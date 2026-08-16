@@ -7,10 +7,10 @@ void test('处理任务列表只发送后端支持的筛选参数', async () => 
   let requestedUrl = '';
   globalThis.fetch = async (input) => {
     requestedUrl = String(input);
-    return new Response(JSON.stringify({ items: [], nextCursor: null }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    });
+    return {
+      ok: true,
+      json: async () => ({ items: [], nextCursor: null }),
+    };
   };
 
   try {

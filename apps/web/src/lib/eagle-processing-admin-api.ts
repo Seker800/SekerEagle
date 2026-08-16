@@ -37,10 +37,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 export function fetchEagleProcessingSummary(_token: string) { return request<EagleProcessingSummary>('summary'); }
-export function listEagleProcessingJobs(_token: string, filters: { status?: string; lane?: string; kind?: string; cursor?: string; limit?: number } = {}) {
-  const query = new URLSearchParams({ limit: String(filters.limit ?? 50) });
-  Object.entries(filters).forEach(([key, value]) => { if (value !== undefined && key !== 'limit') query.set(key, String(value)); });
-  return request<{ items: EagleProcessingJob[]; nextCursor: string | null }>(`jobs?${query}`);
+export function listEagleProcessingJobs(
+  _token: string,
+  filters: { status?: string; lane?: string; kind?: string } = {},
+) {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined) query.set(key, value);
+  });
+  const queryString = query.toString();
+  return request<{ items: EagleProcessingJob[]; nextCursor: string | null }>(
+    queryString ? `jobs?${queryString}` : 'jobs',
+  );
 }
 export function retryEagleProcessingJob(_token: string, id: string) { return request<{ retried: number }>(`jobs/${encodeURIComponent(id)}/retry`, { method: 'POST', body: '{}' }); }
 export function retryAllFailedEagleProcessingJobs(_token: string) { return request<{ retried: number }>('retry-failed', { method: 'POST', body: '{}' }); }
