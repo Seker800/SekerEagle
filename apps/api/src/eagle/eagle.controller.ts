@@ -35,6 +35,7 @@ import {
 } from './eagle.dto';
 import { EagleService } from './eagle.service';
 import { EagleMediaService } from './eagle-media.service';
+import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 
 @ApiTags('eagle')
 @ApiCookieAuth()
@@ -42,9 +43,15 @@ import { EagleMediaService } from './eagle-media.service';
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
 export class EagleController {
   constructor(
+    private readonly mediaCapabilities: EagleMediaCapabilityService,
     private readonly eagle: EagleService,
     private readonly media: EagleMediaService,
   ) {}
+
+  @Get('media-capabilities')
+  getMediaCapabilities() {
+    return this.mediaCapabilities.getCapabilities();
+  }
 
   @Get('assets')
   listAssets(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {

@@ -9,21 +9,23 @@ import { PrismaService } from '../prisma/prisma.service';
 import { createAssetObjectKey } from '../storage/object-key';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
-
-const SUPPORTED_MIME_TYPE = /^(image\/[a-z0-9.+-]+|video\/(mp4|quicktime|webm)|application\/pdf)$/i;
+import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 
 @Injectable()
 export class EagleUploadService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
+    private readonly mediaCapabilities: EagleMediaCapabilityService,
   ) {}
 
   async initiate(ownerId: string, input: InitiateEagleUploadDto) {
     const originalName = normalizeOriginalName(input.originalName);
-    const mimeType = input.mimeType.trim().toLowerCase();
-    if (!SUPPORTED_MIME_TYPE.test(mimeType))
-      throw new BadRequestException('暂不支持这种素材类型。');
+    const { mimeType } = this.mediaCapabilities.assertUploadAllowed({
+      fileName: originalName,
+      mimeType: input.mimeType,
+      size: input.size,
+    });
     const objectKey = createAssetObjectKey(ownerId, originalName);
     const multipartUploadId = await this.storage.createMultipartUpload(objectKey, mimeType);
     try {

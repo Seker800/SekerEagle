@@ -59,7 +59,7 @@ export interface EagleAssetUpdate {
 }
 export interface EagleMediaCapabilities {
   version: 1;
-  images: { mimeTypes: string[]; extensions: string[]; maxBytes: number; maxWidth: number; maxHeight: number };
+  images: { mimeTypes: string[]; extensions: string[]; maxBytes: number; maxPixels: number };
   videos: { mimeTypes: string[]; extensions: string[]; maxBytes: number; maxDurationMs: number | null };
 }
 export interface EagleManualTag extends EagleManualTagRef {
@@ -146,11 +146,7 @@ function normalizeAsset<T extends EagleAssetListItem>(asset: T): T {
 }
 
 export function getEagleMediaCapabilities(_accessToken: string) {
-  return Promise.resolve<EagleMediaCapabilities>({
-    version: 1,
-    images: { mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif'], maxBytes: 5 * 1024 ** 3, maxWidth: 65535, maxHeight: 65535 },
-    videos: { mimeTypes: ['video/mp4'], extensions: ['.mp4'], maxBytes: 5 * 1024 ** 3, maxDurationMs: null },
-  });
+  return api<EagleMediaCapabilities>('/eagle/media-capabilities');
 }
 export async function listEagleAssets(_token: string, filters: EagleAssetFilters = {}, signal?: AbortSignal): Promise<EagleAssetPage> {
   const result = await api<{ items: EagleAssetListItem[]; nextCursor: string | null }>(`/eagle/assets?${assetQuery(filters)}`, { signal });

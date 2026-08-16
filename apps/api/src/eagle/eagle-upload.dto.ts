@@ -27,11 +27,11 @@ export class InitiateEagleUploadDto {
   @MaxLength(200)
   mimeType!: string;
 
-  @ApiProperty({ minimum: 1, maximum: 5 * 1024 * 1024 * 1024 })
+  @ApiProperty({ minimum: 1, maximum: 100 * 1024 * 1024 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(5 * 1024 * 1024 * 1024)
+  @Max(100 * 1024 * 1024)
   size!: number;
 
   @ApiPropertyOptional({ pattern: '^[a-fA-F0-9]{64}$' })
