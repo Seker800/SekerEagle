@@ -11,3 +11,12 @@ button, input { font: inherit; }
 .auth-card button { min-height: 42px; border: 0; border-radius: 9px; color: white; background: #5965dc; cursor: pointer; }
 .auth-error { margin: 0; color: #dc2626; font-size: 14px; }
 .standalone-eagle-shell { min-height: 100vh; }
+.account-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.account-card { width: min(620px, 100%); padding: 32px; border: 1px solid #e2e8f0; border-radius: 18px; background: white; box-shadow: 0 18px 50px rgb(15 23 42 / 9%); }
+.account-card h1 { margin: 6px 0 10px; }
+.account-card > p:not(.auth-eyebrow, .auth-error) { color: #64748b; line-height: 1.6; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+.account-actions button { min-height: 40px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 9px; background: white; cursor: pointer; }
+.account-actions .primary-action { border-color: #5965dc; color: white; background: #5965dc; }
+.token-result { display: grid; gap: 8px; margin-top: 24px; color: #475569; font-size: 14px; }
+.token-result textarea { min-height: 112px; padding: 12px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 9px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
