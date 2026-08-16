@@ -1,0 +1,326 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  background: rgb(3 4 5 / 68%);
+  backdrop-filter: blur(6px);
+}
+.dialog {
+  width: min(920px, calc(100vw - 32px));
+  max-height: min(800px, calc(100dvh - 40px));
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 15px;
+  display: grid;
+  grid-template-rows: 70px minmax(0, 1fr) 62px;
+  overflow: hidden;
+  color: #e7e9ec;
+  background: #17181c;
+  box-shadow: 0 28px 100px rgb(0 0 0 / 55%);
+}
+.dialog header {
+  padding: 0 19px 0 20px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #1b1c20;
+}
+.headerIdentity {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.headerIcon {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgb(214 155 72 / 22%);
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #d69b48;
+  background: rgb(214 155 72 / 8%);
+}
+.headerCopy {
+  display: grid;
+  gap: 3px;
+}
+.dialog h2 {
+  margin: 0;
+  color: #eceef0;
+  font-size: 15px;
+  font-weight: 680;
+  letter-spacing: 0.01em;
+}
+.headerCopy p {
+  margin: 0;
+  color: #777d86;
+  font-size: 11px;
+}
+.closeButton {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  color: #858b94;
+  background: transparent;
+  cursor: pointer;
+}
+.closeButton:hover {
+  color: #c7cbd0;
+  background: rgb(255 255 255 / 6%);
+}
+.body {
+  padding: 20px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  background: #141519;
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.85fr);
+  align-items: start;
+  gap: 18px;
+}
+.primaryPanel,
+.secondaryPanel {
+  min-width: 0;
+}
+.primaryPanel {
+  display: grid;
+  gap: 17px;
+}
+.secondaryPanel {
+  padding: 15px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 11px;
+  display: grid;
+  gap: 14px;
+  background: rgb(255 255 255 / 2.5%);
+}
+.nameField {
+  display: grid;
+  gap: 7px;
+}
+.nameField > span {
+  color: #b9bdc4;
+  font-size: 12px;
+  font-weight: 650;
+}
+.nameField input,
+.ratingField select {
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 8px;
+  outline: 0;
+  color: #e5e7ea;
+  background: #0f1012;
+}
+.nameField input:focus {
+  border-color: rgb(214 155 72 / 55%);
+  box-shadow: 0 0 0 3px rgb(214 155 72 / 7%);
+}
+.sectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.sectionHeading h3 {
+  margin: 0;
+  color: #d8dbe0;
+  font-size: 12px;
+  font-weight: 680;
+}
+.sectionHeading p {
+  margin: 4px 0 0;
+  color: #707680;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.optionalBadge {
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+}
+.matchModeField {
+  min-width: 118px;
+  display: grid;
+  gap: 5px;
+  color: #777d86;
+  font-size: 9px;
+}
+.matchModeField select {
+  height: 30px;
+  padding: 0 26px 0 9px;
+  border: 1px solid rgb(214 155 72 / 28%);
+  border-radius: 7px;
+  outline: 0;
+  color: #efc78e;
+  color-scheme: dark;
+  background: rgb(214 155 72 / 8%);
+  font-size: 10px;
+  font-weight: 650;
+}
+.matchModeField select:focus {
+  border-color: rgb(214 155 72 / 55%);
+  box-shadow: 0 0 0 3px rgb(214 155 72 / 7%);
+}
+.optionalBadge {
+  color: #777d86;
+  background: rgb(255 255 255 / 5%);
+}
+.tagPickers {
+  display: grid;
+  gap: 12px;
+}
+.dialog fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.dialog legend {
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #aeb2b9;
+  font-size: 11px;
+  font-weight: 700;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.choices label {
+  min-height: 29px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #aeb2b8;
+  background: rgb(255 255 255 / 3%);
+  cursor: pointer;
+  font-size: 11px;
+}
+.choices label:has(input:checked) {
+  border-color: rgb(214 155 72 / 45%);
+  color: #efc78e;
+  background: rgb(214 155 72 / 11%);
+}
+.choices input {
+  accent-color: #d69b48;
+}
+.choices span {
+  color: #666c75;
+  font-size: 11px;
+}
+.ratingField {
+  display: grid;
+  gap: 8px;
+  color: #aeb2b9;
+  font-size: 11px;
+}
+.ratingField select {
+  width: 100%;
+  height: 34px;
+  color-scheme: dark;
+}
+.secondaryGroup {
+  padding-top: 13px !important;
+  border-top: 1px solid rgb(255 255 255 / 6%) !important;
+}
+.secondaryGroup:first-of-type {
+  padding-top: 0 !important;
+  border-top: 0 !important;
+}
+.colorGroup {
+  min-width: 0;
+}
+.error {
+  margin: 0;
+  padding: 9px 11px;
+  border: 1px solid rgb(233 140 140 / 22%);
+  border-radius: 7px;
+  color: #e98c8c;
+  background: rgb(233 140 140 / 6%);
+  font-size: 11px;
+}
+.dialog footer {
+  padding: 0 20px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #1b1c20;
+}
+.conditionSummary {
+  color: #777d86;
+  font-size: 10px;
+}
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dialog footer button {
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 7px;
+  color: #bfc3c9;
+  background: #24262a;
+  cursor: pointer;
+}
+.dialog footer .primary {
+  border-color: #d69b48;
+  color: #19130b;
+  background: #d69b48;
+  font-weight: 700;
+}
+.dialog footer button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+@media (max-width: 760px) {
+  .dialog {
+    width: min(640px, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+  }
+
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .dialog {
+    grid-template-rows: 68px minmax(0, 1fr) 58px;
+  }
+
+  .body {
+    padding: 14px;
+  }
+
+  .headerCopy p {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

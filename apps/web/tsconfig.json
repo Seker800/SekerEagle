@@ -5,6 +5,8 @@
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "types": ["vite/client"],
+    "noUncheckedIndexedAccess": false,
     "noEmit": true
   },
   "include": ["src", "vite.config.ts"]

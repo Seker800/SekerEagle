@@ -137,6 +137,7 @@ model User {
   eagleManualTagGroups     EagleManualTagGroup[]
   eagleAiTags              EagleAiTag[]
   eagleSmartFolders        EagleSmartFolder[]
+  eagleProcessingSetting   EagleProcessingSetting?
   eagleUploadSessionStates EagleUploadSessionState[]
   eagleExternalLibraries   EagleExternalLibrary[]
   eagleExternalAssets      EagleExternalAsset[]
@@ -793,4 +794,15 @@ model EagleProcessingWorkerHeartbeat {
   updatedAt      DateTime @updatedAt
 
   @@index([heartbeatAt])
+}
+
+model EagleProcessingSetting {
+  ownerId    String   @id
+  mode       String   @default("NIGHT")
+  nightStart String   @default("23:00")
+  nightEnd   String   @default("06:00")
+  timeZone   String   @default("Asia/Shanghai")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SekerEagle 独立导入器</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script defer src="plugin.js"></script>
+  </head>
+  <body>
+    <main>
+      <header><img src="logo.svg" alt="" /><div><h1>SekerEagle 导入器</h1><p>当前 Eagle 图库 → 本机独立素材库</p></div><span id="badge">未连接</span></header>
+      <section>
+        <h2>连接</h2>
+        <div class="connection"><label>服务器<input id="server" type="url" value="http://localhost:8180" /></label><label>PAT<input id="pat" type="password" placeholder="se_pat_…" /></label><button id="connect">验证连接</button></div>
+        <p class="help">PAT 需要 <code>import:read</code>、<code>import:write</code> 和 <code>asset:write</code>。插件不保存账号密码。</p>
+      </section>
+      <section>
+        <h2>当前图库</h2><strong id="libraryName">正在读取 Eagle…</strong><small id="libraryPath"></small>
+      </section>
+      <section class="actions"><button id="start" disabled>扫描并增量导入</button><button id="resume" disabled>继续上次任务</button><button id="cancel" disabled>取消</button></section>
+      <section><div class="progress-head"><span id="phase">尚未开始</span><span id="percent">0%</span></div><div class="track"><i id="bar"></i></div><pre id="log"></pre></section>
+    </main>
+  </body>
+</html>

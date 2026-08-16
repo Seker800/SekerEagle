@@ -346,6 +346,32 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/trash/{assetId}": {
+      "get": {
+        "operationId": "EagleController_getTrashAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/{assetId}/original": {
       "get": {
         "operationId": "EagleController_getOriginal",
@@ -632,6 +658,125 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/tag-groups": {
+      "get": {
+        "operationId": "EagleController_listTagGroups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      },
+      "post": {
+        "operationId": "EagleController_createTagGroup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateManualTagGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/tag-groups/{groupId}": {
+      "patch": {
+        "operationId": "EagleController_updateTagGroup",
+        "parameters": [
+          {
+            "name": "groupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateManualTagGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      },
+      "delete": {
+        "operationId": "EagleController_deleteTagGroup",
+        "parameters": [
+          {
+            "name": "groupId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/ai-tags": {
+      "get": {
+        "operationId": "EagleController_listAiTags",
+        "parameters": [],
         "responses": {
           "200": {
             "description": ""
@@ -981,6 +1126,415 @@
         "tags": ["eagle-uploads"]
       }
     },
+    "/api/eagle/imports/libraries": {
+      "get": {
+        "operationId": "EagleImportController_listLibraries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports": {
+      "post": {
+        "operationId": "EagleImportController_createRun",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEagleImportRunDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}": {
+      "get": {
+        "operationId": "EagleImportController_getRun",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/manifest/chunks": {
+      "post": {
+        "operationId": "EagleImportController_stageChunk",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EagleImportManifestChunkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/preflight": {
+      "post": {
+        "operationId": "EagleImportController_preflight",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/items": {
+      "get": {
+        "operationId": "EagleImportController_listItems",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maximum": 100,
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/items/{itemId}/upload": {
+      "post": {
+        "operationId": "EagleImportController_initiateUpload",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/items/{itemId}/finish": {
+      "post": {
+        "operationId": "EagleImportController_finishItem",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "itemId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FinishEagleImportItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/eagle/imports/{runId}/cancel": {
+      "post": {
+        "operationId": "EagleImportController_cancel",
+        "parameters": [
+          {
+            "name": "runId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-imports"]
+      }
+    },
+    "/api/admin/eagle-processing/summary": {
+      "get": {
+        "operationId": "EagleProcessingController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
+    "/api/admin/eagle-processing/jobs": {
+      "get": {
+        "operationId": "EagleProcessingController_jobs",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
+    "/api/admin/eagle-processing/jobs/{jobId}/retry": {
+      "post": {
+        "operationId": "EagleProcessingController_retry",
+        "parameters": [
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
+    "/api/admin/eagle-processing/retry-failed": {
+      "post": {
+        "operationId": "EagleProcessingController_retryFailed",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
+    "/api/admin/eagle-processing/reconcile": {
+      "post": {
+        "operationId": "EagleProcessingController_reconcile",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
+    "/api/admin/eagle-processing/settings": {
+      "patch": {
+        "operationId": "EagleProcessingController_settings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEagleProcessingSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleProcessing"]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -1103,7 +1657,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["import:read", "asset:write"]
+              "enum": ["import:read", "import:write", "asset:write"]
             }
           },
           "expiresInDays": {
@@ -1187,22 +1741,20 @@
       "UpdateManualTagDto": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 100
-          },
-          "color": {
-            "type": "object",
-            "nullable": true,
-            "pattern": "^#[0-9a-fA-F]{6}$"
-          },
           "rowVersion": {
             "type": "number",
             "minimum": 1
           }
         },
-        "required": ["name", "rowVersion"]
+        "required": ["rowVersion"]
+      },
+      "CreateManualTagGroupDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UpdateManualTagGroupDto": {
+        "type": "object",
+        "properties": {}
       },
       "ReplaceAssetTagsDto": {
         "type": "object",
@@ -1339,6 +1891,27 @@
           }
         },
         "required": ["parts"]
+      },
+      "CreateEagleImportRunDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "EagleImportManifestChunkDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "FinishEagleImportItemDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string"
+          }
+        },
+        "required": ["assetId"]
+      },
+      "UpdateEagleProcessingSettingsDto": {
+        "type": "object",
+        "properties": {}
       }
     }
   }

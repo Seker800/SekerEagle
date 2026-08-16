@@ -1,0 +1,151 @@
+.picker {
+  min-width: 0;
+  padding: 12px !important;
+  border: 1px solid rgb(255 255 255 / 7%) !important;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 2%);
+}
+
+.picker legend {
+  width: 100%;
+}
+
+.picker legend b {
+  min-width: 18px;
+  height: 18px;
+  margin-left: auto;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  color: #19130b;
+  background: #d69b48;
+  font-size: 10px;
+}
+
+.searchBox {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #737983;
+  background: #101114;
+}
+
+.searchBox:focus-within {
+  border-color: rgb(214 155 72 / 55%);
+}
+
+.searchBox input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #e0e2e5;
+  background: transparent;
+  font-size: 11px;
+}
+
+.selectedTags {
+  margin-top: 7px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.selectedTags button {
+  min-height: 27px;
+  padding: 0 7px 0 9px;
+  border: 1px solid rgb(214 155 72 / 35%);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #efc78e;
+  background: rgb(214 155 72 / 10%);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.selectedTags button:hover {
+  background: rgb(214 155 72 / 17%);
+}
+
+.tagList {
+  height: clamp(132px, 17dvh, 160px);
+  min-height: 0;
+  margin-top: 7px;
+  padding: 3px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 7px;
+  overflow-y: auto;
+  background: rgb(8 9 11 / 42%);
+}
+
+.tagList > div {
+  width: 100%;
+}
+
+.tagOption {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b9bdc3;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.tagOption:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.tagOption:has(input:checked) {
+  border-color: rgb(214 155 72 / 28%);
+  color: #efc78e;
+  background: rgb(214 155 72 / 9%);
+}
+
+.tagOption input {
+  flex: 0 0 auto;
+  accent-color: #d69b48;
+}
+
+.color {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #555a62;
+}
+
+.tagName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.star {
+  flex: 0 0 auto;
+  color: #d69b48;
+}
+
+.tagOption small {
+  margin-left: auto;
+  color: #676d75;
+  font-size: 10px;
+}
+
+.empty {
+  height: clamp(132px, 17dvh, 160px);
+  display: grid;
+  place-items: center;
+  color: #666c75;
+  font-size: 11px;
+}

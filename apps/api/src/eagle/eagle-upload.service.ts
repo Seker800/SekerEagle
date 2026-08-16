@@ -10,7 +10,7 @@ import { createAssetObjectKey } from '../storage/object-key';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 
-const SUPPORTED_MIME_TYPE = /^(image\/[a-z0-9.+-]+|video\/[a-z0-9.+-]+|application\/pdf)$/i;
+const SUPPORTED_MIME_TYPE = /^(image\/[a-z0-9.+-]+|video\/(mp4|quicktime|webm)|application\/pdf)$/i;
 
 @Injectable()
 export class EagleUploadService {
@@ -131,7 +131,7 @@ export class EagleUploadService {
             format: inferFormat(session.originalName, session.mimeType),
             byteSize: session.size,
             originalObjectKey: session.objectKey,
-            sha256: session.eagleState?.expectedContentSha256,
+            sha256: null,
           },
         });
         await transaction.eagleAssetProcessingJob.create({

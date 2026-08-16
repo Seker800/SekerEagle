@@ -22,6 +22,7 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import {
   CreateManualTagDto,
+  CreateManualTagGroupDto,
   CreateSmartFolderDto,
   EagleAssetIdsDto,
   ListEagleAssetsDto,
@@ -29,6 +30,7 @@ import {
   ReplaceAssetTagsDto,
   UpdateEagleAssetDto,
   UpdateManualTagDto,
+  UpdateManualTagGroupDto,
   UpdateSmartFolderDto,
 } from './eagle.dto';
 import { EagleService } from './eagle.service';
@@ -55,6 +57,14 @@ export class EagleController {
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
   ) {
     return this.eagle.getAsset(principal.sub, assetId);
+  }
+
+  @Get('trash/:assetId')
+  getTrashAsset(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+  ) {
+    return this.eagle.getAsset(principal.sub, assetId, true);
   }
 
   @Get('assets/:assetId/original')
@@ -141,6 +151,41 @@ export class EagleController {
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
   ) {
     return this.eagle.deleteManualTag(principal.sub, tagId);
+  }
+
+  @Get('tag-groups')
+  listTagGroups(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.eagle.listManualTagGroups(principal.sub);
+  }
+
+  @Post('tag-groups')
+  @UseGuards(BrowserOriginGuard)
+  createTagGroup(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CreateManualTagGroupDto) {
+    return this.eagle.createManualTagGroup(principal.sub, input);
+  }
+
+  @Patch('tag-groups/:groupId')
+  @UseGuards(BrowserOriginGuard)
+  updateTagGroup(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
+    @Body() input: UpdateManualTagGroupDto,
+  ) {
+    return this.eagle.updateManualTagGroup(principal.sub, groupId, input);
+  }
+
+  @Delete('tag-groups/:groupId')
+  @UseGuards(BrowserOriginGuard)
+  deleteTagGroup(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('groupId', new ParseUUIDPipe({ version: '4' })) groupId: string,
+  ) {
+    return this.eagle.deleteManualTagGroup(principal.sub, groupId);
+  }
+
+  @Get('ai-tags')
+  listAiTags(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.eagle.listAiTags(principal.sub);
   }
 
   @Put('assets/:assetId/tags')

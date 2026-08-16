@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
@@ -66,6 +66,14 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       mediaRevision: job.assetRevision,
       deletedAt: null,
     },
+    include: {
+      uploadSessions: {
+        where: { status: 'COMPLETED' },
+        orderBy: { completedAt: 'desc' },
+        take: 1,
+        select: { eagleState: { select: { expectedContentSha256: true } } },
+      },
+    },
   });
   if (!asset) throw new Error('ASSET_NOT_PROCESSABLE');
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
@@ -77,6 +85,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
     const input = Buffer.from(await object.Body.transformToByteArray());
+    const sha256 = createHash('sha256').update(input).digest('hex');
+    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
     const metadata = await sharp(input, {
       failOn: 'error',
       limitInputPixels: 200_000_000,
@@ -138,6 +148,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         data: {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
+          sha256,
           width: metadata.autoOrient.width ?? metadata.width,
           height: metadata.autoOrient.height ?? metadata.height,
         },
@@ -150,10 +161,16 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     return;
   }
 
+  const object = await storage.send(
+    new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+  );
+  if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+  const verified = await verifyStream(object.Body as AsyncIterable<Uint8Array>, asset.mimeType);
+  assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, verified.sha256);
   await prisma.$transaction([
     prisma.eagleAsset.updateMany({
       where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
-      data: { lifecycleStatus: 'READY', mediaErrorCode: null },
+      data: { lifecycleStatus: 'READY', mediaErrorCode: null, sha256: verified.sha256 },
     }),
     prisma.eagleAssetProcessingJob.update({
       where: { id: job.id },
@@ -206,6 +223,45 @@ async function poll(): Promise<void> {
 
 function assertOwnedKey(ownerId: string, key: string): void {
   if (!key.startsWith(`users/${ownerId}/`)) throw new Error('CROSS_OWNER_OBJECT_KEY');
+}
+
+function assertExpectedHash(expected: string | null | undefined, actual: string): void {
+  if (expected && expected !== actual) throw new Error('CONTENT_SHA256_MISMATCH');
+}
+
+async function verifyStream(
+  stream: AsyncIterable<Uint8Array>,
+  mimeType: string,
+): Promise<{ sha256: string }> {
+  const hash = createHash('sha256');
+  const prefixParts: Buffer[] = [];
+  let prefixLength = 0;
+  for await (const chunk of stream) {
+    const bytes = Buffer.from(chunk);
+    hash.update(bytes);
+    if (prefixLength < 16) {
+      const prefix = bytes.subarray(0, 16 - prefixLength);
+      prefixParts.push(prefix);
+      prefixLength += prefix.byteLength;
+    }
+  }
+  const prefix = Buffer.concat(prefixParts);
+  if (mimeType === 'application/pdf' && prefix.subarray(0, 5).toString('ascii') !== '%PDF-') {
+    throw new Error('MEDIA_SIGNATURE_MISMATCH');
+  }
+  if (
+    ['video/mp4', 'video/quicktime'].includes(mimeType) &&
+    prefix.subarray(4, 8).toString('ascii') !== 'ftyp'
+  ) {
+    throw new Error('MEDIA_SIGNATURE_MISMATCH');
+  }
+  if (
+    mimeType === 'video/webm' &&
+    !prefix.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
+  ) {
+    throw new Error('MEDIA_SIGNATURE_MISMATCH');
+  }
+  return { sha256: hash.digest('hex') };
 }
 
 async function stop(signal: string): Promise<void> {

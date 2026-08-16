@@ -1,0 +1,75 @@
+.root {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.pickerRow {
+  display: grid;
+  grid-template-columns: 34px minmax(120px, 240px);
+  align-items: center;
+  gap: 9px;
+}
+.nativePicker {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 6px;
+  background: #111216;
+  cursor: pointer;
+}
+.hue {
+  width: 100%;
+  accent-color: var(--eagle-accent);
+}
+.presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.presets button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 16%);
+}
+.presets button[aria-pressed='true'] {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px #5b616b;
+}
+.valueRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.valueRow input {
+  min-width: 170px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 6px;
+  color: #d6d9de;
+  background: #101114;
+}
+.valueRow button {
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 6px;
+  color: #c7cbd1;
+  background: #24262b;
+  cursor: pointer;
+}
+.preview {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 5px;
+}
+.error {
+  color: #e88d8d;
+}

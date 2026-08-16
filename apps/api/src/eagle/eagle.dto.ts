@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  IsBoolean,
   IsArray,
   IsInt,
   IsObject,
@@ -59,6 +60,33 @@ export class ListEagleAssetsDto {
   @IsString()
   @MaxLength(32)
   format?: string;
+
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  formats?: string[];
+
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  manualTagIds?: string[];
+
+  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  aiTagIds?: string[];
+
+  @IsOptional() @IsUUID('4') smartFolderId?: string;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(1) minWidth?: number;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(1) maxWidth?: number;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(1) minHeight?: number;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(1) maxHeight?: number;
+  @IsOptional() @IsString() createdFrom?: string;
+  @IsOptional() @IsString() createdTo?: string;
+  @IsOptional() @Matches(COLOR_PATTERN) color?: string;
 }
 
 export class UpdateEagleAssetDto {
@@ -130,11 +158,28 @@ export class CreateManualTagDto {
   color?: string | null;
 }
 
-export class UpdateManualTagDto extends CreateManualTagDto {
+export class UpdateManualTagDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
+  @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
+  @IsOptional() @IsUUID('4') groupId?: string | null;
+  @IsOptional() @IsBoolean() isStarred?: boolean;
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)
   rowVersion!: number;
+}
+
+export class CreateManualTagGroupDto {
+  @IsString() @MinLength(1) @MaxLength(100) name!: string;
+  @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
+  @IsOptional() @IsString() @MaxLength(1000) description?: string | null;
+}
+
+export class UpdateManualTagGroupDto {
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
+  @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
+  @IsOptional() @IsString() @MaxLength(1000) description?: string | null;
+  @IsInt() @Min(1) rowVersion!: number;
 }
 
 export class CreateSmartFolderDto {

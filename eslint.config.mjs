@@ -21,6 +21,20 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ['plugins/eagle-importer/**/*.js', 'plugins/eagle-importer/**/*.cjs'],
+    languageOptions: {
+      globals: {
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        document: 'readonly',
+        eagle: 'readonly',
+        fetch: 'readonly',
+        localStorage: 'readonly',
+        require: 'readonly',
+      },
+    },
+  },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
     files: ['**/*.ts'],
@@ -37,6 +51,7 @@ export default tseslint.config(
       '@typescript-eslint/consistent-type-imports': 'error',
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
     },
   },
 );

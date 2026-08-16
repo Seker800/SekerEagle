@@ -1,0 +1,18 @@
+{
+  "id": "e9f07a6a-760d-4cb6-b276-f61a3d223a0b",
+  "version": "2.0.0",
+  "platform": "all",
+  "arch": "all",
+  "name": "SekerEagle 独立导入器",
+  "logo": "/logo.svg",
+  "keywords": ["SekerEagle", "增量导入", "独立素材库"],
+  "devTools": false,
+  "main": {
+    "serviceMode": true,
+    "url": "index.html",
+    "width": 720,
+    "minWidth": 620,
+    "height": 620,
+    "minHeight": 520
+  }
+}
