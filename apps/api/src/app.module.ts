@@ -4,6 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule, minutes, seconds } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { validateEnvironment } from './config/runtime-config';
+import { EagleModule } from './eagle/eagle.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
@@ -18,6 +19,7 @@ import { StorageModule } from './storage/storage.module';
     PrismaModule,
     StorageModule,
     AuthModule,
+    EagleModule,
     HealthModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

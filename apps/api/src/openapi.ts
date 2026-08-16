@@ -13,6 +13,7 @@ async function generate(): Promise<void> {
   process.env.ACCESS_TOKEN_TTL_SECONDS ??= '900';
   process.env.REFRESH_TOKEN_TTL_SECONDS ??= '2592000';
   process.env.S3_ENDPOINT ??= 'http://minio-test:9000';
+  process.env.S3_PUBLIC_ENDPOINT ??= 'http://localhost:8180';
   process.env.S3_REGION ??= 'us-east-1';
   process.env.S3_BUCKET ??= 'sekereagle-test-assets';
   process.env.S3_ACCESS_KEY_ID ??= 'contract-only';

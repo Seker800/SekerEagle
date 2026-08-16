@@ -11,6 +11,7 @@ const safeEnv = {
   ACCESS_TOKEN_TTL_SECONDS: '900',
   REFRESH_TOKEN_TTL_SECONDS: '2592000',
   S3_ENDPOINT: 'http://minio-test:9000',
+  S3_PUBLIC_ENDPOINT: 'http://localhost:8180',
   S3_REGION: 'us-east-1',
   S3_BUCKET: 'sekereagle-test-assets',
   S3_ACCESS_KEY_ID: 'test-access-key',

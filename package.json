@@ -30,6 +30,7 @@
     "env:create": "node ./scripts/create-local-env.mjs",
     "bootstrap-credentials:create": "node ./scripts/create-bootstrap-credentials.mjs",
     "smoke:auth": "node ./scripts/smoke-auth.mjs",
+    "smoke:eagle": "node ./scripts/smoke-eagle.mjs",
     "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check"
   },
   "devDependencies": {

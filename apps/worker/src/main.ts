@@ -1,5 +1,8 @@
-import { PrismaClient } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
+import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
+import sharp from 'sharp';
 
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
@@ -9,39 +12,233 @@ process.stdout.write(
   `SekerEagle worker target: ${describeRuntimeTarget({ databaseUrl, s3Endpoint, s3Bucket })}\n`,
 );
 
+const workerId = `worker-${randomUUID()}`;
+const workerVersion = 'v1';
 const prisma = new PrismaClient();
-let timer: NodeJS.Timeout | undefined;
+const storage = new S3Client({
+  endpoint: s3Endpoint,
+  region: process.env.S3_REGION ?? 'us-east-1',
+  forcePathStyle: true,
+  credentials: {
+    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
+  },
+});
+let pollTimer: NodeJS.Timeout | undefined;
+let heartbeatTimer: NodeJS.Timeout | undefined;
 let stopping = false;
+let activeJobCount = 0;
 
 async function heartbeat(): Promise<void> {
-  await prisma.$queryRaw`SELECT 1`;
+  const now = new Date();
+  await prisma.eagleProcessingWorkerHeartbeat.upsert({
+    where: { workerId },
+    create: { workerId, version: workerVersion, startedAt: now, heartbeatAt: now, activeJobCount },
+    update: { heartbeatAt: now, activeJobCount },
+  });
+}
+
+async function claimJob(): Promise<EagleAssetProcessingJob | null> {
+  const candidate = await prisma.eagleAssetProcessingJob.findFirst({
+    where: { status: 'PENDING', availableAt: { lte: new Date() } },
+    orderBy: [{ lane: 'asc' }, { availableAt: 'asc' }, { createdAt: 'asc' }],
+  });
+  if (!candidate) return null;
+  const claimed = await prisma.eagleAssetProcessingJob.updateMany({
+    where: { id: candidate.id, status: 'PENDING', leaseVersion: candidate.leaseVersion },
+    data: {
+      status: 'PROCESSING',
+      lockedAt: new Date(),
+      startedAt: candidate.startedAt ?? new Date(),
+      attempts: { increment: 1 },
+      leaseVersion: { increment: 1 },
+    },
+  });
+  if (claimed.count !== 1) return null;
+  return prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: candidate.id } });
+}
+
+async function processJob(job: EagleAssetProcessingJob): Promise<void> {
+  const asset = await prisma.eagleAsset.findFirst({
+    where: {
+      id: job.assetId,
+      ownerId: job.ownerId,
+      mediaRevision: job.assetRevision,
+      deletedAt: null,
+    },
+  });
+  if (!asset) throw new Error('ASSET_NOT_PROCESSABLE');
+  assertOwnedKey(asset.ownerId, asset.originalObjectKey);
+
+  if (asset.mimeType.startsWith('image/')) {
+    if (asset.byteSize > 250n * 1024n * 1024n) throw new Error('IMAGE_TOO_LARGE_TO_PROCESS');
+    const object = await storage.send(
+      new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+    );
+    if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+    const input = Buffer.from(await object.Body.transformToByteArray());
+    const metadata = await sharp(input, {
+      failOn: 'error',
+      limitInputPixels: 200_000_000,
+    }).metadata();
+    const renditionSpecs = [
+      { kind: 'THUMBNAIL' as const, maxSize: 480 },
+      { kind: 'PREVIEW' as const, maxSize: 1600 },
+    ];
+    const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
+    for (const spec of renditionSpecs) {
+      const rendered = await sharp(input, { failOn: 'error', limitInputPixels: 200_000_000 })
+        .rotate()
+        .resize({
+          width: spec.maxSize,
+          height: spec.maxSize,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({ quality: spec.kind === 'THUMBNAIL' ? 78 : 86 })
+        .toBuffer({ resolveWithObject: true });
+      const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/${spec.kind.toLowerCase()}.webp`;
+      await storage.send(
+        new PutObjectCommand({
+          Bucket: s3Bucket,
+          Key: storageKey,
+          Body: rendered.data,
+          ContentType: 'image/webp',
+        }),
+      );
+      renditions.push({
+        ownerId: asset.ownerId,
+        assetId: asset.id,
+        kind: spec.kind,
+        revision: job.assetRevision,
+        storageKey,
+        mimeType: 'image/webp',
+        byteSize: BigInt(rendered.data.byteLength),
+        width: rendered.info.width,
+        height: rendered.info.height,
+        status: 'READY' as const,
+      });
+    }
+    await prisma.$transaction(async (transaction) => {
+      for (const rendition of renditions) {
+        await transaction.eagleAssetRendition.upsert({
+          where: {
+            assetId_kind_revision: {
+              assetId: rendition.assetId,
+              kind: rendition.kind,
+              revision: rendition.revision,
+            },
+          },
+          create: rendition,
+          update: rendition,
+        });
+      }
+      await transaction.eagleAsset.updateMany({
+        where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
+        data: {
+          lifecycleStatus: 'READY',
+          mediaErrorCode: null,
+          width: metadata.autoOrient.width ?? metadata.width,
+          height: metadata.autoOrient.height ?? metadata.height,
+        },
+      });
+      await transaction.eagleAssetProcessingJob.update({
+        where: { id: job.id },
+        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+      });
+    });
+    return;
+  }
+
+  await prisma.$transaction([
+    prisma.eagleAsset.updateMany({
+      where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
+      data: { lifecycleStatus: 'READY', mediaErrorCode: null },
+    }),
+    prisma.eagleAssetProcessingJob.update({
+      where: { id: job.id },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    }),
+  ]);
+}
+
+async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
+  const message =
+    error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
+  const terminal = job.attempts >= 3;
+  await prisma.$transaction(async (transaction) => {
+    await transaction.eagleAssetProcessingJob.update({
+      where: { id: job.id },
+      data: terminal
+        ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
+        : {
+            status: 'PENDING',
+            availableAt: new Date(Date.now() + 30_000 * 2 ** Math.max(0, job.attempts - 1)),
+            lockedAt: null,
+            lastError: message,
+          },
+    });
+    if (terminal) {
+      await transaction.eagleAsset.updateMany({
+        where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
+        data: { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) },
+      });
+    }
+  });
+}
+
+async function poll(): Promise<void> {
+  if (stopping || activeJobCount > 0) return;
+  const job = await claimJob();
+  if (!job) return;
+  activeJobCount += 1;
+  try {
+    await processJob(job);
+    process.stdout.write(`completed media job ${job.id}\n`);
+  } catch (error) {
+    await failJob(job, error);
+    const message = error instanceof Error ? error.message : 'unknown media error';
+    process.stderr.write(`failed media job ${job.id}: ${message}\n`);
+  } finally {
+    activeJobCount -= 1;
+  }
+}
+
+function assertOwnedKey(ownerId: string, key: string): void {
+  if (!key.startsWith(`users/${ownerId}/`)) throw new Error('CROSS_OWNER_OBJECT_KEY');
 }
 
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
-  if (timer) clearInterval(timer);
+  if (pollTimer) clearInterval(pollTimer);
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
+  while (activeJobCount > 0) await new Promise((resolve) => setTimeout(resolve, 100));
+  await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
+  storage.destroy();
   process.exitCode = 0;
 }
 
 async function main(): Promise<void> {
   await heartbeat();
-  process.stdout.write('SekerEagle worker ready\n');
-  timer = setInterval(() => {
-    void heartbeat().catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'unknown worker heartbeat error';
-      process.stderr.write(`${message}\n`);
-    });
-  }, 30_000);
+  process.stdout.write(`SekerEagle worker ready: ${workerId}\n`);
+  pollTimer = setInterval(() => void poll().catch(reportLoopError), 1_000);
+  heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
+  await poll();
+}
+
+function reportLoopError(error: unknown): void {
+  const message = error instanceof Error ? error.message : 'unknown worker loop error';
+  process.stderr.write(`${message}\n`);
 }
 
 process.on('SIGTERM', () => void stop('SIGTERM'));
 process.on('SIGINT', () => void stop('SIGINT'));
 void main().catch(async (error: unknown) => {
-  const message = error instanceof Error ? error.message : 'unknown worker startup error';
-  process.stderr.write(`${message}\n`);
+  reportLoopError(error);
   await prisma.$disconnect();
+  storage.destroy();
   process.exitCode = 1;
 });

@@ -5,6 +5,7 @@ import { AuthController } from './auth.controller';
 import { AccessAuthGuard } from './access-auth.guard';
 import { AdminGuard } from './admin.guard';
 import { BrowserOriginGuard } from './browser-origin.guard';
+import { BrowserOrPatOriginGuard } from './browser-or-pat-origin.guard';
 import { BrowserPrincipalGuard } from './browser-principal.guard';
 import { BrowserSessionService } from './browser-session.service';
 import { PasswordService } from './password.service';
@@ -27,6 +28,7 @@ import { SessionTokenService } from './session-token.service';
     AccessAuthGuard,
     AdminGuard,
     BrowserOriginGuard,
+    BrowserOrPatOriginGuard,
     BrowserPrincipalGuard,
     BrowserSessionService,
     PasswordService,
@@ -34,6 +36,16 @@ import { SessionTokenService } from './session-token.service';
     PatScopeGuard,
     SessionTokenService,
   ],
-  exports: [AccessAuthGuard, AdminGuard, PatScopeGuard, PasswordService, PatService],
+  exports: [
+    AccessAuthGuard,
+    AdminGuard,
+    BrowserOriginGuard,
+    BrowserOrPatOriginGuard,
+    BrowserPrincipalGuard,
+    PatScopeGuard,
+    PasswordService,
+    PatService,
+    SessionTokenService,
+  ],
 })
 export class AuthModule {}

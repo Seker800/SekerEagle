@@ -9,6 +9,7 @@ export interface RuntimeConfig {
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
   s3Endpoint: string;
+  s3PublicEndpoint: string;
   s3Region: string;
   s3Bucket: string;
   s3AccessKeyId: string;
@@ -57,8 +58,12 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
 
   const databaseUrl = required(env, 'DATABASE_URL');
   const s3Endpoint = required(env, 'S3_ENDPOINT');
+  const s3PublicEndpoint = required(env, 'S3_PUBLIC_ENDPOINT');
   const s3Bucket = required(env, 'S3_BUCKET');
   assertSafeRuntimeTarget({ databaseUrl, s3Endpoint, s3Bucket });
+  if (new URL(s3PublicEndpoint).origin !== origin.origin) {
+    throw new Error('S3_PUBLIC_ENDPOINT must use CANONICAL_ORIGIN');
+  }
 
   return {
     ...env,
@@ -70,6 +75,7 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
     ACCESS_TOKEN_TTL_SECONDS: positiveInteger(env, 'ACCESS_TOKEN_TTL_SECONDS'),
     REFRESH_TOKEN_TTL_SECONDS: positiveInteger(env, 'REFRESH_TOKEN_TTL_SECONDS'),
     S3_ENDPOINT: s3Endpoint,
+    S3_PUBLIC_ENDPOINT: s3PublicEndpoint,
     S3_REGION: required(env, 'S3_REGION'),
     S3_BUCKET: s3Bucket,
     S3_ACCESS_KEY_ID: required(env, 'S3_ACCESS_KEY_ID'),
