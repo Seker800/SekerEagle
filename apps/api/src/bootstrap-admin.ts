@@ -6,10 +6,10 @@ import { PasswordService } from './auth/password.service';
 import { PrismaService } from './prisma/prisma.service';
 
 async function bootstrapAdmin(): Promise<void> {
-  const username = process.env.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase() ?? '';
+  const email = process.env.BOOTSTRAP_ADMIN_EMAIL?.trim().toLowerCase() ?? '';
   const password = process.env.BOOTSTRAP_ADMIN_PASSWORD ?? '';
-  if (!/^[a-z0-9][a-z0-9._-]{2,31}$/.test(username)) {
-    throw new Error('BOOTSTRAP_ADMIN_USERNAME 格式无效');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+    throw new Error('BOOTSTRAP_ADMIN_EMAIL 格式无效');
   }
   if (password.length < 12 || password.length > 128) {
     throw new Error('BOOTSTRAP_ADMIN_PASSWORD 必须为 12-128 个字符');
@@ -21,8 +21,8 @@ async function bootstrapAdmin(): Promise<void> {
     if ((await prisma.user.count()) !== 0) {
       throw new Error('数据库已经存在用户，拒绝再次执行管理员 bootstrap');
     }
-    const user = await app.get(PasswordService).createUser(username, password, UserRole.ADMIN);
-    process.stdout.write(`Created SekerEagle admin: ${user.username} (${user.id})\n`);
+    const user = await app.get(PasswordService).createUser(email, password, UserRole.ADMIN);
+    process.stdout.write(`Created SekerEagle admin: ${user.email} (${user.id})\n`);
   } finally {
     await app.close();
   }

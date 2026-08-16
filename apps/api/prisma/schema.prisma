@@ -121,7 +121,7 @@ enum EagleImportItemAction {
 
 model User {
   id                       String                    @id @default(uuid())
-  username                 String                    @unique
+  email                    String                    @unique
   passwordHash             String
   role                     UserRole                  @default(USER)
   authVersion              Int                       @default(0)

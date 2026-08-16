@@ -1,10 +1,10 @@
 const baseUrl = process.env.SEKEREAGLE_BASE_URL ?? 'http://localhost:8180';
-const adminUsername = process.env.SMOKE_ADMIN_USERNAME ?? '';
+const adminEmail = process.env.SMOKE_ADMIN_EMAIL ?? '';
 const adminPassword = process.env.SMOKE_ADMIN_PASSWORD ?? '';
 const origin = new URL(baseUrl).origin;
 
-if (!adminUsername || !adminPassword) {
-  throw new Error('SMOKE_ADMIN_USERNAME and SMOKE_ADMIN_PASSWORD are required');
+if (!adminEmail || !adminPassword) {
+  throw new Error('SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD are required');
 }
 if (origin !== 'http://localhost:8180') {
   throw new Error(`拒绝对非本机独立实例运行 smoke: ${origin}`);
@@ -38,19 +38,19 @@ async function api(path, { method = 'GET', cookie = '', bearer = '', body } = {}
 
 const adminLogin = await api('/api/auth/login', {
   method: 'POST',
-  body: { username: adminUsername, password: adminPassword },
+  body: { email: adminEmail, password: adminPassword },
 });
 if (!adminLogin.response.ok) throw new Error(`管理员登录失败: ${adminLogin.response.status}`);
 const adminCookie = cookiesFrom(adminLogin.response);
 
 const suffix = Date.now().toString(36);
-const username = `smoke_${suffix}`;
+const email = `smoke.${suffix}@smoke.invalid`;
 const oldPassword = `Old-smoke-${suffix}-password`;
 const newPassword = `New-smoke-${suffix}-password`;
 const created = await api('/api/admin/users', {
   method: 'POST',
   cookie: adminCookie,
-  body: { username, password: oldPassword, role: 'USER' },
+  body: { email, password: oldPassword, role: 'USER' },
 });
 if (created.response.status !== 201)
   throw new Error(`创建测试用户失败: ${created.response.status}`);
@@ -59,7 +59,7 @@ if (typeof userId !== 'string') throw new Error('创建用户响应缺少 user.i
 
 const userLogin = await api('/api/auth/login', {
   method: 'POST',
-  body: { username, password: oldPassword },
+  body: { email, password: oldPassword },
 });
 if (!userLogin.response.ok) throw new Error(`测试用户登录失败: ${userLogin.response.status}`);
 const userCookie = cookiesFrom(userLogin.response);
@@ -99,7 +99,7 @@ if (revokedSession.response.status !== 401) throw new Error('重置密码后旧�
 
 const relogin = await api('/api/auth/login', {
   method: 'POST',
-  body: { username, password: newPassword },
+  body: { email, password: newPassword },
 });
 if (!relogin.response.ok) throw new Error('新密码登录失败');
 
@@ -111,14 +111,14 @@ const disabled = await api(`/api/admin/users/${userId}/disabled`, {
 if (!disabled.response.ok) throw new Error(`停用用户失败: ${disabled.response.status}`);
 const disabledLogin = await api('/api/auth/login', {
   method: 'POST',
-  body: { username, password: newPassword },
+  body: { email, password: newPassword },
 });
 if (disabledLogin.response.status !== 403) throw new Error('停用用户仍可登录');
 
 const rejectedOrigin = await fetch(`${baseUrl}/api/auth/login`, {
   method: 'POST',
   headers: { origin: 'http://untrusted.invalid', 'content-type': 'application/json' },
-  body: JSON.stringify({ username: adminUsername, password: adminPassword }),
+  body: JSON.stringify({ email: adminEmail, password: adminPassword }),
 });
 if (rejectedOrigin.status !== 403) throw new Error('跨站 Origin 未被拒绝');
 
@@ -126,7 +126,7 @@ const bruteForceStatuses = [];
 for (let attempt = 0; attempt < 8; attempt += 1) {
   const result = await api('/api/auth/login', {
     method: 'POST',
-    body: { username: `missing-${suffix}`, password: 'never-a-real-password' },
+    body: { email: `missing.${suffix}@smoke.invalid`, password: 'never-a-real-password' },
   });
   bruteForceStatuses.push(result.response.status);
 }

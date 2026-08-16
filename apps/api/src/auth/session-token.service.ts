@@ -9,7 +9,7 @@ import type { AuthPrincipal, BrowserSession } from './auth.types';
 
 interface AccessPayload {
   sub: string;
-  username: string;
+  email: string;
   role: User['role'];
   authVersion: number;
   kind: 'browser';
@@ -37,7 +37,7 @@ export class SessionTokenService {
     return {
       accessToken: await this.signAccessToken(user),
       refreshToken,
-      user: { id: user.id, username: user.username, role: user.role },
+      user: { id: user.id, email: user.email, role: user.role },
     };
   }
 
@@ -81,7 +81,7 @@ export class SessionTokenService {
     }
     return {
       sub: user.id,
-      username: user.username,
+      email: user.email,
       role: user.role,
       authVersion: user.authVersion,
       kind: 'browser',
@@ -92,7 +92,7 @@ export class SessionTokenService {
   private signAccessToken(user: User): Promise<string> {
     const payload: AccessPayload = {
       sub: user.id,
-      username: user.username,
+      email: user.email,
       role: user.role,
       authVersion: user.authVersion,
       kind: 'browser',

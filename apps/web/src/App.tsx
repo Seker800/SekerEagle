@@ -1,7 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 
-interface User { id: string; username: string; role: 'USER' | 'ADMIN' }
+interface User {
+  id: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -10,7 +14,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => null) as { message?: string | string[] } | null;
+    const body = (await response.json().catch(() => null)) as {
+      message?: string | string[];
+    } | null;
     const message = Array.isArray(body?.message) ? body.message.join('；') : body?.message;
     throw new Error(message ?? `请求失败（${response.status}）`);
   }
@@ -20,7 +26,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -39,7 +45,7 @@ export function App() {
     try {
       const result = await request<{ user: User }>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       setUser(result.user);
       setShowAccount(false);
@@ -61,8 +67,25 @@ export function App() {
         <form className="auth-card" onSubmit={(event) => void login(event)}>
           <p className="auth-eyebrow">SekerEagle</p>
           <h1>登录素材库</h1>
-          <label>用户名<input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" autoFocus /></label>
-          <label>密码<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" /></label>
+          <label>
+            邮箱
+            <input
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+              autoFocus
+            />
+          </label>
+          <label>
+            密码
+            <input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
           {error ? <p className="auth-error">{error}</p> : null}
           <button type="submit">登录</button>
         </form>
@@ -71,17 +94,35 @@ export function App() {
   }
 
   if (showAccount) {
-    return <AccountHome user={user} onEnterLibrary={() => setShowAccount(false)} onLogout={() => void logout()} />;
+    return (
+      <AccountHome
+        user={user}
+        onEnterLibrary={() => setShowAccount(false)}
+        onLogout={() => void logout()}
+      />
+    );
   }
 
   return (
     <div className="standalone-eagle-shell">
-      <SekerEaglePage ownerId={user.id} canManageProcessing={user.role === 'ADMIN'} onLogout={() => setShowAccount(true)} />
+      <SekerEaglePage
+        ownerId={user.id}
+        canManageProcessing={user.role === 'ADMIN'}
+        onLogout={() => setShowAccount(true)}
+      />
     </div>
   );
 }
 
-function AccountHome({ user, onEnterLibrary, onLogout }: { user: User; onEnterLibrary: () => void; onLogout: () => void }) {
+function AccountHome({
+  user,
+  onEnterLibrary,
+  onLogout,
+}: {
+  user: User;
+  onEnterLibrary: () => void;
+  onLogout: () => void;
+}) {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -92,7 +133,11 @@ function AccountHome({ user, onEnterLibrary, onLogout }: { user: User; onEnterLi
     try {
       const result = await request<{ token: string }>('/api/tokens', {
         method: 'POST',
-        body: JSON.stringify({ name: `Eagle 导入器 ${new Date().toLocaleDateString('zh-CN')}`, scopes: ['import:read', 'import:write', 'asset:write'], expiresInDays: 30 }),
+        body: JSON.stringify({
+          name: `Eagle 导入器 ${new Date().toLocaleDateString('zh-CN')}`,
+          scopes: ['import:read', 'import:write', 'asset:write'],
+          expiresInDays: 30,
+        }),
       });
       setToken(result.token);
     } catch (cause) {
@@ -105,15 +150,26 @@ function AccountHome({ user, onEnterLibrary, onLogout }: { user: User; onEnterLi
   return (
     <main className="account-shell">
       <section className="account-card">
-        <p className="auth-eyebrow">SekerEagle · {user.username}</p>
+        <p className="auth-eyebrow">SekerEagle · {user.email}</p>
         <h1>独立账号</h1>
         <p>素材库界面和你的原设置保持不变；这里仅承载独立账号与 Eagle 导入器连接。</p>
         <div className="account-actions">
-          <button className="primary-action" type="button" onClick={onEnterLibrary}>进入素材库</button>
-          <button type="button" onClick={() => void createImporterToken()} disabled={creating}>{creating ? '正在创建…' : '创建 30 天导入令牌'}</button>
-          <button type="button" onClick={onLogout}>退出登录</button>
+          <button className="primary-action" type="button" onClick={onEnterLibrary}>
+            进入素材库
+          </button>
+          <button type="button" onClick={() => void createImporterToken()} disabled={creating}>
+            {creating ? '正在创建…' : '创建 30 天导入令牌'}
+          </button>
+          <button type="button" onClick={onLogout}>
+            退出登录
+          </button>
         </div>
-        {token ? <label className="token-result">令牌只显示一次<textarea readOnly value={token} onFocus={(event) => event.currentTarget.select()} /></label> : null}
+        {token ? (
+          <label className="token-result">
+            令牌只显示一次
+            <textarea readOnly value={token} onFocus={(event) => event.currentTarget.select()} />
+          </label>
+        ) : null}
         {error ? <p className="auth-error">{error}</p> : null}
       </section>
     </main>

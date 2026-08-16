@@ -7,18 +7,16 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsEmail,
   IsInt,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
 } from 'class-validator';
 import { PAT_SCOPES, type PatScope } from './auth.types';
-
-const USERNAME_PATTERN = /^[a-z0-9][a-z0-9._-]{2,31}$/;
 
 function normalizeLowercaseString(value: unknown): unknown {
   return typeof value === 'string' ? value.trim().toLowerCase() : value;
@@ -29,11 +27,12 @@ function normalizeString(value: unknown): unknown {
 }
 
 export class LoginDto {
-  @ApiProperty({ example: 'seker' })
+  @ApiProperty({ example: 'seker@example.com', format: 'email' })
   @Transform(({ value }: { value: unknown }) => normalizeLowercaseString(value))
   @IsString()
-  @Matches(USERNAME_PATTERN)
-  username!: string;
+  @IsEmail({}, { message: '请输入有效的邮箱地址。' })
+  @MaxLength(254)
+  email!: string;
 
   @ApiProperty({ minLength: 12, maxLength: 128, writeOnly: true })
   @IsString()
@@ -71,11 +70,12 @@ export class SetUserDisabledDto {
 }
 
 export class CreateUserDto {
-  @ApiProperty({ example: 'new-user' })
+  @ApiProperty({ example: 'new-user@example.com', format: 'email' })
   @Transform(({ value }: { value: unknown }) => normalizeLowercaseString(value))
   @IsString()
-  @Matches(USERNAME_PATTERN)
-  username!: string;
+  @IsEmail({}, { message: '请输入有效的邮箱地址。' })
+  @MaxLength(254)
+  email!: string;
 
   @ApiProperty({ minLength: 12, maxLength: 128, writeOnly: true })
   @IsString()

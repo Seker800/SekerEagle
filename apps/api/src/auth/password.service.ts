@@ -6,7 +6,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { UserRole, type User } from '@prisma/client';
+import { Prisma, UserRole, type User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -17,29 +17,40 @@ const DUMMY_HASH = bcrypt.hashSync('sekereagle-invalid-password', BCRYPT_ROUNDS)
 export class PasswordService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async login(username: string, password: string): Promise<User> {
-    const normalized = username.trim().toLowerCase();
-    const user = await this.prisma.user.findUnique({ where: { username: normalized } });
-    const valid = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-    if (!user || !valid) throw new UnauthorizedException('用户名或密码错误。');
+  async login(email: string, password: string): Promise<User> {
+    const normalized = normalizeEmail(email);
+    let user = await this.prisma.user.findUnique({ where: { email: normalized } });
+    if (user) {
+      if (!(await bcrypt.compare(password, user.passwordHash))) {
+        throw new UnauthorizedException('邮箱或密码错误。');
+      }
+    } else {
+      user = await this.claimSoleLegacyAdminEmail(normalized, password);
+      if (!user) throw new UnauthorizedException('邮箱或密码错误。');
+    }
     if (user.disabledAt) throw new ForbiddenException('该账号已停用。');
     return user;
   }
 
-  async createUser(username: string, password: string, role: UserRole): Promise<User> {
-    const normalized = username.trim().toLowerCase();
-    if (
-      await this.prisma.user.findUnique({ where: { username: normalized }, select: { id: true } })
-    ) {
-      throw new ConflictException('用户名已存在。');
+  async createUser(email: string, password: string, role: UserRole): Promise<User> {
+    const normalized = normalizeEmail(email);
+    if (await this.prisma.user.findUnique({ where: { email: normalized }, select: { id: true } })) {
+      throw new ConflictException('邮箱已存在。');
     }
-    return this.prisma.user.create({
-      data: {
-        username: normalized,
-        passwordHash: await bcrypt.hash(password, BCRYPT_ROUNDS),
-        role,
-      },
-    });
+    try {
+      return await this.prisma.user.create({
+        data: {
+          email: normalized,
+          passwordHash: await bcrypt.hash(password, BCRYPT_ROUNDS),
+          role,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('邮箱已存在。');
+      }
+      throw error;
+    }
   }
 
   async changePassword(
@@ -117,4 +128,53 @@ export class PasswordService {
       }),
     ]);
   }
+
+  private async claimSoleLegacyAdminEmail(email: string, password: string): Promise<User | null> {
+    const candidates = await this.prisma.user.findMany({
+      where: { role: UserRole.ADMIN, disabledAt: null, email: { not: { contains: '@' } } },
+      take: 2,
+    });
+    if (candidates.length !== 1) {
+      await bcrypt.compare(password, DUMMY_HASH);
+      return null;
+    }
+    const [legacyAdmin] = candidates;
+    if (!legacyAdmin || !(await bcrypt.compare(password, legacyAdmin.passwordHash))) return null;
+    const now = new Date();
+    try {
+      const claimed = await this.prisma.$transaction(async (transaction) => {
+        const updated = await transaction.user.updateMany({
+          where: {
+            id: legacyAdmin.id,
+            email: legacyAdmin.email,
+            role: UserRole.ADMIN,
+            disabledAt: null,
+          },
+          data: { email, authVersion: { increment: 1 } },
+        });
+        if (updated.count !== 1) return null;
+        await Promise.all([
+          transaction.refreshToken.updateMany({
+            where: { userId: legacyAdmin.id, revokedAt: null },
+            data: { revokedAt: now },
+          }),
+          transaction.personalAccessToken.updateMany({
+            where: { userId: legacyAdmin.id, revokedAt: null },
+            data: { revokedAt: now },
+          }),
+        ]);
+        return transaction.user.findUnique({ where: { id: legacyAdmin.id } });
+      });
+      return claimed;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        return null;
+      }
+      throw error;
+    }
+  }
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
 }

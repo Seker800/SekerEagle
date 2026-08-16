@@ -1573,9 +1573,10 @@
       "LoginDto": {
         "type": "object",
         "properties": {
-          "username": {
+          "email": {
             "type": "string",
-            "example": "seker"
+            "example": "seker@example.com",
+            "format": "email"
           },
           "password": {
             "type": "string",
@@ -1584,7 +1585,7 @@
             "writeOnly": true
           }
         },
-        "required": ["username", "password"]
+        "required": ["email", "password"]
       },
       "ChangePasswordDto": {
         "type": "object",
@@ -1607,9 +1608,10 @@
       "CreateUserDto": {
         "type": "object",
         "properties": {
-          "username": {
+          "email": {
             "type": "string",
-            "example": "new-user"
+            "example": "new-user@example.com",
+            "format": "email"
           },
           "password": {
             "type": "string",
@@ -1623,7 +1625,7 @@
             "default": "USER"
           }
         },
-        "required": ["username", "password"]
+        "required": ["email", "password"]
       },
       "ResetPasswordDto": {
         "type": "object",

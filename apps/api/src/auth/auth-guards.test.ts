@@ -17,7 +17,7 @@ function contextFor(principal: AuthPrincipal): ExecutionContext {
 
 const browser: AuthPrincipal = {
   sub: 'browser-user',
-  username: 'browser',
+  email: 'browser@example.com',
   role: UserRole.USER,
   authVersion: 0,
   kind: 'browser',
@@ -27,7 +27,7 @@ const browser: AuthPrincipal = {
 const pat: AuthPrincipal = {
   ...browser,
   sub: 'pat-user',
-  username: 'pat',
+  email: 'pat@example.com',
   kind: 'pat',
   scopes: ['import:read'],
 };

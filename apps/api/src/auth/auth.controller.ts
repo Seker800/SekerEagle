@@ -48,7 +48,7 @@ export class AuthController {
   @UseGuards(BrowserOriginGuard)
   @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
-    const user = await this.passwords.login(dto.username, dto.password);
+    const user = await this.passwords.login(dto.email, dto.password);
     const session = await this.tokens.createSession(user);
     this.browser.write(response, session);
     return { user: session.user };
@@ -75,7 +75,7 @@ export class AuthController {
   @Get('auth/me')
   @UseGuards(AccessAuthGuard)
   me(@CurrentPrincipal() principal: AuthPrincipal) {
-    return { user: { id: principal.sub, username: principal.username, role: principal.role } };
+    return { user: { id: principal.sub, email: principal.email, role: principal.role } };
   }
 
   @Patch('auth/me/password')
@@ -91,8 +91,8 @@ export class AuthController {
   @Post('admin/users')
   @UseGuards(AccessAuthGuard, AdminGuard, BrowserOriginGuard)
   async createUser(@Body() dto: CreateUserDto) {
-    const user = await this.passwords.createUser(dto.username, dto.password, dto.role);
-    return { user: { id: user.id, username: user.username, role: user.role } };
+    const user = await this.passwords.createUser(dto.email, dto.password, dto.role);
+    return { user: { id: user.id, email: user.email, role: user.role } };
   }
 
   @Patch('admin/users/:userId/password')

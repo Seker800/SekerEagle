@@ -8,11 +8,12 @@ const password = `Sea-${randomBytes(24).toString('base64url')}`;
 
 await mkdir(directory, { recursive: true, mode: 0o700 });
 try {
-  await writeFile(output, `SMOKE_ADMIN_USERNAME=seker\nSMOKE_ADMIN_PASSWORD=${password}\n`, {
-    encoding: 'utf8',
-    flag: 'wx',
-    mode: 0o600,
-  });
+  const email = 'seker@example.com';
+  await writeFile(
+    output,
+    `BOOTSTRAP_ADMIN_EMAIL=${email}\nBOOTSTRAP_ADMIN_PASSWORD=${password}\nSMOKE_ADMIN_EMAIL=${email}\nSMOKE_ADMIN_PASSWORD=${password}\n`,
+    { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+  );
   process.stdout.write(
     'Created private .local/bootstrap.env; delete it after changing the admin password\n',
   );

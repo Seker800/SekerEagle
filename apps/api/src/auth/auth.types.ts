@@ -5,7 +5,7 @@ export type PatScope = (typeof PAT_SCOPES)[number];
 
 export interface AuthPrincipal {
   sub: string;
-  username: string;
+  email: string;
   role: UserRole;
   authVersion: number;
   kind: 'browser' | 'pat';
@@ -17,7 +17,7 @@ export interface BrowserSession {
   refreshToken: string;
   user: {
     id: string;
-    username: string;
+    email: string;
     role: UserRole;
   };
 }

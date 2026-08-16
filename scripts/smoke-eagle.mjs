@@ -3,11 +3,11 @@ import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const baseUrl = process.env.SEKEREAGLE_BASE_URL ?? 'http://localhost:8180';
-const adminUsername = process.env.SMOKE_ADMIN_USERNAME ?? '';
+const adminEmail = process.env.SMOKE_ADMIN_EMAIL ?? '';
 const adminPassword = process.env.SMOKE_ADMIN_PASSWORD ?? '';
 const origin = new URL(baseUrl).origin;
 
-if (!adminUsername || !adminPassword) throw new Error('缺少 smoke 管理员凭据');
+if (!adminEmail || !adminPassword) throw new Error('缺少 smoke 管理员凭据');
 if (origin !== 'http://localhost:8180') throw new Error(`拒绝测试非本机实例: ${origin}`);
 
 function cookiesFrom(response) {
@@ -33,26 +33,26 @@ async function api(path, { method = 'GET', cookie = '', bearer = '', body } = {}
   return { response, payload };
 }
 
-async function login(username, password) {
-  const result = await api('/api/auth/login', { method: 'POST', body: { username, password } });
-  if (!result.response.ok) throw new Error(`${username} 登录失败: ${result.response.status}`);
+async function login(email, password) {
+  const result = await api('/api/auth/login', { method: 'POST', body: { email, password } });
+  if (!result.response.ok) throw new Error(`${email} 登录失败: ${result.response.status}`);
   return cookiesFrom(result.response);
 }
 
-const adminCookie = await login(adminUsername, adminPassword);
+const adminCookie = await login(adminEmail, adminPassword);
 const suffix = Date.now().toString(36);
 const password = `Eagle-smoke-${suffix}-password`;
 const users = [];
 for (const prefix of ['owner', 'other']) {
-  const username = `${prefix}_${suffix}`;
+  const email = `${prefix}.${suffix}@smoke.invalid`;
   const created = await api('/api/admin/users', {
     method: 'POST',
     cookie: adminCookie,
-    body: { username, password, role: 'USER' },
+    body: { email, password, role: 'USER' },
   });
   if (created.response.status !== 201) throw new Error(`创建 ${prefix} 用户失败`);
   await delay(150);
-  users.push({ username, cookie: await login(username, password) });
+  users.push({ email, cookie: await login(email, password) });
 }
 
 const [owner, other] = users;
@@ -137,12 +137,14 @@ if (!tagged.response.ok || tagged.payload?.manualTags?.length !== 1)
   throw new Error('素材标签关联失败');
 
 const tagGroup = await api('/api/eagle/tag-groups', {
-  method: 'POST', cookie: owner.cookie,
+  method: 'POST',
+  cookie: owner.cookie,
   body: { name: `group-${suffix}`, color: '#547de8', description: 'smoke' },
 });
 if (tagGroup.response.status !== 201) throw new Error('创建标签组失败');
 const groupedTag = await api(`/api/eagle/tags/${tag.payload.id}`, {
-  method: 'PATCH', cookie: owner.cookie,
+  method: 'PATCH',
+  cookie: owner.cookie,
   body: { groupId: tagGroup.payload.id, isStarred: true, rowVersion: tag.payload.rowVersion },
 });
 if (!groupedTag.response.ok || groupedTag.payload?.groupId !== tagGroup.payload.id)
@@ -151,25 +153,35 @@ const filteredAssets = await api(
   `/api/eagle/assets?formats=svg&manualTagIds=${tag.payload.id}&search=smoke`,
   { cookie: owner.cookie },
 );
-if (!filteredAssets.response.ok || !filteredAssets.payload?.items?.some((item) => item.id === assetId))
+if (
+  !filteredAssets.response.ok ||
+  !filteredAssets.payload?.items?.some((item) => item.id === assetId)
+)
   throw new Error('原版界面的复合筛选接口失败');
 const smartFolder = await api('/api/eagle/smart-folders', {
-  method: 'POST', cookie: owner.cookie,
+  method: 'POST',
+  cookie: owner.cookie,
   body: { name: `smart-${suffix}`, query: { version: 1, filters: { formats: ['svg'] } } },
 });
 if (smartFolder.response.status !== 201)
-  throw new Error(`创建智能文件夹失败: ${smartFolder.response.status} ${JSON.stringify(smartFolder.payload)}`);
+  throw new Error(
+    `创建智能文件夹失败: ${smartFolder.response.status} ${JSON.stringify(smartFolder.payload)}`,
+  );
 const smartFolderAssets = await api(`/api/eagle/assets?smartFolderId=${smartFolder.payload.id}`, {
   cookie: owner.cookie,
 });
-if (!smartFolderAssets.response.ok || !smartFolderAssets.payload?.items?.some((item) => item.id === assetId))
+if (
+  !smartFolderAssets.response.ok ||
+  !smartFolderAssets.payload?.items?.some((item) => item.id === assetId)
+)
   throw new Error('智能文件夹筛选失败');
 
 const processingSummary = await api('/api/admin/eagle-processing/summary', { cookie: adminCookie });
 if (!processingSummary.response.ok || !processingSummary.payload?.settings)
   throw new Error('管理员处理页读取失败');
 const processingSettings = await api('/api/admin/eagle-processing/settings', {
-  method: 'PATCH', cookie: adminCookie,
+  method: 'PATCH',
+  cookie: adminCookie,
   body: { mode: 'NIGHT', nightStart: '23:00', nightEnd: '06:00' },
 });
 if (!processingSettings.response.ok || processingSettings.payload?.timeZone !== 'Asia/Shanghai')

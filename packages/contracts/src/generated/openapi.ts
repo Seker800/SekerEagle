@@ -777,8 +777,11 @@ export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
     LoginDto: {
-      /** @example seker */
-      username: string;
+      /**
+       * Format: email
+       * @example seker@example.com
+       */
+      email: string;
       password: string;
     };
     ChangePasswordDto: {
@@ -786,8 +789,11 @@ export interface components {
       newPassword: string;
     };
     CreateUserDto: {
-      /** @example new-user */
-      username: string;
+      /**
+       * Format: email
+       * @example new-user@example.com
+       */
+      email: string;
       password: string;
       /**
        * @default USER

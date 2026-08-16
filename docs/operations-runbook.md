@@ -10,7 +10,7 @@
 
    ```sh
    docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \
-     -e BOOTSTRAP_ADMIN_USERNAME=你的用户名 \
+     -e BOOTSTRAP_ADMIN_EMAIL=你的邮箱 \
      -e BOOTSTRAP_ADMIN_PASSWORD=至少十二位的密码 \
      api node apps/api/dist/bootstrap-admin.js
    ```
@@ -18,6 +18,8 @@
 6. 打开 `http://localhost:8180` 登录。
 
 也可以先运行 `npm run bootstrap-credentials:create` 生成本机私有的 `.local/bootstrap.env`。首次登录并修改密码后应删除该文件。
+
+从早期用户名版本升级时，数据库中唯一的旧管理员可以直接在新登录页输入希望绑定的邮箱和原密码。只有原密码验证成功后才会写入邮箱，并同时吊销旧 refresh token 与 PAT；普通用户和多个旧管理员不会自动绑定。
 
 ## 安全检查
 

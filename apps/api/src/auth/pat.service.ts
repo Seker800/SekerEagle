@@ -68,7 +68,7 @@ export class PatService {
     });
     return {
       sub: record.user.id,
-      username: record.user.username,
+      email: record.user.email,
       role: record.user.role,
       authVersion: record.user.authVersion,
       kind: 'pat',
