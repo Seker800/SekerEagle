@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run ci:check
+      - run: docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet
+      - run: docker build -f apps/api/Dockerfile .
+      - run: docker build -f apps/worker/Dockerfile .
+      - run: docker build -f apps/web/Dockerfile .

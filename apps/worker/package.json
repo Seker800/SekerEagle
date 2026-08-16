@@ -1,0 +1,19 @@
+{
+  "name": "@sekereagle/worker",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "@sekereagle/config": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.9.3"
+  }
+}

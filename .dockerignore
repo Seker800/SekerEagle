@@ -1,0 +1,8 @@
+.git
+.github
+**/dist
+**/node_modules
+**/.env*
+!.env.example
+coverage
+.omx

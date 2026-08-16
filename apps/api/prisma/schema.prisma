@@ -1,0 +1,796 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UploadKind {
+  EAGLE_ASSET
+}
+
+enum UploadSessionStatus {
+  INITIATED
+  ASSEMBLED
+  FINALIZING
+  COMPLETED
+  FAILED
+  ABORTED
+}
+
+enum EagleAssetLifecycleStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum EagleRenditionKind {
+  THUMBNAIL
+  PREVIEW
+  POSTER
+}
+
+enum EagleRenditionStatus {
+  PENDING
+  READY
+  FAILED
+}
+
+enum EagleAiAnalysisStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  FAILED
+  SUPERSEDED
+}
+
+enum EagleAiTagStatus {
+  ACTIVE
+  HIDDEN
+  REJECTED
+}
+
+enum EagleMediaJobKind {
+  GENERATE_RENDITIONS
+  GENERATE_THUMBNAIL
+  GENERATE_PREVIEW
+  PROBE_MEDIA
+  EXTRACT_COLOR_PALETTE
+  PURGE_ASSET
+}
+
+enum EagleMediaJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum EagleProcessingLane {
+  INTERACTIVE
+  BACKGROUND
+  MAINTENANCE
+}
+
+enum EagleColorAnalysisStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum EagleExternalProvider {
+  EAGLE_APP
+}
+
+enum EagleImportRunStatus {
+  DRAFT
+  PREFLIGHTED
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+  CANCELLED
+}
+
+enum EagleImportItemStatus {
+  STAGED
+  UPLOADING
+  FINALIZING
+  IMPORTED
+  SKIPPED
+  FAILED
+  CANCELLED
+}
+
+enum EagleImportItemAction {
+  NEW
+  UNCHANGED
+  METADATA_UPDATE
+  CONTENT_REPLACE
+  SKIP_DELETED
+  SKIP_UNSUPPORTED
+}
+
+model User {
+  id                       String                    @id @default(uuid())
+  username                 String                    @unique
+  passwordHash             String
+  role                     UserRole                  @default(USER)
+  authVersion              Int                       @default(0)
+  disabledAt               DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  refreshTokens            RefreshToken[]
+  personalAccessTokens     PersonalAccessToken[]
+  uploadSessions           UploadSession[]
+  eagleAssets              EagleAsset[]
+  eagleAssetAnnotations    EagleAssetAnnotation[]
+  eagleManualTags          EagleManualTag[]
+  eagleManualTagGroups     EagleManualTagGroup[]
+  eagleAiTags              EagleAiTag[]
+  eagleSmartFolders        EagleSmartFolder[]
+  eagleUploadSessionStates EagleUploadSessionState[]
+  eagleExternalLibraries   EagleExternalLibrary[]
+  eagleExternalAssets      EagleExternalAsset[]
+  eagleImportRuns          EagleImportRun[]
+}
+
+model RefreshToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model PersonalAccessToken {
+  id         String    @id @default(uuid())
+  tokenHash  String    @unique
+  name       String
+  scopes     String[]
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, expiresAt])
+}
+
+model UploadSession {
+  id                    String                   @id @default(uuid())
+  kind                  UploadKind               @default(EAGLE_ASSET)
+  status                UploadSessionStatus      @default(INITIATED)
+  originalName          String
+  mimeType              String
+  size                  BigInt
+  objectKey             String                   @unique
+  multipartUploadId     String
+  completionParts       Json?
+  uploaderId            String
+  eagleAssetId          String?
+  eagleDuplicatePolicy  String?
+  objectCleanupPending  Boolean                  @default(false)
+  assembledAt           DateTime?
+  finalizationStartedAt DateTime?
+  finalizationAttempts  Int                      @default(0)
+  lastError             String?
+  completedAt           DateTime?
+  abortedAt             DateTime?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  uploader              User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+  eagleAsset            EagleAsset?              @relation(fields: [uploaderId, eagleAssetId], references: [ownerId, id], onDelete: Restrict)
+  eagleState            EagleUploadSessionState?
+  finalizationMode      String?
+  finalizationJob       UploadFinalizationJob?
+
+  @@unique([uploaderId, id])
+  @@index([uploaderId, createdAt])
+  @@index([status, createdAt])
+  @@index([status, updatedAt])
+  @@index([objectCleanupPending, updatedAt])
+  @@index([eagleAssetId])
+}
+
+model UploadFinalizationJob {
+  id              String        @id @default(uuid())
+  uploadSessionId String        @unique
+  status          String        @default("PENDING")
+  availableAt     DateTime      @default(now())
+  attempts        Int           @default(0)
+  leaseVersion    Int           @default(0)
+  lockedAt        DateTime?
+  lastError       String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  uploadSession   UploadSession @relation(fields: [uploadSessionId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt, createdAt])
+  @@index([status, lockedAt])
+}
+
+model EagleUploadSessionState {
+  uploadSessionId       String        @id
+  ownerId               String
+  duplicatePolicy       String        @default("SKIP")
+  assetId               String?
+  replacementAssetId    String?
+  expectedContentSha256 String?
+  retiredObjectKeys     String[]      @default([])
+  supersededAt          DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  uploadSession         UploadSession @relation(fields: [ownerId, uploadSessionId], references: [uploaderId, id], onDelete: Cascade)
+  owner                 User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  asset                 EagleAsset?   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Restrict)
+  replacementAsset      EagleAsset?   @relation("EagleReplacementUpload", fields: [ownerId, replacementAssetId], references: [ownerId, id], onDelete: Restrict)
+
+  @@unique([ownerId, uploadSessionId])
+  @@index([ownerId, createdAt])
+  @@index([assetId])
+  @@index([ownerId, replacementAssetId])
+}
+
+model EagleAsset {
+  id                             String                         @id @default(uuid())
+  ownerId                        String
+  originalName                   String
+  displayName                    String
+  normalizedDisplayName          String
+  mimeType                       String
+  format                         String
+  byteSize                       BigInt
+  sha256                         String?
+  width                          Int?
+  height                         Int?
+  durationMs                     Int?
+  originalObjectKey              String                         @unique
+  lifecycleStatus                EagleAssetLifecycleStatus      @default(PROCESSING)
+  mediaErrorCode                 String?
+  mediaRevision                  Int                            @default(0)
+  rowVersion                     Int                            @default(1)
+  rating                         Int?
+  libraryAddedAt                 DateTime                       @default(now())
+  deletedAt                      DateTime?
+  purgeAfter                     DateTime?
+  createdAt                      DateTime                       @default(now())
+  updatedAt                      DateTime                       @updatedAt
+  owner                          User                           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  renditions                     EagleAssetRendition[]
+  manualTagLinks                 EagleAssetManualTag[]
+  manualTagIngestions            EagleAssetManualTagIngestion[]
+  aiTagLinks                     EagleAssetAiTag[]
+  aiAnalysisRuns                 EagleAiAnalysisRun[]
+  processingJobs                 EagleAssetProcessingJob[]
+  colorAnalyses                  EagleAssetColorAnalysis[]
+  uploadSessions                 UploadSession[]
+  uploadSessionStates            EagleUploadSessionState[]
+  replacementUploadSessionStates EagleUploadSessionState[]      @relation("EagleReplacementUpload")
+  annotation                     EagleAssetAnnotation?
+  externalSource                 EagleExternalAsset?
+  importRunItems                 EagleImportRunItem[]
+
+  @@unique([ownerId, id])
+  @@index([ownerId, deletedAt, libraryAddedAt, id])
+  @@index([ownerId, deletedAt, rating])
+  @@index([ownerId, normalizedDisplayName])
+  @@index([normalizedDisplayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_normalizedDisplayName_trgm_idx")
+  @@index([originalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_originalName_trgm_idx")
+  @@index([ownerId, sha256])
+}
+
+model EagleAssetAnnotation {
+  ownerId     String
+  assetId     String
+  color       String?
+  description String?
+  sourceUrl   String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  asset       EagleAsset @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([ownerId, assetId])
+  @@index([ownerId, updatedAt])
+}
+
+model EagleExternalLibrary {
+  id                String                @id @default(uuid())
+  ownerId           String
+  provider          EagleExternalProvider @default(EAGLE_APP)
+  externalLibraryId String
+  displayName       String
+  sourceModifiedAt  DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  owner             User                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  assets            EagleExternalAsset[]
+  importRuns        EagleImportRun[]
+
+  @@unique([ownerId, provider, externalLibraryId])
+  @@unique([ownerId, id])
+  @@index([ownerId, updatedAt])
+}
+
+model EagleExternalAsset {
+  id                   String               @id @default(uuid())
+  ownerId              String
+  externalLibraryId    String
+  externalItemId       String
+  assetId              String?
+  sourceImportedAt     DateTime?
+  sourceModifiedAt     DateTime?
+  metadataVersion      Int                  @default(1)
+  metadataHash         String?
+  sourceContentSha256  String?
+  sourceFileModifiedAt DateTime?
+  sourceByteSize       BigInt?
+  lastSeenAt           DateTime?
+  lastImportedAt       DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  owner                User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  library              EagleExternalLibrary @relation(fields: [ownerId, externalLibraryId], references: [ownerId, id], onDelete: Restrict)
+  /// The migration uses PostgreSQL column-specific SET NULL so ownerId remains intact.
+  asset                EagleAsset?          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: SetNull)
+  importRunItems       EagleImportRunItem[]
+
+  @@unique([ownerId, externalLibraryId, externalItemId])
+  @@unique([ownerId, assetId])
+  @@unique([ownerId, id])
+  @@index([ownerId, externalItemId])
+}
+
+model EagleImportRun {
+  id                String                          @id @default(uuid())
+  ownerId           String
+  externalLibraryId String
+  idempotencyKey    String
+  declarationHash   String?
+  manifestVersion   Int
+  status            EagleImportRunStatus            @default(DRAFT)
+  declaredItemCount Int                             @default(0)
+  declaredByteSize  BigInt                          @default(0)
+  stagedItemCount   Int                             @default(0)
+  importedItemCount Int                             @default(0)
+  skippedItemCount  Int                             @default(0)
+  failedItemCount   Int                             @default(0)
+  startedAt         DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+  lastErrorCode     String?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  owner             User                            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  externalLibrary   EagleExternalLibrary            @relation(fields: [ownerId, externalLibraryId], references: [ownerId, id], onDelete: Restrict)
+  manifestChunks    EagleImportManifestChunk[]
+  items             EagleImportRunItem[]
+  folders           EagleImportFolderDefinition[]
+  tags              EagleImportTagDefinition[]
+  tagGroups         EagleImportTagGroupDefinition[]
+
+  @@unique([ownerId, idempotencyKey])
+  @@unique([ownerId, id])
+  @@index([ownerId, status, updatedAt])
+  @@index([externalLibraryId, createdAt])
+  @@index([status, completedAt])
+}
+
+model EagleImportManifestChunk {
+  id                String         @id @default(uuid())
+  ownerId           String
+  runId             String
+  chunkKey          String
+  contentHash       String
+  acceptedItemCount Int
+  skippedItemCount  Int
+  createdAt         DateTime       @default(now())
+  run               EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([runId, chunkKey])
+  @@index([ownerId, runId, createdAt])
+}
+
+model EagleImportRunItem {
+  id                        String                 @id @default(uuid())
+  ownerId                   String
+  runId                     String
+  externalAssetId           String
+  sourceItemId              String
+  displayName               String
+  originalFileName          String
+  extension                 String
+  mimeType                  String
+  byteSize                  BigInt
+  sourceImportedAt          DateTime?
+  sourceModifiedAt          DateTime?
+  rating                    Int?
+  description               String?
+  sourceUrl                 String?
+  tagNames                  String[]               @default([])
+  folderSourceIds           String[]               @default([])
+  metadataHash              String
+  action                    EagleImportItemAction?
+  contentSha256             String?
+  sourceFileModifiedAt      DateTime?
+  warningCodes              String[]               @default([])
+  status                    EagleImportItemStatus  @default(STAGED)
+  attemptCount              Int                    @default(0)
+  errorCode                 String?
+  errorMessage              String?
+  assetId                   String?
+  activeUploadSessionId     String?                @unique
+  terminalProgressAppliedAt DateTime?
+  completedAt               DateTime?
+  createdAt                 DateTime               @default(now())
+  updatedAt                 DateTime               @updatedAt
+  run                       EagleImportRun         @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+  externalAsset             EagleExternalAsset     @relation(fields: [ownerId, externalAssetId], references: [ownerId, id], onDelete: Restrict)
+  /// The migration uses PostgreSQL column-specific SET NULL so ownerId remains intact.
+  asset                     EagleAsset?            @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: SetNull)
+
+  @@unique([runId, externalAssetId])
+  @@unique([runId, sourceItemId])
+  @@unique([ownerId, id])
+  @@index([ownerId, runId, status, id])
+}
+
+model EagleImportFolderDefinition {
+  id                   String         @id @default(uuid())
+  ownerId              String
+  runId                String
+  sourceFolderId       String
+  name                 String
+  parentSourceFolderId String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  run                  EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([runId, sourceFolderId])
+  @@index([ownerId, runId])
+}
+
+model EagleImportTagDefinition {
+  id             String         @id @default(uuid())
+  ownerId        String
+  runId          String
+  name           String
+  normalizedName String
+  color          String?
+  isStarred      Boolean        @default(false)
+  groupSourceIds String[]       @default([])
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  run            EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([runId, normalizedName])
+  @@index([ownerId, runId])
+}
+
+model EagleImportTagGroupDefinition {
+  id             String         @id @default(uuid())
+  ownerId        String
+  runId          String
+  sourceGroupId  String
+  name           String
+  normalizedName String
+  color          String?
+  description    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  run            EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([runId, sourceGroupId])
+  @@index([ownerId, runId])
+}
+
+model EagleAssetRendition {
+  id         String               @id @default(uuid())
+  ownerId    String
+  assetId    String
+  kind       EagleRenditionKind
+  revision   Int
+  storageKey String               @unique
+  mimeType   String
+  byteSize   BigInt
+  width      Int?
+  height     Int?
+  status     EagleRenditionStatus @default(PENDING)
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+  asset      EagleAsset           @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([assetId, kind, revision])
+  @@index([ownerId, assetId])
+}
+
+model EagleManualTag {
+  id                 String                                @id @default(uuid())
+  ownerId            String
+  name               String
+  normalizedName     String
+  color              String?
+  groupId            String?
+  isStarred          Boolean                               @default(false)
+  rowVersion         Int                                   @default(1)
+  createdAt          DateTime                              @default(now())
+  updatedAt          DateTime                              @updatedAt
+  owner              User                                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  group              EagleManualTagGroup?                  @relation("EagleManualTagPrimaryGroup", fields: [ownerId, groupId], references: [ownerId, id], onDelete: Restrict)
+  groupMemberships   EagleManualTagGroupMembership[]
+  assetLinks         EagleAssetManualTag[]
+  promotedAiTagLinks EagleAssetAiTag[]                     @relation("PromotedManualTag")
+  smartFolderDeps    EagleSmartFolderManualTagDependency[]
+
+  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, id])
+  @@index([ownerId, name])
+  @@index([ownerId, groupId, name])
+  @@index([ownerId, isStarred, name])
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleManualTag_normalizedName_trgm_idx")
+}
+
+model EagleManualTagGroup {
+  id             String                          @id @default(uuid())
+  ownerId        String
+  name           String
+  normalizedName String
+  color          String?
+  description    String?
+  rowVersion     Int                             @default(1)
+  createdAt      DateTime                        @default(now())
+  updatedAt      DateTime                        @updatedAt
+  owner          User                            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  tags           EagleManualTag[]                @relation("EagleManualTagPrimaryGroup")
+  tagMemberships EagleManualTagGroupMembership[]
+
+  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, id])
+  @@index([ownerId, name])
+}
+
+model EagleManualTagGroupMembership {
+  ownerId   String
+  tagId     String
+  groupId   String
+  createdAt DateTime            @default(now())
+  tag       EagleManualTag      @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  group     EagleManualTagGroup @relation(fields: [ownerId, groupId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([ownerId, tagId, groupId])
+  @@index([ownerId, groupId, tagId])
+}
+
+model EagleAssetManualTag {
+  ownerId          String
+  assetId          String
+  tagId            String
+  assignedByUser   Boolean                        @default(true)
+  createdAt        DateTime                       @default(now())
+  asset            EagleAsset                     @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  tag              EagleManualTag                 @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  ingestionOrigins EagleAssetManualTagIngestion[]
+
+  @@id([ownerId, assetId, tagId])
+  @@index([ownerId, tagId, assetId])
+}
+
+model EagleAssetManualTagIngestion {
+  ownerId   String
+  assetId   String
+  tagId     String
+  sourceKey String
+  createdAt DateTime            @default(now())
+  asset     EagleAsset          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  link      EagleAssetManualTag @relation(fields: [ownerId, assetId, tagId], references: [ownerId, assetId, tagId], onDelete: Cascade)
+
+  @@id([ownerId, assetId, tagId, sourceKey])
+  @@index([ownerId, assetId, sourceKey])
+}
+
+model EagleAiAnalysisRun {
+  id            String                @id @default(uuid())
+  ownerId       String
+  assetId       String
+  assetRevision Int
+  provider      String
+  model         String
+  modelVersion  String?
+  promptVersion String
+  status        EagleAiAnalysisStatus @default(PENDING)
+  errorCode     String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+  asset         EagleAsset            @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  tagLinks      EagleAssetAiTag[]
+
+  @@unique([ownerId, id])
+  @@index([ownerId, assetId, assetRevision, createdAt])
+  @@index([status, createdAt])
+}
+
+model EagleAiTag {
+  id              String                            @id @default(uuid())
+  ownerId         String
+  name            String
+  normalizedName  String
+  createdAt       DateTime                          @default(now())
+  updatedAt       DateTime                          @updatedAt
+  owner           User                              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  assetLinks      EagleAssetAiTag[]
+  smartFolderDeps EagleSmartFolderAiTagDependency[]
+
+  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, id])
+  @@index([ownerId, name])
+  @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAiTag_normalizedName_trgm_idx")
+}
+
+model EagleAssetAiTag {
+  ownerId             String
+  assetId             String
+  aiTagId             String
+  analysisRunId       String
+  confidence          Float
+  status              EagleAiTagStatus   @default(ACTIVE)
+  promotedManualTagId String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  asset               EagleAsset         @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  aiTag               EagleAiTag         @relation(fields: [ownerId, aiTagId], references: [ownerId, id], onDelete: Cascade)
+  analysisRun         EagleAiAnalysisRun @relation(fields: [ownerId, analysisRunId], references: [ownerId, id], onDelete: Cascade)
+  promotedManualTag   EagleManualTag?    @relation("PromotedManualTag", fields: [ownerId, promotedManualTagId], references: [ownerId, id], onDelete: Restrict)
+
+  @@id([ownerId, assetId, aiTagId, analysisRunId])
+  @@index([ownerId, aiTagId, assetId])
+  @@index([ownerId, analysisRunId])
+}
+
+model EagleSmartFolder {
+  id             String                                @id @default(uuid())
+  ownerId        String
+  parentId       String?
+  name           String
+  normalizedName String
+  color          String?
+  queryVersion   Int                                   @default(1)
+  queryJson      Json
+  sortField      String?
+  sortDirection  String?
+  viewMode       String?
+  thumbnailSize  Int?
+  position       Int                                   @default(0)
+  rowVersion     Int                                   @default(1)
+  createdAt      DateTime                              @default(now())
+  updatedAt      DateTime                              @updatedAt
+  owner          User                                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  parent         EagleSmartFolder?                     @relation("EagleSmartFolderTree", fields: [ownerId, parentId], references: [ownerId, id], onDelete: Restrict)
+  children       EagleSmartFolder[]                    @relation("EagleSmartFolderTree")
+  manualTagDeps  EagleSmartFolderManualTagDependency[]
+  aiTagDeps      EagleSmartFolderAiTagDependency[]
+
+  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, id])
+  @@index([ownerId, parentId, position, id])
+}
+
+model EagleSmartFolderManualTagDependency {
+  ownerId       String
+  smartFolderId String
+  manualTagId   String
+  createdAt     DateTime         @default(now())
+  smartFolder   EagleSmartFolder @relation(fields: [ownerId, smartFolderId], references: [ownerId, id], onDelete: Cascade)
+  manualTag     EagleManualTag   @relation(fields: [ownerId, manualTagId], references: [ownerId, id], onDelete: Restrict)
+
+  @@id([ownerId, smartFolderId, manualTagId])
+  @@index([ownerId, manualTagId, smartFolderId])
+}
+
+model EagleSmartFolderAiTagDependency {
+  ownerId       String
+  smartFolderId String
+  aiTagId       String
+  createdAt     DateTime         @default(now())
+  smartFolder   EagleSmartFolder @relation(fields: [ownerId, smartFolderId], references: [ownerId, id], onDelete: Cascade)
+  aiTag         EagleAiTag       @relation(fields: [ownerId, aiTagId], references: [ownerId, id], onDelete: Restrict)
+
+  @@id([ownerId, smartFolderId, aiTagId])
+  @@index([ownerId, aiTagId, smartFolderId])
+}
+
+model EagleAssetProcessingJob {
+  id               String              @id @default(uuid())
+  ownerId          String
+  assetId          String
+  kind             EagleMediaJobKind
+  status           EagleMediaJobStatus @default(PENDING)
+  lane             EagleProcessingLane @default(INTERACTIVE)
+  assetRevision    Int
+  processorVersion String              @default("v1")
+  attempts         Int                 @default(0)
+  leaseVersion     Int                 @default(0)
+  availableAt      DateTime            @default(now())
+  lockedAt         DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  lastError        String?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  asset            EagleAsset          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([assetId, kind, assetRevision, processorVersion])
+  @@index([status, lane, availableAt])
+  @@index([status, lockedAt])
+  @@index([ownerId, assetId])
+  @@map("EagleMediaJob")
+}
+
+model EagleAssetColorAnalysis {
+  id               String                   @id @default(uuid())
+  ownerId          String
+  assetId          String
+  assetRevision    Int
+  processorVersion String
+  status           EagleColorAnalysisStatus @default(PENDING)
+  isCurrent        Boolean                  @default(false)
+  lastError        String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+  asset            EagleAsset               @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  swatches         EagleAssetColorSwatch[]
+
+  @@unique([ownerId, id])
+  @@unique([assetId, assetRevision, processorVersion])
+  @@index([ownerId, assetId, assetRevision])
+  @@index([ownerId, processorVersion, isCurrent, status])
+  @@index([status, updatedAt])
+}
+
+model EagleAssetColorSwatch {
+  ownerId    String
+  analysisId String
+  rank       Int
+  hex        String
+  weight     Float
+  labL       Float
+  labA       Float
+  labB       Float
+  createdAt  DateTime                @default(now())
+  analysis   EagleAssetColorAnalysis @relation(fields: [ownerId, analysisId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([analysisId, rank])
+  @@index([ownerId, analysisId])
+  @@index([hex])
+  @@index([ownerId, labL])
+}
+
+model EagleProcessingWorkerHeartbeat {
+  workerId       String   @id
+  version        String
+  startedAt      DateTime
+  heartbeatAt    DateTime
+  activeJobCount Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([heartbeatAt])
+}

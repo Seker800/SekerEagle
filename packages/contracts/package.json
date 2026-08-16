@@ -1,0 +1,17 @@
+{
+  "name": "@sekereagle/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "generate": "openapi-typescript openapi.json -o src/generated/openapi.ts"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.10.1",
+    "typescript": "^5.9.3"
+  }
+}

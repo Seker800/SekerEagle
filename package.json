@@ -1,0 +1,44 @@
+{
+  "name": "sekereagle",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "npm@10.9.4",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "overrides": {
+    "@nestjs/swagger": {
+      "js-yaml": "5.2.2"
+    }
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts",
+    "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts",
+    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts",
+    "lint": "eslint .",
+    "format:check": "prettier --check .",
+    "db:guard": "node ./scripts/assert-safe-target.mjs",
+    "db:generate": "npm run prisma:generate --workspace @sekereagle/api",
+    "db:migrate:deploy": "npm run db:guard && npm run prisma:migrate:deploy --workspace @sekereagle/api",
+    "contracts:generate": "npm run openapi:generate --workspace @sekereagle/api && npm run generate --workspace @sekereagle/contracts && prettier --write packages/contracts/openapi.json packages/contracts/src/generated/openapi.ts",
+    "contracts:check": "npm run contracts:generate && git diff --exit-code -- packages/contracts/openapi.json packages/contracts/src/generated/openapi.ts",
+    "compose:config": "docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet",
+    "env:create": "node ./scripts/create-local-env.mjs",
+    "bootstrap-credentials:create": "node ./scripts/create-bootstrap-credentials.mjs",
+    "smoke:auth": "node ./scripts/smoke-auth.mjs",
+    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.10.2",
+    "eslint": "^9.39.1",
+    "js-yaml": "4.3.1",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3"
+  }
+}
