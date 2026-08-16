@@ -10,7 +10,6 @@ import {
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import {
   IconAdjustmentsHorizontal,
-  IconArrowLeft,
   IconCheck,
   IconLayoutGrid,
   IconLayoutSidebarRight,
@@ -24,6 +23,7 @@ import {
   IconStarFilled,
   IconTags,
   IconTrash,
+  IconUserCircle,
   IconX,
 } from '@tabler/icons-react';
 import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
@@ -71,7 +71,7 @@ interface SekerEaglePageProps {
   accessToken?: string;
   ownerId: string;
   canManageProcessing?: boolean;
-  onLogout?: () => void;
+  onOpenAccount?: () => void;
 }
 
 type EagleAssetContextMenu = { x: number; y: number };
@@ -102,7 +102,7 @@ export function SekerEaglePage({
   accessToken: providedAccessToken,
   ownerId,
   canManageProcessing = false,
-  onLogout,
+  onOpenAccount,
 }: SekerEaglePageProps) {
   const accessToken = providedAccessToken ?? '';
   const queryKeys = useMemo(() => {
@@ -605,8 +605,14 @@ export function SekerEaglePage({
               </span>
               <span>SekerEagle</span>
             </div>
-            <button className={styles.backLink} type="button" onClick={onLogout} aria-label="退出登录">
-              <IconArrowLeft size={16} />
+            <button
+              className={styles.backLink}
+              type="button"
+              onClick={onOpenAccount}
+              aria-label="账号设置"
+              title="账号设置"
+            >
+              <IconUserCircle size={18} />
             </button>
           </div>
           <button

@@ -29,6 +29,7 @@ export function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAccount, setShowAccount] = useState(false);
 
@@ -42,6 +43,7 @@ export function App() {
   async function login(event: FormEvent) {
     event.preventDefault();
     setError('');
+    setNotice('');
     try {
       const result = await request<{ user: User }>('/api/auth/login', {
         method: 'POST',
@@ -56,8 +58,22 @@ export function App() {
   }
 
   async function logout() {
-    await request('/api/auth/logout', { method: 'POST', body: '{}' });
-    setUser(null);
+    try {
+      await request('/api/auth/logout', { method: 'POST', body: '{}' });
+    } finally {
+      setUser(null);
+      setNotice('');
+    }
+  }
+
+  async function finishPasswordChange() {
+    try {
+      await request('/api/auth/logout', { method: 'POST', body: '{}' });
+    } finally {
+      setUser(null);
+      setPassword('');
+      setNotice('密码已修改，请使用新密码重新登录。');
+    }
   }
 
   if (loading) return <main className="auth-loading">正在连接 SekerEagle…</main>;
@@ -86,6 +102,7 @@ export function App() {
               autoComplete="current-password"
             />
           </label>
+          {notice ? <p className="auth-success">{notice}</p> : null}
           {error ? <p className="auth-error">{error}</p> : null}
           <button type="submit">登录</button>
         </form>
@@ -98,6 +115,7 @@ export function App() {
       <AccountHome
         user={user}
         onEnterLibrary={() => setShowAccount(false)}
+        onPasswordChanged={() => finishPasswordChange()}
         onLogout={() => void logout()}
       />
     );
@@ -108,7 +126,7 @@ export function App() {
       <SekerEaglePage
         ownerId={user.id}
         canManageProcessing={user.role === 'ADMIN'}
-        onLogout={() => setShowAccount(true)}
+        onOpenAccount={() => setShowAccount(true)}
       />
     </div>
   );
@@ -117,15 +135,22 @@ export function App() {
 function AccountHome({
   user,
   onEnterLibrary,
+  onPasswordChanged,
   onLogout,
 }: {
   user: User;
   onEnterLibrary: () => void;
+  onPasswordChanged: () => Promise<void>;
   onLogout: () => void;
 }) {
   const [token, setToken] = useState('');
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
 
   async function createImporterToken() {
     setCreating(true);
@@ -144,6 +169,34 @@ function AccountHome({
       setError(cause instanceof Error ? cause.message : '创建导入令牌失败');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function changePassword(event: FormEvent) {
+    event.preventDefault();
+    setPasswordError('');
+    if (newPassword !== confirmPassword) {
+      setPasswordError('两次输入的新密码不一致。');
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setPasswordError('新密码不能与当前密码相同。');
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      await request('/api/auth/me/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      await onPasswordChanged();
+    } catch (cause) {
+      setPasswordError(cause instanceof Error ? cause.message : '修改密码失败');
+    } finally {
+      setChangingPassword(false);
     }
   }
 
@@ -171,6 +224,52 @@ function AccountHome({
           </label>
         ) : null}
         {error ? <p className="auth-error">{error}</p> : null}
+        <form className="password-form" onSubmit={(event) => void changePassword(event)}>
+          <div className="account-section-heading">
+            <h2>修改密码</h2>
+            <p>修改后会退出当前账号，并撤销其他登录和导入令牌。</p>
+          </div>
+          <label>
+            当前密码
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+              minLength={12}
+              maxLength={128}
+              autoComplete="current-password"
+              required
+            />
+          </label>
+          <label>
+            新密码
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              minLength={12}
+              maxLength={128}
+              autoComplete="new-password"
+              required
+            />
+          </label>
+          <label>
+            确认新密码
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              minLength={12}
+              maxLength={128}
+              autoComplete="new-password"
+              required
+            />
+          </label>
+          {passwordError ? <p className="auth-error">{passwordError}</p> : null}
+          <button className="password-submit" type="submit" disabled={changingPassword}>
+            {changingPassword ? '正在修改…' : '修改密码'}
+          </button>
+        </form>
       </section>
     </main>
   );
