@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "hardware": "Apple M4 Pro arm64, 64 GiB RAM",
+  "dockerTarget": { "cpus": 8, "memoryGiB": 16 },
+  "metadataFixture": { "assetCount": 10000, "pageSize": 50, "seed": 800 },
+  "mediaFixture": {
+    "itemCount": 100,
+    "selection": "sort source-relative paths, then select every floor(total/100)-th supported item",
+    "requiredKinds": ["image", "animated-image", "video"],
+    "source": "user-owned Eagle backup",
+    "status": "waiting-for-stage-8-backup-preflight"
+  },
+  "runs": {
+    "cacheModes": ["cold", "warm"],
+    "workerConcurrency": 2,
+    "repetitions": 5,
+    "record": ["durationMs", "throughputPerMinute", "rssPeakBytes", "failures"]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "source": {
+    "repository": "SekerChat",
+    "commit": "4361257a854232494f6279487e06a8e858f76ba0",
+    "mode": "clean-copy-with-provenance",
+    "sourceRuntimeAccess": false
+  },
+  "domains": {
+    "included": [
+      "independent-auth",
+      "personal-access-tokens",
+      "eagle-assets",
+      "eagle-tags",
+      "eagle-folders",
+      "eagle-smart-folders",
+      "eagle-import-state",
+      "eagle-media-jobs",
+      "eagle-only-uploads"
+    ],
+    "excluded": ["chat", "groups", "reminders", "bots", "email", "oidc", "albums"]
+  },
+  "runtimeIsolation": {
+    "databaseNames": ["sekereagle", "sekereagle_test"],
+    "bucketPattern": "^sekereagle-[a-z0-9-]+$",
+    "forbiddenHost": "192.168.31.89",
+    "browserCookiePrefix": "sekereagle_",
+    "publicRegistration": false
+  },
+  "firstRound": {
+    "stages": [0, 1, 2, 3],
+    "eagleBusinessApiCopied": false,
+    "userBackupImported": false,
+    "sekerChatModified": false
+  }
+}
