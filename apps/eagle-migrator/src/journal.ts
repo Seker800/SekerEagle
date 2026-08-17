@@ -2,17 +2,8 @@ import { chmodSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { redactSensitiveText } from './secrets';
 
-const ITEM_STATUSES = [
-  'READY',
-  'UPLOADING',
-  'COMMITTING',
-  'RETRYABLE',
-  'IMPORTED',
-  'SKIPPED',
-  'REJECTED',
-] as const;
-
-export type MigrationItemStatus = (typeof ITEM_STATUSES)[number];
+export type MigrationItemStatus =
+  'READY' | 'UPLOADING' | 'COMMITTING' | 'RETRYABLE' | 'IMPORTED' | 'SKIPPED' | 'REJECTED';
 
 export interface JournalIdentity {
   migrationId: string;
@@ -64,7 +55,9 @@ export class MigrationJournal {
     assertIdentity(identity);
     const database = new DatabaseSync(path);
     chmodSync(path, 0o600);
-    database.exec('PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;');
+    database.exec(
+      'PRAGMA journal_mode = WAL; PRAGMA synchronous = FULL; PRAGMA foreign_keys = ON;',
+    );
     database.exec(`
       CREATE TABLE IF NOT EXISTS migration_metadata (
         key TEXT PRIMARY KEY,
@@ -107,18 +100,27 @@ export class MigrationJournal {
     return parseActiveRun(JSON.parse(row.value));
   }
 
+  loadServerRunId(): string | null {
+    const row = this.database
+      .prepare("SELECT value FROM migration_metadata WHERE key = 'lastServerRunId'")
+      .get() as { value: string } | undefined;
+    return row?.value ?? null;
+  }
+
   saveActiveRun(value: unknown): void {
     if (value === null) {
       this.database.prepare("DELETE FROM migration_metadata WHERE key = 'activeRun'").run();
       return;
     }
     const activeRun = parseActiveRun(value);
-    this.database
-      .prepare(`
-        INSERT INTO migration_metadata (key, value) VALUES ('activeRun', ?)
-        ON CONFLICT(key) DO UPDATE SET value = excluded.value
-      `)
-      .run(JSON.stringify(activeRun));
+    const upsert = this.database.prepare(`
+      INSERT INTO migration_metadata (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `);
+    this.transaction(() => {
+      upsert.run('activeRun', JSON.stringify(activeRun));
+      upsert.run('lastServerRunId', activeRun.runId);
+    });
   }
 
   registerItems(items: Iterable<{ sourceItemId: string; contentSha256: string }>): void {
@@ -180,7 +182,11 @@ export class MigrationJournal {
       for (const row of rows) {
         const result = update.run(now(), row.sourceItemId);
         if (result.changes === 1) {
-          claimed.push({ ...serializeRow(row), status: 'UPLOADING', attemptCount: row.attemptCount + 1 });
+          claimed.push({
+            ...serializeRow(row),
+            status: 'UPLOADING',
+            attemptCount: row.attemptCount + 1,
+          });
         }
       }
       return claimed;
@@ -195,35 +201,42 @@ export class MigrationJournal {
 
   markUploading(sourceItemId: string): void {
     const result = this.database
-      .prepare(`
+      .prepare(
+        `
         UPDATE migration_items SET
           status = 'UPLOADING', attempt_count = attempt_count + 1,
           last_error_code = NULL, last_error_message = NULL, updated_at = ?
         WHERE source_item_id = ? AND status IN ('READY', 'RETRYABLE', 'UPLOADING')
-      `)
+      `,
+      )
       .run(now(), sourceItemId);
     if (result.changes !== 1) throw new Error(`迁移项 ${sourceItemId} 当前不能上传。`);
   }
 
-  markImported(
-    sourceItemId: string,
-    input: { assetId: string; duplicate: boolean },
-  ): void {
-    this.transition(sourceItemId, ['UPLOADING', 'COMMITTING'], 'IMPORTED', {
-      assetId: input.assetId,
-      duplicate: input.duplicate ? 1 : 0,
-      uploadSessionId: null,
-    });
+  markImported(sourceItemId: string, input: { assetId: string; duplicate: boolean }): void {
+    const result = this.database
+      .prepare(
+        `
+        UPDATE migration_items SET
+          status = 'IMPORTED', asset_id = ?, duplicate = ?, upload_session_id = NULL,
+          last_error_code = NULL, last_error_message = NULL, updated_at = ?
+        WHERE source_item_id = ? AND status IN ('UPLOADING', 'COMMITTING')
+      `,
+      )
+      .run(input.assetId, input.duplicate ? 1 : 0, now(), sourceItemId);
+    if (result.changes !== 1) throw new Error(`迁移项 ${sourceItemId} 不能标记为 IMPORTED。`);
   }
 
   reconcileImported(sourceItemId: string, input: { assetId: string; duplicate?: boolean }): void {
     const result = this.database
-      .prepare(`
+      .prepare(
+        `
         UPDATE migration_items SET
           status = 'IMPORTED', asset_id = ?, duplicate = ?, upload_session_id = NULL,
           last_error_code = NULL, last_error_message = NULL, updated_at = ?
         WHERE source_item_id = ? AND status NOT IN ('REJECTED')
-      `)
+      `,
+      )
       .run(input.assetId, input.duplicate ? 1 : 0, now(), sourceItemId);
     if (result.changes !== 1) throw new Error(`迁移项 ${sourceItemId} 无法与服务端完成状态收敛。`);
   }
@@ -244,10 +257,12 @@ export class MigrationJournal {
 
   recoverInterrupted(): number {
     const result = this.database
-      .prepare(`
+      .prepare(
+        `
         UPDATE migration_items SET status = 'RETRYABLE', updated_at = ?
         WHERE status IN ('UPLOADING', 'COMMITTING')
-      `)
+      `,
+      )
       .run(now());
     return Number(result.changes);
   }
@@ -279,7 +294,7 @@ export class MigrationJournal {
       'INSERT INTO migration_metadata (key, value) VALUES (?, ?)',
     );
     this.transaction(() => {
-      for (const [key, value] of Object.entries(identity)) {
+      for (const [key, value] of Object.entries(identity) as Array<[string, string]>) {
         const existing = select.get(key) as { value: string } | undefined;
         if (existing && existing.value !== value) throw new SnapshotMismatchError();
         if (!existing) insert.run(key, value);
@@ -295,13 +310,15 @@ export class MigrationJournal {
   ): void {
     const placeholders = from.map(() => '?').join(',');
     const result = this.database
-      .prepare(`
+      .prepare(
+        `
         UPDATE migration_items SET
           status = ?, upload_session_id = COALESCE(?, upload_session_id),
           asset_id = COALESCE(?, asset_id), duplicate = COALESCE(?, duplicate),
           updated_at = ?
         WHERE source_item_id = ? AND status IN (${placeholders})
-      `)
+      `,
+      )
       .run(
         to,
         values.uploadSessionId ?? null,
@@ -320,11 +337,13 @@ export class MigrationJournal {
     error: { code: string; message: unknown },
   ): void {
     const result = this.database
-      .prepare(`
+      .prepare(
+        `
         UPDATE migration_items SET
           status = ?, last_error_code = ?, last_error_message = ?, updated_at = ?
         WHERE source_item_id = ? AND status NOT IN ('IMPORTED', 'SKIPPED', 'REJECTED')
-      `)
+      `,
+      )
       .run(
         status,
         redactSensitiveText(error.code, 64),
@@ -391,14 +410,16 @@ function parseActiveRun(value: unknown): ActiveRunState {
     /token|secret|password|authorization|cookie/i.test(key),
   );
   if (forbidden) throw new Error(`active run control state 不得包含 secret 字段：${forbidden}`);
-  const runId = String(record.runId ?? '');
-  const phase = String(record.phase ?? '');
-  const libraryPath = String(record.libraryPath ?? '');
-  const externalLibraryId = record.externalLibraryId
-    ? String(record.externalLibraryId)
-    : undefined;
+  const runId = stringField(record.runId);
+  const phase = stringField(record.phase);
+  const libraryPath = stringField(record.libraryPath);
+  const externalLibraryId = stringField(record.externalLibraryId) || undefined;
   if (!runId || !phase || !libraryPath) throw new Error('active run control state 缺少必要字段。');
   return { runId, phase, libraryPath, ...(externalLibraryId ? { externalLibraryId } : {}) };
+}
+
+function stringField(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 function now(): string {

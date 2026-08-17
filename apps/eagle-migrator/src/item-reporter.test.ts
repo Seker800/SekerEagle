@@ -21,10 +21,7 @@ test('projects upload lifecycle events into the local journal', async () => {
   const report = createItemReporter(journal);
 
   await report({ sourceItemId: 'item-1' }, { status: 'UPLOADING' });
-  await report(
-    { sourceItemId: 'item-1' },
-    { status: 'COMMITTING', uploadSessionId: 'upload-1' },
-  );
+  await report({ sourceItemId: 'item-1' }, { status: 'COMMITTING', uploadSessionId: 'upload-1' });
   await report(
     { sourceItemId: 'item-1' },
     { status: 'IMPORTED', assetId: 'asset-1', duplicate: false },
@@ -60,3 +57,14 @@ test('separates transient failures from permanent content rejection', async () =
   permanent.close();
 });
 
+test('projects an explicit server skip without treating it as a failure', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-reporter-skip-'));
+  const journal = journalFixture(directory);
+  await createItemReporter(journal)(
+    { sourceItemId: 'item-1' },
+    { status: 'SKIPPED', code: 'UNCHANGED', message: 'already imported' },
+  );
+
+  assert.equal(journal.get('item-1')?.status, 'SKIPPED');
+  journal.close();
+});

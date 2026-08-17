@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { createItemReporter } from './item-reporter';
-import { MigrationJournal, type ActiveRunState } from './journal';
+import type { ActiveRunState, MigrationJournal } from './journal';
 import type { MigrationSnapshot, SnapshotItem } from './snapshot';
 
 interface SourceFile {
@@ -41,7 +41,10 @@ interface ServerImportItem {
 }
 
 interface EngineLike {
-  prepare(scan: PreparedScan['scan'], externalLibraryId: string): Promise<{
+  prepare(
+    scan: PreparedScan['scan'],
+    externalLibraryId: string,
+  ): Promise<{
     run: { id: string };
     preflight: { uploadItemCount: number };
   }>;
@@ -51,6 +54,7 @@ interface EngineLike {
     externalLibraryId: string,
   ): Promise<{ preflight: { uploadItemCount: number } }>;
   upload(runId: string, sourceFiles: PreparedScan['sourceFiles']): Promise<{ status: string }>;
+  pauseLocally(): void;
 }
 
 export async function prepareSnapshotForMigration(
@@ -109,7 +113,7 @@ export async function prepareSnapshotForMigration(
       tagGroups: snapshot.tagGroups,
       iterateItems: () => iterateServerItems(snapshot),
     },
-    sourceFiles: { get: async (sourceItemId) => sources.get(sourceItemId) ?? null },
+    sourceFiles: { get: (sourceItemId) => Promise.resolve(sources.get(sourceItemId) ?? null) },
   };
 }
 
@@ -121,17 +125,14 @@ export async function runSnapshotMigration(input: {
   concurrency: number;
   log?: (message: string) => void;
 }): Promise<{ status: string; summary: Record<string, number> }> {
-  if (!input.pat.startsWith('se_pat_')) throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
+  if (!input.pat.startsWith('se_pat_'))
+    throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
   const log = input.log ?? (() => undefined);
   const prepared = await prepareSnapshotForMigration(input.snapshot, input.journal);
   const interrupted = input.journal.recoverInterrupted();
   if (interrupted) log(`已恢复 ${interrupted} 个被中断的本地迁移项。`);
-  const { ApiClient, ImportEngine } = loadPluginRuntime();
-  const api = new ApiClient({
-    baseUrl: input.serverUrl,
-    accessToken: input.pat,
-    minimumImportIntervalMs: 0,
-  }) as ApiLike;
+  const { ImportEngine } = loadPluginRuntime();
+  const api = createApi(input.serverUrl, input.pat);
   await api.request('/auth/me');
   await api.listLibraries();
   const store = journalStateStore(input.journal);
@@ -153,9 +154,29 @@ export async function runSnapshotMigration(input: {
       await engine.resumePreparation(runId, prepared.scan, externalLibraryId);
     }
   }
-  const run = await engine.upload(runId, prepared.sourceFiles);
+  const run = await uploadWithGracefulSignals(engine, runId, prepared.sourceFiles, log);
   await reconcileServerItems(api, runId, input.journal);
   return { status: run.status, summary: input.journal.summary() };
+}
+
+export async function doctorServer(input: { serverUrl: string; pat: string }): Promise<void> {
+  if (!input.pat.startsWith('se_pat_'))
+    throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
+  const api = createApi(input.serverUrl, input.pat);
+  await api.request('/auth/me');
+  await api.listLibraries();
+}
+
+export async function verifyRemoteMigration(input: {
+  journal: MigrationJournal;
+  serverUrl: string;
+  pat: string;
+}): Promise<{ run: { id: string; status: string }; summary: Record<string, number> }> {
+  if (!input.pat.startsWith('se_pat_'))
+    throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
+  const runId = input.journal.loadServerRunId();
+  if (!runId) throw new Error('本地 journal 没有可核验的服务端迁移任务。');
+  return verifyMigration(createApi(input.serverUrl, input.pat), runId, input.journal);
 }
 
 export async function verifyMigration(
@@ -209,12 +230,12 @@ function journalStateStore(journal: MigrationJournal): {
   const state = { activeRun: journal.loadActiveRun() };
   return {
     state,
-    save: async (patch) => {
+    save: (patch) => {
       if (Object.hasOwn(patch, 'activeRun')) {
         journal.saveActiveRun(patch.activeRun ?? null);
         state.activeRun = patch.activeRun ?? null;
       }
-      return state;
+      return Promise.resolve(state);
     },
   };
 }
@@ -225,13 +246,50 @@ function loadPluginRuntime(): {
 } {
   const require = createRequire(__filename);
   const pluginRoot = resolve(__dirname, '../../../plugins/eagle-importer/js');
-  const apiModule = require(resolve(pluginRoot, 'api-client.js')) as { ApiClient: new (input: Record<string, unknown>) => unknown };
-  const engineModule = require(resolve(pluginRoot, 'import-engine.js')) as { ImportEngine: new (input: Record<string, unknown>) => unknown };
+  const apiModule = require(resolve(pluginRoot, 'api-client.js')) as {
+    ApiClient: new (input: Record<string, unknown>) => unknown;
+  };
+  const engineModule = require(resolve(pluginRoot, 'import-engine.js')) as {
+    ImportEngine: new (input: Record<string, unknown>) => unknown;
+  };
   return { ApiClient: apiModule.ApiClient, ImportEngine: engineModule.ImportEngine };
+}
+
+function createApi(serverUrl: string, pat: string): ApiLike {
+  const { ApiClient } = loadPluginRuntime();
+  return new ApiClient({
+    baseUrl: serverUrl,
+    accessToken: pat,
+    minimumImportIntervalMs: 0,
+  }) as ApiLike;
+}
+
+async function uploadWithGracefulSignals(
+  engine: EngineLike,
+  runId: string,
+  sourceFiles: PreparedScan['sourceFiles'],
+  log: (message: string) => void,
+): Promise<{ status: string }> {
+  let stopping = false;
+  const pause = () => {
+    if (stopping) return;
+    stopping = true;
+    log('收到停止信号，正在安全暂停；再次运行 resume 可继续。');
+    engine.pauseLocally();
+  };
+  process.once('SIGINT', pause);
+  process.once('SIGTERM', pause);
+  try {
+    return await engine.upload(runId, sourceFiles);
+  } finally {
+    process.removeListener('SIGINT', pause);
+    process.removeListener('SIGTERM', pause);
+  }
 }
 
 function requireString(item: SnapshotItem, key: string): string {
   const value = item[key];
-  if (typeof value !== 'string' || !value) throw new Error(`迁移项 ${item.sourceItemId} 缺少 ${key}。`);
+  if (typeof value !== 'string' || !value)
+    throw new Error(`迁移项 ${item.sourceItemId} 缺少 ${key}。`);
   return value;
 }

@@ -34,7 +34,9 @@ export function parseCliOptions(arguments_: string[]): CliOptions {
     const key = rest[index];
     const value = rest[index + 1];
     if (key === '--pat' || key === '--token' || key === '--password') {
-      throw new Error('Secrets must be supplied through the environment, never command-line arguments.');
+      throw new Error(
+        'Secrets must be supplied through the environment, never command-line arguments.',
+      );
     }
     if (!value || value.startsWith('--')) throw new Error(`参数 ${key} 缺少值。`);
     if (key === '--server') options.serverUrl = normalizeServerUrl(value);
@@ -53,7 +55,8 @@ export function parseCliOptions(arguments_: string[]): CliOptions {
 
 function normalizeServerUrl(value: string): string {
   const url = new URL(value);
-  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('服务器必须使用 HTTP(S)。');
+  if (url.protocol !== 'http:' && url.protocol !== 'https:')
+    throw new Error('服务器必须使用 HTTP(S)。');
   if (url.username || url.password) throw new Error('服务器 URL 不得包含凭据。');
   return url.toString().replace(/\/$/, '');
 }

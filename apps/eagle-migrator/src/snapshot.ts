@@ -65,7 +65,8 @@ export async function openMigrationSnapshot(
   const descriptors = Object.values(parsed.files).filter(
     (descriptor): descriptor is SnapshotFileDescriptor => Boolean(descriptor),
   );
-  for (const descriptor of descriptors) validateSnapshotRelativePath(snapshotDirectory, descriptor.path);
+  for (const descriptor of descriptors)
+    validateSnapshotRelativePath(snapshotDirectory, descriptor.path);
 
   const actualHashes = new Map<string, string>();
   for (const descriptor of descriptors) {
@@ -101,7 +102,10 @@ export async function openMigrationSnapshot(
   if (parsed.snapshotSha256 && parsed.snapshotSha256 !== snapshotSha256) {
     throw new SnapshotIntegrityError('迁移快照身份校验失败。');
   }
-  if ((!parsed.snapshotSha256 || descriptors.some((value) => !value.sha256)) && options.repairMissingChecksums) {
+  if (
+    (!parsed.snapshotSha256 || descriptors.some((value) => !value.sha256)) &&
+    options.repairMissingChecksums
+  ) {
     repaired.snapshotSha256 = snapshotSha256;
     await writeFile(headerPath, `${JSON.stringify(repaired, null, 2)}\n`, { mode: 0o600 });
   }
@@ -113,7 +117,7 @@ export async function openMigrationSnapshot(
         await readFile(resolve(snapshotDirectory, repaired.files[key].path), 'utf8'),
       );
       if (!Array.isArray(value)) throw new SnapshotIntegrityError(`${key} 定义必须是数组。`);
-      return value;
+      return Array.from(value as unknown[]);
     }),
   );
 
@@ -124,7 +128,7 @@ export async function openMigrationSnapshot(
     tags: definitions[1]!,
     tagGroups: definitions[2]!,
     iterateItems: () => iterateItemsFile(itemsPath, libraryRoot),
-    sourceFiles: { get: async (sourceItemId) => itemPaths.get(sourceItemId) ?? null },
+    sourceFiles: { get: (sourceItemId) => Promise.resolve(itemPaths.get(sourceItemId) ?? null) },
   };
 }
 
@@ -179,12 +183,15 @@ function parseHeader(value: unknown): SnapshotHeader {
   if (!isRecord(value) || value.formatVersion !== FORMAT_VERSION) {
     throw new SnapshotIntegrityError('迁移快照格式版本不受支持。');
   }
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(String(value.migrationId ?? ''))) {
+  const migrationId = requireString(value.migrationId, 'migrationId');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(migrationId)) {
     throw new SnapshotIntegrityError('migrationId 无效。');
   }
-  if (!isRecord(value.library) || !isAbsolute(String(value.library.rootPath ?? ''))) {
+  if (!isRecord(value.library)) {
     throw new SnapshotIntegrityError('library.rootPath 无效。');
   }
+  const rootPath = requireString(value.library.rootPath, 'library.rootPath');
+  if (!isAbsolute(rootPath)) throw new SnapshotIntegrityError('library.rootPath 无效。');
   if (!isRecord(value.files)) throw new SnapshotIntegrityError('快照文件声明缺失。');
   const files = {
     items: parseDescriptor(value.files.items, 'items'),
@@ -197,16 +204,18 @@ function parseHeader(value: unknown): SnapshotHeader {
   };
   return {
     formatVersion: FORMAT_VERSION,
-    migrationId: String(value.migrationId),
+    migrationId,
     library: {
-      name: String(value.library.name ?? ''),
-      rootPath: String(value.library.rootPath),
-      sourceModifiedAt: String(value.library.sourceModifiedAt ?? ''),
+      name: optionalString(value.library.name),
+      rootPath,
+      sourceModifiedAt: optionalString(value.library.sourceModifiedAt),
     },
     itemCount: requireSafeNonNegativeInteger(value.itemCount, 'itemCount'),
     byteSize: requireSafeNonNegativeInteger(value.byteSize, 'byteSize'),
     files,
-    snapshotSha256: value.snapshotSha256 ? String(value.snapshotSha256) : '',
+    snapshotSha256: value.snapshotSha256
+      ? requireString(value.snapshotSha256, 'snapshotSha256')
+      : '',
   };
 }
 
@@ -222,11 +231,12 @@ function parseDescriptor(value: unknown, name: string): SnapshotFileDescriptor {
 
 function parseItem(value: unknown, lineNumber: number): SnapshotItem {
   if (!isRecord(value)) throw new SnapshotIntegrityError(`items.ndjson 第 ${lineNumber} 行无效。`);
-  const sourceItemId = String(value.sourceItemId ?? '');
-  const sourcePath = String(value.sourcePath ?? '');
-  const contentSha256 = String(value.contentSha256 ?? '').toLowerCase();
+  const sourceItemId = optionalString(value.sourceItemId);
+  const sourcePath = optionalString(value.sourcePath);
+  const contentSha256 = optionalString(value.contentSha256).toLowerCase();
   const isDeleted = value.isDeleted === true;
-  if (!sourceItemId || sourceItemId.length > 255) throw new SnapshotIntegrityError('sourceItemId 无效。');
+  if (!sourceItemId || sourceItemId.length > 255)
+    throw new SnapshotIntegrityError('sourceItemId 无效。');
   if (!isDeleted && !sourcePath) throw new SnapshotIntegrityError('sourcePath 缺失。');
   if (!isDeleted && !/^[a-f0-9]{64}$/.test(contentSha256)) {
     throw new SnapshotIntegrityError('contentSha256 无效。');
@@ -272,16 +282,29 @@ function snapshotIdentityHash(header: SnapshotHeader): string {
 async function sha256File(path: string): Promise<string> {
   const hash = createHash('sha256');
   const input = createReadStream(path);
-  for await (const chunk of input) hash.update(chunk);
+  for await (const chunk of input as AsyncIterable<unknown>) {
+    if (!(chunk instanceof Uint8Array)) throw new SnapshotIntegrityError('无法读取快照文件。');
+    hash.update(chunk);
+  }
   return hash.digest('hex');
 }
 
 function requireSafeNonNegativeInteger(value: unknown, name: string): number {
   const number = Number(value);
-  if (!Number.isSafeInteger(number) || number < 0) throw new SnapshotIntegrityError(`${name} 无效。`);
+  if (!Number.isSafeInteger(number) || number < 0)
+    throw new SnapshotIntegrityError(`${name} 无效。`);
   return number;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && !Array.isArray(value) && typeof value === 'object';
+}
+
+function requireString(value: unknown, name: string): string {
+  if (typeof value !== 'string' || !value) throw new SnapshotIntegrityError(`${name} 无效。`);
+  return value;
+}
+
+function optionalString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }

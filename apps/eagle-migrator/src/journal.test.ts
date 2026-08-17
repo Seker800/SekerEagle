@@ -36,6 +36,7 @@ test('persists item checkpoints and recovers interrupted work without losing att
   assert.equal(retry?.attemptCount, 2);
   restored.markImported('item-1', { assetId: 'asset-1', duplicate: false });
   assert.equal(restored.get('item-1')?.status, 'IMPORTED');
+  assert.equal(restored.get('item-1')?.uploadSessionId, null);
   restored.close();
 });
 
@@ -88,6 +89,7 @@ test('tracks a specific server-scheduled item and preserves explicit skips', asy
 
   journal.markUploading('item-2');
   journal.markSkipped('item-1', { code: 'SKIP_DELETED', message: 'Eagle trash record' });
+  journal.markSkipped('item-1', { code: 'SKIP_DELETED', message: 'Eagle trash record' });
 
   assert.equal(journal.get('item-2')?.attemptCount, 1);
   assert.equal(journal.get('item-2')?.status, 'UPLOADING');
@@ -114,4 +116,21 @@ test('persists only non-secret active run control state', async () => {
     /secret/i,
   );
   restored.close();
+});
+
+test('retains the last server run id after terminal state clears the active run', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-migrator-journal-final-'));
+  const journal = MigrationJournal.open(join(directory, 'journal.sqlite'), {
+    migrationId: 'migration-1',
+    snapshotSha256: 'a'.repeat(64),
+  });
+
+  assert.equal(journal.loadServerRunId(), null);
+
+  journal.saveActiveRun({ runId: 'run-final', phase: 'UPLOADING', libraryPath: '/library' });
+  journal.saveActiveRun(null);
+
+  assert.equal(journal.loadActiveRun(), null);
+  assert.equal(journal.loadServerRunId(), 'run-final');
+  journal.close();
 });

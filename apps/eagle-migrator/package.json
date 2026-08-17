@@ -2,8 +2,12 @@
   "name": "@sekereagle/eagle-migrator",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "eagle-migrator": "dist/main.js"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --require ts-node/register --test src/**/*.test.ts",
     "test:coverage": "node --require ts-node/register --experimental-test-coverage --test src/**/*.test.ts"

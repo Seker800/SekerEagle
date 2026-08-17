@@ -26,6 +26,7 @@ async function fixture() {
         folders: { path: 'folders.json', sha256: '' },
         tags: { path: 'tags.json', sha256: '' },
         tagGroups: { path: 'tag-groups.json', sha256: '' },
+        inventory: { path: 'inventory.json', sha256: '' },
       },
     }),
   );
@@ -54,6 +55,7 @@ async function fixture() {
   await writeFile(join(snapshot, 'folders.json'), '[]\n');
   await writeFile(join(snapshot, 'tags.json'), '[]\n');
   await writeFile(join(snapshot, 'tag-groups.json'), '[]\n');
+  await writeFile(join(snapshot, 'inventory.json'), '{"unreadableItemCount":0}\n');
   return { root, library, snapshot, imagePath };
 }
 
@@ -102,4 +104,3 @@ test('rejects source paths outside the frozen library and symlink escapes', asyn
     /symlink/i,
   );
 });
-

@@ -191,7 +191,7 @@ class ImportEngine {
     this.log = log;
     this.progress = progress;
     this.itemState = itemState;
-    this.uploadConcurrency = Math.min(4, Math.max(1, Math.trunc(uploadConcurrency)));
+    this.uploadConcurrency = Math.min(16, Math.max(1, Math.trunc(uploadConcurrency)));
     this.cancelRequested = false;
     this.pauseRequested = false;
   }

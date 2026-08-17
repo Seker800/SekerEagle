@@ -1,4 +1,4 @@
-import { MigrationJournal } from './journal';
+import type { MigrationJournal } from './journal';
 import { classifyFailure, type FailureLike } from './retry-policy';
 
 interface ImportItemReference {
@@ -13,32 +13,33 @@ type ItemEvent =
   | { status: 'FAILED'; error: FailureLike & { message?: unknown } };
 
 export function createItemReporter(journal: MigrationJournal) {
-  return async (item: ImportItemReference, event: ItemEvent): Promise<void> => {
+  return (item: ImportItemReference, event: ItemEvent): Promise<void> => {
     switch (event.status) {
       case 'UPLOADING':
         journal.markUploading(item.sourceItemId);
-        return;
+        return Promise.resolve();
       case 'COMMITTING':
         journal.markCommitting(item.sourceItemId, { uploadSessionId: event.uploadSessionId });
-        return;
+        return Promise.resolve();
       case 'IMPORTED':
         journal.markImported(item.sourceItemId, {
           assetId: event.assetId,
           duplicate: event.duplicate,
         });
-        return;
+        return Promise.resolve();
       case 'SKIPPED':
         journal.markSkipped(item.sourceItemId, { code: event.code, message: event.message });
-        return;
+        return Promise.resolve();
       case 'FAILED': {
         const failure = {
           code: event.error.code ?? `HTTP_${event.error.status ?? 'UNKNOWN'}`,
           message: event.error.message ?? '迁移项处理失败。',
         };
-        if (classifyFailure(event.error) === 'RETRYABLE') journal.markRetryable(item.sourceItemId, failure);
+        if (classifyFailure(event.error) === 'RETRYABLE')
+          journal.markRetryable(item.sourceItemId, failure);
         else journal.markRejected(item.sourceItemId, failure);
+        return Promise.resolve();
       }
     }
   };
 }
-
