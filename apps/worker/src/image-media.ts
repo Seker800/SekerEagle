@@ -13,6 +13,11 @@ import { classifyImageInputError, PermanentMediaValidationError } from './media-
 export const MAX_EAGLE_IMAGE_INPUT_PIXELS = 50_000_000;
 const execFileAsync = promisify(execFile);
 
+// libvips otherwise retains a large process-global cache and may create one worker per CPU.
+// Media jobs are already concurrency-controlled at the queue boundary.
+sharp.cache({ memory: 64, files: 20, items: 100 });
+sharp.concurrency(1);
+
 export function assertSafeHeifInfo(output: string): void {
   const dimensions = [...output.matchAll(/^\s*image:\s+(\d+)x(\d+)\b/gm)];
   const totalPixels = dimensions.reduce(

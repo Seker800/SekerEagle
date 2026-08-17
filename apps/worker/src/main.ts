@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
@@ -9,7 +9,9 @@ import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import {
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -17,7 +19,9 @@ import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
+import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
+import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
 import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
 import { claimNextMediaJob } from './job-claim';
 import {
@@ -98,6 +102,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       deletedAt: null,
     },
     include: {
+      renditions: {
+        where: { revision: job.assetRevision, kind: 'THUMBNAIL', status: 'READY' },
+        select: { kind: true, revision: true, status: true, storageKey: true, mimeType: true },
+      },
       uploadSessions: {
         where: { status: 'COMPLETED' },
         orderBy: { completedAt: 'desc' },
@@ -141,18 +149,24 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         'IMAGE_CONTENT_MISMATCH',
         'IMAGE_TOO_LARGE_TO_PROCESS',
       );
+    const sourceDetails = selectImageJobSource(asset, job.kind);
+    assertOwnedKey(asset.ownerId, sourceDetails.storageKey);
     const object = await storage.send(
-      new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+      new GetObjectCommand({ Bucket: s3Bucket, Key: sourceDetails.storageKey }),
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
     const renditionSpecs = [
-      { kind: 'THUMBNAIL' as const, maxSize: 480 },
       { kind: 'PREVIEW' as const, maxSize: 1600 },
+      { kind: 'THUMBNAIL' as const, maxSize: 512 },
     ];
+    if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
+      await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
+      return;
+    }
     const { result: processed, sha256 } = await withProcessableImage(
       object.Body as AsyncIterable<Uint8Array>,
-      asset.mimeType,
-      asset.originalObjectKey,
+      sourceDetails.mimeType,
+      sourceDetails.storageKey,
       async (source) => {
         const metadataPromise = source.clone().metadata();
         if (job.kind === 'EXTRACT_COLOR_PALETTE') {
@@ -173,9 +187,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
             rendered: null,
           };
         }
-        const [metadata, ...rendered] = await Promise.all([
-          metadataPromise,
-          ...renditionSpecs.map(async (spec) => ({
+        const metadata = await metadataPromise;
+        const rendered = [];
+        for (const spec of renditionSpecs) {
+          rendered.push({
             spec,
             output: await source
               .clone()
@@ -188,12 +203,14 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
               })
               .webp({ quality: spec.kind === 'THUMBNAIL' ? 78 : 86 })
               .toBuffer({ resolveWithObject: true }),
-          })),
-        ]);
+          });
+        }
         return { metadata, palette: null, rendered };
       },
     );
-    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
+    if (sourceDetails.verifiesOriginalHash) {
+      assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
+    }
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
       await prisma.$transaction(async (transaction) => {
         const completed = await transaction.eagleAssetProcessingJob.updateMany({
@@ -429,6 +446,122 @@ async function processVideo(
   }
 }
 
+async function generateImagePyramid(
+  job: EagleAssetProcessingJob,
+  asset: {
+    id: string;
+    ownerId: string;
+    mimeType: string;
+    originalObjectKey: string;
+    uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
+  },
+  sourceBody: AsyncIterable<Uint8Array>,
+): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-pyramid-'));
+  const outputBase = join(directory, 'pyramid');
+  const tileDirectory = `${outputBase}_files`;
+  const storagePrefix = `users/${asset.ownerId}/assets/${asset.id}/pyramids/${job.assetRevision}/${job.processorVersion}`;
+  assertOwnedKey(asset.ownerId, `${storagePrefix}/0/0_0.webp`);
+  try {
+    const { result, sha256 } = await withProcessableImage(
+      sourceBody,
+      asset.mimeType,
+      asset.originalObjectKey,
+      async (image) => {
+        const metadata = await image.clone().metadata();
+        const width = metadata.autoOrient.width ?? metadata.width;
+        const height = metadata.autoOrient.height ?? metadata.height;
+        if (!width || !height) throw new Error('INVALID_PYRAMID_DIMENSIONS');
+        const descriptor = buildPyramidDescriptor(width, height);
+        await prisma.eagleImagePyramid.upsert({
+          where: {
+            assetId_revision_processorVersion: {
+              assetId: asset.id,
+              revision: job.assetRevision,
+              processorVersion: job.processorVersion,
+            },
+          },
+          create: {
+            ownerId: asset.ownerId,
+            assetId: asset.id,
+            revision: job.assetRevision,
+            processorVersion: job.processorVersion,
+            status: 'RUNNING',
+            storagePrefix,
+            ...descriptor,
+          },
+          update: { status: 'RUNNING', storagePrefix, lastError: null, ...descriptor },
+        });
+        await image
+          .rotate()
+          .webp({ quality: 82 })
+          .tile({
+            layout: 'dz',
+            size: descriptor.tileSize,
+            overlap: descriptor.overlap,
+          })
+          .toFile(`${outputBase}.dz`);
+        return descriptor;
+      },
+    );
+    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
+
+    const tilePaths = await listFiles(tileDirectory);
+    let byteSize = 0n;
+    for (const filePath of tilePaths) {
+      const relativePath = filePath.slice(tileDirectory.length + 1);
+      const tile = parseDeepZoomTilePath(relativePath);
+      const details = await stat(filePath);
+      byteSize += BigInt(details.size);
+      await storage.send(
+        new PutObjectCommand({
+          Bucket: s3Bucket,
+          Key: `${storagePrefix}/${tile.relativeKey}`,
+          Body: await readFile(filePath),
+          ContentType: 'image/webp',
+        }),
+      );
+    }
+
+    await prisma.$transaction(async (transaction) => {
+      const completed = await transaction.eagleAssetProcessingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+      });
+      if (completed.count !== 1) return;
+      await transaction.eagleImagePyramid.update({
+        where: {
+          assetId_revision_processorVersion: {
+            assetId: asset.id,
+            revision: job.assetRevision,
+            processorVersion: job.processorVersion,
+          },
+        },
+        data: {
+          status: 'READY',
+          tileCount: tilePaths.length,
+          byteSize,
+          completedAt: new Date(),
+          lastError: null,
+          ...result,
+        },
+      });
+    });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function listFiles(directory: string): Promise<string[]> {
+  const files: string[] = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...(await listFiles(path)));
+    else if (entry.isFile() && entry.name.endsWith('.webp')) files.push(path);
+  }
+  return files.sort();
+}
+
 async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
   const asset = await prisma.eagleAsset.findFirst({
     where: {
@@ -438,7 +571,10 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
       deletedAt: { not: null },
       purgeAfter: { lte: new Date() },
     },
-    include: { renditions: { select: { storageKey: true } } },
+    include: {
+      renditions: { select: { storageKey: true } },
+      imagePyramids: { select: { storagePrefix: true } },
+    },
   });
   if (!asset) {
     await prisma.eagleAssetProcessingJob.updateMany({
@@ -451,6 +587,9 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
   for (const key of keys) {
     assertOwnedKey(asset.ownerId, key);
     await storage.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
+  }
+  for (const { storagePrefix } of asset.imagePyramids) {
+    await deleteOwnedPrefix(asset.ownerId, `${storagePrefix}/`);
   }
   await prisma.eagleAsset.deleteMany({
     where: {
@@ -506,6 +645,21 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
       });
     }
+    if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
+      await transaction.eagleImagePyramid.updateMany({
+        where: {
+          ownerId: job.ownerId,
+          assetId: job.assetId,
+          revision: job.assetRevision,
+          processorVersion: job.processorVersion,
+        },
+        data: {
+          status: terminal ? 'FAILED' : 'PENDING',
+          lastError: message,
+          completedAt: terminal ? new Date() : null,
+        },
+      });
+    }
     if (terminal && taskBlocksAssetReady(job.kind)) {
       await transaction.eagleAsset.updateMany({
         where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
@@ -513,6 +667,31 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
       });
     }
   });
+}
+
+async function deleteOwnedPrefix(ownerId: string, prefix: string): Promise<void> {
+  assertOwnedKey(ownerId, `${prefix}placeholder`);
+  let continuationToken: string | undefined;
+  do {
+    const page = await storage.send(
+      new ListObjectsV2Command({
+        Bucket: s3Bucket,
+        Prefix: prefix,
+        ContinuationToken: continuationToken,
+      }),
+    );
+    const keys = (page.Contents ?? []).flatMap(({ Key }) => (Key ? [Key] : []));
+    for (const key of keys) assertOwnedKey(ownerId, key);
+    if (keys.length) {
+      await storage.send(
+        new DeleteObjectsCommand({
+          Bucket: s3Bucket,
+          Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
+    continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
+  } while (continuationToken);
 }
 
 async function poll(): Promise<void> {

@@ -4,6 +4,7 @@ import { selectImageJobSource } from './image-job-source';
 
 const asset = {
   originalObjectKey: 'users/owner-1/assets/asset-1/original.jpg',
+  mimeType: 'image/jpeg',
   mediaRevision: 3,
   renditions: [
     {
