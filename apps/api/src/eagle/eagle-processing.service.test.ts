@@ -46,7 +46,8 @@ test('reconciler creates only missing current-version color jobs', async () => {
 
   assert.deepEqual(result, { scanned: 2, created: 1, skipped: 1, remaining: 0 });
   assert.equal(typeof (created[0] as { id: unknown }).id, 'string');
-  const { id: _id, ...createdJob } = created[0] as Record<string, unknown>;
+  const createdJob = { ...(created[0] as Record<string, unknown>) };
+  delete createdJob.id;
   assert.deepEqual(createdJob, {
     ownerId: 'owner-1',
     assetId: 'asset-2',

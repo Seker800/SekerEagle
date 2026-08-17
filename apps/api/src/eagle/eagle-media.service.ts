@@ -71,9 +71,14 @@ export class EagleMediaService {
     });
     const pyramid = asset?.imagePyramids.find(({ revision }) => revision === asset.mediaRevision);
     if (!pyramid) throw new NotFoundException('图像金字塔不存在。');
-    const { revision: _revision, ...descriptor } = pyramid;
     return {
-      ...descriptor,
+      id: pyramid.id,
+      width: pyramid.width,
+      height: pyramid.height,
+      tileSize: pyramid.tileSize,
+      overlap: pyramid.overlap,
+      format: pyramid.format,
+      maxLevel: pyramid.maxLevel,
       tileUrlTemplate: `/api/eagle/assets/${encodeURIComponent(assetId)}/pyramids/${encodeURIComponent(pyramid.id)}/tiles/{level}/{x}/{y}`,
     };
   }
