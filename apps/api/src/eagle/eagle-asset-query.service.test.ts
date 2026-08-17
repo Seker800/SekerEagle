@@ -64,7 +64,7 @@ test('color filtering reports original global image-analysis coverage', async ()
     eligible: 10,
     completed: 7,
     percentage: 70,
-    processorVersion: 'color-v2',
+    processorVersion: 'color-v3-thumbnail',
   });
 });
 

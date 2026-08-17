@@ -11,6 +11,7 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
+import { buildImageProcessingJobs } from './media-job-plan';
 
 @Injectable()
 export class EagleUploadService {
@@ -338,21 +339,26 @@ export class EagleUploadService {
         }
         const jobs =
           session.mimeType === 'video/mp4'
-            ? [{ kind: 'GENERATE_THUMBNAIL' as const, lane: 'INTERACTIVE' as const }]
-            : [
-                { kind: 'GENERATE_RENDITIONS' as const, lane: 'INTERACTIVE' as const },
-                { kind: 'EXTRACT_COLOR_PALETTE' as const, lane: 'BACKGROUND' as const },
-              ];
+            ? [
+                {
+                  ownerId: session.uploaderId,
+                  assetId: finalizedAssetId,
+                  kind: 'GENERATE_THUMBNAIL' as const,
+                  lane: 'INTERACTIVE' as const,
+                  assetRevision,
+                  processorVersion: 'video-thumbnail-v1',
+                },
+              ]
+            : buildImageProcessingJobs({
+                ownerId: session.uploaderId,
+                assetId: finalizedAssetId,
+                assetRevision,
+                width: inspection.width,
+                height: inspection.height,
+              });
         if (!duplicate) {
           await transaction.eagleAssetProcessingJob.createMany({
-            data: jobs.map(({ kind, lane }) => ({
-              ownerId: session.uploaderId,
-              assetId: finalizedAssetId,
-              kind,
-              lane,
-              assetRevision,
-              processorVersion: kind === 'EXTRACT_COLOR_PALETTE' ? 'color-v2' : 'v1',
-            })),
+            data: jobs,
           });
         }
         await transaction.eagleUploadSessionState.update({

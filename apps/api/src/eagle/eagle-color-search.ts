@@ -1,6 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const COLOR_PROCESSOR_VERSION = 'color-v2';
+export const COLOR_PROCESSOR_VERSION = 'color-v3-thumbnail';
 export const COLOR_MATCH_DISTANCE = 20;
 export const COLOR_MINIMUM_WEIGHT = 0.03;
 

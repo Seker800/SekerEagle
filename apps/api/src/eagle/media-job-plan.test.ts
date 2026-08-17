@@ -43,7 +43,7 @@ test('large images get dependent palette and pyramid jobs after renditions', () 
 });
 
 test('ordinary images skip pyramids while either size threshold enables them', () => {
-  assert.equal(needsImagePyramid(4_096, 4_096), false);
+  assert.equal(needsImagePyramid(4_000, 4_000), false);
   assert.equal(needsImagePyramid(4_097, 1), true);
   assert.equal(needsImagePyramid(4_000, 4_001), true);
   assert.equal(needsImagePyramid(null, 8_000), false);

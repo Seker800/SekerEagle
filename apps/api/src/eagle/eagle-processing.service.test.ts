@@ -17,7 +17,7 @@ test('reconciler creates only missing current-version color jobs', async () => {
           assetId: 'asset-1',
           assetRevision: 1,
           kind: 'EXTRACT_COLOR_PALETTE',
-          processorVersion: 'color-v2',
+          processorVersion: 'color-v3-thumbnail',
         },
       ],
       createMany: async ({ data }: { data: unknown[] }) => {
@@ -37,7 +37,7 @@ test('reconciler creates only missing current-version color jobs', async () => {
       assetRevision: 3,
       kind: 'EXTRACT_COLOR_PALETTE',
       lane: 'BACKGROUND',
-      processorVersion: 'color-v2',
+      processorVersion: 'color-v3-thumbnail',
     },
   ]);
 });

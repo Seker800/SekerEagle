@@ -17,7 +17,7 @@ test('builds a current-version perceptual color relation filter', () => {
   const target = rgbToLab(46, 134, 171);
   const where = buildColorAnalysisWhere('#2e86ab');
 
-  assert.equal(COLOR_PROCESSOR_VERSION, 'color-v2');
+  assert.equal(COLOR_PROCESSOR_VERSION, 'color-v3-thumbnail');
   assert.equal(where.some.isCurrent, true);
   assert.equal(where.some.processorVersion, COLOR_PROCESSOR_VERSION);
   assert.equal(where.some.status, 'COMPLETED');
