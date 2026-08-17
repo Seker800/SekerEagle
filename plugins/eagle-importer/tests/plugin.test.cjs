@@ -22,3 +22,12 @@ test('manifest 使用独立插件身份', () => {
   assert.equal(manifest.name, 'SekerEagle 独立导入器');
   assert.equal(manifest.version, '2.0.0');
 });
+
+test('一次性迁移快照可以在未连接服务器时导出', () => {
+  const source = fs.readFileSync(path.join(root, 'js', 'plugin.js'), 'utf8');
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  assert.match(source, /exportMigrationSnapshot/);
+  assert.match(source, /migrationSnapshotButton/);
+  assert.match(html, /id="migrationSnapshotButton"/);
+  assert.match(html, /导出迁移快照/);
+});

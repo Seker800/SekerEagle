@@ -75,3 +75,22 @@ test('records bounded errors but never accepts bearer tokens as persisted fields
   journal.close();
 });
 
+test('tracks a specific server-scheduled item and preserves explicit skips', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-migrator-journal-item-'));
+  const journal = MigrationJournal.open(join(directory, 'journal.sqlite'), {
+    migrationId: 'migration-1',
+    snapshotSha256: 'a'.repeat(64),
+  });
+  journal.registerItems([
+    { sourceItemId: 'item-1', contentSha256: 'b'.repeat(64) },
+    { sourceItemId: 'item-2', contentSha256: 'c'.repeat(64) },
+  ]);
+
+  journal.markUploading('item-2');
+  journal.markSkipped('item-1', { code: 'SKIP_DELETED', message: 'Eagle trash record' });
+
+  assert.equal(journal.get('item-2')?.attemptCount, 1);
+  assert.equal(journal.get('item-2')?.status, 'UPLOADING');
+  assert.equal(journal.get('item-1')?.status, 'SKIPPED');
+  journal.close();
+});
