@@ -41,8 +41,14 @@ async function heartbeat(): Promise<void> {
 }
 
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
+  const staleBefore = new Date(Date.now() - 10 * 60 * 1000);
   const candidates = await prisma.eagleAssetProcessingJob.findMany({
-    where: { status: 'PENDING', availableAt: { lte: new Date() } },
+    where: {
+      OR: [
+        { status: 'PENDING', availableAt: { lte: new Date() } },
+        { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
+      ],
+    },
     orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
     take: 50,
   });
@@ -58,7 +64,13 @@ async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   }
   if (!candidate) return null;
   const claimed = await prisma.eagleAssetProcessingJob.updateMany({
-    where: { id: candidate.id, status: 'PENDING', leaseVersion: candidate.leaseVersion },
+    where: {
+      id: candidate.id,
+      leaseVersion: candidate.leaseVersion,
+      ...(candidate.status === 'PENDING'
+        ? { status: 'PENDING' as const }
+        : { status: 'PROCESSING' as const, lockedAt: { lt: staleBefore } }),
+    },
     data: {
       status: 'PROCESSING',
       lockedAt: new Date(),
@@ -144,6 +156,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         6,
       );
       await prisma.$transaction(async (transaction) => {
+        const completed = await transaction.eagleAssetProcessingJob.updateMany({
+          where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+          data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        });
+        if (completed.count !== 1) return;
         await transaction.eagleAssetColorAnalysis.updateMany({
           where: { ownerId: asset.ownerId, assetId: asset.id, isCurrent: true },
           data: { isCurrent: false },
@@ -186,10 +203,6 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
             })),
           });
         }
-        await transaction.eagleAssetProcessingJob.update({
-          where: { id: job.id },
-          data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-        });
       });
       return;
     }
@@ -232,6 +245,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       });
     }
     await prisma.$transaction(async (transaction) => {
+      const completed = await transaction.eagleAssetProcessingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+      });
+      if (completed.count !== 1) return;
       for (const rendition of renditions) {
         await transaction.eagleAssetRendition.upsert({
           where: {
@@ -255,10 +273,6 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           height: metadata.autoOrient.height ?? metadata.height,
         },
       });
-      await transaction.eagleAssetProcessingJob.update({
-        where: { id: job.id },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-      });
     });
     return;
   }
@@ -269,16 +283,17 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
   const verified = await verifyStream(object.Body as AsyncIterable<Uint8Array>, asset.mimeType);
   assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, verified.sha256);
-  await prisma.$transaction([
-    prisma.eagleAsset.updateMany({
+  await prisma.$transaction(async (transaction) => {
+    const completed = await transaction.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    });
+    if (completed.count !== 1) return;
+    await transaction.eagleAsset.updateMany({
       where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
       data: { lifecycleStatus: 'READY', mediaErrorCode: null, sha256: verified.sha256 },
-    }),
-    prisma.eagleAssetProcessingJob.update({
-      where: { id: job.id },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-    }),
-  ]);
+    });
+  });
 }
 
 async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
@@ -293,8 +308,8 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
     include: { renditions: { select: { storageKey: true } } },
   });
   if (!asset) {
-    await prisma.eagleAssetProcessingJob.update({
-      where: { id: job.id },
+    await prisma.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
       data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
     });
     return;
@@ -320,8 +335,8 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
   const terminal = job.attempts >= 3;
   await prisma.$transaction(async (transaction) => {
-    await transaction.eagleAssetProcessingJob.update({
-      where: { id: job.id },
+    const failed = await transaction.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
       data: terminal
         ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
         : {
@@ -331,7 +346,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
             lastError: message,
           },
     });
-    if (terminal) {
+    if (terminal && failed.count === 1) {
       await transaction.eagleAsset.updateMany({
         where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
         data: { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) },
@@ -345,14 +360,34 @@ async function poll(): Promise<void> {
   const job = await claimJob();
   if (!job) return;
   activeJobCount += 1;
+  let leaseHeld = true;
+  let renewing = false;
+  const renewal = setInterval(() => {
+    if (renewing || !leaseHeld) return;
+    renewing = true;
+    void prisma.eagleAssetProcessingJob
+      .updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        data: { lockedAt: new Date() },
+      })
+      .then(({ count }) => {
+        leaseHeld = count === 1;
+      })
+      .catch(reportLoopError)
+      .finally(() => {
+        renewing = false;
+      });
+  }, 60_000);
+  renewal.unref();
   try {
     await processJob(job);
     process.stdout.write(`completed media job ${job.id}\n`);
   } catch (error) {
-    await failJob(job, error);
+    if (leaseHeld) await failJob(job, error);
     const message = error instanceof Error ? error.message : 'unknown media error';
     process.stderr.write(`failed media job ${job.id}: ${message}\n`);
   } finally {
+    clearInterval(renewal);
     activeJobCount -= 1;
   }
 }
