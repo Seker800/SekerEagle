@@ -19,6 +19,7 @@ import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-polic
 import { extractRepresentativeColors } from './color-palette';
 import { withProcessableImage } from './image-media';
 import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
+import { claimNextMediaJob } from './job-claim';
 import {
   isPermanentMediaValidationError,
   PermanentMediaValidationError,
@@ -65,50 +66,9 @@ async function heartbeat(): Promise<void> {
 }
 
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
-  const staleBefore = new Date(Date.now() - 10 * 60 * 1000);
-  const candidates = await prisma.eagleAssetProcessingJob.findMany({
-    where: {
-      OR: [
-        { status: 'PENDING', availableAt: { lte: new Date() } },
-        { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
-      ],
-    },
-    orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
-    take: 50,
+  return claimNextMediaJob(prisma, {
+    canClaimBackground: canClaimBackgroundForOwner,
   });
-  const ordered = candidates.sort(
-    (left, right) => lanePriority(left.lane) - lanePriority(right.lane),
-  );
-  let candidate: EagleAssetProcessingJob | undefined;
-  for (const pending of ordered) {
-    if (pending.lane !== 'BACKGROUND' || (await canClaimBackgroundForOwner(pending.ownerId))) {
-      candidate = pending;
-      break;
-    }
-  }
-  if (!candidate) return null;
-  const claimed = await prisma.eagleAssetProcessingJob.updateMany({
-    where: {
-      id: candidate.id,
-      leaseVersion: candidate.leaseVersion,
-      ...(candidate.status === 'PENDING'
-        ? { status: 'PENDING' as const }
-        : { status: 'PROCESSING' as const, lockedAt: { lt: staleBefore } }),
-    },
-    data: {
-      status: 'PROCESSING',
-      lockedAt: new Date(),
-      startedAt: candidate.startedAt ?? new Date(),
-      attempts: { increment: 1 },
-      leaseVersion: { increment: 1 },
-    },
-  });
-  if (claimed.count !== 1) return null;
-  return prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: candidate.id } });
-}
-
-function lanePriority(lane: EagleAssetProcessingJob['lane']): number {
-  return lane === 'INTERACTIVE' ? 0 : lane === 'BACKGROUND' ? 1 : 2;
 }
 
 async function canClaimBackgroundForOwner(ownerId: string): Promise<boolean> {

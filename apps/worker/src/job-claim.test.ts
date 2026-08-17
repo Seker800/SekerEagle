@@ -41,7 +41,11 @@ test('claims an interactive job before an older background backlog', async () =>
         return where.lane === 'INTERACTIVE' ? [interactive] : [job('background', 'BACKGROUND')];
       },
       updateMany: async () => ({ count: 1 }),
-      findUniqueOrThrow: async () => ({ ...interactive, leaseVersion: 1, status: 'PROCESSING' }),
+      findUniqueOrThrow: async () => ({
+        ...interactive,
+        leaseVersion: 1,
+        status: 'PROCESSING' as const,
+      }),
     },
   };
 
@@ -65,7 +69,7 @@ test('continues within the highest-priority lane after a contended candidate', a
         attemptedIds.push(where.id);
         return { count: where.id === first.id ? 0 : 1 };
       },
-      findUniqueOrThrow: async () => ({ ...second, leaseVersion: 1, status: 'PROCESSING' }),
+      findUniqueOrThrow: async () => ({ ...second, leaseVersion: 1, status: 'PROCESSING' as const }),
     },
   };
 
@@ -90,7 +94,11 @@ test('skips disallowed background work and falls through to maintenance', async 
         return [];
       },
       updateMany: async () => ({ count: 1 }),
-      findUniqueOrThrow: async () => ({ ...maintenance, leaseVersion: 1, status: 'PROCESSING' }),
+      findUniqueOrThrow: async () => ({
+        ...maintenance,
+        leaseVersion: 1,
+        status: 'PROCESSING' as const,
+      }),
     },
   };
 
