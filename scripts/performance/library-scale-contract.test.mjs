@@ -89,3 +89,21 @@ test('scale report rejects a fast query that does not exercise any matching rows
     ['format-rating-filter returned 0 items; expected at least 1'],
   );
 });
+
+test('scale report rejects a default gallery plan that falls back to a sequential scan', () => {
+  assert.deepEqual(
+    evaluateScaleMeasurements(
+      {
+        assetCount: 100_000,
+        measurements: [{ name: 'default-first-page', p95Ms: 20, itemCount: 40 }],
+        plans: [{ name: 'default-first-page', nodes: ['Limit', 'Sort', 'Seq Scan'] }],
+      },
+      {
+        requiredAssetCount: 100_000,
+        maximumP95Ms: { 'default-first-page': 200 },
+        forbiddenPlanNodes: { 'default-first-page': ['Seq Scan'] },
+      },
+    ),
+    ['default-first-page plan contains forbidden node Seq Scan'],
+  );
+});
