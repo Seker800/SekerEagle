@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { EagleAssetListItem, EaglePyramidDescriptor } from '../../lib/eagle-api';
-import { createEagleTileSource, getEaglePreviewContentUrl } from './eagle-media-sources';
+import {
+  createEagleTileSource,
+  getEaglePreviewContentUrl,
+  getEagleThumbnailSourceSet,
+} from './eagle-media-sources';
 
 const asset = {
   id: 'asset-1',
@@ -36,5 +40,21 @@ describe('Eagle media sources', () => {
       '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/13/4/2',
     );
     expect(source.maxLevel).toBe(13);
+  });
+
+  it('builds responsive thumbnail candidates in ascending width order', () => {
+    const responsiveAsset = {
+      ...asset,
+      renditions: [
+        { id: 'large', kind: 'THUMBNAIL', revision: 3, width: 512 },
+        { id: 'small', kind: 'THUMBNAIL', revision: 3, width: 256 },
+      ],
+    } as EagleAssetListItem;
+
+    expect(getEagleThumbnailSourceSet(responsiveAsset)).toEqual({
+      src: '/api/eagle/assets/asset-1/renditions/small',
+      srcSet:
+        '/api/eagle/assets/asset-1/renditions/small 256w, /api/eagle/assets/asset-1/renditions/large 512w',
+    });
   });
 });
