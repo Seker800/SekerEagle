@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleUploadService } from './eagle-upload.service';
 import { EagleImportsService } from './import/eagle-app-import.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 
 const RECOVERY_INTERVAL_MS = 60_000;
 
@@ -15,6 +16,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     private readonly prisma: PrismaService,
     private readonly uploads: EagleUploadService,
     private readonly imports: EagleImportsService,
+    private readonly storage: ObjectStorageService,
   ) {}
 
   onModuleInit(): void {
@@ -70,6 +72,57 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
         this.logger.warn(
           `upload_finalization_recovery_failed ${JSON.stringify({
             sessionId: session.id,
+            error: error instanceof Error ? error.message : 'Unknown',
+          })}`,
+        );
+      }
+    }
+    await this.recoverObjectCleanup();
+  }
+
+  private async recoverObjectCleanup(): Promise<void> {
+    const sessions = await this.prisma.uploadSession.findMany({
+      where: { objectCleanupPending: true, status: { in: ['COMPLETED', 'FAILED'] } },
+      select: { id: true, objectKey: true },
+      orderBy: { updatedAt: 'asc' },
+      take: 50,
+    });
+    for (const session of sessions) {
+      try {
+        await this.storage.deleteObject(session.objectKey);
+        await this.prisma.uploadSession.updateMany({
+          where: { id: session.id, objectCleanupPending: true },
+          data: { objectCleanupPending: false },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `upload_object_cleanup_failed ${JSON.stringify({
+            sessionId: session.id,
+            error: error instanceof Error ? error.message : 'Unknown',
+          })}`,
+        );
+      }
+    }
+
+    const replacements = await this.prisma.eagleUploadSessionState.findMany({
+      where: {
+        retiredObjectKeys: { isEmpty: false },
+        replacementAsset: { lifecycleStatus: 'READY' },
+      },
+      select: { uploadSessionId: true, retiredObjectKeys: true },
+      take: 50,
+    });
+    for (const replacement of replacements) {
+      try {
+        for (const key of replacement.retiredObjectKeys) await this.storage.deleteObject(key);
+        await this.prisma.eagleUploadSessionState.updateMany({
+          where: { uploadSessionId: replacement.uploadSessionId },
+          data: { retiredObjectKeys: [], replacementAssetId: null },
+        });
+      } catch (error) {
+        this.logger.warn(
+          `replacement_object_cleanup_failed ${JSON.stringify({
+            uploadSessionId: replacement.uploadSessionId,
             error: error instanceof Error ? error.message : 'Unknown',
           })}`,
         );

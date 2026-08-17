@@ -10,6 +10,7 @@ import { createAssetObjectKey } from '../storage/object-key';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
+import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
 
 @Injectable()
 export class EagleUploadService {
@@ -17,6 +18,7 @@ export class EagleUploadService {
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
     private readonly mediaCapabilities: EagleMediaCapabilityService,
+    private readonly inspection: EagleUploadInspectionService,
   ) {}
 
   async initiate(ownerId: string, input: InitiateEagleUploadDto) {
@@ -110,7 +112,12 @@ export class EagleUploadService {
     const requestedParts = normalizeParts(input.parts);
     const session = await this.requireCompletable(ownerId, uploadSessionId);
     if (session.status === 'COMPLETED' && session.eagleAssetId) {
-      return { uploadSessionId: session.id, assetId: session.eagleAssetId, status: 'PROCESSING' };
+      return {
+        uploadSessionId: session.id,
+        assetId: session.eagleAssetId,
+        status: session.objectCleanupPending ? 'READY' : 'PROCESSING',
+        duplicate: session.objectCleanupPending,
+      };
     }
     const parts =
       session.status === 'INITIATED'
@@ -183,8 +190,37 @@ export class EagleUploadService {
     const now = new Date();
     const assetId = randomUUID();
     const displayName = displayNameFromOriginal(session.originalName);
+    let inspection;
     try {
-      await this.prisma.$transaction(async (transaction) => {
+      inspection = await this.inspection.inspect(session.objectKey, session.mimeType);
+      if (
+        session.eagleState?.expectedContentSha256 &&
+        session.eagleState.expectedContentSha256 !== inspection.sha256
+      ) {
+        throw new BadRequestException({
+          code: 'CONTENT_HASH_MISMATCH',
+          message: '上传文件内容与 Eagle manifest 的 SHA-256 不一致。',
+        });
+      }
+    } catch (error) {
+      const permanent = error instanceof BadRequestException;
+      await this.prisma.uploadSession.updateMany({
+        where: {
+          id: session.id,
+          uploaderId: session.uploaderId,
+          status: { in: ['ASSEMBLED', 'FAILED'] },
+        },
+        data: {
+          status: 'FAILED',
+          finalizationAttempts: permanent ? 10 : { increment: 1 },
+          lastError: error instanceof Error ? error.message.slice(0, 2000) : 'MEDIA_INSPECTION_FAILED',
+          objectCleanupPending: permanent,
+        },
+      });
+      throw error;
+    }
+    try {
+      const finalized = await this.prisma.$transaction(async (transaction) => {
         const claimed = await transaction.uploadSession.updateMany({
           where: {
             id: session.id,
@@ -200,20 +236,97 @@ export class EagleUploadService {
           },
         });
         if (claimed.count !== 1) throw new ConflictException('上传会话状态已改变。');
-        await transaction.eagleAsset.create({
-          data: {
-            id: assetId,
-            ownerId: session.uploaderId,
-            originalName: session.originalName,
-            displayName,
-            normalizedDisplayName: normalizeKey(displayName),
-            mimeType: session.mimeType,
-            format: inferFormat(session.originalName, session.mimeType),
-            byteSize: session.size,
-            originalObjectKey: session.objectKey,
-            sha256: null,
-          },
-        });
+        let finalizedAssetId: string = assetId;
+        let assetRevision = 1;
+        let duplicate = false;
+        let cleanupObject = false;
+        let retiredObjectKeys: string[] = [];
+        if (session.eagleState?.replacementAssetId) {
+          const current = await transaction.eagleAsset.findFirst({
+            where: {
+              id: session.eagleState.replacementAssetId,
+              ownerId: session.uploaderId,
+              deletedAt: null,
+            },
+            include: {
+              renditions: {
+                select: { storageKey: true, revision: true },
+              },
+            },
+          });
+          if (!current) throw new NotFoundException('待替换的素材不存在。');
+          const currentRenditions = current.renditions.filter(
+            (rendition) => rendition.revision === current.mediaRevision,
+          );
+          assetRevision = current.mediaRevision + 1;
+          finalizedAssetId = current.id;
+          retiredObjectKeys = [
+            current.originalObjectKey,
+            ...currentRenditions.map(({ storageKey }) => storageKey),
+          ];
+          await transaction.eagleAsset.update({
+            where: { id: current.id },
+            data: {
+              originalName: session.originalName,
+              mimeType: session.mimeType,
+              format: inspection.format,
+              byteSize: session.size,
+              sha256: inspection.sha256,
+              width: inspection.width,
+              height: inspection.height,
+              durationMs: inspection.durationMs,
+              originalObjectKey: session.objectKey,
+              lifecycleStatus: 'PROCESSING',
+              mediaErrorCode: null,
+              mediaRevision: assetRevision,
+              rowVersion: { increment: 1 },
+            },
+          });
+          if (currentRenditions.length) {
+            await transaction.eagleAssetRendition.deleteMany({
+              where: { assetId: current.id, revision: current.mediaRevision },
+            });
+          }
+        } else {
+          await transaction.$executeRaw`
+            SELECT pg_advisory_xact_lock(hashtext(${session.uploaderId}), hashtext(${inspection.sha256}))
+          `;
+          const existing =
+            session.eagleState?.duplicatePolicy === 'CREATE_COPY'
+              ? null
+              : await transaction.eagleAsset.findFirst({
+                  where: {
+                    ownerId: session.uploaderId,
+                    sha256: inspection.sha256,
+                    deletedAt: null,
+                  },
+                  select: { id: true },
+                });
+          if (existing) {
+            finalizedAssetId = existing.id;
+            duplicate = true;
+            cleanupObject = true;
+          } else {
+            await transaction.eagleAsset.create({
+              data: {
+                id: assetId,
+                ownerId: session.uploaderId,
+                originalName: session.originalName,
+                displayName,
+                normalizedDisplayName: normalizeKey(displayName),
+                mimeType: session.mimeType,
+                format: inspection.format,
+                byteSize: session.size,
+                originalObjectKey: session.objectKey,
+                sha256: inspection.sha256,
+                width: inspection.width,
+                height: inspection.height,
+                durationMs: inspection.durationMs,
+                mediaRevision: assetRevision,
+              },
+            });
+          }
+        }
         const jobs =
           session.mimeType === 'video/mp4'
             ? [{ kind: 'GENERATE_THUMBNAIL' as const, lane: 'INTERACTIVE' as const }]
@@ -221,30 +334,40 @@ export class EagleUploadService {
                 { kind: 'GENERATE_RENDITIONS' as const, lane: 'INTERACTIVE' as const },
                 { kind: 'EXTRACT_COLOR_PALETTE' as const, lane: 'BACKGROUND' as const },
               ];
-        await transaction.eagleAssetProcessingJob.createMany({
-          data: jobs.map(({ kind, lane }) => ({
-            ownerId: session.uploaderId,
-            assetId,
-            kind,
-            lane,
-            assetRevision: 0,
-            processorVersion: kind === 'EXTRACT_COLOR_PALETTE' ? 'color-v2' : 'v1',
-          })),
-        });
+        if (!duplicate) {
+          await transaction.eagleAssetProcessingJob.createMany({
+            data: jobs.map(({ kind, lane }) => ({
+              ownerId: session.uploaderId,
+              assetId: finalizedAssetId,
+              kind,
+              lane,
+              assetRevision,
+              processorVersion: kind === 'EXTRACT_COLOR_PALETTE' ? 'color-v2' : 'v1',
+            })),
+          });
+        }
         await transaction.eagleUploadSessionState.update({
           where: { uploadSessionId: session.id },
-          data: { assetId },
+          data: { assetId: finalizedAssetId, retiredObjectKeys },
         });
         await transaction.uploadSession.update({
           where: { id: session.id },
           data: {
             status: 'COMPLETED',
-            eagleAssetId: assetId,
+            eagleAssetId: finalizedAssetId,
             completedAt: now,
             completionParts: parts,
+            objectCleanupPending: cleanupObject,
           },
         });
+        return { assetId: finalizedAssetId, duplicate };
       });
+      return {
+        uploadSessionId: session.id,
+        assetId: finalized.assetId,
+        status: finalized.duplicate ? 'READY' : 'PROCESSING',
+        duplicate: finalized.duplicate,
+      };
     } catch (error) {
       await this.prisma.uploadSession.updateMany({
         where: {
@@ -261,7 +384,6 @@ export class EagleUploadService {
       });
       throw error;
     }
-    return { uploadSessionId: session.id, assetId, status: 'PROCESSING' };
   }
 
   async abort(ownerId: string, uploadSessionId: string) {
@@ -358,13 +480,6 @@ function normalizeStoredParts(value: unknown): ReturnType<typeof normalizeParts>
 function displayNameFromOriginal(originalName: string): string {
   const dot = originalName.lastIndexOf('.');
   return (dot > 0 ? originalName.slice(0, dot) : originalName).slice(0, 255);
-}
-
-function inferFormat(originalName: string, mimeType: string): string {
-  const extension = originalName.split('.').at(-1)?.toLowerCase();
-  if (extension && extension !== originalName.toLowerCase() && /^[a-z0-9]{1,16}$/.test(extension))
-    return extension;
-  return mimeType.split('/').at(-1)?.split('+').at(0) ?? 'unknown';
 }
 
 function normalizeKey(value: string): string {

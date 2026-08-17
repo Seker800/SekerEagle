@@ -587,6 +587,9 @@ test('upload binding uses an owner-scoped conditional claim to reject concurrent
         mimeType: 'image/png',
         byteSize: 100n,
         status: 'STAGED',
+        action: 'NEW',
+        assetId: null,
+        contentSha256: 'a'.repeat(64),
         run: { status: 'PREFLIGHTED', startedAt: null },
       }),
       updateMany: async () => ({ count: 0 }),
@@ -630,6 +633,7 @@ test('upload binding records the session that exclusively owns the import attemp
         return { count: 1 };
       },
     },
+    eagleUploadSessionState: { update: async () => undefined },
     eagleImportRun: {
       update: async (args: { data: Record<string, unknown> }) => runWrites.push(args.data),
     },

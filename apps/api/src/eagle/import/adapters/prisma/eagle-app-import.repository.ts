@@ -706,6 +706,9 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           runId: true,
           status: true,
           activeUploadSessionId: true,
+          action: true,
+          assetId: true,
+          contentSha256: true,
           terminalProgressAppliedAt: true,
           run: { select: { status: true } },
         },
@@ -1039,6 +1042,9 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           byteSize: true,
           status: true,
           activeUploadSessionId: true,
+          action: true,
+          assetId: true,
+          contentSha256: true,
           run: { select: { status: true, startedAt: true } },
         },
       });
@@ -1077,6 +1083,15 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         }
         throw new ConflictException('Eagle 导入项已被其他上传占用。');
       }
+      await transaction.eagleUploadSessionState.update({
+        where: { uploadSessionId: input.uploadSessionId },
+        data: {
+          duplicatePolicy: 'CREATE_COPY',
+          replacementAssetId:
+            item.action === EagleImportItemAction.CONTENT_REPLACE ? item.assetId : null,
+          expectedContentSha256: item.contentSha256,
+        },
+      });
       await transaction.eagleImportRun.update({
         where: { id: item.runId },
         data: {

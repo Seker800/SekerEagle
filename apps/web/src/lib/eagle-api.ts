@@ -210,8 +210,8 @@ export async function uploadEagleAsset(_token: string, file: File, onProgress: (
       parts.push({ partNumber, etag });
       onProgress({ percent: Math.round((partNumber / count) * 100) });
     }
-    const completed = await api<{ assetId: string }>(`/eagle/uploads/${session.id}/complete`, { method: 'POST', body: JSON.stringify({ parts }) });
-    return { duplicate: false, asset: await getEagleAsset('', completed.assetId) };
+    const completed = await api<{ assetId: string; duplicate: boolean }>(`/eagle/uploads/${session.id}/complete`, { method: 'POST', body: JSON.stringify({ parts }) });
+    return { duplicate: completed.duplicate, asset: await getEagleAsset('', completed.assetId) };
   } catch (error) {
     await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}' }).catch(() => undefined);
     throw error;

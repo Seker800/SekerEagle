@@ -8,12 +8,16 @@ test('recovery retries every recoverable upload session without stopping on one 
     {
       uploadSession: {
         updateMany: async () => ({ count: 1 }),
-        findMany: async () => [
-          { id: 'assembled-1', uploaderId: 'owner-1' },
-          { id: 'failed-1', uploaderId: 'owner-1' },
-          { id: 'assembled-2', uploaderId: 'owner-1' },
-        ],
+        findMany: async ({ where }: { where: { objectCleanupPending?: boolean } }) =>
+          where.objectCleanupPending
+            ? []
+            : [
+                { id: 'assembled-1', uploaderId: 'owner-1' },
+                { id: 'failed-1', uploaderId: 'owner-1' },
+                { id: 'assembled-2', uploaderId: 'owner-1' },
+              ],
       },
+      eagleUploadSessionState: { findMany: async () => [] },
     } as never,
     {
       recoverUploadSession: async (sessionId: string) => {
@@ -25,6 +29,7 @@ test('recovery retries every recoverable upload session without stopping on one 
       finalizeUpload: async () => undefined,
       markUploadFailed: async () => undefined,
     } as never,
+    {} as never,
   );
 
   await recovery.recoverPendingFinalizations();

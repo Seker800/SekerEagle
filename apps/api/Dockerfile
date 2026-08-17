@@ -13,7 +13,7 @@ COPY packages/config packages/config
 RUN npm run db:generate && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/api
 
 FROM node:22-bookworm-slim AS runtime
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg openssl && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules
