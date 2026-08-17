@@ -62,6 +62,7 @@ describe('browser session recovery', () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse({ message: '邮箱或密码错误。' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ message: '访问令牌无效或已过期。' }, 401))
       .mockResolvedValueOnce(jsonResponse({ message: '缺少刷新令牌。' }, 401));
 
     await expect(
