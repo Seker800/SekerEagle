@@ -164,6 +164,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/media-capabilities': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getMediaCapabilities'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets': {
     parameters: {
       query?: never;
@@ -174,6 +190,22 @@ export interface paths {
     get: operations['EagleController_listAssets'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/asset-updates': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_listAssetUpdates'];
+    put?: never;
+    post: operations['EagleController_listAssetUpdatesByBody'];
     delete?: never;
     options?: never;
     head?: never;
@@ -228,6 +260,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getOriginalContent'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/{assetId}/renditions/{renditionId}': {
     parameters: {
       query?: never;
@@ -244,6 +292,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/renditions/{renditionId}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getRenditionContent'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/batch': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['EagleController_batchUpdate'];
+    trace?: never;
+  };
   '/api/eagle/assets/trash': {
     parameters: {
       query?: never;
@@ -254,6 +334,38 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['EagleController_trashAssets'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/batch/trash': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchTrash'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/batch/restore': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchRestore'];
     delete?: never;
     options?: never;
     head?: never;
@@ -292,6 +404,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/trash/empty': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_emptyTrashCompat'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/tags': {
     parameters: {
       query?: never;
@@ -299,9 +427,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get: operations['EagleController_listTags'];
+    get: operations['EagleController_listTags[0]'];
     put?: never;
-    post: operations['EagleController_createTag'];
+    post: operations['EagleController_createTag[0]'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/manual-tags': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_listTags[1]'];
+    put?: never;
+    post: operations['EagleController_createTag[1]'];
     delete?: never;
     options?: never;
     head?: never;
@@ -318,10 +462,26 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    delete: operations['EagleController_deleteTag'];
+    delete: operations['EagleController_deleteTag[0]'];
     options?: never;
     head?: never;
-    patch: operations['EagleController_updateTag'];
+    patch: operations['EagleController_updateTag[0]'];
+    trace?: never;
+  };
+  '/api/eagle/manual-tags/{tagId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['EagleController_deleteTag[1]'];
+    options?: never;
+    head?: never;
+    patch: operations['EagleController_updateTag[1]'];
     trace?: never;
   };
   '/api/eagle/tag-groups': {
@@ -331,9 +491,25 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get: operations['EagleController_listTagGroups'];
+    get: operations['EagleController_listTagGroups[0]'];
     put?: never;
-    post: operations['EagleController_createTagGroup'];
+    post: operations['EagleController_createTagGroup[0]'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/manual-tag-groups': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_listTagGroups[1]'];
+    put?: never;
+    post: operations['EagleController_createTagGroup[1]'];
     delete?: never;
     options?: never;
     head?: never;
@@ -350,10 +526,26 @@ export interface paths {
     get?: never;
     put?: never;
     post?: never;
-    delete: operations['EagleController_deleteTagGroup'];
+    delete: operations['EagleController_deleteTagGroup[0]'];
     options?: never;
     head?: never;
-    patch: operations['EagleController_updateTagGroup'];
+    patch: operations['EagleController_updateTagGroup[0]'];
+    trace?: never;
+  };
+  '/api/eagle/manual-tag-groups/{groupId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete: operations['EagleController_deleteTagGroup[1]'];
+    options?: never;
+    head?: never;
+    patch: operations['EagleController_updateTagGroup[1]'];
     trace?: never;
   };
   '/api/eagle/ai-tags': {
@@ -382,6 +574,38 @@ export interface paths {
     get?: never;
     put: operations['EagleController_replaceAssetTags'];
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/{assetId}/manual-tags': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put: operations['EagleController_replaceAssetManualTags'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/batch/manual-tags': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_batchChangeManualTags'];
     delete?: never;
     options?: never;
     head?: never;
@@ -484,6 +708,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/uploads/{uploadSessionId}/parts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleUploadController_listParts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads/{uploadSessionId}/complete': {
     parameters: {
       query?: never;
@@ -500,6 +740,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/imports': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleImportController_listRuns'];
+    put?: never;
+    post: operations['EagleImportController_createRun'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/imports/libraries': {
     parameters: {
       query?: never;
@@ -510,22 +766,6 @@ export interface paths {
     get: operations['EagleImportController_listLibraries'];
     put?: never;
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/eagle/imports': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['EagleImportController_createRun'];
     delete?: never;
     options?: never;
     head?: never;
@@ -596,6 +836,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/imports/{runId}/items/{itemId}/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleImportController_retryItem'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/imports/{runId}/items/{itemId}/reset-upload': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleImportController_resetUpload'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/imports/{runId}/items/{itemId}/upload': {
     parameters: {
       query?: never;
@@ -644,6 +916,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/imports/{runId}/reconcile': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleImportController_reconcile'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/admin/eagle-processing/summary': {
     parameters: {
       query?: never;
@@ -674,6 +962,22 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
+    trace?: never;
+  };
+  '/api/admin/eagle-processing/settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleProcessingController_settings'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['EagleProcessingController_updateSettings'];
     trace?: never;
   };
   '/api/admin/eagle-processing/jobs/{jobId}/retry': {
@@ -722,22 +1026,6 @@ export interface paths {
     options?: never;
     head?: never;
     patch?: never;
-    trace?: never;
-  };
-  '/api/admin/eagle-processing/settings': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations['EagleProcessingController_settings'];
     trace?: never;
   };
   '/api/health': {
@@ -814,6 +1102,10 @@ export interface components {
       expiresInDays: Record<string, never>;
     };
     Object: Record<string, never>;
+    EagleAssetIdsDto: {
+      assetIds: string[];
+    };
+    BatchUpdateEagleAssetsDto: Record<string, never>;
     UpdateEagleAssetDto: {
       rowVersion: number;
       displayName?: string;
@@ -821,9 +1113,6 @@ export interface components {
       color?: Record<string, never> | null;
       description?: Record<string, never> | null;
       sourceUrl?: Record<string, never> | null;
-    };
-    EagleAssetIdsDto: {
-      assetIds: string[];
     };
     CreateManualTagDto: {
       name: string;
@@ -837,6 +1126,7 @@ export interface components {
     ReplaceAssetTagsDto: {
       tagIds: string[];
     };
+    BatchChangeEagleManualTagsDto: Record<string, never>;
     CreateSmartFolderDto: {
       name: string;
       parentId?: Record<string, never> | null;
@@ -846,10 +1136,10 @@ export interface components {
       };
     };
     UpdateSmartFolderDto: {
-      name: string;
+      name?: string;
       parentId?: Record<string, never> | null;
       color?: Record<string, never> | null;
-      query: {
+      query?: {
         [key: string]: unknown;
       };
       rowVersion: number;
@@ -1104,6 +1394,23 @@ export interface operations {
       };
     };
   };
+  EagleController_getMediaCapabilities: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleController_listAssets: {
     parameters: {
       query?: {
@@ -1120,6 +1427,44 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_listAssetUpdates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_listAssetUpdatesByBody: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EagleAssetIdsDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -1207,6 +1552,25 @@ export interface operations {
       };
     };
   };
+  EagleController_getOriginalContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleController_getRendition: {
     parameters: {
       query?: never;
@@ -1227,7 +1591,90 @@ export interface operations {
       };
     };
   };
+  EagleController_getRenditionContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+        renditionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_batchUpdate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchUpdateEagleAssetsDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleController_trashAssets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EagleAssetIdsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_batchTrash: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['EagleAssetIdsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_batchRestore: {
     parameters: {
       query?: never;
       header?: never;
@@ -1309,7 +1756,24 @@ export interface operations {
       };
     };
   };
-  EagleController_listTags: {
+  EagleController_emptyTrashCompat: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_listTags[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1326,7 +1790,7 @@ export interface operations {
       };
     };
   };
-  EagleController_createTag: {
+  'EagleController_createTag[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1347,7 +1811,45 @@ export interface operations {
       };
     };
   };
-  EagleController_deleteTag: {
+  'EagleController_listTags[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_createTag[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateManualTagDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_deleteTag[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1366,7 +1868,7 @@ export interface operations {
       };
     };
   };
-  EagleController_updateTag: {
+  'EagleController_updateTag[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1389,7 +1891,49 @@ export interface operations {
       };
     };
   };
-  EagleController_listTagGroups: {
+  'EagleController_deleteTag[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tagId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_updateTag[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        tagId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateManualTagDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_listTagGroups[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1406,7 +1950,7 @@ export interface operations {
       };
     };
   };
-  EagleController_createTagGroup: {
+  'EagleController_createTagGroup[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1427,7 +1971,45 @@ export interface operations {
       };
     };
   };
-  EagleController_deleteTagGroup: {
+  'EagleController_listTagGroups[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_createTagGroup[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateManualTagGroupDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_deleteTagGroup[0]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1446,7 +2028,49 @@ export interface operations {
       };
     };
   };
-  EagleController_updateTagGroup: {
+  'EagleController_updateTagGroup[0]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateManualTagGroupDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_deleteTagGroup[1]': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        groupId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  'EagleController_updateTagGroup[1]': {
     parameters: {
       query?: never;
       header?: never;
@@ -1502,6 +2126,50 @@ export interface operations {
     };
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_replaceAssetManualTags: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReplaceAssetTagsDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_batchChangeManualTags: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchChangeEagleManualTagsDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -1691,6 +2359,25 @@ export interface operations {
       };
     };
   };
+  EagleUploadController_listParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        uploadSessionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleUploadController_complete: {
     parameters: {
       query?: never;
@@ -1714,9 +2401,14 @@ export interface operations {
       };
     };
   };
-  EagleImportController_listLibraries: {
+  EagleImportController_listRuns: {
     parameters: {
-      query?: never;
+      query?: {
+        externalLibraryId?: string;
+        status?: string;
+        limit?: components['schemas']['Object'];
+        cursor?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -1745,6 +2437,23 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleImportController_listLibraries: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -1836,6 +2545,46 @@ export interface operations {
       };
     };
   };
+  EagleImportController_retryItem: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: string;
+        itemId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleImportController_resetUpload: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: string;
+        itemId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleImportController_initiateUpload: {
     parameters: {
       query?: never;
@@ -1899,6 +2648,25 @@ export interface operations {
       };
     };
   };
+  EagleImportController_reconcile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleProcessingController_summary: {
     parameters: {
       query?: never;
@@ -1924,6 +2692,44 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleProcessingController_settings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleProcessingController_updateSettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateEagleProcessingSettingsDto'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -1979,27 +2785,6 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleProcessingController_settings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateEagleProcessingSettingsDto'];
-      };
-    };
-    responses: {
-      200: {
         headers: {
           [name: string]: unknown;
         };

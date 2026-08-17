@@ -12,8 +12,12 @@ import {
   type CompletedPart,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  executeObjectReadWithRetry,
+  isRetryableObjectReadError,
+} from './object-storage-read-retry';
 
 @Injectable()
 export class ObjectStorageService implements OnModuleDestroy {
@@ -115,13 +119,23 @@ export class ObjectStorageService implements OnModuleDestroy {
     return this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  getObject(key: string, options?: { range?: string; ifNoneMatch?: string }) {
-    return this.client.send(new GetObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      Range: options?.range,
-      IfNoneMatch: options?.ifNoneMatch,
-    }));
+  async getObject(key: string, options?: { range?: string; ifNoneMatch?: string }) {
+    try {
+      return await executeObjectReadWithRetry(() =>
+        this.client.send(
+          new GetObjectCommand({
+            Bucket: this.bucket,
+            Key: key,
+            Range: options?.range,
+            IfNoneMatch: options?.ifNoneMatch,
+          }),
+        ),
+      );
+    } catch (error) {
+      if (isRetryableObjectReadError(error))
+        throw new ServiceUnavailableException('对象存储暂时不可用，请稍后重试。');
+      throw error;
+    }
   }
 
   async deleteObject(key: string): Promise<void> {

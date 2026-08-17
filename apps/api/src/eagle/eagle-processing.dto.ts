@@ -1,6 +1,12 @@
-import { IsEnum, IsOptional, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
+import { EagleMediaJobKind, EagleMediaJobStatus, EagleProcessingLane } from '@prisma/client';
+import { IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
-export enum EagleProcessingModeDto { ALWAYS = 'ALWAYS', NIGHT = 'NIGHT', MANUAL = 'MANUAL' }
+export enum EagleProcessingModeDto {
+  ALWAYS = 'ALWAYS',
+  NIGHT = 'NIGHT',
+  MANUAL = 'MANUAL',
+}
 
 export class UpdateEagleProcessingSettingsDto {
   @IsEnum(EagleProcessingModeDto) mode!: EagleProcessingModeDto;
@@ -9,7 +15,9 @@ export class UpdateEagleProcessingSettingsDto {
 }
 
 export class ListEagleProcessingJobsDto {
-  @IsOptional() status?: string;
-  @IsOptional() lane?: string;
-  @IsOptional() kind?: string;
+  @IsOptional() @IsEnum(EagleMediaJobStatus) status?: EagleMediaJobStatus;
+  @IsOptional() @IsEnum(EagleProcessingLane) lane?: EagleProcessingLane;
+  @IsOptional() @IsEnum(EagleMediaJobKind) kind?: EagleMediaJobKind;
+  @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
+  @Type(() => Number) @IsOptional() @IsInt() @Min(1) @Max(100) limit?: number;
 }

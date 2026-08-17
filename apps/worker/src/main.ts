@@ -7,14 +7,22 @@ import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
-import sharp from 'sharp';
 import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
-import { decodeProcessableImage, MAX_EAGLE_IMAGE_INPUT_PIXELS } from './image-media';
+import { withProcessableImage } from './image-media';
 import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
+import {
+  isPermanentMediaValidationError,
+  PermanentMediaValidationError,
+} from './media-validation-error';
 
 const execFileAsync = promisify(execFile);
 
@@ -138,7 +146,13 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       },
     },
   });
-  if (!asset) throw new Error('ASSET_NOT_PROCESSABLE');
+  if (!asset) {
+    await prisma.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    });
+    return;
+  }
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
   if (job.kind === 'EXTRACT_COLOR_PALETTE') {
     await prisma.eagleAssetColorAnalysis.upsert({
@@ -162,40 +176,65 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   }
 
   if (asset.mimeType.startsWith('image/')) {
-    if (asset.byteSize > 250n * 1024n * 1024n) throw new Error('IMAGE_TOO_LARGE_TO_PROCESS');
+    if (asset.byteSize > 250n * 1024n * 1024n)
+      throw new PermanentMediaValidationError(
+        'IMAGE_CONTENT_MISMATCH',
+        'IMAGE_TOO_LARGE_TO_PROCESS',
+      );
     const object = await storage.send(
       new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-    const input = Buffer.from(await object.Body.transformToByteArray());
-    const sha256 = createHash('sha256').update(input).digest('hex');
-    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-    const processableInput = await decodeProcessableImage(
-      input,
+    const renditionSpecs = [
+      { kind: 'THUMBNAIL' as const, maxSize: 480 },
+      { kind: 'PREVIEW' as const, maxSize: 1600 },
+    ];
+    const { result: processed, sha256 } = await withProcessableImage(
+      object.Body as AsyncIterable<Uint8Array>,
       asset.mimeType,
       asset.originalObjectKey,
+      async (source) => {
+        const metadataPromise = source.clone().metadata();
+        if (job.kind === 'EXTRACT_COLOR_PALETTE') {
+          const [{ data, info }, metadata] = await Promise.all([
+            source
+              .clone()
+              .rotate()
+              .toColourspace('srgb')
+              .resize({ width: 192, height: 192, fit: 'inside', withoutEnlargement: true })
+              .ensureAlpha()
+              .raw()
+              .toBuffer({ resolveWithObject: true }),
+            metadataPromise,
+          ]);
+          return {
+            metadata,
+            palette: extractRepresentativeColors(data, info.channels, info.width * info.height, 6),
+            rendered: null,
+          };
+        }
+        const [metadata, ...rendered] = await Promise.all([
+          metadataPromise,
+          ...renditionSpecs.map(async (spec) => ({
+            spec,
+            output: await source
+              .clone()
+              .rotate()
+              .resize({
+                width: spec.maxSize,
+                height: spec.maxSize,
+                fit: 'inside',
+                withoutEnlargement: true,
+              })
+              .webp({ quality: spec.kind === 'THUMBNAIL' ? 78 : 86 })
+              .toBuffer({ resolveWithObject: true }),
+          })),
+        ]);
+        return { metadata, palette: null, rendered };
+      },
     );
-    const metadata = await sharp(processableInput, {
-      failOn: 'error',
-      limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-    }).metadata();
+    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-      const { data, info } = await sharp(processableInput, {
-        failOn: 'error',
-        limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-      })
-        .rotate()
-        .toColourspace('srgb')
-        .resize({ width: 192, height: 192, fit: 'inside', withoutEnlargement: true })
-        .ensureAlpha()
-        .raw()
-        .toBuffer({ resolveWithObject: true });
-      const palette = extractRepresentativeColors(
-        data,
-        info.channels,
-        info.width * info.height,
-        6,
-      );
       await prisma.$transaction(async (transaction) => {
         const completed = await transaction.eagleAssetProcessingJob.updateMany({
           where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
@@ -234,9 +273,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         await transaction.eagleAssetColorSwatch.deleteMany({
           where: { ownerId: asset.ownerId, analysisId: analysis.id },
         });
-        if (palette.length) {
+        if (processed.palette?.length) {
           await transaction.eagleAssetColorSwatch.createMany({
-            data: palette.map((swatch, rank) => ({
+            data: processed.palette.map((swatch, rank) => ({
               ownerId: asset.ownerId,
               analysisId: analysis.id,
               rank,
@@ -247,25 +286,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       });
       return;
     }
-    const renditionSpecs = [
-      { kind: 'THUMBNAIL' as const, maxSize: 480 },
-      { kind: 'PREVIEW' as const, maxSize: 1600 },
-    ];
     const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
-    for (const spec of renditionSpecs) {
-      const rendered = await sharp(processableInput, {
-        failOn: 'error',
-        limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-      })
-        .rotate()
-        .resize({
-          width: spec.maxSize,
-          height: spec.maxSize,
-          fit: 'inside',
-          withoutEnlargement: true,
-        })
-        .webp({ quality: spec.kind === 'THUMBNAIL' ? 78 : 86 })
-        .toBuffer({ resolveWithObject: true });
+    for (const { spec, output: rendered } of processed.rendered ?? []) {
       const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/${spec.kind.toLowerCase()}.webp`;
       await storage.send(
         new PutObjectCommand({
@@ -313,15 +335,16 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
           sha256,
-          width: metadata.autoOrient.width ?? metadata.width,
-          height: metadata.autoOrient.height ?? metadata.height,
+          width: processed.metadata.autoOrient.width ?? processed.metadata.width,
+          height: processed.metadata.autoOrient.height ?? processed.metadata.height,
         },
       });
     });
     return;
   }
 
-  if (asset.mimeType !== 'video/mp4') throw new Error('UNSUPPORTED_MEDIA_TYPE');
+  if (asset.mimeType !== 'video/mp4')
+    throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
   await processVideo(job, asset);
 }
 
@@ -367,16 +390,32 @@ async function processVideo(
     await execFileAsync(
       process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
       [
-        '-v', 'error', '-y', '-ss', '0', '-i', inputPath, '-frames:v', '1',
-        '-vf', "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
-        '-q:v', '3', posterPath,
+        '-v',
+        'error',
+        '-y',
+        '-ss',
+        '0',
+        '-i',
+        inputPath,
+        '-frames:v',
+        '1',
+        '-vf',
+        "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+        '-q:v',
+        '3',
+        posterPath,
       ],
       { timeout: 120_000 },
     );
     const poster = await readFile(posterPath);
     const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/thumbnail.jpg`;
     await storage.send(
-      new PutObjectCommand({ Bucket: s3Bucket, Key: storageKey, Body: poster, ContentType: 'image/jpeg' }),
+      new PutObjectCommand({
+        Bucket: s3Bucket,
+        Key: storageKey,
+        Body: poster,
+        ContentType: 'image/jpeg',
+      }),
     );
     await prisma.$transaction(async (transaction) => {
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
@@ -385,7 +424,13 @@ async function processVideo(
       });
       if (completed.count !== 1) return;
       await transaction.eagleAssetRendition.upsert({
-        where: { assetId_kind_revision: { assetId: asset.id, kind: 'THUMBNAIL', revision: job.assetRevision } },
+        where: {
+          assetId_kind_revision: {
+            assetId: asset.id,
+            kind: 'THUMBNAIL',
+            revision: job.assetRevision,
+          },
+        },
         create: {
           ownerId: asset.ownerId,
           assetId: asset.id,
@@ -461,7 +506,8 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const terminal = job.attempts >= 3;
+  const terminal = isPermanentMediaValidationError(error) || job.attempts >= 12;
+  const delaySeconds = Math.min(3_600, 2 ** Math.min(job.attempts, 12));
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({
       where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
@@ -469,7 +515,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
         : {
             status: 'PENDING',
-            availableAt: new Date(Date.now() + 30_000 * 2 ** Math.max(0, job.attempts - 1)),
+            availableAt: new Date(Date.now() + delaySeconds * 1_000),
             lockedAt: null,
             lastError: message,
           },
@@ -558,7 +604,8 @@ function assertOwnedKey(ownerId: string, key: string): void {
 }
 
 function assertExpectedHash(expected: string | null | undefined, actual: string): void {
-  if (expected && expected !== actual) throw new Error('CONTENT_SHA256_MISMATCH');
+  if (expected && expected !== actual)
+    throw new PermanentMediaValidationError('CONTENT_SHA256_MISMATCH');
 }
 
 async function stop(signal: string): Promise<void> {

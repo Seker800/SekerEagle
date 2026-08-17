@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsArray,
   IsInt,
+  IsIn,
   IsObject,
   IsOptional,
   IsString,
@@ -63,19 +64,25 @@ export class ListEagleAssetsDto {
   @MaxLength(32)
   format?: string;
 
-  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
+  )
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   formats?: string[];
 
-  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
+  )
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
   manualTagIds?: string[];
 
-  @Transform(({ value }: { value: unknown }) => typeof value === 'string' ? value.split(',').filter(Boolean) : undefined)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
+  )
   @IsOptional()
   @IsArray()
   @IsUUID('4', { each: true })
@@ -89,6 +96,7 @@ export class ListEagleAssetsDto {
   @IsOptional() @IsString() createdFrom?: string;
   @IsOptional() @IsString() createdTo?: string;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string;
+  @IsOptional() @IsIn(['ANY', 'ALL']) tagMatch?: 'ANY' | 'ALL';
 }
 
 export class UpdateEagleAssetDto {
@@ -141,7 +149,10 @@ export class EagleAssetIdsDto {
 
 export class ListEagleAssetUpdatesDto {
   @Transform(({ value }: { value: unknown }) => String(value).split(',').filter(Boolean))
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID('4', { each: true })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @IsUUID('4', { each: true })
   assetIds!: string[];
 }
 
@@ -151,19 +162,31 @@ export class EagleAssetVersionDto {
 }
 
 export class BatchUpdateEagleAssetsDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
   @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)
-  @ValidateNested({ each: true }) @Type(() => EagleAssetVersionDto)
+  @ValidateNested({ each: true })
+  @Type(() => EagleAssetVersionDto)
   assets!: EagleAssetVersionDto[];
   @IsOptional() @IsString() @MinLength(1) @MaxLength(255) displayName?: string;
   @IsOptional() @IsInt() @Min(1) @Max(5) rating?: number | null;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
   @IsOptional() @IsString() @MaxLength(4000) description?: string | null;
-  @IsOptional() @IsString() @IsUrl({ protocols: ['http', 'https'], require_protocol: true }) @MaxLength(2048) sourceUrl?: string | null;
+  @IsOptional()
+  @IsString()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
+  @MaxLength(2048)
+  sourceUrl?: string | null;
 }
 
 export class BatchChangeEagleManualTagsDto {
-  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) assetIds!: string[];
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  assetIds!: string[];
   @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) addTagIds!: string[];
   @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) removeTagIds!: string[];
 }
@@ -177,10 +200,10 @@ export class ReplaceAssetTagsDto {
 }
 
 export class CreateManualTagDto {
-  @ApiProperty({ minLength: 1, maxLength: 100 })
+  @ApiProperty({ minLength: 1, maxLength: 64 })
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(64)
   name!: string;
 
   @ApiPropertyOptional({ nullable: true, pattern: COLOR_PATTERN.source })
@@ -190,7 +213,7 @@ export class CreateManualTagDto {
 }
 
 export class UpdateManualTagDto {
-  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) name?: string;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
   @IsOptional() @IsUUID('4') groupId?: string | null;
   @IsOptional() @IsBoolean() isStarred?: boolean;
@@ -201,23 +224,23 @@ export class UpdateManualTagDto {
 }
 
 export class CreateManualTagGroupDto {
-  @IsString() @MinLength(1) @MaxLength(100) name!: string;
+  @IsString() @MinLength(1) @MaxLength(64) name!: string;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
-  @IsOptional() @IsString() @MaxLength(1000) description?: string | null;
+  @IsOptional() @IsString() @MaxLength(500) description?: string | null;
 }
 
 export class UpdateManualTagGroupDto {
-  @IsOptional() @IsString() @MinLength(1) @MaxLength(100) name?: string;
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(64) name?: string;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
-  @IsOptional() @IsString() @MaxLength(1000) description?: string | null;
+  @IsOptional() @IsString() @MaxLength(500) description?: string | null;
   @IsInt() @Min(1) rowVersion!: number;
 }
 
 export class CreateSmartFolderDto {
-  @ApiProperty({ minLength: 1, maxLength: 100 })
+  @ApiProperty({ minLength: 1, maxLength: 64 })
   @IsString()
   @MinLength(1)
-  @MaxLength(100)
+  @MaxLength(64)
   name!: string;
 
   @ApiPropertyOptional({ nullable: true })
@@ -235,7 +258,29 @@ export class CreateSmartFolderDto {
   query!: Record<string, unknown>;
 }
 
-export class UpdateSmartFolderDto extends CreateSmartFolderDto {
+export class UpdateSmartFolderDto {
+  @ApiPropertyOptional({ minLength: 1, maxLength: 64 })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  name?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsUUID('4')
+  parentId?: string | null;
+
+  @ApiPropertyOptional({ nullable: true, pattern: COLOR_PATTERN.source })
+  @IsOptional()
+  @Matches(COLOR_PATTERN)
+  color?: string | null;
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  @IsOptional()
+  @IsObject()
+  query?: Record<string, unknown>;
+
   @ApiProperty({ minimum: 1 })
   @IsInt()
   @Min(1)

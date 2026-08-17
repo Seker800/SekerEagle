@@ -17,7 +17,9 @@ test('batch asset update rejects a stale member before mutating any asset', asyn
       },
     },
   };
-  const prisma = { $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction) };
+  const prisma = {
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  };
   const service = new EagleService(prisma as never);
 
   await assert.rejects(
@@ -53,4 +55,24 @@ test('batch tag changes fail closed before writes when any asset belongs elsewhe
     NotFoundException,
   );
   assert.equal(transactions, 0);
+});
+
+test('batch trash rejects inside the transaction so partial updates roll back', async () => {
+  let rejectionWasInsideTransaction = false;
+  const service = new EagleService({
+    $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
+      try {
+        return await callback({ eagleAsset: { updateMany: async () => ({ count: 1 }) } });
+      } catch (error) {
+        rejectionWasInsideTransaction = true;
+        throw error;
+      }
+    },
+  } as never);
+
+  await assert.rejects(
+    service.setTrash('owner-1', ['asset-1', 'asset-2'], false),
+    /一个或多个素材不存在/,
+  );
+  assert.equal(rejectionWasInsideTransaction, true);
 });
