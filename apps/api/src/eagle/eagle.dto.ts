@@ -3,6 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayMinSize,
+  ArrayUnique,
   IsBoolean,
   IsArray,
   IsInt,
@@ -16,6 +17,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
 
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
@@ -135,6 +137,35 @@ export class EagleAssetIdsDto {
   @ArrayMaxSize(100)
   @IsUUID('4', { each: true })
   assetIds!: string[];
+}
+
+export class ListEagleAssetUpdatesDto {
+  @Transform(({ value }: { value: unknown }) => String(value).split(',').filter(Boolean))
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @IsUUID('4', { each: true })
+  assetIds!: string[];
+}
+
+export class EagleAssetVersionDto {
+  @IsUUID('4') assetId!: string;
+  @Type(() => Number) @IsInt() @Min(1) rowVersion!: number;
+}
+
+export class BatchUpdateEagleAssetsDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100)
+  @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)
+  @ValidateNested({ each: true }) @Type(() => EagleAssetVersionDto)
+  assets!: EagleAssetVersionDto[];
+  @IsOptional() @IsString() @MinLength(1) @MaxLength(255) displayName?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(5) rating?: number | null;
+  @IsOptional() @Matches(COLOR_PATTERN) color?: string | null;
+  @IsOptional() @IsString() @MaxLength(4000) description?: string | null;
+  @IsOptional() @IsString() @IsUrl({ protocols: ['http', 'https'], require_protocol: true }) @MaxLength(2048) sourceUrl?: string | null;
+}
+
+export class BatchChangeEagleManualTagsDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) assetIds!: string[];
+  @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) addTagIds!: string[];
+  @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) removeTagIds!: string[];
 }
 
 export class ReplaceAssetTagsDto {

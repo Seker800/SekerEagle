@@ -7,6 +7,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
+  BatchChangeEagleManualTagsDto,
+  BatchUpdateEagleAssetsDto,
   CreateManualTagDto,
   CreateManualTagGroupDto,
   CreateSmartFolderDto,
@@ -126,22 +128,7 @@ export class EagleService {
   }
 
   async updateAsset(ownerId: string, assetId: string, input: UpdateEagleAssetDto) {
-    const data: Prisma.EagleAssetUpdateManyMutationInput = {};
-    if (input.displayName !== undefined) {
-      const displayName = normalizeName(input.displayName, 255, '素材名称');
-      data.displayName = displayName;
-      data.normalizedDisplayName = normalizeKey(displayName);
-    }
-    if (input.rating !== undefined) {
-      if (input.rating !== null && ![1, 2, 3, 4, 5].includes(input.rating)) {
-        throw new BadRequestException('星级只能是 1 到 5，或留空。');
-      }
-      data.rating = input.rating;
-    }
-    const annotation = normalizeAnnotation(input);
-    if (Object.keys(data).length === 0 && !annotation) {
-      throw new BadRequestException('没有可更新的素材信息。');
-    }
+    const { data, annotation } = buildAssetChanges(input);
     await this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.eagleAsset.updateMany({
         where: { ownerId, id: assetId, deletedAt: null, rowVersion: input.rowVersion },
@@ -157,6 +144,92 @@ export class EagleService {
       }
     });
     return this.getAsset(ownerId, assetId);
+  }
+
+  listUpdates(ownerId: string, assetIds: string[]) {
+    return this.prisma.eagleAsset.findMany({
+      where: { ownerId, id: { in: assetIds }, deletedAt: null },
+      select: {
+        id: true,
+        lifecycleStatus: true,
+        mediaErrorCode: true,
+        updatedAt: true,
+        renditions: {
+          where: { status: 'READY' },
+          orderBy: [{ revision: 'desc' as const }, { kind: 'asc' as const }],
+          select: { id: true, kind: true, revision: true, mimeType: true, byteSize: true, width: true, height: true },
+        },
+      },
+    }).then((rows) => rows.map((row) => ({
+      ...row,
+      renditions: row.renditions.map((rendition) => ({ ...rendition, byteSize: Number(rendition.byteSize) })),
+    })));
+  }
+
+  async batchUpdate(ownerId: string, input: BatchUpdateEagleAssetsDto) {
+    const { data, annotation } = buildAssetChanges(input);
+    const updatedAssets = await this.prisma.$transaction(async (transaction) => {
+      const current = await transaction.eagleAsset.findMany({
+        where: { ownerId, id: { in: input.assets.map(({ assetId }) => assetId) }, deletedAt: null },
+        select: { id: true, rowVersion: true },
+      });
+      if (current.length !== input.assets.length) throw new NotFoundException('一个或多个素材不存在。');
+      const versions = new Map(current.map((asset) => [asset.id, asset.rowVersion]));
+      if (input.assets.some((asset) => versions.get(asset.assetId) !== asset.rowVersion)) {
+        throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
+      }
+      const updated = await transaction.eagleAsset.updateMany({
+        where: {
+          ownerId,
+          deletedAt: null,
+          OR: input.assets.map(({ assetId, rowVersion }) => ({ id: assetId, rowVersion })),
+        },
+        data: { ...data, rowVersion: { increment: 1 } },
+      });
+      if (updated.count !== input.assets.length) {
+        throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
+      }
+      if (annotation) {
+        for (const { assetId } of input.assets) {
+          await transaction.eagleAssetAnnotation.upsert({
+            where: { ownerId_assetId: { ownerId, assetId } },
+            create: { ownerId, assetId, ...annotation },
+            update: annotation,
+          });
+        }
+      }
+      return current.map(({ id, rowVersion }) => ({ assetId: id, rowVersion: rowVersion + 1 }));
+    });
+    return { affectedAssetCount: updatedAssets.length, assets: updatedAssets };
+  }
+
+  async batchChangeManualTags(ownerId: string, input: BatchChangeEagleManualTagsDto) {
+    const tagIds = [...new Set([...input.addTagIds, ...input.removeTagIds])];
+    const [assets, tags] = await Promise.all([
+      this.prisma.eagleAsset.findMany({ where: { ownerId, id: { in: input.assetIds }, deletedAt: null }, select: { id: true } }),
+      this.prisma.eagleManualTag.findMany({ where: { ownerId, id: { in: tagIds } }, select: { id: true } }),
+    ]);
+    if (assets.length !== input.assetIds.length || tags.length !== tagIds.length) {
+      throw new NotFoundException('一个或多个素材或标签不存在。');
+    }
+    await this.prisma.$transaction(async (transaction) => {
+      if (input.removeTagIds.length) {
+        await transaction.eagleAssetManualTag.deleteMany({
+          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
+        });
+      }
+      if (input.addTagIds.length) {
+        await transaction.eagleAssetManualTag.updateMany({
+          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.addTagIds } },
+          data: { assignedByUser: true },
+        });
+        await transaction.eagleAssetManualTag.createMany({
+          data: input.assetIds.flatMap((assetId) => input.addTagIds.map((tagId) => ({ ownerId, assetId, tagId }))),
+          skipDuplicates: true,
+        });
+      }
+    });
+    return { affectedAssetCount: input.assetIds.length };
   }
 
   async setTrash(ownerId: string, assetIds: string[], restore: boolean) {
@@ -553,7 +626,35 @@ type AnnotationData = {
   sourceUrl?: string | null;
 };
 
-function normalizeAnnotation(input: UpdateEagleAssetDto): AnnotationData | null {
+function buildAssetChanges(input: {
+  displayName?: string;
+  rating?: number | null;
+  color?: string | null;
+  description?: string | null;
+  sourceUrl?: string | null;
+}) {
+  const data: Prisma.EagleAssetUpdateManyMutationInput = {};
+  if (input.displayName !== undefined) {
+    const displayName = normalizeName(input.displayName, 255, '素材名称');
+    data.displayName = displayName;
+    data.normalizedDisplayName = normalizeKey(displayName);
+  }
+  if (input.rating !== undefined) {
+    if (input.rating !== null && ![1, 2, 3, 4, 5].includes(input.rating)) {
+      throw new BadRequestException('星级只能是 1 到 5，或留空。');
+    }
+    data.rating = input.rating;
+  }
+  const annotation = normalizeAnnotation(input);
+  if (!Object.keys(data).length && !annotation) throw new BadRequestException('没有可更新的素材信息。');
+  return { data, annotation };
+}
+
+function normalizeAnnotation(input: {
+  color?: string | null;
+  description?: string | null;
+  sourceUrl?: string | null;
+}): AnnotationData | null {
   if (input.color === undefined && input.description === undefined && input.sourceUrl === undefined)
     return null;
   const annotation: AnnotationData = {};

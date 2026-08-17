@@ -22,10 +22,13 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import {
   CreateManualTagDto,
+  BatchChangeEagleManualTagsDto,
+  BatchUpdateEagleAssetsDto,
   CreateManualTagGroupDto,
   CreateSmartFolderDto,
   EagleAssetIdsDto,
   ListEagleAssetsDto,
+  ListEagleAssetUpdatesDto,
   MoveSmartFolderDto,
   ReplaceAssetTagsDto,
   UpdateEagleAssetDto,
@@ -56,6 +59,23 @@ export class EagleController {
   @Get('assets')
   listAssets(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
     return this.eagle.listAssets(principal.sub, query);
+  }
+
+  @Get('asset-updates')
+  listAssetUpdates(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Query() query: ListEagleAssetUpdatesDto,
+  ) {
+    return this.eagle.listUpdates(principal.sub, query.assetIds);
+  }
+
+  @Post('asset-updates')
+  @UseGuards(BrowserOriginGuard)
+  listAssetUpdatesByBody(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: EagleAssetIdsDto,
+  ) {
+    return this.eagle.listUpdates(principal.sub, input.assetIds);
   }
 
   @Get('assets/:assetId')
@@ -97,6 +117,12 @@ export class EagleController {
     return new StreamableFile(media.stream);
   }
 
+  @Patch('assets/batch')
+  @UseGuards(BrowserOriginGuard)
+  batchUpdate(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: BatchUpdateEagleAssetsDto) {
+    return this.eagle.batchUpdate(principal.sub, input);
+  }
+
   @Patch('assets/:assetId')
   @UseGuards(BrowserOriginGuard)
   updateAsset(
@@ -113,6 +139,18 @@ export class EagleController {
     return this.eagle.setTrash(principal.sub, input.assetIds, false);
   }
 
+  @Post('assets/batch/trash')
+  @UseGuards(BrowserOriginGuard)
+  batchTrash(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
+    return this.eagle.setTrash(principal.sub, input.assetIds, false);
+  }
+
+  @Post('assets/batch/restore')
+  @UseGuards(BrowserOriginGuard)
+  batchRestore(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
+    return this.eagle.setTrash(principal.sub, input.assetIds, true);
+  }
+
   @Get('trash')
   listTrash(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
     return this.eagle.listAssets(principal.sub, query, true);
@@ -127,6 +165,12 @@ export class EagleController {
   @Delete('trash')
   @UseGuards(BrowserOriginGuard)
   emptyTrash(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.eagle.emptyTrash(principal.sub);
+  }
+
+  @Post('trash/empty')
+  @UseGuards(BrowserOriginGuard)
+  emptyTrashCompat(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.eagle.emptyTrash(principal.sub);
   }
 
@@ -203,6 +247,25 @@ export class EagleController {
     @Body() input: ReplaceAssetTagsDto,
   ) {
     return this.eagle.replaceAssetTags(principal.sub, assetId, input.tagIds);
+  }
+
+  @Put('assets/:assetId/manual-tags')
+  @UseGuards(BrowserOriginGuard)
+  replaceAssetManualTags(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Body() input: ReplaceAssetTagsDto,
+  ) {
+    return this.eagle.replaceAssetTags(principal.sub, assetId, input.tagIds);
+  }
+
+  @Post('assets/batch/manual-tags')
+  @UseGuards(BrowserOriginGuard)
+  batchChangeManualTags(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchChangeEagleManualTagsDto,
+  ) {
+    return this.eagle.batchChangeManualTags(principal.sub, input);
   }
 
   @Get('smart-folders')

@@ -162,10 +162,13 @@ export async function getEagleAsset(_token: string, id: string, signal?: AbortSi
 export async function getEagleTrashAsset(_token: string, id: string, signal?: AbortSignal) {
   return normalizeAsset(await api<EagleAsset>(`/eagle/trash/${encodeURIComponent(id)}`, { signal }));
 }
-export async function listEagleAssetUpdates(token: string, ids: readonly string[], signal?: AbortSignal) {
+export async function listEagleAssetUpdates(_token: string, ids: readonly string[], signal?: AbortSignal) {
   if (!ids.length) return [];
-  const assets = await Promise.all(ids.map((id) => getEagleAsset(token, id, signal)));
-  return assets.map(({ id, lifecycleStatus, mediaErrorCode, updatedAt, renditions }) => ({ id, lifecycleStatus, mediaErrorCode, updatedAt, renditions }));
+  return api<Array<Pick<EagleAsset, 'id' | 'lifecycleStatus' | 'mediaErrorCode' | 'updatedAt' | 'renditions'>>>('/eagle/asset-updates', {
+    method: 'POST',
+    body: JSON.stringify({ assetIds: ids }),
+    signal,
+  });
 }
 
 function normalizeTag(tag: Partial<EagleManualTag> & EagleManualTagRef & { _count?: { assetLinks: number } }): EagleManualTag {
@@ -185,12 +188,12 @@ export async function createEagleSmartFolder(_token: string, input: EagleSmartFo
 export async function updateEagleSmartFolder(_token: string, id: string, input: EagleSmartFolderFilters & { name?: string; color?: string | null; rowVersion: number }) { const { name, color, rowVersion, ...filters } = input; return api<EagleSmartFolder>(`/eagle/smart-folders/${id}`, { method: 'PATCH', body: JSON.stringify({ name, color, rowVersion, query: { version: 1, filters } }) }); }
 export async function moveEagleSmartFolder(_token: string, id: string, input: { parentId: string | null; position: number; rowVersion: number }) { return api<EagleSmartFolder>(`/eagle/smart-folders/${id}/move`, { method: 'POST', body: JSON.stringify(input) }); }
 export async function replaceEagleAssetManualTags(_token: string, id: string, tagIds: string[]) { await api(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) }); return { assetId: id, tagIds }; }
-export async function batchChangeEagleManualTags(token: string, input: { assetIds: string[]; addTagIds: string[]; removeTagIds: string[] }) { const assets = await Promise.all(input.assetIds.map((id) => getEagleAsset(token, id))); await Promise.all(assets.map((asset) => replaceEagleAssetManualTags(token, asset.id, [...new Set([...asset.manualTags.map((tag) => tag.id).filter((id) => !input.removeTagIds.includes(id)), ...input.addTagIds])]))); return { affectedAssetCount: assets.length }; }
-export async function batchTrashEagleAssets(_token: string, assetIds: string[]) { return api<{ affectedAssetCount: number }>('/eagle/assets/trash', { method: 'POST', body: JSON.stringify({ assetIds }) }); }
-export async function batchRestoreEagleAssets(_token: string, assetIds: string[]) { return api<{ affectedAssetCount: number }>('/eagle/trash/restore', { method: 'POST', body: JSON.stringify({ assetIds }) }); }
-export async function emptyEagleTrash(_token: string) { return api<{ affectedAssetCount: number }>('/eagle/trash', { method: 'DELETE', body: '{}' }); }
+export async function batchChangeEagleManualTags(_token: string, input: { assetIds: string[]; addTagIds: string[]; removeTagIds: string[] }) { return api<{ affectedAssetCount: number }>('/eagle/assets/batch/manual-tags', { method: 'POST', body: JSON.stringify(input) }); }
+export async function batchTrashEagleAssets(_token: string, assetIds: string[]) { return api<{ affectedAssetCount: number }>('/eagle/assets/batch/trash', { method: 'POST', body: JSON.stringify({ assetIds }) }); }
+export async function batchRestoreEagleAssets(_token: string, assetIds: string[]) { return api<{ affectedAssetCount: number }>('/eagle/assets/batch/restore', { method: 'POST', body: JSON.stringify({ assetIds }) }); }
+export async function emptyEagleTrash(_token: string) { return api<{ affectedAssetCount: number }>('/eagle/trash/empty', { method: 'POST', body: '{}' }); }
 export async function updateEagleAsset(_token: string, id: string, input: EagleAssetChanges & { rowVersion: number }) { return normalizeAsset(await api<EagleAsset>(`/eagle/assets/${id}`, { method: 'PATCH', body: JSON.stringify(input) })); }
-export async function batchUpdateEagleAssets(token: string, input: EagleAssetChanges & { assets: EagleAssetVersion[] }) { const { assets, ...changes } = input; const updated = await Promise.all(assets.map((asset) => updateEagleAsset(token, asset.assetId, { ...changes, rowVersion: asset.rowVersion }))); return { affectedAssetCount: updated.length, assets: updated.map((asset) => ({ assetId: asset.id, rowVersion: asset.rowVersion })) }; }
+export async function batchUpdateEagleAssets(_token: string, input: EagleAssetChanges & { assets: EagleAssetVersion[] }) { return api<{ affectedAssetCount: number; assets: EagleAssetVersion[] }>('/eagle/assets/batch', { method: 'PATCH', body: JSON.stringify(input) }); }
 
 export async function uploadEagleAsset(_token: string, file: File, onProgress: (value: { percent: number }) => void) {
   const session = await api<{ id: string; partSize: number }>('/eagle/uploads', { method: 'POST', body: JSON.stringify({ originalName: file.name, mimeType: file.type || 'application/octet-stream', size: file.size }) });
