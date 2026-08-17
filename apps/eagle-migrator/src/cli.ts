@@ -1,4 +1,4 @@
-import { access, mkdir, statfs } from 'node:fs/promises';
+import { access, mkdir, stat, statfs } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseCliOptions } from './cli-options';
@@ -52,6 +52,7 @@ export async function executeCli(arguments_: string[], runtime: CliRuntime = {})
   } else {
     await access(journalPath);
   }
+  await assertSecureStateDirectory(stateDirectory);
   const journal = MigrationJournal.open(journalPath, {
     migrationId: snapshot.header.migrationId,
     snapshotSha256: snapshot.header.snapshotSha256,
@@ -85,6 +86,14 @@ export async function executeCli(arguments_: string[], runtime: CliRuntime = {})
     write(JSON.stringify(result, null, 2));
   } finally {
     journal.close();
+  }
+}
+
+export async function assertSecureStateDirectory(directory: string): Promise<void> {
+  const directoryStat = await stat(directory);
+  if (!directoryStat.isDirectory()) throw new Error('迁移 state 路径不是目录。');
+  if ((directoryStat.mode & 0o077) !== 0) {
+    throw new Error('迁移 state 目录权限必须是 0700，避免 SQLite 恢复日志泄露。');
   }
 }
 

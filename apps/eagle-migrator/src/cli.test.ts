@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { chmod, mkdtemp, mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
-import { inventoryOf, requirePat, resolveStateDirectory } from './cli';
+import { assertSecureStateDirectory, inventoryOf, requirePat, resolveStateDirectory } from './cli';
 import type { MigrationSnapshot } from './snapshot';
 
 test('requires PAT from the environment and never from command arguments', () => {
@@ -42,4 +45,16 @@ test('reports immutable snapshot inventory without exposing item paths', () => {
     tagCount: 0,
     tagGroupCount: 0,
   });
+});
+
+test('requires the whole SQLite state directory to be private', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'sekereagle-state-permissions-'));
+  const privateDirectory = join(root, 'private');
+  const sharedDirectory = join(root, 'shared');
+  await mkdir(privateDirectory, { mode: 0o700 });
+  await mkdir(sharedDirectory, { mode: 0o755 });
+  await assertSecureStateDirectory(privateDirectory);
+  await assert.rejects(assertSecureStateDirectory(sharedDirectory), /0700/);
+  await chmod(sharedDirectory, 0o700);
+  await assertSecureStateDirectory(sharedDirectory);
 });

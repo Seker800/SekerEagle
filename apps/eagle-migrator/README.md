@@ -55,7 +55,7 @@ node apps/eagle-migrator/dist/main.js resume /绝对路径/迁移快照 --server
 node apps/eagle-migrator/dist/main.js verify /绝对路径/迁移快照 --server http://localhost:8180
 ```
 
-默认 journal 位于 `~/.local/share/sekereagle/migrations/<migrationId>/journal.sqlite`，权限为 `0600`。可以用 `--state /绝对路径` 指定位置；同一快照必须一直复用同一 state 目录。journal 与快照身份不一致时工具会拒绝继续。
+默认 journal 位于 `~/.local/share/sekereagle/migrations/<migrationId>/journal.sqlite`，文件权限为 `0600`、目录权限为 `0700`。可以用 `--state /绝对路径` 指定位置，但自定义目录也必须是 `0700`；同一快照必须一直复用同一 state 目录。journal 与快照身份不一致时工具会拒绝继续。
 
 只有满足以下条件后才开始 6 万张全量：小样本无结构性错误；暂停/恢复至少演练一次；`verify` 与网页抽查一致；服务端数据库和对象存储已有可恢复备份。全量先用并发 `4`，根据服务端 CPU、磁盘、MinIO 与错误率再决定是否提高，不应把 `16` 当默认值。
 
