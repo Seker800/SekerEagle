@@ -184,6 +184,7 @@ export class EagleImportService {
   async finishItem(ownerId: string, runId: string, itemId: string, assetId: string) {
     const item = await this.prisma.eagleImportRunItem.findFirst({ where: { ownerId, runId, id: itemId }, include: { externalAsset: true } });
     if (!item) throw new NotFoundException('Eagle 导入项不存在。');
+    if (item.status === 'IMPORTED' && item.assetId === assetId) return serializeItem(item);
     const asset = await this.prisma.eagleAsset.findFirst({ where: { ownerId, id: assetId }, select: { id: true } });
     if (!asset) throw new NotFoundException('上传后的素材不存在。');
     await this.prisma.$transaction(async (transaction) => {

@@ -107,14 +107,76 @@ export class EagleUploadService {
   }
 
   async complete(ownerId: string, uploadSessionId: string, input: CompleteEagleUploadDto) {
-    const session = await this.requireInitiated(ownerId, uploadSessionId);
-    const parts = normalizeParts(input.parts);
-    await this.storage.completeMultipartUpload(session.objectKey, session.multipartUploadId, parts);
+    const requestedParts = normalizeParts(input.parts);
+    const session = await this.requireCompletable(ownerId, uploadSessionId);
+    if (session.status === 'COMPLETED' && session.eagleAssetId) {
+      return { uploadSessionId: session.id, assetId: session.eagleAssetId, status: 'PROCESSING' };
+    }
+    const parts =
+      session.status === 'INITIATED'
+        ? requestedParts
+        : normalizeStoredParts(session.completionParts);
+    if (session.status === 'INITIATED') {
+      await this.prisma.uploadSession.updateMany({
+        where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+        data: { completionParts: parts },
+      });
+      try {
+        await this.storage.completeMultipartUpload(session.objectKey, session.multipartUploadId, parts);
+      } catch (error) {
+        await this.storage.headObject(session.objectKey).catch(() => {
+          throw error;
+        });
+      }
+      await this.prisma.uploadSession.updateMany({
+        where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+        data: { status: 'ASSEMBLED', assembledAt: new Date(), lastError: null },
+      });
+    }
+    return this.finalizeAssembled({ ...session, status: 'ASSEMBLED' }, parts);
+  }
+
+  async recoverUploadSession(uploadSessionId: string) {
+    const session = await this.prisma.uploadSession.findFirst({
+      where: {
+        id: uploadSessionId,
+        status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED'] },
+        finalizationAttempts: { lt: 10 },
+      },
+      include: { eagleState: true },
+    });
+    if (!session || !session.completionParts) return null;
+    const parts = normalizeStoredParts(session.completionParts);
+    if (session.status === 'INITIATED') {
+      try {
+        await this.storage.completeMultipartUpload(session.objectKey, session.multipartUploadId, parts);
+      } catch (error) {
+        await this.storage.headObject(session.objectKey).catch(() => {
+          throw error;
+        });
+      }
+      await this.prisma.uploadSession.updateMany({
+        where: { id: session.id, status: 'INITIATED' },
+        data: { status: 'ASSEMBLED', assembledAt: new Date(), lastError: null },
+      });
+    }
+    return this.finalizeAssembled({ ...session, status: 'ASSEMBLED' }, parts);
+  }
+
+  private async finalizeAssembled(
+    session: Awaited<ReturnType<EagleUploadService['requireCompletable']>>,
+    parts: ReturnType<typeof normalizeParts>,
+  ) {
     const head = await this.storage.headObject(session.objectKey);
     if (head.ContentLength === undefined || BigInt(head.ContentLength) !== session.size) {
       await this.prisma.uploadSession.update({
         where: { id: session.id },
-        data: { status: 'FAILED', lastError: 'OBJECT_SIZE_MISMATCH', objectCleanupPending: true },
+        data: {
+          status: 'FAILED',
+          finalizationAttempts: 10,
+          lastError: 'OBJECT_SIZE_MISMATCH',
+          objectCleanupPending: true,
+        },
       });
       throw new BadRequestException('上传后的对象大小与声明不一致。');
     }
@@ -124,7 +186,12 @@ export class EagleUploadService {
     try {
       await this.prisma.$transaction(async (transaction) => {
         const claimed = await transaction.uploadSession.updateMany({
-          where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+          where: {
+            id: session.id,
+            uploaderId: session.uploaderId,
+            status: { in: ['ASSEMBLED', 'FAILED'] },
+            finalizationAttempts: { lt: 10 },
+          },
           data: {
             status: 'FINALIZING',
             assembledAt: now,
@@ -136,7 +203,7 @@ export class EagleUploadService {
         await transaction.eagleAsset.create({
           data: {
             id: assetId,
-            ownerId,
+            ownerId: session.uploaderId,
             originalName: session.originalName,
             displayName,
             normalizedDisplayName: normalizeKey(displayName),
@@ -156,7 +223,7 @@ export class EagleUploadService {
               ];
         await transaction.eagleAssetProcessingJob.createMany({
           data: jobs.map(({ kind, lane }) => ({
-            ownerId,
+            ownerId: session.uploaderId,
             assetId,
             kind,
             lane,
@@ -180,8 +247,17 @@ export class EagleUploadService {
       });
     } catch (error) {
       await this.prisma.uploadSession.updateMany({
-        where: { id: session.id, uploaderId: ownerId, status: { in: ['INITIATED', 'FINALIZING'] } },
-        data: { status: 'FAILED', lastError: 'FINALIZATION_FAILED', objectCleanupPending: true },
+        where: {
+          id: session.id,
+          uploaderId: session.uploaderId,
+          status: { in: ['ASSEMBLED', 'FINALIZING', 'FAILED'] },
+        },
+        data: {
+          status: 'FAILED',
+          finalizationAttempts: { increment: 1 },
+          lastError: error instanceof Error ? error.message.slice(0, 2000) : 'FINALIZATION_FAILED',
+          objectCleanupPending: false,
+        },
       });
       throw error;
     }
@@ -210,6 +286,25 @@ export class EagleUploadService {
       });
       if (!exists) throw new NotFoundException('上传会话不存在。');
       throw new ConflictException('上传会话不再可修改。');
+    }
+    return session;
+  }
+
+  private async requireCompletable(ownerId: string, uploadSessionId: string) {
+    const session = await this.prisma.uploadSession.findFirst({
+      where: {
+        id: uploadSessionId,
+        uploaderId: ownerId,
+        status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED', 'COMPLETED'] },
+      },
+      include: { eagleState: true },
+    });
+    if (!session) {
+      const exists = await this.prisma.uploadSession.count({
+        where: { id: uploadSessionId, uploaderId: ownerId },
+      });
+      if (!exists) throw new NotFoundException('上传会话不存在。');
+      throw new ConflictException('上传会话不再可完成。');
     }
     return session;
   }
@@ -243,6 +338,21 @@ function normalizeParts(parts: CompleteEagleUploadDto['parts']) {
     throw new BadRequestException('上传分片清单无效。');
   }
   return sorted;
+}
+
+function normalizeStoredParts(value: unknown): ReturnType<typeof normalizeParts> {
+  if (!Array.isArray(value)) throw new BadRequestException('上传分片清单无效。');
+  return normalizeParts(
+    value.map((part) => {
+      if (!part || typeof part !== 'object') return { partNumber: 0, etag: '' };
+      const record = part as Record<string, unknown>;
+      const etag = record.etag ?? record.ETag;
+      return {
+        partNumber: Number(record.partNumber ?? record.PartNumber),
+        etag: typeof etag === 'string' ? etag : '',
+      };
+    }),
+  );
 }
 
 function displayNameFromOriginal(originalName: string): string {

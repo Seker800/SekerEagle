@@ -11,6 +11,7 @@ import { EagleProcessingService } from './eagle-processing.service';
 import { EagleService } from './eagle.service';
 import { EagleUploadController } from './eagle-upload.controller';
 import { EagleUploadService } from './eagle-upload.service';
+import { EagleUploadRecoveryService } from './eagle-upload-recovery.service';
 import { PrismaSekerEagleIngestionAdapter } from './adapters/prisma/seker-eagle-ingestion.adapter';
 import { PrismaEagleImportsRepository } from './import/adapters/prisma/eagle-app-import.repository';
 import { EAGLE_IMPORTS_REPOSITORY } from './import/eagle-app-import.repository';
@@ -25,6 +26,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
     EagleMediaService,
     EagleMediaCapabilityService,
     EagleUploadService,
+    EagleUploadRecoveryService,
     EagleImportService,
     EagleImportsService,
     PrismaEagleImportsRepository,

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -17,6 +18,7 @@ import { PatScopeGuard } from '../auth/pat-scope.guard';
 import { RequirePatScopes } from '../auth/required-scopes';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
+import { EagleImportsService } from './import/eagle-app-import.service';
 import { EagleUploadService } from './eagle-upload.service';
 
 @ApiTags('eagle-uploads')
@@ -26,7 +28,10 @@ import { EagleUploadService } from './eagle-upload.service';
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 @RequirePatScopes('asset:write')
 export class EagleUploadController {
-  constructor(private readonly uploads: EagleUploadService) {}
+  constructor(
+    private readonly uploads: EagleUploadService,
+    private readonly imports: EagleImportsService,
+  ) {}
 
   @Post()
   @UseGuards(BrowserOrPatOriginGuard)
@@ -62,12 +67,25 @@ export class EagleUploadController {
 
   @Post(':uploadSessionId/complete')
   @UseGuards(BrowserOrPatOriginGuard)
-  complete(
+  async complete(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('uploadSessionId', new ParseUUIDPipe({ version: '4' })) uploadSessionId: string,
     @Body() input: CompleteEagleUploadDto,
   ) {
-    return this.uploads.complete(principal.sub, uploadSessionId, input);
+    try {
+      const completed = await this.uploads.complete(principal.sub, uploadSessionId, input);
+      await this.imports.finalizeUpload(principal.sub, uploadSessionId, completed.assetId);
+      return completed;
+    } catch (error) {
+      const permanent = error instanceof BadRequestException;
+      await this.imports
+        .markUploadFailed(principal.sub, uploadSessionId, error, {
+          terminal: permanent,
+          permanent,
+        })
+        .catch(() => undefined);
+      throw error;
+    }
   }
 
   @Delete(':uploadSessionId')
