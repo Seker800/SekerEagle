@@ -514,6 +514,7 @@ model EagleAssetRendition {
   ownerId    String
   assetId    String
   kind       EagleRenditionKind
+  variant    String               @default("default")
   revision   Int
   storageKey String               @unique
   mimeType   String
@@ -525,7 +526,7 @@ model EagleAssetRendition {
   updatedAt  DateTime             @updatedAt
   asset      EagleAsset           @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
 
-  @@unique([assetId, kind, revision])
+  @@unique([assetId, kind, revision, variant])
   @@index([ownerId, assetId])
 }
 
@@ -753,25 +754,25 @@ model EagleSmartFolderAiTagDependency {
 }
 
 model EagleAssetProcessingJob {
-  id               String              @id @default(uuid())
+  id               String                    @id @default(uuid())
   ownerId          String
   assetId          String
   kind             EagleMediaJobKind
-  status           EagleMediaJobStatus @default(PENDING)
-  lane             EagleProcessingLane @default(INTERACTIVE)
+  status           EagleMediaJobStatus       @default(PENDING)
+  lane             EagleProcessingLane       @default(INTERACTIVE)
   assetRevision    Int
-  processorVersion String              @default("v1")
-  attempts         Int                 @default(0)
-  leaseVersion     Int                 @default(0)
-  availableAt      DateTime            @default(now())
+  processorVersion String                    @default("v1")
+  attempts         Int                       @default(0)
+  leaseVersion     Int                       @default(0)
+  availableAt      DateTime                  @default(now())
   lockedAt         DateTime?
   startedAt        DateTime?
   completedAt      DateTime?
   lastError        String?
   dependsOnJobId   String?
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
-  asset            EagleAsset          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+  asset            EagleAsset                @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
   dependsOnJob     EagleAssetProcessingJob?  @relation("EagleMediaJobDependency", fields: [dependsOnJobId], references: [id], onDelete: SetNull)
   dependentJobs    EagleAssetProcessingJob[] @relation("EagleMediaJobDependency")
 

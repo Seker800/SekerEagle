@@ -3,6 +3,7 @@ import { IconPhoto } from '@tabler/icons-react';
 import { getEagleRenditionContentUrl, type EagleAssetListItem } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
+import { getEagleThumbnailSourceSet } from './eagle-media-sources';
 
 const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
 const RETRY_BASE_DELAY_MS = 500;
@@ -24,6 +25,10 @@ export function getEagleAssetThumbnailUrls(asset: EagleAssetListItem): string[] 
       RENDITION_PRIORITY.flatMap((kind) =>
         asset.renditions
           .filter((rendition) => rendition.kind === kind)
+          .sort(
+            (left, right) =>
+              (left.width ?? Number.MAX_SAFE_INTEGER) - (right.width ?? Number.MAX_SAFE_INTEGER),
+          )
           .map((rendition) => getEagleRenditionContentUrl(asset.id, rendition.id)),
       ),
     ),
@@ -34,14 +39,17 @@ export function EagleAssetThumbnail({
   asset,
   scheduler,
   order,
+  displayWidth,
   alt = '',
 }: {
   asset: EagleAssetListItem;
   scheduler: MediaLoadScheduler;
   order: number;
+  displayWidth: number;
   alt?: string;
 }) {
   const urls = useMemo(() => getEagleAssetThumbnailUrls(asset), [asset]);
+  const responsiveSource = useMemo(() => getEagleThumbnailSourceSet(asset), [asset]);
   const sourceKey = urls.join('\u0000');
   const [attempt, setAttempt] = useState(0);
   const [activeSource, setActiveSource] = useState<string | null>(null);
@@ -148,6 +156,14 @@ export function EagleAssetThumbnail({
   }
   if (!activeSource) return <IconPhoto size={30} aria-label="正在加载缩略图" />;
   return (
-    <img src={activeSource} alt={alt} draggable={false} onLoad={handleLoad} onError={handleError} />
+    <img
+      src={activeSource}
+      srcSet={responsiveSource?.src === activeSource ? responsiveSource.srcSet : undefined}
+      sizes={`${Math.max(1, Math.round(displayWidth))}px`}
+      alt={alt}
+      draggable={false}
+      onLoad={handleLoad}
+      onError={handleError}
+    />
   );
 }

@@ -156,8 +156,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
     const renditionSpecs = [
-      { kind: 'PREVIEW' as const, maxSize: 1600 },
-      { kind: 'THUMBNAIL' as const, maxSize: 512 },
+      { kind: 'PREVIEW' as const, variant: 'default', maxSize: 1600 },
+      { kind: 'THUMBNAIL' as const, variant: '256', maxSize: 256 },
+      { kind: 'THUMBNAIL' as const, variant: '512', maxSize: 512 },
     ];
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
@@ -265,7 +266,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     }
     const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
     for (const { spec, output: rendered } of processed.rendered ?? []) {
-      const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/${spec.kind.toLowerCase()}.webp`;
+      const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/${spec.kind.toLowerCase()}-${spec.variant}.webp`;
       await storage.send(
         new PutObjectCommand({
           Bucket: s3Bucket,
@@ -278,6 +279,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         ownerId: asset.ownerId,
         assetId: asset.id,
         kind: spec.kind,
+        variant: spec.variant,
         revision: job.assetRevision,
         storageKey,
         mimeType: 'image/webp',
@@ -296,10 +298,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       for (const rendition of renditions) {
         await transaction.eagleAssetRendition.upsert({
           where: {
-            assetId_kind_revision: {
+            assetId_kind_revision_variant: {
               assetId: rendition.assetId,
               kind: rendition.kind,
               revision: rendition.revision,
+              variant: rendition.variant ?? 'default',
             },
           },
           create: rendition,
@@ -402,16 +405,18 @@ async function processVideo(
       if (completed.count !== 1) return;
       await transaction.eagleAssetRendition.upsert({
         where: {
-          assetId_kind_revision: {
+          assetId_kind_revision_variant: {
             assetId: asset.id,
             kind: 'THUMBNAIL',
             revision: job.assetRevision,
+            variant: 'default',
           },
         },
         create: {
           ownerId: asset.ownerId,
           assetId: asset.id,
           kind: 'THUMBNAIL',
+          variant: 'default',
           revision: job.assetRevision,
           storageKey,
           mimeType: 'image/jpeg',

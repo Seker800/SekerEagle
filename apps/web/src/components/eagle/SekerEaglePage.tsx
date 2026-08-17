@@ -1138,6 +1138,7 @@ export function SekerEaglePage({
                             asset={asset}
                             scheduler={thumbnailScheduler}
                             order={-masonryItem.top}
+                            displayWidth={thumbnailSize}
                           />
                           {asset.lifecycleStatus !== 'READY' && (
                             <span className={styles.processing}>
