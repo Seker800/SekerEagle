@@ -72,3 +72,20 @@ test('scale report accepts measurements exactly on their thresholds', () => {
     [],
   );
 });
+
+test('scale report rejects a fast query that does not exercise any matching rows', () => {
+  assert.deepEqual(
+    evaluateScaleMeasurements(
+      {
+        assetCount: 100_000,
+        measurements: [{ name: 'format-rating-filter', p95Ms: 1, itemCount: 0 }],
+      },
+      {
+        requiredAssetCount: 100_000,
+        maximumP95Ms: { 'format-rating-filter': 500 },
+        minimumItemCounts: { 'format-rating-filter': 1 },
+      },
+    ),
+    ['format-rating-filter returned 0 items; expected at least 1'],
+  );
+});
