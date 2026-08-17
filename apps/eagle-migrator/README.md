@@ -62,7 +62,7 @@ node apps/eagle-migrator/dist/main.js verify /绝对路径/迁移快照 --server
 ## 命令边界
 
 - `inventory`：只校验并展示快照清单，不连接服务端。
-- `doctor`：校验整个快照和源文件，检查服务端连通性与 PAT 权限。
+- `doctor`：校验整个快照、源文件可读性和路径边界，并检查服务端连通性、PAT 身份及 `import:read`。`import:write`、`asset:write` 由后续小样本试跑实际验证。
 - `run` / `resume`：使用同一套幂等迁移流程；重复执行不会绕过服务端校验。
 - `status`：只读本地 journal，不需要 PAT。
 - `verify`：用保留的服务端 run ID 收敛并输出最终逐项状态。
