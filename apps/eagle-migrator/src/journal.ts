@@ -216,6 +216,18 @@ export class MigrationJournal {
     });
   }
 
+  reconcileImported(sourceItemId: string, input: { assetId: string; duplicate?: boolean }): void {
+    const result = this.database
+      .prepare(`
+        UPDATE migration_items SET
+          status = 'IMPORTED', asset_id = ?, duplicate = ?, upload_session_id = NULL,
+          last_error_code = NULL, last_error_message = NULL, updated_at = ?
+        WHERE source_item_id = ? AND status NOT IN ('REJECTED')
+      `)
+      .run(input.assetId, input.duplicate ? 1 : 0, now(), sourceItemId);
+    if (result.changes !== 1) throw new Error(`迁移项 ${sourceItemId} 无法与服务端完成状态收敛。`);
+  }
+
   markRetryable(sourceItemId: string, error: { code: string; message: unknown }): void {
     this.markFailed(sourceItemId, 'RETRYABLE', error);
   }
@@ -225,6 +237,8 @@ export class MigrationJournal {
   }
 
   markSkipped(sourceItemId: string, error: { code: string; message: unknown }): void {
+    const current = this.get(sourceItemId);
+    if (current?.status === 'SKIPPED') return;
     this.markFailed(sourceItemId, 'SKIPPED', error);
   }
 
