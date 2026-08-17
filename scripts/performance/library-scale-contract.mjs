@@ -18,7 +18,9 @@ export function evaluateScaleMeasurements(report, thresholds) {
       `asset count ${report.assetCount} is below required ${thresholds.requiredAssetCount}`,
     );
   }
-  const measurements = new Map(report.measurements.map((measurement) => [measurement.name, measurement]));
+  const measurements = new Map(
+    report.measurements.map((measurement) => [measurement.name, measurement]),
+  );
   for (const [name, maximum] of Object.entries(thresholds.maximumP95Ms)) {
     const measurement = measurements.get(name);
     if (!measurement) {
@@ -28,6 +30,14 @@ export function evaluateScaleMeasurements(report, thresholds) {
     if (measurement.p95Ms > maximum) {
       failures.push(
         `${name} p95 ${measurement.p95Ms.toFixed(2)}ms exceeds ${maximum.toFixed(2)}ms`,
+      );
+    }
+  }
+  for (const [name, minimum] of Object.entries(thresholds.minimumItemCounts ?? {})) {
+    const measurement = measurements.get(name);
+    if (measurement && measurement.itemCount < minimum) {
+      failures.push(
+        `${name} returned ${measurement.itemCount} items; expected at least ${minimum}`,
       );
     }
   }
