@@ -1914,6 +1914,8 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       externalLibraryId: _internalLibraryId,
       ...view
     } = run;
+    void _declarationHash;
+    void _internalLibraryId;
     return {
       ...view,
       externalLibraryId: externalLibrary.externalLibraryId,
@@ -1926,6 +1928,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     session?: { id: string; status: UploadSessionStatus; createdAt: Date; updatedAt: Date },
   ) {
     const { activeUploadSessionId: _activeUploadSessionId, ...view } = item;
+    void _activeUploadSessionId;
     return {
       ...view,
       byteSize: Number(item.byteSize),
@@ -2154,7 +2157,7 @@ function definitionValue(value: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => !['id', 'ownerId', 'runId', 'createdAt', 'updatedAt'].includes(key))
-      .map(([key, nested]) => [key, Array.isArray(nested) ? [...nested].sort() : nested]),
+      .map(([key, nested]) => [key, Array.isArray(nested) ? [...(nested as unknown[])].sort() : nested]),
   );
 }
 

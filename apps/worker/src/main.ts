@@ -1,10 +1,21 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { createWriteStream } from 'node:fs';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { promisify } from 'node:util';
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import sharp from 'sharp';
 import { canClaimBackgroundJobs } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
+import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
+
+const execFileAsync = promisify(execFile);
 
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
@@ -277,23 +288,107 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     return;
   }
 
-  const object = await storage.send(
-    new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
-  );
-  if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-  const verified = await verifyStream(object.Body as AsyncIterable<Uint8Array>, asset.mimeType);
-  assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, verified.sha256);
-  await prisma.$transaction(async (transaction) => {
-    const completed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+  if (asset.mimeType !== 'video/mp4') throw new Error('UNSUPPORTED_MEDIA_TYPE');
+  await processVideo(job, asset);
+}
+
+async function processVideo(
+  job: EagleAssetProcessingJob,
+  asset: {
+    id: string;
+    ownerId: string;
+    originalObjectKey: string;
+    uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
+  },
+): Promise<void> {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
+  const inputPath = join(directory, 'input.mp4');
+  const posterPath = join(directory, 'poster.jpg');
+  try {
+    const object = await storage.send(
+      new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+    );
+    if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+    const hash = createHash('sha256');
+    const hashTap = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        hash.update(chunk);
+        callback(null, chunk);
+      },
     });
-    if (completed.count !== 1) return;
-    await transaction.eagleAsset.updateMany({
-      where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
-      data: { lifecycleStatus: 'READY', mediaErrorCode: null, sha256: verified.sha256 },
+    await pipeline(
+      Readable.from(object.Body as AsyncIterable<Uint8Array>),
+      hashTap,
+      createWriteStream(inputPath, { flags: 'wx' }),
+    );
+    const sha256 = hash.digest('hex');
+    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
+    const { stdout } = await execFileAsync(
+      process.env.FFPROBE_PATH?.trim() || 'ffprobe',
+      ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', inputPath],
+      { maxBuffer: 2 * 1024 * 1024, timeout: 60_000 },
+    );
+    const parsedProbe: unknown = JSON.parse(stdout);
+    if (!parsedProbe || typeof parsedProbe !== 'object') throw new Error('INVALID_VIDEO_PROBE');
+    const metadata = parseBrowserCompatibleMp4Probe(parsedProbe);
+    await execFileAsync(
+      process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
+      [
+        '-v', 'error', '-y', '-ss', '0', '-i', inputPath, '-frames:v', '1',
+        '-vf', "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+        '-q:v', '3', posterPath,
+      ],
+      { timeout: 120_000 },
+    );
+    const poster = await readFile(posterPath);
+    const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/thumbnail.jpg`;
+    await storage.send(
+      new PutObjectCommand({ Bucket: s3Bucket, Key: storageKey, Body: poster, ContentType: 'image/jpeg' }),
+    );
+    await prisma.$transaction(async (transaction) => {
+      const completed = await transaction.eagleAssetProcessingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+      });
+      if (completed.count !== 1) return;
+      await transaction.eagleAssetRendition.upsert({
+        where: { assetId_kind_revision: { assetId: asset.id, kind: 'THUMBNAIL', revision: job.assetRevision } },
+        create: {
+          ownerId: asset.ownerId,
+          assetId: asset.id,
+          kind: 'THUMBNAIL',
+          revision: job.assetRevision,
+          storageKey,
+          mimeType: 'image/jpeg',
+          byteSize: BigInt(poster.byteLength),
+          width: metadata.width,
+          height: metadata.height,
+          status: 'READY',
+        },
+        update: {
+          storageKey,
+          mimeType: 'image/jpeg',
+          byteSize: BigInt(poster.byteLength),
+          width: metadata.width,
+          height: metadata.height,
+          status: 'READY',
+        },
+      });
+      await transaction.eagleAsset.updateMany({
+        where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
+        data: {
+          lifecycleStatus: 'READY',
+          mediaErrorCode: null,
+          sha256,
+          width: metadata.width,
+          height: metadata.height,
+          durationMs: metadata.durationMs,
+        },
+      });
     });
-  });
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
@@ -398,41 +493,6 @@ function assertOwnedKey(ownerId: string, key: string): void {
 
 function assertExpectedHash(expected: string | null | undefined, actual: string): void {
   if (expected && expected !== actual) throw new Error('CONTENT_SHA256_MISMATCH');
-}
-
-async function verifyStream(
-  stream: AsyncIterable<Uint8Array>,
-  mimeType: string,
-): Promise<{ sha256: string }> {
-  const hash = createHash('sha256');
-  const prefixParts: Buffer[] = [];
-  let prefixLength = 0;
-  for await (const chunk of stream) {
-    const bytes = Buffer.from(chunk);
-    hash.update(bytes);
-    if (prefixLength < 16) {
-      const prefix = bytes.subarray(0, 16 - prefixLength);
-      prefixParts.push(prefix);
-      prefixLength += prefix.byteLength;
-    }
-  }
-  const prefix = Buffer.concat(prefixParts);
-  if (mimeType === 'application/pdf' && prefix.subarray(0, 5).toString('ascii') !== '%PDF-') {
-    throw new Error('MEDIA_SIGNATURE_MISMATCH');
-  }
-  if (
-    ['video/mp4', 'video/quicktime'].includes(mimeType) &&
-    prefix.subarray(4, 8).toString('ascii') !== 'ftyp'
-  ) {
-    throw new Error('MEDIA_SIGNATURE_MISMATCH');
-  }
-  if (
-    mimeType === 'video/webm' &&
-    !prefix.subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3]))
-  ) {
-    throw new Error('MEDIA_SIGNATURE_MISMATCH');
-  }
-  return { sha256: hash.digest('hex') };
 }
 
 async function stop(signal: string): Promise<void> {

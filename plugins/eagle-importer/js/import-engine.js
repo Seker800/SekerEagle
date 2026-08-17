@@ -197,7 +197,10 @@ class ImportEngine {
     let total = scan.manifestChunkCount;
     if (total === undefined) {
       total = 0;
-      for await (const _chunk of iterateManifestChunksAsync(scan)) total += 1;
+      for await (const chunk of iterateManifestChunksAsync(scan)) {
+        void chunk;
+        total += 1;
+      }
     }
     let completed = 0;
     for await (const chunk of iterateManifestChunksAsync(scan)) {
@@ -332,4 +335,3 @@ module.exports = {
   buildManifestChunks, iterateManifestChunks, iterateSizedChunks, sizedChunks,
   iterateManifestChunksAsync,
 };
-

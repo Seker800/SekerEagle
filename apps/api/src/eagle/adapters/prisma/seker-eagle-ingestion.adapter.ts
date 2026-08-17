@@ -4,7 +4,6 @@ import type {
   SekerEagleIngestionCommand,
   SekerEagleIngestionPort,
   SekerEagleIngestionTag,
-  SekerEagleIngestionTagGroup,
 } from '../../seker-eagle-ingestion.port';
 
 type ResolvedDefinition = { id: string; normalizedName: string };
