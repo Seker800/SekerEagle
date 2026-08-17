@@ -114,3 +114,35 @@ test('skips disallowed background work and falls through to maintenance', async 
   assert.equal(claimed?.id, 'maintenance');
   assert.deepEqual(queriedLanes, ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE']);
 });
+
+test('only queries jobs whose dependency completed successfully', async () => {
+  let capturedWhere: unknown;
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async ({ where }: { where: unknown }) => {
+        capturedWhere = where;
+        return [];
+      },
+      updateMany: async () => ({ count: 0 }),
+      findUniqueOrThrow: async () => job('unused', 'INTERACTIVE'),
+    },
+  };
+
+  await claimNextMediaJob(client, {
+    now: new Date('2026-08-17T00:05:00.000Z'),
+    canClaimBackground: async () => true,
+  });
+
+  assert.deepEqual(capturedWhere, {
+    lane: 'MAINTENANCE',
+    AND: [
+      { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
+      {
+        OR: [
+          { status: 'PENDING', availableAt: { lte: new Date('2026-08-17T00:05:00.000Z') } },
+          { status: 'PROCESSING', lockedAt: { lt: new Date('2026-08-16T23:55:00.000Z') } },
+        ],
+      },
+    ],
+  });
+});
