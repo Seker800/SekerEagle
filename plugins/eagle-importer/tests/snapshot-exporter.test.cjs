@@ -55,7 +55,7 @@ test('exports a deterministic migration snapshot without secrets', async () => {
 
   assert.equal(result.itemCount, 1);
   const item = JSON.parse((await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim());
-  assert.equal(item.sourcePath, sourcePath);
+  assert.equal(item.sourcePath, await fs.realpath(sourcePath));
   const serialized = await fs.readFile(path.join(result.directory, 'snapshot.json'), 'utf8');
   assert.doesNotMatch(serialized, /token|password|authorization/i);
   assert.match(JSON.parse(serialized).files.items.sha256, /^[a-f0-9]{64}$/);
@@ -88,4 +88,3 @@ test('refuses unstable identifiers and source files outside the library', async 
     /outside the Eagle library/i,
   );
 });
-
