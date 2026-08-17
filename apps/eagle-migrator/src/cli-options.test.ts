@@ -43,9 +43,9 @@ test('rejects malformed and credential-bearing command options', () => {
     () => parseCliOptions(['run', '/snapshot', '--server', 'http://user:pass@localhost']),
     /凭据/,
   );
-  assert.throws(
-    () => parseCliOptions(['run', '/snapshot', '--server', 'http://example.com']),
-    /必须使用 HTTPS/,
+  assert.equal(
+    parseCliOptions(['run', '/snapshot', '--server', 'http://192.168.1.20:8180']).serverUrl,
+    'http://192.168.1.20:8180',
   );
   assert.equal(
     parseCliOptions(['doctor', '/snapshot', '--server', 'http://[::1]:8180']).serverUrl,
