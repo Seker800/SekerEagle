@@ -42,6 +42,10 @@ let pollTimer: NodeJS.Timeout | undefined;
 let heartbeatTimer: NodeJS.Timeout | undefined;
 let stopping = false;
 let activeJobCount = 0;
+const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
+const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
+  ? Math.min(4, Math.max(1, configuredConcurrency))
+  : 1;
 
 async function heartbeat(): Promise<void> {
   const now = new Date();
@@ -506,10 +510,16 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
 }
 
 async function poll(): Promise<void> {
-  if (stopping || activeJobCount > 0) return;
-  const job = await claimJob();
-  if (!job) return;
-  activeJobCount += 1;
+  if (stopping || activeJobCount >= workerConcurrency) return;
+  while (!stopping && activeJobCount < workerConcurrency) {
+    const job = await claimJob();
+    if (!job) return;
+    activeJobCount += 1;
+    void processClaimedJob(job);
+  }
+}
+
+async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
   let leaseHeld = true;
   let renewing = false;
   const renewal = setInterval(() => {
@@ -539,6 +549,7 @@ async function poll(): Promise<void> {
   } finally {
     clearInterval(renewal);
     activeJobCount -= 1;
+    void poll().catch(reportLoopError);
   }
 }
 
