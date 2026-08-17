@@ -6,11 +6,7 @@ import type {
 
 const CLAIM_BATCH_SIZE = 50;
 const STALE_LEASE_MS = 10 * 60 * 1_000;
-const LANE_ORDER: readonly EagleProcessingLane[] = [
-  'INTERACTIVE',
-  'BACKGROUND',
-  'MAINTENANCE',
-];
+const LANE_ORDER: readonly EagleProcessingLane[] = ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE'];
 
 interface ClaimFindManyInput {
   where: {

@@ -1,4 +1,5 @@
 import { createRequire } from 'node:module';
+import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import {
   assertDedicatedScaleTarget,
@@ -341,9 +342,7 @@ async function verifyScaleLibrary() {
       'color-filter': 800,
       'interactive-job-candidate': 100,
     },
-    minimumItemCounts: Object.fromEntries(
-      measurements.map((measurement) => [measurement.name, 1]),
-    ),
+    minimumItemCounts: Object.fromEntries(measurements.map((measurement) => [measurement.name, 1])),
     forbiddenPlanNodes: {
       'default-first-page': ['Seq Scan'],
       'interactive-job-candidate': ['Seq Scan'],

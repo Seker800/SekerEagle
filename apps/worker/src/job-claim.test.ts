@@ -69,7 +69,11 @@ test('continues within the highest-priority lane after a contended candidate', a
         attemptedIds.push(where.id);
         return { count: where.id === first.id ? 0 : 1 };
       },
-      findUniqueOrThrow: async () => ({ ...second, leaseVersion: 1, status: 'PROCESSING' as const }),
+      findUniqueOrThrow: async () => ({
+        ...second,
+        leaseVersion: 1,
+        status: 'PROCESSING' as const,
+      }),
     },
   };
 

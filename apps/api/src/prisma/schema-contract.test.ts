@@ -54,8 +54,5 @@ void test('scale migration keeps active gallery ordering and color search indexa
     migration,
     /ON "EagleAsset"\("ownerId", "libraryAddedAt" DESC, "id" DESC\)\s+WHERE "deletedAt" IS NULL/,
   );
-  assert.match(
-    migration,
-    /ON "EagleAssetColorSwatch"\("ownerId", "labL", "labA", "labB"\)/,
-  );
+  assert.match(migration, /ON "EagleAssetColorSwatch"\("ownerId", "labL", "labA", "labB"\)/);
 });
