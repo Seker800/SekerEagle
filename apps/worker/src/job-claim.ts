@@ -11,10 +11,17 @@ const LANE_ORDER: readonly EagleProcessingLane[] = ['INTERACTIVE', 'BACKGROUND',
 interface ClaimFindManyInput {
   where: {
     lane: EagleProcessingLane;
-    OR: Array<
-      | { status: 'PENDING'; availableAt: { lte: Date } }
-      | { status: 'PROCESSING'; lockedAt: { lt: Date } }
-    >;
+    AND: [
+      {
+        OR: Array<{ dependsOnJobId: null } | { dependsOnJob: { status: 'COMPLETED' } }>;
+      },
+      {
+        OR: Array<
+          | { status: 'PENDING'; availableAt: { lte: Date } }
+          | { status: 'PROCESSING'; lockedAt: { lt: Date } }
+        >;
+      },
+    ];
   };
   orderBy: Array<{ availableAt: 'asc' } | { createdAt: 'asc' }>;
   take: number;
@@ -60,9 +67,14 @@ export async function claimNextMediaJob(
     const candidates = await client.eagleAssetProcessingJob.findMany({
       where: {
         lane,
-        OR: [
-          { status: 'PENDING', availableAt: { lte: now } },
-          { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
+        AND: [
+          { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
+          {
+            OR: [
+              { status: 'PENDING', availableAt: { lte: now } },
+              { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
+            ],
+          },
         ],
       },
       orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],

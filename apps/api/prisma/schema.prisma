@@ -63,7 +63,15 @@ enum EagleMediaJobKind {
   GENERATE_PREVIEW
   PROBE_MEDIA
   EXTRACT_COLOR_PALETTE
+  GENERATE_IMAGE_PYRAMID
   PURGE_ASSET
+}
+
+enum EagleImagePyramidStatus {
+  PENDING
+  RUNNING
+  READY
+  FAILED
 }
 
 enum EagleMediaJobStatus {
@@ -278,6 +286,7 @@ model EagleAsset {
   aiTagLinks                     EagleAssetAiTag[]
   aiAnalysisRuns                 EagleAiAnalysisRun[]
   processingJobs                 EagleAssetProcessingJob[]
+  imagePyramids                  EagleImagePyramid[]
   colorAnalyses                  EagleAssetColorAnalysis[]
   uploadSessions                 UploadSession[]
   uploadSessionStates            EagleUploadSessionState[]
@@ -520,6 +529,33 @@ model EagleAssetRendition {
   @@index([ownerId, assetId])
 }
 
+model EagleImagePyramid {
+  id               String                  @id @default(uuid())
+  ownerId          String
+  assetId          String
+  revision         Int
+  processorVersion String
+  status           EagleImagePyramidStatus @default(PENDING)
+  storagePrefix    String
+  tileSize         Int                     @default(512)
+  overlap          Int                     @default(1)
+  format           String                  @default("webp")
+  width            Int
+  height           Int
+  maxLevel         Int
+  tileCount        Int                     @default(0)
+  byteSize         BigInt                  @default(0)
+  lastError        String?
+  completedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  asset            EagleAsset              @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+
+  @@unique([assetId, revision, processorVersion])
+  @@unique([storagePrefix])
+  @@index([ownerId, assetId, status])
+}
+
 model EagleManualTag {
   id                 String                                @id @default(uuid())
   ownerId            String
@@ -732,14 +768,18 @@ model EagleAssetProcessingJob {
   startedAt        DateTime?
   completedAt      DateTime?
   lastError        String?
+  dependsOnJobId   String?
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
   asset            EagleAsset          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  dependsOnJob     EagleAssetProcessingJob?  @relation("EagleMediaJobDependency", fields: [dependsOnJobId], references: [id], onDelete: SetNull)
+  dependentJobs    EagleAssetProcessingJob[] @relation("EagleMediaJobDependency")
 
   @@unique([assetId, kind, assetRevision, processorVersion])
   @@index([status, lane, availableAt])
   @@index([status, lockedAt])
   @@index([ownerId, assetId])
+  @@index([dependsOnJobId, status])
   @@map("EagleMediaJob")
 }
 

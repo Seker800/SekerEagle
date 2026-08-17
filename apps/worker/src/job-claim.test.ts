@@ -25,6 +25,7 @@ function job(
     startedAt: null,
     completedAt: null,
     lastError: null,
+    dependsOnJobId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,
