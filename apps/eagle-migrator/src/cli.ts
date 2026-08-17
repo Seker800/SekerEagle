@@ -3,6 +3,7 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { parseCliOptions } from './cli-options';
 import { MigrationJournal } from './journal';
+import { isSekerEaglePat } from './pat';
 import { doctorServer, runSnapshotMigration, verifyRemoteMigration } from './runner';
 import { redactSensitiveText } from './secrets';
 import { openMigrationSnapshot, type MigrationSnapshot } from './snapshot';
@@ -105,7 +106,7 @@ export function resolveStateDirectory(value: string | undefined, migrationId: st
 
 export function requirePat(environment: NodeJS.ProcessEnv): string {
   const pat = environment.SEKEREAGLE_PAT;
-  if (!pat?.startsWith('se_pat_')) {
+  if (!isSekerEaglePat(pat)) {
     throw new Error('请通过环境变量 SEKEREAGLE_PAT 提供 SekerEagle PAT。');
   }
   return pat;

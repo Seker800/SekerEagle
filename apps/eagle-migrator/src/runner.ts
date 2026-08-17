@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { createItemReporter } from './item-reporter';
 import type { ActiveRunState, MigrationJournal } from './journal';
+import { isSekerEaglePat } from './pat';
 import type { MigrationSnapshot, SnapshotItem } from './snapshot';
 
 interface SourceFile {
@@ -125,7 +126,7 @@ export async function runSnapshotMigration(input: {
   concurrency: number;
   log?: (message: string) => void;
 }): Promise<{ status: string; summary: Record<string, number> }> {
-  if (!input.pat.startsWith('se_pat_'))
+  if (!isSekerEaglePat(input.pat))
     throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
   const log = input.log ?? (() => undefined);
   const prepared = await prepareSnapshotForMigration(input.snapshot, input.journal);
@@ -160,7 +161,7 @@ export async function runSnapshotMigration(input: {
 }
 
 export async function doctorServer(input: { serverUrl: string; pat: string }): Promise<void> {
-  if (!input.pat.startsWith('se_pat_'))
+  if (!isSekerEaglePat(input.pat))
     throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
   const api = createApi(input.serverUrl, input.pat);
   await api.request('/auth/me');
@@ -172,7 +173,7 @@ export async function verifyRemoteMigration(input: {
   serverUrl: string;
   pat: string;
 }): Promise<{ run: { id: string; status: string }; summary: Record<string, number> }> {
-  if (!input.pat.startsWith('se_pat_'))
+  if (!isSekerEaglePat(input.pat))
     throw new Error('SEKEREAGLE_PAT 不是有效的 SekerEagle PAT。');
   const runId = input.journal.loadServerRunId();
   if (!runId) throw new Error('本地 journal 没有可核验的服务端迁移任务。');

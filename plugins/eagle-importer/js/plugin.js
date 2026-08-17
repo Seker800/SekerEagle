@@ -249,7 +249,7 @@ async function connect() {
   setBusy(true);
   try {
     const pat = ui.pat.value.trim();
-    if (!pat.startsWith('se_pat_')) throw new Error('请输入独立 SekerEagle PAT。');
+    if (!pat.startsWith('sea_pat_')) throw new Error('请输入独立 SekerEagle PAT。');
     sessionPat = pat;
     createApi();
     await api.request('/auth/me');
