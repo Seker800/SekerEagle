@@ -3,6 +3,7 @@ import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import sharp from 'sharp';
+import { canClaimBackgroundJobs } from './processing-policy';
 
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
@@ -39,10 +40,21 @@ async function heartbeat(): Promise<void> {
 }
 
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
-  const candidate = await prisma.eagleAssetProcessingJob.findFirst({
+  const candidates = await prisma.eagleAssetProcessingJob.findMany({
     where: { status: 'PENDING', availableAt: { lte: new Date() } },
-    orderBy: [{ lane: 'asc' }, { availableAt: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+    take: 50,
   });
+  const ordered = candidates.sort(
+    (left, right) => lanePriority(left.lane) - lanePriority(right.lane),
+  );
+  let candidate: EagleAssetProcessingJob | undefined;
+  for (const pending of ordered) {
+    if (pending.lane !== 'BACKGROUND' || (await canClaimBackgroundForOwner(pending.ownerId))) {
+      candidate = pending;
+      break;
+    }
+  }
   if (!candidate) return null;
   const claimed = await prisma.eagleAssetProcessingJob.updateMany({
     where: { id: candidate.id, status: 'PENDING', leaseVersion: candidate.leaseVersion },
@@ -56,6 +68,24 @@ async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   });
   if (claimed.count !== 1) return null;
   return prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: candidate.id } });
+}
+
+function lanePriority(lane: EagleAssetProcessingJob['lane']): number {
+  return lane === 'INTERACTIVE' ? 0 : lane === 'BACKGROUND' ? 1 : 2;
+}
+
+async function canClaimBackgroundForOwner(ownerId: string): Promise<boolean> {
+  const settings = await prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
+  const configuredMode = settings?.mode;
+  const mode =
+    configuredMode === 'ALWAYS' || configuredMode === 'MANUAL' || configuredMode === 'NIGHT'
+      ? configuredMode
+      : 'NIGHT';
+  return canClaimBackgroundJobs(
+    mode,
+    settings?.nightStart ?? '23:00',
+    settings?.nightEnd ?? '06:00',
+  );
 }
 
 async function processJob(job: EagleAssetProcessingJob): Promise<void> {

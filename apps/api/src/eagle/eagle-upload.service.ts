@@ -147,8 +147,22 @@ export class EagleUploadService {
             sha256: null,
           },
         });
-        await transaction.eagleAssetProcessingJob.create({
-          data: { ownerId, assetId, kind: 'GENERATE_RENDITIONS', assetRevision: 0 },
+        const jobs =
+          session.mimeType === 'video/mp4'
+            ? [{ kind: 'GENERATE_THUMBNAIL' as const, lane: 'INTERACTIVE' as const }]
+            : [
+                { kind: 'GENERATE_RENDITIONS' as const, lane: 'INTERACTIVE' as const },
+                { kind: 'EXTRACT_COLOR_PALETTE' as const, lane: 'BACKGROUND' as const },
+              ];
+        await transaction.eagleAssetProcessingJob.createMany({
+          data: jobs.map(({ kind, lane }) => ({
+            ownerId,
+            assetId,
+            kind,
+            lane,
+            assetRevision: 0,
+            processorVersion: kind === 'EXTRACT_COLOR_PALETTE' ? 'color-v2' : 'v1',
+          })),
         });
         await transaction.eagleUploadSessionState.update({
           where: { uploadSessionId: session.id },
