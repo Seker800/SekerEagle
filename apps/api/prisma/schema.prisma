@@ -782,6 +782,7 @@ model EagleAssetColorSwatch {
   @@index([ownerId, analysisId])
   @@index([hex])
   @@index([ownerId, labL])
+  @@index([ownerId, labL, labA, labB])
 }
 
 model EagleProcessingWorkerHeartbeat {
