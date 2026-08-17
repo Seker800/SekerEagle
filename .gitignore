@@ -10,3 +10,4 @@ coverage/
 .cache/
 .local/
 apps/api/prisma/dev.db
+.omx/
