@@ -68,6 +68,22 @@ test('color filtering reports original global image-analysis coverage', async ()
   });
 });
 
+test('asset listing only loads relations required by gallery cards', async () => {
+  let include: Record<string, unknown> | undefined;
+  const service = new EagleService({
+    eagleAsset: {
+      findMany: async (query: { include: Record<string, unknown> }) => {
+        include = query.include;
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listAssets('owner-1', { limit: 40 });
+
+  assert.deepEqual(Object.keys(include ?? {}).sort(), ['manualTagLinks', 'renditions']);
+});
+
 test('smart folder creation rejects a missing owner-scoped tag before writing', async () => {
   let wroteFolder = false;
   const service = new EagleService({
