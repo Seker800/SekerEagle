@@ -19,6 +19,13 @@ export interface JournalIdentity {
   snapshotSha256: string;
 }
 
+export interface ActiveRunState {
+  runId: string;
+  phase: string;
+  libraryPath: string;
+  externalLibraryId?: string;
+}
+
 export interface JournalItem {
   sourceItemId: string;
   contentSha256: string;
@@ -90,6 +97,28 @@ export class MigrationJournal {
 
   close(): void {
     this.database.close();
+  }
+
+  loadActiveRun(): ActiveRunState | null {
+    const row = this.database
+      .prepare("SELECT value FROM migration_metadata WHERE key = 'activeRun'")
+      .get() as { value: string } | undefined;
+    if (!row) return null;
+    return parseActiveRun(JSON.parse(row.value));
+  }
+
+  saveActiveRun(value: unknown): void {
+    if (value === null) {
+      this.database.prepare("DELETE FROM migration_metadata WHERE key = 'activeRun'").run();
+      return;
+    }
+    const activeRun = parseActiveRun(value);
+    this.database
+      .prepare(`
+        INSERT INTO migration_metadata (key, value) VALUES ('activeRun', ?)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `)
+      .run(JSON.stringify(activeRun));
   }
 
   registerItems(items: Iterable<{ sourceItemId: string; contentSha256: string }>): void {
@@ -337,6 +366,25 @@ function assertIdentity(identity: JournalIdentity): void {
 function assertSourceItem(sourceItemId: string, contentSha256: string): void {
   if (!sourceItemId || sourceItemId.length > 255) throw new Error('sourceItemId 无效。');
   if (!/^[a-f0-9]{64}$/i.test(contentSha256)) throw new Error('contentSha256 无效。');
+}
+
+function parseActiveRun(value: unknown): ActiveRunState {
+  if (!value || Array.isArray(value) || typeof value !== 'object') {
+    throw new Error('active run control state 无效。');
+  }
+  const record = value as Record<string, unknown>;
+  const forbidden = Object.keys(record).find((key) =>
+    /token|secret|password|authorization|cookie/i.test(key),
+  );
+  if (forbidden) throw new Error(`active run control state 不得包含 secret 字段：${forbidden}`);
+  const runId = String(record.runId ?? '');
+  const phase = String(record.phase ?? '');
+  const libraryPath = String(record.libraryPath ?? '');
+  const externalLibraryId = record.externalLibraryId
+    ? String(record.externalLibraryId)
+    : undefined;
+  if (!runId || !phase || !libraryPath) throw new Error('active run control state 缺少必要字段。');
+  return { runId, phase, libraryPath, ...(externalLibraryId ? { externalLibraryId } : {}) };
 }
 
 function now(): string {
