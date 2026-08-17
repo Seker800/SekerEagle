@@ -1,5 +1,10 @@
+import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
 import { buildEagleMasonryLayout } from './eagle-masonry-layout';
+import {
+  buildMasonryViewportIndex,
+  selectVisibleMasonryItemsFromIndex,
+} from '../media/masonry-layout';
 
 describe('buildEagleMasonryLayout', () => {
   it('keeps every card position stable when selection changes outside the layout inputs', () => {
@@ -105,5 +110,25 @@ describe('buildEagleMasonryLayout', () => {
     expect(afterNoise.items.map((item) => item.column)).toEqual(
       beforeNoise.items.map((item) => item.column),
     );
+  });
+
+  it('keeps the rendered viewport bounded for a 100k asset layout', () => {
+    const assets = Array.from({ length: 100_000 }, (_, index) => ({
+      id: `scale-${index}`,
+      width: 640 + (index % 3_200),
+      height: 480 + (index % 2_400),
+    }));
+    const startedAt = performance.now();
+    const layout = buildEagleMasonryLayout(assets, 1_440, { targetCardWidth: 210 });
+    const index = buildMasonryViewportIndex(layout.items);
+    const visible = selectVisibleMasonryItemsFromIndex(index, {
+      scrollTop: Math.floor(layout.height / 2),
+      viewportHeight: 900,
+      overscan: 1_800,
+    });
+
+    expect(layout.items).toHaveLength(100_000);
+    expect(visible.length).toBeLessThan(200);
+    expect(performance.now() - startedAt).toBeLessThan(2_000);
   });
 });
