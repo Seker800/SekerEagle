@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import sharp from 'sharp';
 import { canClaimBackgroundJobs } from './processing-policy';
+import { extractRepresentativeColors } from './color-palette';
 
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
@@ -89,6 +90,10 @@ async function canClaimBackgroundForOwner(ownerId: string): Promise<boolean> {
 }
 
 async function processJob(job: EagleAssetProcessingJob): Promise<void> {
+  if (job.kind === 'PURGE_ASSET') {
+    await purgeAsset(job);
+    return;
+  }
   const asset = await prisma.eagleAsset.findFirst({
     where: {
       id: job.assetId,
@@ -121,6 +126,73 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       failOn: 'error',
       limitInputPixels: 200_000_000,
     }).metadata();
+    if (job.kind === 'EXTRACT_COLOR_PALETTE') {
+      const { data, info } = await sharp(input, {
+        failOn: 'error',
+        limitInputPixels: 200_000_000,
+      })
+        .rotate()
+        .toColourspace('srgb')
+        .resize({ width: 192, height: 192, fit: 'inside', withoutEnlargement: true })
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const palette = extractRepresentativeColors(
+        data,
+        info.channels,
+        info.width * info.height,
+        6,
+      );
+      await prisma.$transaction(async (transaction) => {
+        await transaction.eagleAssetColorAnalysis.updateMany({
+          where: { ownerId: asset.ownerId, assetId: asset.id, isCurrent: true },
+          data: { isCurrent: false },
+        });
+        const analysis = await transaction.eagleAssetColorAnalysis.upsert({
+          where: {
+            assetId_assetRevision_processorVersion: {
+              assetId: asset.id,
+              assetRevision: job.assetRevision,
+              processorVersion: job.processorVersion,
+            },
+          },
+          create: {
+            ownerId: asset.ownerId,
+            assetId: asset.id,
+            assetRevision: job.assetRevision,
+            processorVersion: job.processorVersion,
+            status: 'COMPLETED',
+            isCurrent: true,
+            startedAt: job.startedAt ?? new Date(),
+            completedAt: new Date(),
+          },
+          update: {
+            status: 'COMPLETED',
+            isCurrent: true,
+            lastError: null,
+            completedAt: new Date(),
+          },
+        });
+        await transaction.eagleAssetColorSwatch.deleteMany({
+          where: { ownerId: asset.ownerId, analysisId: analysis.id },
+        });
+        if (palette.length) {
+          await transaction.eagleAssetColorSwatch.createMany({
+            data: palette.map((swatch, rank) => ({
+              ownerId: asset.ownerId,
+              analysisId: analysis.id,
+              rank,
+              ...swatch,
+            })),
+          });
+        }
+        await transaction.eagleAssetProcessingJob.update({
+          where: { id: job.id },
+          data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        });
+      });
+      return;
+    }
     const renditionSpecs = [
       { kind: 'THUMBNAIL' as const, maxSize: 480 },
       { kind: 'PREVIEW' as const, maxSize: 1600 },
@@ -207,6 +279,40 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
     }),
   ]);
+}
+
+async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
+  const asset = await prisma.eagleAsset.findFirst({
+    where: {
+      id: job.assetId,
+      ownerId: job.ownerId,
+      mediaRevision: job.assetRevision,
+      deletedAt: { not: null },
+      purgeAfter: { lte: new Date() },
+    },
+    include: { renditions: { select: { storageKey: true } } },
+  });
+  if (!asset) {
+    await prisma.eagleAssetProcessingJob.update({
+      where: { id: job.id },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    });
+    return;
+  }
+  const keys = [asset.originalObjectKey, ...asset.renditions.map(({ storageKey }) => storageKey)];
+  for (const key of keys) {
+    assertOwnedKey(asset.ownerId, key);
+    await storage.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
+  }
+  await prisma.eagleAsset.deleteMany({
+    where: {
+      id: asset.id,
+      ownerId: asset.ownerId,
+      mediaRevision: job.assetRevision,
+      deletedAt: { not: null },
+      purgeAfter: { lte: new Date() },
+    },
+  });
 }
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {

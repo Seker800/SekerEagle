@@ -176,11 +176,31 @@ export class EagleService {
   }
 
   async emptyTrash(ownerId: string) {
-    const result = await this.prisma.eagleAsset.updateMany({
-      where: { ownerId, deletedAt: { not: null }, purgeAfter: null },
-      data: { purgeAfter: new Date(), rowVersion: { increment: 1 } },
+    const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
+      const purgeAfter = new Date();
+      const assets = await transaction.$queryRaw<Array<{ id: string; mediaRevision: number }>>(
+        Prisma.sql`
+          UPDATE "EagleAsset"
+          SET "purgeAfter" = ${purgeAfter}, "rowVersion" = "rowVersion" + 1,
+              "updatedAt" = CURRENT_TIMESTAMP
+          WHERE "ownerId" = ${ownerId} AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
+          RETURNING "id", "mediaRevision"
+        `,
+      );
+      if (!assets.length) return 0;
+      await transaction.eagleAssetProcessingJob.createMany({
+        data: assets.map((asset) => ({
+          ownerId,
+          assetId: asset.id,
+          kind: 'PURGE_ASSET' as const,
+          lane: 'MAINTENANCE' as const,
+          assetRevision: asset.mediaRevision,
+        })),
+        skipDuplicates: true,
+      });
+      return assets.length;
     });
-    return { affectedAssetCount: result.count };
+    return { affectedAssetCount };
   }
 
   async listManualTags(ownerId: string) {
