@@ -10,7 +10,7 @@
     "bootstrap:admin": "node dist/bootstrap-admin.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "npm --prefix ../.. run build --workspace @sekereagle/config",
-    "test": "node --require ts-node/register --test src/**/*.test.ts",
+    "test": "node --require ts-node/register --test src/**/*.test.ts src/*/**/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "openapi:generate": "npm run build && node dist/openapi.js"

@@ -1,0 +1,1 @@
+export const UPLOAD_PART_SIZE_BYTES = 5 * 1024 * 1024;

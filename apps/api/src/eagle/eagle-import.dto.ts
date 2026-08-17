@@ -21,7 +21,7 @@ export class CreateEagleImportRunDto {
   @Type(() => Number) @IsInt() @Min(2) @Max(2) manifestVersion!: number;
   @IsString() @MinLength(1) @MaxLength(255) externalLibraryId!: string;
   @IsString() @MinLength(1) @MaxLength(255) libraryName!: string;
-  @IsOptional() @Type(() => Date) @IsDate() sourceModifiedAt?: Date | null;
+  @IsOptional() @Type(() => Date) @IsDate() sourceModifiedAt!: Date | null;
   @Type(() => Number) @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) declaredItemCount!: number;
   @Type(() => Number) @IsInt() @Min(0) @Max(Number.MAX_SAFE_INTEGER) declaredByteSize!: number;
 }
@@ -29,7 +29,7 @@ export class CreateEagleImportRunDto {
 export class EagleImportFolderDto {
   @IsString() @MinLength(1) @MaxLength(255) sourceId!: string;
   @IsString() @MinLength(1) @MaxLength(255) name!: string;
-  @IsOptional() @IsString() @MaxLength(255) parentSourceId?: string | null;
+  @IsOptional() @IsString() @MaxLength(255) parentSourceId!: string | null;
 }
 
 export class EagleImportTagDto {
@@ -54,7 +54,7 @@ export class EagleImportItemDto {
   @IsString() @MinLength(1) @MaxLength(100) mimeType!: string;
   @Type(() => Number) @IsInt() @Min(1) @Max(Number.MAX_SAFE_INTEGER) size!: number;
   @Type(() => Number) @IsInt() @Min(0) importedAt!: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(0) modifiedAt?: number | null;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) modifiedAt!: number | null;
   @Type(() => Number) @IsInt() @Min(0) @Max(5) star!: number;
   @IsString() @MaxLength(10_000) annotation!: string;
   @IsString() @MaxLength(2_048) sourceUrl!: string;
@@ -78,6 +78,13 @@ export class ListEagleImportItemsDto {
   @ApiPropertyOptional({ maximum: 100 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 100;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
+}
+
+export class ListEagleImportRunsDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) externalLibraryId?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
+  @ApiPropertyOptional({ maximum: 100 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 100;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
 }
 
 export class FinishEagleImportItemDto {

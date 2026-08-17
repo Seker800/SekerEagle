@@ -11,11 +11,28 @@ import { EagleProcessingService } from './eagle-processing.service';
 import { EagleService } from './eagle.service';
 import { EagleUploadController } from './eagle-upload.controller';
 import { EagleUploadService } from './eagle-upload.service';
+import { PrismaSekerEagleIngestionAdapter } from './adapters/prisma/seker-eagle-ingestion.adapter';
+import { PrismaEagleImportsRepository } from './import/adapters/prisma/eagle-app-import.repository';
+import { EAGLE_IMPORTS_REPOSITORY } from './import/eagle-app-import.repository';
+import { EagleImportsService } from './import/eagle-app-import.service';
+import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
 @Module({
   imports: [AuthModule, StorageModule],
   controllers: [EagleController, EagleUploadController, EagleImportController, EagleProcessingController],
-  providers: [EagleService, EagleMediaService, EagleMediaCapabilityService, EagleUploadService, EagleImportService, EagleProcessingService],
+  providers: [
+    EagleService,
+    EagleMediaService,
+    EagleMediaCapabilityService,
+    EagleUploadService,
+    EagleImportService,
+    EagleImportsService,
+    PrismaEagleImportsRepository,
+    PrismaSekerEagleIngestionAdapter,
+    { provide: EAGLE_IMPORTS_REPOSITORY, useExisting: PrismaEagleImportsRepository },
+    { provide: SEKER_EAGLE_INGESTION_PORT, useExisting: PrismaSekerEagleIngestionAdapter },
+    EagleProcessingService,
+  ],
   exports: [EagleService],
 })
 export class EagleModule {}
