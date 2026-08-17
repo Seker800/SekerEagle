@@ -106,6 +106,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Headers('range') range: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
     let parsedRange: string | undefined;
@@ -118,19 +119,23 @@ export class EagleController {
     }
     let media: Awaited<ReturnType<EagleMediaService['getOriginal']>>;
     try {
-      media = await this.media.getOriginal(principal.sub, assetId, parsedRange);
+      media = await this.media.getOriginal(principal.sub, assetId, parsedRange, ifNoneMatch);
     } catch (error) {
       if (!isObjectRangeNotSatisfiableError(error)) throw error;
       const metadata = await this.media.getOriginalMetadata(principal.sub, assetId);
       setRangeNotSatisfiableHeaders(response, metadata.size);
       return;
     }
-    applyMediaHeaders(response, media);
+    applyMediaHeaders(response, media, 'private, max-age=3600');
+    if (media.notModified) {
+      response.status(304);
+      return;
+    }
     setPartialContentHeaders(response, parsedRange, media.contentRange, media.contentLength, media.fullSize);
     response.once('close', () => {
-      if (!response.writableEnded && !media.stream.destroyed) media.stream.destroy();
+      if (!response.writableEnded && !media.stream!.destroyed) media.stream!.destroy();
     });
-    return new StreamableFile(media.stream);
+    return new StreamableFile(media.stream!);
   }
 
   @Get('assets/:assetId/content')
@@ -138,9 +143,10 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Headers('range') range: string | undefined,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.getOriginal(principal, assetId, range, response);
+    return this.getOriginal(principal, assetId, range, ifNoneMatch, response);
   }
 
   @Get('assets/:assetId/renditions/:renditionId')
@@ -148,11 +154,16 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Param('renditionId', new ParseUUIDPipe({ version: '4' })) renditionId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const media = await this.media.getRendition(principal.sub, assetId, renditionId);
-    applyMediaHeaders(response, media);
-    return new StreamableFile(media.stream);
+    const media = await this.media.getRendition(principal.sub, assetId, renditionId, ifNoneMatch);
+    applyMediaHeaders(response, media, 'private, max-age=31536000, immutable');
+    if (media.notModified) {
+      response.status(304);
+      return;
+    }
+    return new StreamableFile(media.stream!);
   }
 
   @Get('assets/:assetId/renditions/:renditionId/content')
@@ -160,9 +171,10 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Param('renditionId', new ParseUUIDPipe({ version: '4' })) renditionId: string,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    return this.getRendition(principal, assetId, renditionId, response);
+    return this.getRendition(principal, assetId, renditionId, ifNoneMatch, response);
   }
 
   @Patch('assets/batch')
@@ -222,18 +234,18 @@ export class EagleController {
     return this.eagle.emptyTrash(principal.sub);
   }
 
-  @Get('tags')
+  @Get(['tags', 'manual-tags'])
   listTags(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.eagle.listManualTags(principal.sub);
   }
 
-  @Post('tags')
+  @Post(['tags', 'manual-tags'])
   @UseGuards(BrowserOriginGuard)
   createTag(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CreateManualTagDto) {
     return this.eagle.createManualTag(principal.sub, input);
   }
 
-  @Patch('tags/:tagId')
+  @Patch(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
   updateTag(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -243,7 +255,7 @@ export class EagleController {
     return this.eagle.updateManualTag(principal.sub, tagId, input);
   }
 
-  @Delete('tags/:tagId')
+  @Delete(['tags/:tagId', 'manual-tags/:tagId'])
   @UseGuards(BrowserOriginGuard)
   deleteTag(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -252,18 +264,18 @@ export class EagleController {
     return this.eagle.deleteManualTag(principal.sub, tagId);
   }
 
-  @Get('tag-groups')
+  @Get(['tag-groups', 'manual-tag-groups'])
   listTagGroups(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.eagle.listManualTagGroups(principal.sub);
   }
 
-  @Post('tag-groups')
+  @Post(['tag-groups', 'manual-tag-groups'])
   @UseGuards(BrowserOriginGuard)
   createTagGroup(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CreateManualTagGroupDto) {
     return this.eagle.createManualTagGroup(principal.sub, input);
   }
 
-  @Patch('tag-groups/:groupId')
+  @Patch(['tag-groups/:groupId', 'manual-tag-groups/:groupId'])
   @UseGuards(BrowserOriginGuard)
   updateTagGroup(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -273,7 +285,7 @@ export class EagleController {
     return this.eagle.updateManualTagGroup(principal.sub, groupId, input);
   }
 
-  @Delete('tag-groups/:groupId')
+  @Delete(['tag-groups/:groupId', 'manual-tag-groups/:groupId'])
   @UseGuards(BrowserOriginGuard)
   deleteTagGroup(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -362,15 +374,24 @@ export class EagleController {
 
 function applyMediaHeaders(
   response: Response,
-  media: { fileName: string; mimeType: string; contentLength?: number; etag?: string },
+  media: {
+    fileName: string;
+    mimeType: string;
+    contentLength?: number;
+    etag?: string;
+    lastModified?: Date;
+  },
+  cacheControl: string,
 ): void {
   response.setHeader('Content-Type', media.mimeType);
   response.setHeader(
     'Content-Disposition',
     `inline; filename*=UTF-8''${encodeURIComponent(media.fileName)}`,
   );
-  response.setHeader('Cache-Control', 'private, max-age=300');
+  response.setHeader('Cache-Control', cacheControl);
+  response.vary('Authorization');
   if (media.contentLength !== undefined)
     response.setHeader('Content-Length', String(media.contentLength));
   if (media.etag) response.setHeader('ETag', media.etag);
+  if (media.lastModified) response.setHeader('Last-Modified', media.lastModified.toUTCString());
 }
