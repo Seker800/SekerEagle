@@ -4,6 +4,8 @@
 
 它不会直接写 PostgreSQL 或 MinIO，也不会读取或持久化 SekerChat 数据。PAT 只能通过 `SEKEREAGLE_PAT` 环境变量提供，不接受命令行参数，也不会写入 journal。
 
+HTTP 只允许连接 `localhost` 或 loopback；连接远程 SekerEagle 时必须使用 HTTPS，避免 PAT 明文传输。
+
 ## 在真实图库到位前准备
 
 ```bash
