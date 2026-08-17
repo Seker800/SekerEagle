@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildImageProcessingJobs, needsImagePyramid } from './media-job-plan';
+import {
+  buildImageProcessingJobs,
+  buildMissingImageProcessingJobs,
+  needsImagePyramid,
+} from './media-job-plan';
 
 test('large images get dependent palette and pyramid jobs after renditions', () => {
   const jobs = buildImageProcessingJobs(
@@ -48,3 +52,31 @@ test('ordinary images skip pyramids while either size threshold enables them', (
   assert.equal(needsImagePyramid(4_000, 4_001), true);
   assert.equal(needsImagePyramid(null, 8_000), false);
 });
+
+test('backfill reuses a current rendition job as the dependency for missing analysis work', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    { ownerId: 'owner-1', assetId: 'asset-1', assetRevision: 2, width: 8_000, height: 6_000 },
+    [
+      {
+        id: 'rendition-job',
+        kind: 'GENERATE_RENDITIONS',
+        processorVersion: 'rendition-v2',
+      },
+    ],
+  );
+
+  expectJobKinds(jobs, [
+    ['EXTRACT_COLOR_PALETTE', 'rendition-job'],
+    ['GENERATE_IMAGE_PYRAMID', 'rendition-job'],
+  ]);
+});
+
+function expectJobKinds(
+  jobs: ReturnType<typeof buildMissingImageProcessingJobs>,
+  expected: Array<[string, string | null | undefined]>,
+) {
+  assert.deepEqual(
+    jobs.map(({ kind, dependsOnJobId }) => [kind, dependsOnJobId]),
+    expected,
+  );
+}
