@@ -26,12 +26,14 @@ const createEagleSmartFolderMock = vi.fn();
 const updateEagleSmartFolderMock = vi.fn();
 const moveEagleSmartFolderMock = vi.fn();
 const listEagleAssetUpdatesMock = vi.fn();
+const getEaglePyramidDescriptorMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
   getEagleAssetContentUrl: (assetId: string) => `/api/eagle/assets/${assetId}/content`,
   getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
     `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,
+  getEaglePyramidDescriptor: (...args: unknown[]) => getEaglePyramidDescriptorMock(...args),
   listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
   getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
   getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
@@ -76,6 +78,7 @@ const asset = {
   durationMs: null,
   lifecycleStatus: 'READY',
   mediaErrorCode: null,
+  mediaRevision: 1,
   rowVersion: 1,
   rating: null,
   annotation: null,
@@ -151,6 +154,7 @@ describe('SekerEaglePage', () => {
       },
     );
     listEagleAssetsMock.mockResolvedValue({ items: [asset], nextCursor: null });
+    getEaglePyramidDescriptorMock.mockRejectedValue(new Error('图像金字塔不存在'));
     getEagleAssetMock.mockResolvedValue(asset);
     getEagleTrashAssetMock.mockResolvedValue({
       ...asset,
@@ -963,6 +967,14 @@ describe('SekerEaglePage', () => {
     fireEvent.doubleClick(card);
     expect(screen.getByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
     expect(screen.getByText(/滚轮缩放/)).toBeInTheDocument();
+    expect(screen.getByTestId('image-preview-image')).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/asset-1/renditions/rendition-1/content',
+    );
+    expect(screen.getByTestId('image-preview-image')).not.toHaveAttribute(
+      'src',
+      '/api/eagle/assets/asset-1/content',
+    );
   });
 
   it('navigates between images with the left and right arrow keys while previewing', async () => {

@@ -1,0 +1,45 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgb(8 11 18 / 92%);
+}
+
+.dialog {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.viewer {
+  min-width: 0;
+  min-height: 0;
+  background: #090d14;
+}
+
+.dialog footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  padding: 8px 18px;
+  color: #dbe4f0;
+  background: #111722;
+}
+
+.dialog footer span {
+  flex: 1;
+  color: #91a0b5;
+  font-size: 13px;
+}
+
+.dialog button {
+  border: 1px solid #344055;
+  border-radius: 7px;
+  padding: 7px 14px;
+  color: inherit;
+  background: #1b2432;
+}

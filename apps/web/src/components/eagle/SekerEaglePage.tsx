@@ -33,7 +33,7 @@ import { useImagePreviewState } from '../media/image-preview/useImagePreviewStat
 import {
   getEagleAsset,
   getEagleTrashAsset,
-  getEagleAssetContentUrl,
+  getEaglePyramidDescriptor,
   listEagleAssets,
   listEagleTrash,
   type EagleAsset,
@@ -45,7 +45,9 @@ import {
   type EagleSmartFolderFilters,
 } from '../../lib/eagle-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
+import { EagleTiledImageViewer } from './EagleTiledImageViewer';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
+import { getEaglePreviewContentUrl } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
 import { EagleColorFilter } from './EagleColorFilter';
@@ -325,6 +327,14 @@ export function SekerEaglePage({
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
   const previewAsset = assets.find((asset) => asset.id === previewAssetId) ?? null;
+  const previewPyramidQuery = useQuery({
+    queryKey: ['eagle', ownerId, 'pyramid', imagePreview.previewImage?.assetId ?? 'none'],
+    queryFn: ({ signal }) =>
+      getEaglePyramidDescriptor(accessToken, imagePreview.previewImage!.assetId!, signal),
+    enabled: Boolean(imagePreview.previewImage?.assetId),
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const isInspectorOpen = isAssetView && isInspectorVisible;
   const activeSmartFolder =
     smartFolders.find((folder) => folder.id === activeSmartFolderId) ?? null;
@@ -532,10 +542,8 @@ export function SekerEaglePage({
       setPreviewAssetId(asset.id);
       return;
     }
-    imagePreview.setPreviewImage({
-      src: getEagleAssetContentUrl(asset.id),
-      alt: asset.displayName,
-    });
+    const src = getEaglePreviewContentUrl(asset);
+    if (src) imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
   };
 
   useEffect(() => {
@@ -543,9 +551,7 @@ export function SekerEaglePage({
     if (!currentPreview) return undefined;
 
     const imageAssets = assets.filter((asset) => asset.mimeType.startsWith('image/'));
-    const currentIndex = imageAssets.findIndex(
-      (asset) => getEagleAssetContentUrl(asset.id) === currentPreview.src,
-    );
+    const currentIndex = imageAssets.findIndex((asset) => asset.id === currentPreview.assetId);
     if (currentIndex === -1) return undefined;
 
     const handlePreviewNavigation = (event: KeyboardEvent) => {
@@ -556,10 +562,10 @@ export function SekerEaglePage({
       if (!nextAsset) return;
 
       event.preventDefault();
-      imagePreview.setPreviewImage({
-        src: getEagleAssetContentUrl(nextAsset.id),
-        alt: nextAsset.displayName,
-      });
+      const src = getEaglePreviewContentUrl(nextAsset);
+      if (src) {
+        imagePreview.setPreviewImage({ src, alt: nextAsset.displayName, assetId: nextAsset.id });
+      }
     };
 
     window.addEventListener('keydown', handlePreviewNavigation);
@@ -1513,7 +1519,13 @@ export function SekerEaglePage({
       {previewAsset && (
         <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
       )}
-      {imagePreview.previewImage && (
+      {imagePreview.previewImage && previewPyramidQuery.data ? (
+        <EagleTiledImageViewer
+          descriptor={previewPyramidQuery.data}
+          alt={imagePreview.previewImage.alt}
+          onClose={imagePreview.closePreview}
+        />
+      ) : imagePreview.previewImage ? (
         <ImagePreviewDialog
           activeDimensions={imagePreview.activeDimensions}
           canPan={imagePreview.canPan}
@@ -1527,7 +1539,7 @@ export function SekerEaglePage({
           onImagePointerDown={imagePreview.handlePreviewPointerDown}
           onWheel={imagePreview.handlePreviewWheel}
         />
-      )}
+      ) : null}
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
           initialFilters={editingSmartFolder?.queryJson.filters ?? smartFolderFilters}

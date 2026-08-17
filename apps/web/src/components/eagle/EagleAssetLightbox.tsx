@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { getEagleAssetContentUrl, type EagleAssetListItem } from '../../lib/eagle-api';
+import { getEaglePreviewContentUrl } from './eagle-media-sources';
 import styles from './EagleAssetLightbox.module.css';
 
 interface EagleAssetLightboxProps {
@@ -14,6 +15,7 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
+  const previewUrl = getEaglePreviewContentUrl(asset);
 
   return (
     <div
@@ -48,12 +50,14 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
             autoPlay
             onClick={(event) => event.stopPropagation()}
           />
-        ) : (
+        ) : previewUrl ? (
           <img
-            src={getEagleAssetContentUrl(asset.id)}
+            src={previewUrl}
             alt={asset.displayName}
             onClick={(event) => event.stopPropagation()}
           />
+        ) : (
+          <p>预览图尚未生成</p>
         )}
       </div>
       <footer>Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览</footer>

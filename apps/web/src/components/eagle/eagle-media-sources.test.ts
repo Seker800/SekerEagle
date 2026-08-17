@@ -5,6 +5,7 @@ import { createEagleTileSource, getEaglePreviewContentUrl } from './eagle-media-
 const asset = {
   id: 'asset-1',
   mimeType: 'image/jpeg',
+  mediaRevision: 3,
   renditions: [
     { id: 'thumb-1', kind: 'THUMBNAIL', revision: 3 },
     { id: 'preview-old', kind: 'PREVIEW', revision: 2 },
@@ -14,9 +15,7 @@ const asset = {
 
 describe('Eagle media sources', () => {
   it('uses the current preview and never falls back to the original image', () => {
-    expect(getEaglePreviewContentUrl(asset)).toBe(
-      '/api/eagle/assets/asset-1/renditions/preview-1',
-    );
+    expect(getEaglePreviewContentUrl(asset)).toBe('/api/eagle/assets/asset-1/renditions/preview-1');
     expect(getEaglePreviewContentUrl({ ...asset, renditions: [] })).toBeNull();
   });
 
@@ -29,8 +28,7 @@ describe('Eagle media sources', () => {
       overlap: 1,
       format: 'webp',
       maxLevel: 13,
-      tileUrlTemplate:
-        '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
+      tileUrlTemplate: '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
     };
     const source = createEagleTileSource(descriptor);
 

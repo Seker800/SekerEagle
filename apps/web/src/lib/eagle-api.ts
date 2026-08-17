@@ -78,6 +78,16 @@ export interface EagleMediaCapabilities {
     maxDurationMs: number | null;
   };
 }
+export interface EaglePyramidDescriptor {
+  id: string;
+  width: number;
+  height: number;
+  tileSize: number;
+  overlap: number;
+  format: 'webp';
+  maxLevel: number;
+  tileUrlTemplate: string;
+}
 export interface EagleManualTag extends EagleManualTagRef {
   groupId: string | null;
   groupIds: string[];
@@ -468,6 +478,11 @@ export async function uploadEagleAsset(
 }
 export function getEagleAssetContentUrl(id: string) {
   return `/api/eagle/assets/${encodeURIComponent(id)}/original`;
+}
+export function getEaglePyramidDescriptor(_token: string, assetId: string, signal?: AbortSignal) {
+  return api<EaglePyramidDescriptor>(`/eagle/assets/${encodeURIComponent(assetId)}/pyramid`, {
+    signal,
+  });
 }
 export function getEagleRenditionContentUrl(assetId: string, renditionId: string) {
   return `/api/eagle/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(renditionId)}`;
