@@ -6,6 +6,7 @@ import type {
   UpdateEagleProcessingSettingsDto,
 } from './eagle-processing.dto';
 import { COLOR_PROCESSOR_VERSION } from './eagle-color-search';
+import { buildMissingImageProcessingJobs } from './media-job-plan';
 
 @Injectable()
 export class EagleProcessingService {
@@ -166,40 +167,48 @@ export class EagleProcessingService {
     let scanned = 0;
     let created = 0;
     let missingCount = 0;
+    let assetsMissingCount = 0;
     do {
       const assets = await this.prisma.eagleAsset.findMany({
         where: { ownerId, deletedAt: null, mimeType: { not: 'video/mp4' } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: pageSize,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
-        select: { id: true, ownerId: true, mediaRevision: true },
+        select: { id: true, ownerId: true, mediaRevision: true, width: true, height: true },
       });
       if (!assets.length) break;
       scanned += assets.length;
       const existing = await this.prisma.eagleAssetProcessingJob.findMany({
         where: { ownerId, assetId: { in: assets.map(({ id }) => id) } },
-        select: { assetId: true, assetRevision: true, kind: true, processorVersion: true },
+        select: {
+          id: true,
+          assetId: true,
+          assetRevision: true,
+          kind: true,
+          processorVersion: true,
+        },
       });
-      const keys = new Set(
-        existing.map(
-          (job) => `${job.assetId}:${job.assetRevision}:${job.kind}:${job.processorVersion}`,
-        ),
-      );
-      const missing = assets
-        .filter(
-          (asset) =>
-            !keys.has(
-              `${asset.id}:${asset.mediaRevision}:EXTRACT_COLOR_PALETTE:${COLOR_PROCESSOR_VERSION}`,
-            ),
-        )
-        .map((asset) => ({
-          ownerId,
-          assetId: asset.id,
-          assetRevision: asset.mediaRevision,
-          kind: 'EXTRACT_COLOR_PALETTE' as const,
-          lane: 'BACKGROUND' as const,
-          processorVersion: COLOR_PROCESSOR_VERSION,
-        }));
+      const existingByAssetRevision = new Map<string, typeof existing>();
+      for (const job of existing) {
+        const key = `${job.assetId}:${job.assetRevision}`;
+        const jobs = existingByAssetRevision.get(key) ?? [];
+        jobs.push(job);
+        existingByAssetRevision.set(key, jobs);
+      }
+      const missing = assets.flatMap((asset) => {
+        const jobs = buildMissingImageProcessingJobs(
+          {
+            ownerId,
+            assetId: asset.id,
+            assetRevision: asset.mediaRevision,
+            width: asset.width,
+            height: asset.height,
+          },
+          existingByAssetRevision.get(`${asset.id}:${asset.mediaRevision}`) ?? [],
+        );
+        if (jobs.length) assetsMissingCount += 1;
+        return jobs;
+      });
       missingCount += missing.length;
       const creatable = missing.slice(0, Math.max(0, creationLimit - created));
       if (creatable.length) {
@@ -215,7 +224,7 @@ export class EagleProcessingService {
     return {
       scanned,
       created,
-      skipped: scanned - created,
+      skipped: scanned - assetsMissingCount,
       remaining: Math.max(0, missingCount - created),
     };
   }

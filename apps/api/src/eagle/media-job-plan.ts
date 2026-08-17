@@ -25,30 +25,60 @@ export function buildImageProcessingJobs(
   },
   renditionJobId: string = randomUUID(),
 ): Prisma.EagleAssetProcessingJobCreateManyInput[] {
+  return buildMissingImageProcessingJobs(input, [], renditionJobId);
+}
+
+export function buildMissingImageProcessingJobs(
+  input: {
+    ownerId: string;
+    assetId: string;
+    assetRevision: number;
+    width: number | null;
+    height: number | null;
+  },
+  existingJobs: ReadonlyArray<{ id: string; kind: string; processorVersion: string }>,
+  newRenditionJobId: string = randomUUID(),
+): Prisma.EagleAssetProcessingJobCreateManyInput[] {
   const common = {
     ownerId: input.ownerId,
     assetId: input.assetId,
     assetRevision: input.assetRevision,
   };
-  const jobs: Prisma.EagleAssetProcessingJobCreateManyInput[] = [
-    {
-      id: renditionJobId,
+  const existingRendition = existingJobs.find(
+    ({ kind, processorVersion }) =>
+      kind === 'GENERATE_RENDITIONS' && processorVersion === RENDITION_PROCESSOR_VERSION,
+  );
+  const renditionJobId = existingRendition?.id ?? newRenditionJobId;
+  const jobs: Prisma.EagleAssetProcessingJobCreateManyInput[] = [];
+  if (!existingRendition) {
+    jobs.push({
+      id: newRenditionJobId,
       ...common,
       kind: 'GENERATE_RENDITIONS',
       lane: 'INTERACTIVE',
       processorVersion: RENDITION_PROCESSOR_VERSION,
       dependsOnJobId: null,
-    },
-    {
+    });
+  }
+  const hasPalette = existingJobs.some(
+    ({ kind, processorVersion }) =>
+      kind === 'EXTRACT_COLOR_PALETTE' && processorVersion === COLOR_THUMBNAIL_PROCESSOR_VERSION,
+  );
+  if (!hasPalette) {
+    jobs.push({
       id: randomUUID(),
       ...common,
       kind: 'EXTRACT_COLOR_PALETTE',
       lane: 'BACKGROUND',
       processorVersion: COLOR_THUMBNAIL_PROCESSOR_VERSION,
       dependsOnJobId: renditionJobId,
-    },
-  ];
-  if (needsImagePyramid(input.width, input.height)) {
+    });
+  }
+  const hasPyramid = existingJobs.some(
+    ({ kind, processorVersion }) =>
+      kind === 'GENERATE_IMAGE_PYRAMID' && processorVersion === PYRAMID_PROCESSOR_VERSION,
+  );
+  if (needsImagePyramid(input.width, input.height) && !hasPyramid) {
     jobs.push({
       id: randomUUID(),
       ...common,

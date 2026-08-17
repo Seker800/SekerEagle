@@ -7,17 +7,32 @@ test('reconciler creates only missing current-version color jobs', async () => {
   const service = new EagleProcessingService({
     eagleAsset: {
       findMany: async () => [
-        { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 1 },
-        { id: 'asset-2', ownerId: 'owner-1', mediaRevision: 3 },
+        { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 1, width: 100, height: 100 },
+        { id: 'asset-2', ownerId: 'owner-1', mediaRevision: 3, width: 100, height: 100 },
       ],
     },
     eagleAssetProcessingJob: {
       findMany: async () => [
         {
+          id: 'color-job-1',
           assetId: 'asset-1',
           assetRevision: 1,
           kind: 'EXTRACT_COLOR_PALETTE',
           processorVersion: 'color-v3-thumbnail',
+        },
+        {
+          id: 'rendition-job-1',
+          assetId: 'asset-1',
+          assetRevision: 1,
+          kind: 'GENERATE_RENDITIONS',
+          processorVersion: 'rendition-v2',
+        },
+        {
+          id: 'rendition-job-2',
+          assetId: 'asset-2',
+          assetRevision: 3,
+          kind: 'GENERATE_RENDITIONS',
+          processorVersion: 'rendition-v2',
         },
       ],
       createMany: async ({ data }: { data: unknown[] }) => {
@@ -30,16 +45,17 @@ test('reconciler creates only missing current-version color jobs', async () => {
   const result = await service.reconcile('owner-1');
 
   assert.deepEqual(result, { scanned: 2, created: 1, skipped: 1, remaining: 0 });
-  assert.deepEqual(created, [
-    {
-      ownerId: 'owner-1',
-      assetId: 'asset-2',
-      assetRevision: 3,
-      kind: 'EXTRACT_COLOR_PALETTE',
-      lane: 'BACKGROUND',
-      processorVersion: 'color-v3-thumbnail',
-    },
-  ]);
+  assert.equal(typeof (created[0] as { id: unknown }).id, 'string');
+  const { id: _id, ...createdJob } = created[0] as Record<string, unknown>;
+  assert.deepEqual(createdJob, {
+    ownerId: 'owner-1',
+    assetId: 'asset-2',
+    assetRevision: 3,
+    kind: 'EXTRACT_COLOR_PALETTE',
+    lane: 'BACKGROUND',
+    processorVersion: 'color-v3-thumbnail',
+    dependsOnJobId: 'rendition-job-2',
+  });
 });
 
 test('reconciler scans beyond the first page without exceeding its creation bound', async () => {
@@ -47,6 +63,8 @@ test('reconciler scans beyond the first page without exceeding its creation boun
     id: `asset-${String(index).padStart(3, '0')}`,
     ownerId: 'owner-1',
     mediaRevision: 1,
+    width: 100,
+    height: 100,
   }));
   let page = 0;
   const service = new EagleProcessingService({
@@ -61,7 +79,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 1, remaining: 1 });
+  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 502 });
   assert.equal(page, 2);
 });
 
