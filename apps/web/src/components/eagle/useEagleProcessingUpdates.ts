@@ -1,21 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient, type InfiniteData, type QueryKey } from '@tanstack/react-query';
-import {
-  listEagleAssetUpdates,
-  type EagleAssetListItem,
-  type EagleAssetUpdate,
-} from '../../lib/eagle-api';
-
-interface EagleAssetPage {
-  items: EagleAssetListItem[];
-  nextCursor: string | null;
-  colorCoverage?: {
-    eligible: number;
-    completed: number;
-    percentage: number;
-    processorVersion: string;
-  } | null;
-}
+import { useQuery, type QueryKey } from '@tanstack/react-query';
+import { listEagleAssetUpdates, type EagleAssetListItem } from '../../lib/eagle-api';
+import type { EagleAssetEntityStore } from './eagle-asset-entity-store';
 
 export function getEagleProcessingPollInterval(
   visibility: DocumentVisibilityState,
@@ -25,27 +11,13 @@ export function getEagleProcessingPollInterval(
   return successfulSyncs < 3 ? 10_000 : 30_000;
 }
 
-function mergeEagleAssetUpdate(
-  asset: EagleAssetListItem,
-  update: EagleAssetUpdate,
-): EagleAssetListItem {
-  return {
-    ...asset,
-    lifecycleStatus: update.lifecycleStatus,
-    mediaErrorCode: update.mediaErrorCode,
-    updatedAt: update.updatedAt,
-    renditions: update.renditions,
-  };
-}
-
 export function useEagleProcessingUpdates(input: {
   accessToken: string;
   assets: EagleAssetListItem[];
   enabled: boolean;
-  assetsQueryKey: QueryKey;
+  assetStore: EagleAssetEntityStore;
   updatesQueryKey: (assetIds: string[]) => QueryKey;
 }) {
-  const queryClient = useQueryClient();
   const [visibility, setVisibility] = useState<DocumentVisibilityState>(() =>
     typeof document === 'undefined' ? 'visible' : document.visibilityState,
   );
@@ -71,22 +43,6 @@ export function useEagleProcessingUpdates(input: {
   useEffect(() => {
     const updates = updatesQuery.data;
     if (!updates?.length) return;
-    const updatesById = new Map(updates.map((item) => [item.id, item]));
-    queryClient.setQueriesData<InfiniteData<EagleAssetPage>>(
-      { queryKey: input.assetsQueryKey },
-      (current) =>
-        current
-          ? {
-              ...current,
-              pages: current.pages.map((page) => ({
-                ...page,
-                items: page.items.map((item) => {
-                  const update = updatesById.get(item.id);
-                  return update ? mergeEagleAssetUpdate(item, update) : item;
-                }),
-              })),
-            }
-          : current,
-    );
-  }, [input.assetsQueryKey, queryClient, updatesQuery.data]);
+    input.assetStore.mergeProcessingUpdates(updates);
+  }, [input.assetStore, updatesQuery.data]);
 }

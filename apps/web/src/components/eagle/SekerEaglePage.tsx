@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type DragEvent,
   type MouseEvent,
 } from 'react';
@@ -57,6 +58,7 @@ import { EagleSmartFolderTree } from './EagleSmartFolderTree';
 import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
+import { getEagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
 import { useEagleReferenceData } from './useEagleReferenceData';
@@ -185,17 +187,26 @@ export function SekerEaglePage({
     color: smartFolderFilters.assetColor,
     smartFolderId: activeSmartFolderId ?? undefined,
   };
+  const assetStore = useMemo(() => getEagleAssetEntityStore(ownerId), [ownerId]);
+  const assetStoreRevision = useSyncExternalStore(
+    assetStore.subscribe,
+    assetStore.getSnapshot,
+    assetStore.getSnapshot,
+  );
   const assetsQuery = useInfiniteQuery({
     queryKey: queryKeys.assetList(libraryView, assetFilters),
-    queryFn: ({ pageParam, signal }) => {
+    queryFn: async ({ pageParam, signal }) => {
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
-      return libraryView === 'TRASH'
-        ? listEagleTrash(accessToken, pageFilters, signal)
-        : listEagleAssets(accessToken, pageFilters, signal);
+      const page =
+        libraryView === 'TRASH'
+          ? await listEagleTrash(accessToken, pageFilters, signal)
+          : await listEagleAssets(accessToken, pageFilters, signal);
+      return assetStore.normalizePage(page);
     },
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: isAssetView,
+    gcTime: 60_000,
   });
   const {
     ratingMutation,
@@ -250,10 +261,10 @@ export function SekerEaglePage({
   const assets = useMemo(() => {
     const uniqueAssets = new Map<string, EagleAssetListItem>();
     assetsQuery.data?.pages.forEach((page) => {
-      page.items.forEach((item) => uniqueAssets.set(item.id, item));
+      assetStore.getMany(page.assetIds).forEach((item) => uniqueAssets.set(item.id, item));
     });
     return [...uniqueAssets.values()];
-  }, [assetsQuery.data]);
+  }, [assetStore, assetStoreRevision, assetsQuery.data]);
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   const selectedAssetQuery = useQuery({
     queryKey: [...queryKeys.assetDetail(selectedAssetId), libraryView],
@@ -318,7 +329,7 @@ export function SekerEaglePage({
     accessToken,
     assets: observedAssets,
     enabled: isAssetView,
-    assetsQueryKey: queryKeys.assets,
+    assetStore,
     updatesQueryKey: queryKeys.assetUpdates,
   });
   const colorCoverage = assetsQuery.data?.pages[0]?.colorCoverage ?? null;
