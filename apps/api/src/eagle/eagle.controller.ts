@@ -5,6 +5,7 @@ import {
   Get,
   Headers,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -181,6 +182,42 @@ export class EagleController {
     @Res({ passthrough: true }) response: Response,
   ) {
     return this.getRendition(principal, assetId, renditionId, ifNoneMatch, response);
+  }
+
+  @Get('assets/:assetId/pyramid')
+  getPyramidDescriptor(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+  ) {
+    return this.media.getPyramidDescriptor(principal.sub, assetId);
+  }
+
+  @Get('assets/:assetId/pyramids/:pyramidId/tiles/:level/:x/:y')
+  async getPyramidTile(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Param('pyramidId', new ParseUUIDPipe({ version: '4' })) pyramidId: string,
+    @Param('level', ParseIntPipe) level: number,
+    @Param('x', ParseIntPipe) x: number,
+    @Param('y', ParseIntPipe) y: number,
+    @Headers('if-none-match') ifNoneMatch: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const media = await this.media.getPyramidTile(
+      principal.sub,
+      assetId,
+      pyramidId,
+      level,
+      x,
+      y,
+      ifNoneMatch,
+    );
+    applyMediaHeaders(response, media, 'private, max-age=31536000, immutable');
+    if (media.notModified) {
+      response.status(304);
+      return;
+    }
+    return new StreamableFile(media.stream!);
   }
 
   @Patch('assets/batch')

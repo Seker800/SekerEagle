@@ -48,6 +48,85 @@ export class EagleMediaService {
     );
   }
 
+  async getPyramidDescriptor(ownerId: string, assetId: string) {
+    const asset = await this.prisma.eagleAsset.findFirst({
+      where: { ownerId, id: assetId, purgeAfter: null },
+      select: {
+        mediaRevision: true,
+        imagePyramids: {
+          where: { status: 'READY' },
+          orderBy: { revision: 'desc' },
+          select: {
+            id: true,
+            revision: true,
+            width: true,
+            height: true,
+            tileSize: true,
+            overlap: true,
+            format: true,
+            maxLevel: true,
+          },
+        },
+      },
+    });
+    const pyramid = asset?.imagePyramids.find(({ revision }) => revision === asset.mediaRevision);
+    if (!pyramid) throw new NotFoundException('图像金字塔不存在。');
+    const { revision: _revision, ...descriptor } = pyramid;
+    return {
+      ...descriptor,
+      tileUrlTemplate: `/api/eagle/assets/${encodeURIComponent(assetId)}/pyramids/${encodeURIComponent(pyramid.id)}/tiles/{level}/{x}/{y}`,
+    };
+  }
+
+  async getPyramidTile(
+    ownerId: string,
+    assetId: string,
+    pyramidId: string,
+    level: number,
+    x: number,
+    y: number,
+    ifNoneMatch?: string,
+  ) {
+    const pyramid = await this.prisma.eagleImagePyramid.findFirst({
+      where: {
+        id: pyramidId,
+        ownerId,
+        assetId,
+        status: 'READY',
+        asset: { purgeAfter: null },
+      },
+      select: {
+        storagePrefix: true,
+        width: true,
+        height: true,
+        tileSize: true,
+        maxLevel: true,
+        format: true,
+      },
+    });
+    if (!pyramid || pyramid.format !== 'webp') {
+      throw new NotFoundException('切片不存在。');
+    }
+    if (![level, x, y].every(Number.isSafeInteger) || level < 0 || level > pyramid.maxLevel) {
+      throw new NotFoundException('切片不存在。');
+    }
+    const scale = 2 ** (pyramid.maxLevel - level);
+    const levelWidth = Math.ceil(pyramid.width / scale);
+    const levelHeight = Math.ceil(pyramid.height / scale);
+    const columns = Math.ceil(levelWidth / pyramid.tileSize);
+    const rows = Math.ceil(levelHeight / pyramid.tileSize);
+    if (x < 0 || y < 0 || x >= columns || y >= rows) {
+      throw new NotFoundException('切片不存在。');
+    }
+    return this.open(
+      ownerId,
+      `${pyramid.storagePrefix}/${level}/${x}_${y}.webp`,
+      `${level}-${x}-${y}.webp`,
+      'image/webp',
+      { ifNoneMatch },
+    );
+  }
+
   private async open(
     ownerId: string,
     key: string,

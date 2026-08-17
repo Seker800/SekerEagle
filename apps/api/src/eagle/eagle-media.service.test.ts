@@ -104,8 +104,7 @@ test('pyramid descriptor is owner-scoped and only exposes the current ready revi
     overlap: 1,
     format: 'webp',
     maxLevel: 13,
-    tileUrlTemplate:
-      '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
+    tileUrlTemplate: '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
   });
   assert.deepEqual(queries[0], {
     where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null },
