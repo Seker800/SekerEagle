@@ -94,3 +94,24 @@ test('tracks a specific server-scheduled item and preserves explicit skips', asy
   assert.equal(journal.get('item-1')?.status, 'SKIPPED');
   journal.close();
 });
+
+test('persists only non-secret active run control state', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-migrator-journal-control-'));
+  const path = join(directory, 'journal.sqlite');
+  const identity = { migrationId: 'migration-1', snapshotSha256: 'a'.repeat(64) };
+  const journal = MigrationJournal.open(path, identity);
+  journal.saveActiveRun({ runId: 'run-1', phase: 'UPLOADING', libraryPath: '/library' });
+  journal.close();
+
+  const restored = MigrationJournal.open(path, identity);
+  assert.deepEqual(restored.loadActiveRun(), {
+    runId: 'run-1',
+    phase: 'UPLOADING',
+    libraryPath: '/library',
+  });
+  assert.throws(
+    () => restored.saveActiveRun({ runId: 'run-1', phase: 'UPLOADING', accessToken: 'secret' }),
+    /secret/i,
+  );
+  restored.close();
+});
