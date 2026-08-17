@@ -488,8 +488,14 @@ function importItemData(
 function serializeRun(run: { declaredByteSize: bigint; [key: string]: unknown }) {
   return { ...run, declaredByteSize: Number(run.declaredByteSize) };
 }
-function serializeItem(item: { byteSize: bigint; [key: string]: unknown }) {
-  return { ...item, byteSize: Number(item.byteSize) };
+function serializeItem(item: {
+  byteSize: bigint;
+  externalAsset?: unknown;
+  [key: string]: unknown;
+}) {
+  const publicItem = { ...item };
+  delete publicItem.externalAsset;
+  return { ...publicItem, byteSize: Number(item.byteSize) };
 }
 function normalized(value: string, max: number) {
   const result = value.normalize('NFKC').trim();

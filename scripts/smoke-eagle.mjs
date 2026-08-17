@@ -56,13 +56,14 @@ for (const prefix of ['owner', 'other']) {
 }
 
 const [owner, other] = users;
-const svg = Buffer.from(
-  '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><rect width="640" height="400" fill="#547de8"/><circle cx="320" cy="200" r="110" fill="#fff"/><text x="320" y="220" text-anchor="middle" font-family="sans-serif" font-size="54" fill="#253453">SE</text></svg>',
+const png = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEklEQVQYlWMIqX3xHx9mGBkKAHC/rgFqds3aAAAAAElFTkSuQmCC',
+  'base64',
 );
 const initiated = await api('/api/eagle/uploads', {
   method: 'POST',
   cookie: owner.cookie,
-  body: { originalName: 'smoke-eagle.svg', mimeType: 'image/svg+xml', size: svg.byteLength },
+  body: { originalName: 'smoke-eagle.png', mimeType: 'image/png', size: png.byteLength },
 });
 if (initiated.response.status !== 201) {
   throw new Error(
@@ -78,7 +79,7 @@ const signed = await api(`/api/eagle/uploads/${uploadId}/parts/1`, {
 if (signed.response.status !== 201 || typeof signed.payload?.uploadUrl !== 'string') {
   throw new Error(`获取上传地址失败: ${signed.response.status}`);
 }
-const uploaded = await fetch(signed.payload.uploadUrl, { method: 'PUT', body: svg });
+const uploaded = await fetch(signed.payload.uploadUrl, { method: 'PUT', body: png });
 const etag = uploaded.headers.get('etag');
 if (!uploaded.ok || !etag) throw new Error(`上传分片失败: ${uploaded.status}`);
 const completed = await api(`/api/eagle/uploads/${uploadId}/complete`, {
@@ -112,7 +113,7 @@ if (!asset.renditions?.some((rendition) => rendition.kind === 'THUMBNAIL')) {
 const original = await fetch(`${baseUrl}${asset.originalUrl}`, {
   headers: { cookie: owner.cookie },
 });
-if (!original.ok || (await original.arrayBuffer()).byteLength !== svg.byteLength) {
+if (!original.ok || (await original.arrayBuffer()).byteLength !== png.byteLength) {
   throw new Error('原文件鉴权读取失败');
 }
 const crossOwnerAsset = await api(`/api/eagle/assets/${assetId}`, { cookie: other.cookie });
@@ -150,7 +151,7 @@ const groupedTag = await api(`/api/eagle/tags/${tag.payload.id}`, {
 if (!groupedTag.response.ok || groupedTag.payload?.groupId !== tagGroup.payload.id)
   throw new Error('标签分组或星标更新失败');
 const filteredAssets = await api(
-  `/api/eagle/assets?formats=svg&manualTagIds=${tag.payload.id}&search=smoke`,
+  `/api/eagle/assets?formats=png&manualTagIds=${tag.payload.id}&search=smoke`,
   { cookie: owner.cookie },
 );
 if (
@@ -161,7 +162,7 @@ if (
 const smartFolder = await api('/api/eagle/smart-folders', {
   method: 'POST',
   cookie: owner.cookie,
-  body: { name: `smart-${suffix}`, query: { version: 1, filters: { formats: ['svg'] } } },
+  body: { name: `smart-${suffix}`, query: { version: 1, filters: { formats: ['png'] } } },
 });
 if (smartFolder.response.status !== 201)
   throw new Error(
@@ -198,7 +199,7 @@ const importerPat = await api('/api/tokens', {
 });
 if (importerPat.response.status !== 201) throw new Error('导入器 PAT 创建失败');
 const importerToken = importerPat.payload?.token;
-const importSha256 = createHash('sha256').update(svg).digest('hex');
+const importSha256 = createHash('sha256').update(png).digest('hex');
 const sourceItemId = `source-${suffix}`;
 const externalLibraryId = `library-${suffix}`;
 
@@ -213,7 +214,7 @@ async function createImportRun(annotation) {
       libraryName: 'Smoke Library',
       sourceModifiedAt: new Date().toISOString(),
       declaredItemCount: 1,
-      declaredByteSize: svg.byteLength,
+      declaredByteSize: png.byteLength,
     },
   });
   if (createdRun.response.status !== 201) throw new Error('创建导入任务失败');
@@ -231,10 +232,10 @@ async function createImportRun(annotation) {
         {
           sourceItemId,
           name: 'Imported smoke',
-          originalFileName: 'imported-smoke.svg',
-          extension: 'svg',
-          mimeType: 'image/svg+xml',
-          size: svg.byteLength,
+          originalFileName: 'imported-smoke.png',
+          extension: 'png',
+          mimeType: 'image/png',
+          size: png.byteLength,
           importedAt: Date.now(),
           modifiedAt: Date.now(),
           star: annotation === 'updated' ? 5 : 3,
@@ -277,7 +278,7 @@ const importSigned = await api(`/api/eagle/uploads/${importUpload.payload.id}/pa
   bearer: importerToken,
   body: {},
 });
-const importPart = await fetch(importSigned.payload.uploadUrl, { method: 'PUT', body: svg });
+const importPart = await fetch(importSigned.payload.uploadUrl, { method: 'PUT', body: png });
 const importEtag = importPart.headers.get('etag');
 if (!importPart.ok || !importEtag) throw new Error('导入项上传分片失败');
 const importCompleted = await api(`/api/eagle/uploads/${importUpload.payload.id}/complete`, {
@@ -324,7 +325,7 @@ const readOnlyPat = await api('/api/tokens', {
 const rejectedUpload = await api('/api/eagle/uploads', {
   method: 'POST',
   bearer: readOnlyPat.payload?.token,
-  body: { originalName: 'blocked.svg', mimeType: 'image/svg+xml', size: 1 },
+  body: { originalName: 'blocked.png', mimeType: 'image/png', size: 1 },
 });
 if (rejectedUpload.response.status !== 403) throw new Error('只读 PAT 错误获得了上传权限');
 
