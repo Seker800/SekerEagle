@@ -11,8 +11,9 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } fro
 import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import sharp from 'sharp';
-import { canClaimBackgroundJobs } from './processing-policy';
+import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
+import { decodeProcessableImage, MAX_EAGLE_IMAGE_INPUT_PIXELS } from './image-media';
 import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
 
 const execFileAsync = promisify(execFile);
@@ -135,6 +136,26 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   });
   if (!asset) throw new Error('ASSET_NOT_PROCESSABLE');
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
+  if (job.kind === 'EXTRACT_COLOR_PALETTE') {
+    await prisma.eagleAssetColorAnalysis.upsert({
+      where: {
+        assetId_assetRevision_processorVersion: {
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          processorVersion: job.processorVersion,
+        },
+      },
+      create: {
+        ownerId: job.ownerId,
+        assetId: job.assetId,
+        assetRevision: job.assetRevision,
+        processorVersion: job.processorVersion,
+        status: 'RUNNING',
+        startedAt: new Date(),
+      },
+      update: { status: 'RUNNING', startedAt: new Date(), completedAt: null, lastError: null },
+    });
+  }
 
   if (asset.mimeType.startsWith('image/')) {
     if (asset.byteSize > 250n * 1024n * 1024n) throw new Error('IMAGE_TOO_LARGE_TO_PROCESS');
@@ -145,14 +166,19 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     const input = Buffer.from(await object.Body.transformToByteArray());
     const sha256 = createHash('sha256').update(input).digest('hex');
     assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-    const metadata = await sharp(input, {
+    const processableInput = await decodeProcessableImage(
+      input,
+      asset.mimeType,
+      asset.originalObjectKey,
+    );
+    const metadata = await sharp(processableInput, {
       failOn: 'error',
-      limitInputPixels: 200_000_000,
+      limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
     }).metadata();
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-      const { data, info } = await sharp(input, {
+      const { data, info } = await sharp(processableInput, {
         failOn: 'error',
-        limitInputPixels: 200_000_000,
+        limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
       })
         .rotate()
         .toColourspace('srgb')
@@ -223,7 +249,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     ];
     const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
     for (const spec of renditionSpecs) {
-      const rendered = await sharp(input, { failOn: 'error', limitInputPixels: 200_000_000 })
+      const rendered = await sharp(processableInput, {
+        failOn: 'error',
+        limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
+      })
         .rotate()
         .resize({
           width: spec.maxSize,
@@ -441,7 +470,33 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
             lastError: message,
           },
     });
-    if (terminal && failed.count === 1) {
+    if (failed.count !== 1) return;
+    if (job.kind === 'EXTRACT_COLOR_PALETTE') {
+      await transaction.eagleAssetColorAnalysis.upsert({
+        where: {
+          assetId_assetRevision_processorVersion: {
+            assetId: job.assetId,
+            assetRevision: job.assetRevision,
+            processorVersion: job.processorVersion,
+          },
+        },
+        create: {
+          ownerId: job.ownerId,
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          processorVersion: job.processorVersion,
+          status: terminal ? 'FAILED' : 'PENDING',
+          lastError: message,
+          completedAt: terminal ? new Date() : null,
+        },
+        update: {
+          status: terminal ? 'FAILED' : 'PENDING',
+          lastError: message,
+          completedAt: terminal ? new Date() : null,
+        },
+      });
+    }
+    if (terminal && taskBlocksAssetReady(job.kind)) {
       await transaction.eagleAsset.updateMany({
         where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
         data: { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) },
