@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test",
+    "test": "node --test src/*.test.mjs && vitest run --exclude '**/*.test.mjs'",
     "dev": "vite --host 127.0.0.1"
   },
   "dependencies": {
@@ -19,7 +19,13 @@
     "vite": "^6.0.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.0",
-    "@types/react-dom": "^19.2.0"
+    "@types/react-dom": "^19.2.0",
+    "jsdom": "^27.0.1",
+    "react-router-dom": "^7.18.2",
+    "vitest": "^3.2.4"
   }
 }
