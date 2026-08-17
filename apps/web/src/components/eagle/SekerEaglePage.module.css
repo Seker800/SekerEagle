@@ -40,22 +40,6 @@
   height: 22px;
   object-fit: contain;
 }
-.backLink {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
-  color: var(--eagle-muted);
-  text-decoration: none;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.backLink:hover {
-  color: var(--eagle-text);
-}
-
 .workspace {
   width: 100%;
   min-width: 0;
@@ -160,6 +144,19 @@
 }
 .sidebarSpacer {
   flex: 1;
+}
+.accountSection {
+  margin: 8px 0 4px;
+  padding: 7px 0 5px;
+  border-top: 1px solid var(--eagle-line);
+  border-bottom: 1px solid var(--eagle-line);
+}
+.sidebar .accountSection button {
+  color: #d4d6da;
+}
+.sidebar .accountSection button:hover {
+  color: #f1d2a5;
+  background: rgb(214 155 72 / 10%);
 }
 
 .library {

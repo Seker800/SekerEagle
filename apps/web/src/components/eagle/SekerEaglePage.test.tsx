@@ -299,16 +299,25 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('complementary', { name: '素材详情' })).not.toBeInTheDocument();
   });
 
-  it('integrates the brand and standalone account entry into the compact sidebar header', async () => {
-    renderPage();
+  it('places the standalone account entry in its own sidebar section', async () => {
+    const onOpenAccount = vi.fn();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <SekerEaglePage accessToken="token" ownerId="owner-test" onOpenAccount={onOpenAccount} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
 
     await screen.findByRole('heading', { name: '全部素材' });
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole('button', {
-        name: '账号设置',
-      }),
-    ).toBeInTheDocument();
+    const accountButton = within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole(
+      'button',
+      { name: '个人账号' },
+    );
+    fireEvent.click(accountButton);
+    expect(onOpenAccount).toHaveBeenCalledOnce();
   });
 
   it('opens asset processing from the SekerEagle navigation', async () => {

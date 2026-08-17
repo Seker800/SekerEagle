@@ -605,15 +605,6 @@ export function SekerEaglePage({
               </span>
               <span>SekerEagle</span>
             </div>
-            <button
-              className={styles.backLink}
-              type="button"
-              onClick={onOpenAccount}
-              aria-label="账号设置"
-              title="账号设置"
-            >
-              <IconUserCircle size={18} />
-            </button>
           </div>
           <button
             className={
@@ -690,6 +681,14 @@ export function SekerEaglePage({
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
+          {onOpenAccount && (
+            <div className={styles.accountSection}>
+              <button type="button" onClick={onOpenAccount} aria-label="个人账号">
+                <IconUserCircle size={17} />
+                个人账号
+              </button>
+            </div>
+          )}
           {canManageProcessing && (
             <div className={styles.navSection}>
               <div className={styles.sectionLabel}>系统</div>
