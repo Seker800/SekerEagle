@@ -507,14 +507,16 @@ select:focus-visible {
   background: #0e0f11;
 }
 
-.token-value code {
+.token-value input {
   min-width: 0;
   flex: 1;
-  overflow: hidden;
+  padding: 0;
+  border: 0;
+  outline: 0;
   color: #d7d9dd;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  background: transparent;
   font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .token-value button {

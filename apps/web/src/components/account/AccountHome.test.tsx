@@ -14,6 +14,7 @@ function jsonResponse(body: unknown, status = 200) {
 
 describe('AccountHome', () => {
   beforeEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.stubGlobal(
       'confirm',
@@ -23,7 +24,8 @@ describe('AccountHome', () => {
 
   it('loads, creates and revokes importer tokens', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
+      const path =
+        typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
       if (path === '/api/tokens' && !init?.method) {
         return jsonResponse([
           {
@@ -70,8 +72,18 @@ describe('AccountHome', () => {
     const createdToken = await screen.findByRole('textbox', { name: '新创建的令牌' });
     expect(createdToken).toHaveValue('seg_pat_secret');
     expect(createdToken).toHaveAttribute('readonly');
-    expect(screen.queryByRole('status')).not.toHaveTextContent('seg_pat_secret');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByText('Eagle 导入器')).toBeInTheDocument();
+
+    const selectSpy = vi.spyOn(HTMLInputElement.prototype, 'select');
+    vi.stubGlobal('navigator', {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error('clipboard denied')) },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '复制' }));
+    expect(
+      await screen.findByText('无法自动复制，已选中完整令牌，请手动复制。'),
+    ).toBeInTheDocument();
+    expect(selectSpy).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByRole('button', { name: '撤销令牌 工作室 Mac' }));
     await waitFor(() => {

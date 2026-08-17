@@ -4,7 +4,7 @@ import { searchAndSortEagleTags, type EagleTagSearchSource } from './eagle-tag-i
 import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleTagConditionPicker.module.css';
 
-interface EagleTagConditionPickerProps<T extends EagleTagSearchSource> {
+interface EagleTagConditionPickerProps<T extends EagleTagSearchSource & { color?: string | null }> {
   label: string;
   icon: ReactNode;
   tags: T[];
@@ -13,14 +13,9 @@ interface EagleTagConditionPickerProps<T extends EagleTagSearchSource> {
   onChange: (tagIds: string[]) => void;
 }
 
-export function EagleTagConditionPicker<T extends EagleTagSearchSource>({
-  label,
-  icon,
-  tags,
-  selectedTagIds,
-  emptyText,
-  onChange,
-}: EagleTagConditionPickerProps<T>) {
+export function EagleTagConditionPicker<
+  T extends EagleTagSearchSource & { color?: string | null },
+>({ label, icon, tags, selectedTagIds, emptyText, onChange }: EagleTagConditionPickerProps<T>) {
   const [query, setQuery] = useState('');
   const searchLabel = label.startsWith('AI ') ? `搜索 ${label}` : `搜索${label}`;
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags]);
@@ -89,10 +84,10 @@ export function EagleTagConditionPicker<T extends EagleTagSearchSource>({
                 checked={selectedTagIds.includes(tag.id)}
                 onChange={() => toggleTag(tag.id)}
               />
-              {'color' in tag && (
+              {tag.color !== undefined && (
                 <span
                   className={styles.color}
-                  style={tag.color ? { background: String(tag.color) } : undefined}
+                  style={tag.color ? { background: tag.color } : undefined}
                 />
               )}
               <span className={styles.tagName}>{tag.name}</span>

@@ -1142,7 +1142,7 @@ describe('SekerEaglePage', () => {
   it('opens the smart-folder creator and saves its filter definition', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: '新建智能文件夹' }));
-    const dialog = screen.getByRole('dialog', { name: '新建智能文件夹' });
+    expect(screen.getByRole('dialog', { name: '新建智能文件夹' })).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '智能文件夹名称' }), {
       target: { value: '猫头鹰精选' },
     });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   IconArrowLeft,
   IconCheck,
@@ -62,6 +62,7 @@ export function AccountHome({
   const [tokenName, setTokenName] = useState('Eagle 导入器');
   const [expiresInDays, setExpiresInDays] = useState(30);
   const [createdToken, setCreatedToken] = useState<CreatedToken | null>(null);
+  const createdTokenInputRef = useRef<HTMLInputElement>(null);
   const [creating, setCreating] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -117,7 +118,8 @@ export function AccountHome({
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2_000);
     } catch {
-      setTokenError('无法自动复制，请手动选择令牌文本。');
+      createdTokenInputRef.current?.focus();
+      setTokenError('无法自动复制，已选中完整令牌，请手动复制。');
     }
   }
 
@@ -250,13 +252,20 @@ export function AccountHome({
             </form>
 
             {createdToken ? (
-              <div className="token-reveal" role="status">
+              <div className="token-reveal">
                 <div>
                   <strong>请立即保存，令牌只显示这一次</strong>
                   <p>关闭或离开此页面后，将无法再次查看完整令牌。</p>
                 </div>
                 <div className="token-value">
-                  <code>{createdToken.token}</code>
+                  <input
+                    ref={createdTokenInputRef}
+                    aria-label="新创建的令牌"
+                    readOnly
+                    spellCheck={false}
+                    value={createdToken.token}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
                   <button type="button" onClick={() => void copyCreatedToken()}>
                     {copied ? <IconCheck size={17} /> : <IconCopy size={17} />}
                     {copied ? '已复制' : '复制'}

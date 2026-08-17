@@ -81,9 +81,13 @@ const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
 function readThumbnailSize(): number {
   try {
-    const value = JSON.parse(
+    const preferences: unknown = JSON.parse(
       window.localStorage.getItem(EAGLE_PREFERENCES_KEY) ?? '{}',
-    ).thumbnailSize;
+    );
+    const value =
+      typeof preferences === 'object' && preferences !== null && 'thumbnailSize' in preferences
+        ? preferences.thumbnailSize
+        : undefined;
     return typeof value === 'number' && value >= 140 && value <= 320
       ? value
       : DEFAULT_THUMBNAIL_SIZE;
