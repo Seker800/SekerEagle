@@ -1,3 +1,5 @@
+import { fetchWithBrowserSession } from './api-client';
+
 export interface EagleRendition {
   id: string;
   kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
@@ -169,9 +171,8 @@ export type EagleSmartFolderFilters = Omit<
 };
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+  const response = await fetchWithBrowserSession(`/api${path}`, {
     ...init,
-    credentials: 'include',
     headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
   });
   if (!response.ok) {

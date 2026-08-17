@@ -1,3 +1,5 @@
+import { fetchWithBrowserSession } from './api-client';
+
 export type EagleProcessingLane = 'INTERACTIVE' | 'BACKGROUND' | 'MAINTENANCE';
 export type EagleProcessingStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type EagleProcessingMode = 'ALWAYS' | 'NIGHT' | 'MANUAL';
@@ -47,9 +49,8 @@ export interface EagleProcessingJob {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api/admin/eagle-processing/${path}`, {
+  const response = await fetchWithBrowserSession(`/api/admin/eagle-processing/${path}`, {
     ...init,
-    credentials: 'include',
     headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
   });
   if (!response.ok) {
