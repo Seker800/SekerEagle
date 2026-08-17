@@ -30,9 +30,10 @@ export interface SnapshotHeader {
 
 export interface SnapshotItem {
   sourceItemId: string;
-  sourcePath: string;
-  contentSha256: string;
+  sourcePath?: string;
+  contentSha256?: string;
   size: number;
+  isDeleted?: boolean;
   [key: string]: unknown;
 }
 
@@ -87,7 +88,7 @@ export async function openMigrationSnapshot(
     if (itemPaths.has(item.sourceItemId)) {
       throw new SnapshotIntegrityError(`迁移快照包含重复 sourceItemId：${item.sourceItemId}`);
     }
-    itemPaths.set(item.sourceItemId, item.sourcePath);
+    if (item.sourcePath) itemPaths.set(item.sourceItemId, item.sourcePath);
     itemCount += 1;
     byteSize += item.size;
   }
@@ -145,7 +146,7 @@ async function* iterateItemsFile(
         throw new SnapshotIntegrityError(`items.ndjson 第 ${lineNumber} 行不是有效 JSON。`);
       }
       const item = parseItem(value, lineNumber);
-      await assertSafeSourcePath(libraryRoot, item.sourcePath);
+      if (item.sourcePath) await assertSafeSourcePath(libraryRoot, item.sourcePath);
       yield item;
     }
   } finally {
@@ -224,13 +225,18 @@ function parseItem(value: unknown, lineNumber: number): SnapshotItem {
   const sourceItemId = String(value.sourceItemId ?? '');
   const sourcePath = String(value.sourcePath ?? '');
   const contentSha256 = String(value.contentSha256 ?? '').toLowerCase();
+  const isDeleted = value.isDeleted === true;
   if (!sourceItemId || sourceItemId.length > 255) throw new SnapshotIntegrityError('sourceItemId 无效。');
-  if (!/^[a-f0-9]{64}$/.test(contentSha256)) throw new SnapshotIntegrityError('contentSha256 无效。');
+  if (!isDeleted && !sourcePath) throw new SnapshotIntegrityError('sourcePath 缺失。');
+  if (!isDeleted && !/^[a-f0-9]{64}$/.test(contentSha256)) {
+    throw new SnapshotIntegrityError('contentSha256 无效。');
+  }
   return {
     ...value,
     sourceItemId,
-    sourcePath,
-    contentSha256,
+    ...(sourcePath ? { sourcePath } : {}),
+    ...(contentSha256 ? { contentSha256 } : {}),
+    isDeleted,
     size: requireSafeNonNegativeInteger(value.size, 'size'),
   };
 }

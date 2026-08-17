@@ -26,6 +26,12 @@ async function exportMigrationSnapshot(scan, { outputRoot, migrationId }) {
       for await (const rawItem of scan.iterateItems()) {
         const sourceItemId = String(rawItem?.sourceItemId || '');
         if (!sourceItemId || sourceItemId.length > 255) throw new Error('sourceItemId 无效。');
+        if (rawItem.isDeleted) {
+          await itemsHandle.write(`${JSON.stringify(rawItem)}\n`);
+          itemCount += 1;
+          byteSize += Number(rawItem.size);
+          continue;
+        }
         const source = await scan.sourceFiles.get(sourceItemId);
         if (!source?.filePath) throw new Error(`迁移项 ${sourceItemId} 缺少源文件。`);
         const sourcePath = await assertSafeSourcePath(libraryRoot, source.filePath);
@@ -160,4 +166,3 @@ function assertMigrationId(value) {
 }
 
 module.exports = { FORMAT_VERSION, exportMigrationSnapshot, snapshotIdentityHash };
-
