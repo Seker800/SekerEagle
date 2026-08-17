@@ -5,6 +5,7 @@ import { EagleController } from './eagle.controller';
 import { EagleImportController } from './eagle-import.controller';
 import { EagleImportService } from './eagle-import.service';
 import { EagleMediaService } from './eagle-media.service';
+import { EagleMaintenanceService } from './eagle-maintenance.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleProcessingController } from './eagle-processing.controller';
 import { EagleProcessingService } from './eagle-processing.service';
@@ -30,6 +31,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
   providers: [
     EagleService,
     EagleMediaService,
+    EagleMaintenanceService,
     EagleMediaCapabilityService,
     EagleUploadService,
     EagleUploadRecoveryService,
