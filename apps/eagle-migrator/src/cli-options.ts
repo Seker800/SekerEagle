@@ -57,13 +57,6 @@ function normalizeServerUrl(value: string): string {
   const url = new URL(value);
   if (url.protocol !== 'http:' && url.protocol !== 'https:')
     throw new Error('服务器必须使用 HTTP(S)。');
-  if (url.protocol === 'http:' && !isLoopbackHost(url.hostname)) {
-    throw new Error('远程服务器必须使用 HTTPS；HTTP 只允许 localhost 或 loopback。');
-  }
   if (url.username || url.password) throw new Error('服务器 URL 不得包含凭据。');
   return url.toString().replace(/\/$/, '');
-}
-
-function isLoopbackHost(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
