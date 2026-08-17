@@ -12,18 +12,23 @@ function isRecord(value) {
 }
 
 function orderedEntries(entries) {
-  return Object.fromEntries(Object.entries(entries).sort(([left], [right]) => left.localeCompare(right)));
+  return Object.fromEntries(
+    Object.entries(entries).sort(([left], [right]) => left.localeCompare(right)),
+  );
 }
 
 function checksum(entries) {
-  return crypto.createHash('sha256').update(JSON.stringify(orderedEntries(entries))).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify(orderedEntries(entries)))
+    .digest('hex');
 }
 
 class HashCacheStore {
-  constructor(directory, {
-    maxLoadedShards = DEFAULT_MAX_LOADED_SHARDS,
-    directoryName = 'hash-cache-v2',
-  } = {}) {
+  constructor(
+    directory,
+    { maxLoadedShards = DEFAULT_MAX_LOADED_SHARDS, directoryName = 'hash-cache-v2' } = {},
+  ) {
     this.directory = path.join(directory, directoryName);
     this.markerPath = path.join(this.directory, 'migration.json');
     this.maxLoadedShards = Math.max(1, Math.trunc(maxLoadedShards));
@@ -85,7 +90,10 @@ class HashCacheStore {
       if (isRecord(value)) await this.set(sourceItemId, value);
     }
     await this.flush();
-    await this.atomicWrite(this.markerPath, { version: CACHE_VERSION, migratedAt: new Date().toISOString() });
+    await this.atomicWrite(this.markerPath, {
+      version: CACHE_VERSION,
+      migratedAt: new Date().toISOString(),
+    });
   }
 
   async loadShard(name) {
@@ -107,7 +115,11 @@ class HashCacheStore {
     let entries = {};
     try {
       const parsed = JSON.parse(await fs.readFile(filePath, 'utf8'));
-      if (parsed?.version !== CACHE_VERSION || !isRecord(parsed.entries) || parsed.checksum !== checksum(parsed.entries)) {
+      if (
+        parsed?.version !== CACHE_VERSION ||
+        !isRecord(parsed.entries) ||
+        parsed.checksum !== checksum(parsed.entries)
+      ) {
         throw new SyntaxError('缓存分片校验失败。');
       }
       entries = parsed.entries;
@@ -153,4 +165,3 @@ class HashCacheStore {
 }
 
 module.exports = { CACHE_VERSION, HashCacheStore };
-

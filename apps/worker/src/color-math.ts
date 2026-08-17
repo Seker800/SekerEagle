@@ -23,4 +23,3 @@ export function rgbToLab(red: number, green: number, blue: number): LabColor {
 export function colorDistance(left: LabColor, right: LabColor): number {
   return Math.hypot(left.labL - right.labL, left.labA - right.labA, left.labB - right.labB);
 }
-

@@ -68,14 +68,36 @@ export class EagleImportItemDto {
 export class EagleImportManifestChunkDto {
   @Type(() => Number) @IsInt() @Min(2) @Max(2) manifestVersion!: number;
   @IsString() @MinLength(1) @MaxLength(128) chunkKey!: string;
-  @Type(() => EagleImportFolderDto) @ValidateNested({ each: true }) @IsArray() @ArrayMaxSize(2_000) folders!: EagleImportFolderDto[];
-  @Type(() => EagleImportTagDto) @ValidateNested({ each: true }) @IsArray() @ArrayMaxSize(2_000) tags!: EagleImportTagDto[];
-  @Type(() => EagleImportTagGroupDto) @ValidateNested({ each: true }) @IsArray() @ArrayMaxSize(500) tagGroups!: EagleImportTagGroupDto[];
-  @Type(() => EagleImportItemDto) @ValidateNested({ each: true }) @IsArray() @ArrayMaxSize(500) items!: EagleImportItemDto[];
+  @Type(() => EagleImportFolderDto)
+  @ValidateNested({ each: true })
+  @IsArray()
+  @ArrayMaxSize(2_000)
+  folders!: EagleImportFolderDto[];
+  @Type(() => EagleImportTagDto)
+  @ValidateNested({ each: true })
+  @IsArray()
+  @ArrayMaxSize(2_000)
+  tags!: EagleImportTagDto[];
+  @Type(() => EagleImportTagGroupDto)
+  @ValidateNested({ each: true })
+  @IsArray()
+  @ArrayMaxSize(500)
+  tagGroups!: EagleImportTagGroupDto[];
+  @Type(() => EagleImportItemDto)
+  @ValidateNested({ each: true })
+  @IsArray()
+  @ArrayMaxSize(500)
+  items!: EagleImportItemDto[];
 }
 
 export class ListEagleImportItemsDto {
-  @ApiPropertyOptional({ maximum: 100 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 100;
+  @ApiPropertyOptional({ maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 100;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
 }
@@ -83,7 +105,13 @@ export class ListEagleImportItemsDto {
 export class ListEagleImportRunsDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) externalLibraryId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
-  @ApiPropertyOptional({ maximum: 100 }) @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) limit = 100;
+  @ApiPropertyOptional({ maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 100;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
 }
 

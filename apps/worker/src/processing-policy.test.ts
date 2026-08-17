@@ -46,4 +46,3 @@ test('background scheduling supports always, manual, daytime and cross-midnight 
     false,
   );
 });
-

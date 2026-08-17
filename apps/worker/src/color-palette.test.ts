@@ -52,4 +52,3 @@ test('merges perceptually close colors and drops tiny noise clusters', () => {
   assert.match(palette[0]!.hex, /^#c[89a-f]/);
   assert.ok(palette[0]!.weight > 0.98);
 });
-

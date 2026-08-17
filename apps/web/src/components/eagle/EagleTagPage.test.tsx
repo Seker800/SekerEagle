@@ -259,4 +259,3 @@ describe('EagleTagPage', () => {
     expect(screen.getByRole('button', { name: /AI标签 猫头鹰/ })).toBeInTheDocument();
   });
 });
-

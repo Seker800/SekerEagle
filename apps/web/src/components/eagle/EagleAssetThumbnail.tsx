@@ -49,8 +49,7 @@ export function EagleAssetThumbnail({
   const settleRef = useRef<(() => void) | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
-  const source =
-    urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
+  const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
 
   const clearRetryTimer = () => {
     if (retryTimerRef.current === null) return;
@@ -121,10 +120,13 @@ export function EagleAssetThumbnail({
       setFailed(true);
       return;
     }
-    retryTimerRef.current = window.setTimeout(() => {
-      retryTimerRef.current = null;
-      setAttempt(nextAttempt);
-    }, retryDelayMs(asset.id, nextAttempt));
+    retryTimerRef.current = window.setTimeout(
+      () => {
+        retryTimerRef.current = null;
+        setAttempt(nextAttempt);
+      },
+      retryDelayMs(asset.id, nextAttempt),
+    );
   };
 
   const retry = () => {

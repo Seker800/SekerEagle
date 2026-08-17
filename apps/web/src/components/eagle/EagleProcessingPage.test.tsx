@@ -85,4 +85,3 @@ describe('EagleProcessingPage', () => {
     await waitFor(() => expect(api.fetchEagleProcessingSummary).toHaveBeenCalledTimes(2));
   });
 });
-

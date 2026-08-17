@@ -13,4 +13,3 @@ test('parseRangeHeader still rejects malformed and multiple ranges', () => {
   assert.throws(() => parseRangeHeader('bytes=0-10,20-30'));
   assert.throws(() => parseRangeHeader('items=0-10'));
 });
-

@@ -22,10 +22,13 @@ describe('buildEagleMasonryLayout', () => {
   });
 
   it('uses deterministic single-column positions at narrow widths', () => {
-    const layout = buildEagleMasonryLayout([
-      { id: 'one', width: 800, height: 400 },
-      { id: 'two', width: 400, height: 800 },
-    ], 180);
+    const layout = buildEagleMasonryLayout(
+      [
+        { id: 'one', width: 800, height: 400 },
+        { id: 'two', width: 400, height: 800 },
+      ],
+      180,
+    );
 
     expect(layout.columns).toBe(1);
     expect(layout.items[0]).toMatchObject({ id: 'one', column: 0, left: 0, top: 0 });
@@ -33,9 +36,9 @@ describe('buildEagleMasonryLayout', () => {
   });
 
   it('sizes every card to the image preview without a metadata row', () => {
-    const layout = buildEagleMasonryLayout([
-      { id: 'square', width: 800, height: 800 },
-    ], 210, { targetCardWidth: 210 });
+    const layout = buildEagleMasonryLayout([{ id: 'square', width: 800, height: 800 }], 210, {
+      targetCardWidth: 210,
+    });
 
     expect(layout.items[0]).toMatchObject({ width: 210, height: 210, previewHeight: 208 });
     expect(layout.height).toBe(210);
@@ -61,32 +64,38 @@ describe('buildEagleMasonryLayout', () => {
   });
 
   it('fits every card inside the narrower width left by the inspector', () => {
-    const layout = buildEagleMasonryLayout([
-      { id: 'one', width: 800, height: 600 },
-      { id: 'two', width: 600, height: 800 },
-      { id: 'three', width: 1200, height: 600 },
-    ], 480);
+    const layout = buildEagleMasonryLayout(
+      [
+        { id: 'one', width: 800, height: 600 },
+        { id: 'two', width: 600, height: 800 },
+        { id: 'three', width: 1200, height: 600 },
+      ],
+      480,
+    );
 
     expect(layout.columns).toBe(3);
     expect(Math.max(...layout.items.map((item) => item.left + item.width))).toBeCloseTo(480);
   });
 
   it('caps oversized thumbnail preferences in a compact library pane', () => {
-    const layout = buildEagleMasonryLayout([
-      { id: 'one', width: 800, height: 600 },
-      { id: 'two', width: 600, height: 800 },
-    ], 450, { targetCardWidth: 320 });
+    const layout = buildEagleMasonryLayout(
+      [
+        { id: 'one', width: 800, height: 600 },
+        { id: 'two', width: 600, height: 800 },
+      ],
+      450,
+      { targetCardWidth: 320 },
+    );
 
     expect(layout.columns).toBe(2);
   });
 
   it('keeps column assignments stable across subpixel container width noise', () => {
-    const assets = [1.158224, 0.579603, 4.127633, 0.204057, 1.729095]
-      .map((ratio, index) => ({
-        id: `asset-${index}`,
-        width: 1_000_000,
-        height: Math.round(1_000_000 * ratio),
-      }));
+    const assets = [1.158224, 0.579603, 4.127633, 0.204057, 1.729095].map((ratio, index) => ({
+      id: `asset-${index}`,
+      width: 1_000_000,
+      height: Math.round(1_000_000 * ratio),
+    }));
 
     const beforeNoise = buildEagleMasonryLayout(assets, 657.45);
     const afterNoise = buildEagleMasonryLayout(assets, 657.55);
@@ -98,4 +107,3 @@ describe('buildEagleMasonryLayout', () => {
     );
   });
 });
-

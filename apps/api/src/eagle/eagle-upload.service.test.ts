@@ -26,7 +26,12 @@ test('lists uploaded multipart parts for resumable clients', async () => {
       count: async () => 1,
     },
   };
-  const service = new EagleUploadService(prisma as never, storage as never, {} as never, {} as never);
+  const service = new EagleUploadService(
+    prisma as never,
+    storage as never,
+    {} as never,
+    {} as never,
+  );
 
   assert.deepEqual(await service.listParts(ownerId, sessionId), {
     uploadSessionId: sessionId,
@@ -100,7 +105,10 @@ test('completion preserves an assembled object for recovery when DB finalization
     /database unavailable/,
   );
 
-  assert.equal(updates.some((data) => data.status === 'ASSEMBLED'), true);
+  assert.equal(
+    updates.some((data) => data.status === 'ASSEMBLED'),
+    true,
+  );
   assert.deepEqual(updates.at(-1), {
     status: 'FAILED',
     finalizationAttempts: { increment: 1 },
@@ -146,7 +154,11 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
     {} as never,
     {
       inspect: async () => ({
-        sha256: 'a'.repeat(64), format: 'jpeg', width: 1, height: 1, durationMs: null,
+        sha256: 'a'.repeat(64),
+        format: 'jpeg',
+        width: 1,
+        height: 1,
+        durationMs: null,
       }),
     } as never,
   );
@@ -208,7 +220,11 @@ test('content replacement preserves the logical asset id and advances its media 
     {} as never,
     {
       inspect: async () => ({
-        sha256: 'a'.repeat(64), format: 'jpeg', width: 10, height: 20, durationMs: null,
+        sha256: 'a'.repeat(64),
+        format: 'jpeg',
+        width: 10,
+        height: 20,
+        durationMs: null,
       }),
     } as never,
   );

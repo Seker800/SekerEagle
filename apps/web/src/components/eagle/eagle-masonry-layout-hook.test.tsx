@@ -29,7 +29,9 @@ function LayoutHarness() {
 
   return (
     <>
-      <button type="button" onClick={() => setVisible((current) => !current)}>切换页面</button>
+      <button type="button" onClick={() => setVisible((current) => !current)}>
+        切换页面
+      </button>
       <output aria-label="瀑布流列数">{layout.columns}</output>
       <output aria-label="瀑布流卡片宽度">{layout.items[0]?.width}</output>
       {visible && <div ref={containerRef} />}
@@ -73,4 +75,3 @@ describe('useEagleMasonryLayout', () => {
     expect(screen.getByLabelText('瀑布流卡片宽度')).toHaveTextContent(stableWidth ?? '');
   });
 });
-

@@ -7,8 +7,14 @@ const path = require('node:path');
 const { clampText, chunksOf } = require('./utils');
 
 const MIME_BY_EXTENSION = Object.freeze({
-  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
-  heic: 'image/heic', heif: 'image/heif', mp4: 'video/mp4',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  heic: 'image/heic',
+  heif: 'image/heif',
+  mp4: 'video/mp4',
 });
 
 const MAX_UNREADABLE_ITEM_DETAILS = 20;
@@ -52,7 +58,9 @@ function dedupeDefinitions(values, identityOf) {
     if (JSON.stringify(value) < JSON.stringify(prior)) byIdentity.set(identity, value);
   }
   return {
-    values: [...byIdentity.values()].sort((left, right) => identityOf(left).localeCompare(identityOf(right))),
+    values: [...byIdentity.values()].sort((left, right) =>
+      identityOf(left).localeCompare(identityOf(right)),
+    ),
     duplicateCount,
   };
 }
@@ -89,7 +97,9 @@ function normalizeTagsWithDiagnostics(rawTags, groups) {
 
   const candidatesByIdentity = new Map();
   for (const tag of values) {
-    const name = clampText(typeof tag === 'string' ? tag : tag.name, 64).normalize('NFKC').trim();
+    const name = clampText(typeof tag === 'string' ? tag : tag.name, 64)
+      .normalize('NFKC')
+      .trim();
     const identity = canonicalTagIdentity(name);
     if (!identity) continue;
     const ownGroups = Array.isArray(tag?.groups)
@@ -160,12 +170,17 @@ function normalizeItemTagNames(rawNames, displayNameByIdentity) {
 }
 
 function normalizeTagGroups(groups) {
-  return dedupeDefinitions((groups || []).map((group) => ({
-    sourceId: clampText(group.id, 255),
-    name: clampText(group.name, 64) || '未命名标签组',
-    color: clampText(group.color, 32) || null,
-    description: clampText(group.description, 500) || null,
-  })).filter((group) => group.sourceId), (group) => group.sourceId).values;
+  return dedupeDefinitions(
+    (groups || [])
+      .map((group) => ({
+        sourceId: clampText(group.id, 255),
+        name: clampText(group.name, 64) || '未命名标签组',
+        color: clampText(group.color, 32) || null,
+        description: clampText(group.description, 500) || null,
+      }))
+      .filter((group) => group.sourceId),
+    (group) => group.sourceId,
+  ).values;
 }
 
 function buildManifestMetadata(
@@ -185,7 +200,9 @@ function buildManifestMetadata(
     annotation: clampText(item.annotation, 10000),
     sourceUrl: clampText(item.url, 2048),
     tagNames: normalizeItemTagNames(item.tags, displayNameByTagIdentity),
-    folderIds: [...new Set((item.folders || []).map((value) => clampText(value, 255)).filter(Boolean))]
+    folderIds: [
+      ...new Set((item.folders || []).map((value) => clampText(value, 255)).filter(Boolean)),
+    ]
       .sort()
       .slice(0, 100),
   };
@@ -200,7 +217,10 @@ async function sha256File(filePath, onBytes) {
   const hash = crypto.createHash('sha256');
   await new Promise((resolve, reject) => {
     const stream = fs.createReadStream(filePath, { highWaterMark: 1024 * 1024 });
-    stream.on('data', (chunk) => { hash.update(chunk); if (onBytes) onBytes(chunk.length); });
+    stream.on('data', (chunk) => {
+      hash.update(chunk);
+      if (onBytes) onBytes(chunk.length);
+    });
     stream.on('error', reject);
     stream.on('end', resolve);
   });
@@ -243,14 +263,21 @@ async function scanEagleLibrary({
   const identifiers = [...new Set(rawIdentifiers)];
   if (hashCacheStore?.shardNameFor) {
     identifiers.sort((left, right) => {
-      const shardOrder = hashCacheStore.shardNameFor(left).localeCompare(hashCacheStore.shardNameFor(right));
+      const shardOrder = hashCacheStore
+        .shardNameFor(left)
+        .localeCompare(hashCacheStore.shardNameFor(right));
       return shardOrder || left.localeCompare(right);
     });
   }
   const [folderTree, rawTags, rawTagGroups] = await Promise.all([
-    eagleApi.folder.getAll(), eagleApi.tag.get(), eagleApi.tagGroup.get(),
+    eagleApi.folder.getAll(),
+    eagleApi.tag.get(),
+    eagleApi.tagGroup.get(),
   ]);
-  const folderNormalization = dedupeDefinitions(flattenFolders(folderTree), (folder) => folder.sourceId);
+  const folderNormalization = dedupeDefinitions(
+    flattenFolders(folderTree),
+    (folder) => folder.sourceId,
+  );
   const folders = folderNormalization.values;
   const knownFolderIds = new Set(folders.map((folder) => folder.sourceId));
   const tagGroups = normalizeTagGroups(rawTagGroups);
@@ -265,7 +292,8 @@ async function scanEagleLibrary({
   let processed = 0;
   let unreadableItemCount = 0;
   const dataWarnings = [];
-  let dataWarningCount = rawIdentifiers.length - identifiers.length + folderNormalization.duplicateCount;
+  let dataWarningCount =
+    rawIdentifiers.length - identifiers.length + folderNormalization.duplicateCount;
   const seenSourceItemIds = new Set();
   const boundedHashConcurrency = Number.isSafeInteger(hashConcurrency)
     ? Math.min(4, Math.max(1, hashConcurrency))
@@ -279,12 +307,18 @@ async function scanEagleLibrary({
   for (let batchIndex = 0; batchIndex < itemBatches.length; batchIndex += 1) {
     if (cancelled()) throw new Error('操作已取消。');
     const requestedIds = itemBatches[batchIndex];
-    const sourceItems = await eagleApi.item.getByIds(requestedIds) || [];
-    const returnedIds = new Set((sourceItems || []).map((item) => clampText(item?.id, 255)).filter(Boolean));
+    const sourceItems = (await eagleApi.item.getByIds(requestedIds)) || [];
+    const returnedIds = new Set(
+      (sourceItems || []).map((item) => clampText(item?.id, 255)).filter(Boolean),
+    );
     for (const requestedId of requestedIds) {
       if (!returnedIds.has(requestedId)) warnData(`Eagle 未返回素材记录：${requestedId}`);
     }
-    onProgress({ phase: 'read', current: Math.min((batchIndex + 1) * 100, identifiers.length), total: identifiers.length });
+    onProgress({
+      phase: 'read',
+      current: Math.min((batchIndex + 1) * 100, identifiers.length),
+      total: identifiers.length,
+    });
     const inspections = await mapConcurrentOrdered(
       sourceItems,
       boundedHashConcurrency,
@@ -339,10 +373,13 @@ async function scanEagleLibrary({
       seenSourceItemIds.add(sourceItemId);
       const filePath = item.filePath || '';
       const isDeleted = Boolean(item.isDeleted);
-      const extension = clampText((item.ext || path.extname(filePath)).replace(/^\./, '').toLowerCase(), 16) || 'unknown';
+      const extension =
+        clampText((item.ext || path.extname(filePath)).replace(/^\./, '').toLowerCase(), 16) ||
+        'unknown';
       const mimeType = MIME_BY_EXTENSION[extension] || 'application/octet-stream';
-      const originalFileName = clampText(path.basename(filePath), 255)
-        || clampText(`${sourceItemId}.${extension}`, 255, 'unknown');
+      const originalFileName =
+        clampText(path.basename(filePath), 255) ||
+        clampText(`${sourceItemId}.${extension}`, 255, 'unknown');
       const metadata = buildManifestMetadata(item, {
         sourceItemId,
         originalFileName,
@@ -350,14 +387,19 @@ async function scanEagleLibrary({
         mimeType,
         displayNameByTagIdentity: tagNormalization.displayNameByIdentity,
       });
-      const missingFolderIds = metadata.folderIds.filter((folderId) => !knownFolderIds.has(folderId));
+      const missingFolderIds = metadata.folderIds.filter(
+        (folderId) => !knownFolderIds.has(folderId),
+      );
       if (missingFolderIds.length) {
         metadata.folderIds = metadata.folderIds.filter((folderId) => knownFolderIds.has(folderId));
-        warnData(`素材 ${metadata.name || sourceItemId} 已忽略 ${missingFolderIds.length} 个失效文件夹引用。`);
+        warnData(
+          `素材 ${metadata.name || sourceItemId} 已忽略 ${missingFolderIds.length} 个失效文件夹引用。`,
+        );
       }
       if (isDeleted) {
         const rawDeletedSize = Math.trunc(Number(item.size));
-        const deletedSize = Number.isSafeInteger(rawDeletedSize) && rawDeletedSize > 0 ? rawDeletedSize : 1;
+        const deletedSize =
+          Number.isSafeInteger(rawDeletedSize) && rawDeletedSize > 0 ? rawDeletedSize : 1;
         const manifestItem = { ...metadata, size: deletedSize, isDeleted: true };
         if (workspace) await workspace.append(manifestItem);
         else items.push(manifestItem);
@@ -370,7 +412,12 @@ async function scanEagleLibrary({
       if (inspection.failure) {
         unreadableItemCount += 1;
         if (unreadableItems.length < MAX_UNREADABLE_ITEM_DETAILS) {
-          unreadableItems.push({ sourceItemId, name: metadata.name, filePath, ...inspection.failure });
+          unreadableItems.push({
+            sourceItemId,
+            name: metadata.name,
+            filePath,
+            ...inspection.failure,
+          });
         }
         processed += 1;
         onProgress({ phase: 'hash', current: processed, total: identifiers.length });
@@ -381,7 +428,9 @@ async function scanEagleLibrary({
         unreadableItemCount += 1;
         if (unreadableItems.length < MAX_UNREADABLE_ITEM_DETAILS) {
           unreadableItems.push({
-            sourceItemId, name: metadata.name, filePath,
+            sourceItemId,
+            name: metadata.name,
+            filePath,
             code: stat.isFile() ? 'EMPTY_FILE' : 'NOT_A_FILE',
             message: stat.isFile() ? '原文件为空' : '原文件路径不是普通文件',
           });
@@ -417,11 +466,16 @@ async function scanEagleLibrary({
       path: path.resolve(library.path),
       sourceModifiedAt: new Date(timestamp(library.modificationTime, Date.now())).toISOString(),
     },
-    folders, tags, tagGroups, sourceFiles,
-    unreadableItemCount, unreadableItems,
+    folders,
+    tags,
+    tagGroups,
+    sourceFiles,
+    unreadableItemCount,
+    unreadableItems,
     mergedTagCount: tagNormalization.mergedTagCount,
     mergedTagDetails: tagNormalization.mergedTagDetails,
-    dataWarningCount, dataWarnings,
+    dataWarningCount,
+    dataWarnings,
     byteSize,
   };
   if (workspace) {
@@ -437,7 +491,11 @@ async function scanEagleLibrary({
 }
 
 module.exports = {
-  MIME_BY_EXTENSION, flattenFolders, mapConcurrentOrdered, normalizeTagGroups, normalizeTags,
-  scanEagleLibrary, sha256File,
+  MIME_BY_EXTENSION,
+  flattenFolders,
+  mapConcurrentOrdered,
+  normalizeTagGroups,
+  normalizeTags,
+  scanEagleLibrary,
+  sha256File,
 };
-

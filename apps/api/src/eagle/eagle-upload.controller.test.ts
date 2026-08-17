@@ -19,11 +19,9 @@ test('completed uploads converge their bound original import item', async () => 
     } as never,
   );
 
-  const result = await controller.complete(
-    { sub: ownerId } as never,
-    'session-1',
-    { parts: [{ partNumber: 1, etag: 'etag-1' }] },
-  );
+  const result = await controller.complete({ sub: ownerId } as never, 'session-1', {
+    parts: [{ partNumber: 1, etag: 'etag-1' }],
+  });
 
   assert.equal(result.assetId, 'asset-1');
   assert.deepEqual(finalized, [[ownerId, 'session-1', 'asset-1']]);

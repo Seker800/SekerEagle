@@ -30,4 +30,3 @@ export interface SekerEagleIngestionCommand {
 export interface SekerEagleIngestionPort<TTransaction = unknown> {
   applyMetadata(command: SekerEagleIngestionCommand, transaction: TTransaction): Promise<void>;
 }
-

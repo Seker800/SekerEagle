@@ -39,4 +39,3 @@ test('shared media probe rejects unsupported containers and codecs', () => {
     /H\.264/,
   );
 });
-

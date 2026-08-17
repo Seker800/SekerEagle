@@ -19,6 +19,9 @@ describe('listEagleAssetUpdates', () => {
 
     const [requestUrl, request] = fetchMock.mock.calls[0] ?? [];
     expect(requestUrl).toBe('/api/eagle/asset-updates');
-    expect(request).toMatchObject({ method: 'POST', body: JSON.stringify({ assetIds: [assetId] }) });
+    expect(request).toMatchObject({
+      method: 'POST',
+      body: JSON.stringify({ assetIds: [assetId] }),
+    });
   });
 });

@@ -14,4 +14,3 @@ describe('normalizeColorInput', () => {
     expect(() => normalizeColorInput('rgb(300, 0, 0)')).toThrow('请输入 HEX、RGB 或 HSL 颜色');
   });
 });
-

@@ -63,4 +63,3 @@ export function parseBrowserCompatibleMp4Probe(probe: MediaVideoProbe): MediaVid
     durationMs: Math.round(durationSeconds * 1_000),
   };
 }
-

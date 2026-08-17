@@ -2172,7 +2172,10 @@ function definitionValue(value: Record<string, unknown>) {
   return Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => !['id', 'ownerId', 'runId', 'createdAt', 'updatedAt'].includes(key))
-      .map(([key, nested]) => [key, Array.isArray(nested) ? [...(nested as unknown[])].sort() : nested]),
+      .map(([key, nested]) => [
+        key,
+        Array.isArray(nested) ? [...(nested as unknown[])].sort() : nested,
+      ]),
   );
 }
 

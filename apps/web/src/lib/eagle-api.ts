@@ -326,15 +326,14 @@ export async function listEagleAiTags(_token: string) {
   return api<EagleAiTag[]>('/eagle/ai-tags');
 }
 export async function listEagleSmartFolders(_token: string) {
-  const rows =
-    await api<
-      Array<
-        Omit<EagleSmartFolder, 'queryJson'> & {
-          queryJson?: EagleSmartFolder['queryJson'];
-          query?: EagleSmartFolderFilters;
-        }
-      >
-    >('/eagle/smart-folders');
+  const rows = await api<
+    Array<
+      Omit<EagleSmartFolder, 'queryJson'> & {
+        queryJson?: EagleSmartFolder['queryJson'];
+        query?: EagleSmartFolderFilters;
+      }
+    >
+  >('/eagle/smart-folders');
   return rows.map((row) => ({
     ...row,
     queryVersion: row.queryVersion ?? 1,

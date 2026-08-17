@@ -7,14 +7,22 @@ const MANIFEST_VERSION = 2;
 const MAX_JSON_BYTES = 72 * 1024;
 const MAX_CHUNK_ENTRIES = 500;
 
-function* iterateSizedChunks(kind, values, maxBytes = MAX_JSON_BYTES, maxEntries = MAX_CHUNK_ENTRIES) {
+function* iterateSizedChunks(
+  kind,
+  values,
+  maxBytes = MAX_JSON_BYTES,
+  maxEntries = MAX_CHUNK_ENTRIES,
+) {
   let current = [];
   let currentBytes = 2;
   let index = 0;
   for (const value of values) {
     const encodedBytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
     const appendedBytes = encodedBytes + (current.length ? 1 : 0);
-    if (current.length && (currentBytes + appendedBytes > maxBytes || current.length >= maxEntries)) {
+    if (
+      current.length &&
+      (currentBytes + appendedBytes > maxBytes || current.length >= maxEntries)
+    ) {
       index += 1;
       yield { kind, key: `${kind}-${String(index).padStart(5, '0')}`, entries: current };
       current = [value];
@@ -58,7 +66,10 @@ function* iterateManifestChunks(scan) {
     yield {
       manifestVersion: MANIFEST_VERSION,
       chunkKey: 'items-00001',
-      folders: [], tags: [], tagGroups: [], items: [],
+      folders: [],
+      tags: [],
+      tagGroups: [],
+      items: [],
     };
   }
 }
@@ -74,7 +85,10 @@ async function* iterateSizedChunksAsync(kind, values) {
   for await (const value of values) {
     const encodedBytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
     const appendedBytes = encodedBytes + (current.length ? 1 : 0);
-    if (current.length && (currentBytes + appendedBytes > MAX_JSON_BYTES || current.length >= MAX_CHUNK_ENTRIES)) {
+    if (
+      current.length &&
+      (currentBytes + appendedBytes > MAX_JSON_BYTES || current.length >= MAX_CHUNK_ENTRIES)
+    ) {
       index += 1;
       yield { kind, key: `${kind}-${String(index).padStart(5, '0')}`, entries: current };
       current = [value];
@@ -93,15 +107,19 @@ async function* iterateSizedChunksAsync(kind, values) {
 async function* iterateManifestChunksAsync(scan) {
   let emitted = false;
   for (const [kind, values] of [
-    ['folders', scan.folders], ['tags', scan.tags], ['tag-groups', scan.tagGroups],
+    ['folders', scan.folders],
+    ['tags', scan.tags],
+    ['tag-groups', scan.tagGroups],
   ]) {
     for (const group of iterateSizedChunks(kind, values)) {
       emitted = true;
       yield {
-        manifestVersion: MANIFEST_VERSION, chunkKey: group.key,
+        manifestVersion: MANIFEST_VERSION,
+        chunkKey: group.key,
         folders: kind === 'folders' ? group.entries : [],
         tags: kind === 'tags' ? group.entries : [],
-        tagGroups: kind === 'tag-groups' ? group.entries : [], items: [],
+        tagGroups: kind === 'tag-groups' ? group.entries : [],
+        items: [],
       };
     }
   }
@@ -109,14 +127,22 @@ async function* iterateManifestChunksAsync(scan) {
   for await (const group of iterateSizedChunksAsync('items', items)) {
     emitted = true;
     yield {
-      manifestVersion: MANIFEST_VERSION, chunkKey: group.key,
-      folders: [], tags: [], tagGroups: [], items: group.entries,
+      manifestVersion: MANIFEST_VERSION,
+      chunkKey: group.key,
+      folders: [],
+      tags: [],
+      tagGroups: [],
+      items: group.entries,
     };
   }
   if (!emitted) {
     yield {
-      manifestVersion: MANIFEST_VERSION, chunkKey: 'items-00001',
-      folders: [], tags: [], tagGroups: [], items: [],
+      manifestVersion: MANIFEST_VERSION,
+      chunkKey: 'items-00001',
+      folders: [],
+      tags: [],
+      tagGroups: [],
+      items: [],
     };
   }
 }
@@ -162,8 +188,12 @@ class ImportEngine {
     this.pauseRequested = false;
   }
 
-  cancelLocally() { this.cancelRequested = true; }
-  pauseLocally() { this.pauseRequested = true; }
+  cancelLocally() {
+    this.cancelRequested = true;
+  }
+  pauseLocally() {
+    this.pauseRequested = true;
+  }
   assertActive() {
     if (this.cancelRequested) throw new ImportCancelledError();
     if (this.pauseRequested) throw new ImportPausedError();
@@ -182,7 +212,14 @@ class ImportEngine {
       declaredItemCount: scan.itemCount ?? scan.items.length,
       declaredByteSize: scan.byteSize,
     });
-    await this.store.save({ activeRun: { runId: run.id, externalLibraryId, libraryPath: scan.library.path, phase: 'STAGING' } });
+    await this.store.save({
+      activeRun: {
+        runId: run.id,
+        externalLibraryId,
+        libraryPath: scan.library.path,
+        phase: 'STAGING',
+      },
+    });
     return this.stageAndPreflight(run, scan, externalLibraryId);
   }
 
@@ -211,9 +248,15 @@ class ImportEngine {
     }
     const preflight = await this.api.preflight(run.id);
     await this.store.save({
-      activeRun: preflight.uploadItemCount === 0
-        ? null
-        : { runId: run.id, externalLibraryId, libraryPath: scan.library.path, phase: 'PREFLIGHTED' },
+      activeRun:
+        preflight.uploadItemCount === 0
+          ? null
+          : {
+              runId: run.id,
+              externalLibraryId,
+              libraryPath: scan.library.path,
+              phase: 'PREFLIGHTED',
+            },
     });
     return { run, preflight };
   }
@@ -227,7 +270,9 @@ class ImportEngine {
     }
     const startingRun = await this.api.getRun(runId);
     const total = Math.max(startingRun.stagedItemCount || 0, 1);
-    await this.store.save({ activeRun: { ...this.store.state.activeRun, runId, phase: 'UPLOADING' } });
+    await this.store.save({
+      activeRun: { ...this.store.state.activeRun, runId, phase: 'UPLOADING' },
+    });
     let completed = 0;
     const active = new Set();
     const scheduledItemIds = new Set();
@@ -269,7 +314,11 @@ class ImportEngine {
     this.assertActive();
     const run = await this.api.getRun(runId);
     this.assertActive();
-    await this.store.save({ activeRun: ['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'].includes(run.status) ? null : { ...this.store.state.activeRun, phase: run.status } });
+    await this.store.save({
+      activeRun: ['COMPLETED', 'PARTIAL', 'FAILED', 'CANCELLED'].includes(run.status)
+        ? null
+        : { ...this.store.state.activeRun, phase: run.status },
+    });
     return run;
   }
 
@@ -290,9 +339,14 @@ class ImportEngine {
 
   async uploadItem(runId, item, source, onProgress) {
     const session = await this.api.initiateUpload(runId, item.id, {
-      fileName: source.originalFileName, mimeType: source.mimeType, size: source.size,
+      fileName: source.originalFileName,
+      mimeType: source.mimeType,
+      size: source.size,
     });
-    if (session.alreadyImported) { onProgress(1); return; }
+    if (session.alreadyImported) {
+      onProgress(1);
+      return;
+    }
     const sessionId = session.id;
     const uploaded = await this.api.getUploadedParts(sessionId);
     const existing = new Map(uploaded.parts.map((part) => [part.partNumber, part]));
@@ -305,7 +359,11 @@ class ImportEngine {
         this.assertActive();
         if (!completedParts.has(partNumber)) {
           const offset = (partNumber - 1) * partSize;
-          const bytes = await readPart(fileHandle, offset, Math.min(partSize, source.size - offset));
+          const bytes = await readPart(
+            fileHandle,
+            offset,
+            Math.min(partSize, source.size - offset),
+          );
           const response = await this.api.uploadPart(sessionId, partNumber, bytes);
           completedParts.set(partNumber, { partNumber, etag: response.etag, size: bytes.length });
         }
@@ -330,8 +388,15 @@ class ImportEngine {
 }
 
 module.exports = {
-  ImportEngine, ImportPausedError, isImportPausedError,
-  MANIFEST_VERSION, MAX_JSON_BYTES, MAX_CHUNK_ENTRIES,
-  buildManifestChunks, iterateManifestChunks, iterateSizedChunks, sizedChunks,
+  ImportEngine,
+  ImportPausedError,
+  isImportPausedError,
+  MANIFEST_VERSION,
+  MAX_JSON_BYTES,
+  MAX_CHUNK_ENTRIES,
+  buildManifestChunks,
+  iterateManifestChunks,
+  iterateSizedChunks,
+  sizedChunks,
   iterateManifestChunksAsync,
 };

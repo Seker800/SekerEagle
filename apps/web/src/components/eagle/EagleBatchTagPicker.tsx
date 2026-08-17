@@ -139,20 +139,20 @@ export function EagleBatchTagPicker({
               rowHeight={37}
               viewportHeight={420}
               renderItem={({ tag }) => (
-              <label key={tag.id} className={styles.tagOption}>
-                <input
-                  type="checkbox"
-                  aria-label={tag.name}
-                  checked={selectedTagIds.includes(tag.id)}
-                  onChange={() => toggleTag(tag.id)}
-                />
-                <span
-                  className={styles.color}
-                  style={tag.color ? { background: tag.color } : undefined}
-                />
-                <span>{tag.name}</span>
-                <small>{tag.assetCount}</small>
-              </label>
+                <label key={tag.id} className={styles.tagOption}>
+                  <input
+                    type="checkbox"
+                    aria-label={tag.name}
+                    checked={selectedTagIds.includes(tag.id)}
+                    onChange={() => toggleTag(tag.id)}
+                  />
+                  <span
+                    className={styles.color}
+                    style={tag.color ? { background: tag.color } : undefined}
+                  />
+                  <span>{tag.name}</span>
+                  <small>{tag.assetCount}</small>
+                </label>
               )}
             />
           ) : (

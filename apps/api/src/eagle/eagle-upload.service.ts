@@ -129,7 +129,11 @@ export class EagleUploadService {
         data: { completionParts: parts },
       });
       try {
-        await this.storage.completeMultipartUpload(session.objectKey, session.multipartUploadId, parts);
+        await this.storage.completeMultipartUpload(
+          session.objectKey,
+          session.multipartUploadId,
+          parts,
+        );
       } catch (error) {
         await this.storage.headObject(session.objectKey).catch(() => {
           throw error;
@@ -156,7 +160,11 @@ export class EagleUploadService {
     const parts = normalizeStoredParts(session.completionParts);
     if (session.status === 'INITIATED') {
       try {
-        await this.storage.completeMultipartUpload(session.objectKey, session.multipartUploadId, parts);
+        await this.storage.completeMultipartUpload(
+          session.objectKey,
+          session.multipartUploadId,
+          parts,
+        );
       } catch (error) {
         await this.storage.headObject(session.objectKey).catch(() => {
           throw error;
@@ -213,7 +221,8 @@ export class EagleUploadService {
         data: {
           status: 'FAILED',
           finalizationAttempts: permanent ? 10 : { increment: 1 },
-          lastError: error instanceof Error ? error.message.slice(0, 2000) : 'MEDIA_INSPECTION_FAILED',
+          lastError:
+            error instanceof Error ? error.message.slice(0, 2000) : 'MEDIA_INSPECTION_FAILED',
           objectCleanupPending: permanent,
         },
       });

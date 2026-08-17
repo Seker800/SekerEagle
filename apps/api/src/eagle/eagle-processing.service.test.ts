@@ -70,7 +70,10 @@ test('retrying a required media task restores the current asset processing lifec
   const transaction = {
     eagleAssetProcessingJob: {
       findFirst: async () => ({
-        id: 'job-1', assetId: 'asset-1', assetRevision: 4, kind: 'GENERATE_RENDITIONS',
+        id: 'job-1',
+        assetId: 'asset-1',
+        assetRevision: 4,
+        kind: 'GENERATE_RENDITIONS',
       }),
       updateMany: async () => ({ count: 1 }),
     },
@@ -82,7 +85,8 @@ test('retrying a required media task restores the current asset processing lifec
     },
   };
   const service = new EagleProcessingService({
-    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) => work(transaction),
+    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+      work(transaction),
   } as never);
 
   assert.deepEqual(await service.retry('owner-1', 'job-1'), { retried: 1 });

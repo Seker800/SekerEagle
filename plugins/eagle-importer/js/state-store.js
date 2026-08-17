@@ -78,7 +78,10 @@ class StateStore {
   async persist(state) {
     await fs.mkdir(this.directory, { recursive: true });
     const temporary = `${this.filePath}.tmp`;
-    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     await fs.rename(temporary, this.filePath);
   }
 
@@ -90,7 +93,10 @@ class StateStore {
       if (error.code !== 'ENOENT') throw error;
     }
     const temporary = `${this.legacyStateBackupPath}.tmp`;
-    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    await fs.writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    });
     await fs.rename(temporary, this.legacyStateBackupPath);
   }
 
@@ -127,4 +133,3 @@ function persistentState(state) {
 }
 
 module.exports = { StateStore };
-

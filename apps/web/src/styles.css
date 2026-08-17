@@ -1,30 +1,187 @@
-:root { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1f2937; background: #f5f7fb; }
-* { box-sizing: border-box; }
-html, body, #root { min-width: 320px; min-height: 100%; margin: 0; }
-button, input { font: inherit; }
-.auth-loading, .auth-shell { min-height: 100vh; display: grid; place-items: center; }
-.auth-card { width: min(390px, calc(100vw - 32px)); display: grid; gap: 18px; padding: 32px; border: 1px solid #e2e8f0; border-radius: 18px; background: white; box-shadow: 0 18px 50px rgb(15 23 42 / 9%); }
-.auth-card h1 { margin: 0; font-size: 26px; }
-.auth-eyebrow { margin: 0; color: #5965dc; font-weight: 700; letter-spacing: .08em; }
-.auth-card label { display: grid; gap: 7px; color: #475569; font-size: 14px; }
-.auth-card input { min-height: 42px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 9px; }
-.auth-card button { min-height: 42px; border: 0; border-radius: 9px; color: white; background: #5965dc; cursor: pointer; }
-.auth-error { margin: 0; color: #dc2626; font-size: 14px; }
-.auth-success { margin: 0; color: #15803d; font-size: 14px; }
-.standalone-eagle-shell { min-height: 100vh; }
-.account-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
-.account-card { width: min(620px, 100%); padding: 32px; border: 1px solid #e2e8f0; border-radius: 18px; background: white; box-shadow: 0 18px 50px rgb(15 23 42 / 9%); }
-.account-card h1 { margin: 6px 0 10px; }
-.account-card > p:not(.auth-eyebrow, .auth-error) { color: #64748b; line-height: 1.6; }
-.account-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-.account-actions button { min-height: 40px; padding: 0 14px; border: 1px solid #cbd5e1; border-radius: 9px; background: white; cursor: pointer; }
-.account-actions .primary-action { border-color: #5965dc; color: white; background: #5965dc; }
-.token-result { display: grid; gap: 8px; margin-top: 24px; color: #475569; font-size: 14px; }
-.token-result textarea { min-height: 112px; padding: 12px; resize: vertical; border: 1px solid #cbd5e1; border-radius: 9px; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
-.password-form { display: grid; gap: 16px; margin-top: 28px; padding-top: 26px; border-top: 1px solid #e2e8f0; }
-.account-section-heading h2 { margin: 0; font-size: 20px; }
-.account-section-heading p { margin: 6px 0 0; color: #64748b; font-size: 14px; line-height: 1.5; }
-.password-form label { display: grid; gap: 7px; color: #475569; font-size: 14px; }
-.password-form input { min-height: 42px; padding: 0 12px; border: 1px solid #cbd5e1; border-radius: 9px; }
-.password-submit { min-height: 42px; padding: 0 16px; border: 0; border-radius: 9px; color: white; background: #5965dc; cursor: pointer; justify-self: start; }
-.password-submit:disabled { cursor: wait; opacity: .65; }
+:root {
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  color: #1f2937;
+  background: #f5f7fb;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+button,
+input {
+  font: inherit;
+}
+.auth-loading,
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+}
+.auth-card {
+  width: min(390px, calc(100vw - 32px));
+  display: grid;
+  gap: 18px;
+  padding: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 18px 50px rgb(15 23 42 / 9%);
+}
+.auth-card h1 {
+  margin: 0;
+  font-size: 26px;
+}
+.auth-eyebrow {
+  margin: 0;
+  color: #5965dc;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.auth-card label {
+  display: grid;
+  gap: 7px;
+  color: #475569;
+  font-size: 14px;
+}
+.auth-card input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+}
+.auth-card button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 9px;
+  color: white;
+  background: #5965dc;
+  cursor: pointer;
+}
+.auth-error {
+  margin: 0;
+  color: #dc2626;
+  font-size: 14px;
+}
+.auth-success {
+  margin: 0;
+  color: #15803d;
+  font-size: 14px;
+}
+.standalone-eagle-shell {
+  min-height: 100vh;
+}
+.account-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.account-card {
+  width: min(620px, 100%);
+  padding: 32px;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  background: white;
+  box-shadow: 0 18px 50px rgb(15 23 42 / 9%);
+}
+.account-card h1 {
+  margin: 6px 0 10px;
+}
+.account-card > p:not(.auth-eyebrow, .auth-error) {
+  color: #64748b;
+  line-height: 1.6;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+.account-actions button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: white;
+  cursor: pointer;
+}
+.account-actions .primary-action {
+  border-color: #5965dc;
+  color: white;
+  background: #5965dc;
+}
+.token-result {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+  color: #475569;
+  font-size: 14px;
+}
+.token-result textarea {
+  min-height: 112px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font:
+    12px/1.5 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+}
+.password-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 26px;
+  border-top: 1px solid #e2e8f0;
+}
+.account-section-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.account-section-heading p {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.password-form label {
+  display: grid;
+  gap: 7px;
+  color: #475569;
+  font-size: 14px;
+}
+.password-form input {
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+}
+.password-submit {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9px;
+  color: white;
+  background: #5965dc;
+  cursor: pointer;
+  justify-self: start;
+}
+.password-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

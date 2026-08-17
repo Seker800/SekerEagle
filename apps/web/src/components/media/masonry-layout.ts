@@ -50,9 +50,10 @@ export function selectVisibleMasonryItems<T extends MasonryLayoutItem>(
   options: { scrollTop: number; viewportHeight: number; overscan: number },
 ): T[] {
   const scrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : 0;
-  const viewportHeight = Number.isFinite(options.viewportHeight) && options.viewportHeight > 0
-    ? options.viewportHeight
-    : 800;
+  const viewportHeight =
+    Number.isFinite(options.viewportHeight) && options.viewportHeight > 0
+      ? options.viewportHeight
+      : 800;
   const overscan = Number.isFinite(options.overscan) ? Math.max(0, options.overscan) : 1_200;
   const minimumTop = Math.max(0, scrollTop - overscan);
   const maximumBottom = scrollTop + viewportHeight + overscan;
@@ -82,9 +83,10 @@ export function selectVisibleMasonryItemsFromIndex<T extends MasonryLayoutItem>(
   options: { scrollTop: number; viewportHeight: number; overscan: number },
 ): T[] {
   const scrollTop = Number.isFinite(options.scrollTop) ? options.scrollTop : 0;
-  const viewportHeight = Number.isFinite(options.viewportHeight) && options.viewportHeight > 0
-    ? options.viewportHeight
-    : 800;
+  const viewportHeight =
+    Number.isFinite(options.viewportHeight) && options.viewportHeight > 0
+      ? options.viewportHeight
+      : 800;
   const overscan = Number.isFinite(options.overscan) ? Math.max(0, options.overscan) : 1_200;
   const minimumTop = Math.max(0, scrollTop - overscan);
   const maximumBottom = scrollTop + viewportHeight + overscan;

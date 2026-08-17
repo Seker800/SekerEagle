@@ -37,12 +37,7 @@ export function EagleVirtualList<T>({
   };
 
   return (
-    <div
-      ref={viewportRef}
-      className={className}
-      aria-label={ariaLabel}
-      onScroll={handleScroll}
-    >
+    <div ref={viewportRef} className={className} aria-label={ariaLabel} onScroll={handleScroll}>
       <div style={{ height: items.length * rowHeight, position: 'relative' }}>
         {items.slice(firstRow, lastRow).map((item, offset) => {
           const index = firstRow + offset;

@@ -9,4 +9,3 @@ describe('getEagleProcessingPollInterval', () => {
     expect(getEagleProcessingPollInterval('visible', 3)).toBe(30_000);
   });
 });
-

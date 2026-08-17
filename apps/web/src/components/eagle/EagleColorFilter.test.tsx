@@ -25,4 +25,3 @@ describe('EagleColorFilter', () => {
     expect(onChange).toHaveBeenLastCalledWith(undefined);
   });
 });
-

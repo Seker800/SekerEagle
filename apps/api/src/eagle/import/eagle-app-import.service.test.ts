@@ -462,12 +462,14 @@ test('retry moves only failed items back to staged and increments no upload atte
     terminalProgressAppliedAt: null,
     completedAt: null,
   });
-  assert.deepEqual(runWrites, [{
-    stagedItemCount: { increment: 1 },
-    failedItemCount: { decrement: 1 },
-    status: 'RUNNING',
-    completedAt: null,
-  }]);
+  assert.deepEqual(runWrites, [
+    {
+      stagedItemCount: { increment: 1 },
+      failedItemCount: { decrement: 1 },
+      status: 'RUNNING',
+      completedAt: null,
+    },
+  ]);
 });
 
 test('replacing a stale upload session restores the staged counter before rebinding', async () => {

@@ -215,4 +215,3 @@ describe('EagleSmartFolderDialog', () => {
     );
   });
 });
-

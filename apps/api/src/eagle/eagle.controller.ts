@@ -131,7 +131,13 @@ export class EagleController {
       response.status(304);
       return;
     }
-    setPartialContentHeaders(response, parsedRange, media.contentRange, media.contentLength, media.fullSize);
+    setPartialContentHeaders(
+      response,
+      parsedRange,
+      media.contentRange,
+      media.contentLength,
+      media.fullSize,
+    );
     response.once('close', () => {
       if (!response.writableEnded && !media.stream!.destroyed) media.stream!.destroy();
     });
@@ -179,7 +185,10 @@ export class EagleController {
 
   @Patch('assets/batch')
   @UseGuards(BrowserOriginGuard)
-  batchUpdate(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: BatchUpdateEagleAssetsDto) {
+  batchUpdate(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchUpdateEagleAssetsDto,
+  ) {
     return this.eagle.batchUpdate(principal.sub, input);
   }
 
@@ -271,7 +280,10 @@ export class EagleController {
 
   @Post(['tag-groups', 'manual-tag-groups'])
   @UseGuards(BrowserOriginGuard)
-  createTagGroup(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CreateManualTagGroupDto) {
+  createTagGroup(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: CreateManualTagGroupDto,
+  ) {
     return this.eagle.createManualTagGroup(principal.sub, input);
   }
 

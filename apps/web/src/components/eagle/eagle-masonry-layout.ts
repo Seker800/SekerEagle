@@ -102,7 +102,7 @@ export function useEagleMasonryLayout(
     const updateWidth = (width: number) => {
       const normalizedWidth = Math.round(width);
       if (normalizedWidth > 0) {
-        setContainerWidth((current) => current === normalizedWidth ? current : normalizedWidth);
+        setContainerWidth((current) => (current === normalizedWidth ? current : normalizedWidth));
       }
     };
     updateWidth(container.getBoundingClientRect().width);

@@ -31,7 +31,12 @@
           <div class="connection-grid">
             <label>
               <span>服务器</span>
-              <input id="serverUrl" type="url" placeholder="http://localhost:8180" autocomplete="url" />
+              <input
+                id="serverUrl"
+                type="url"
+                placeholder="http://localhost:8180"
+                autocomplete="url"
+              />
             </label>
             <label>
               <span>个人访问令牌</span>
@@ -41,7 +46,10 @@
               <button id="connectButton" class="secondary">连接</button>
             </div>
           </div>
-          <p class="remember-row"><span>需要 import:read、import:write、asset:write scope</span><small>退出 Eagle 后令牌自动清除</small></p>
+          <p class="remember-row">
+            <span>需要 import:read、import:write、asset:write scope</span
+            ><small>退出 Eagle 后令牌自动清除</small>
+          </p>
         </section>
 
         <div class="workspace-grid">
@@ -73,14 +81,20 @@
             <div class="settings-list">
               <label class="setting-row">
                 <input id="autoReconnect" type="checkbox" checked />
-                <span><strong>断线自动重连</strong><small>网络恢复后按退避策略重新连接</small></span>
+                <span
+                  ><strong>断线自动重连</strong><small>网络恢复后按退避策略重新连接</small></span
+                >
               </label>
               <label class="setting-row">
                 <input id="autoSyncEnabled" type="checkbox" />
-                <span><strong>每天深夜自动同步</strong><small>自动扫描、预检并增量上传</small></span>
+                <span
+                  ><strong>每天深夜自动同步</strong><small>自动扫描、预检并增量上传</small></span
+                >
               </label>
               <label class="setting-row time-setting">
-                <span><strong>开始时间</strong><small>3 小时补跑窗口 · 失败 15 分钟后重试</small></span>
+                <span
+                  ><strong>开始时间</strong><small>3 小时补跑窗口 · 失败 15 分钟后重试</small></span
+                >
                 <input id="autoSyncTime" type="time" value="03:00" />
               </label>
             </div>

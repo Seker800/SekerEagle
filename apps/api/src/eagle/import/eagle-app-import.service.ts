@@ -215,4 +215,3 @@ export class EagleImportsService {
     this.logger.log(JSON.stringify({ event, ...details }));
   }
 }
-

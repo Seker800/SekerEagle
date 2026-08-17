@@ -30,7 +30,8 @@ let sessionPat = '';
 
 function normalizePluginPath(pluginPath) {
   let normalized = String(pluginPath || '');
-  if (process.platform === 'win32') normalized = normalized.replace(/^[\\/]+(?=[A-Za-z]:[\\/])/, '');
+  if (process.platform === 'win32')
+    normalized = normalized.replace(/^[\\/]+(?=[A-Za-z]:[\\/])/, '');
   return path.resolve(normalized);
 }
 
@@ -44,7 +45,9 @@ function loadDependencies(pluginPath) {
   ({ formatBytes, randomId } = require(path.join(jsPath, 'utils.js')));
 }
 
-function element(id) { return document.getElementById(id); }
+function element(id) {
+  return document.getElementById(id);
+}
 function log(message) {
   const time = new Date().toLocaleTimeString('zh-CN', { hour12: false });
   ui.log.textContent += `[${time}] ${message}\n`;
@@ -79,7 +82,10 @@ function setBusy(value) {
   ui.autoSyncTime.disabled = value || !ui.autoSyncEnabled.checked;
   ui.pauseButton.disabled = !value || !currentRunId;
   ui.cancelButton.disabled = !value || !currentRunId;
-  if (value) { ui.uploadButton.disabled = true; ui.resumeButton.disabled = true; }
+  if (value) {
+    ui.uploadButton.disabled = true;
+    ui.resumeButton.disabled = true;
+  }
 }
 function showError(error, prefix = '失败') {
   console.error(error);
@@ -91,9 +97,12 @@ function showError(error, prefix = '失败') {
     logElement.textContent += `[${prefix}] ${details}\n`;
     logElement.scrollTop = logElement.scrollHeight;
   }
-  if (progressElement) progressElement.textContent = prefix === '启动错误' ? '插件启动失败' : '发生错误';
+  if (progressElement)
+    progressElement.textContent = prefix === '启动错误' ? '插件启动失败' : '发生错误';
 }
-function showStartupError(error) { showError(error, '启动错误'); }
+function showStartupError(error) {
+  showError(error, '启动错误');
+}
 function asConnectionError(error) {
   if (error?.status === 404 && /Eagle 导入任务不存在/.test(error.message || '')) {
     return new Error('当前服务器尚未部署 Eagle 增量导入 v2 API，请先更新 NAS 后端。');
@@ -101,10 +110,34 @@ function asConnectionError(error) {
   return error;
 }
 function bindElements() {
-  for (const id of ['connectionBadge', 'serverUrl', 'pat', 'connectButton', 'libraryName', 'libraryPath',
-    'autoReconnect', 'autoSyncEnabled', 'autoSyncTime', 'autoSyncStatus', 'libraryBinding', 'refreshLibrariesButton',
-    'prepareButton', 'uploadButton', 'resumeButton', 'pauseButton', 'cancelButton',
-    'summaryCard', 'summaryTitle', 'summaryGrid', 'runStatus', 'progressLabel', 'progressPercent', 'progressBar', 'log']) ui[id] = element(id);
+  for (const id of [
+    'connectionBadge',
+    'serverUrl',
+    'pat',
+    'connectButton',
+    'libraryName',
+    'libraryPath',
+    'autoReconnect',
+    'autoSyncEnabled',
+    'autoSyncTime',
+    'autoSyncStatus',
+    'libraryBinding',
+    'refreshLibrariesButton',
+    'prepareButton',
+    'uploadButton',
+    'resumeButton',
+    'pauseButton',
+    'cancelButton',
+    'summaryCard',
+    'summaryTitle',
+    'summaryGrid',
+    'runStatus',
+    'progressLabel',
+    'progressPercent',
+    'progressBar',
+    'log',
+  ])
+    ui[id] = element(id);
 }
 
 async function readCurrentLibrary() {
@@ -127,7 +160,9 @@ function createApi() {
   engine = new ImportEngine({ api, store, log, progress: engineProgress });
 }
 
-function canReconnect() { return Boolean(store.state.serverUrl && sessionPat); }
+function canReconnect() {
+  return Boolean(store.state.serverUrl && sessionPat);
+}
 
 async function restoreConnection() {
   if (!canReconnect()) throw new Error('没有可用于自动重连的登录状态。');
@@ -230,8 +265,9 @@ async function connect() {
     setConnected(false);
     showError(asConnectionError(error));
     if (store.state.autoReconnect && canReconnect()) configureConnectionSupervisor();
+  } finally {
+    setBusy(false);
   }
-  finally { setBusy(false); }
 }
 
 function resolveExternalLibraryId(libraryPath) {
@@ -248,7 +284,8 @@ async function scanLibrary() {
       hashCacheStore: store.hashCache,
       workspace,
       cancelled: () => engine?.cancelRequested,
-      onProgress: ({ phase, current, total }) => setProgress(phase === 'hash' ? '计算内容指纹' : '读取 Eagle 素材', current, total || 1),
+      onProgress: ({ phase, current, total }) =>
+        setProgress(phase === 'hash' ? '计算内容指纹' : '读取 Eagle 素材', current, total || 1),
     });
   } catch (error) {
     await workspace.dispose();
@@ -267,17 +304,25 @@ function renderSummary(preflight) {
   ui.summaryTitle.textContent = `${preflight.itemCount} 项 · ${formatBytes(preflight.byteSize)}`;
   ui.runStatus.textContent = preflight.status;
   const values = [
-    ['新增', preflight.newItemCount], ['内容替换', preflight.contentReplaceItemCount],
-    ['仅元数据', preflight.metadataUpdateItemCount], ['未变化', preflight.unchangedItemCount],
-    ['需上传', preflight.uploadItemCount], ['上传体积', formatBytes(preflight.uploadByteSize)],
-    ['不支持', preflight.skippedUnsupportedItemCount], ['警告', preflight.warningCount],
+    ['新增', preflight.newItemCount],
+    ['内容替换', preflight.contentReplaceItemCount],
+    ['仅元数据', preflight.metadataUpdateItemCount],
+    ['未变化', preflight.unchangedItemCount],
+    ['需上传', preflight.uploadItemCount],
+    ['上传体积', formatBytes(preflight.uploadByteSize)],
+    ['不支持', preflight.skippedUnsupportedItemCount],
+    ['警告', preflight.warningCount],
   ];
   ui.summaryGrid.innerHTML = '';
   for (const [label, value] of values) {
-    const metric = document.createElement('div'); metric.className = 'metric';
-    const strong = document.createElement('strong'); strong.textContent = value;
-    const span = document.createElement('span'); span.textContent = label;
-    metric.append(strong, span); ui.summaryGrid.appendChild(metric);
+    const metric = document.createElement('div');
+    metric.className = 'metric';
+    const strong = document.createElement('strong');
+    strong.textContent = value;
+    const span = document.createElement('span');
+    span.textContent = label;
+    metric.append(strong, span);
+    ui.summaryGrid.appendChild(metric);
   }
 }
 
@@ -321,11 +366,19 @@ async function prepareRun() {
 }
 
 async function prepare() {
-  if (!connected) { showError(new Error('请先连接并完成服务端兼容性检查。')); return; }
+  if (!connected) {
+    showError(new Error('请先连接并完成服务端兼容性检查。'));
+    return;
+  }
   setBusy(true);
-  try { await prepareRun(); }
-  catch (error) { showError(error); }
-  finally { setBusy(false); ui.cancelButton.disabled = true; }
+  try {
+    await prepareRun();
+  } catch (error) {
+    showError(error);
+  } finally {
+    setBusy(false);
+    ui.cancelButton.disabled = true;
+  }
 }
 
 async function uploadRun() {
@@ -333,19 +386,21 @@ async function uploadRun() {
   const run = await engine.upload(currentRunId, currentScan.sourceFiles);
   ui.runStatus.textContent = run.status;
   setProgress(`任务 ${run.status}`, 1, 1);
-  log(`任务结束：${run.status}，成功 ${run.importedItemCount}，跳过 ${run.skippedItemCount}，失败 ${run.failedItemCount}。`);
+  log(
+    `任务结束：${run.status}，成功 ${run.importedItemCount}，跳过 ${run.skippedItemCount}，失败 ${run.failedItemCount}。`,
+  );
   return run;
 }
 
 async function upload() {
   let paused = false;
   setBusy(true);
-  try { await uploadRun(); }
-  catch (error) {
+  try {
+    await uploadRun();
+  } catch (error) {
     paused = handlePaused(error);
     if (!paused) showError(error);
-  }
-  finally {
+  } finally {
     setBusy(false);
     ui.cancelButton.disabled = true;
     ui.uploadButton.disabled = true;
@@ -356,7 +411,8 @@ async function upload() {
 async function resumeRun() {
   const active = store.state.activeRun;
   if (!active?.runId) return;
-  if (path.resolve(currentLibrary.path) !== path.resolve(active.libraryPath)) throw new Error('请先打开该任务对应的 Eagle 图库。');
+  if (path.resolve(currentLibrary.path) !== path.resolve(active.libraryPath))
+    throw new Error('请先打开该任务对应的 Eagle 图库。');
   currentRunId = active.runId;
   engine.cancelRequested = false;
   const externalLibraryId = await scanLibrary();
@@ -380,12 +436,12 @@ async function resumeRun() {
 async function resume() {
   let paused = false;
   setBusy(true);
-  try { await resumeRun(); }
-  catch (error) {
+  try {
+    await resumeRun();
+  } catch (error) {
     paused = handlePaused(error);
     if (!paused) showError(error);
-  }
-  finally {
+  } finally {
     setBusy(false);
     ui.cancelButton.disabled = true;
     ui.resumeButton.disabled = paused ? !connected : true;
@@ -404,7 +460,7 @@ async function automaticSync() {
   let paused = false;
   if (busy) throw new Error('已有导入任务正在执行。');
   if (!connected) {
-    const restored = connectionSupervisor && await connectionSupervisor.checkNow();
+    const restored = connectionSupervisor && (await connectionSupervisor.checkNow());
     if (!restored) throw new Error('服务器尚未恢复连接。');
   }
   setBusy(true);
@@ -441,9 +497,15 @@ async function pause() {
 async function cancel() {
   if (!currentRunId) return;
   engine.cancelLocally();
-  try { await engine.cancelRun(currentRunId); log('服务端导入任务已取消。'); }
-  catch (error) { showError(error); }
-  finally { setBusy(false); currentRunId = ''; }
+  try {
+    await engine.cancelRun(currentRunId);
+    log('服务端导入任务已取消。');
+  } catch (error) {
+    showError(error);
+  } finally {
+    setBusy(false);
+    currentRunId = '';
+  }
 }
 
 async function initialize(pluginPath) {
@@ -452,7 +514,7 @@ async function initialize(pluginPath) {
   try {
     loadDependencies(pluginPath);
     bindElements();
-    const userDataPath = eagle.app.userDataPath || await eagle.app.getPath('userData');
+    const userDataPath = eagle.app.userDataPath || (await eagle.app.getPath('userData'));
     if (!userDataPath) throw new Error('Eagle 未提供用户数据目录。');
     store = new StateStore(userDataPath);
     await store.load();
@@ -469,18 +531,21 @@ async function initialize(pluginPath) {
     setConnected(false);
     ui.connectButton.addEventListener('click', connect);
     ui.autoReconnect.addEventListener('change', () => {
-      store.save({ autoReconnect: ui.autoReconnect.checked })
+      store
+        .save({ autoReconnect: ui.autoReconnect.checked })
         .then(configureConnectionSupervisor)
         .catch(showError);
     });
     ui.autoSyncEnabled.addEventListener('change', () => {
       ui.autoSyncTime.disabled = !ui.autoSyncEnabled.checked;
-      store.save({ autoSyncEnabled: ui.autoSyncEnabled.checked })
+      store
+        .save({ autoSyncEnabled: ui.autoSyncEnabled.checked })
         .then(() => syncScheduler.reschedule())
         .catch(showError);
     });
     ui.autoSyncTime.addEventListener('change', () => {
-      store.save({ autoSyncTime: ui.autoSyncTime.value || '03:00' })
+      store
+        .save({ autoSyncTime: ui.autoSyncTime.value || '03:00' })
         .then(() => syncScheduler.reschedule())
         .catch(showError);
     });

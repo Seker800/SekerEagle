@@ -19,8 +19,5 @@ void test('处理任务列表只发送后端支持的筛选参数', async () => 
     globalThis.fetch = originalFetch;
   }
 
-  assert.equal(
-    requestedUrl,
-    '/api/admin/eagle-processing/jobs?status=PENDING&lane=BACKGROUND',
-  );
+  assert.equal(requestedUrl, '/api/admin/eagle-processing/jobs?status=PENDING&lane=BACKGROUND');
 });

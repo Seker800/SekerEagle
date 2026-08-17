@@ -23,4 +23,3 @@ export const EagleImportItemAction = {
 
 export type EagleImportItemAction =
   (typeof EagleImportItemAction)[keyof typeof EagleImportItemAction];
-

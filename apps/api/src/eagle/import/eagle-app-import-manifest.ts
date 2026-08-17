@@ -55,10 +55,7 @@ export interface EagleImportManifestChunkInput {
 }
 
 export type EagleImportMetadataWarning =
-  | 'INVALID_SOURCE_URL'
-  | 'INVALID_IMPORTED_AT'
-  | 'INVALID_MODIFIED_AT'
-  | 'INVALID_RATING';
+  'INVALID_SOURCE_URL' | 'INVALID_IMPORTED_AT' | 'INVALID_MODIFIED_AT' | 'INVALID_RATING';
 
 export class EagleImportManifestValidationError extends Error {
   constructor(message: string) {
@@ -315,4 +312,3 @@ export function validateEagleImportManifestChunk(input: EagleImportManifestChunk
 
   return { acceptedItemIds, skippedDeletedItemIds, skippedUnsupportedItemIds };
 }
-

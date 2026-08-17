@@ -44,9 +44,15 @@ export class EagleUploadInspectionService {
       ]);
       const detectedMimeType: string | undefined =
         metadata.mediaType ??
-        ({ jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif', heif: 'image/heic' } as const)[
-          metadata.format as 'jpeg' | 'png' | 'webp' | 'gif' | 'heif'
-        ];
+        (
+          {
+            jpeg: 'image/jpeg',
+            png: 'image/png',
+            webp: 'image/webp',
+            gif: 'image/gif',
+            heif: 'image/heic',
+          } as const
+        )[metadata.format as 'jpeg' | 'png' | 'webp' | 'gif' | 'heif'];
       const heifAlias =
         metadata.format === 'heif' &&
         (mimeType === 'image/heic' || mimeType === 'image/heif') &&

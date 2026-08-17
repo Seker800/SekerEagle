@@ -96,4 +96,3 @@ export function setPartialContentHeaders(
     response.setHeader('Content-Length', String(fullSize));
   }
 }
-

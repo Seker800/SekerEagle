@@ -1,4 +1,14 @@
-import { Body, ConflictException, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  ConflictException,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOrPatOriginGuard } from '../auth/browser-or-pat-origin.guard';
@@ -123,7 +133,11 @@ export class EagleImportController {
     if (start.kind === 'RESUME' || start.kind === 'FINALIZING') {
       if (!start.sessionId) throw new ConflictException('导入项正在完成上传，请稍后重试。');
       const session = await this.uploads.getSession(principal.sub, start.sessionId);
-      return { ...session, partSize: UPLOAD_PART_SIZE_BYTES, partSizeBytes: UPLOAD_PART_SIZE_BYTES };
+      return {
+        ...session,
+        partSize: UPLOAD_PART_SIZE_BYTES,
+        partSizeBytes: UPLOAD_PART_SIZE_BYTES,
+      };
     }
     if (start.kind === 'IMPORTED') {
       throw new ConflictException('导入项已经完成。');

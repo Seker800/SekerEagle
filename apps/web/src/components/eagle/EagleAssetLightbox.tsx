@@ -28,14 +28,32 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
       }}
     >
       <header>
-        <div><strong>{asset.displayName}</strong><span>{asset.width && asset.height ? `${asset.width} × ${asset.height}` : asset.format.toUpperCase()}</span></div>
-        <button type="button" aria-label="关闭大图预览" onClick={onClose}><IconX size={22} /></button>
+        <div>
+          <strong>{asset.displayName}</strong>
+          <span>
+            {asset.width && asset.height
+              ? `${asset.width} × ${asset.height}`
+              : asset.format.toUpperCase()}
+          </span>
+        </div>
+        <button type="button" aria-label="关闭大图预览" onClick={onClose}>
+          <IconX size={22} />
+        </button>
       </header>
       <div className={styles.stage} onClick={onClose}>
         {asset.mimeType.startsWith('video/') ? (
-          <video src={getEagleAssetContentUrl(asset.id)} controls autoPlay onClick={(event) => event.stopPropagation()} />
+          <video
+            src={getEagleAssetContentUrl(asset.id)}
+            controls
+            autoPlay
+            onClick={(event) => event.stopPropagation()}
+          />
         ) : (
-          <img src={getEagleAssetContentUrl(asset.id)} alt={asset.displayName} onClick={(event) => event.stopPropagation()} />
+          <img
+            src={getEagleAssetContentUrl(asset.id)}
+            alt={asset.displayName}
+            onClick={(event) => event.stopPropagation()}
+          />
         )}
       </div>
       <footer>Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览</footer>

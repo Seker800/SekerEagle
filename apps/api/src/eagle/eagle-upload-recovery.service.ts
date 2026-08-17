@@ -56,11 +56,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
       try {
         const completed = await this.uploads.recoverUploadSession(session.id);
         if (completed) {
-          await this.imports.finalizeUpload(
-            session.uploaderId,
-            session.id,
-            completed.assetId,
-          );
+          await this.imports.finalizeUpload(session.uploaderId, session.id, completed.assetId);
         }
       } catch (error) {
         await this.imports

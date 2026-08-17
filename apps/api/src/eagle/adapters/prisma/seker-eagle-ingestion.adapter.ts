@@ -9,9 +9,7 @@ import type {
 type ResolvedDefinition = { id: string; normalizedName: string };
 
 @Injectable()
-export class PrismaSekerEagleIngestionAdapter
-  implements SekerEagleIngestionPort<Prisma.TransactionClient>
-{
+export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort<Prisma.TransactionClient> {
   async applyMetadata(
     command: SekerEagleIngestionCommand,
     transaction: Prisma.TransactionClient,
@@ -116,7 +114,9 @@ export class PrismaSekerEagleIngestionAdapter
       select: { id: true, normalizedName: true },
     });
     const existingNames = new Set(existing.map(({ normalizedName }) => normalizedName));
-    const newCandidates = candidates.filter(({ normalizedName }) => !existingNames.has(normalizedName));
+    const newCandidates = candidates.filter(
+      ({ normalizedName }) => !existingNames.has(normalizedName),
+    );
     if (newCandidates.length) {
       await transaction.eagleManualTag.createMany({
         data: newCandidates.map((candidate) => ({
@@ -161,7 +161,9 @@ export class PrismaSekerEagleIngestionAdapter
       select: { id: true, normalizedName: true },
     });
     const existingNames = new Set(existing.map(({ normalizedName }) => normalizedName));
-    const missing = groupCandidates.filter(({ normalizedName }) => !existingNames.has(normalizedName));
+    const missing = groupCandidates.filter(
+      ({ normalizedName }) => !existingNames.has(normalizedName),
+    );
     if (missing.length) {
       await transaction.eagleManualTagGroup.createMany({
         data: missing.map((group) => ({

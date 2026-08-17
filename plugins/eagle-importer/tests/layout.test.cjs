@@ -10,11 +10,31 @@ const pluginRoot = path.resolve(__dirname, '..');
 test('uses the original compact desktop layout with the independent PAT boundary', async () => {
   const html = await fs.readFile(path.join(pluginRoot, 'index.html'), 'utf8');
   const requiredIds = [
-    'connectionBadge', 'serverUrl', 'pat', 'connectButton', 'autoReconnect', 'autoSyncEnabled',
-    'autoSyncTime', 'autoSyncStatus', 'libraryName', 'libraryPath', 'libraryBinding',
-    'refreshLibrariesButton', 'prepareButton', 'uploadButton', 'resumeButton', 'pauseButton',
-    'cancelButton', 'summaryCard', 'summaryTitle', 'summaryGrid', 'runStatus', 'progressLabel',
-    'progressPercent', 'progressBar', 'log',
+    'connectionBadge',
+    'serverUrl',
+    'pat',
+    'connectButton',
+    'autoReconnect',
+    'autoSyncEnabled',
+    'autoSyncTime',
+    'autoSyncStatus',
+    'libraryName',
+    'libraryPath',
+    'libraryBinding',
+    'refreshLibrariesButton',
+    'prepareButton',
+    'uploadButton',
+    'resumeButton',
+    'pauseButton',
+    'cancelButton',
+    'summaryCard',
+    'summaryTitle',
+    'summaryGrid',
+    'runStatus',
+    'progressLabel',
+    'progressPercent',
+    'progressBar',
+    'log',
   ];
 
   assert.match(html, /class="app-toolbar"/);

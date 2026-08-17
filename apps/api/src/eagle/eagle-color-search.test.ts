@@ -27,4 +27,3 @@ test('builds a current-version perceptual color relation filter', () => {
   assert.ok(where.some.swatches.some.labA.gte < target.labA);
   assert.ok(where.some.swatches.some.labB.lte > target.labB);
 });
-

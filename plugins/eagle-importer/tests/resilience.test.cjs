@@ -26,7 +26,12 @@ test('resume processes recoverable UPLOADING items before new STAGED items', asy
     iterateItems: async function* (_runId, status) {
       requestedStatuses.push(status);
       if (status === 'UPLOADING') {
-        yield { id: 'resumable', sourceItemId: 'source-1', displayName: 'resume.jpg', action: 'NEW' };
+        yield {
+          id: 'resumable',
+          sourceItemId: 'source-1',
+          displayName: 'resume.jpg',
+          action: 'NEW',
+        };
       }
     },
     getRun: async () => ({ status: 'COMPLETED', stagedItemCount: 0 }),
@@ -70,7 +75,13 @@ test('pauses after in-flight work and preserves the active run for a later resum
   };
 
   await assert.rejects(
-    engine.upload('run-1', new Map([['source-1', {}], ['source-2', {}]])),
+    engine.upload(
+      'run-1',
+      new Map([
+        ['source-1', {}],
+        ['source-2', {}],
+      ]),
+    ),
     (error) => error instanceof ImportPausedError && error.code === 'IMPORT_PAUSED',
   );
 
@@ -94,10 +105,17 @@ test('clears a previous pause before resuming manifest staging', async () => {
   const engine = new ImportEngine({ api, store });
   engine.pauseLocally();
 
-  await engine.resumePreparation('run-1', {
-    library: { path: '/library', name: 'Library' },
-    folders: [], tags: [], tagGroups: [], items: [],
-  }, 'library-1');
+  await engine.resumePreparation(
+    'run-1',
+    {
+      library: { path: '/library', name: 'Library' },
+      folders: [],
+      tags: [],
+      tagGroups: [],
+      items: [],
+    },
+    'library-1',
+  );
 
   assert.deepEqual(staged, ['items-00001']);
   assert.equal(store.state.activeRun.phase, 'PREFLIGHTED');
@@ -154,12 +172,15 @@ test('never persists passwords or bearer tokens and scrubs legacy plaintext stat
   assert.equal(store.state.password, 'secret');
   assert.equal(store.state.refreshToken, 'refresh');
 
-  await fs.writeFile(store.filePath, JSON.stringify({
-    serverUrl: 'https://chat.example.com',
-    password: 'legacy-password',
-    accessToken: 'legacy-access',
-    refreshToken: 'legacy-refresh',
-  }));
+  await fs.writeFile(
+    store.filePath,
+    JSON.stringify({
+      serverUrl: 'https://chat.example.com',
+      password: 'legacy-password',
+      accessToken: 'legacy-access',
+      refreshToken: 'legacy-refresh',
+    }),
+  );
   const restored = new StateStore(directory);
   await restored.load();
   assert.equal(restored.state.password, '');
@@ -187,13 +208,16 @@ test('migrates the legacy hash cache into checksummed shards without touching th
   const userDataPath = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-cache-migration-'));
   const store = new StateStore(userDataPath);
   await fs.mkdir(store.directory, { recursive: true });
-  await fs.writeFile(store.filePath, JSON.stringify({
-    activeRun: { runId: 'run-live', libraryPath: '/library', phase: 'UPLOADING' },
-    hashCache: {
-      'asset-1': { key: '/one.jpg\u00001\u00001', sha256: 'a'.repeat(64) },
-      'asset-2': { key: '/two.jpg\u00002\u00002', sha256: 'b'.repeat(64) },
-    },
-  }));
+  await fs.writeFile(
+    store.filePath,
+    JSON.stringify({
+      activeRun: { runId: 'run-live', libraryPath: '/library', phase: 'UPLOADING' },
+      hashCache: {
+        'asset-1': { key: '/one.jpg\u00001\u00001', sha256: 'a'.repeat(64) },
+        'asset-2': { key: '/two.jpg\u00002\u00002', sha256: 'b'.repeat(64) },
+      },
+    }),
+  );
 
   await store.load();
 
@@ -201,7 +225,10 @@ test('migrates the legacy hash cache into checksummed shards without touching th
   assert.equal((await store.hashCache.get('asset-2')).sha256, 'b'.repeat(64));
   const serialized = JSON.parse(await fs.readFile(store.filePath, 'utf8'));
   assert.equal(Object.hasOwn(serialized, 'hashCache'), false);
-  assert.equal(JSON.parse(await fs.readFile(store.legacyStateBackupPath, 'utf8')).activeRun.runId, 'run-live');
+  assert.equal(
+    JSON.parse(await fs.readFile(store.legacyStateBackupPath, 'utf8')).activeRun.runId,
+    'run-live',
+  );
 });
 
 test('isolates a corrupt hash shard and keeps resumable state available', async () => {
@@ -223,7 +250,10 @@ test('isolates a corrupt hash shard and keeps resumable state available', async 
 });
 
 test('passes Eagle trash state through the manifest without uploading the deleted file', async () => {
-  const sourcePath = path.join(await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-trash-')), 'trash.jpg');
+  const sourcePath = path.join(
+    await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-trash-')),
+    'trash.jpg',
+  );
   await fs.writeFile(sourcePath, 'deleted');
   const eagleApi = {
     library: { path: path.dirname(sourcePath), name: 'Library' },
@@ -232,10 +262,18 @@ test('passes Eagle trash state through the manifest without uploading the delete
     tagGroup: { get: async () => [] },
     item: {
       getIdsWithModifiedAt: async () => [{ id: 'deleted-1', modifiedAt: 1 }],
-      getByIds: async () => [{
-        id: 'deleted-1', name: 'Trash', ext: 'jpg', filePath: sourcePath,
-        isDeleted: true, size: 7, tags: [], folders: [],
-      }],
+      getByIds: async () => [
+        {
+          id: 'deleted-1',
+          name: 'Trash',
+          ext: 'jpg',
+          filePath: sourcePath,
+          isDeleted: true,
+          size: 7,
+          tags: [],
+          folders: [],
+        },
+      ],
     },
   };
 
@@ -257,13 +295,22 @@ test('scans into a resumable disk workspace without returning full item collecti
   const scan = await scanEagleLibrary({
     eagleApi: {
       library: { path: directory, name: 'Library' },
-      folder: { getAll: async () => [] }, tag: { get: async () => [] }, tagGroup: { get: async () => [] },
+      folder: { getAll: async () => [] },
+      tag: { get: async () => [] },
+      tagGroup: { get: async () => [] },
       item: {
         getIdsWithModifiedAt: async () => [{ id: 'asset-1' }],
-        getByIds: async () => [{
-          id: 'asset-1', name: 'Asset', ext: 'jpg', filePath: sourcePath,
-          isDeleted: false, tags: [], folders: [],
-        }],
+        getByIds: async () => [
+          {
+            id: 'asset-1',
+            name: 'Asset',
+            ext: 'jpg',
+            filePath: sourcePath,
+            isDeleted: false,
+            tags: [],
+            folders: [],
+          },
+        ],
       },
     },
     hashCacheStore: store.hashCache,
@@ -295,14 +342,24 @@ test('skips empty files and removes stale folder references without aborting the
       getIdsWithModifiedAt: async () => [{ id: 'empty-1' }, { id: 'valid-1' }, { id: 'valid-1' }],
       getByIds: async () => [
         { id: 'empty-1', name: 'Empty', ext: 'jpg', filePath: emptyPath, tags: [], folders: [] },
-        { id: 'valid-1', name: 'Valid', ext: 'jpg', filePath: validPath, tags: [], folders: ['known', 'missing'] },
+        {
+          id: 'valid-1',
+          name: 'Valid',
+          ext: 'jpg',
+          filePath: validPath,
+          tags: [],
+          folders: ['known', 'missing'],
+        },
       ],
     },
   };
 
   const scan = await scanEagleLibrary({ eagleApi });
 
-  assert.deepEqual(scan.items.map((item) => item.sourceItemId), ['valid-1']);
+  assert.deepEqual(
+    scan.items.map((item) => item.sourceItemId),
+    ['valid-1'],
+  );
   assert.deepEqual(scan.items[0].folderIds, ['known']);
   assert.equal(scan.unreadableItemCount, 1);
   assert.equal(scan.unreadableItems[0].code, 'EMPTY_FILE');
@@ -322,16 +379,27 @@ test('keeps scanning when an Eagle source file is missing and retries it next ti
     tagGroup: { get: async () => [] },
     item: {
       getIdsWithModifiedAt: async () => [
-        { id: 'missing-1', modifiedAt: 1 }, { id: 'readable-1', modifiedAt: 1 },
+        { id: 'missing-1', modifiedAt: 1 },
+        { id: 'readable-1', modifiedAt: 1 },
       ],
       getByIds: async () => [
         {
-          id: 'missing-1', name: 'Missing', ext: 'jpg', filePath: missingPath,
-          isDeleted: false, tags: [], folders: [],
+          id: 'missing-1',
+          name: 'Missing',
+          ext: 'jpg',
+          filePath: missingPath,
+          isDeleted: false,
+          tags: [],
+          folders: [],
         },
         {
-          id: 'readable-1', name: 'Readable', ext: 'jpg', filePath: readablePath,
-          isDeleted: false, tags: [], folders: [],
+          id: 'readable-1',
+          name: 'Readable',
+          ext: 'jpg',
+          filePath: readablePath,
+          isDeleted: false,
+          tags: [],
+          folders: [],
         },
       ],
     },
@@ -349,9 +417,10 @@ test('keeps scanning when an Eagle source file is missing and retries it next ti
   assert.equal(scan.sourceFiles.has('readable-1'), true);
   assert.equal(scan.hashCache['missing-1'], undefined);
   assert.equal(scan.unreadableItemCount, 1);
-  assert.deepEqual(scan.unreadableItems.map(({ sourceItemId, code }) => ({ sourceItemId, code })), [
-    { sourceItemId: 'missing-1', code: 'ENOENT' },
-  ]);
+  assert.deepEqual(
+    scan.unreadableItems.map(({ sourceItemId, code }) => ({ sourceItemId, code })),
+    [{ sourceItemId: 'missing-1', code: 'ENOENT' }],
+  );
 });
 
 test('normalizes fractional filesystem timestamp fallbacks before manifest staging', async (context) => {
@@ -369,10 +438,17 @@ test('normalizes fractional filesystem timestamp fallbacks before manifest stagi
     tagGroup: { get: async () => [] },
     item: {
       getIdsWithModifiedAt: async () => [{ id: 'fractional-time-1' }],
-      getByIds: async () => [{
-        id: 'fractional-time-1', name: 'Fractional time', ext: 'jpg', filePath: sourcePath,
-        isDeleted: false, tags: [], folders: [],
-      }],
+      getByIds: async () => [
+        {
+          id: 'fractional-time-1',
+          name: 'Fractional time',
+          ext: 'jpg',
+          filePath: sourcePath,
+          isDeleted: false,
+          tags: [],
+          folders: [],
+        },
+      ],
     },
   };
 
@@ -400,10 +476,17 @@ test('keeps scanning when a source disappears while hashing', async () => {
     tagGroup: { get: async () => [] },
     item: {
       getIdsWithModifiedAt: async () => [{ id: 'directory-1', modifiedAt: 1 }],
-      getByIds: async () => [{
-        id: 'directory-1', name: 'Unreadable', ext: 'jpg', filePath: directory,
-        isDeleted: false, tags: [], folders: [],
-      }],
+      getByIds: async () => [
+        {
+          id: 'directory-1',
+          name: 'Unreadable',
+          ext: 'jpg',
+          filePath: directory,
+          isDeleted: false,
+          tags: [],
+          folders: [],
+        },
+      ],
     },
   };
 
@@ -426,10 +509,17 @@ test('normalizes duplicate Eagle tags and item assignments before manifest stagi
     tagGroup: { get: async () => [{ id: 'group-1', tags: ['JIEMA'] }] },
     item: {
       getIdsWithModifiedAt: async () => [{ id: 'tagged-1', modifiedAt: 1 }],
-      getByIds: async () => [{
-        id: 'tagged-1', name: 'Tagged', ext: 'jpg', filePath: sourcePath,
-        isDeleted: false, tags: ['Jiema', 'jiema'], folders: [],
-      }],
+      getByIds: async () => [
+        {
+          id: 'tagged-1',
+          name: 'Tagged',
+          ext: 'jpg',
+          filePath: sourcePath,
+          isDeleted: false,
+          tags: ['Jiema', 'jiema'],
+          folders: [],
+        },
+      ],
     },
   };
 
@@ -439,8 +529,11 @@ test('normalizes duplicate Eagle tags and item assignments before manifest stagi
   assert.equal(scan.tags[0].name, 'jiema');
   assert.deepEqual(scan.items[0].tagNames, ['jiema']);
   assert.equal(scan.mergedTagCount, 1);
-  assert.deepEqual(scan.mergedTagDetails, [{
-    identity: 'jiema', names: ['Jiema', 'jiema'], selectedName: 'jiema',
-  }]);
+  assert.deepEqual(scan.mergedTagDetails, [
+    {
+      identity: 'jiema',
+      names: ['Jiema', 'jiema'],
+      selectedName: 'jiema',
+    },
+  ]);
 });
-

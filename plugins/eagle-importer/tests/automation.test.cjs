@@ -40,9 +40,14 @@ test('reconnects with bounded exponential backoff and returns to the healthy int
 test('coalesces concurrent reconnect checks into one request', async () => {
   let calls = 0;
   let release;
-  const pending = new Promise((resolve) => { release = resolve; });
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
   const supervisor = new ConnectionSupervisor({
-    connect: async () => { calls += 1; await pending; },
+    connect: async () => {
+      calls += 1;
+      await pending;
+    },
     onStateChange: () => {},
     schedule: () => null,
     cancelSchedule: () => {},
@@ -75,13 +80,18 @@ test('executes the scheduled reconnect check', async () => {
   let scheduledCallback;
   let calls = 0;
   let resolveSecondCall;
-  const secondCall = new Promise((resolve) => { resolveSecondCall = resolve; });
+  const secondCall = new Promise((resolve) => {
+    resolveSecondCall = resolve;
+  });
   const supervisor = new ConnectionSupervisor({
     connect: async () => {
       calls += 1;
       if (calls === 2) resolveSecondCall();
     },
-    schedule: (callback) => { scheduledCallback = callback; return callback; },
+    schedule: (callback) => {
+      scheduledCallback = callback;
+      return callback;
+    },
     cancelSchedule: () => {},
   });
 
@@ -109,14 +119,22 @@ test('runs nightly sync once per local date and never overlaps', async () => {
   const scheduled = [];
   let calls = 0;
   let release;
-  const pending = new Promise((resolve) => { release = resolve; });
+  const pending = new Promise((resolve) => {
+    release = resolve;
+  });
   const scheduler = new NightlySyncScheduler({
     getConfig: () => ({ enabled: true, time: '03:00' }),
     getState: () => state,
     saveState: async (patch) => Object.assign(state, patch),
-    run: async () => { calls += 1; await pending; },
+    run: async () => {
+      calls += 1;
+      await pending;
+    },
     now: () => new Date(2026, 7, 15, 3, 5),
-    schedule: (callback, delay) => { scheduled.push({ callback, delay }); return callback; },
+    schedule: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return callback;
+    },
     cancelSchedule: () => {},
   });
 
@@ -140,10 +158,15 @@ test('retries a failed nightly sync at a bounded interval inside the window', as
     getConfig: () => ({ enabled: true, time: '03:00' }),
     getState: () => state,
     saveState: async (patch) => Object.assign(state, patch),
-    run: async () => { throw new Error('network unavailable'); },
+    run: async () => {
+      throw new Error('network unavailable');
+    },
     onResult: (result) => results.push(result),
     now: () => new Date(2026, 7, 15, 3, 5),
-    schedule: (callback, delay) => { scheduled.push({ callback, delay }); return callback; },
+    schedule: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return callback;
+    },
     cancelSchedule: () => {},
     retryDelayMs: 15 * 60_000,
   });
@@ -165,10 +188,15 @@ test('defers a user-paused nightly sync until the next scheduled day', async () 
     getConfig: () => ({ enabled: true, time: '03:00' }),
     getState: () => state,
     saveState: async (patch) => Object.assign(state, patch),
-    run: async () => { throw Object.assign(new Error('用户暂停了同步。'), { code: 'IMPORT_PAUSED' }); },
+    run: async () => {
+      throw Object.assign(new Error('用户暂停了同步。'), { code: 'IMPORT_PAUSED' });
+    },
     onResult: (result) => results.push(result),
     now: () => new Date(2026, 7, 15, 3, 5),
-    schedule: (callback, delay) => { scheduled.push({ callback, delay }); return callback; },
+    schedule: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return callback;
+    },
     cancelSchedule: () => {},
   });
 
@@ -210,11 +238,19 @@ test('waits for the retry interval after a recent nightly attempt', async () => 
   const scheduled = [];
   const scheduler = new NightlySyncScheduler({
     getConfig: () => ({ enabled: true, time: '03:00' }),
-    getState: () => ({ lastAutoSyncDate: '', lastAutoSyncAttemptAt: new Date(2026, 7, 15, 3, 0).toISOString() }),
+    getState: () => ({
+      lastAutoSyncDate: '',
+      lastAutoSyncAttemptAt: new Date(2026, 7, 15, 3, 0).toISOString(),
+    }),
     saveState: async () => {},
-    run: async () => { runs += 1; },
+    run: async () => {
+      runs += 1;
+    },
     now: () => new Date(2026, 7, 15, 3, 5),
-    schedule: (callback, delay) => { scheduled.push({ callback, delay }); return callback; },
+    schedule: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return callback;
+    },
     cancelSchedule: () => {},
     retryDelayMs: 15 * 60_000,
   });
@@ -232,4 +268,3 @@ test('normalizes invalid nightly times and formats local dates', () => {
   assert.deepEqual(parseTime('23:45'), [23, 45]);
   assert.equal(formatLocalDate(new Date(2026, 0, 2, 12, 0)), '2026-01-02');
 });
-

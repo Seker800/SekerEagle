@@ -43,4 +43,3 @@ describe('EagleColorPalette', () => {
     expect(screen.getByText('颜色分析失败')).toBeInTheDocument();
   });
 });
-

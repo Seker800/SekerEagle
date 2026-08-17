@@ -21,7 +21,12 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
 @Module({
   imports: [AuthModule, StorageModule],
-  controllers: [EagleController, EagleUploadController, EagleImportController, EagleProcessingController],
+  controllers: [
+    EagleController,
+    EagleUploadController,
+    EagleImportController,
+    EagleProcessingController,
+  ],
   providers: [
     EagleService,
     EagleMediaService,

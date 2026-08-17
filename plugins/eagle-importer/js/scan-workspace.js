@@ -33,9 +33,9 @@ class ScanWorkspace {
     const encodedBytes = Buffer.byteLength(encoded, 'utf8');
     const appendedBytes = encodedBytes + (this.currentChunkEntries ? 1 : 0);
     if (
-      this.currentChunkEntries > 0
-      && (this.currentChunkBytes + appendedBytes > MAX_JSON_BYTES
-        || this.currentChunkEntries >= MAX_CHUNK_ENTRIES)
+      this.currentChunkEntries > 0 &&
+      (this.currentChunkBytes + appendedBytes > MAX_JSON_BYTES ||
+        this.currentChunkEntries >= MAX_CHUNK_ENTRIES)
     ) {
       this.itemChunkCount += 1;
       this.currentChunkEntries = 0;
@@ -97,4 +97,3 @@ class ScanWorkspace {
 }
 
 module.exports = { ScanWorkspace };
-

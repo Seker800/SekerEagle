@@ -53,7 +53,9 @@ class ConnectionSupervisor {
   checkNow() {
     if (this.inFlight) return this.inFlight;
     this.clearTimer();
-    this.inFlight = this.runCheck().finally(() => { this.inFlight = null; });
+    this.inFlight = this.runCheck().finally(() => {
+      this.inFlight = null;
+    });
     return this.inFlight;
   }
 
@@ -141,7 +143,9 @@ class NightlySyncScheduler {
 
   checkNow() {
     if (this.inFlight) return this.inFlight;
-    this.inFlight = this.runCheck().finally(() => { this.inFlight = null; });
+    this.inFlight = this.runCheck().finally(() => {
+      this.inFlight = null;
+    });
     return this.inFlight;
   }
 
@@ -156,7 +160,11 @@ class NightlySyncScheduler {
     const current = this.now();
     const window = nextNightlyWindow(current, config.time, this.graceMinutes);
     const state = this.getState();
-    if (!window.isOpen || state.lastAutoSyncDate === window.dueDate || state.lastAutoSyncPausedDate === window.dueDate) {
+    if (
+      !window.isOpen ||
+      state.lastAutoSyncDate === window.dueDate ||
+      state.lastAutoSyncPausedDate === window.dueDate
+    ) {
       this.scheduleAt(window.nextStart);
       return false;
     }
@@ -170,12 +178,23 @@ class NightlySyncScheduler {
       }
     }
 
-    await this.saveState({ lastAutoSyncAttemptAt: current.toISOString(), lastAutoSyncStatus: 'RUNNING', lastAutoSyncError: '' });
+    await this.saveState({
+      lastAutoSyncAttemptAt: current.toISOString(),
+      lastAutoSyncStatus: 'RUNNING',
+      lastAutoSyncError: '',
+    });
     try {
       await this.run();
-      await this.saveState({ lastAutoSyncDate: window.dueDate, lastAutoSyncStatus: 'SUCCESS', lastAutoSyncError: '' });
+      await this.saveState({
+        lastAutoSyncDate: window.dueDate,
+        lastAutoSyncStatus: 'SUCCESS',
+        lastAutoSyncError: '',
+      });
       await this.onResult({ ok: true, error: null });
-      this.scheduleAt(nextNightlyWindow(new Date(window.end.getTime() + 1), config.time, this.graceMinutes).nextStart);
+      this.scheduleAt(
+        nextNightlyWindow(new Date(window.end.getTime() + 1), config.time, this.graceMinutes)
+          .nextStart,
+      );
       return true;
     } catch (error) {
       if (error?.code === 'IMPORT_PAUSED') {
@@ -188,7 +207,10 @@ class NightlySyncScheduler {
         this.scheduleAt(window.nextStart);
         return false;
       }
-      await this.saveState({ lastAutoSyncStatus: 'FAILED', lastAutoSyncError: error?.message || String(error) });
+      await this.saveState({
+        lastAutoSyncStatus: 'FAILED',
+        lastAutoSyncError: error?.message || String(error),
+      });
       await this.onResult({ ok: false, error });
       const retryAt = new Date(this.now().getTime() + this.retryDelayMs);
       this.scheduleAt(retryAt < window.end ? retryAt : window.nextStart);
@@ -242,4 +264,3 @@ module.exports = {
   parseTime,
   formatLocalDate,
 };
-

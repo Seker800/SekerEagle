@@ -62,4 +62,3 @@ export function resolveEagleImportAction(input: {
   }
   return input.priorMetadataHash === input.metadataHash ? 'UNCHANGED' : 'METADATA_UPDATE';
 }
-

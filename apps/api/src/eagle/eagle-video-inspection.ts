@@ -23,17 +23,26 @@ export function parseBrowserCompatibleMp4Probe(probe: MediaVideoProbe) {
   if (!video || video.codec_name !== 'h264') {
     throw new BadRequestException('MP4 视频必须使用 H.264 编码。');
   }
-  if (!Number.isInteger(video.width) || !Number.isInteger(video.height) || !video.width || !video.height) {
+  if (
+    !Number.isInteger(video.width) ||
+    !Number.isInteger(video.height) ||
+    !video.width ||
+    !video.height
+  ) {
     throw new BadRequestException('无法读取视频尺寸。');
   }
-  if (probe.streams?.some((stream) => stream.codec_type === 'audio' && stream.codec_name !== 'aac')) {
+  if (
+    probe.streams?.some((stream) => stream.codec_type === 'audio' && stream.codec_name !== 'aac')
+  ) {
     throw new BadRequestException('MP4 的音轨必须使用 AAC 编码。');
   }
   const durationSeconds = Number(probe.format?.duration);
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
     throw new BadRequestException('无法读取视频时长。');
   }
-  const sideDataRotation = video.side_data_list?.find((item) => Number.isFinite(item.rotation))?.rotation;
+  const sideDataRotation = video.side_data_list?.find((item) =>
+    Number.isFinite(item.rotation),
+  )?.rotation;
   const tagRotation = Number(video.tags?.rotate ?? 0);
   const rotation = sideDataRotation ?? (Number.isFinite(tagRotation) ? tagRotation : 0);
   const swapsDimensions = Math.abs(rotation) % 180 === 90;

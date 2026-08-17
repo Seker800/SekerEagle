@@ -109,4 +109,3 @@ describe('EagleBatchTagPicker', () => {
     expect(within(dialog).queryByRole('button', { name: '创建标签 yjfw' })).not.toBeInTheDocument();
   });
 });
-
