@@ -344,6 +344,10 @@ async function verifyScaleLibrary() {
     minimumItemCounts: Object.fromEntries(
       measurements.map((measurement) => [measurement.name, 1]),
     ),
+    forbiddenPlanNodes: {
+      'default-first-page': ['Seq Scan'],
+      'interactive-job-candidate': ['Seq Scan'],
+    },
   };
   const failures = evaluateScaleMeasurements(report, thresholds);
   process.stdout.write(`SCALE_REPORT ${JSON.stringify({ ...report, thresholds, failures })}\n`);

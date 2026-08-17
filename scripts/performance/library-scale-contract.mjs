@@ -41,5 +41,18 @@ export function evaluateScaleMeasurements(report, thresholds) {
       );
     }
   }
+  const plans = new Map((report.plans ?? []).map((plan) => [plan.name, plan]));
+  for (const [name, forbiddenNodes] of Object.entries(thresholds.forbiddenPlanNodes ?? {})) {
+    const plan = plans.get(name);
+    if (!plan) {
+      failures.push(`${name} execution plan is missing`);
+      continue;
+    }
+    for (const node of forbiddenNodes) {
+      if (plan.nodes.includes(node)) {
+        failures.push(`${name} plan contains forbidden node ${node}`);
+      }
+    }
+  }
   return failures;
 }
