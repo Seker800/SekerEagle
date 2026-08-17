@@ -23,8 +23,7 @@ import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
 
-const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
-  annotation: { select: { color: true, description: true, sourceUrl: true } },
+const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   renditions: {
     where: { status: 'READY' },
     orderBy: [{ revision: 'desc' }, { kind: 'asc' }],
@@ -42,6 +41,11 @@ const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
     orderBy: { tag: { normalizedName: 'asc' } },
     select: { tag: { select: { id: true, name: true, color: true } } },
   },
+});
+
+const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
+  ...assetListInclude,
+  annotation: { select: { color: true, description: true, sourceUrl: true } },
   aiTagLinks: {
     where: { status: 'ACTIVE' },
     orderBy: { confidence: 'desc' },
@@ -54,6 +58,7 @@ const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   },
 });
 
+type AssetListRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>;
 type AssetRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetInclude }>;
 
 @Injectable()
@@ -106,7 +111,7 @@ export class EagleService {
     const [rows, colorEligible, colorCompleted] = await Promise.all([
       this.prisma.eagleAsset.findMany({
         where,
-        include: assetInclude,
+        include: assetListInclude,
         orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
       }),
@@ -130,7 +135,7 @@ export class EagleService {
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
     return {
-      items: page.map(serializeAsset),
+      items: page.map(serializeAssetList),
       nextCursor: hasMore && page.length ? encodeEagleAssetCursor(page.at(-1)!) : null,
       colorCoverage: query.color
         ? {
@@ -865,18 +870,10 @@ export class EagleService {
 }
 
 function serializeAsset(asset: AssetRecord) {
-  const { manualTagLinks, aiTagLinks, colorAnalyses, ...record } = asset;
-  const safe = { ...record, originalObjectKey: undefined };
+  const { annotation, aiTagLinks, colorAnalyses, ...listRecord } = asset;
   return {
-    ...safe,
-    byteSize: Number(asset.byteSize),
-    originalUrl: `/api/eagle/assets/${asset.id}/original`,
-    renditions: asset.renditions.map((rendition) => ({
-      ...rendition,
-      byteSize: Number(rendition.byteSize),
-      url: `/api/eagle/assets/${asset.id}/renditions/${rendition.id}`,
-    })),
-    manualTags: manualTagLinks.map(({ tag }) => tag),
+    ...serializeAssetList(listRecord),
+    annotation,
     aiTags: aiTagLinks.map(({ aiTag, confidence, status }) => ({ ...aiTag, confidence, status })),
     colorAnalysis: colorAnalyses[0]
       ? {
@@ -888,6 +885,22 @@ function serializeAsset(asset: AssetRecord) {
           swatches: colorAnalyses[0].swatches,
         }
       : null,
+  };
+}
+
+function serializeAssetList(asset: AssetListRecord) {
+  const { manualTagLinks, ...record } = asset;
+  const safe = { ...record, originalObjectKey: undefined };
+  return {
+    ...safe,
+    byteSize: Number(asset.byteSize),
+    originalUrl: `/api/eagle/assets/${asset.id}/original`,
+    renditions: asset.renditions.map((rendition) => ({
+      ...rendition,
+      byteSize: Number(rendition.byteSize),
+      url: `/api/eagle/assets/${asset.id}/renditions/${rendition.id}`,
+    })),
+    manualTags: manualTagLinks.map(({ tag }) => tag),
   };
 }
 
