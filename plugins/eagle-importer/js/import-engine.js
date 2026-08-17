@@ -178,11 +178,19 @@ function isImportControlError(error) {
 }
 
 class ImportEngine {
-  constructor({ api, store, log = () => {}, progress = () => {}, uploadConcurrency = 3 }) {
+  constructor({
+    api,
+    store,
+    log = () => {},
+    progress = () => {},
+    itemState = async () => {},
+    uploadConcurrency = 3,
+  }) {
     this.api = api;
     this.store = store;
     this.log = log;
     this.progress = progress;
+    this.itemState = itemState;
     this.uploadConcurrency = Math.min(4, Math.max(1, Math.trunc(uploadConcurrency)));
     this.cancelRequested = false;
     this.pauseRequested = false;
@@ -324,12 +332,21 @@ class ImportEngine {
 
   async uploadOne(runId, item, sourceFiles, onCompleted) {
     try {
+      await this.itemState(item, { status: 'UPLOADING' });
       const source = await sourceFiles.get(item.sourceItemId);
       if (!source) throw new Error(`Eagle 中找不到待上传原文件：${item.displayName}`);
       this.log(`上传 ${item.displayName}`);
-      await this.uploadItem(runId, item, source, () => {});
+      const completed = await this.uploadItem(runId, item, source, () => {});
+      if (completed?.assetId) {
+        await this.itemState(item, {
+          status: 'IMPORTED',
+          assetId: completed.assetId,
+          duplicate: Boolean(completed.duplicate),
+        });
+      }
     } catch (error) {
       if (isImportControlError(error)) throw error;
+      await this.itemState(item, { status: 'FAILED', error });
       const detail = error instanceof Error ? error.message : String(error);
       this.log(`跳过上传失败项 ${item.displayName}：${detail}`);
     } finally {
@@ -345,7 +362,7 @@ class ImportEngine {
     });
     if (session.alreadyImported) {
       onProgress(1);
-      return;
+      return session;
     }
     const sessionId = session.id;
     const uploaded = await this.api.getUploadedParts(sessionId);
@@ -376,7 +393,8 @@ class ImportEngine {
       .map(({ partNumber, etag }) => ({ partNumber, etag }))
       .sort((left, right) => left.partNumber - right.partNumber);
     this.assertActive();
-    await this.api.completeUpload(sessionId, parts);
+    await this.itemState(item, { status: 'COMMITTING', uploadSessionId: sessionId });
+    return this.api.completeUpload(sessionId, parts);
   }
 
   async cancelRun(runId) {

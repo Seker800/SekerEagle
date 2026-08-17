@@ -8,6 +8,7 @@ const ITEM_STATUSES = [
   'COMMITTING',
   'RETRYABLE',
   'IMPORTED',
+  'SKIPPED',
   'REJECTED',
 ] as const;
 
@@ -65,7 +66,7 @@ export class MigrationJournal {
       CREATE TABLE IF NOT EXISTS migration_items (
         source_item_id TEXT PRIMARY KEY,
         content_sha256 TEXT NOT NULL,
-        status TEXT NOT NULL CHECK (status IN ('READY','UPLOADING','COMMITTING','RETRYABLE','IMPORTED','REJECTED')),
+        status TEXT NOT NULL CHECK (status IN ('READY','UPLOADING','COMMITTING','RETRYABLE','IMPORTED','SKIPPED','REJECTED')),
         attempt_count INTEGER NOT NULL DEFAULT 0,
         upload_session_id TEXT,
         asset_id TEXT,
@@ -163,6 +164,18 @@ export class MigrationJournal {
     });
   }
 
+  markUploading(sourceItemId: string): void {
+    const result = this.database
+      .prepare(`
+        UPDATE migration_items SET
+          status = 'UPLOADING', attempt_count = attempt_count + 1,
+          last_error_code = NULL, last_error_message = NULL, updated_at = ?
+        WHERE source_item_id = ? AND status IN ('READY', 'RETRYABLE', 'UPLOADING')
+      `)
+      .run(now(), sourceItemId);
+    if (result.changes !== 1) throw new Error(`迁移项 ${sourceItemId} 当前不能上传。`);
+  }
+
   markImported(
     sourceItemId: string,
     input: { assetId: string; duplicate: boolean },
@@ -180,6 +193,10 @@ export class MigrationJournal {
 
   markRejected(sourceItemId: string, error: { code: string; message: unknown }): void {
     this.markFailed(sourceItemId, 'REJECTED', error);
+  }
+
+  markSkipped(sourceItemId: string, error: { code: string; message: unknown }): void {
+    this.markFailed(sourceItemId, 'SKIPPED', error);
   }
 
   recoverInterrupted(): number {
@@ -256,14 +273,14 @@ export class MigrationJournal {
 
   private markFailed(
     sourceItemId: string,
-    status: 'RETRYABLE' | 'REJECTED',
+    status: 'RETRYABLE' | 'SKIPPED' | 'REJECTED',
     error: { code: string; message: unknown },
   ): void {
     const result = this.database
       .prepare(`
         UPDATE migration_items SET
           status = ?, last_error_code = ?, last_error_message = ?, updated_at = ?
-        WHERE source_item_id = ? AND status NOT IN ('IMPORTED', 'REJECTED')
+        WHERE source_item_id = ? AND status NOT IN ('IMPORTED', 'SKIPPED', 'REJECTED')
       `)
       .run(
         status,

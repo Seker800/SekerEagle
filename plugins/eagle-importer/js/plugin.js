@@ -11,6 +11,7 @@ let ConnectionSupervisor;
 let NightlySyncScheduler;
 let formatBytes;
 let randomId;
+let exportMigrationSnapshot;
 
 const ui = {};
 let store;
@@ -43,6 +44,7 @@ function loadDependencies(pluginPath) {
   ({ StateStore } = require(path.join(jsPath, 'state-store.js')));
   ({ ConnectionSupervisor, NightlySyncScheduler } = require(path.join(jsPath, 'automation.js')));
   ({ formatBytes, randomId } = require(path.join(jsPath, 'utils.js')));
+  ({ exportMigrationSnapshot } = require(path.join(jsPath, 'snapshot-exporter.js')));
 }
 
 function element(id) {
@@ -74,6 +76,7 @@ function setConnected(value) {
 function setBusy(value) {
   busy = value;
   ui.connectButton.disabled = value;
+  ui.migrationSnapshotButton.disabled = value;
   ui.prepareButton.disabled = value || !connected;
   ui.refreshLibrariesButton.disabled = value || !connected;
   ui.libraryBinding.disabled = value || !connected;
@@ -123,6 +126,7 @@ function bindElements() {
     'autoSyncStatus',
     'libraryBinding',
     'refreshLibrariesButton',
+    'migrationSnapshotButton',
     'prepareButton',
     'uploadButton',
     'resumeButton',
@@ -297,6 +301,47 @@ async function scanLibrary() {
     libraryBindings: { ...store.state.libraryBindings, [libraryPath]: externalLibraryId },
   });
   return externalLibraryId;
+}
+
+async function exportSnapshot() {
+  setBusy(true);
+  let snapshotScan = null;
+  try {
+    if (currentScan?.dispose) await currentScan.dispose();
+    currentScan = null;
+    const workspace = await store.createScanWorkspace();
+    try {
+      log('开始生成一次性迁移快照；此操作不会连接或写入服务器。');
+      snapshotScan = await scanEagleLibrary({
+        eagleApi: eagle,
+        hashCacheStore: store.hashCache,
+        workspace,
+        cancelled: () => false,
+        onProgress: ({ phase, current, total }) =>
+          setProgress(
+            phase === 'hash' ? '计算迁移快照指纹' : '读取 Eagle 素材',
+            current,
+            total || 1,
+          ),
+      });
+    } catch (error) {
+      await workspace.dispose();
+      throw error;
+    }
+    const result = await exportMigrationSnapshot(snapshotScan, {
+      outputRoot: path.join(store.directory, 'migration-snapshots'),
+      migrationId: `eagle-${randomId()}`,
+    });
+    setProgress('迁移快照已导出', 1, 1);
+    log(`迁移快照已导出：${result.itemCount} 项，${formatBytes(result.byteSize)}。`);
+    log(`快照路径：${result.directory}`);
+  } catch (error) {
+    showError(error, '快照导出失败');
+  } finally {
+    if (snapshotScan?.dispose) await snapshotScan.dispose().catch(() => undefined);
+    currentScan = null;
+    setBusy(false);
+  }
 }
 
 function renderSummary(preflight) {
@@ -550,6 +595,7 @@ async function initialize(pluginPath) {
         .catch(showError);
     });
     ui.refreshLibrariesButton.addEventListener('click', () => refreshLibraries().catch(showError));
+    ui.migrationSnapshotButton.addEventListener('click', exportSnapshot);
     ui.prepareButton.addEventListener('click', prepare);
     ui.uploadButton.addEventListener('click', upload);
     ui.resumeButton.addEventListener('click', resume);
