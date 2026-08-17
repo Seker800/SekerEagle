@@ -17,6 +17,7 @@ import type {
   UpdateManualTagGroupDto,
   UpdateSmartFolderDto,
 } from './eagle.dto';
+import { buildColorAnalysisWhere } from './eagle-color-search';
 
 const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   annotation: { select: { color: true, description: true, sourceUrl: true } },
@@ -74,7 +75,7 @@ export class EagleService {
       libraryAddedAt: dateRangeFilter(filters.createdFrom, filters.createdTo),
       manualTagLinks: filters.manualTagIds?.length ? { some: { tagId: { in: filters.manualTagIds } } } : undefined,
       aiTagLinks: filters.aiTagIds?.length ? { some: { aiTagId: { in: filters.aiTagIds }, status: 'ACTIVE' } } : undefined,
-      annotation: filters.color ? { color: filters.color.toLowerCase() } : undefined,
+      colorAnalyses: filters.color ? buildColorAnalysisWhere(filters.color) : undefined,
       ...(filters.search
         ? {
             OR: [
