@@ -30,7 +30,7 @@ class ApiClient {
     this.fetchImpl = fetchImpl;
     this.refreshPromise = null;
     this.uploadContexts = new Map();
-    this.importPacer = new RequestPacer({ minimumIntervalMs: minimumImportIntervalMs, now, sleep });
+    this.apiPacer = new RequestPacer({ minimumIntervalMs: minimumImportIntervalMs, now, sleep });
   }
 
   async login(email, password) {
@@ -90,7 +90,7 @@ class ApiClient {
       requestBody = JSON.stringify(body);
     }
 
-    if (pathname.startsWith('/eagle/imports')) await this.importPacer.wait();
+    if (pathname.startsWith('/eagle/')) await this.apiPacer.wait();
     let response;
     try {
       response = await this.fetchImpl(`${this.baseUrl}${pathname}`, {

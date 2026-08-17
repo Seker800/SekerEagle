@@ -260,7 +260,7 @@ function createApi(serverUrl: string, pat: string): ApiLike {
   return new ApiClient({
     baseUrl: serverUrl,
     accessToken: pat,
-    minimumImportIntervalMs: 0,
+    minimumImportIntervalMs: 550,
   }) as ApiLike;
 }
 

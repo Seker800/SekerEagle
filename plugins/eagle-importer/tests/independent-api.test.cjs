@@ -52,6 +52,27 @@ test('maps the original resumable upload engine onto independent Eagle endpoints
   assert.equal(requests[3].init.headers?.Authorization, undefined);
 });
 
+test('paces both import and upload-control API requests below the server throttle', async () => {
+  let now = 0;
+  const waits = [];
+  const api = new ApiClient({
+    baseUrl: 'http://localhost:8180',
+    accessToken: 'se_pat_test',
+    minimumImportIntervalMs: 550,
+    now: () => now,
+    sleep: async (milliseconds) => {
+      waits.push(milliseconds);
+      now += milliseconds;
+    },
+    fetchImpl: async () => json({ parts: [] }),
+  });
+
+  await api.getUploadedParts('session-1');
+  await api.getRun('run-1');
+
+  assert.deepEqual(waits, [550]);
+});
+
 function json(payload) {
   return {
     ok: true,
