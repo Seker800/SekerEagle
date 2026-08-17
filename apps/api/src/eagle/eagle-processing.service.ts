@@ -61,7 +61,7 @@ export class EagleProcessingService {
     const row = await this.prisma.eagleProcessingSetting.upsert({ where: { ownerId }, create: { ownerId, ...input }, update: input });
     return { mode: row.mode, nightStart: row.nightStart, nightEnd: row.nightEnd, timeZone: 'Asia/Shanghai' as const };
   }
-  private async getSettings(ownerId: string) {
+  async getSettings(ownerId: string) {
     const row = await this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
     return { mode: row?.mode ?? 'NIGHT', nightStart: row?.nightStart ?? '23:00', nightEnd: row?.nightEnd ?? '06:00', timeZone: 'Asia/Shanghai' as const };
   }

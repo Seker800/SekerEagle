@@ -15,6 +15,7 @@ export class EagleProcessingController {
 
   @Get('summary') summary(@CurrentPrincipal() principal: AuthPrincipal) { return this.processing.summary(principal.sub); }
   @Get('jobs') jobs(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleProcessingJobsDto) { return this.processing.jobs(principal.sub, query); }
+  @Get('settings') settings(@CurrentPrincipal() principal: AuthPrincipal) { return this.processing.getSettings(principal.sub); }
 
   @Post('jobs/:jobId/retry')
   @UseGuards(BrowserOriginGuard)
@@ -30,5 +31,5 @@ export class EagleProcessingController {
 
   @Patch('settings')
   @UseGuards(BrowserOriginGuard)
-  settings(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: UpdateEagleProcessingSettingsDto) { return this.processing.updateSettings(principal.sub, input); }
+  updateSettings(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: UpdateEagleProcessingSettingsDto) { return this.processing.updateSettings(principal.sub, input); }
 }

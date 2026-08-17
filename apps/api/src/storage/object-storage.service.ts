@@ -115,8 +115,13 @@ export class ObjectStorageService implements OnModuleDestroy {
     return this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  getObject(key: string) {
-    return this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+  getObject(key: string, options?: { range?: string; ifNoneMatch?: string }) {
+    return this.client.send(new GetObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Range: options?.range,
+      IfNoneMatch: options?.ifNoneMatch,
+    }));
   }
 
   async deleteObject(key: string): Promise<void> {

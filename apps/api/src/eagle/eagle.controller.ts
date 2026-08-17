@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -15,6 +16,12 @@ import {
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import {
+  isObjectRangeNotSatisfiableError,
+  parseRangeHeader,
+  setPartialContentHeaders,
+  setRangeNotSatisfiableHeaders,
+} from '../common/range-parser';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
@@ -98,11 +105,42 @@ export class EagleController {
   async getOriginal(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Headers('range') range: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const media = await this.media.getOriginal(principal.sub, assetId);
+    let parsedRange: string | undefined;
+    try {
+      parsedRange = parseRangeHeader(range);
+    } catch {
+      const metadata = await this.media.getOriginalMetadata(principal.sub, assetId);
+      setRangeNotSatisfiableHeaders(response, metadata.size);
+      return;
+    }
+    let media: Awaited<ReturnType<EagleMediaService['getOriginal']>>;
+    try {
+      media = await this.media.getOriginal(principal.sub, assetId, parsedRange);
+    } catch (error) {
+      if (!isObjectRangeNotSatisfiableError(error)) throw error;
+      const metadata = await this.media.getOriginalMetadata(principal.sub, assetId);
+      setRangeNotSatisfiableHeaders(response, metadata.size);
+      return;
+    }
     applyMediaHeaders(response, media);
+    setPartialContentHeaders(response, parsedRange, media.contentRange, media.contentLength, media.fullSize);
+    response.once('close', () => {
+      if (!response.writableEnded && !media.stream.destroyed) media.stream.destroy();
+    });
     return new StreamableFile(media.stream);
+  }
+
+  @Get('assets/:assetId/content')
+  getOriginalContent(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Headers('range') range: string | undefined,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.getOriginal(principal, assetId, range, response);
   }
 
   @Get('assets/:assetId/renditions/:renditionId')
@@ -115,6 +153,16 @@ export class EagleController {
     const media = await this.media.getRendition(principal.sub, assetId, renditionId);
     applyMediaHeaders(response, media);
     return new StreamableFile(media.stream);
+  }
+
+  @Get('assets/:assetId/renditions/:renditionId/content')
+  getRenditionContent(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+    @Param('renditionId', new ParseUUIDPipe({ version: '4' })) renditionId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.getRendition(principal, assetId, renditionId, response);
   }
 
   @Patch('assets/batch')
