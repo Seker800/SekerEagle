@@ -3,23 +3,120 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SekerEagle 独立导入器</title>
+    <title>SekerEagle 增量导入</title>
     <link rel="stylesheet" href="styles.css" />
-    <script defer src="plugin.js"></script>
+    <script defer src="js/plugin.js"></script>
   </head>
   <body>
-    <main>
-      <header><img src="logo.svg" alt="" /><div><h1>SekerEagle 导入器</h1><p>当前 Eagle 图库 → 本机独立素材库</p></div><span id="badge">未连接</span></header>
-      <section>
-        <h2>连接</h2>
-        <div class="connection"><label>服务器<input id="server" type="url" value="http://localhost:8180" /></label><label>PAT<input id="pat" type="password" placeholder="se_pat_…" /></label><button id="connect">验证连接</button></div>
-        <p class="help">PAT 需要 <code>import:read</code>、<code>import:write</code> 和 <code>asset:write</code>。插件不保存账号密码。</p>
-      </section>
-      <section>
-        <h2>当前图库</h2><strong id="libraryName">正在读取 Eagle…</strong><small id="libraryPath"></small>
-      </section>
-      <section class="actions"><button id="start" disabled>扫描并增量导入</button><button id="resume" disabled>继续上次任务</button><button id="cancel" disabled>取消</button></section>
-      <section><div class="progress-head"><span id="phase">尚未开始</span><span id="percent">0%</span></div><div class="track"><i id="bar"></i></div><pre id="log"></pre></section>
+    <main class="app-shell">
+      <header class="app-toolbar">
+        <div class="app-identity">
+          <span class="app-mark" aria-hidden="true">SE</span>
+          <div>
+            <h1>SekerEagle 导入器</h1>
+            <p>当前图库 → 独立 SekerEagle · 单向增量同步</p>
+          </div>
+        </div>
+        <span id="connectionBadge" class="badge">未连接</span>
+      </header>
+
+      <div class="app-content">
+        <section class="panel connection-panel">
+          <div class="panel-header">
+            <div>
+              <h2>服务器连接</h2>
+              <span>PAT 仅保存在当前 Eagle 运行进程</span>
+            </div>
+          </div>
+          <div class="connection-grid">
+            <label>
+              <span>服务器</span>
+              <input id="serverUrl" type="url" placeholder="http://localhost:8180" autocomplete="url" />
+            </label>
+            <label>
+              <span>个人访问令牌</span>
+              <input id="pat" type="password" placeholder="se_pat_…" autocomplete="off" />
+            </label>
+            <div class="field-action">
+              <button id="connectButton" class="secondary">连接</button>
+            </div>
+          </div>
+          <p class="remember-row"><span>需要 import:read、import:write、asset:write scope</span><small>退出 Eagle 后令牌自动清除</small></p>
+        </section>
+
+        <div class="workspace-grid">
+          <section class="panel library-panel">
+            <div class="panel-header">
+              <div class="library-title">
+                <h2>当前图库</h2>
+                <strong id="libraryName">等待 Eagle...</strong>
+                <small id="libraryPath"></small>
+              </div>
+              <button id="refreshLibrariesButton" class="ghost compact" disabled>刷新</button>
+            </div>
+            <div class="inline-field">
+              <label for="libraryBinding">服务端图库身份</label>
+              <select id="libraryBinding" disabled>
+                <option value="">为当前图库创建稳定身份</option>
+              </select>
+            </div>
+            <p class="panel-help">图库移动过路径时，选择原来的服务端图库身份。</p>
+          </section>
+
+          <section class="panel automation-panel">
+            <div class="panel-header">
+              <div>
+                <h2>后台自动化</h2>
+                <span id="autoSyncStatus">深夜同步未启用</span>
+              </div>
+            </div>
+            <div class="settings-list">
+              <label class="setting-row">
+                <input id="autoReconnect" type="checkbox" checked />
+                <span><strong>断线自动重连</strong><small>网络恢复后按退避策略重新连接</small></span>
+              </label>
+              <label class="setting-row">
+                <input id="autoSyncEnabled" type="checkbox" />
+                <span><strong>每天深夜自动同步</strong><small>自动扫描、预检并增量上传</small></span>
+              </label>
+              <label class="setting-row time-setting">
+                <span><strong>开始时间</strong><small>3 小时补跑窗口 · 失败 15 分钟后重试</small></span>
+                <input id="autoSyncTime" type="time" value="03:00" />
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <section class="action-toolbar" aria-label="导入操作">
+          <span class="toolbar-label">导入</span>
+          <button id="prepareButton" class="primary" disabled>扫描并预检</button>
+          <button id="uploadButton" class="primary" disabled>开始上传</button>
+          <span class="toolbar-separator" aria-hidden="true"></span>
+          <button id="resumeButton" class="secondary" disabled>继续任务</button>
+          <button id="pauseButton" class="secondary" disabled>暂停本次同步</button>
+          <button id="cancelButton" class="danger" disabled>取消</button>
+        </section>
+
+        <section id="summaryCard" class="panel summary-panel hidden">
+          <div class="panel-header summary-heading">
+            <div>
+              <h2>预检结果</h2>
+              <strong id="summaryTitle">等待预检</strong>
+            </div>
+            <span id="runStatus" class="badge">—</span>
+          </div>
+          <div id="summaryGrid" class="metrics"></div>
+        </section>
+
+        <section class="panel status-panel">
+          <div class="status-heading">
+            <span id="progressLabel">尚未开始</span>
+            <span id="progressPercent">0%</span>
+          </div>
+          <div class="progress-track"><div id="progressBar"></div></div>
+          <pre id="log" aria-live="polite"></pre>
+        </section>
+      </div>
     </main>
   </body>
 </html>

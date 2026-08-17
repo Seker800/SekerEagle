@@ -6,6 +6,7 @@ import {
   GetObjectCommand,
   HeadBucketCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   S3Client,
   UploadPartCommand,
   type CompletedPart,
@@ -84,6 +85,30 @@ export class ObjectStorageService implements OnModuleDestroy {
     await this.client.send(
       new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }),
     );
+  }
+
+  async listMultipartUploadParts(
+    key: string,
+    uploadId: string,
+  ): Promise<Array<{ partNumber: number; etag: string; size: number }>> {
+    const parts: Array<{ partNumber: number; etag: string; size: number }> = [];
+    let partNumberMarker: string | undefined;
+    do {
+      const response = await this.client.send(
+        new ListPartsCommand({
+          Bucket: this.bucket,
+          Key: key,
+          UploadId: uploadId,
+          PartNumberMarker: partNumberMarker,
+        }),
+      );
+      for (const part of response.Parts ?? []) {
+        if (part.PartNumber === undefined || !part.ETag) continue;
+        parts.push({ partNumber: part.PartNumber, etag: part.ETag, size: part.Size ?? 0 });
+      }
+      partNumberMarker = response.IsTruncated ? response.NextPartNumberMarker : undefined;
+    } while (partNumberMarker);
+    return parts.sort((left, right) => left.partNumber - right.partNumber);
   }
 
   headObject(key: string) {

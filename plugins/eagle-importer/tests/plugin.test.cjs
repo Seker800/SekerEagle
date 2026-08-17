@@ -7,12 +7,14 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 
-test('独立导入器不包含 SekerChat 登录和 API 路径', () => {
-  const source = fs.readFileSync(path.join(root, 'plugin.js'), 'utf8');
+test('独立导入器复用原版恢复引擎并只使用 PAT', () => {
+  const source = fs.readFileSync(path.join(root, 'js', 'plugin.js'), 'utf8');
   assert.equal(source.includes('/auth/token/login'), false);
   assert.equal(source.includes('SekerChat'), false);
-  assert.equal(source.includes("'/eagle/imports'"), true);
   assert.equal(source.includes("'/auth/me'"), true);
+  assert.equal(source.includes("require(path.join(jsPath, 'import-engine.js'))"), true);
+  assert.equal(source.includes("require(path.join(jsPath, 'automation.js'))"), true);
+  assert.equal(source.includes("pat.startsWith('se_pat_')"), true);
 });
 
 test('manifest 使用独立插件身份', () => {

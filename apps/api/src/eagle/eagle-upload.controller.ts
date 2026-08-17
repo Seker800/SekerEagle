@@ -52,6 +52,14 @@ export class EagleUploadController {
     return this.uploads.presignPart(principal.sub, uploadSessionId, partNumber);
   }
 
+  @Get(':uploadSessionId/parts')
+  listParts(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('uploadSessionId', new ParseUUIDPipe({ version: '4' })) uploadSessionId: string,
+  ) {
+    return this.uploads.listParts(principal.sub, uploadSessionId);
+  }
+
   @Post(':uploadSessionId/complete')
   @UseGuards(BrowserOrPatOriginGuard)
   complete(

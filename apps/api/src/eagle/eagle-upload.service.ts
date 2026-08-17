@@ -95,6 +95,17 @@ export class EagleUploadService {
     };
   }
 
+  async listParts(ownerId: string, uploadSessionId: string) {
+    const session = await this.requireInitiated(ownerId, uploadSessionId);
+    return {
+      uploadSessionId: session.id,
+      parts: await this.storage.listMultipartUploadParts(
+        session.objectKey,
+        session.multipartUploadId,
+      ),
+    };
+  }
+
   async complete(ownerId: string, uploadSessionId: string, input: CompleteEagleUploadDto) {
     const session = await this.requireInitiated(ownerId, uploadSessionId);
     const parts = normalizeParts(input.parts);
