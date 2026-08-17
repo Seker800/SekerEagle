@@ -54,7 +54,9 @@ test('exports a deterministic migration snapshot without secrets', async () => {
   });
 
   assert.equal(result.itemCount, 1);
-  const item = JSON.parse((await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim());
+  const item = JSON.parse(
+    (await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim(),
+  );
   assert.equal(item.sourcePath, await fs.realpath(sourcePath));
   const serialized = await fs.readFile(path.join(result.directory, 'snapshot.json'), 'utf8');
   assert.doesNotMatch(serialized, /token|password|authorization/i);
@@ -108,7 +110,9 @@ test('exports deleted Eagle records without requiring a source file', async () =
     },
     { outputRoot: path.join(root, 'snapshots'), migrationId: 'migration-deleted' },
   );
-  const item = JSON.parse((await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim());
+  const item = JSON.parse(
+    (await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim(),
+  );
   assert.equal(item.isDeleted, true);
   assert.equal(Object.hasOwn(item, 'sourcePath'), false);
 });

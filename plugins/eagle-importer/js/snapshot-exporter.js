@@ -86,7 +86,10 @@ async function exportMigrationSnapshot(scan, { outputRoot, migrationId }) {
     };
     const files = {};
     for (const [key, fileName] of Object.entries(fileNames)) {
-      files[key] = { path: fileName, sha256: await sha256File(path.join(temporaryDirectory, fileName)) };
+      files[key] = {
+        path: fileName,
+        sha256: await sha256File(path.join(temporaryDirectory, fileName)),
+      };
     }
     const header = {
       formatVersion: FORMAT_VERSION,
@@ -106,7 +109,12 @@ async function exportMigrationSnapshot(scan, { outputRoot, migrationId }) {
       `${JSON.stringify(header, null, 2)}\n`,
     );
     await fsp.rename(temporaryDirectory, finalDirectory);
-    return { directory: finalDirectory, itemCount, byteSize, snapshotSha256: header.snapshotSha256 };
+    return {
+      directory: finalDirectory,
+      itemCount,
+      byteSize,
+      snapshotSha256: header.snapshotSha256,
+    };
   } catch (error) {
     await fsp.rm(temporaryDirectory, { recursive: true, force: true });
     throw error;
