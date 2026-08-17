@@ -88,3 +88,27 @@ test('refuses unstable identifiers and source files outside the library', async 
     /outside the Eagle library/i,
   );
 });
+
+test('exports deleted Eagle records without requiring a source file', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'sekereagle-exporter-deleted-'));
+  const libraryRoot = path.join(root, 'Library.library');
+  await fs.mkdir(libraryRoot);
+  const result = await exportMigrationSnapshot(
+    {
+      library: { name: 'Library', path: libraryRoot, sourceModifiedAt: new Date().toISOString() },
+      itemCount: 1,
+      byteSize: 1,
+      folders: [],
+      tags: [],
+      tagGroups: [],
+      iterateItems: async function* () {
+        yield { sourceItemId: 'deleted-1', size: 1, isDeleted: true };
+      },
+      sourceFiles: { get: async () => null },
+    },
+    { outputRoot: path.join(root, 'snapshots'), migrationId: 'migration-deleted' },
+  );
+  const item = JSON.parse((await fs.readFile(path.join(result.directory, 'items.ndjson'), 'utf8')).trim());
+  assert.equal(item.isDeleted, true);
+  assert.equal(Object.hasOwn(item, 'sourcePath'), false);
+});
