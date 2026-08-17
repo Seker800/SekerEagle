@@ -14,7 +14,7 @@ test('独立导入器复用原版恢复引擎并只使用 PAT', () => {
   assert.equal(source.includes("'/auth/me'"), true);
   assert.equal(source.includes("require(path.join(jsPath, 'import-engine.js'))"), true);
   assert.equal(source.includes("require(path.join(jsPath, 'automation.js'))"), true);
-  assert.equal(source.includes("pat.startsWith('se_pat_')"), true);
+  assert.equal(source.includes("pat.startsWith('sea_pat_')"), true);
 });
 
 test('manifest 使用独立插件身份', () => {

@@ -16,7 +16,7 @@ test('maps the original resumable upload engine onto independent Eagle endpoints
   ];
   const api = new ApiClient({
     baseUrl: 'http://localhost:8180',
-    accessToken: 'se_pat_test',
+    accessToken: 'sea_pat_test',
     minimumImportIntervalMs: 0,
     fetchImpl: async (url, init) => {
       requests.push({ url, init });
@@ -57,7 +57,7 @@ test('paces both import and upload-control API requests below the server throttl
   const waits = [];
   const api = new ApiClient({
     baseUrl: 'http://localhost:8180',
-    accessToken: 'se_pat_test',
+    accessToken: 'sea_pat_test',
     minimumImportIntervalMs: 550,
     now: () => now,
     sleep: async (milliseconds) => {

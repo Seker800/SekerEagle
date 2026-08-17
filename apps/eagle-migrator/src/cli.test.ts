@@ -8,7 +8,8 @@ import type { MigrationSnapshot } from './snapshot';
 
 test('requires PAT from the environment and never from command arguments', () => {
   assert.throws(() => requirePat({}), /SEKEREAGLE_PAT/);
-  assert.equal(requirePat({ SEKEREAGLE_PAT: 'se_pat_example' }), 'se_pat_example');
+  assert.throws(() => requirePat({ SEKEREAGLE_PAT: 'se_pat_legacy' }), /SEKEREAGLE_PAT/);
+  assert.equal(requirePat({ SEKEREAGLE_PAT: 'sea_pat_example' }), 'sea_pat_example');
 });
 
 test('uses a migration-specific local state directory', () => {

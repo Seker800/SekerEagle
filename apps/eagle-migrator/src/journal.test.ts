@@ -68,10 +68,10 @@ test('records bounded errors but never accepts bearer tokens as persisted fields
   journal.registerItems([{ sourceItemId: 'item-1', contentSha256: 'b'.repeat(64) }]);
   journal.markRetryable('item-1', {
     code: 'NETWORK_ERROR',
-    message: `request failed with Authorization: Bearer se_pat_${'x'.repeat(64)}`,
+    message: `request failed with Authorization: Bearer sea_pat_${'x'.repeat(64)}`,
   });
   const item = journal.get('item-1');
-  assert.doesNotMatch(item?.lastErrorMessage ?? '', /se_pat_|Bearer/i);
+  assert.doesNotMatch(item?.lastErrorMessage ?? '', /sea_pat_|Bearer/i);
   assert.ok((item?.lastErrorMessage.length ?? 0) <= 500);
   journal.close();
 });
