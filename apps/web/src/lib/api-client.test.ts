@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchEagleProcessingSummary } from './eagle-processing-admin-api';
 import { request } from './api-client';
+import { listEagleAssets } from './eagle-api';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -73,6 +75,30 @@ describe('browser session recovery', () => {
       '/api/auth/login',
       '/api/auth/me',
       '/api/auth/refresh',
+    ]);
+  });
+
+  it('applies the same recovery path to library and processing API clients', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ message: '访问令牌无效或已过期。' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: 'owner-1' } }))
+      .mockResolvedValueOnce(jsonResponse({ items: [], nextCursor: null, colorCoverage: null }))
+      .mockResolvedValueOnce(jsonResponse({ message: '访问令牌无效或已过期。' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: 'owner-1' } }))
+      .mockResolvedValueOnce(jsonResponse({ refreshedAt: '2026-08-17T00:00:00.000Z' }));
+
+    await expect(listEagleAssets('', { limit: 1 })).resolves.toMatchObject({ items: [] });
+    await expect(fetchEagleProcessingSummary('')).resolves.toMatchObject({
+      refreshedAt: '2026-08-17T00:00:00.000Z',
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/eagle/assets?limit=1',
+      '/api/auth/refresh',
+      '/api/eagle/assets?limit=1',
+      '/api/admin/eagle-processing/summary',
+      '/api/auth/refresh',
+      '/api/admin/eagle-processing/summary',
     ]);
   });
 });
