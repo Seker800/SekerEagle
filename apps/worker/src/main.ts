@@ -150,6 +150,14 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         'IMAGE_TOO_LARGE_TO_PROCESS',
       );
     const sourceDetails = selectImageJobSource(asset, job.kind);
+    process.stdout.write(
+      `${JSON.stringify({
+        event: 'eagle_media_source_selected',
+        jobId: job.id,
+        kind: job.kind,
+        source: sourceDetails.verifiesOriginalHash ? 'ORIGINAL' : 'THUMBNAIL',
+      })}\n`,
+    );
     assertOwnedKey(asset.ownerId, sourceDetails.storageKey);
     const object = await storage.send(
       new GetObjectCommand({ Bucket: s3Bucket, Key: sourceDetails.storageKey }),
@@ -710,6 +718,7 @@ async function poll(): Promise<void> {
 }
 
 async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
+  const startedRss = process.memoryUsage().rss;
   let leaseHeld = true;
   let renewing = false;
   const renewal = setInterval(() => {
@@ -731,7 +740,16 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
   renewal.unref();
   try {
     await processJob(job);
-    process.stdout.write(`completed media job ${job.id}\n`);
+    process.stdout.write(
+      `${JSON.stringify({
+        event: 'eagle_media_job_completed',
+        jobId: job.id,
+        kind: job.kind,
+        rssBeforeMiB: startedRss / 1024 / 1024,
+        rssAfterMiB: process.memoryUsage().rss / 1024 / 1024,
+        processMaxRssMiB: process.resourceUsage().maxRSS / 1024,
+      })}\n`,
+    );
   } catch (error) {
     if (leaseHeld) await failJob(job, error);
     const message = error instanceof Error ? error.message : 'unknown media error';

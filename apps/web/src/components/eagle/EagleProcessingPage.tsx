@@ -33,6 +33,7 @@ const KIND_LABELS: Record<string, string> = {
   GENERATE_PREVIEW: '生成预览图',
   PROBE_MEDIA: '读取媒体信息',
   EXTRACT_COLOR_PALETTE: '提取图片代表色',
+  GENERATE_IMAGE_PYRAMID: '生成大图缩放切片',
   PURGE_ASSET: '永久清理素材',
 };
 

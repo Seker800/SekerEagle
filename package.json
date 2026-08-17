@@ -18,7 +18,7 @@
   "scripts": {
     "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts",
     "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts",
-    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm --prefix plugins/eagle-importer test && node --test scripts/performance/library-scale-contract.test.mjs",
+    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm --prefix plugins/eagle-importer test && node --test scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "db:guard": "node ./scripts/assert-safe-target.mjs",
@@ -32,6 +32,7 @@
     "smoke:auth": "node ./scripts/smoke-auth.mjs",
     "smoke:eagle": "node ./scripts/smoke-eagle.mjs",
     "performance:library:100k": "node ./scripts/performance/verify-library-100k.mjs --verify",
+    "performance:media-memory": "node ./scripts/performance/verify-media-memory.mjs --verify",
     "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check"
   },
   "devDependencies": {

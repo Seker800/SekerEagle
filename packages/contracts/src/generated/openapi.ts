@@ -308,6 +308,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/pyramid': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getPyramidDescriptor'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/{assetId}/pyramids/{pyramidId}/tiles/{level}/{x}/{y}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getPyramidTile'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/batch': {
     parameters: {
       query?: never;
@@ -1598,6 +1630,48 @@ export interface operations {
       path: {
         assetId: string;
         renditionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_getPyramidDescriptor: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_getPyramidTile: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+        pyramidId: string;
+        level: number;
+        x: number;
+        y: number;
       };
       cookie?: never;
     };
