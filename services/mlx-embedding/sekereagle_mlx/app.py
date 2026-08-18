@@ -12,6 +12,7 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from huggingface_hub import snapshot_download
 from mlx_embeddings import load
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel, Field
 
 from .core import project_mrl
 
@@ -52,13 +53,24 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="SekerEagle MLX Embedding Host", version="1", lifespan=lifespan)
 
 
+class TextEmbeddingInput(BaseModel):
+    text: str = Field(min_length=1, max_length=4096)
+
+
 def require_token(authorization: str | None) -> None:
     expected = f"Bearer {TOKEN}"
     if not TOKEN or not authorization or not hmac.compare_digest(authorization, expected):
         raise HTTPException(status_code=401, detail="unauthorized")
 
 
+@app.get("/health/live")
+def live(authorization: str | None = Header(default=None)) -> dict[str, str]:
+    require_token(authorization)
+    return {"status": "live"}
+
+
 @app.get("/healthz")
+@app.get("/health/ready")
 def healthz(authorization: str | None = Header(default=None)) -> dict[str, object]:
     require_token(authorization)
     return {
@@ -68,6 +80,22 @@ def healthz(authorization: str | None = Header(default=None)) -> dict[str, objec
         "dimensions": DIMENSIONS,
         "metal": mx.default_device() == mx.gpu,
     }
+
+
+@app.get("/v1/model")
+def model_contract(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    return healthz(authorization)
+
+
+async def read_bounded_body(request: Request) -> bytes:
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="image payload is too large")
+    if not body:
+        raise HTTPException(status_code=413, detail="image payload is empty")
+    return bytes(body)
 
 
 @app.post("/v1/embeddings/image")
@@ -82,9 +110,7 @@ async def embed_image(
     content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(status_code=415, detail="unsupported image content type")
-    body = await request.body()
-    if not body or len(body) > MAX_BODY_BYTES:
-        raise HTTPException(status_code=413, detail="image payload is empty or too large")
+    body = await read_bounded_body(request)
     try:
         image = Image.open(io.BytesIO(body))
         image.verify()
@@ -95,6 +121,30 @@ async def embed_image(
         raise HTTPException(status_code=503, detail="model is not ready")
     with runtime.lock:
         output = runtime.model.process([{"image": image}], processor=runtime.processor)
+        mx.eval(output)
+        vector = project_mrl(output[0].tolist(), DIMENSIONS)
+    return {
+        "embedding": vector,
+        "model": MODEL_ID,
+        "revision": MODEL_REVISION,
+        "dimensions": DIMENSIONS,
+        "normalized": True,
+    }
+
+
+@app.post("/v1/embeddings/text")
+async def embed_text(
+    input: TextEmbeddingInput,
+    authorization: str | None = Header(default=None),
+    x_embedding_dimensions: int | None = Header(default=None),
+) -> dict[str, object]:
+    require_token(authorization)
+    if x_embedding_dimensions != DIMENSIONS:
+        raise HTTPException(status_code=409, detail="embedding dimension contract mismatch")
+    if runtime.model is None or runtime.processor is None:
+        raise HTTPException(status_code=503, detail="model is not ready")
+    with runtime.lock:
+        output = runtime.model.process([{"text": input.text}], processor=runtime.processor)
         mx.eval(output)
         vector = project_mrl(output[0].tolist(), DIMENSIONS)
     return {

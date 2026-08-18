@@ -15,3 +15,8 @@ to a Hugging Face commit so vectors cannot silently drift.
 
 PyTorch/Torchvision are installed only because the upstream Transformers image
 processor requires them; model inference remains on MLX/Metal.
+
+The authenticated surface is intentionally narrow: `/health/live`,
+`/health/ready` (plus the worker-compatible `/healthz` alias), `/v1/model`, and
+bounded image/text embedding endpoints. Image bodies are streamed into a fixed
+20 MiB ceiling and URLs or host file paths are never accepted.
