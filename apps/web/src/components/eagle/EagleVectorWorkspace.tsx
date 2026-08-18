@@ -20,6 +20,8 @@ import {
 import styles from './EagleVectorWorkspace.module.css';
 
 type View = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED' | 'DISTANCE';
+type TagStatusFilter = 'ENABLED' | 'READY' | 'AWAITING_CENTER' | 'DISABLED' | 'ALL';
+const TAG_RESULT_LIMIT = 50;
 
 export function EagleVectorWorkspace() {
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
@@ -36,6 +38,7 @@ export function EagleVectorWorkspace() {
   const [distanceDirection, setDistanceDirection] = useState<'ASC' | 'DESC'>('DESC');
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState('');
+  const [tagStatus, setTagStatus] = useState<TagStatusFilter>('ENABLED');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -80,12 +83,23 @@ export function EagleVectorWorkspace() {
     }
   };
 
-  const visibleTags = useMemo(() => {
+  const matchingTags = useMemo(() => {
     const keyword = search.trim().toLocaleLowerCase('zh-CN');
-    return keyword
-      ? tags.filter((tag) => tag.name.toLocaleLowerCase('zh-CN').includes(keyword))
-      : tags;
-  }, [search, tags]);
+    if (tagStatus === 'ALL' && !keyword) return [];
+    return tags
+      .filter((tag) => {
+        if (tagStatus === 'ENABLED') return tag.recommendationEnabled;
+        if (tagStatus === 'READY') return tag.recommendationEnabled && Boolean(tag.currentSnapshot);
+        if (tagStatus === 'AWAITING_CENTER')
+          return tag.recommendationEnabled && !tag.currentSnapshot;
+        if (tagStatus === 'DISABLED') return !tag.recommendationEnabled;
+        return true;
+      })
+      .filter((tag) => !keyword || tag.name.toLocaleLowerCase('zh-CN').includes(keyword));
+  }, [search, tagStatus, tags]);
+
+  const visibleTags = matchingTags.slice(0, TAG_RESULT_LIMIT);
+  const matchingTagCount = matchingTags.length;
 
   const openDistance = async (tag: EagleVectorTag) => {
     setBusy(true);
@@ -172,7 +186,7 @@ export function EagleVectorWorkspace() {
           智能标签确认 <span>{summary?.suggestions.pending ?? 0}</span>
         </button>
         <button data-active={view === 'TAGS'} onClick={() => setView('TAGS')} type="button">
-          推荐标签 <span>{summary?.tags.enabled ?? 0}</span>
+          标签推荐设置 <span>{summary?.tags.enabled ?? 0}</span>
         </button>
         <button
           data-active={view === 'UNCLASSIFIED'}
@@ -269,63 +283,97 @@ export function EagleVectorWorkspace() {
           <div className={styles.toolbar}>
             <input
               aria-label="搜索人工标签"
-              placeholder="搜索几百个标签…"
+              placeholder="输入标签名称缩小范围…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
+            <label>
+              标签状态
+              <select
+                aria-label="筛选标签状态"
+                value={tagStatus}
+                onChange={(event) => setTagStatus(event.target.value as TagStatusFilter)}
+              >
+                <option value="ENABLED">参与推荐</option>
+                <option value="READY">已有中心</option>
+                <option value="AWAITING_CENTER">待生成中心</option>
+                <option value="DISABLED">未开启</option>
+                <option value="ALL">全部状态（需搜索）</option>
+              </select>
+            </label>
+            <span className={styles.resultCount}>
+              {matchingTagCount > TAG_RESULT_LIMIT
+                ? `${matchingTagCount} 个结果，仅显示前 ${TAG_RESULT_LIMIT} 个`
+                : `${matchingTagCount} 个结果`}
+            </span>
           </div>
-          <div className={styles.tagList}>
-            {visibleTags.map((tag) => (
-              <article className={styles.tagRow} key={tag.id}>
-                <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
-                <div>
-                  <strong>{tag.name}</strong>
-                  <small>
-                    {tag.assetCount} 张基础图片
-                    {tag.currentSnapshot
-                      ? ` · v${tag.currentSnapshot.version} · ${tag.currentSnapshot.centerCount} 个中心`
-                      : ' · 尚无中心'}
-                  </small>
-                </div>
-                <label className={styles.switch}>
-                  <input
-                    type="checkbox"
-                    checked={tag.recommendationEnabled}
-                    disabled={busy}
-                    onChange={(event) =>
+          {visibleTags.length ? (
+            <div className={styles.tagList}>
+              {visibleTags.map((tag) => (
+                <article className={styles.tagRow} key={tag.id}>
+                  <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
+                  <div>
+                    <strong>{tag.name}</strong>
+                    <small>
+                      {tag.assetCount} 张基础图片
+                      {tag.currentSnapshot
+                        ? ` · v${tag.currentSnapshot.version} · ${tag.currentSnapshot.centerCount} 个中心`
+                        : ' · 尚无中心'}
+                    </small>
+                  </div>
+                  <label className={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={tag.recommendationEnabled}
+                      disabled={busy}
+                      onChange={(event) =>
+                        void act(
+                          () => setEagleVectorTagEnabled(tag.id, event.target.checked),
+                          event.target.checked ? `已开启“${tag.name}”` : `已关闭“${tag.name}”`,
+                        )
+                      }
+                    />
+                    <span />
+                    参与智能推荐
+                  </label>
+                  <button
+                    type="button"
+                    disabled={
+                      busy ||
+                      !tag.recommendationEnabled ||
+                      tag.assetCount === 0 ||
+                      Boolean(tag.activeBuild)
+                    }
+                    onClick={() =>
                       void act(
-                        () => setEagleVectorTagEnabled(tag.id, event.target.checked),
-                        event.target.checked ? `已开启“${tag.name}”` : `已关闭“${tag.name}”`,
+                        () => rebuildEagleVectorTag(tag.id),
+                        `“${tag.name}”中心已进入后台构建`,
                       )
                     }
-                  />
-                  <span />
-                  参与智能推荐
-                </label>
-                <button
-                  type="button"
-                  disabled={
-                    busy ||
-                    !tag.recommendationEnabled ||
-                    tag.assetCount === 0 ||
-                    Boolean(tag.activeBuild)
-                  }
-                  onClick={() =>
-                    void act(() => rebuildEagleVectorTag(tag.id), `“${tag.name}”中心已进入后台构建`)
-                  }
-                >
-                  {tag.activeBuild ? '构建中…' : tag.currentSnapshot ? '刷新中心' : '生成中心'}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy || !tag.currentSnapshot}
-                  onClick={() => void openDistance(tag)}
-                >
-                  距离检查
-                </button>
-              </article>
-            ))}
-          </div>
+                  >
+                    {tag.activeBuild ? '构建中…' : tag.currentSnapshot ? '刷新中心' : '生成中心'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy || !tag.currentSnapshot}
+                    onClick={() => void openDistance(tag)}
+                  >
+                    距离检查
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <Empty
+              text={
+                tagStatus === 'ALL' && !search.trim()
+                  ? '先输入标签名称再显示结果，避免一次铺开全部标签。'
+                  : tagStatus === 'ENABLED' && !search.trim()
+                    ? '还没有参与推荐的标签。请选择“未开启”，再搜索准备启用的标签。'
+                    : '没有符合当前搜索与筛选条件的标签。'
+              }
+            />
+          )}
         </section>
       ) : null}
 

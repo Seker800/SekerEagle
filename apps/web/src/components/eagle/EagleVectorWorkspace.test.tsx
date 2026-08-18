@@ -83,7 +83,14 @@ describe('EagleVectorWorkspace', () => {
 
   it('keeps every tag disabled until the owner explicitly opts in', async () => {
     render(<EagleVectorWorkspace />);
-    fireEvent.click(await screen.findByRole('button', { name: /推荐标签/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /标签推荐设置/ }));
+    expect(screen.queryByRole('checkbox', { name: /参与智能推荐/ })).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole('combobox', { name: '筛选标签状态' }), {
+      target: { value: 'DISABLED' },
+    });
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索人工标签' }), {
+      target: { value: '汽车' },
+    });
     const toggle = screen.getByRole('checkbox', { name: /参与智能推荐/ });
     expect(toggle).not.toBeChecked();
     fireEvent.click(toggle);
