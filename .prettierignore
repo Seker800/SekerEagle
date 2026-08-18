@@ -1,1 +1,5 @@
 .gitnexus/
+**/.venv/
+**/.pytest_cache/
+**/dist/
+**/coverage/

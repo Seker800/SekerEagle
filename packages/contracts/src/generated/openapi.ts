@@ -1188,6 +1188,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/vector/embeddings/scan-missing': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleVectorController_scanMissingEmbeddings'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/vector/suggestions/{suggestionId}/review': {
     parameters: {
       query?: never;
@@ -3159,6 +3175,23 @@ export interface operations {
     };
   };
   EagleVectorController_retryFailedEmbeddings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleVectorController_scanMissingEmbeddings: {
     parameters: {
       query?: never;
       header?: never;

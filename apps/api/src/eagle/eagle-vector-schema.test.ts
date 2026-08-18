@@ -11,7 +11,10 @@ const migrationUrl = resolve(
 
 test('vector schema keeps recommendation opt-in and suggestions separate from AI tags', async () => {
   const schema = await readFile(schemaUrl, 'utf8');
-  assert.match(schema, /model EagleManualTagSemanticConfig[\s\S]*recommendationEnabled\s+Boolean\s+@default\(false\)/);
+  assert.match(
+    schema,
+    /model EagleManualTagSemanticConfig[\s\S]*recommendationEnabled\s+Boolean\s+@default\(false\)/,
+  );
   assert.match(schema, /model EagleVectorTagSuggestion/);
   assert.match(schema, /status\s+EagleVectorSuggestionStatus\s+@default\(PENDING\)/);
   assert.doesNotMatch(

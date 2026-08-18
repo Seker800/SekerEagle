@@ -2434,6 +2434,18 @@
         "tags": ["EagleVector"]
       }
     },
+    "/api/eagle/vector/embeddings/scan-missing": {
+      "post": {
+        "operationId": "EagleVectorController_scanMissingEmbeddings",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
     "/api/eagle/vector/suggestions/{suggestionId}/review": {
       "post": {
         "operationId": "EagleVectorController_review",

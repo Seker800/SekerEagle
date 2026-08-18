@@ -14,7 +14,10 @@ const launchAgents = join(homedir(), 'Library/LaunchAgents');
 const target = join(launchAgents, 'com.sekereagle.mlx-embedding.plist');
 await mkdir(join(root, '.runtime'), { recursive: true });
 await mkdir(launchAgents, { recursive: true });
-await writeFile(target, template.replaceAll('__REPO_ROOT__', root), { encoding: 'utf8', mode: 0o600 });
+await writeFile(target, template.replaceAll('__REPO_ROOT__', root), {
+  encoding: 'utf8',
+  mode: 0o600,
+});
 const domain = `gui/${process.getuid()}`;
 await run('launchctl', ['bootout', domain, target]).catch(() => undefined);
 await run('launchctl', ['bootstrap', domain, target]);

@@ -30,7 +30,14 @@ test('selectTopTagSuggestion scores each tag by its nearest enabled current prot
     [1, 0],
     [
       { tagId: 'disabled', enabled: false, prototypes: [[1, 0]] },
-      { tagId: 'car', enabled: true, prototypes: [[0.9, 0.1], [0, 1]] },
+      {
+        tagId: 'car',
+        enabled: true,
+        prototypes: [
+          [0.9, 0.1],
+          [0, 1],
+        ],
+      },
       { tagId: 'building', enabled: true, prototypes: [[0.4, 0.6]] },
       { tagId: 'no-current-center', enabled: true, prototypes: [] },
     ],
@@ -43,11 +50,7 @@ test('selectTopTagSuggestion scores each tag by its nearest enabled current prot
 
 test('selectTopTagSuggestion returns no suggestion below the reliability threshold', () => {
   assert.equal(
-    selectTopTagSuggestion(
-      [1, 0],
-      [{ tagId: 'weak', enabled: true, prototypes: [[0, 1]] }],
-      0.2,
-    ),
+    selectTopTagSuggestion([1, 0], [{ tagId: 'weak', enabled: true, prototypes: [[0, 1]] }], 0.2),
     null,
   );
 });

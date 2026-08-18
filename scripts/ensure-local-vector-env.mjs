@@ -9,7 +9,8 @@ let contents = await readFile(path, 'utf8');
 const additions = [];
 if (!/^MLX_EMBEDDING_TOKEN=/m.test(contents))
   additions.push(`MLX_EMBEDDING_TOKEN=${randomBytes(48).toString('base64url')}`);
-if (!/^MLX_EMBEDDING_REVISION=/m.test(contents)) additions.push(`MLX_EMBEDDING_REVISION=${revision}`);
+if (!/^MLX_EMBEDDING_REVISION=/m.test(contents))
+  additions.push(`MLX_EMBEDDING_REVISION=${revision}`);
 if (!additions.length) {
   process.stdout.write('Private vector environment is already configured\n');
   process.exit(0);

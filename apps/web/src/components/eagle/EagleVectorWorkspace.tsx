@@ -361,12 +361,13 @@ export function EagleVectorWorkspace() {
               排序
               <select
                 value={distanceDirection}
-                onChange={async (event) => {
+                onChange={(event) => {
                   const direction = event.target.value as 'ASC' | 'DESC';
                   setDistanceDirection(direction);
-                  const result = await listEagleTagDistanceAssets(distanceTag.id, direction);
-                  setDistances(result.items);
-                  setDistanceCursor(result.nextCursor);
+                  void listEagleTagDistanceAssets(distanceTag.id, direction).then((result) => {
+                    setDistances(result.items);
+                    setDistanceCursor(result.nextCursor);
+                  });
                 }}
               >
                 <option value="DESC">由远到近</option>

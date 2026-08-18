@@ -20,7 +20,10 @@ test('buildPrototypePlan produces weighted multi-centers and representative evid
   );
   assert.equal(plan.prototypes.length, 2);
   assert.equal(
-    plan.prototypes.reduce((sum: number, item: { memberCount: number }) => sum + item.memberCount, 0),
+    plan.prototypes.reduce(
+      (sum: number, item: { memberCount: number }) => sum + item.memberCount,
+      0,
+    ),
     4,
   );
   assert.ok(

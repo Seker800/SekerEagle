@@ -8,6 +8,7 @@ export default tseslint.config(
       '**/coverage/**',
       '.gitnexus/**',
       '**/node_modules/**',
+      '**/.venv/**',
       'packages/contracts/src/generated/**',
     ],
   },

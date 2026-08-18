@@ -1,8 +1,5 @@
 export type EmbeddingClientErrorCode =
-  | 'PAYLOAD_TOO_LARGE'
-  | 'HOST_UNAVAILABLE'
-  | 'INVALID_RESPONSE'
-  | 'MODEL_DRIFT';
+  'PAYLOAD_TOO_LARGE' | 'HOST_UNAVAILABLE' | 'INVALID_RESPONSE' | 'MODEL_DRIFT';
 
 export class EmbeddingClientError extends Error {
   constructor(
@@ -52,16 +49,19 @@ export class EmbeddingClient {
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     let response: Response;
     try {
-      response = await this.request(`${stripTrailingSlash(this.options.baseUrl)}/v1/embeddings/image`, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.options.token}`,
-          'content-type': mimeType,
-          'x-embedding-dimensions': String(this.options.dimensions),
+      response = await this.request(
+        `${stripTrailingSlash(this.options.baseUrl)}/v1/embeddings/image`,
+        {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.options.token}`,
+            'content-type': mimeType,
+            'x-embedding-dimensions': String(this.options.dimensions),
+          },
+          body: bytes,
+          signal: controller.signal,
         },
-        body: bytes,
-        signal: controller.signal,
-      });
+      );
     } catch (error) {
       throw new EmbeddingClientError('HOST_UNAVAILABLE', 'Embedding host is unavailable.', {
         cause: error,
@@ -110,4 +110,3 @@ export class EmbeddingClient {
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }
-
