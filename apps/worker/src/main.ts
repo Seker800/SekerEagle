@@ -15,7 +15,7 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
-import { PrismaClient, type EagleAssetProcessingJob, type Prisma } from '@prisma/client';
+import { Prisma, PrismaClient, type EagleAssetProcessingJob } from '@prisma/client';
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
@@ -28,6 +28,7 @@ import {
   isPermanentMediaValidationError,
   PermanentMediaValidationError,
 } from './media-validation-error';
+import { EmbeddingClient } from './embedding-client';
 
 const execFileAsync = promisify(execFile);
 
@@ -59,6 +60,24 @@ const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   ? Math.min(4, Math.max(1, configuredConcurrency))
   : 1;
+const embeddingSpaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';
+const embeddingModel = process.env.MLX_EMBEDDING_MODEL ?? 'Qwen/Qwen3-VL-Embedding-2B';
+const embeddingRevision = process.env.MLX_EMBEDDING_REVISION ?? 'main';
+const embeddingDimensions = 1024;
+const embeddingClient = new EmbeddingClient({
+  baseUrl: process.env.MLX_EMBEDDING_URL ?? 'http://host.docker.internal:11435',
+  token: process.env.MLX_EMBEDDING_TOKEN ?? '',
+  modelId: embeddingModel,
+  modelRevision: embeddingRevision,
+  dimensions: embeddingDimensions,
+  timeoutMs: boundedInteger(process.env.MLX_EMBEDDING_TIMEOUT_MS, 120_000, 1_000, 600_000),
+  maxPayloadBytes: boundedInteger(
+    process.env.MLX_EMBEDDING_MAX_PAYLOAD_BYTES,
+    20 * 1024 * 1024,
+    1,
+    50 * 1024 * 1024,
+  ),
+});
 
 async function heartbeat(): Promise<void> {
   const now = new Date();
@@ -103,7 +122,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     },
     include: {
       renditions: {
-        where: { revision: job.assetRevision, kind: 'THUMBNAIL', status: 'READY' },
+        where: {
+          revision: job.assetRevision,
+          kind: { in: ['THUMBNAIL', 'PREVIEW'] },
+          status: 'READY',
+        },
         select: { kind: true, revision: true, status: true, storageKey: true, mimeType: true },
       },
       uploadSessions: {
@@ -163,6 +186,15 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       new GetObjectCommand({ Bucket: s3Bucket, Key: sourceDetails.storageKey }),
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+    if (job.kind === 'GENERATE_EMBEDDING') {
+      await processEmbeddingJob(
+        job,
+        asset,
+        sourceDetails.mimeType,
+        object.Body as AsyncIterable<Uint8Array>,
+      );
+      return;
+    }
     const renditionSpecs = [
       { kind: 'PREVIEW' as const, variant: 'default', maxSize: 1600 },
       { kind: 'THUMBNAIL' as const, variant: '256', maxSize: 256 },
@@ -459,6 +491,148 @@ async function processVideo(
   }
 }
 
+async function processEmbeddingJob(
+  job: EagleAssetProcessingJob,
+  asset: { id: string; ownerId: string },
+  mimeType: string,
+  source: AsyncIterable<Uint8Array>,
+): Promise<void> {
+  if (!process.env.MLX_EMBEDDING_TOKEN?.trim()) throw new Error('MLX_EMBEDDING_TOKEN_REQUIRED');
+  await prisma.eagleEmbeddingSpace.upsert({
+    where: { id: embeddingSpaceId },
+    create: {
+      id: embeddingSpaceId,
+      model: embeddingModel,
+      revision: embeddingRevision,
+      dimensions: embeddingDimensions,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+      isCurrent: true,
+    },
+    update: {
+      model: embeddingModel,
+      revision: embeddingRevision,
+      dimensions: embeddingDimensions,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+      isCurrent: true,
+    },
+  });
+  const record = await prisma.eagleAssetEmbedding.upsert({
+    where: {
+      assetId_assetRevision_spaceId: {
+        assetId: asset.id,
+        assetRevision: job.assetRevision,
+        spaceId: embeddingSpaceId,
+      },
+    },
+    create: {
+      ownerId: asset.ownerId,
+      assetId: asset.id,
+      assetRevision: job.assetRevision,
+      spaceId: embeddingSpaceId,
+      status: 'RUNNING',
+      startedAt: new Date(),
+    },
+    update: {
+      status: 'RUNNING',
+      errorCode: null,
+      startedAt: new Date(),
+      completedAt: null,
+    },
+    select: { id: true },
+  });
+  const bytes = await readBoundedBytes(source, 20 * 1024 * 1024);
+  const { embedding } = await embeddingClient.embedImage(bytes, mimeType);
+  const vector = `[${embedding.join(',')}]`;
+  await prisma.$transaction(async (transaction) => {
+    const completed = await transaction.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    });
+    if (completed.count !== 1) return;
+    await transaction.eagleAssetEmbedding.updateMany({
+      where: { ownerId: asset.ownerId, assetId: asset.id, isCurrent: true },
+      data: { isCurrent: false, status: 'SUPERSEDED' },
+    });
+    await transaction.eagleAssetEmbedding.update({
+      where: { id: record.id },
+      data: {
+        status: 'READY',
+        isCurrent: true,
+        l2Norm: 1,
+        errorCode: null,
+        completedAt: new Date(),
+      },
+    });
+    await transaction.$executeRaw(
+      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "id" = ${record.id}`,
+    );
+    await createTopSuggestion(transaction, asset.ownerId, asset.id, record.id);
+  });
+}
+
+async function createTopSuggestion(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+  assetId: string,
+  embeddingId: string,
+): Promise<void> {
+  const minimumScore = boundedNumber(process.env.EAGLE_VECTOR_MINIMUM_SCORE, 0.3, -1, 1);
+  await transaction.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "EagleVectorTagSuggestion" (
+        "id", "ownerId", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
+        "generationId", "score", "distance", "prototypeRank", "status", "createdAt", "updatedAt"
+      )
+      SELECT gen_random_uuid()::text, ${ownerId}, ${assetId}, candidate."tagId", ${embeddingId},
+             candidate."snapshotId", candidate."generationId", 1 - candidate.distance,
+             candidate.distance, candidate.rank, 'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
+      FROM (
+        SELECT snapshot."tagId", prototype."snapshotId", snapshot."generationId", prototype.rank,
+               prototype.embedding <=> embedding.embedding AS distance
+        FROM "EagleAssetEmbedding" embedding
+        JOIN "EagleTagPrototype" prototype ON prototype."ownerId" = embedding."ownerId"
+        JOIN "EagleTagPrototypeSnapshot" snapshot
+          ON snapshot."ownerId" = prototype."ownerId" AND snapshot.id = prototype."snapshotId"
+        JOIN "EagleManualTagSemanticConfig" config
+          ON config."ownerId" = snapshot."ownerId" AND config."tagId" = snapshot."tagId"
+        WHERE embedding."ownerId" = ${ownerId} AND embedding.id = ${embeddingId}
+          AND snapshot."isCurrent" = true AND snapshot.status = 'ACTIVE'
+          AND config."recommendationEnabled" = true
+        ORDER BY prototype.embedding <=> embedding.embedding ASC
+        LIMIT 1
+      ) candidate
+      WHERE 1 - candidate.distance >= ${minimumScore}
+        AND NOT EXISTS (
+          SELECT 1 FROM "EagleAssetManualTag" manual
+          WHERE manual."ownerId" = ${ownerId} AND manual."assetId" = ${assetId}
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "EagleVectorTagSuggestion" existing
+          WHERE existing."ownerId" = ${ownerId} AND existing."assetId" = ${assetId}
+            AND existing.status = 'PENDING' AND existing."invalidatedAt" IS NULL
+        )
+    `,
+  );
+}
+
+async function readBoundedBytes(
+  source: AsyncIterable<Uint8Array>,
+  maximumBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of source) {
+    size += chunk.byteLength;
+    if (size > maximumBytes) throw new Error('EMBEDDING_PREVIEW_TOO_LARGE');
+    chunks.push(Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks, size);
+}
+
 async function generateImagePyramid(
   job: EagleAssetProcessingJob,
   asset: {
@@ -673,6 +847,21 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
       });
     }
+    if (job.kind === 'GENERATE_EMBEDDING') {
+      await transaction.eagleAssetEmbedding.updateMany({
+        where: {
+          ownerId: job.ownerId,
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          spaceId: embeddingSpaceId,
+        },
+        data: {
+          status: terminal ? 'FAILED' : 'PENDING',
+          errorCode: message.slice(0, 100),
+          completedAt: terminal ? new Date() : null,
+        },
+      });
+    }
     if (terminal && taskBlocksAssetReady(job.kind)) {
       await transaction.eagleAsset.updateMany({
         where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
@@ -794,6 +983,26 @@ async function main(): Promise<void> {
 function reportLoopError(error: unknown): void {
   const message = error instanceof Error ? error.message : 'unknown worker loop error';
   process.stderr.write(`${message}\n`);
+}
+
+function boundedInteger(
+  raw: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = Number(raw ?? fallback);
+  return Number.isSafeInteger(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+}
+
+function boundedNumber(
+  raw: string | undefined,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const parsed = Number(raw ?? fallback);
+  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
 }
 
 process.on('SIGTERM', () => void stop('SIGTERM'));

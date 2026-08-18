@@ -44,9 +44,13 @@ test('reconciler creates only missing current-version color jobs', async () => {
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 2, created: 1, skipped: 1, remaining: 0 });
-  assert.equal(typeof (created[0] as { id: unknown }).id, 'string');
-  const createdJob = { ...(created[0] as Record<string, unknown>) };
+  assert.deepEqual(result, { scanned: 2, created: 3, skipped: 0, remaining: 0 });
+  const paletteJob = created.find(
+    (job) => (job as { kind?: string }).kind === 'EXTRACT_COLOR_PALETTE',
+  );
+  assert.ok(paletteJob);
+  assert.equal(typeof (paletteJob as { id: unknown }).id, 'string');
+  const createdJob = { ...(paletteJob as Record<string, unknown>) };
   delete createdJob.id;
   assert.deepEqual(createdJob, {
     ownerId: 'owner-1',
@@ -57,6 +61,10 @@ test('reconciler creates only missing current-version color jobs', async () => {
     processorVersion: 'color-v3-thumbnail',
     dependsOnJobId: 'rendition-job-2',
   });
+  assert.equal(
+    created.filter((job) => (job as { kind?: string }).kind === 'GENERATE_EMBEDDING').length,
+    2,
+  );
 });
 
 test('reconciler scans beyond the first page without exceeding its creation bound', async () => {
@@ -80,7 +88,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 502 });
+  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1003 });
   assert.equal(page, 2);
 });
 

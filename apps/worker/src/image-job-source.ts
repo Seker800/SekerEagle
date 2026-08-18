@@ -14,6 +14,20 @@ interface ImageSourceAsset {
 }
 
 export function selectImageJobSource(asset: ImageSourceAsset, kind: EagleMediaJobKind) {
+  if (kind === 'GENERATE_EMBEDDING') {
+    const preview = asset.renditions.find(
+      (rendition) =>
+        rendition.kind === 'PREVIEW' &&
+        rendition.revision === asset.mediaRevision &&
+        rendition.status === 'READY',
+    );
+    if (!preview) throw new Error('READY_PREVIEW_MISSING');
+    return {
+      storageKey: preview.storageKey,
+      mimeType: preview.mimeType,
+      verifiesOriginalHash: false,
+    };
+  }
   if (kind === 'EXTRACT_COLOR_PALETTE') {
     const thumbnail = asset.renditions.find(
       (rendition) =>

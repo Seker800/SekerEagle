@@ -11,6 +11,7 @@ test('classifies current and future processing jobs into stable lanes', () => {
   assert.equal(processingLaneForKind('GENERATE_THUMBNAIL'), 'INTERACTIVE');
   assert.equal(processingLaneForKind('EXTRACT_COLOR_PALETTE'), 'BACKGROUND');
   assert.equal(processingLaneForKind('GENERATE_IMAGE_PYRAMID'), 'BACKGROUND');
+  assert.equal(processingLaneForKind('GENERATE_EMBEDDING'), 'BACKGROUND');
   assert.equal(processingLaneForKind('PURGE_ASSET'), 'MAINTENANCE');
 });
 
@@ -19,6 +20,7 @@ test('only required media jobs block the asset ready lifecycle', () => {
   assert.equal(taskBlocksAssetReady('GENERATE_THUMBNAIL'), true);
   assert.equal(taskBlocksAssetReady('EXTRACT_COLOR_PALETTE'), false);
   assert.equal(taskBlocksAssetReady('GENERATE_IMAGE_PYRAMID'), false);
+  assert.equal(taskBlocksAssetReady('GENERATE_EMBEDDING'), false);
   assert.equal(taskBlocksAssetReady('PURGE_ASSET'), false);
 });
 
