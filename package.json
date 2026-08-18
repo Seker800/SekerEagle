@@ -16,9 +16,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator",
-    "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator",
-    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm --prefix plugins/eagle-importer test && node --test scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
+    "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator",
+    "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/vector-core && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator",
+    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm --prefix plugins/eagle-importer test && node --test scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "db:guard": "node ./scripts/assert-safe-target.mjs",

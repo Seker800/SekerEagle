@@ -796,6 +796,7 @@ model EagleVectorTagSuggestion {
   embeddingId      String
   snapshotId       String
   generationId     String
+  isActive         Boolean                     @default(false)
   score            Float
   distance         Float
   prototypeRank    Int
@@ -822,6 +823,7 @@ model EagleTagSemanticBuild {
   ownerId             String
   tagId               String
   candidateSnapshotId String?                     @unique
+  operation           String                      @default("REBUILD_CENTER")
   status              EagleTagSemanticBuildStatus @default(PENDING)
   attempts            Int                         @default(0)
   leaseVersion        Int                         @default(0)

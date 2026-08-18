@@ -42,10 +42,12 @@ test('disabling recommendation invalidates only the owner tag pending suggestion
     ownerId: 'owner-1',
     suggestedTagId: 'tag-1',
     status: 'PENDING',
+    isActive: true,
     invalidatedAt: null,
   });
   assert.equal(invalidation.data.invalidatedAt instanceof Date, true);
   assert.equal(invalidation.data.invalidReason, 'TAG_RECOMMENDATION_DISABLED');
+  assert.equal((invalidation.data as { isActive?: boolean }).isActive, false);
   /* owner-scoped filter above is the security boundary; no unqualified update is allowed. */
   assert.notDeepEqual(writes[2], {
     where: {

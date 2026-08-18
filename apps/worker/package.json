@@ -13,6 +13,7 @@
     "@nestjs/common": "^11.1.29",
     "@prisma/client": "6.19.3",
     "@sekereagle/config": "*",
+    "@sekereagle/vector-core": "*",
     "sharp": "^0.35.3"
   },
   "devDependencies": {

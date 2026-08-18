@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 import { EagleVectorSuggestionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type {
-  ListTagDistanceAssetsDto,
-  ListVectorSuggestionsDto,
-} from './eagle-vector.dto';
+import type { ListTagDistanceAssetsDto, ListVectorSuggestionsDto } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
 
 @Injectable()
@@ -38,7 +35,7 @@ export class EagleVectorService {
           where: { ownerId, deletedAt: null, manualTagLinks: { none: {} } },
         }),
         this.prisma.eagleVectorTagSuggestion.count({
-          where: { ownerId, status: 'PENDING', invalidatedAt: null },
+          where: { ownerId, status: 'PENDING', isActive: true, invalidatedAt: null },
         }),
       ]);
     return {
@@ -92,10 +89,11 @@ export class EagleVectorService {
         select: { id: true },
       });
       if (!tag) throw new NotFoundException('标签不存在。');
-      await transaction.eagleManualTagSemanticConfig.upsert({
+      const config = await transaction.eagleManualTagSemanticConfig.upsert({
         where: { ownerId_tagId: { ownerId, tagId } },
         create: { ownerId, tagId, recommendationEnabled: enabled },
         update: { recommendationEnabled: enabled },
+        select: { recommendationEnabled: true, currentSnapshotId: true },
       });
       let invalidated = 0;
       if (!enabled) {
@@ -104,14 +102,31 @@ export class EagleVectorService {
             ownerId,
             suggestedTagId: tagId,
             status: 'PENDING',
+            isActive: true,
             invalidatedAt: null,
           },
           data: {
+            isActive: false,
             invalidatedAt: new Date(),
             invalidReason: 'TAG_RECOMMENDATION_DISABLED',
           },
         });
         invalidated = result.count;
+      } else if (config.currentSnapshotId) {
+        const activeGeneration = await transaction.eagleTagSemanticBuild.findFirst({
+          where: {
+            ownerId,
+            tagId,
+            operation: 'RECOMPUTE_SUGGESTIONS',
+            status: { in: ['PENDING', 'PROCESSING'] },
+          },
+          select: { id: true },
+        });
+        if (!activeGeneration) {
+          await transaction.eagleTagSemanticBuild.create({
+            data: { ownerId, tagId, operation: 'RECOMPUTE_SUGGESTIONS' },
+          });
+        }
       }
       return { tagId, recommendationEnabled: enabled, invalidated };
     });
@@ -136,13 +151,12 @@ export class EagleVectorService {
       }),
     ]);
     if (!tag) throw new NotFoundException('标签不存在。');
-    if (!config?.recommendationEnabled)
-      throw new BadRequestException('请先开启该标签的智能推荐。');
+    if (!config?.recommendationEnabled) throw new BadRequestException('请先开启该标签的智能推荐。');
     if (!tag._count.assetLinks)
       throw new BadRequestException('标签没有可用图片，无法生成向量中心。');
     if (activeBuild) return activeBuild;
     return this.prisma.eagleTagSemanticBuild.create({
-      data: { ownerId, tagId, status: 'PENDING' },
+      data: { ownerId, tagId, operation: 'REBUILD_CENTER', status: 'PENDING' },
     });
   }
 
@@ -153,6 +167,7 @@ export class EagleVectorService {
         ownerId,
         suggestedTagId: query.tagId,
         status: 'PENDING',
+        isActive: true,
         invalidatedAt: null,
         asset: { deletedAt: null, manualTagLinks: { none: {} } },
       },
@@ -187,17 +202,14 @@ export class EagleVectorService {
     };
   }
 
-  async reviewSuggestion(
-    ownerId: string,
-    suggestionId: string,
-    action: 'ACCEPT' | 'REJECT',
-  ) {
+  async reviewSuggestion(ownerId: string, suggestionId: string, action: 'ACCEPT' | 'REJECT') {
     const outcome = await this.prisma.$transaction(async (transaction) => {
       const suggestion = await transaction.eagleVectorTagSuggestion.findFirst({
         where: {
           ownerId,
           id: suggestionId,
           status: 'PENDING',
+          isActive: true,
           invalidatedAt: null,
         },
         include: {
@@ -211,7 +223,13 @@ export class EagleVectorService {
       if (!suggestion) throw new NotFoundException('待审核建议不存在。');
       if (action === 'REJECT') {
         const updated = await transaction.eagleVectorTagSuggestion.updateMany({
-          where: { ownerId, id: suggestionId, status: 'PENDING', invalidatedAt: null },
+          where: {
+            ownerId,
+            id: suggestionId,
+            status: 'PENDING',
+            isActive: true,
+            invalidatedAt: null,
+          },
           data: { status: 'REJECTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
         });
         if (updated.count !== 1) throw new ConflictException('建议已被处理。');
@@ -229,8 +247,18 @@ export class EagleVectorService {
         suggestion.suggestedTag.semanticConfig?.recommendationEnabled === true;
       if (!remainsValid) {
         await transaction.eagleVectorTagSuggestion.updateMany({
-          where: { ownerId, id: suggestionId, status: 'PENDING', invalidatedAt: null },
-          data: { invalidatedAt: new Date(), invalidReason: 'SUGGESTION_NO_LONGER_APPLICABLE' },
+          where: {
+            ownerId,
+            id: suggestionId,
+            status: 'PENDING',
+            isActive: true,
+            invalidatedAt: null,
+          },
+          data: {
+            isActive: false,
+            invalidatedAt: new Date(),
+            invalidReason: 'SUGGESTION_NO_LONGER_APPLICABLE',
+          },
         });
         return { invalid: true as const };
       }
@@ -257,7 +285,13 @@ export class EagleVectorService {
         },
       });
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
-        where: { ownerId, id: suggestionId, status: 'PENDING', invalidatedAt: null },
+        where: {
+          ownerId,
+          id: suggestionId,
+          status: 'PENDING',
+          isActive: true,
+          invalidatedAt: null,
+        },
         data: { status: 'ACCEPTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
       });
       if (updated.count !== 1) throw new ConflictException('建议已被处理。');
@@ -267,11 +301,7 @@ export class EagleVectorService {
     return outcome;
   }
 
-  async reviewSuggestions(
-    ownerId: string,
-    suggestionIds: string[],
-    action: 'ACCEPT' | 'REJECT',
-  ) {
+  async reviewSuggestions(ownerId: string, suggestionIds: string[], action: 'ACCEPT' | 'REJECT') {
     const results = [];
     for (const suggestionId of suggestionIds) {
       results.push(await this.reviewSuggestion(ownerId, suggestionId, action));
@@ -307,7 +337,10 @@ export class EagleVectorService {
     const limit = query.limit ?? 40;
     const rows = await this.prisma.eagleTagMemberDistance.findMany({
       where,
-      orderBy: [{ distance: direction === 'DESC' ? 'desc' : 'asc' }, { assetId: direction === 'DESC' ? 'desc' : 'asc' }],
+      orderBy: [
+        { distance: direction === 'DESC' ? 'desc' : 'asc' },
+        { assetId: direction === 'DESC' ? 'desc' : 'asc' },
+      ],
       take: limit + 1,
       include: { asset: { select: { id: true, displayName: true, width: true, height: true } } },
     });
@@ -317,9 +350,9 @@ export class EagleVectorService {
       items,
       nextCursor:
         rows.length > limit && last
-          ? Buffer.from(JSON.stringify({ distance: last.distance, assetId: last.assetId })).toString(
-              'base64url',
-            )
+          ? Buffer.from(
+              JSON.stringify({ distance: last.distance, assetId: last.assetId }),
+            ).toString('base64url')
           : null,
     };
   }
@@ -343,4 +376,3 @@ function decodeDistanceCursor(value: string): { distance: number; assetId: strin
     throw new BadRequestException('向量距离游标无效。');
   }
 }
-

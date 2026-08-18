@@ -77,6 +77,7 @@ CREATE TABLE "EagleTagPrototypeSnapshot" (
   "spaceId" TEXT NOT NULL,
   "version" INTEGER NOT NULL,
   "generationId" TEXT NOT NULL,
+  "isActive" BOOLEAN NOT NULL DEFAULT false,
   "status" "EagleTagPrototypeStatus" NOT NULL DEFAULT 'BUILDING',
   "isCurrent" BOOLEAN NOT NULL DEFAULT false,
   "sourceAssetCount" INTEGER NOT NULL,
@@ -153,7 +154,7 @@ CREATE TABLE "EagleVectorTagSuggestion" (
   CONSTRAINT "EagleVectorTagSuggestion_embedding_fkey" FOREIGN KEY ("ownerId", "embeddingId") REFERENCES "EagleAssetEmbedding"("ownerId", "id") ON DELETE CASCADE,
   CONSTRAINT "EagleVectorTagSuggestion_snapshot_fkey" FOREIGN KEY ("ownerId", "snapshotId") REFERENCES "EagleTagPrototypeSnapshot"("ownerId", "id") ON DELETE RESTRICT
 );
-CREATE UNIQUE INDEX "EagleVectorTagSuggestion_effective_pending_idx" ON "EagleVectorTagSuggestion" ("ownerId", "assetId") WHERE "status" = 'PENDING' AND "invalidatedAt" IS NULL;
+CREATE UNIQUE INDEX "EagleVectorTagSuggestion_effective_pending_idx" ON "EagleVectorTagSuggestion" ("ownerId", "assetId") WHERE "isActive" = true AND "status" = 'PENDING' AND "invalidatedAt" IS NULL;
 CREATE INDEX "EagleVectorTagSuggestion_group_idx" ON "EagleVectorTagSuggestion" ("ownerId", "suggestedTagId", "status", "score" DESC, "assetId");
 CREATE INDEX "EagleVectorTagSuggestion_generation_idx" ON "EagleVectorTagSuggestion" ("generationId");
 
@@ -162,6 +163,7 @@ CREATE TABLE "EagleTagSemanticBuild" (
   "ownerId" TEXT NOT NULL,
   "tagId" TEXT NOT NULL,
   "candidateSnapshotId" TEXT UNIQUE,
+  "operation" TEXT NOT NULL DEFAULT 'REBUILD_CENTER',
   "status" "EagleTagSemanticBuildStatus" NOT NULL DEFAULT 'PENDING',
   "attempts" INTEGER NOT NULL DEFAULT 0,
   "leaseVersion" INTEGER NOT NULL DEFAULT 0,
