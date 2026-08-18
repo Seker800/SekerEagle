@@ -184,14 +184,14 @@ class ImportEngine {
     log = () => {},
     progress = () => {},
     itemState = async () => {},
-    uploadConcurrency = 3,
+    uploadConcurrency = 32,
   }) {
     this.api = api;
     this.store = store;
     this.log = log;
     this.progress = progress;
     this.itemState = itemState;
-    this.uploadConcurrency = Math.min(16, Math.max(1, Math.trunc(uploadConcurrency)));
+    this.uploadConcurrency = Math.min(64, Math.max(1, Math.trunc(uploadConcurrency)));
     this.cancelRequested = false;
     this.pauseRequested = false;
   }
@@ -365,7 +365,9 @@ class ImportEngine {
       return session;
     }
     const sessionId = session.id;
-    const uploaded = await this.api.getUploadedParts(sessionId);
+    const uploaded = session.resumed
+      ? await this.api.getUploadedParts(sessionId)
+      : { parts: [], partSizeBytes: session.partSizeBytes };
     const existing = new Map(uploaded.parts.map((part) => [part.partNumber, part]));
     const partSize = uploaded.partSizeBytes || session.partSizeBytes;
     const partCount = Math.ceil(source.size / partSize);

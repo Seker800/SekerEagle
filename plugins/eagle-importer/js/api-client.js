@@ -17,7 +17,7 @@ class ApiClient {
     accessToken = '',
     refreshToken = '',
     onTokens,
-    minimumImportIntervalMs = 550,
+    minimumImportIntervalMs = 0,
     now = () => Date.now(),
     sleep = delay,
     fetchImpl = (...args) => fetch(...args),
@@ -29,7 +29,6 @@ class ApiClient {
     this.sleep = sleep;
     this.fetchImpl = fetchImpl;
     this.refreshPromise = null;
-    this.uploadContexts = new Map();
     this.apiPacer = new RequestPacer({ minimumIntervalMs: minimumImportIntervalMs, now, sleep });
   }
 
@@ -162,13 +161,11 @@ class ApiClient {
     return this.request(`/eagle/imports/${runId}/items/${itemId}/retry`, { method: 'POST' });
   }
   async initiateUpload(runId, itemId, body) {
-    const session = await this.request(`/eagle/imports/${runId}/items/${itemId}/upload`, {
+    return this.request(`/eagle/imports/${runId}/items/${itemId}/upload`, {
       method: 'POST',
       body,
       retries: 2,
     });
-    if (session?.id) this.uploadContexts.set(session.id, { runId, itemId });
-    return session;
   }
   getUploadedParts(sessionId) {
     return this.request(`/eagle/uploads/${sessionId}/parts`, { retries: 2 });
@@ -186,21 +183,11 @@ class ApiClient {
     return { partNumber, etag, size: bytes.length };
   }
   async completeUpload(sessionId, parts) {
-    const completed = await this.request(`/eagle/uploads/${sessionId}/complete`, {
+    return this.request(`/eagle/uploads/${sessionId}/complete`, {
       method: 'POST',
       body: { parts },
       retries: 2,
     });
-    const context = this.uploadContexts.get(sessionId);
-    if (context && completed?.assetId) {
-      await this.request(`/eagle/imports/${context.runId}/items/${context.itemId}/finish`, {
-        method: 'POST',
-        body: { assetId: completed.assetId },
-        retries: 2,
-      });
-      this.uploadContexts.delete(sessionId);
-    }
-    return completed;
   }
 
   async listAllItems(runId, status) {

@@ -28,7 +28,7 @@ export function parseCliOptions(arguments_: string[]): CliOptions {
     command: rawCommand as MigratorCommand,
     snapshotPath,
     serverUrl: 'http://localhost:8180',
-    concurrency: 4,
+    concurrency: 32,
   };
   for (let index = 0; index < rest.length; index += 1) {
     const key = rest[index];
@@ -42,8 +42,8 @@ export function parseCliOptions(arguments_: string[]): CliOptions {
     if (key === '--server') options.serverUrl = normalizeServerUrl(value);
     else if (key === '--concurrency') {
       const concurrency = Number(value);
-      if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 16) {
-        throw new Error('concurrency must be between 1 and 16.');
+      if (!Number.isInteger(concurrency) || concurrency < 1 || concurrency > 64) {
+        throw new Error('concurrency must be between 1 and 64.');
       }
       options.concurrency = concurrency;
     } else if (key === '--state') options.stateDirectory = value;

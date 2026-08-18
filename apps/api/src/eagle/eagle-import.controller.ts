@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOrPatOriginGuard } from '../auth/browser-or-pat-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
@@ -32,6 +33,7 @@ import { UPLOAD_PART_SIZE_BYTES } from './import/upload-limits';
 @ApiCookieAuth()
 @ApiBearerAuth()
 @Controller('eagle/imports')
+@SkipThrottle({ short: true, default: true })
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 export class EagleImportController {
   constructor(
@@ -137,6 +139,7 @@ export class EagleImportController {
         ...session,
         partSize: UPLOAD_PART_SIZE_BYTES,
         partSizeBytes: UPLOAD_PART_SIZE_BYTES,
+        resumed: true,
       };
     }
     if (start.kind === 'IMPORTED') {
@@ -164,7 +167,7 @@ export class EagleImportController {
       await this.uploads.abort(principal.sub, session.id).catch(() => undefined);
       throw error;
     }
-    return { ...session, partSizeBytes: session.partSize };
+    return { ...session, partSizeBytes: session.partSize, resumed: false };
   }
 
   @Post(':runId/items/:itemId/finish')

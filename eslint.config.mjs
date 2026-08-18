@@ -6,6 +6,7 @@ export default tseslint.config(
     ignores: [
       '**/dist/**',
       '**/coverage/**',
+      '.gitnexus/**',
       '**/node_modules/**',
       'packages/contracts/src/generated/**',
     ],

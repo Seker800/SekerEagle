@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { SkipThrottle } from '@nestjs/throttler';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOrPatOriginGuard } from '../auth/browser-or-pat-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
@@ -25,6 +26,7 @@ import { EagleUploadService } from './eagle-upload.service';
 @ApiCookieAuth()
 @ApiBearerAuth()
 @Controller('eagle/uploads')
+@SkipThrottle({ short: true, default: true })
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 @RequirePatScopes('asset:write')
 export class EagleUploadController {
