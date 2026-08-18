@@ -42,6 +42,15 @@ test('large images get dependent palette and pyramid jobs after renditions', () 
         processorVersion: 'pyramid-v1',
         dependsOnJobId: 'rendition-job',
       },
+      {
+        ownerId: 'owner-1',
+        assetId: 'asset-1',
+        assetRevision: 2,
+        kind: 'GENERATE_EMBEDDING',
+        lane: 'BACKGROUND',
+        processorVersion: 'qwen3-vl-embedding-2b-1024-v1',
+        dependsOnJobId: 'rendition-job',
+      },
     ],
   );
 });
@@ -68,6 +77,7 @@ test('backfill reuses a current rendition job as the dependency for missing anal
   expectJobKinds(jobs, [
     ['EXTRACT_COLOR_PALETTE', 'rendition-job'],
     ['GENERATE_IMAGE_PYRAMID', 'rendition-job'],
+    ['GENERATE_EMBEDDING', 'rendition-job'],
   ]);
 });
 
