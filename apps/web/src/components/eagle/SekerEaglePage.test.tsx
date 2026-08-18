@@ -369,6 +369,40 @@ describe('SekerEaglePage', () => {
     });
   });
 
+  it('keeps large tag collections searchable and bounded inside the filter panel', async () => {
+    const manualTags = Array.from({ length: 80 }, (_, index) => ({
+      id: `manual-tag-${index + 1}`,
+      name: `人工标签 ${String(index + 1).padStart(2, '0')}`,
+      color: null,
+      groupId: null,
+      isStarred: false,
+      rowVersion: 1,
+      assetCount: index + 1,
+      pinyin: `rengongbiaoqian${index + 1}`,
+      pinyinInitials: `rgbq${index + 1}`,
+    }));
+    listEagleManualTagsMock.mockResolvedValue(manualTags);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '筛选' }));
+    const filterPanel = screen.getByLabelText('素材筛选');
+    const manualTagSearch = within(filterPanel).getByRole('searchbox', {
+      name: '搜索人工标签',
+    });
+
+    expect(within(filterPanel).queryByText('人工标签 80')).not.toBeInTheDocument();
+    fireEvent.change(manualTagSearch, { target: { value: '人工标签 80' } });
+    fireEvent.click(within(filterPanel).getByRole('checkbox', { name: '人工标签 80' }));
+
+    await waitFor(() => {
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        'token',
+        expect.objectContaining({ manualTagIds: ['manual-tag-80'] }),
+        expect.any(AbortSignal),
+      );
+    });
+  });
+
   it('applies a canonical color as a server-side asset filter', async () => {
     renderPage();
 
