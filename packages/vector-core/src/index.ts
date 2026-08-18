@@ -18,6 +18,8 @@ export interface SphericalKMeansOptions {
   maxK?: number;
   minimumRelativeImprovement?: number;
   maxIterations?: number;
+  batchSize?: number;
+  outlierTrimFraction?: number;
 }
 
 export interface SphericalKMeansResult {
@@ -94,10 +96,10 @@ export function sphericalKMeans(
   });
   const maxK = Math.max(1, Math.min(options.maxK ?? 8, vectors.length));
   const threshold = options.minimumRelativeImprovement ?? 0.12;
-  let selected = runKMeans(vectors, 1, options.maxIterations ?? 50);
+  let selected = runMiniBatchKMeans(vectors, 1, options);
   let previousLoss = totalLoss(vectors, selected.centers, selected.assignments);
   for (let k = 2; k <= maxK; k += 1) {
-    const candidate = runKMeans(vectors, k, options.maxIterations ?? 50);
+    const candidate = runMiniBatchKMeans(vectors, k, options);
     const loss = totalLoss(vectors, candidate.centers, candidate.assignments);
     const improvement = previousLoss <= Number.EPSILON ? 0 : (previousLoss - loss) / previousLoss;
     if (improvement <= threshold) break;
@@ -114,24 +116,52 @@ export function sphericalKMeans(
   };
 }
 
-function runKMeans(vectors: number[][], k: number, maxIterations: number) {
+function runMiniBatchKMeans(vectors: number[][], k: number, options: SphericalKMeansOptions) {
   let centers = seedFarthestCenters(vectors, k);
+  const batchSize = Math.max(1, Math.min(options.batchSize ?? 128, vectors.length));
+  const seen = new Array<number>(k).fill(0);
+  for (let epoch = 0; epoch < (options.maxIterations ?? 20); epoch += 1) {
+    const previous = centers.map((center) => center.slice());
+    for (let start = 0; start < vectors.length; start += batchSize) {
+      const batch = vectors.slice(start, start + batchSize);
+      const assignments = batch.map((vector) => nearestCenter(vector, centers));
+      centers = centers.map((center, centerIndex) => {
+        const members = batch.filter((_, index) => assignments[index] === centerIndex);
+        if (!members.length) return center;
+        const batchCenter = normalizeEmbedding(
+          center.map((_, dimension) =>
+            members.reduce((sum, member) => sum + member[dimension]!, 0),
+          ),
+        );
+        const weight = members.length / (seen[centerIndex]! + members.length);
+        seen[centerIndex]! += members.length;
+        return normalizeEmbedding(
+          center.map((value, dimension) => value * (1 - weight) + batchCenter[dimension]! * weight),
+        );
+      });
+    }
+    const movement = centers.reduce(
+      (sum, center, index) => sum + cosineDistance(center, previous[index]!),
+      0,
+    );
+    if (movement < 1e-7) break;
+  }
   let assignments = vectors.map((vector) => nearestCenter(vector, centers));
-  for (let iteration = 0; iteration < maxIterations; iteration += 1) {
-    const nextCenters = centers.map((center, centerIndex) => {
-      const members = vectors.filter((_, vectorIndex) => assignments[vectorIndex] === centerIndex);
-      if (!members.length) return center;
+  const trimFraction = Math.max(0, Math.min(options.outlierTrimFraction ?? 0.02, 0.25));
+  if (trimFraction > 0 && vectors.length >= 4) {
+    centers = centers.map((center, centerIndex) => {
+      const members = vectors
+        .filter((_, index) => assignments[index] === centerIndex)
+        .sort((left, right) => cosineDistance(left, center) - cosineDistance(right, center));
+      const retained = members.slice(
+        0,
+        Math.max(1, Math.ceil(members.length * (1 - trimFraction))),
+      );
       return normalizeEmbedding(
-        center.map((_, dimension) => members.reduce((sum, member) => sum + member[dimension]!, 0)),
+        center.map((_, dimension) => retained.reduce((sum, member) => sum + member[dimension]!, 0)),
       );
     });
-    const nextAssignments = vectors.map((vector) => nearestCenter(vector, nextCenters));
-    centers = nextCenters;
-    if (nextAssignments.every((value, index) => value === assignments[index])) {
-      assignments = nextAssignments;
-      break;
-    }
-    assignments = nextAssignments;
+    assignments = vectors.map((vector) => nearestCenter(vector, centers));
   }
   return { centers, assignments };
 }

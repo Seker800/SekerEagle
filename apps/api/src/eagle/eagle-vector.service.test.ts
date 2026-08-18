@@ -150,3 +150,39 @@ test('cross-owner suggestion review returns 404 without writes', async () => {
   );
   assert.equal(wrote, false);
 });
+
+test('missing embedding scan is bounded, owner-scoped and preserves the preview dependency', async () => {
+  let assetWhere: unknown;
+  let created: Array<{ kind?: string; ownerId?: string; dependsOnJobId?: string | null }> = [];
+  const service = new EagleVectorService({
+    eagleAsset: {
+      findMany: async ({ where }: { where: unknown }) => {
+        assetWhere = where;
+        return [{ id: 'asset-1', mediaRevision: 3, width: 800, height: 600 }];
+      },
+    },
+    eagleAssetProcessingJob: {
+      findMany: async () => [
+        {
+          id: 'preview-job',
+          assetId: 'asset-1',
+          assetRevision: 3,
+          kind: 'GENERATE_RENDITIONS',
+          processorVersion: 'rendition-v2',
+        },
+      ],
+      createMany: async ({ data }: { data: typeof created }) => {
+        created = data;
+        return { count: data.length };
+      },
+    },
+  } as never);
+
+  const result = await service.scanMissingEmbeddings('owner-1');
+
+  assert.deepEqual(result, { scanned: 1, created: 1 });
+  assert.equal((assetWhere as { ownerId: string }).ownerId, 'owner-1');
+  assert.equal(created[0]?.ownerId, 'owner-1');
+  assert.equal(created[0]?.kind, 'GENERATE_EMBEDDING');
+  assert.equal(created[0]?.dependsOnJobId, 'preview-job');
+});

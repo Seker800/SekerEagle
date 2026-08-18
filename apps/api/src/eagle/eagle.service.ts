@@ -274,6 +274,9 @@ export class EagleService {
         await transaction.eagleAssetManualTag.deleteMany({
           where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
         });
+        await transaction.eagleTagMemberDistance.deleteMany({
+          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
+        });
       }
       if (input.addTagIds.length) {
         await transaction.eagleAssetManualTag.updateMany({
@@ -286,6 +289,7 @@ export class EagleService {
           ),
           skipDuplicates: true,
         });
+        await syncCurrentTagMemberDistances(transaction, ownerId, input.assetIds, input.addTagIds);
       }
     });
     return { affectedAssetCount: input.assetIds.length };
@@ -576,10 +580,12 @@ export class EagleService {
       ]);
       if (!asset || tagCount !== ids.length) throw new NotFoundException('素材或标签不存在。');
       await transaction.eagleAssetManualTag.deleteMany({ where: { ownerId, assetId } });
+      await transaction.eagleTagMemberDistance.deleteMany({ where: { ownerId, assetId } });
       if (ids.length) {
         await transaction.eagleAssetManualTag.createMany({
           data: ids.map((tagId) => ({ ownerId, assetId, tagId, assignedByUser: true })),
         });
+        await syncCurrentTagMemberDistances(transaction, ownerId, [assetId], ids);
       }
     });
     return this.getAsset(ownerId, assetId);
@@ -867,6 +873,46 @@ export class EagleService {
       throw new NotFoundException('智能文件夹不存在。');
     throw new ConflictException('智能文件夹已被其他操作更新，请刷新后重试。');
   }
+}
+
+async function syncCurrentTagMemberDistances(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+  assetIds: string[],
+  tagIds: string[],
+) {
+  if (!assetIds.length || !tagIds.length) return;
+  await transaction.$executeRaw(
+    Prisma.sql`
+      INSERT INTO "EagleTagMemberDistance" (
+        "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
+      )
+      SELECT link."ownerId", link."tagId", link."assetId", config."currentSnapshotId",
+             nearest.distance, nearest.rank, NOW()
+      FROM "EagleAssetManualTag" link
+      JOIN "EagleManualTagSemanticConfig" config
+        ON config."ownerId" = link."ownerId" AND config."tagId" = link."tagId"
+       AND config."currentSnapshotId" IS NOT NULL
+      JOIN "EagleAssetEmbedding" embedding
+        ON embedding."ownerId" = link."ownerId" AND embedding."assetId" = link."assetId"
+       AND embedding."isCurrent" = true AND embedding.status = 'READY'
+      CROSS JOIN LATERAL (
+        SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
+        FROM "EagleTagPrototype" prototype
+        WHERE prototype."ownerId" = link."ownerId"
+          AND prototype."snapshotId" = config."currentSnapshotId"
+        ORDER BY prototype.embedding <=> embedding.embedding
+        LIMIT 1
+      ) nearest
+      WHERE link."ownerId" = ${ownerId}
+        AND link."assetId" IN (${Prisma.join(assetIds)})
+        AND link."tagId" IN (${Prisma.join(tagIds)})
+      ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId")
+      DO UPDATE SET distance = EXCLUDED.distance,
+                    "prototypeRank" = EXCLUDED."prototypeRank",
+                    "createdAt" = EXCLUDED."createdAt"
+    `,
+  );
 }
 
 function serializeAsset(asset: AssetRecord) {

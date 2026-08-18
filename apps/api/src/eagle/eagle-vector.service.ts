@@ -12,6 +12,7 @@ import type {
   ListVectorSuggestionsDto,
 } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
+import { buildMissingImageProcessingJobs, EMBEDDING_PROCESSOR_VERSION } from './media-job-plan';
 
 @Injectable()
 export class EagleVectorService {
@@ -84,6 +85,55 @@ export class EagleVectorService {
     return { retried: result.count };
   }
 
+  async scanMissingEmbeddings(ownerId: string) {
+    const assets = await this.prisma.eagleAsset.findMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+        mimeType: { startsWith: 'image/' },
+        processingJobs: {
+          none: { kind: 'GENERATE_EMBEDDING', processorVersion: EMBEDDING_PROCESSOR_VERSION },
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 500,
+      select: { id: true, mediaRevision: true, width: true, height: true },
+    });
+    if (!assets.length) return { scanned: 0, created: 0 };
+    const existing = await this.prisma.eagleAssetProcessingJob.findMany({
+      where: { ownerId, assetId: { in: assets.map((asset) => asset.id) } },
+      select: { id: true, assetId: true, assetRevision: true, kind: true, processorVersion: true },
+    });
+    const jobsByRevision = new Map<string, typeof existing>();
+    for (const job of existing) {
+      const key = `${job.assetId}:${job.assetRevision}`;
+      jobsByRevision.set(key, [...(jobsByRevision.get(key) ?? []), job]);
+    }
+    const planned = assets.flatMap((asset) => {
+      const jobs = buildMissingImageProcessingJobs(
+        {
+          ownerId,
+          assetId: asset.id,
+          assetRevision: asset.mediaRevision,
+          width: asset.width,
+          height: asset.height,
+        },
+        jobsByRevision.get(`${asset.id}:${asset.mediaRevision}`) ?? [],
+      );
+      const embedding = jobs.find((job) => job.kind === 'GENERATE_EMBEDDING');
+      if (!embedding) return [];
+      const dependency = jobs.find((job) => job.id === embedding.dependsOnJobId);
+      return dependency ? [dependency, embedding] : [embedding];
+    });
+    const result = planned.length
+      ? await this.prisma.eagleAssetProcessingJob.createMany({
+          data: planned,
+          skipDuplicates: true,
+        })
+      : { count: 0 };
+    return { scanned: assets.length, created: result.count };
+  }
+
   private async checkEmbeddingHost() {
     const baseUrl = process.env.MLX_EMBEDDING_URL?.replace(/\/+$/, '');
     const token = process.env.MLX_EMBEDDING_TOKEN;
@@ -146,12 +196,25 @@ export class EagleVectorService {
           take: 1,
           select: { id: true, status: true, createdAt: true },
         },
-        _count: { select: { assetLinks: { where: { asset: { deletedAt: null } } } } },
+        _count: {
+          select: {
+            assetLinks: { where: { asset: { deletedAt: null } } },
+            vectorSuggestions: {
+              where: {
+                status: 'PENDING',
+                isActive: true,
+                invalidatedAt: null,
+                asset: { deletedAt: null, manualTagLinks: { none: {} } },
+              },
+            },
+          },
+        },
       },
     });
     return tags.map(({ semanticConfig, semanticBuilds, prototypeSnapshots, _count, ...tag }) => ({
       ...tag,
       assetCount: _count.assetLinks,
+      pendingSuggestionCount: _count.vectorSuggestions,
       recommendationEnabled: semanticConfig?.recommendationEnabled ?? false,
       currentSnapshotId: semanticConfig?.currentSnapshotId ?? null,
       lastGeneratedAt: semanticConfig?.lastGeneratedAt ?? null,
@@ -280,8 +343,56 @@ export class EagleVectorService {
       },
     });
     const items = rows.slice(0, limit);
+    const prototypeKeys = [
+      ...new Map(
+        items.map((item) => [
+          `${item.snapshotId}:${item.prototypeRank}`,
+          { snapshotId: item.snapshotId, rank: item.prototypeRank },
+        ]),
+      ).values(),
+    ];
+    const prototypes = prototypeKeys.length
+      ? await this.prisma.eagleTagPrototype.findMany({
+          where: { ownerId, OR: prototypeKeys },
+          select: { snapshotId: true, rank: true, representativeAssetIds: true },
+        })
+      : [];
+    const representativeIds = [
+      ...new Set(prototypes.flatMap((prototype) => prototype.representativeAssetIds.slice(0, 4))),
+    ];
+    const representativeAssets = representativeIds.length
+      ? await this.prisma.eagleAsset.findMany({
+          where: { ownerId, id: { in: representativeIds }, deletedAt: null },
+          select: {
+            id: true,
+            displayName: true,
+            width: true,
+            height: true,
+            renditions: {
+              where: { status: 'READY', kind: 'THUMBNAIL', variant: '256' },
+              orderBy: { revision: 'desc' },
+              take: 1,
+              select: { id: true, width: true, height: true },
+            },
+          },
+        })
+      : [];
+    const assetById = new Map(representativeAssets.map((asset) => [asset.id, asset]));
+    const representativeIdsByPrototype = new Map(
+      prototypes.map((prototype) => [
+        `${prototype.snapshotId}:${prototype.rank}`,
+        prototype.representativeAssetIds,
+      ]),
+    );
     return {
-      items,
+      items: items.map((item) => ({
+        ...item,
+        representativeAssets: (
+          representativeIdsByPrototype.get(`${item.snapshotId}:${item.prototypeRank}`) ?? []
+        )
+          .map((assetId) => assetById.get(assetId))
+          .filter((asset) => asset !== undefined),
+      })),
       nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null,
     };
   }

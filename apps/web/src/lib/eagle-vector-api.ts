@@ -41,6 +41,7 @@ export interface EagleVectorTag {
     activatedAt: string | null;
     centerCount: number;
   } | null;
+  pendingSuggestionCount: number;
 }
 
 export interface EagleVectorAssetPreview {
@@ -59,6 +60,7 @@ export interface EagleVectorSuggestion {
   createdAt: string;
   suggestedTag: { id: string; name: string; color: string | null };
   asset: EagleVectorAssetPreview;
+  representativeAssets: EagleVectorAssetPreview[];
 }
 
 export interface EagleUnclassifiedAsset extends EagleVectorAssetPreview {
@@ -129,8 +131,20 @@ export function listEagleUnclassifiedAssets(cursor?: string) {
 export function retryFailedEagleEmbeddings() {
   return request<{ retried: number }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
 }
-export function listEagleTagDistanceAssets(tagId: string, direction: 'ASC' | 'DESC') {
+export function scanMissingEagleEmbeddings() {
+  return request<{ scanned: number; created: number }>('embeddings/scan-missing', {
+    method: 'POST',
+    body: '{}',
+  });
+}
+export function listEagleTagDistanceAssets(
+  tagId: string,
+  direction: 'ASC' | 'DESC',
+  cursor?: string,
+) {
+  const query = new URLSearchParams({ limit: '40', direction });
+  if (cursor) query.set('cursor', cursor);
   return request<{ items: EagleTagDistanceAsset[]; nextCursor: string | null }>(
-    `tags/${encodeURIComponent(tagId)}/assets?limit=40&direction=${direction}`,
+    `tags/${encodeURIComponent(tagId)}/assets?${query}`,
   );
 }

@@ -225,6 +225,35 @@
   gap: 5px;
   margin-top: 3px;
 }
+.assetInfo .evidence {
+  align-items: center;
+  margin-top: 2px;
+}
+.evidence span {
+  color: #858b94;
+  font-size: 9px;
+}
+.evidence img {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 4px;
+  object-fit: cover;
+}
+.loadMore {
+  justify-self: center;
+  min-width: 120px;
+  min-height: 32px;
+  border: 1px solid rgb(214 155 72 / 30%);
+  border-radius: 7px;
+  color: #e4bc7e;
+  background: rgb(214 155 72 / 7%);
+  cursor: pointer;
+}
+.loadMore:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
 .distanceList > div {
   display: flex;
   justify-content: space-between;

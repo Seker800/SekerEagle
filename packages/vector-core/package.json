@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --require ts-node/register --test src/**/*.test.ts"
+    "test": "node --require ts-node/register --test src/*.test.ts src/**/*.test.ts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

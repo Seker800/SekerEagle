@@ -737,6 +737,8 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
       algorithmParams: {
         maxK: 8,
         minimumRelativeImprovement: 0.12,
+        batchSize: 128,
+        outlierTrimFraction: 0.02,
         sampleLimit,
         sampleCount: sample.length,
       },

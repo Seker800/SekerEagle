@@ -89,6 +89,12 @@ export class EagleVectorController {
     return this.vectors.retryFailedEmbeddings(principal.sub);
   }
 
+  @Post('embeddings/scan-missing')
+  @UseGuards(BrowserOriginGuard)
+  scanMissingEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.vectors.scanMissingEmbeddings(principal.sub);
+  }
+
   @Post('suggestions/:suggestionId/review')
   @UseGuards(BrowserOriginGuard)
   review(

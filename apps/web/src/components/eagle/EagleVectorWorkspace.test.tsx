@@ -13,6 +13,7 @@ vi.mock('../../lib/eagle-vector-api', () => ({
   rebuildEagleVectorTag: vi.fn(),
   reviewEagleVectorSuggestions: vi.fn(),
   retryFailedEagleEmbeddings: vi.fn(),
+  scanMissingEagleEmbeddings: vi.fn(),
   getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
 }));
 
@@ -26,6 +27,7 @@ const tag = {
   lastGeneratedAt: null,
   activeBuild: null,
   currentSnapshot: null,
+  pendingSuggestionCount: 0,
 };
 
 describe('EagleVectorWorkspace', () => {
@@ -57,6 +59,7 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
+          representativeAssets: [],
         },
       ],
       nextCursor: null,

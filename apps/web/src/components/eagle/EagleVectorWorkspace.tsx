@@ -8,6 +8,7 @@ import {
   listEagleVectorTags,
   rebuildEagleVectorTag,
   retryFailedEagleEmbeddings,
+  scanMissingEagleEmbeddings,
   reviewEagleVectorSuggestions,
   setEagleVectorTagEnabled,
   type EagleTagDistanceAsset,
@@ -26,6 +27,9 @@ export function EagleVectorWorkspace() {
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
   const [unclassified, setUnclassified] = useState<EagleUnclassifiedAsset[]>([]);
   const [distances, setDistances] = useState<EagleTagDistanceAsset[]>([]);
+  const [suggestionCursor, setSuggestionCursor] = useState<string | null>(null);
+  const [unclassifiedCursor, setUnclassifiedCursor] = useState<string | null>(null);
+  const [distanceCursor, setDistanceCursor] = useState<string | null>(null);
   const [view, setView] = useState<View>('REVIEW');
   const [tagFilter, setTagFilter] = useState('');
   const [distanceTag, setDistanceTag] = useState<EagleVectorTag | null>(null);
@@ -49,6 +53,8 @@ export function EagleVectorWorkspace() {
       setTags(nextTags);
       setSuggestions(nextSuggestions.items);
       setUnclassified(nextUnclassified.items);
+      setSuggestionCursor(nextSuggestions.nextCursor);
+      setUnclassifiedCursor(nextUnclassified.nextCursor);
       setSelected([]);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取向量处理状态失败');
@@ -88,6 +94,7 @@ export function EagleVectorWorkspace() {
       const result = await listEagleTagDistanceAssets(tag.id, distanceDirection);
       setDistanceTag(tag);
       setDistances(result.items);
+      setDistanceCursor(result.nextCursor);
       setView('DISTANCE');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取标签距离失败');
@@ -117,6 +124,13 @@ export function EagleVectorWorkspace() {
             {summary?.embeddingCoverage.ready ?? 0}/{summary?.embeddingCoverage.eligible ?? 0} ·{' '}
             {summary?.dimensions ?? 1024} 维
           </small>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void act(scanMissingEagleEmbeddings, '缺失图片向量已按有界批次排队')}
+          >
+            扫描缺失向量
+          </button>
           <small>
             Metal 宿主：
             {summary?.host.status === 'ONLINE'
@@ -195,7 +209,7 @@ export function EagleVectorWorkspace() {
                   .filter((tag) => tag.recommendationEnabled && tag.currentSnapshotId)
                   .map((tag) => (
                     <option key={tag.id} value={tag.id}>
-                      {tag.name}
+                      {tag.name}（{tag.pendingSuggestionCount}）
                     </option>
                   ))}
               </select>
@@ -234,6 +248,19 @@ export function EagleVectorWorkspace() {
             ))}
           </AssetGrid>
           {!suggestions.length ? <Empty text="当前没有待确认的人工标签建议。" /> : null}
+          {suggestionCursor ? (
+            <LoadMore
+              disabled={busy}
+              onClick={async () => {
+                const result = await listEagleVectorSuggestions(
+                  tagFilter || undefined,
+                  suggestionCursor,
+                );
+                setSuggestions((current) => [...current, ...result.items]);
+                setSuggestionCursor(result.nextCursor);
+              }}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -313,6 +340,16 @@ export function EagleVectorWorkspace() {
             ))}
           </AssetGrid>
           {!unclassified.length ? <Empty text="当前没有遗漏的未分类图片。" /> : null}
+          {unclassifiedCursor ? (
+            <LoadMore
+              disabled={busy}
+              onClick={async () => {
+                const result = await listEagleUnclassifiedAssets(unclassifiedCursor);
+                setUnclassified((current) => [...current, ...result.items]);
+                setUnclassifiedCursor(result.nextCursor);
+              }}
+            />
+          ) : null}
         </section>
       ) : null}
 
@@ -329,6 +366,7 @@ export function EagleVectorWorkspace() {
                   setDistanceDirection(direction);
                   const result = await listEagleTagDistanceAssets(distanceTag.id, direction);
                   setDistances(result.items);
+                  setDistanceCursor(result.nextCursor);
                 }}
               >
                 <option value="DESC">由远到近</option>
@@ -347,6 +385,20 @@ export function EagleVectorWorkspace() {
             ))}
           </div>
           {!distances.length ? <Empty text="该标签暂时没有可用的成员距离。" /> : null}
+          {distanceCursor ? (
+            <LoadMore
+              disabled={busy}
+              onClick={async () => {
+                const result = await listEagleTagDistanceAssets(
+                  distanceTag.id,
+                  distanceDirection,
+                  distanceCursor,
+                );
+                setDistances((current) => [...current, ...result.items]);
+                setDistanceCursor(result.nextCursor);
+              }}
+            />
+          ) : null}
         </section>
       ) : null}
     </section>
@@ -358,6 +410,18 @@ function AssetGrid({ children }: { children: React.ReactNode }) {
 }
 function Empty({ text }: { text: string }) {
   return <div className={styles.empty}>{text}</div>;
+}
+function LoadMore({ disabled, onClick }: { disabled: boolean; onClick: () => Promise<void> }) {
+  return (
+    <button
+      className={styles.loadMore}
+      disabled={disabled}
+      type="button"
+      onClick={() => void onClick()}
+    >
+      加载更多
+    </button>
+  );
 }
 
 function Preview({
@@ -407,6 +471,17 @@ function SuggestionCard({
         <small>
           相似度 {(suggestion.score * 100).toFixed(1)}% · 中心 {suggestion.prototypeRank + 1}
         </small>
+        {suggestion.representativeAssets.length ? (
+          <div className={styles.evidence} aria-label="该中心代表图片">
+            <span>代表图</span>
+            {suggestion.representativeAssets.map((asset) => {
+              const src = getVectorThumbnailUrl(asset);
+              return src ? (
+                <img key={asset.id} src={src} alt={asset.displayName} loading="lazy" />
+              ) : null;
+            })}
+          </div>
+        ) : null}
         <div>
           <button disabled={disabled} type="button" onClick={() => onReview('ACCEPT')}>
             确认
