@@ -145,6 +145,72 @@ test('coalesces concurrent 401 responses into one token refresh', async () => {
   assert.equal(refreshRequests, 1);
 });
 
+test('fresh uploads avoid the resumable-parts lookup on the hot path', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-fresh-upload-'));
+  const filePath = path.join(directory, 'photo.jpg');
+  await fs.writeFile(filePath, 'hello');
+  let partsLookups = 0;
+  const api = {
+    initiateUpload: async () => ({ id: 'session-1', partSizeBytes: 5, resumed: false }),
+    getUploadedParts: async () => {
+      partsLookups += 1;
+      return { parts: [], partSizeBytes: 5 };
+    },
+    uploadPart: async (_sessionId, partNumber) => ({ partNumber, etag: 'etag-1' }),
+    completeUpload: async () => ({ assetId: 'asset-1' }),
+  };
+  const engine = new ImportEngine({ api, store: { state: {}, save: async () => {} } });
+
+  const result = await engine.uploadItem(
+    'run-1',
+    { id: 'item-1' },
+    { filePath, originalFileName: 'photo.jpg', mimeType: 'image/jpeg', size: 5 },
+    () => {},
+  );
+
+  assert.equal(result.assetId, 'asset-1');
+  assert.equal(partsLookups, 0);
+});
+
+test('resumed uploads still recover already uploaded parts', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-resumed-upload-'));
+  const filePath = path.join(directory, 'photo.jpg');
+  await fs.writeFile(filePath, 'helloworld');
+  const uploadedPartNumbers = [];
+  let partsLookups = 0;
+  const api = {
+    initiateUpload: async () => ({ id: 'session-1', partSizeBytes: 5, resumed: true }),
+    getUploadedParts: async () => {
+      partsLookups += 1;
+      return { parts: [{ partNumber: 1, etag: 'existing' }], partSizeBytes: 5 };
+    },
+    uploadPart: async (_sessionId, partNumber) => {
+      uploadedPartNumbers.push(partNumber);
+      return { partNumber, etag: 'new' };
+    },
+    completeUpload: async () => ({ assetId: 'asset-1' }),
+  };
+  const engine = new ImportEngine({ api, store: { state: {}, save: async () => {} } });
+
+  await engine.uploadItem(
+    'run-1',
+    { id: 'item-1' },
+    { filePath, originalFileName: 'photo.jpg', mimeType: 'image/jpeg', size: 10 },
+    () => {},
+  );
+
+  assert.equal(partsLookups, 1);
+  assert.deepEqual(uploadedPartNumbers, [2]);
+});
+
+test('local importer defaults to 32 concurrent files and allows up to 64', () => {
+  const dependencies = { api: {}, store: {} };
+
+  assert.equal(new ImportEngine(dependencies).uploadConcurrency, 32);
+  assert.equal(new ImportEngine({ ...dependencies, uploadConcurrency: 64 }).uploadConcurrency, 64);
+  assert.equal(new ImportEngine({ ...dependencies, uploadConcurrency: 100 }).uploadConcurrency, 64);
+});
+
 test('serializes concurrent state writes and preserves every patch', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'seker-eagle-state-queue-'));
   const store = new StateStore(directory);

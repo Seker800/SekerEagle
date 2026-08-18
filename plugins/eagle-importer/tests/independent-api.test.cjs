@@ -12,7 +12,6 @@ test('maps the original resumable upload engine onto independent Eagle endpoints
     json({ uploadUrl: 'http://localhost:8180/sekereagle-assets/key?signature=1' }),
     raw('', { etag: 'etag-1' }),
     json({ assetId: 'asset-1' }),
-    json({ status: 'IMPORTED' }),
   ];
   const api = new ApiClient({
     baseUrl: 'http://localhost:8180',
@@ -46,7 +45,6 @@ test('maps the original resumable upload engine onto independent Eagle endpoints
       'POST http://localhost:8180/api/eagle/uploads/session-1/parts/1',
       'PUT http://localhost:8180/sekereagle-assets/key?signature=1',
       'POST http://localhost:8180/api/eagle/uploads/session-1/complete',
-      'POST http://localhost:8180/api/eagle/imports/run-1/items/item-1/finish',
     ],
   );
   assert.equal(requests[3].init.headers?.Authorization, undefined);

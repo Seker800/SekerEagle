@@ -7,7 +7,7 @@ test('parses bounded concurrency and never accepts a PAT on the command line', (
     command: 'doctor',
     snapshotPath: '/snapshot',
     serverUrl: 'http://localhost:8180',
-    concurrency: 4,
+    concurrency: 32,
   });
   assert.equal(
     parseCliOptions([
@@ -25,8 +25,8 @@ test('parses bounded concurrency and never accepts a PAT on the command line', (
     /environment/i,
   );
   assert.throws(
-    () => parseCliOptions(['run', '/snapshot', '--concurrency', '100']),
-    /between 1 and 16/i,
+    () => parseCliOptions(['run', '/snapshot', '--concurrency', '65']),
+    /between 1 and 64/i,
   );
 });
 
@@ -57,7 +57,7 @@ test('rejects malformed and credential-bearing command options', () => {
   );
   assert.throws(
     () => parseCliOptions(['run', '/snapshot', '--concurrency', '1.5']),
-    /between 1 and 16/,
+    /between 1 and 64/,
   );
   assert.equal(
     parseCliOptions(['status', '/snapshot', '--state', '/tmp/state']).stateDirectory,

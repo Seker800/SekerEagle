@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
+import { EagleImportController } from './eagle-import.controller';
 import { EagleUploadController } from './eagle-upload.controller';
+
+test('bulk import controllers bypass generic request throttles without weakening auth guards', () => {
+  for (const controller of [EagleImportController, EagleUploadController]) {
+    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}short`, controller), true);
+    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}default`, controller), true);
+  }
+});
 
 test('completed uploads converge their bound original import item', async () => {
   const finalized: unknown[] = [];
