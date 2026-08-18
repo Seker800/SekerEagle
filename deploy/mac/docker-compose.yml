@@ -17,7 +17,7 @@ x-api-environment: &api-environment
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.1-pg16
     platform: linux/arm64
     restart: unless-stopped
     environment:

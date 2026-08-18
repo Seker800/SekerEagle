@@ -60,6 +60,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
           assetId: command.assetId,
           tagId,
           assignedByUser: false,
+          assignmentProvenance: 'EAGLE_IMPORTED',
         })),
         skipDuplicates: true,
       });

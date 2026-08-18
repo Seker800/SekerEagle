@@ -64,7 +64,36 @@ enum EagleMediaJobKind {
   PROBE_MEDIA
   EXTRACT_COLOR_PALETTE
   GENERATE_IMAGE_PYRAMID
+  GENERATE_EMBEDDING
   PURGE_ASSET
+}
+
+enum EagleEmbeddingStatus {
+  PENDING
+  RUNNING
+  READY
+  FAILED
+  SUPERSEDED
+}
+
+enum EagleTagPrototypeStatus {
+  BUILDING
+  ACTIVE
+  FAILED
+  SUPERSEDED
+}
+
+enum EagleVectorSuggestionStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+enum EagleTagSemanticBuildStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 enum EagleImagePyramidStatus {
@@ -294,6 +323,9 @@ model EagleAsset {
   annotation                     EagleAssetAnnotation?
   externalSource                 EagleExternalAsset?
   importRunItems                 EagleImportRunItem[]
+  embeddings                     EagleAssetEmbedding[]
+  vectorSuggestions              EagleVectorTagSuggestion[]
+  tagMemberDistances             EagleTagMemberDistance[]
 
   @@unique([ownerId, id])
   @@index([ownerId, deletedAt, libraryAddedAt, id])
@@ -574,6 +606,11 @@ model EagleManualTag {
   assetLinks         EagleAssetManualTag[]
   promotedAiTagLinks EagleAssetAiTag[]                     @relation("PromotedManualTag")
   smartFolderDeps    EagleSmartFolderManualTagDependency[]
+  semanticConfig     EagleManualTagSemanticConfig?
+  prototypeSnapshots EagleTagPrototypeSnapshot[]
+  vectorSuggestions  EagleVectorTagSuggestion[]
+  memberDistances    EagleTagMemberDistance[]
+  semanticBuilds     EagleTagSemanticBuild[]
 
   @@unique([ownerId, normalizedName])
   @@unique([ownerId, id])
@@ -615,17 +652,193 @@ model EagleManualTagGroupMembership {
 }
 
 model EagleAssetManualTag {
-  ownerId          String
-  assetId          String
-  tagId            String
-  assignedByUser   Boolean                        @default(true)
-  createdAt        DateTime                       @default(now())
-  asset            EagleAsset                     @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  tag              EagleManualTag                 @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
-  ingestionOrigins EagleAssetManualTagIngestion[]
+  ownerId              String
+  assetId              String
+  tagId                String
+  assignedByUser       Boolean                        @default(true)
+  assignmentProvenance String                         @default("USER_ASSIGNED")
+  acceptedSuggestionId String?
+  createdAt            DateTime                       @default(now())
+  asset                EagleAsset                     @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  tag                  EagleManualTag                 @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  ingestionOrigins     EagleAssetManualTagIngestion[]
 
   @@id([ownerId, assetId, tagId])
   @@index([ownerId, tagId, assetId])
+}
+
+model EagleEmbeddingSpace {
+  id                   String                      @id
+  model                String
+  revision             String
+  dimensions           Int                         @default(1024)
+  instructionVersion   String
+  preprocessingVersion String
+  normalized           Boolean                     @default(true)
+  isCurrent            Boolean                     @default(false)
+  createdAt            DateTime                    @default(now())
+  embeddings           EagleAssetEmbedding[]
+  prototypeSnapshots   EagleTagPrototypeSnapshot[]
+
+  @@unique([model, revision, dimensions, instructionVersion, preprocessingVersion])
+  @@index([isCurrent, createdAt])
+}
+
+model EagleAssetEmbedding {
+  id            String                       @id @default(uuid())
+  ownerId       String
+  assetId       String
+  assetRevision Int
+  spaceId       String
+  status        EagleEmbeddingStatus         @default(PENDING)
+  isCurrent     Boolean                      @default(false)
+  embedding     Unsupported("vector(1024)")?
+  l2Norm        Float?
+  errorCode     String?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime                     @default(now())
+  updatedAt     DateTime                     @updatedAt
+  asset         EagleAsset                   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  space         EagleEmbeddingSpace          @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  suggestions   EagleVectorTagSuggestion[]
+
+  @@unique([assetId, assetRevision, spaceId])
+  @@unique([ownerId, id])
+  @@index([ownerId, spaceId, isCurrent, status])
+  @@index([status, updatedAt])
+}
+
+model EagleManualTagSemanticConfig {
+  ownerId               String
+  tagId                 String
+  recommendationEnabled Boolean        @default(false)
+  currentSnapshotId     String?
+  lastGeneratedAt       DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  tag                   EagleManualTag @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([ownerId, tagId])
+  @@index([ownerId, recommendationEnabled, tagId])
+}
+
+model EagleTagPrototypeSnapshot {
+  id                 String                     @id @default(uuid())
+  ownerId            String
+  tagId              String
+  spaceId            String
+  version            Int
+  generationId       String
+  status             EagleTagPrototypeStatus    @default(BUILDING)
+  isCurrent          Boolean                    @default(false)
+  sourceAssetCount   Int
+  sourceSetDigest    String
+  algorithm          String
+  algorithmVersion   String
+  algorithmParams    Json
+  addedMemberCount   Int                        @default(0)
+  removedMemberCount Int                        @default(0)
+  failureCode        String?
+  activatedAt        DateTime?
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
+  tag                EagleManualTag             @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  space              EagleEmbeddingSpace        @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  prototypes         EagleTagPrototype[]
+  memberDistances    EagleTagMemberDistance[]
+  suggestions        EagleVectorTagSuggestion[]
+  build              EagleTagSemanticBuild?
+
+  @@unique([ownerId, id])
+  @@unique([ownerId, tagId, version])
+  @@index([ownerId, tagId, isCurrent, status])
+  @@index([generationId])
+}
+
+model EagleTagPrototype {
+  ownerId                String
+  snapshotId             String
+  rank                   Int
+  embedding              Unsupported("vector(1024)")
+  memberCount            Int
+  weight                 Float
+  meanDistance           Float
+  p95Distance            Float
+  representativeAssetIds String[]
+  createdAt              DateTime                    @default(now())
+  snapshot               EagleTagPrototypeSnapshot   @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([ownerId, snapshotId, rank])
+}
+
+model EagleTagMemberDistance {
+  ownerId       String
+  tagId         String
+  assetId       String
+  snapshotId    String
+  distance      Float
+  prototypeRank Int
+  createdAt     DateTime                  @default(now())
+  asset         EagleAsset                @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  tag           EagleManualTag            @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  snapshot      EagleTagPrototypeSnapshot @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Cascade)
+
+  @@id([ownerId, tagId, assetId, snapshotId])
+  @@index([ownerId, tagId, snapshotId, distance, assetId])
+}
+
+model EagleVectorTagSuggestion {
+  id               String                      @id @default(uuid())
+  ownerId          String
+  assetId          String
+  suggestedTagId   String
+  embeddingId      String
+  snapshotId       String
+  generationId     String
+  score            Float
+  distance         Float
+  prototypeRank    Int
+  status           EagleVectorSuggestionStatus @default(PENDING)
+  invalidatedAt    DateTime?
+  invalidReason    String?
+  reviewedAt       DateTime?
+  reviewedByUserId String?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  asset            EagleAsset                  @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  suggestedTag     EagleManualTag              @relation(fields: [ownerId, suggestedTagId], references: [ownerId, id], onDelete: Cascade)
+  embedding        EagleAssetEmbedding         @relation(fields: [ownerId, embeddingId], references: [ownerId, id], onDelete: Cascade)
+  snapshot         EagleTagPrototypeSnapshot   @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Restrict)
+
+  @@unique([ownerId, id])
+  @@index([ownerId, suggestedTagId, status, score, assetId])
+  @@index([ownerId, assetId, status])
+  @@index([generationId])
+}
+
+model EagleTagSemanticBuild {
+  id                  String                      @id @default(uuid())
+  ownerId             String
+  tagId               String
+  candidateSnapshotId String?                     @unique
+  status              EagleTagSemanticBuildStatus @default(PENDING)
+  attempts            Int                         @default(0)
+  leaseVersion        Int                         @default(0)
+  availableAt         DateTime                    @default(now())
+  lockedAt            DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  lastError           String?
+  createdAt           DateTime                    @default(now())
+  updatedAt           DateTime                    @updatedAt
+  tag                 EagleManualTag              @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  candidateSnapshot   EagleTagPrototypeSnapshot?  @relation(fields: [ownerId, candidateSnapshotId], references: [ownerId, id], onDelete: Restrict)
+
+  @@unique([ownerId, id])
+  @@unique([ownerId, candidateSnapshotId])
+  @@index([status, availableAt, createdAt])
+  @@index([ownerId, tagId, status])
 }
 
 model EagleAssetManualTagIngestion {
