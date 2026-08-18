@@ -11,12 +11,23 @@ import {
   IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
 export class SetTagRecommendationDto {
   @IsBoolean()
   recommendationEnabled!: boolean;
+}
+
+export class ListVectorTagsDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.normalize('NFKC').trim() || undefined : value,
+  )
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  query?: string;
 }
 
 export class ListVectorSuggestionsDto {

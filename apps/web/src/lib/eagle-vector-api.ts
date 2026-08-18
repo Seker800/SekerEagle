@@ -8,8 +8,17 @@ export interface EagleVectorSummary {
     eligible: number;
     ready: number;
     failed: number;
+    queued: number;
+    running: number;
+    missing: number;
     processing: number;
     percentage: number;
+  };
+  processingSchedule: {
+    mode: 'ALWAYS' | 'NIGHT' | 'MANUAL';
+    nightStart: string;
+    nightEnd: string;
+    timeZone: 'Asia/Shanghai';
   };
   tags: { enabled: number; ready: number; awaitingCenter: number };
   suggestions: { unclassified: number; pending: number };
@@ -95,8 +104,11 @@ export const getVectorThumbnailUrl = (asset: Pick<EagleVectorAssetPreview, 'id' 
 export function fetchEagleVectorSummary() {
   return request<EagleVectorSummary>('summary');
 }
-export function listEagleVectorTags() {
-  return request<EagleVectorTag[]>('tags');
+export function listEagleVectorTags(query?: string) {
+  const params = new URLSearchParams();
+  if (query?.trim()) params.set('query', query.trim());
+  const suffix = params.size ? `?${params}` : '';
+  return request<EagleVectorTag[]>(`tags${suffix}`);
 }
 export function setEagleVectorTagEnabled(tagId: string, recommendationEnabled: boolean) {
   return request(`tags/${encodeURIComponent(tagId)}`, {
@@ -132,7 +144,7 @@ export function retryFailedEagleEmbeddings() {
   return request<{ retried: number }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
 }
 export function scanMissingEagleEmbeddings() {
-  return request<{ scanned: number; created: number }>('embeddings/scan-missing', {
+  return request<{ scanned: number; created: number; repaired: number }>('embeddings/scan-missing', {
     method: 'POST',
     body: '{}',
   });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   fetchEagleVectorSummary,
   getVectorThumbnailUrl,
@@ -20,8 +20,6 @@ import {
 import styles from './EagleVectorWorkspace.module.css';
 
 type View = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED' | 'DISTANCE';
-type TagStatusFilter = 'ENABLED' | 'READY' | 'AWAITING_CENTER' | 'DISABLED' | 'ALL';
-const TAG_RESULT_LIMIT = 50;
 
 export function EagleVectorWorkspace() {
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
@@ -38,7 +36,8 @@ export function EagleVectorWorkspace() {
   const [distanceDirection, setDistanceDirection] = useState<'ASC' | 'DESC'>('DESC');
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const [tagStatus, setTagStatus] = useState<TagStatusFilter>('ENABLED');
+  const [tagCandidates, setTagCandidates] = useState<EagleVectorTag[]>([]);
+  const [searchingTags, setSearchingTags] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -68,38 +67,74 @@ export function EagleVectorWorkspace() {
     void reload();
   }, [reload]);
 
-  const act = async (action: () => Promise<unknown>, message: string) => {
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') void reload();
+    }, 10_000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void reload();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [reload]);
+
+  useEffect(() => {
+    const query = search.trim();
+    if (view !== 'TAGS' || !query) {
+      setTagCandidates([]);
+      setSearchingTags(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchingTags(true);
+    const timer = window.setTimeout(() => {
+      void listEagleVectorTags(query)
+        .then((results) => {
+          if (!cancelled) setTagCandidates(results);
+        })
+        .catch((cause: unknown) => {
+          if (!cancelled) setError(cause instanceof Error ? cause.message : '搜索人工标签失败');
+        })
+        .finally(() => {
+          if (!cancelled) setSearchingTags(false);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [search, view]);
+
+  const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {
     setBusy(true);
     setError('');
     setNotice('');
     try {
-      await action();
-      setNotice(message);
+      const result = await action();
+      setNotice(typeof message === 'function' ? message(result) : message);
       await reload();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '操作失败');
+      return false;
     } finally {
       setBusy(false);
     }
   };
 
-  const matchingTags = useMemo(() => {
-    const keyword = search.trim().toLocaleLowerCase('zh-CN');
-    if (tagStatus === 'ALL' && !keyword) return [];
-    return tags
-      .filter((tag) => {
-        if (tagStatus === 'ENABLED') return tag.recommendationEnabled;
-        if (tagStatus === 'READY') return tag.recommendationEnabled && Boolean(tag.currentSnapshot);
-        if (tagStatus === 'AWAITING_CENTER')
-          return tag.recommendationEnabled && !tag.currentSnapshot;
-        if (tagStatus === 'DISABLED') return !tag.recommendationEnabled;
-        return true;
-      })
-      .filter((tag) => !keyword || tag.name.toLocaleLowerCase('zh-CN').includes(keyword));
-  }, [search, tagStatus, tags]);
-
-  const visibleTags = matchingTags.slice(0, TAG_RESULT_LIMIT);
-  const matchingTagCount = matchingTags.length;
+  const addRecommendationTag = async (tag: EagleVectorTag) => {
+    const added = await act(
+      () => setEagleVectorTagEnabled(tag.id, true),
+      `已添加“${tag.name}”参与推荐`,
+    );
+    if (added) {
+      setSearch('');
+      setTagCandidates([]);
+    }
+  };
 
   const openDistance = async (tag: EagleVectorTag) => {
     setBusy(true);
@@ -138,13 +173,31 @@ export function EagleVectorWorkspace() {
             {summary?.embeddingCoverage.ready ?? 0}/{summary?.embeddingCoverage.eligible ?? 0} ·{' '}
             {summary?.dimensions ?? 1024} 维
           </small>
+          <small>
+            等待 {summary?.embeddingCoverage.queued ?? 0} · 运行{' '}
+            {summary?.embeddingCoverage.running ?? 0} · 未入队{' '}
+            {summary?.embeddingCoverage.missing ?? 0}
+          </small>
           <button
             type="button"
-            disabled={busy}
-            onClick={() => void act(scanMissingEagleEmbeddings, '缺失图片向量已按有界批次排队')}
+            disabled={busy || (summary?.embeddingCoverage.missing ?? 0) === 0}
+            onClick={() =>
+              void act(scanMissingEagleEmbeddings, ({ created, repaired }) =>
+                created || repaired
+                  ? `已排队 ${created + repaired} 个缺失图片向量`
+                  : '没有发现可排队的缺失图片向量',
+              )
+            }
           >
             扫描缺失向量
           </button>
+          <small>
+            {summary?.processingSchedule.mode === 'ALWAYS'
+              ? '后台任务全天执行'
+              : summary?.processingSchedule.mode === 'MANUAL'
+                ? '后台任务已暂停'
+                : `夜间 ${summary?.processingSchedule.nightStart ?? '23:00'}–${summary?.processingSchedule.nightEnd ?? '06:00'} 执行`}
+          </small>
           <small>
             Metal 宿主：
             {summary?.host.status === 'ONLINE'
@@ -280,36 +333,51 @@ export function EagleVectorWorkspace() {
 
       {view === 'TAGS' ? (
         <section className={styles.panel} aria-label="推荐标签设置">
-          <div className={styles.toolbar}>
+          <div className={styles.tagSearch}>
+            <label htmlFor="vector-tag-search">添加推荐标签</label>
             <input
-              aria-label="搜索人工标签"
-              placeholder="输入标签名称缩小范围…"
+              id="vector-tag-search"
+              aria-label="搜索可添加的人工标签"
+              autoComplete="off"
+              placeholder="输入标签名称搜索并添加…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            <label>
-              标签状态
-              <select
-                aria-label="筛选标签状态"
-                value={tagStatus}
-                onChange={(event) => setTagStatus(event.target.value as TagStatusFilter)}
-              >
-                <option value="ENABLED">参与推荐</option>
-                <option value="READY">已有中心</option>
-                <option value="AWAITING_CENTER">待生成中心</option>
-                <option value="DISABLED">未开启</option>
-                <option value="ALL">全部状态（需搜索）</option>
-              </select>
-            </label>
-            <span className={styles.resultCount}>
-              {matchingTagCount > TAG_RESULT_LIMIT
-                ? `${matchingTagCount} 个结果，仅显示前 ${TAG_RESULT_LIMIT} 个`
-                : `${matchingTagCount} 个结果`}
-            </span>
+            {!search.trim() ? (
+              <small>只会搜索尚未参与推荐的人工标签，不提供全部标签列表。</small>
+            ) : (
+              <div className={styles.tagSearchResults} aria-label="可添加的标签">
+                {searchingTags ? <span className={styles.searchHint}>正在搜索…</span> : null}
+                {!searchingTags && !tagCandidates.length ? (
+                  <span className={styles.searchHint}>没有找到可添加的标签。</span>
+                ) : null}
+                {tagCandidates.map((tag) => (
+                  <article className={styles.tagCandidate} key={tag.id}>
+                    <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
+                    <div>
+                      <strong>{tag.name}</strong>
+                      <small>{tag.assetCount} 张基础图片</small>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void addRecommendationTag(tag)}
+                    >
+                      添加
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
-          {visibleTags.length ? (
+
+          <div className={styles.sectionHeading}>
+            <strong>参与推荐</strong>
+            <span>{summary?.tags.enabled ?? tags.length} 个标签</span>
+          </div>
+          {tags.length ? (
             <div className={styles.tagList}>
-              {visibleTags.map((tag) => (
+              {tags.map((tag) => (
                 <article className={styles.tagRow} key={tag.id}>
                   <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
                   <div>
@@ -321,21 +389,6 @@ export function EagleVectorWorkspace() {
                         : ' · 尚无中心'}
                     </small>
                   </div>
-                  <label className={styles.switch}>
-                    <input
-                      type="checkbox"
-                      checked={tag.recommendationEnabled}
-                      disabled={busy}
-                      onChange={(event) =>
-                        void act(
-                          () => setEagleVectorTagEnabled(tag.id, event.target.checked),
-                          event.target.checked ? `已开启“${tag.name}”` : `已关闭“${tag.name}”`,
-                        )
-                      }
-                    />
-                    <span />
-                    参与智能推荐
-                  </label>
                   <button
                     type="button"
                     disabled={
@@ -360,19 +413,23 @@ export function EagleVectorWorkspace() {
                   >
                     距离检查
                   </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      void act(
+                        () => setEagleVectorTagEnabled(tag.id, false),
+                        `已将“${tag.name}”移出推荐`,
+                      )
+                    }
+                  >
+                    移出推荐
+                  </button>
                 </article>
               ))}
             </div>
           ) : (
-            <Empty
-              text={
-                tagStatus === 'ALL' && !search.trim()
-                  ? '先输入标签名称再显示结果，避免一次铺开全部标签。'
-                  : tagStatus === 'ENABLED' && !search.trim()
-                    ? '还没有参与推荐的标签。请选择“未开启”，再搜索准备启用的标签。'
-                    : '没有符合当前搜索与筛选条件的标签。'
-              }
-            />
+            <Empty text="还没有参与推荐的标签，请从上方搜索并添加。" />
           )}
         </section>
       ) : null}

@@ -19,6 +19,7 @@ import {
   ListTagDistanceAssetsDto,
   ListUnclassifiedVectorAssetsDto,
   ListVectorSuggestionsDto,
+  ListVectorTagsDto,
   ReviewVectorSuggestionDto,
   SetTagRecommendationDto,
 } from './eagle-vector.dto';
@@ -35,8 +36,8 @@ export class EagleVectorController {
   }
 
   @Get('tags')
-  tags(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.vectors.listTagSemantics(principal.sub);
+  tags(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListVectorTagsDto) {
+    return this.vectors.listTagSemantics(principal.sub, query.query);
   }
 
   @Patch('tags/:tagId')

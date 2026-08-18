@@ -13,7 +13,7 @@ import type {
 } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
 import { upsertAcceptedSuggestionMemberDistance } from './eagle-vector.persistence';
-import { buildMissingImageProcessingJobs, EMBEDDING_PROCESSOR_VERSION } from './media-job-plan';
+import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
 
 @Injectable()
 export class EagleVectorService {
@@ -29,6 +29,8 @@ export class EagleVectorService {
       unclassified,
       pendingSuggestions,
       host,
+      embeddingJobs,
+      processingSetting,
     ] = await Promise.all([
       this.prisma.eagleAsset.count({
         where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' } },
@@ -52,16 +54,42 @@ export class EagleVectorService {
         where: { ownerId, status: 'PENDING', isActive: true, invalidatedAt: null },
       }),
       this.checkEmbeddingHost(),
+      this.prisma.eagleAssetProcessingJob.groupBy({
+        by: ['status'],
+        where: {
+          ownerId,
+          kind: 'GENERATE_EMBEDDING',
+          processorVersion: EMBEDDING_PROCESSOR_VERSION,
+          asset: { deletedAt: null },
+        },
+        _count: true,
+      }),
+      this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } }),
     ]);
+    const countJobs = (status: string) =>
+      embeddingJobs.find((row) => row.status === status)?._count ?? 0;
+    const queued = countJobs('PENDING');
+    const running = countJobs('PROCESSING');
+    const failedJobs = countJobs('FAILED');
+    const effectiveFailed = Math.max(failed, failedJobs);
     return {
       model: EAGLE_EMBEDDING_MODEL,
       dimensions: EAGLE_EMBEDDING_DIMENSIONS,
       embeddingCoverage: {
         eligible,
         ready,
-        failed,
-        processing: Math.max(0, eligible - ready - failed),
+        failed: effectiveFailed,
+        queued,
+        running,
+        missing: Math.max(0, eligible - ready - effectiveFailed - queued - running),
+        processing: queued + running,
         percentage: eligible ? Math.round((ready / eligible) * 100) : 100,
+      },
+      processingSchedule: {
+        mode: processingSetting?.mode ?? 'NIGHT',
+        nightStart: processingSetting?.nightStart ?? '23:00',
+        nightEnd: processingSetting?.nightEnd ?? '06:00',
+        timeZone: 'Asia/Shanghai' as const,
       },
       tags: { enabled: enabledTags, ready: readyTags, awaitingCenter: enabledTags - readyTags },
       suggestions: { unclassified, pending: pendingSuggestions },
@@ -87,52 +115,77 @@ export class EagleVectorService {
   }
 
   async scanMissingEmbeddings(ownerId: string) {
-    const assets = await this.prisma.eagleAsset.findMany({
-      where: {
-        ownerId,
-        deletedAt: null,
-        mimeType: { startsWith: 'image/' },
-        processingJobs: {
-          none: { kind: 'GENERATE_EMBEDDING', processorVersion: EMBEDDING_PROCESSOR_VERSION },
-        },
-      },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 500,
-      select: { id: true, mediaRevision: true, width: true, height: true },
+    const [repaired, created] = await this.prisma.$transaction(async (transaction) => {
+      const repairedCount = await transaction.$executeRaw(Prisma.sql`
+        UPDATE "EagleMediaJob" AS job
+        SET status = 'PENDING', attempts = 0, "availableAt" = CURRENT_TIMESTAMP,
+            "lockedAt" = NULL, "startedAt" = NULL, "completedAt" = NULL,
+            "lastError" = NULL, "updatedAt" = CURRENT_TIMESTAMP
+        FROM "EagleAsset" AS asset
+        WHERE job."ownerId" = ${ownerId}
+          AND asset."ownerId" = ${ownerId}
+          AND asset.id = job."assetId"
+          AND asset."deletedAt" IS NULL
+          AND asset."mimeType" LIKE 'image/%'
+          AND asset."mediaRevision" = job."assetRevision"
+          AND job.kind = 'GENERATE_EMBEDDING'
+          AND job."processorVersion" = ${EMBEDDING_PROCESSOR_VERSION}
+          AND job.status = 'COMPLETED'
+          AND NOT EXISTS (
+            SELECT 1
+            FROM "EagleAssetEmbedding" AS embedding
+            WHERE embedding."ownerId" = ${ownerId}
+              AND embedding."assetId" = asset.id
+              AND embedding."assetRevision" = asset."mediaRevision"
+              AND embedding."isCurrent" = true
+              AND embedding.status = 'READY'
+          )
+      `);
+      const createdCount = await transaction.$executeRaw(Prisma.sql`
+        INSERT INTO "EagleMediaJob" (
+          id, "ownerId", "assetId", kind, status, lane, "assetRevision",
+          "processorVersion", "dependsOnJobId", "createdAt", "updatedAt"
+        )
+        SELECT gen_random_uuid()::text, asset."ownerId", asset.id,
+          'GENERATE_EMBEDDING'::"EagleMediaJobKind", 'PENDING'::"EagleMediaJobStatus",
+          'BACKGROUND'::"EagleProcessingLane", asset."mediaRevision",
+          ${EMBEDDING_PROCESSOR_VERSION}, dependency.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM "EagleAsset" AS asset
+        JOIN LATERAL (
+          SELECT rendition.id
+          FROM "EagleMediaJob" AS rendition
+          WHERE rendition."ownerId" = ${ownerId}
+            AND rendition."assetId" = asset.id
+            AND rendition."assetRevision" = asset."mediaRevision"
+            AND rendition.kind = 'GENERATE_RENDITIONS'
+            AND rendition."processorVersion" = ${RENDITION_PROCESSOR_VERSION}
+            AND rendition.status = 'COMPLETED'
+          ORDER BY rendition."completedAt" DESC NULLS LAST, rendition.id
+          LIMIT 1
+        ) AS dependency ON true
+        WHERE asset."ownerId" = ${ownerId}
+          AND asset."deletedAt" IS NULL
+          AND asset."mimeType" LIKE 'image/%'
+          AND EXISTS (
+            SELECT 1 FROM "EagleAssetRendition" AS preview
+            WHERE preview."ownerId" = ${ownerId}
+              AND preview."assetId" = asset.id
+              AND preview.revision = asset."mediaRevision"
+              AND preview.kind = 'PREVIEW'
+              AND preview.status = 'READY'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "EagleMediaJob" AS existing
+            WHERE existing."assetId" = asset.id
+              AND existing."assetRevision" = asset."mediaRevision"
+              AND existing.kind = 'GENERATE_EMBEDDING'
+              AND existing."processorVersion" = ${EMBEDDING_PROCESSOR_VERSION}
+          )
+        ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
+      `);
+      return [repairedCount, createdCount] as const;
     });
-    if (!assets.length) return { scanned: 0, created: 0 };
-    const existing = await this.prisma.eagleAssetProcessingJob.findMany({
-      where: { ownerId, assetId: { in: assets.map((asset) => asset.id) } },
-      select: { id: true, assetId: true, assetRevision: true, kind: true, processorVersion: true },
-    });
-    const jobsByRevision = new Map<string, typeof existing>();
-    for (const job of existing) {
-      const key = `${job.assetId}:${job.assetRevision}`;
-      jobsByRevision.set(key, [...(jobsByRevision.get(key) ?? []), job]);
-    }
-    const planned = assets.flatMap((asset) => {
-      const jobs = buildMissingImageProcessingJobs(
-        {
-          ownerId,
-          assetId: asset.id,
-          assetRevision: asset.mediaRevision,
-          width: asset.width,
-          height: asset.height,
-        },
-        jobsByRevision.get(`${asset.id}:${asset.mediaRevision}`) ?? [],
-      );
-      const embedding = jobs.find((job) => job.kind === 'GENERATE_EMBEDDING');
-      if (!embedding) return [];
-      const dependency = jobs.find((job) => job.id === embedding.dependsOnJobId);
-      return dependency ? [dependency, embedding] : [embedding];
-    });
-    const result = planned.length
-      ? await this.prisma.eagleAssetProcessingJob.createMany({
-          data: planned,
-          skipDuplicates: true,
-        })
-      : { count: 0 };
-    return { scanned: assets.length, created: result.count };
+    return { scanned: repaired + created, created, repaired };
   }
 
   private async checkEmbeddingHost() {
@@ -169,10 +222,22 @@ export class EagleVectorService {
     }
   }
 
-  async listTagSemantics(ownerId: string) {
+  async listTagSemantics(ownerId: string, query?: string) {
+    const normalizedQuery = query?.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
+    const where: Prisma.EagleManualTagWhereInput = normalizedQuery
+      ? {
+          ownerId,
+          normalizedName: { contains: normalizedQuery },
+          OR: [
+            { semanticConfig: { is: null } },
+            { semanticConfig: { is: { recommendationEnabled: false } } },
+          ],
+        }
+      : { ownerId, semanticConfig: { is: { recommendationEnabled: true } } };
     const tags = await this.prisma.eagleManualTag.findMany({
-      where: { ownerId },
+      where,
       orderBy: [{ isStarred: 'desc' }, { normalizedName: 'asc' }],
+      ...(normalizedQuery ? { take: 20 } : {}),
       select: {
         id: true,
         name: true,

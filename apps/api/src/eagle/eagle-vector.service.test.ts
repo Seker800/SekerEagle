@@ -3,6 +3,36 @@ import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
 import { EagleVectorService } from './eagle-vector.service';
 
+test('tag semantics defaults to enabled tags and search is bounded to disabled candidates', async () => {
+  const queries: Array<Record<string, unknown>> = [];
+  const service = new EagleVectorService({
+    eagleManualTag: {
+      findMany: async (input: Record<string, unknown>) => {
+        queries.push(input);
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listTagSemantics('owner-1');
+  await service.listTagSemantics('owner-1', ' 汽车 ');
+
+  assert.deepEqual(queries[0]?.where, {
+    ownerId: 'owner-1',
+    semanticConfig: { is: { recommendationEnabled: true } },
+  });
+  assert.equal('take' in (queries[0] ?? {}), false);
+  assert.deepEqual(queries[1]?.where, {
+    ownerId: 'owner-1',
+    normalizedName: { contains: '汽车' },
+    OR: [
+      { semanticConfig: { is: null } },
+      { semanticConfig: { is: { recommendationEnabled: false } } },
+    ],
+  });
+  assert.equal(queries[1]?.take, 20);
+});
+
 test('disabling recommendation invalidates only the owner tag pending suggestions', async () => {
   const writes: unknown[] = [];
   const transaction = {
@@ -151,38 +181,26 @@ test('cross-owner suggestion review returns 404 without writes', async () => {
   assert.equal(wrote, false);
 });
 
-test('missing embedding scan is bounded, owner-scoped and preserves the preview dependency', async () => {
-  let assetWhere: unknown;
-  let created: Array<{ kind?: string; ownerId?: string; dependsOnJobId?: string | null }> = [];
+test('missing embedding scan repairs drift and bulk-enqueues every owner-scoped ready preview', async () => {
+  const statements: unknown[] = [];
+  let call = 0;
+  const transaction = {
+    $executeRaw: async (statement: unknown) => {
+      statements.push(statement);
+      return call++ === 0 ? 2 : 67_000;
+    },
+  };
   const service = new EagleVectorService({
-    eagleAsset: {
-      findMany: async ({ where }: { where: unknown }) => {
-        assetWhere = where;
-        return [{ id: 'asset-1', mediaRevision: 3, width: 800, height: 600 }];
-      },
-    },
-    eagleAssetProcessingJob: {
-      findMany: async () => [
-        {
-          id: 'preview-job',
-          assetId: 'asset-1',
-          assetRevision: 3,
-          kind: 'GENERATE_RENDITIONS',
-          processorVersion: 'rendition-v2',
-        },
-      ],
-      createMany: async ({ data }: { data: typeof created }) => {
-        created = data;
-        return { count: data.length };
-      },
-    },
+    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+      work(transaction),
   } as never);
 
   const result = await service.scanMissingEmbeddings('owner-1');
 
-  assert.deepEqual(result, { scanned: 1, created: 1 });
-  assert.equal((assetWhere as { ownerId: string }).ownerId, 'owner-1');
-  assert.equal(created[0]?.ownerId, 'owner-1');
-  assert.equal(created[0]?.kind, 'GENERATE_EMBEDDING');
-  assert.equal(created[0]?.dependsOnJobId, 'preview-job');
+  assert.deepEqual(result, { scanned: 67_002, created: 67_000, repaired: 2 });
+  assert.equal(statements.length, 2);
+  assert.match(JSON.stringify(statements), /owner-1/);
+  assert.match(JSON.stringify(statements), /GENERATE_EMBEDDING/);
+  assert.match(JSON.stringify(statements), /GENERATE_RENDITIONS/);
+  assert.match(JSON.stringify(statements), /rendition-v2/);
 });
