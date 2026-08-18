@@ -2301,6 +2301,192 @@
         "tags": ["EagleProcessing"]
       }
     },
+    "/api/eagle/vector/summary": {
+      "get": {
+        "operationId": "EagleVectorController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/tags": {
+      "get": {
+        "operationId": "EagleVectorController_tags",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/tags/{tagId}": {
+      "patch": {
+        "operationId": "EagleVectorController_setTagRecommendation",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetTagRecommendationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/tags/{tagId}/rebuild": {
+      "post": {
+        "operationId": "EagleVectorController_rebuildTag",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/tags/{tagId}/assets": {
+      "get": {
+        "operationId": "EagleVectorController_tagAssets",
+        "parameters": [
+          {
+            "name": "tagId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/suggestions": {
+      "get": {
+        "operationId": "EagleVectorController_suggestions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/unclassified": {
+      "get": {
+        "operationId": "EagleVectorController_unclassified",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/embeddings/retry-failed": {
+      "post": {
+        "operationId": "EagleVectorController_retryFailedEmbeddings",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/suggestions/{suggestionId}/review": {
+      "post": {
+        "operationId": "EagleVectorController_review",
+        "parameters": [
+          {
+            "name": "suggestionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewVectorSuggestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
+    "/api/eagle/vector/suggestions/review-batch": {
+      "post": {
+        "operationId": "EagleVectorController_reviewBatch",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchReviewVectorSuggestionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -2686,6 +2872,18 @@
         "required": ["assetId"]
       },
       "UpdateEagleProcessingSettingsDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "SetTagRecommendationDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "ReviewVectorSuggestionDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "BatchReviewVectorSuggestionsDto": {
         "type": "object",
         "properties": {}
       }

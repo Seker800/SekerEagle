@@ -13,3 +13,5 @@ truncated to the configured 1024-dimensional prefix and L2-normalized.
 `MLX_EMBEDDING_TOKEN` must match the private Docker `.env`. The revision is pinned
 to a Hugging Face commit so vectors cannot silently drift.
 
+PyTorch/Torchvision are installed only because the upstream Transformers image
+processor requires them; model inference remains on MLX/Metal.
