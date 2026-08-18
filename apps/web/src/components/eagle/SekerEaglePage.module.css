@@ -481,14 +481,30 @@
   border-color: var(--eagle-accent);
   background: var(--eagle-accent);
 }
-.preview img {
+.thumbnailMedia {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.preview img,
+.thumbnailVideo {
   width: 100%;
   height: 100%;
   display: block;
   object-fit: cover;
   pointer-events: none;
   user-select: none;
+}
+.preview img {
   -webkit-user-drag: none;
+}
+.thumbnailVideo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
 }
 .thumbnailError {
   max-width: 150px;

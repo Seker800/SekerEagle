@@ -45,9 +45,12 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
       <div className={styles.stage} onClick={onClose}>
         {asset.mimeType.startsWith('video/') ? (
           <video
+            className={styles.videoPlayer}
             src={getEagleAssetContentUrl(asset.id)}
+            aria-label={`播放 ${asset.displayName}`}
             controls
             autoPlay
+            playsInline
             onClick={(event) => event.stopPropagation()}
           />
         ) : previewUrl ? (

@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto } from '@tabler/icons-react';
-import { getEagleRenditionContentUrl, type EagleAssetListItem } from '../../lib/eagle-api';
+import {
+  getEagleAssetContentUrl,
+  getEagleRenditionContentUrl,
+  type EagleAssetListItem,
+} from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
 import { getEagleThumbnailSourceSet } from './eagle-media-sources';
@@ -9,6 +13,7 @@ const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
 const RETRY_BASE_DELAY_MS = 500;
 const RETRY_MAX_DELAY_MS = 4_000;
 const ATTEMPTS_PER_RENDITION = 2;
+const VIDEO_HOVER_DELAY_MS = 500;
 
 function retryDelayMs(assetId: string, attempt: number): number {
   let hash = attempt;
@@ -54,8 +59,10 @@ export function EagleAssetThumbnail({
   const [attempt, setAttempt] = useState(0);
   const [activeSource, setActiveSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [isVideoPreviewActive, setIsVideoPreviewActive] = useState(false);
   const settleRef = useRef<(() => void) | null>(null);
   const retryTimerRef = useRef<number | null>(null);
+  const videoHoverTimerRef = useRef<number | null>(null);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
   const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
 
@@ -65,6 +72,12 @@ export function EagleAssetThumbnail({
     retryTimerRef.current = null;
   };
 
+  const clearVideoHoverTimer = () => {
+    if (videoHoverTimerRef.current === null) return;
+    window.clearTimeout(videoHoverTimerRef.current);
+    videoHoverTimerRef.current = null;
+  };
+
   useEffect(() => {
     clearRetryTimer();
     settleRef.current?.();
@@ -72,6 +85,7 @@ export function EagleAssetThumbnail({
     setAttempt(0);
     setActiveSource(null);
     setFailed(false);
+    setIsVideoPreviewActive(false);
   }, [sourceKey]);
 
   useEffect(() => {
@@ -109,6 +123,7 @@ export function EagleAssetThumbnail({
   useEffect(
     () => () => {
       clearRetryTimer();
+      clearVideoHoverTimer();
       settleRef.current?.();
       settleRef.current = null;
     },
@@ -146,24 +161,59 @@ export function EagleAssetThumbnail({
     setAttempt(0);
   };
 
+  let thumbnailContent;
   if (failed) {
-    return (
+    thumbnailContent = (
       <span className={styles.thumbnailError} onClick={retry}>
         <IconPhoto size={30} />
         <span>缩略图加载失败，点击素材重试</span>
       </span>
     );
+  } else if (!activeSource) {
+    thumbnailContent = <IconPhoto size={30} aria-label="正在加载缩略图" />;
+  } else {
+    thumbnailContent = (
+      <img
+        src={activeSource}
+        srcSet={responsiveSource?.src === activeSource ? responsiveSource.srcSet : undefined}
+        sizes={`${Math.max(1, Math.round(displayWidth))}px`}
+        alt={alt}
+        draggable={false}
+        onLoad={handleLoad}
+        onError={handleError}
+      />
+    );
   }
-  if (!activeSource) return <IconPhoto size={30} aria-label="正在加载缩略图" />;
+
+  const isVideo = asset.mimeType.startsWith('video/');
   return (
-    <img
-      src={activeSource}
-      srcSet={responsiveSource?.src === activeSource ? responsiveSource.srcSet : undefined}
-      sizes={`${Math.max(1, Math.round(displayWidth))}px`}
-      alt={alt}
-      draggable={false}
-      onLoad={handleLoad}
-      onError={handleError}
-    />
+    <span
+      className={styles.thumbnailMedia}
+      onMouseEnter={() => {
+        if (!isVideo || videoHoverTimerRef.current !== null || isVideoPreviewActive) return;
+        videoHoverTimerRef.current = window.setTimeout(() => {
+          videoHoverTimerRef.current = null;
+          setIsVideoPreviewActive(true);
+        }, VIDEO_HOVER_DELAY_MS);
+      }}
+      onMouseLeave={() => {
+        clearVideoHoverTimer();
+        setIsVideoPreviewActive(false);
+      }}
+    >
+      {thumbnailContent}
+      {isVideoPreviewActive && (
+        <video
+          className={styles.thumbnailVideo}
+          src={getEagleAssetContentUrl(asset.id)}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          aria-hidden="true"
+        />
+      )}
+    </span>
   );
 }
