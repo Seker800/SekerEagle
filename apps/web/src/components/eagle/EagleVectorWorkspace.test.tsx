@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as eagleApi from '../../lib/eagle-api';
 import * as api from '../../lib/eagle-vector-api';
@@ -21,19 +21,6 @@ vi.mock('../../lib/eagle-vector-api', () => ({
   scanMissingEagleEmbeddings: vi.fn(),
   getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
 }));
-
-const tag = {
-  id: 'tag-1',
-  name: '汽车',
-  color: '#dc8039',
-  assetCount: 1286,
-  recommendationEnabled: false,
-  currentSnapshotId: null,
-  lastGeneratedAt: null,
-  activeBuild: null,
-  currentSnapshot: null,
-  pendingSuggestionCount: 0,
-};
 
 describe('EagleVectorWorkspace', () => {
   beforeEach(() => {
@@ -62,22 +49,8 @@ describe('EagleVectorWorkspace', () => {
       host: { status: 'ONLINE' },
       refreshedAt: '2026-08-19T00:00:00Z',
     });
-    vi.mocked(api.listEagleVectorTags).mockImplementation(async (query?: string) =>
-      query ? [tag] : [],
-    );
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([]);
     vi.mocked(eagleApi.listEagleManualTags).mockResolvedValue([
-      {
-        id: 'driver',
-        name: '驾驶',
-        color: '#79818c',
-        groupId: null,
-        groupIds: [],
-        isStarred: false,
-        rowVersion: 1,
-        assetCount: 42,
-        pinyin: 'jia shi',
-        pinyinInitials: 'js',
-      },
       {
         id: 'night',
         name: '夜间氛围',
@@ -89,6 +62,18 @@ describe('EagleVectorWorkspace', () => {
         assetCount: 18,
         pinyin: 'ye jian fen wei',
         pinyinInitials: 'yjfw',
+      },
+      {
+        id: 'driver',
+        name: '驾驶',
+        color: '#79818c',
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        rowVersion: 1,
+        assetCount: 42,
+        pinyin: 'jia shi',
+        pinyinInitials: 'js',
       },
     ]);
     vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
@@ -140,6 +125,17 @@ describe('EagleVectorWorkspace', () => {
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByText('还没有参与推荐的标签，请从上方搜索并添加。')).toBeInTheDocument();
     expect(await screen.findByText('驾驶')).toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText('可添加的标签列表')).getAllByRole('button')[0],
+    ).toHaveAccessibleName('添加驾驶到标签推荐');
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索可添加的人工标签' }), {
+      target: { value: 'js' },
+    });
+    expect(screen.getByText('驾驶')).toBeInTheDocument();
+    fireEvent.change(screen.getByRole('textbox', { name: '搜索可添加的人工标签' }), {
+      target: { value: '驾驶' },
+    });
+    expect(screen.getByText('驾驶')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '搜索可添加的人工标签' }), {
       target: { value: 'jiashi' },
     });

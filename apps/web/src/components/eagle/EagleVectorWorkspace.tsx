@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
 import {
   fetchEagleVectorSummary,
   getVectorThumbnailUrl,
@@ -17,6 +18,8 @@ import {
   type EagleVectorSummary,
   type EagleVectorTag,
 } from '../../lib/eagle-vector-api';
+import { searchAndSortEagleTags } from './eagle-tag-index';
+import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleVectorWorkspace.module.css';
 
 type View = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED' | 'DISTANCE';
@@ -36,8 +39,8 @@ export function EagleVectorWorkspace() {
   const [distanceDirection, setDistanceDirection] = useState<'ASC' | 'DESC'>('DESC');
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const [tagCandidates, setTagCandidates] = useState<EagleVectorTag[]>([]);
-  const [searchingTags, setSearchingTags] = useState(false);
+  const [manualTags, setManualTags] = useState<EagleManualTag[]>([]);
+  const [loadingManualTags, setLoadingManualTags] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -82,31 +85,31 @@ export function EagleVectorWorkspace() {
   }, [reload]);
 
   useEffect(() => {
-    const query = search.trim();
-    if (view !== 'TAGS' || !query) {
-      setTagCandidates([]);
-      setSearchingTags(false);
-      return;
-    }
+    if (view !== 'TAGS') return;
     let cancelled = false;
-    setSearchingTags(true);
-    const timer = window.setTimeout(() => {
-      void listEagleVectorTags(query)
-        .then((results) => {
-          if (!cancelled) setTagCandidates(results);
-        })
-        .catch((cause: unknown) => {
-          if (!cancelled) setError(cause instanceof Error ? cause.message : '搜索人工标签失败');
-        })
-        .finally(() => {
-          if (!cancelled) setSearchingTags(false);
-        });
-    }, 250);
+    setLoadingManualTags(true);
+    void listEagleManualTags('')
+      .then((results) => {
+        if (!cancelled) setManualTags(results);
+      })
+      .catch((cause: unknown) => {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : '读取人工标签失败');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingManualTags(false);
+      });
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
-  }, [search, view]);
+  }, [view]);
+
+  const availableTags = useMemo(() => {
+    const enabledIds = new Set(tags.map((tag) => tag.id));
+    return searchAndSortEagleTags(
+      manualTags.filter((tag) => !enabledIds.has(tag.id)),
+      search,
+    );
+  }, [manualTags, search, tags]);
 
   const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {
     setBusy(true);
@@ -125,14 +128,13 @@ export function EagleVectorWorkspace() {
     }
   };
 
-  const addRecommendationTag = async (tag: EagleVectorTag) => {
+  const addRecommendationTag = async (tag: Pick<EagleManualTag, 'id' | 'name'>) => {
     const added = await act(
       () => setEagleVectorTagEnabled(tag.id, true),
       `已添加“${tag.name}”参与推荐`,
     );
     if (added) {
       setSearch('');
-      setTagCandidates([]);
     }
   };
 
@@ -339,36 +341,46 @@ export function EagleVectorWorkspace() {
               id="vector-tag-search"
               aria-label="搜索可添加的人工标签"
               autoComplete="off"
-              placeholder="输入标签名称搜索并添加…"
+              placeholder="搜索名称、拼音或首字母"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
-            {!search.trim() ? (
-              <small>只会搜索尚未参与推荐的人工标签，不提供全部标签列表。</small>
-            ) : (
-              <div className={styles.tagSearchResults} aria-label="可添加的标签">
-                {searchingTags ? <span className={styles.searchHint}>正在搜索…</span> : null}
-                {!searchingTags && !tagCandidates.length ? (
-                  <span className={styles.searchHint}>没有找到可添加的标签。</span>
-                ) : null}
-                {tagCandidates.map((tag) => (
-                  <article className={styles.tagCandidate} key={tag.id}>
-                    <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
-                    <div>
-                      <strong>{tag.name}</strong>
-                      <small>{tag.assetCount} 张基础图片</small>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void addRecommendationTag(tag)}
-                    >
-                      添加
-                    </button>
-                  </article>
-                ))}
-              </div>
-            )}
+            <small>尚未参与推荐的标签；同等匹配下，素材数量多的优先。</small>
+            <div className={styles.tagSearchResults} aria-label="可添加的标签">
+              {loadingManualTags ? <span className={styles.searchHint}>正在读取标签…</span> : null}
+              {!loadingManualTags && !availableTags.length ? (
+                <span className={styles.searchHint}>
+                  {search.trim() ? '没有找到可添加的标签。' : '没有尚未参与推荐的标签。'}
+                </span>
+              ) : null}
+              {!loadingManualTags && availableTags.length ? (
+                <EagleVirtualList
+                  ariaLabel="可添加的标签列表"
+                  className={styles.virtualTagResults}
+                  items={availableTags}
+                  itemKey={({ tag }) => tag.id}
+                  rowHeight={47}
+                  viewportHeight={260}
+                  renderItem={({ tag }) => (
+                    <article className={styles.tagCandidate}>
+                      <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
+                      <div>
+                        <strong>{tag.name}</strong>
+                        <small>{tag.assetCount} 张基础图片</small>
+                      </div>
+                      <button
+                        type="button"
+                        aria-label={`添加${tag.name}到标签推荐`}
+                        disabled={busy}
+                        onClick={() => void addRecommendationTag(tag)}
+                      >
+                        添加
+                      </button>
+                    </article>
+                  )}
+                />
+              ) : null}
+            </div>
           </div>
 
           <div className={styles.sectionHeading}>
