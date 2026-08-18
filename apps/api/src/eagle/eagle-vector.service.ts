@@ -12,6 +12,7 @@ import type {
   ListVectorSuggestionsDto,
 } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
+import { upsertAcceptedSuggestionMemberDistance } from './eagle-vector.persistence';
 import { buildMissingImageProcessingJobs, EMBEDDING_PROCESSOR_VERSION } from './media-job-plan';
 
 @Injectable()
@@ -515,27 +516,13 @@ export class EagleVectorService {
           acceptedSuggestionId: suggestion.id,
         },
       });
-      await transaction.$executeRaw(
-        Prisma.sql`
-          INSERT INTO "EagleTagMemberDistance" (
-            "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
-          )
-          SELECT ${ownerId}, ${suggestion.suggestedTagId}, ${suggestion.assetId},
-                 prototype."snapshotId", prototype.embedding <=> embedding.embedding,
-                 prototype.rank, NOW()
-          FROM "EagleAssetEmbedding" embedding
-          CROSS JOIN LATERAL (
-            SELECT candidate."snapshotId", candidate.rank, candidate.embedding
-            FROM "EagleTagPrototype" candidate
-            WHERE candidate."ownerId" = ${ownerId}
-              AND candidate."snapshotId" = ${suggestion.snapshotId}
-            ORDER BY candidate.embedding <=> embedding.embedding
-            LIMIT 1
-          ) prototype
-          WHERE embedding."ownerId" = ${ownerId} AND embedding.id = ${suggestion.embeddingId}
-          ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId") DO NOTHING
-        `,
-      );
+      await upsertAcceptedSuggestionMemberDistance(transaction, {
+        ownerId,
+        tagId: suggestion.suggestedTagId,
+        assetId: suggestion.assetId,
+        snapshotId: suggestion.snapshotId,
+        embeddingId: suggestion.embeddingId,
+      });
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
         where: {
           ownerId,
