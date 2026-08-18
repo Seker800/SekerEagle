@@ -47,7 +47,7 @@ import {
 import { EagleService } from './eagle.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
-import { EagleMediaReadThrottle } from './eagle-media-throttle';
+import { EagleDerivedMediaReadThrottle } from './eagle-media-throttle';
 
 @ApiTags('eagle')
 @ApiCookieAuth()
@@ -104,7 +104,6 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/original')
-  @EagleMediaReadThrottle()
   async getOriginal(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -148,7 +147,6 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/content')
-  @EagleMediaReadThrottle()
   getOriginalContent(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -160,7 +158,7 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/renditions/:renditionId')
-  @EagleMediaReadThrottle()
+  @EagleDerivedMediaReadThrottle()
   async getRendition(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -178,7 +176,7 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/renditions/:renditionId/content')
-  @EagleMediaReadThrottle()
+  @EagleDerivedMediaReadThrottle()
   getRenditionContent(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -198,7 +196,7 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/pyramids/:pyramidId/tiles/:level/:x/:y')
-  @EagleMediaReadThrottle()
+  @EagleDerivedMediaReadThrottle()
   async getPyramidTile(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,

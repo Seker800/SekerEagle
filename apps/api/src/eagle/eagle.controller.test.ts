@@ -15,8 +15,6 @@ function controllerMethod(name: keyof EagleController): object {
 
 test('authenticated media reads use a bounded high-throughput throttle without changing API limits', () => {
   const mediaHandlers = [
-    controllerMethod('getOriginal'),
-    controllerMethod('getOriginalContent'),
     controllerMethod('getRendition'),
     controllerMethod('getRenditionContent'),
     controllerMethod('getPyramidTile'),
@@ -31,6 +29,10 @@ test('authenticated media reads use a bounded high-throughput throttle without c
 
   assert.equal(
     Reflect.getMetadata(`${THROTTLER_LIMIT}short`, controllerMethod('listAssets')),
+    undefined,
+  );
+  assert.equal(
+    Reflect.getMetadata(`${THROTTLER_LIMIT}short`, controllerMethod('getOriginal')),
     undefined,
   );
 });
