@@ -1,7 +1,12 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as eagleApi from '../../lib/eagle-api';
 import * as api from '../../lib/eagle-vector-api';
 import { EagleVectorWorkspace } from './EagleVectorWorkspace';
+
+vi.mock('../../lib/eagle-api', () => ({
+  listEagleManualTags: vi.fn(),
+}));
 
 vi.mock('../../lib/eagle-vector-api', () => ({
   fetchEagleVectorSummary: vi.fn(),
@@ -60,6 +65,32 @@ describe('EagleVectorWorkspace', () => {
     vi.mocked(api.listEagleVectorTags).mockImplementation(async (query?: string) =>
       query ? [tag] : [],
     );
+    vi.mocked(eagleApi.listEagleManualTags).mockResolvedValue([
+      {
+        id: 'driver',
+        name: '驾驶',
+        color: '#79818c',
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        rowVersion: 1,
+        assetCount: 42,
+        pinyin: 'jia shi',
+        pinyinInitials: 'js',
+      },
+      {
+        id: 'night',
+        name: '夜间氛围',
+        color: null,
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        rowVersion: 1,
+        assetCount: 18,
+        pinyin: 'ye jian fen wei',
+        pinyinInitials: 'yjfw',
+      },
+    ]);
     vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
       items: [
         {
@@ -103,18 +134,20 @@ describe('EagleVectorWorkspace', () => {
     );
   });
 
-  it('keeps every tag disabled until the owner explicitly opts in', async () => {
+  it('reuses the full tag picker search so owners can browse and find tags by pinyin', async () => {
     render(<EagleVectorWorkspace />);
     fireEvent.click(await screen.findByRole('button', { name: /标签推荐设置/ }));
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByText('还没有参与推荐的标签，请从上方搜索并添加。')).toBeInTheDocument();
+    expect(await screen.findByText('驾驶')).toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '搜索可添加的人工标签' }), {
-      target: { value: '汽车' },
+      target: { value: 'jiashi' },
     });
-    const addButton = await screen.findByRole('button', { name: '添加' });
-    expect(api.listEagleVectorTags).toHaveBeenCalledWith('汽车');
+    expect(screen.getByText('驾驶')).toBeInTheDocument();
+    expect(screen.queryByText('夜间氛围')).not.toBeInTheDocument();
+    const addButton = screen.getByRole('button', { name: '添加驾驶到标签推荐' });
     fireEvent.click(addButton);
-    await waitFor(() => expect(api.setEagleVectorTagEnabled).toHaveBeenCalledWith('tag-1', true));
+    await waitFor(() => expect(api.setEagleVectorTagEnabled).toHaveBeenCalledWith('driver', true));
   });
 
   it('shows real queue state and reports how many missing vectors were enqueued', async () => {
