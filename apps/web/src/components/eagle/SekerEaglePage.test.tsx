@@ -390,14 +390,15 @@ describe('SekerEaglePage', () => {
       name: '搜索人工标签',
     });
 
-    expect(within(filterPanel).queryByText('人工标签 80')).not.toBeInTheDocument();
-    fireEvent.change(manualTagSearch, { target: { value: '人工标签 80' } });
-    fireEvent.click(within(filterPanel).getByRole('checkbox', { name: '人工标签 80' }));
+    expect(within(filterPanel).getAllByRole('checkbox').length).toBeLessThan(manualTags.length);
+    expect(within(filterPanel).queryByText('人工标签 01')).not.toBeInTheDocument();
+    fireEvent.change(manualTagSearch, { target: { value: '人工标签 01' } });
+    fireEvent.click(within(filterPanel).getByRole('checkbox', { name: '人工标签 01' }));
 
     await waitFor(() => {
       expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
         'token',
-        expect.objectContaining({ manualTagIds: ['manual-tag-80'] }),
+        expect.objectContaining({ manualTagIds: ['manual-tag-1'] }),
         expect.any(AbortSignal),
       );
     });
@@ -787,10 +788,7 @@ describe('SekerEaglePage', () => {
     const filterButton = screen.getByRole('button', { name: '筛选，1 项已启用' });
     fireEvent.click(filterButton);
     const filterPanel = screen.getByLabelText('素材筛选');
-    expect(within(filterPanel).getByRole('button', { name: '灵感' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(within(filterPanel).getByRole('checkbox', { name: '灵感' })).toBeChecked();
     await waitFor(() => {
       expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
         'token',
@@ -811,8 +809,8 @@ describe('SekerEaglePage', () => {
       'true',
     );
     expect(
-      within(screen.getByLabelText('素材筛选')).getByRole('button', { name: '猫头鹰' }),
-    ).toHaveAttribute('aria-pressed', 'true');
+      within(screen.getByLabelText('素材筛选')).getByRole('checkbox', { name: '猫头鹰' }),
+    ).toBeChecked();
     await waitFor(() => {
       expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
         'token',
@@ -1235,14 +1233,8 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '筛选' }));
 
     const filterPanel = screen.getByLabelText('素材筛选');
-    expect(within(filterPanel).getByRole('button', { name: '灵感' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-    expect(within(filterPanel).getByRole('button', { name: '猫头鹰' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    expect(within(filterPanel).getByRole('checkbox', { name: '灵感' })).not.toBeChecked();
+    expect(within(filterPanel).getByRole('checkbox', { name: '猫头鹰' })).not.toBeChecked();
   });
 
   it('wires smart-folder color and nesting actions to persistent APIs', async () => {

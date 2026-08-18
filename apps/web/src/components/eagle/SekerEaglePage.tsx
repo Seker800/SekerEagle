@@ -55,6 +55,7 @@ import { EagleColorFilter } from './EagleColorFilter';
 import { EagleProcessingPage } from './EagleProcessingPage';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
+import { EagleTagConditionPicker } from './EagleTagConditionPicker';
 import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
@@ -882,48 +883,22 @@ export function SekerEaglePage({
 
               {libraryView === 'ACTIVE' && isFilterOpen && (
                 <div className={styles.filterPanel} aria-label="素材筛选">
-                  <div>
-                    <strong>人工标签</strong>
-                    <span className={styles.filterChoices}>
-                      {manualTags.length > 0 ? (
-                        manualTags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            type="button"
-                            aria-pressed={manualTagIds.includes(tag.id)}
-                            className={
-                              manualTagIds.includes(tag.id) ? styles.choiceActive : undefined
-                            }
-                            onClick={() => toggleFilterValue(tag.id, manualTagIds, setManualTagIds)}
-                          >
-                            {tag.name}
-                          </button>
-                        ))
-                      ) : (
-                        <em className={styles.filterEmpty}>暂无人工标签</em>
-                      )}
-                    </span>
-                  </div>
-                  <div>
-                    <strong>AI 标签</strong>
-                    <span className={styles.filterChoices}>
-                      {aiTags.length > 0 ? (
-                        aiTags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            type="button"
-                            aria-pressed={aiTagIds.includes(tag.id)}
-                            className={aiTagIds.includes(tag.id) ? styles.choiceActive : undefined}
-                            onClick={() => toggleFilterValue(tag.id, aiTagIds, setAiTagIds)}
-                          >
-                            {tag.name}
-                          </button>
-                        ))
-                      ) : (
-                        <em className={styles.filterEmpty}>AI 分析尚未启用</em>
-                      )}
-                    </span>
-                  </div>
+                  <EagleTagConditionPicker
+                    label="人工标签"
+                    icon={<IconTags size={15} aria-hidden="true" />}
+                    tags={manualTags}
+                    selectedTagIds={manualTagIds}
+                    emptyText="暂无人工标签"
+                    onChange={setManualTagIds}
+                  />
+                  <EagleTagConditionPicker
+                    label="AI 标签"
+                    icon={<IconSparkles size={15} aria-hidden="true" />}
+                    tags={aiTags}
+                    selectedTagIds={aiTagIds}
+                    emptyText="AI 分析尚未启用"
+                    onChange={setAiTagIds}
+                  />
                   <div>
                     <strong>格式</strong>
                     <span className={styles.filterChoices}>
