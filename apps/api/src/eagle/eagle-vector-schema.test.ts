@@ -29,4 +29,8 @@ test('pgvector migration is additive, owner-scoped and fixes the embedding dimen
   assert.match(migration, /FOREIGN KEY \("ownerId", "tagId"\)/);
   assert.match(migration, /WHERE "isCurrent" = true/);
   assert.match(migration, /vector_cosine_ops/);
+  const suggestionTable = migration.match(
+    /CREATE TABLE "EagleVectorTagSuggestion" \([\s\S]*?\n\);/,
+  )?.[0];
+  assert.match(suggestionTable ?? '', /"isActive" BOOLEAN NOT NULL DEFAULT false/);
 });
