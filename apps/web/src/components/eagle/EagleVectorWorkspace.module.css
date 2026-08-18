@@ -1,0 +1,274 @@
+.workspace {
+  display: grid;
+  gap: 12px;
+  color: #d9dadd;
+}
+.hero {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px;
+  border: 1px solid rgb(214 155 72 / 28%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgb(214 155 72 / 12%), rgb(255 255 255 / 2%));
+}
+.hero h2 {
+  margin: 4px 0;
+  font-size: 18px;
+}
+.hero p,
+.explainer {
+  margin: 0;
+  color: #999fa8;
+  font-size: 12px;
+}
+.eyebrow {
+  color: #d69b48;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.coverage {
+  min-width: 150px;
+  display: grid;
+  text-align: right;
+}
+.coverage strong {
+  color: #f2d09b;
+  font-size: 25px;
+}
+.coverage span,
+.coverage small {
+  color: #9da2aa;
+  font-size: 10px;
+}
+.coverage button {
+  margin-top: 5px;
+  min-height: 27px;
+  border: 1px solid rgb(214 155 72 / 35%);
+  border-radius: 6px;
+  color: #e5c18b;
+  background: rgb(214 155 72 / 8%);
+  cursor: pointer;
+}
+.boundary {
+  display: flex;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  color: #a9aeb7;
+  background: rgb(255 255 255 / 3%);
+  font-size: 11px;
+}
+.boundary strong {
+  color: #d3d5d8;
+  white-space: nowrap;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+}
+.tabs button {
+  padding: 9px 11px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: #8e949d;
+  background: transparent;
+  cursor: pointer;
+}
+.tabs button[data-active='true'] {
+  border-color: #d69b48;
+  color: #f0f1f3;
+}
+.tabs span {
+  margin-left: 4px;
+  color: #d69b48;
+}
+.panel {
+  display: grid;
+  gap: 10px;
+}
+.toolbar {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.toolbar label {
+  display: grid;
+  gap: 4px;
+  color: #9da2aa;
+  font-size: 10px;
+}
+.toolbar select,
+.toolbar input,
+.toolbar button,
+.tagRow button,
+.assetInfo button {
+  min-height: 31px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  color: #d9dadd;
+  background: #101114;
+}
+.toolbar input {
+  min-width: 260px;
+  padding: 0 9px;
+}
+.toolbar button,
+.tagRow button,
+.assetInfo button {
+  padding: 0 10px;
+  cursor: pointer;
+}
+.toolbar button:disabled,
+.tagRow button:disabled,
+.assetInfo button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.tagList,
+.distanceList {
+  display: grid;
+  gap: 5px;
+}
+.tagRow {
+  display: grid;
+  grid-template-columns: 12px minmax(180px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 2%);
+}
+.tagRow > div {
+  display: grid;
+  gap: 2px;
+}
+.tagRow small {
+  color: #858b94;
+  font-size: 10px;
+}
+.tagDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #b5b8bd;
+  font-size: 10px;
+}
+.switch input {
+  accent-color: #d69b48;
+}
+.assetGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+}
+.assetCard {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: rgb(255 255 255 / 2%);
+}
+.assetCard > img,
+.placeholder {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  background: #0d0e10;
+}
+.placeholder {
+  display: grid;
+  place-items: center;
+  color: #626872;
+  font-size: 10px;
+}
+.check {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  padding: 4px;
+  border-radius: 5px;
+  background: rgb(0 0 0 / 58%);
+}
+.assetInfo {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+}
+.assetInfo strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.assetInfo span {
+  color: #e4bc7e;
+  font-size: 11px;
+}
+.assetInfo small {
+  color: #858b94;
+  font-size: 9px;
+}
+.assetInfo > div {
+  display: flex;
+  gap: 5px;
+  margin-top: 3px;
+}
+.distanceList > div {
+  display: flex;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 7px;
+  font-size: 11px;
+}
+.distanceList span {
+  color: #9da2aa;
+}
+.empty {
+  padding: 28px;
+  border: 1px dashed rgb(255 255 255 / 10%);
+  border-radius: 9px;
+  color: #858b94;
+  text-align: center;
+  font-size: 11px;
+}
+.error,
+.notice {
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 11px;
+}
+.error {
+  color: #ffb6b9;
+  background: rgb(232 95 100 / 12%);
+}
+.notice {
+  color: #9cdbb3;
+  background: rgb(73 182 117 / 12%);
+}
+@media (max-width: 800px) {
+  .hero {
+    display: grid;
+  }
+  .coverage {
+    text-align: left;
+  }
+  .tagRow {
+    grid-template-columns: 12px 1fr;
+  }
+  .tagRow > :not(.tagDot):not(div) {
+    grid-column: 2;
+  }
+}

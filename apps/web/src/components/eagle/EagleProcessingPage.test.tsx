@@ -11,6 +11,9 @@ vi.mock('../../lib/eagle-processing-admin-api', () => ({
   retryAllFailedEagleProcessingJobs: vi.fn(),
   reconcileEagleProcessingJobs: vi.fn(),
 }));
+vi.mock('./EagleVectorWorkspace', () => ({
+  EagleVectorWorkspace: () => <div data-testid="vector-workspace">人工标签建议</div>,
+}));
 
 const summary = {
   worker: {

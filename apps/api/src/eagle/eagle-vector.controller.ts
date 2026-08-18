@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
@@ -7,6 +17,7 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import {
   BatchReviewVectorSuggestionsDto,
   ListTagDistanceAssetsDto,
+  ListUnclassifiedVectorAssetsDto,
   ListVectorSuggestionsDto,
   ReviewVectorSuggestionDto,
   SetTagRecommendationDto,
@@ -35,11 +46,7 @@ export class EagleVectorController {
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
     @Body() input: SetTagRecommendationDto,
   ) {
-    return this.vectors.setRecommendationEnabled(
-      principal.sub,
-      tagId,
-      input.recommendationEnabled,
-    );
+    return this.vectors.setRecommendationEnabled(principal.sub, tagId, input.recommendationEnabled);
   }
 
   @Post('tags/:tagId/rebuild')
@@ -68,6 +75,20 @@ export class EagleVectorController {
     return this.vectors.listSuggestions(principal.sub, query);
   }
 
+  @Get('unclassified')
+  unclassified(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Query() query: ListUnclassifiedVectorAssetsDto,
+  ) {
+    return this.vectors.listUnclassified(principal.sub, query);
+  }
+
+  @Post('embeddings/retry-failed')
+  @UseGuards(BrowserOriginGuard)
+  retryFailedEmbeddings(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.vectors.retryFailedEmbeddings(principal.sub);
+  }
+
   @Post('suggestions/:suggestionId/review')
   @UseGuards(BrowserOriginGuard)
   review(
@@ -87,4 +108,3 @@ export class EagleVectorController {
     return this.vectors.reviewSuggestions(principal.sub, input.suggestionIds, input.action);
   }
 }
-

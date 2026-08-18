@@ -43,6 +43,19 @@ export class ListVectorSuggestionsDto {
   sort: 'SCORE_DESC' | 'NEWEST' = 'SCORE_DESC';
 }
 
+export class ListUnclassifiedVectorAssetsDto {
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 40;
+
+  @IsOptional()
+  @IsString()
+  cursor?: string;
+}
+
 export class ReviewVectorSuggestionDto {
   @IsIn(['ACCEPT', 'REJECT'])
   action!: 'ACCEPT' | 'REJECT';
@@ -73,4 +86,3 @@ export class ListTagDistanceAssetsDto {
   @IsString()
   cursor?: string;
 }
-

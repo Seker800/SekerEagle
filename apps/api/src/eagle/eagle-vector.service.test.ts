@@ -83,6 +83,7 @@ test('requesting a tag rebuild remains opt-in and enqueues one owner-scoped buil
 test('accepting a suggestion atomically creates an audited manual tag relation', async () => {
   const creates: unknown[] = [];
   const transaction = {
+    $executeRaw: async () => 1,
     eagleVectorTagSuggestion: {
       findFirst: async () => ({
         id: 'suggestion-1',

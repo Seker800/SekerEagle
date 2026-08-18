@@ -711,20 +711,18 @@ export function SekerEaglePage({
               </button>
             </div>
           )}
-          {canManageProcessing && (
-            <div className={styles.navSection}>
-              <div className={styles.sectionLabel}>系统</div>
-              <button
-                className={libraryView === 'PROCESSING' ? styles.navActive : undefined}
-                type="button"
-                aria-label="素材处理"
-                onClick={() => changeLibraryView('PROCESSING')}
-              >
-                <IconSettings size={17} />
-                素材处理
-              </button>
-            </div>
-          )}
+          <div className={styles.navSection}>
+            <div className={styles.sectionLabel}>工具</div>
+            <button
+              className={libraryView === 'PROCESSING' ? styles.navActive : undefined}
+              type="button"
+              aria-label="素材处理"
+              onClick={() => changeLibraryView('PROCESSING')}
+            >
+              <IconSettings size={17} />
+              素材处理
+            </button>
+          </div>
           <button
             className={libraryView === 'TRASH' ? styles.navActive : undefined}
             type="button"
@@ -742,7 +740,10 @@ export function SekerEaglePage({
           aria-labelledby={libraryView === 'PROCESSING' ? undefined : 'eagle-library-title'}
         >
           {libraryView === 'PROCESSING' ? (
-            <EagleProcessingPage accessToken={accessToken} />
+            <EagleProcessingPage
+              accessToken={accessToken}
+              canManageProcessing={canManageProcessing}
+            />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
               kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}

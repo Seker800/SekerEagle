@@ -333,11 +333,11 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('region', { name: '素材处理' })).toBeInTheDocument();
   });
 
-  it('hides the admin processing entry when the current user lacks its capability', async () => {
+  it('keeps the material-processing entry available for ordinary owners', async () => {
     renderPage();
 
     await screen.findByRole('heading', { name: '全部素材' });
-    expect(screen.queryByRole('button', { name: '素材处理' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '素材处理' })).toBeInTheDocument();
   });
 
   it('changes and persists the thumbnail size', async () => {

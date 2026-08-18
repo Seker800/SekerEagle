@@ -13,6 +13,7 @@ import {
   type EagleProcessingSummary,
 } from '../../lib/eagle-processing-admin-api';
 import styles from './EagleProcessingPage.module.css';
+import { EagleVectorWorkspace } from './EagleVectorWorkspace';
 
 const LANE_LABELS: Record<EagleProcessingLane, string> = {
   INTERACTIVE: '上传处理',
@@ -34,12 +35,14 @@ const KIND_LABELS: Record<string, string> = {
   PROBE_MEDIA: '读取媒体信息',
   EXTRACT_COLOR_PALETTE: '提取图片代表色',
   GENERATE_IMAGE_PYRAMID: '生成大图缩放切片',
+  GENERATE_EMBEDDING: '生成图片向量',
   PURGE_ASSET: '永久清理素材',
 };
 
 export function EagleProcessingPage({
   accessToken: providedAccessToken,
-}: { accessToken?: string } = {}) {
+  canManageProcessing = true,
+}: { accessToken?: string; canManageProcessing?: boolean } = {}) {
   const accessToken = providedAccessToken ?? '';
   const [summary, setSummary] = useState<EagleProcessingSummary | null>(null);
   const [jobs, setJobs] = useState<EagleProcessingJob[]>([]);
@@ -55,6 +58,10 @@ export function EagleProcessingPage({
   const [notice, setNotice] = useState('');
 
   const reload = useCallback(async () => {
+    if (!canManageProcessing) {
+      setIsLoading(false);
+      return;
+    }
     setError('');
     try {
       const [nextSummary, nextJobs] = await Promise.all([
@@ -75,7 +82,7 @@ export function EagleProcessingPage({
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken, kind, lane, status]);
+  }, [accessToken, canManageProcessing, kind, lane, status]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -122,6 +129,19 @@ export function EagleProcessingPage({
           : coverage?.eligible === 0
             ? '等待素材'
             : '可用于筛选';
+
+  if (!canManageProcessing)
+    return (
+      <section className={styles.section}>
+        <header className={styles.header}>
+          <div>
+            <h1>素材处理</h1>
+            <p>管理图片向量、人工标签建议与审核。</p>
+          </div>
+        </header>
+        <EagleVectorWorkspace />
+      </section>
+    );
 
   if (isLoading && !summary)
     return (
@@ -175,6 +195,8 @@ export function EagleProcessingPage({
           {notice}
         </div>
       ) : null}
+
+      <EagleVectorWorkspace />
 
       <section className={styles.contentBlock} aria-labelledby="processing-capabilities-title">
         <div className={styles.sectionHeading}>

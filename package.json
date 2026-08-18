@@ -28,6 +28,8 @@
     "contracts:check": "npm run contracts:generate && git diff --exit-code -- packages/contracts/openapi.json packages/contracts/src/generated/openapi.ts",
     "compose:config": "docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet",
     "env:create": "node ./scripts/create-local-env.mjs",
+    "env:ensure-vector": "node ./scripts/ensure-local-vector-env.mjs",
+    "mlx:install-service": "node ./scripts/install-mlx-launch-agent.mjs",
     "bootstrap-credentials:create": "node ./scripts/create-bootstrap-credentials.mjs",
     "smoke:auth": "node ./scripts/smoke-auth.mjs",
     "smoke:eagle": "node ./scripts/smoke-eagle.mjs",

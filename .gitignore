@@ -9,5 +9,9 @@ coverage/
 .npm/
 .cache/
 .local/
+.runtime/
+.venv/
+__pycache__/
+*.pyc
 apps/api/prisma/dev.db
 .omx/

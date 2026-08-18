@@ -6,7 +6,11 @@ import {
 } from '@nestjs/common';
 import { EagleVectorSuggestionStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import type { ListTagDistanceAssetsDto, ListVectorSuggestionsDto } from './eagle-vector.dto';
+import type {
+  ListTagDistanceAssetsDto,
+  ListUnclassifiedVectorAssetsDto,
+  ListVectorSuggestionsDto,
+} from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
 
 @Injectable()
@@ -14,30 +18,39 @@ export class EagleVectorService {
   constructor(private readonly prisma: PrismaService) {}
 
   async summary(ownerId: string) {
-    const [eligible, ready, failed, enabledTags, readyTags, unclassified, pendingSuggestions] =
-      await Promise.all([
-        this.prisma.eagleAsset.count({
-          where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' } },
-        }),
-        this.prisma.eagleAssetEmbedding.count({
-          where: { ownerId, isCurrent: true, status: 'READY', asset: { deletedAt: null } },
-        }),
-        this.prisma.eagleAssetEmbedding.count({
-          where: { ownerId, isCurrent: true, status: 'FAILED', asset: { deletedAt: null } },
-        }),
-        this.prisma.eagleManualTagSemanticConfig.count({
-          where: { ownerId, recommendationEnabled: true },
-        }),
-        this.prisma.eagleManualTagSemanticConfig.count({
-          where: { ownerId, recommendationEnabled: true, currentSnapshotId: { not: null } },
-        }),
-        this.prisma.eagleAsset.count({
-          where: { ownerId, deletedAt: null, manualTagLinks: { none: {} } },
-        }),
-        this.prisma.eagleVectorTagSuggestion.count({
-          where: { ownerId, status: 'PENDING', isActive: true, invalidatedAt: null },
-        }),
-      ]);
+    const [
+      eligible,
+      ready,
+      failed,
+      enabledTags,
+      readyTags,
+      unclassified,
+      pendingSuggestions,
+      host,
+    ] = await Promise.all([
+      this.prisma.eagleAsset.count({
+        where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' } },
+      }),
+      this.prisma.eagleAssetEmbedding.count({
+        where: { ownerId, isCurrent: true, status: 'READY', asset: { deletedAt: null } },
+      }),
+      this.prisma.eagleAssetEmbedding.count({
+        where: { ownerId, isCurrent: true, status: 'FAILED', asset: { deletedAt: null } },
+      }),
+      this.prisma.eagleManualTagSemanticConfig.count({
+        where: { ownerId, recommendationEnabled: true },
+      }),
+      this.prisma.eagleManualTagSemanticConfig.count({
+        where: { ownerId, recommendationEnabled: true, currentSnapshotId: { not: null } },
+      }),
+      this.prisma.eagleAsset.count({
+        where: { ownerId, deletedAt: null, manualTagLinks: { none: {} } },
+      }),
+      this.prisma.eagleVectorTagSuggestion.count({
+        where: { ownerId, status: 'PENDING', isActive: true, invalidatedAt: null },
+      }),
+      this.checkEmbeddingHost(),
+    ]);
     return {
       model: EAGLE_EMBEDDING_MODEL,
       dimensions: EAGLE_EMBEDDING_DIMENSIONS,
@@ -50,8 +63,59 @@ export class EagleVectorService {
       },
       tags: { enabled: enabledTags, ready: readyTags, awaitingCenter: enabledTags - readyTags },
       suggestions: { unclassified, pending: pendingSuggestions },
+      host,
       refreshedAt: new Date().toISOString(),
     };
+  }
+
+  async retryFailedEmbeddings(ownerId: string) {
+    const result = await this.prisma.eagleAssetProcessingJob.updateMany({
+      where: { ownerId, kind: 'GENERATE_EMBEDDING', status: 'FAILED' },
+      data: {
+        status: 'PENDING',
+        attempts: 0,
+        availableAt: new Date(),
+        startedAt: null,
+        completedAt: null,
+        lockedAt: null,
+        lastError: null,
+      },
+    });
+    return { retried: result.count };
+  }
+
+  private async checkEmbeddingHost() {
+    const baseUrl = process.env.MLX_EMBEDDING_URL?.replace(/\/+$/, '');
+    const token = process.env.MLX_EMBEDDING_TOKEN;
+    if (!baseUrl || !token) return { status: 'NOT_CONFIGURED' as const };
+    try {
+      const response = await fetch(`${baseUrl}/healthz`, {
+        headers: { authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (!response.ok) return { status: 'OFFLINE' as const };
+      const payload = (await response.json()) as {
+        status?: unknown;
+        model?: unknown;
+        revision?: unknown;
+        dimensions?: unknown;
+        metal?: unknown;
+      };
+      const matchesContract =
+        payload.status === 'ready' &&
+        payload.model === EAGLE_EMBEDDING_MODEL &&
+        payload.dimensions === EAGLE_EMBEDDING_DIMENSIONS &&
+        payload.metal === true;
+      return {
+        status: matchesContract ? ('ONLINE' as const) : ('DRIFTED' as const),
+        model: typeof payload.model === 'string' ? payload.model : null,
+        revision: typeof payload.revision === 'string' ? payload.revision : null,
+        dimensions: typeof payload.dimensions === 'number' ? payload.dimensions : null,
+        metal: payload.metal === true,
+      };
+    } catch {
+      return { status: 'OFFLINE' as const };
+    }
   }
 
   async listTagSemantics(ownerId: string) {
@@ -63,6 +127,19 @@ export class EagleVectorService {
         name: true,
         color: true,
         semanticConfig: true,
+        prototypeSnapshots: {
+          where: { isCurrent: true, status: 'ACTIVE' },
+          take: 1,
+          select: {
+            id: true,
+            version: true,
+            sourceAssetCount: true,
+            addedMemberCount: true,
+            removedMemberCount: true,
+            activatedAt: true,
+            _count: { select: { prototypes: true } },
+          },
+        },
         semanticBuilds: {
           where: { status: { in: ['PENDING', 'PROCESSING'] } },
           orderBy: { createdAt: 'desc' },
@@ -72,13 +149,20 @@ export class EagleVectorService {
         _count: { select: { assetLinks: { where: { asset: { deletedAt: null } } } } },
       },
     });
-    return tags.map(({ semanticConfig, semanticBuilds, _count, ...tag }) => ({
+    return tags.map(({ semanticConfig, semanticBuilds, prototypeSnapshots, _count, ...tag }) => ({
       ...tag,
       assetCount: _count.assetLinks,
       recommendationEnabled: semanticConfig?.recommendationEnabled ?? false,
       currentSnapshotId: semanticConfig?.currentSnapshotId ?? null,
       lastGeneratedAt: semanticConfig?.lastGeneratedAt ?? null,
       activeBuild: semanticBuilds[0] ?? null,
+      currentSnapshot: prototypeSnapshots[0]
+        ? {
+            ...prototypeSnapshots[0],
+            centerCount: prototypeSnapshots[0]._count.prototypes,
+            _count: undefined,
+          }
+        : null,
     }));
   }
 
@@ -202,6 +286,42 @@ export class EagleVectorService {
     };
   }
 
+  async listUnclassified(ownerId: string, query: ListUnclassifiedVectorAssetsDto) {
+    const limit = query.limit ?? 40;
+    const rows = await this.prisma.eagleAsset.findMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+        manualTagLinks: { none: {} },
+        vectorSuggestions: {
+          none: { status: 'PENDING', isActive: true, invalidatedAt: null },
+        },
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+      select: {
+        id: true,
+        displayName: true,
+        width: true,
+        height: true,
+        embeddings: {
+          where: { isCurrent: true },
+          take: 1,
+          select: { status: true, errorCode: true },
+        },
+        renditions: {
+          where: { status: 'READY', kind: 'THUMBNAIL', variant: '512' },
+          orderBy: { revision: 'desc' },
+          take: 1,
+          select: { id: true, width: true, height: true },
+        },
+      },
+    });
+    const items = rows.slice(0, limit);
+    return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
+  }
+
   async reviewSuggestion(ownerId: string, suggestionId: string, action: 'ACCEPT' | 'REJECT') {
     const outcome = await this.prisma.$transaction(async (transaction) => {
       const suggestion = await transaction.eagleVectorTagSuggestion.findFirst({
@@ -284,6 +404,27 @@ export class EagleVectorService {
           acceptedSuggestionId: suggestion.id,
         },
       });
+      await transaction.$executeRaw(
+        Prisma.sql`
+          INSERT INTO "EagleTagMemberDistance" (
+            "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
+          )
+          SELECT ${ownerId}, ${suggestion.suggestedTagId}, ${suggestion.assetId},
+                 prototype."snapshotId", prototype.embedding <=> embedding.embedding,
+                 prototype.rank, NOW()
+          FROM "EagleAssetEmbedding" embedding
+          CROSS JOIN LATERAL (
+            SELECT candidate."snapshotId", candidate.rank, candidate.embedding
+            FROM "EagleTagPrototype" candidate
+            WHERE candidate."ownerId" = ${ownerId}
+              AND candidate."snapshotId" = ${suggestion.snapshotId}
+            ORDER BY candidate.embedding <=> embedding.embedding
+            LIMIT 1
+          ) prototype
+          WHERE embedding."ownerId" = ${ownerId} AND embedding.id = ${suggestion.embeddingId}
+          ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId") DO NOTHING
+        `,
+      );
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
         where: {
           ownerId,

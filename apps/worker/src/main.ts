@@ -68,7 +68,8 @@ const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   : 1;
 const embeddingSpaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';
 const embeddingModel = process.env.MLX_EMBEDDING_MODEL ?? 'Qwen/Qwen3-VL-Embedding-2B';
-const embeddingRevision = process.env.MLX_EMBEDDING_REVISION ?? 'main';
+const embeddingRevision =
+  process.env.MLX_EMBEDDING_REVISION ?? '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda';
 const embeddingDimensions = 1024;
 const embeddingClient = new EmbeddingClient({
   baseUrl: process.env.MLX_EMBEDDING_URL ?? 'http://host.docker.internal:11435',
