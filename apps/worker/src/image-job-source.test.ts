@@ -35,6 +35,32 @@ test('rendition and pyramid work retain the original source', () => {
   }
 });
 
+test('embedding reads the current ready preview instead of the original', () => {
+  const source = selectImageJobSource(
+    {
+      originalObjectKey: 'users/owner/assets/asset/original.heic',
+      mimeType: 'image/heic',
+      mediaRevision: 3,
+      renditions: [
+        {
+          kind: 'PREVIEW',
+          revision: 3,
+          status: 'READY',
+          storageKey: 'users/owner/assets/asset/renditions/3/preview-default.webp',
+          mimeType: 'image/webp',
+        },
+      ],
+    },
+    'GENERATE_EMBEDDING',
+  );
+
+  assert.deepEqual(source, {
+    storageKey: 'users/owner/assets/asset/renditions/3/preview-default.webp',
+    mimeType: 'image/webp',
+    verifiesOriginalHash: false,
+  });
+});
+
 test('palette extraction fails closed when its dependent thumbnail is unavailable', () => {
   assert.throws(
     () => selectImageJobSource({ ...asset, renditions: [] }, 'EXTRACT_COLOR_PALETTE'),
