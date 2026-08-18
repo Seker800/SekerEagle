@@ -3,7 +3,7 @@ import test from 'node:test';
 import type { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
-import type { AuthPrincipal } from './auth.types';
+import { PAT_SCOPES, type AuthPrincipal } from './auth.types';
 import { BrowserPrincipalGuard } from './browser-principal.guard';
 import { PatScopeGuard } from './pat-scope.guard';
 
@@ -51,4 +51,8 @@ void test('PAT scope guard rejects missing scopes', () => {
   Reflect.defineMetadata('sekereagle:required-pat-scopes', ['asset:write'], contextFor);
   const guard = new PatScopeGuard(reflector);
   assert.throws(() => guard.canActivate(contextFor(pat)));
+});
+
+void test('browser capture uses a dedicated least-privilege PAT scope', () => {
+  assert.equal(PAT_SCOPES.includes('capture:write' as never), true);
 });

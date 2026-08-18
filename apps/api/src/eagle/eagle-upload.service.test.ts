@@ -241,3 +241,78 @@ test('content replacement preserves the logical asset id and advances its media 
     `users/${ownerId}/assets/old/preview.webp`,
   ]);
 });
+
+test('new browser captures commit provenance and initial metadata with the uploaded asset', async () => {
+  const assetWrites: Array<Record<string, unknown>> = [];
+  const annotationWrites: Array<Record<string, unknown>> = [];
+  const captureWrites: Array<Record<string, unknown>> = [];
+  const session = {
+    id: sessionId,
+    uploaderId: ownerId,
+    status: 'ASSEMBLED',
+    originalName: 'source-file.jpg',
+    mimeType: 'image/jpeg',
+    size: 5n,
+    objectKey: `users/${ownerId}/assets/id/source-file.jpg`,
+    multipartUploadId: 'multipart-id',
+    eagleAssetId: null,
+    objectCleanupPending: false,
+    completionParts: [{ PartNumber: 1, ETag: 'etag-1' }],
+    eagleState: { duplicatePolicy: 'SKIP', replacementAssetId: null },
+  };
+  const transaction = {
+    uploadSession: { updateMany: async () => ({ count: 1 }), update: async () => undefined },
+    $executeRaw: async () => 1,
+    eagleAsset: {
+      findFirst: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => assetWrites.push(data),
+    },
+    eagleAssetAnnotation: {
+      create: async ({ data }: { data: Record<string, unknown> }) =>
+        annotationWrites.push(data),
+    },
+    eagleBrowserCapture: {
+      findUnique: async () => ({
+        id: 'capture-1',
+        displayName: 'Sunset Inspiration',
+        pageUrl: 'https://example.com/gallery?id=7',
+      }),
+      update: async ({ data }: { data: Record<string, unknown> }) => captureWrites.push(data),
+    },
+    eagleAssetProcessingJob: { createMany: async () => undefined },
+    eagleUploadSessionState: { update: async () => undefined },
+  };
+  const service = new EagleUploadService(
+    {
+      uploadSession: { findFirst: async () => session, count: async () => 1 },
+      $transaction: async (callback: (value: unknown) => unknown) => callback(transaction),
+    } as never,
+    { headObject: async () => ({ ContentLength: 5 }) } as never,
+    {} as never,
+    {
+      inspect: async () => ({
+        sha256: 'b'.repeat(64),
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        durationMs: null,
+      }),
+    } as never,
+  );
+
+  const result = await service.complete(ownerId, sessionId, {
+    parts: [{ partNumber: 1, etag: 'etag-1' }],
+  });
+
+  assert.equal(result.duplicate, false);
+  assert.equal(assetWrites[0]?.displayName, 'Sunset Inspiration');
+  assert.equal(assetWrites[0]?.normalizedDisplayName, 'sunset inspiration');
+  assert.deepEqual(annotationWrites, [
+    {
+      ownerId,
+      assetId: result.assetId,
+      sourceUrl: 'https://example.com/gallery?id=7',
+    },
+  ]);
+  assert.deepEqual(captureWrites, [{ assetId: result.assetId, completedAt: new Date(0) }]);
+});
