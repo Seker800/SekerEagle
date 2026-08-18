@@ -2,21 +2,24 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import {
-  THROTTLER_LIMIT,
-  THROTTLER_TTL,
-} from '@nestjs/throttler/dist/throttler.constants';
+import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { EagleController } from './eagle.controller';
 
+function controllerMethod(name: keyof EagleController): object {
+  const method = Object.getOwnPropertyDescriptor(EagleController.prototype, name)?.value as unknown;
+  assert.equal(typeof method, 'function');
+  return method as object;
+}
+
 test('authenticated media reads use a bounded high-throughput throttle without changing API limits', () => {
   const mediaHandlers = [
-    EagleController.prototype.getOriginal,
-    EagleController.prototype.getOriginalContent,
-    EagleController.prototype.getRendition,
-    EagleController.prototype.getRenditionContent,
-    EagleController.prototype.getPyramidTile,
+    controllerMethod('getOriginal'),
+    controllerMethod('getOriginalContent'),
+    controllerMethod('getRendition'),
+    controllerMethod('getRenditionContent'),
+    controllerMethod('getPyramidTile'),
   ];
 
   for (const handler of mediaHandlers) {
@@ -27,7 +30,7 @@ test('authenticated media reads use a bounded high-throughput throttle without c
   }
 
   assert.equal(
-    Reflect.getMetadata(`${THROTTLER_LIMIT}short`, EagleController.prototype.listAssets),
+    Reflect.getMetadata(`${THROTTLER_LIMIT}short`, controllerMethod('listAssets')),
     undefined,
   );
 });
