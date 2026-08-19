@@ -77,6 +77,18 @@ select:focus {
   outline: 3px solid rgba(47, 111, 237, 0.16);
   border-color: #2f6fed;
 }
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #9f1c17;
+  font-size: 13px;
+  font-weight: 600;
+}
+.checkbox-row input {
+  width: auto;
+  margin-top: 2px;
+}
 button {
   border: 0;
   border-radius: 9px;

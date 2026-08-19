@@ -12,8 +12,9 @@ export class CaptureApiError extends Error {
 }
 
 export class CaptureApiClient {
-  constructor({ serverUrl, pat, fetchImpl = fetch }) {
-    this.serverUrl = normalizeServerUrl(serverUrl);
+  constructor({ serverUrl, pat, allowInsecureHttp = false, fetchImpl = fetch }) {
+    this.allowInsecureHttp = allowInsecureHttp;
+    this.serverUrl = normalizeServerUrl(serverUrl, { allowRemoteHttp: allowInsecureHttp });
     this.pat = String(pat || '').trim();
     if (!this.pat.startsWith('seg_pat_')) throw new Error('请配置有效的 SekerEagle PAT。');
     this.fetchImpl = fetchImpl;
@@ -55,11 +56,16 @@ export class CaptureApiClient {
   async uploadPart(uploadUrl, bytes) {
     let response;
     try {
-      response = await this.fetchImpl(rewritePresignedUploadUrl(uploadUrl, this.serverUrl), {
-        method: 'PUT',
-        body: bytes,
-        credentials: 'omit',
-      });
+      response = await this.fetchImpl(
+        rewritePresignedUploadUrl(uploadUrl, this.serverUrl, {
+          allowInsecureHttp: this.allowInsecureHttp,
+        }),
+        {
+          method: 'PUT',
+          body: bytes,
+          credentials: 'omit',
+        },
+      );
     } catch (cause) {
       throw new CaptureApiError(messageFrom(cause, '对象存储连接失败。'));
     }

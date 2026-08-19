@@ -22,13 +22,12 @@
         <input id="localServerUrl" type="url" autocomplete="url" />
         <small>本机默认使用 <code>http://localhost:8180</code>。</small>
         <label for="publicServerUrl">公网服务器地址（可选）</label>
-        <input
-          id="publicServerUrl"
-          type="url"
-          inputmode="url"
-          placeholder="https://eagle.example.com"
-        />
-        <small>必须是固定 HTTPS 地址。公网映射未开启时可以留空。</small>
+        <input id="publicServerUrl" type="url" inputmode="url" placeholder="http://公网IP:端口" />
+        <small>可以是固定域名或公网 IP 与端口；映射未开启时可以留空。</small>
+        <label class="checkbox-row" for="allowInsecurePublicHttp">
+          <input id="allowInsecurePublicHttp" type="checkbox" />
+          <span>允许公网 HTTP（PAT 和图片将以明文传输）</span>
+        </label>
         <label for="pat">浏览器采集 PAT</label>
         <input id="pat" type="password" autocomplete="off" placeholder="seg_pat_…" />
         <small>请只授予 <code>capture:write</code> 权限；令牌只保存在本机扩展存储中。</small>

@@ -98,6 +98,7 @@ async function getConfig() {
     connectionMode: 'auto',
     localServerUrl: 'http://localhost:8180',
     publicServerUrl: '',
+    allowInsecurePublicHttp: false,
     serverUrl: '',
     pat: '',
     concurrency: 3,

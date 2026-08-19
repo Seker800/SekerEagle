@@ -48,6 +48,27 @@ test('rewrites a loopback-signed upload URL onto the active public gateway only'
       'https://eagle.example.com',
     ),
   );
+  assert.equal(
+    rewritePresignedUploadUrl(
+      'http://localhost:8180/sekereagle-assets/user/image.jpg?X-Amz-Signature=signed',
+      'http://203.0.113.10:8180',
+      { allowInsecureHttp: true },
+    ),
+    'http://203.0.113.10:8180/sekereagle-assets/user/image.jpg?X-Amz-Signature=signed',
+  );
+  assert.throws(() =>
+    rewritePresignedUploadUrl(
+      'http://localhost:8180/sekereagle-assets/user/image.jpg?X-Amz-Signature=signed',
+      'http://203.0.113.10:8180',
+    ),
+  );
+});
+
+test('options page makes insecure public HTTP an explicit visible choice', async () => {
+  const options = await readFile(new URL('../options.html', import.meta.url), 'utf8');
+
+  assert.match(options, /id="allowInsecurePublicHttp" type="checkbox"/);
+  assert.match(options, /PAT 和图片将以明文传输/);
 });
 
 test('gateway preserves the loopback signing host behind a public reverse proxy', async () => {

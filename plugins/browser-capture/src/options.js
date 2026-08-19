@@ -1,9 +1,14 @@
-import { buildServerCandidates, normalizeServerUrl } from './connection-config.js';
+import {
+  buildServerCandidates,
+  normalizePublicServerUrl,
+  normalizeServerUrl,
+} from './connection-config.js';
 
 const form = document.querySelector('form');
 const connectionMode = document.querySelector('#connectionMode');
 const localServerUrl = document.querySelector('#localServerUrl');
 const publicServerUrl = document.querySelector('#publicServerUrl');
+const allowInsecurePublicHttp = document.querySelector('#allowInsecurePublicHttp');
 const pat = document.querySelector('#pat');
 const concurrency = document.querySelector('#concurrency');
 const status = document.querySelector('#status');
@@ -12,12 +17,14 @@ const saved = await chrome.storage.local.get({
   connectionMode: 'auto',
   localServerUrl: '',
   publicServerUrl: '',
+  allowInsecurePublicHttp: false,
   serverUrl: 'http://localhost:8180',
   concurrency: 3,
 });
 connectionMode.value = saved.connectionMode;
 localServerUrl.value = saved.localServerUrl || saved.serverUrl;
 publicServerUrl.value = saved.publicServerUrl;
+allowInsecurePublicHttp.checked = saved.allowInsecurePublicHttp;
 concurrency.value = String(saved.concurrency);
 
 form.addEventListener('submit', async (event) => {
@@ -28,8 +35,11 @@ form.addEventListener('submit', async (event) => {
       connectionMode: connectionMode.value,
       localServerUrl: localServerUrl.value.trim() ? normalizeServerUrl(localServerUrl.value) : '',
       publicServerUrl: publicServerUrl.value.trim()
-        ? normalizeServerUrl(publicServerUrl.value)
+        ? normalizePublicServerUrl(publicServerUrl.value, {
+            allowInsecureHttp: allowInsecurePublicHttp.checked,
+          })
         : '',
+      allowInsecurePublicHttp: allowInsecurePublicHttp.checked,
     };
     buildServerCandidates(nextConfig);
     const existing = await chrome.storage.local.get({ pat: '' });
@@ -43,7 +53,7 @@ form.addEventListener('submit', async (event) => {
     await chrome.storage.local.remove('serverUrl');
     pat.value = '';
     pat.placeholder = '已保存；留空表示不更换';
-    status.textContent = '配置已安全保存，队列正在继续。';
+    status.textContent = '配置已保存，队列正在继续。';
     await chrome.runtime.sendMessage({ type: 'config:changed' });
   } catch (error) {
     status.textContent = error instanceof Error ? error.message : '保存失败。';

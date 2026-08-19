@@ -129,7 +129,12 @@ export function createQueueRunner({
 async function initiateWithFallback({ serverCandidates, pat, fetchImpl, declaration }) {
   let lastError;
   for (const serverUrl of serverCandidates) {
-    const api = new CaptureApiClient({ serverUrl, pat, fetchImpl });
+    const api = new CaptureApiClient({
+      serverUrl,
+      pat,
+      allowInsecureHttp: serverUrl.startsWith('http://') && !isLoopbackServer(serverUrl),
+      fetchImpl,
+    });
     try {
       return { api, session: await api.initiate(declaration) };
     } catch (error) {
@@ -138,6 +143,11 @@ async function initiateWithFallback({ serverCandidates, pat, fetchImpl, declarat
     }
   }
   throw lastError ?? new CaptureApiError('无法连接 SekerEagle。');
+}
+
+function isLoopbackServer(serverUrl) {
+  const hostname = new URL(serverUrl).hostname;
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
 function markCompleted(store, jobId, completed) {
