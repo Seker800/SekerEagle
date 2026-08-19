@@ -35,7 +35,7 @@ test('converges locally when the server already completed a replayed capture', a
     store,
     getConfig: async () => ({
       serverUrl: 'https://eagle.example.com',
-      pat: 'seg_pat_test',
+      pat: 'sea_pat_test',
       concurrency: 3,
     }),
     fetchImpl: async () => {
@@ -107,7 +107,7 @@ test('reuses committed part metadata when server finalization needs recovery', a
     store,
     getConfig: async () => ({
       serverUrl: 'https://eagle.example.com',
-      pat: 'seg_pat_test',
+      pat: 'sea_pat_test',
       concurrency: 3,
     }),
     fetchImpl: async (url, init) => {
@@ -169,7 +169,7 @@ test('automatic connection falls back from unavailable loopback to the public en
       localServerUrl: 'http://localhost:8180',
       publicServerUrl: 'http://203.0.113.10:8180',
       allowInsecurePublicHttp: true,
-      pat: 'seg_pat_test',
+      pat: 'sea_pat_test',
       concurrency: 3,
     }),
     fetchImpl: async (url) => {

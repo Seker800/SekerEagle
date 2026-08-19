@@ -26,22 +26,22 @@ test('keeps PAT authorization on control requests and never leaks it to presigne
   };
   const api = new CaptureApiClient({
     serverUrl: 'https://eagle.example.com',
-    pat: 'seg_pat_secret',
+    pat: 'sea_pat_secret',
     fetchImpl,
   });
 
   const signed = await api.presignPart('13e84291-8ad7-4c44-aa76-29a45ce058b2', 1);
   await api.uploadPart(signed.uploadUrl, new Blob(['image']));
 
-  assert.equal(requests[0].init.headers.authorization, 'Bearer seg_pat_secret');
+  assert.equal(requests[0].init.headers.authorization, 'Bearer sea_pat_secret');
   assert.equal(requests[1].init.headers?.authorization, undefined);
-  assert.equal(requests[1].url.includes('seg_pat_secret'), false);
+  assert.equal(requests[1].url.includes('sea_pat_secret'), false);
 });
 
 test('treats an in-progress server state conflict as retryable', async () => {
   const api = new CaptureApiClient({
     serverUrl: 'https://eagle.example.com',
-    pat: 'seg_pat_secret',
+    pat: 'sea_pat_secret',
     fetchImpl: async () =>
       new Response(JSON.stringify({ message: '上传正在完成。' }), {
         status: 409,
