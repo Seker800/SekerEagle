@@ -1,6 +1,7 @@
 {
   "name": "@sekereagle/vector-core",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "main": "dist/index.js",
   "types": "src/index.ts",

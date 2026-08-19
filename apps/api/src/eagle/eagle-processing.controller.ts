@@ -27,13 +27,13 @@ export class EagleProcessingController {
   constructor(private readonly processing: EagleProcessingService) {}
 
   @Get('summary') summary(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.processing.summary(principal.sub);
+    return this.processing.summary(principal.sub, principal.canViewPrivate);
   }
   @Get('jobs') jobs(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Query() query: ListEagleProcessingJobsDto,
   ) {
-    return this.processing.jobs(principal.sub, query);
+    return this.processing.jobs(principal.sub, query, principal.canViewPrivate);
   }
   @Get('settings') settings(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.processing.getSettings(principal.sub);
@@ -45,19 +45,19 @@ export class EagleProcessingController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('jobId', new ParseUUIDPipe({ version: '4' })) jobId: string,
   ) {
-    return this.processing.retry(principal.sub, jobId);
+    return this.processing.retry(principal.sub, jobId, principal.canViewPrivate);
   }
 
   @Post('retry-failed')
   @UseGuards(BrowserOriginGuard)
   retryFailed(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.processing.retryFailed(principal.sub);
+    return this.processing.retryFailed(principal.sub, principal.canViewPrivate);
   }
 
   @Post('reconcile')
   @UseGuards(BrowserOriginGuard)
   reconcile(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.processing.reconcile(principal.sub);
+    return this.processing.reconcile(principal.sub, principal.canViewPrivate);
   }
 
   @Patch('settings')

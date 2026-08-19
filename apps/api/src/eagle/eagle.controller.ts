@@ -31,7 +31,9 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import {
   CreateManualTagDto,
   BatchChangeEagleManualTagsDto,
+  BatchSetEagleAssetPrivacyDto,
   BatchUpdateEagleAssetsDto,
+  CountEagleAssetsDto,
   CreateManualTagGroupDto,
   CreateSmartFolderDto,
   EagleAssetIdsDto,
@@ -67,7 +69,15 @@ export class EagleController {
 
   @Get('assets')
   listAssets(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
-    return this.eagle.listAssets(principal.sub, query);
+    return this.eagle.listAssets(principal.sub, query, {
+      includePrivate: principal.canViewPrivate,
+    });
+  }
+
+  @Post('assets/filter-count')
+  @UseGuards(BrowserOriginGuard)
+  countAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CountEagleAssetsDto) {
+    return this.eagle.countAssets(principal.sub, input.query, principal.canViewPrivate);
   }
 
   @Get('asset-updates')
@@ -75,7 +85,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Query() query: ListEagleAssetUpdatesDto,
   ) {
-    return this.eagle.listUpdates(principal.sub, query.assetIds);
+    return this.eagle.listUpdates(principal.sub, query.assetIds, principal.canViewPrivate);
   }
 
   @Post('asset-updates')
@@ -84,7 +94,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: EagleAssetIdsDto,
   ) {
-    return this.eagle.listUpdates(principal.sub, input.assetIds);
+    return this.eagle.listUpdates(principal.sub, input.assetIds, principal.canViewPrivate);
   }
 
   @Get('assets/:assetId')
@@ -92,7 +102,9 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
   ) {
-    return this.eagle.getAsset(principal.sub, assetId);
+    return this.eagle.getAsset(principal.sub, assetId, {
+      includePrivate: principal.canViewPrivate,
+    });
   }
 
   @Get('trash/:assetId')
@@ -100,7 +112,10 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
   ) {
-    return this.eagle.getAsset(principal.sub, assetId, true);
+    return this.eagle.getAsset(principal.sub, assetId, {
+      trash: true,
+      includePrivate: principal.canViewPrivate,
+    });
   }
 
   @Get('assets/:assetId/original')
@@ -115,20 +130,38 @@ export class EagleController {
     try {
       parsedRange = parseRangeHeader(range);
     } catch {
-      const metadata = await this.media.getOriginalMetadata(principal.sub, assetId);
+      const metadata = await this.media.getOriginalMetadata(
+        principal.sub,
+        assetId,
+        principal.canViewPrivate,
+      );
       setRangeNotSatisfiableHeaders(response, metadata.size);
       return;
     }
     let media: Awaited<ReturnType<EagleMediaService['getOriginal']>>;
     try {
-      media = await this.media.getOriginal(principal.sub, assetId, parsedRange, ifNoneMatch);
+      media = await this.media.getOriginal(
+        principal.sub,
+        assetId,
+        parsedRange,
+        ifNoneMatch,
+        principal.canViewPrivate,
+      );
     } catch (error) {
       if (!isObjectRangeNotSatisfiableError(error)) throw error;
-      const metadata = await this.media.getOriginalMetadata(principal.sub, assetId);
+      const metadata = await this.media.getOriginalMetadata(
+        principal.sub,
+        assetId,
+        principal.canViewPrivate,
+      );
       setRangeNotSatisfiableHeaders(response, metadata.size);
       return;
     }
-    applyMediaHeaders(response, media, 'private, max-age=3600');
+    applyMediaHeaders(
+      response,
+      media,
+      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=3600',
+    );
     if (media.notModified) {
       response.status(304);
       return;
@@ -166,8 +199,18 @@ export class EagleController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
-    const media = await this.media.getRendition(principal.sub, assetId, renditionId, ifNoneMatch);
-    applyMediaHeaders(response, media, 'private, max-age=31536000, immutable');
+    const media = await this.media.getRendition(
+      principal.sub,
+      assetId,
+      renditionId,
+      ifNoneMatch,
+      principal.canViewPrivate,
+    );
+    applyMediaHeaders(
+      response,
+      media,
+      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=31536000, immutable',
+    );
     if (media.notModified) {
       response.status(304);
       return;
@@ -192,7 +235,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
   ) {
-    return this.media.getPyramidDescriptor(principal.sub, assetId);
+    return this.media.getPyramidDescriptor(principal.sub, assetId, principal.canViewPrivate);
   }
 
   @Get('assets/:assetId/pyramids/:pyramidId/tiles/:level/:x/:y')
@@ -215,8 +258,13 @@ export class EagleController {
       x,
       y,
       ifNoneMatch,
+      principal.canViewPrivate,
     );
-    applyMediaHeaders(response, media, 'private, max-age=31536000, immutable');
+    applyMediaHeaders(
+      response,
+      media,
+      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=31536000, immutable',
+    );
     if (media.notModified) {
       response.status(304);
       return;
@@ -230,7 +278,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchUpdateEagleAssetsDto,
   ) {
-    return this.eagle.batchUpdate(principal.sub, input);
+    return this.eagle.batchUpdate(principal.sub, input, principal.canViewPrivate);
   }
 
   @Patch('assets/:assetId')
@@ -240,36 +288,48 @@ export class EagleController {
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: UpdateEagleAssetDto,
   ) {
-    return this.eagle.updateAsset(principal.sub, assetId, input);
+    return this.eagle.updateAsset(principal.sub, assetId, input, principal.canViewPrivate);
+  }
+
+  @Patch('assets/batch/privacy')
+  @UseGuards(BrowserOriginGuard)
+  setAssetPrivacy(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: BatchSetEagleAssetPrivacyDto,
+  ) {
+    return this.eagle.batchSetPrivacy(principal.sub, input, principal.canViewPrivate);
   }
 
   @Post('assets/trash')
   @UseGuards(BrowserOriginGuard)
   trashAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, false);
+    return this.eagle.setTrash(principal.sub, input.assetIds, false, principal.canViewPrivate);
   }
 
   @Post('assets/batch/trash')
   @UseGuards(BrowserOriginGuard)
   batchTrash(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, false);
+    return this.eagle.setTrash(principal.sub, input.assetIds, false, principal.canViewPrivate);
   }
 
   @Post('assets/batch/restore')
   @UseGuards(BrowserOriginGuard)
   batchRestore(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, true);
+    return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
   }
 
   @Get('trash')
   listTrash(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
-    return this.eagle.listAssets(principal.sub, query, true);
+    return this.eagle.listAssets(principal.sub, query, {
+      trash: true,
+      includePrivate: principal.canViewPrivate,
+    });
   }
 
   @Post('trash/restore')
   @UseGuards(BrowserOriginGuard)
   restoreAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: EagleAssetIdsDto) {
-    return this.eagle.setTrash(principal.sub, input.assetIds, true);
+    return this.eagle.setTrash(principal.sub, input.assetIds, true, principal.canViewPrivate);
   }
 
   @Delete('trash')
@@ -286,7 +346,7 @@ export class EagleController {
 
   @Get(['tags', 'manual-tags'])
   listTags(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.listManualTags(principal.sub);
+    return this.eagle.listManualTags(principal.sub, principal.canViewPrivate);
   }
 
   @Post(['tags', 'manual-tags'])
@@ -302,7 +362,7 @@ export class EagleController {
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
     @Body() input: UpdateManualTagDto,
   ) {
-    return this.eagle.updateManualTag(principal.sub, tagId, input);
+    return this.eagle.updateManualTag(principal.sub, tagId, input, principal.canViewPrivate);
   }
 
   @Delete(['tags/:tagId', 'manual-tags/:tagId'])
@@ -349,7 +409,7 @@ export class EagleController {
 
   @Get('ai-tags')
   listAiTags(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.listAiTags(principal.sub);
+    return this.eagle.listAiTags(principal.sub, principal.canViewPrivate);
   }
 
   @Put('assets/:assetId/tags')
@@ -359,7 +419,12 @@ export class EagleController {
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: ReplaceAssetTagsDto,
   ) {
-    return this.eagle.replaceAssetTags(principal.sub, assetId, input.tagIds);
+    return this.eagle.replaceAssetTags(
+      principal.sub,
+      assetId,
+      input.tagIds,
+      principal.canViewPrivate,
+    );
   }
 
   @Put('assets/:assetId/manual-tags')
@@ -369,7 +434,12 @@ export class EagleController {
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
     @Body() input: ReplaceAssetTagsDto,
   ) {
-    return this.eagle.replaceAssetTags(principal.sub, assetId, input.tagIds);
+    return this.eagle.replaceAssetTags(
+      principal.sub,
+      assetId,
+      input.tagIds,
+      principal.canViewPrivate,
+    );
   }
 
   @Post('assets/batch/manual-tags')
@@ -378,7 +448,7 @@ export class EagleController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchChangeEagleManualTagsDto,
   ) {
-    return this.eagle.batchChangeManualTags(principal.sub, input);
+    return this.eagle.batchChangeManualTags(principal.sub, input, principal.canViewPrivate);
   }
 
   @Get('smart-folders')

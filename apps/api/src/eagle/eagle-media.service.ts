@@ -11,9 +11,20 @@ export class EagleMediaService {
     private readonly storage: ObjectStorageService,
   ) {}
 
-  async getOriginal(ownerId: string, assetId: string, range?: string, ifNoneMatch?: string) {
+  async getOriginal(
+    ownerId: string,
+    assetId: string,
+    range?: string,
+    ifNoneMatch?: string,
+    includePrivate = false,
+  ) {
     const asset = await this.prisma.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, purgeAfter: null },
+      where: {
+        ownerId,
+        id: assetId,
+        purgeAfter: null,
+        ...(includePrivate ? {} : { isPrivate: false }),
+      },
       select: { originalObjectKey: true, originalName: true, mimeType: true, byteSize: true },
     });
     if (!asset) throw new NotFoundException('素材不存在。');
@@ -24,18 +35,35 @@ export class EagleMediaService {
     });
   }
 
-  async getOriginalMetadata(ownerId: string, assetId: string) {
+  async getOriginalMetadata(ownerId: string, assetId: string, includePrivate = false) {
     const asset = await this.prisma.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, purgeAfter: null },
+      where: {
+        ownerId,
+        id: assetId,
+        purgeAfter: null,
+        ...(includePrivate ? {} : { isPrivate: false }),
+      },
       select: { byteSize: true },
     });
     if (!asset) throw new NotFoundException('素材不存在。');
     return { size: asset.byteSize };
   }
 
-  async getRendition(ownerId: string, assetId: string, renditionId: string, ifNoneMatch?: string) {
+  async getRendition(
+    ownerId: string,
+    assetId: string,
+    renditionId: string,
+    ifNoneMatch?: string,
+    includePrivate = false,
+  ) {
     const rendition = await this.prisma.eagleAssetRendition.findFirst({
-      where: { ownerId, assetId, id: renditionId, status: 'READY', asset: { purgeAfter: null } },
+      where: {
+        ownerId,
+        assetId,
+        id: renditionId,
+        status: 'READY',
+        asset: { purgeAfter: null, ...(includePrivate ? {} : { isPrivate: false }) },
+      },
       select: { storageKey: true, mimeType: true, kind: true },
     });
     if (!rendition) throw new NotFoundException('预览文件不存在。');
@@ -48,9 +76,14 @@ export class EagleMediaService {
     );
   }
 
-  async getPyramidDescriptor(ownerId: string, assetId: string) {
+  async getPyramidDescriptor(ownerId: string, assetId: string, includePrivate = false) {
     const asset = await this.prisma.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, purgeAfter: null },
+      where: {
+        ownerId,
+        id: assetId,
+        purgeAfter: null,
+        ...(includePrivate ? {} : { isPrivate: false }),
+      },
       select: {
         mediaRevision: true,
         imagePyramids: {
@@ -91,6 +124,7 @@ export class EagleMediaService {
     x: number,
     y: number,
     ifNoneMatch?: string,
+    includePrivate = false,
   ) {
     const pyramid = await this.prisma.eagleImagePyramid.findFirst({
       where: {
@@ -98,7 +132,7 @@ export class EagleMediaService {
         ownerId,
         assetId,
         status: 'READY',
-        asset: { purgeAfter: null },
+        asset: { purgeAfter: null, ...(includePrivate ? {} : { isPrivate: false }) },
       },
       select: {
         storagePrefix: true,

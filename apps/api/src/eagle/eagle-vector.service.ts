@@ -19,7 +19,8 @@ import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './medi
 export class EagleVectorService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async summary(ownerId: string) {
+  async summary(ownerId: string, includePrivate = false) {
+    const visibleAsset = includePrivate ? {} : { isPrivate: false };
     const [
       eligible,
       ready,
@@ -31,15 +32,26 @@ export class EagleVectorService {
       host,
       embeddingJobs,
       processingSetting,
+      processableRows,
     ] = await Promise.all([
       this.prisma.eagleAsset.count({
-        where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' } },
+        where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' }, ...visibleAsset },
       }),
       this.prisma.eagleAssetEmbedding.count({
-        where: { ownerId, isCurrent: true, status: 'READY', asset: { deletedAt: null } },
+        where: {
+          ownerId,
+          isCurrent: true,
+          status: 'READY',
+          asset: { deletedAt: null, ...visibleAsset },
+        },
       }),
       this.prisma.eagleAssetEmbedding.count({
-        where: { ownerId, isCurrent: true, status: 'FAILED', asset: { deletedAt: null } },
+        where: {
+          ownerId,
+          isCurrent: true,
+          status: 'FAILED',
+          asset: { deletedAt: null, ...visibleAsset },
+        },
       }),
       this.prisma.eagleManualTagSemanticConfig.count({
         where: { ownerId, recommendationEnabled: true },
@@ -48,10 +60,16 @@ export class EagleVectorService {
         where: { ownerId, recommendationEnabled: true, currentSnapshotId: { not: null } },
       }),
       this.prisma.eagleAsset.count({
-        where: { ownerId, deletedAt: null, manualTagLinks: { none: {} } },
+        where: { ownerId, deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
       }),
       this.prisma.eagleVectorTagSuggestion.count({
-        where: { ownerId, status: 'PENDING', isActive: true, invalidatedAt: null },
+        where: {
+          ownerId,
+          status: 'PENDING',
+          isActive: true,
+          invalidatedAt: null,
+          asset: visibleAsset,
+        },
       }),
       this.checkEmbeddingHost(),
       this.prisma.eagleAssetProcessingJob.groupBy({
@@ -60,11 +78,28 @@ export class EagleVectorService {
           ownerId,
           kind: 'GENERATE_EMBEDDING',
           processorVersion: EMBEDDING_PROCESSOR_VERSION,
-          asset: { deletedAt: null },
+          asset: { deletedAt: null, ...visibleAsset },
         },
         _count: true,
       }),
       this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } }),
+      this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
+        SELECT COUNT(*)::integer AS count
+        FROM "EagleAsset" AS asset
+        WHERE asset."ownerId" = ${ownerId}
+          AND asset."deletedAt" IS NULL
+          AND asset."mimeType" LIKE 'image/%'
+          AND (${includePrivate} OR asset."isPrivate" = false)
+          AND EXISTS (
+            SELECT 1
+            FROM "EagleAssetRendition" AS preview
+            WHERE preview."ownerId" = ${ownerId}
+              AND preview."assetId" = asset.id
+              AND preview.revision = asset."mediaRevision"
+              AND preview.kind = 'PREVIEW'
+              AND preview.status = 'READY'
+          )
+      `),
     ]);
     const countJobs = (status: string) =>
       embeddingJobs.find((row) => row.status === status)?._count ?? 0;
@@ -72,6 +107,7 @@ export class EagleVectorService {
     const running = countJobs('PROCESSING');
     const failedJobs = countJobs('FAILED');
     const effectiveFailed = Math.max(failed, failedJobs);
+    const processable = processableRows[0]?.count ?? 0;
     return {
       model: EAGLE_EMBEDDING_MODEL,
       dimensions: EAGLE_EMBEDDING_DIMENSIONS,
@@ -81,9 +117,10 @@ export class EagleVectorService {
         failed: effectiveFailed,
         queued,
         running,
-        missing: Math.max(0, eligible - ready - effectiveFailed - queued - running),
+        missing: Math.max(0, processable - ready - effectiveFailed - queued - running),
+        blocked: Math.max(0, eligible - processable),
         processing: queued + running,
-        percentage: eligible ? Math.round((ready / eligible) * 100) : 100,
+        percentage: eligible ? Math.round((ready / eligible) * 1_000) / 10 : 100,
       },
       processingSchedule: {
         mode: processingSetting?.mode ?? 'NIGHT',
@@ -115,8 +152,9 @@ export class EagleVectorService {
   }
 
   async scanMissingEmbeddings(ownerId: string) {
-    const [repaired, created] = await this.prisma.$transaction(async (transaction) => {
-      const repairedCount = await transaction.$executeRaw(Prisma.sql`
+    const [repaired, created] = await this.prisma.$transaction(
+      async (transaction) => {
+        const repairedCount = await transaction.$executeRaw(Prisma.sql`
         UPDATE "EagleMediaJob" AS job
         SET status = 'PENDING', attempts = 0, "availableAt" = CURRENT_TIMESTAMP,
             "lockedAt" = NULL, "startedAt" = NULL, "completedAt" = NULL,
@@ -141,7 +179,7 @@ export class EagleVectorService {
               AND embedding.status = 'READY'
           )
       `);
-      const createdCount = await transaction.$executeRaw(Prisma.sql`
+        const createdCount = await transaction.$executeRaw(Prisma.sql`
         INSERT INTO "EagleMediaJob" (
           id, "ownerId", "assetId", kind, status, lane, "assetRevision",
           "processorVersion", "dependsOnJobId", "createdAt", "updatedAt"
@@ -183,8 +221,10 @@ export class EagleVectorService {
           )
         ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
       `);
-      return [repairedCount, createdCount] as const;
-    });
+        return [repairedCount, createdCount] as const;
+      },
+      { timeout: 60_000 },
+    );
     return { scanned: repaired + created, created, repaired };
   }
 
@@ -222,7 +262,8 @@ export class EagleVectorService {
     }
   }
 
-  async listTagSemantics(ownerId: string, query?: string) {
+  async listTagSemantics(ownerId: string, query?: string, includePrivate = false) {
+    const visibleAsset = includePrivate ? {} : { isPrivate: false };
     const normalizedQuery = query?.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
     const where: Prisma.EagleManualTagWhereInput = normalizedQuery
       ? {
@@ -264,13 +305,13 @@ export class EagleVectorService {
         },
         _count: {
           select: {
-            assetLinks: { where: { asset: { deletedAt: null } } },
+            assetLinks: { where: { asset: { deletedAt: null, ...visibleAsset } } },
             vectorSuggestions: {
               where: {
                 status: 'PENDING',
                 isActive: true,
                 invalidatedAt: null,
-                asset: { deletedAt: null, manualTagLinks: { none: {} } },
+                asset: { deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
               },
             },
           },
@@ -373,7 +414,8 @@ export class EagleVectorService {
     });
   }
 
-  async listSuggestions(ownerId: string, query: ListVectorSuggestionsDto) {
+  async listSuggestions(ownerId: string, query: ListVectorSuggestionsDto, includePrivate = false) {
+    const visibleAsset = includePrivate ? {} : { isPrivate: false };
     const limit = query.limit ?? 40;
     const rows = await this.prisma.eagleVectorTagSuggestion.findMany({
       where: {
@@ -382,7 +424,7 @@ export class EagleVectorService {
         status: 'PENDING',
         isActive: true,
         invalidatedAt: null,
-        asset: { deletedAt: null, manualTagLinks: { none: {} } },
+        asset: { deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
       },
       orderBy:
         query.sort === 'NEWEST'
@@ -428,7 +470,7 @@ export class EagleVectorService {
     ];
     const representativeAssets = representativeIds.length
       ? await this.prisma.eagleAsset.findMany({
-          where: { ownerId, id: { in: representativeIds }, deletedAt: null },
+          where: { ownerId, id: { in: representativeIds }, deletedAt: null, ...visibleAsset },
           select: {
             id: true,
             displayName: true,
@@ -463,12 +505,17 @@ export class EagleVectorService {
     };
   }
 
-  async listUnclassified(ownerId: string, query: ListUnclassifiedVectorAssetsDto) {
+  async listUnclassified(
+    ownerId: string,
+    query: ListUnclassifiedVectorAssetsDto,
+    includePrivate = false,
+  ) {
     const limit = query.limit ?? 40;
     const rows = await this.prisma.eagleAsset.findMany({
       where: {
         ownerId,
         deletedAt: null,
+        ...(includePrivate ? {} : { isPrivate: false }),
         manualTagLinks: { none: {} },
         vectorSuggestions: {
           none: { status: 'PENDING', isActive: true, invalidatedAt: null },
@@ -499,7 +546,12 @@ export class EagleVectorService {
     return { items, nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null };
   }
 
-  async reviewSuggestion(ownerId: string, suggestionId: string, action: 'ACCEPT' | 'REJECT') {
+  async reviewSuggestion(
+    ownerId: string,
+    suggestionId: string,
+    action: 'ACCEPT' | 'REJECT',
+    includePrivate = false,
+  ) {
     const outcome = await this.prisma.$transaction(async (transaction) => {
       const suggestion = await transaction.eagleVectorTagSuggestion.findFirst({
         where: {
@@ -508,6 +560,7 @@ export class EagleVectorService {
           status: 'PENDING',
           isActive: true,
           invalidatedAt: null,
+          asset: includePrivate ? {} : { isPrivate: false },
         },
         include: {
           embedding: { select: { isCurrent: true, status: true } },
@@ -605,15 +658,25 @@ export class EagleVectorService {
     return outcome;
   }
 
-  async reviewSuggestions(ownerId: string, suggestionIds: string[], action: 'ACCEPT' | 'REJECT') {
+  async reviewSuggestions(
+    ownerId: string,
+    suggestionIds: string[],
+    action: 'ACCEPT' | 'REJECT',
+    includePrivate = false,
+  ) {
     const results = [];
     for (const suggestionId of suggestionIds) {
-      results.push(await this.reviewSuggestion(ownerId, suggestionId, action));
+      results.push(await this.reviewSuggestion(ownerId, suggestionId, action, includePrivate));
     }
     return { items: results };
   }
 
-  async listTagDistanceAssets(ownerId: string, tagId: string, query: ListTagDistanceAssetsDto) {
+  async listTagDistanceAssets(
+    ownerId: string,
+    tagId: string,
+    query: ListTagDistanceAssetsDto,
+    includePrivate = false,
+  ) {
     const tag = await this.prisma.eagleManualTag.findFirst({
       where: { ownerId, id: tagId },
       select: { semanticConfig: { select: { currentSnapshotId: true } } },
@@ -628,7 +691,7 @@ export class EagleVectorService {
       ownerId,
       tagId,
       snapshotId,
-      asset: { deletedAt: null },
+      asset: { deletedAt: null, ...(includePrivate ? {} : { isPrivate: false }) },
       ...(cursor
         ? {
             OR: [

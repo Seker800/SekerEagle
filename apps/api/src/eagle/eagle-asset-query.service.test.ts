@@ -44,7 +44,8 @@ test('ANY tag matching combines every selected manual and AI tag into one union'
     tagMatch: 'ANY',
   });
 
-  const conditions = queries[0]?.where.AND as Array<Record<string, unknown>>;
+  const baseWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[0]!;
+  const conditions = baseWhere.AND as Array<Record<string, unknown>>;
   const tagUnion = conditions.find((condition) => Array.isArray(condition.OR))?.OR as unknown[];
   assert.equal(tagUnion.length, 3);
 });
@@ -68,6 +69,33 @@ test('color filtering reports original global image-analysis coverage', async ()
   });
 });
 
+test('rule count is owner scoped even when the query itself has no owner field', async () => {
+  let where: unknown;
+  const service = new EagleService({
+    eagleAsset: {
+      count: async (input: { where: unknown }) => {
+        where = input.where;
+        return 7;
+      },
+    },
+  } as never);
+
+  const result = await service.countAssets('owner-1', {
+    version: 2,
+    conditions: [
+      {
+        id: 'condition-1',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [{ id: 'rule-1', field: 'FORMAT', operator: 'EQUALS', value: 'png' }],
+      },
+    ],
+  });
+
+  assert.equal(result.count, 7);
+  assert.equal((where as { ownerId: string }).ownerId, 'owner-1');
+});
+
 test('asset listing only loads relations required by gallery cards', async () => {
   let include: Record<string, unknown> | undefined;
   const service = new EagleService({
@@ -82,6 +110,45 @@ test('asset listing only loads relations required by gallery cards', async () =>
   await service.listAssets('owner-1', { limit: 40 });
 
   assert.deepEqual(Object.keys(include ?? {}).sort(), ['manualTagLinks', 'renditions']);
+});
+
+test('private assets are excluded by default and only enter queries during a visibility window', async () => {
+  const queries: Array<{ where: Record<string, unknown> }> = [];
+  const service = new EagleService({
+    eagleAsset: {
+      findMany: async (query: { where: Record<string, unknown> }) => {
+        queries.push(query);
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listAssets('owner-1', { limit: 30 });
+  await service.listAssets('owner-1', { limit: 30 }, { includePrivate: true });
+  await service.listAssets('owner-1', { limit: 30, privacy: 'PRIVATE' }, { includePrivate: true });
+
+  const lockedBase = (queries[0]?.where.AND as Array<Record<string, unknown>>)[0];
+  const unlockedBase = (queries[1]?.where.AND as Array<Record<string, unknown>>)[0];
+  const privateOnlyBase = (queries[2]?.where.AND as Array<Record<string, unknown>>)[0];
+  assert.equal(lockedBase?.isPrivate, false);
+  assert.equal(unlockedBase?.isPrivate, undefined);
+  assert.equal(privateOnlyBase?.isPrivate, true);
+});
+
+test('tag counts exclude private assets while visibility is locked', async () => {
+  let query: unknown;
+  const service = new EagleService({
+    eagleManualTag: {
+      findMany: async (input: unknown) => {
+        query = input;
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listManualTags('owner-1');
+
+  assert.match(JSON.stringify(query), /"isPrivate":false/);
 });
 
 test('smart folder creation rejects a missing owner-scoped tag before writing', async () => {

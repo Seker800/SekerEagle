@@ -5,9 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   BatchChangeEagleManualTagsDto,
+  BatchSetEagleAssetPrivacyDto,
   BatchUpdateEagleAssetsDto,
   CreateManualTagDto,
   CreateManualTagGroupDto,
@@ -23,6 +25,11 @@ import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
 import { syncCurrentTagMemberDistances } from './eagle-vector.persistence';
+import {
+  buildEagleFilterWhere,
+  readEagleFilterQuery,
+  readEagleFilterTagDependencies,
+} from './eagle-filter-query';
 
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   renditions: {
@@ -61,12 +68,14 @@ const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
 
 type AssetListRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>;
 type AssetRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetInclude }>;
+type AssetListOptions = { trash?: boolean; includePrivate?: boolean };
 
 @Injectable()
 export class EagleService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async listAssets(ownerId: string, query: ListEagleAssetsDto, trash = false) {
+  async listAssets(ownerId: string, query: ListEagleAssetsDto, options: AssetListOptions = {}) {
+    const { trash = false, includePrivate = false } = options;
     const smartFolder = query.smartFolderId
       ? await this.prisma.eagleSmartFolder.findFirst({
           where: { ownerId, id: query.smartFolderId },
@@ -80,15 +89,27 @@ export class EagleService {
         })
       : null;
     if (query.smartFolderId && !smartFolder) throw new NotFoundException('智能文件夹不存在。');
-    const folderFilters = smartFolder
-      ? [smartFolder.queryJson, ...smartFolder.children.map(({ queryJson }) => queryJson)].map(
-          readSmartFolderFilters,
-        )
+    const folderQueries = smartFolder
+      ? [smartFolder.queryJson, ...smartFolder.children.map(({ queryJson }) => queryJson)]
       : [];
-    const filters = omitRepeatedSmartFolderFilters(query, folderFilters);
+    const legacyFolderFilters = folderQueries
+      .filter((storedQuery) => !isEagleFilterQuery(storedQuery))
+      .map(readSmartFolderFilters);
+    const filters = omitRepeatedSmartFolderFilters(query, legacyFolderFilters);
     const cursor = query.cursor ? decodeEagleAssetCursor(query.cursor) : null;
-    const baseWhere = buildAssetWhere(ownerId, filters, trash);
-    const folderConditions = folderFilters.map((folder) => buildAssetWhere(ownerId, folder, trash));
+    const baseConditions: Prisma.EagleAssetWhereInput[] = [
+      buildAssetWhere(ownerId, filters, trash, includePrivate),
+    ];
+    const ruleQuery = query.rules ? parseEncodedFilterQuery(query.rules) : null;
+    if (ruleQuery) baseConditions.push(buildEagleFilterWhere(ruleQuery));
+    const filterColor =
+      query.color ??
+      readFilterColor(ruleQuery) ??
+      folderQueries.map(readStoredFilterColor).find((value) => value !== undefined);
+    const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
+    const folderConditions = folderQueries.map((folder) =>
+      buildStoredSmartFolderWhere(ownerId, folder, trash, includePrivate),
+    );
     const folderWhere =
       folderConditions.length === 0
         ? null
@@ -116,19 +137,28 @@ export class EagleService {
         orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
       }),
-      query.color
+      filterColor
         ? this.prisma.eagleAsset.count({
-            where: { ownerId, deletedAt: null, mimeType: { not: 'video/mp4' } },
+            where: {
+              ownerId,
+              deletedAt: null,
+              mimeType: { not: 'video/mp4' },
+              ...privateVisibilityWhere(includePrivate),
+            },
           })
         : Promise.resolve(0),
-      query.color
+      filterColor
         ? this.prisma.eagleAssetColorAnalysis.count({
             where: {
               ownerId,
               processorVersion: COLOR_PROCESSOR_VERSION,
               isCurrent: true,
               status: 'COMPLETED',
-              asset: { deletedAt: null, mimeType: { not: 'video/mp4' } },
+              asset: {
+                deletedAt: null,
+                mimeType: { not: 'video/mp4' },
+                ...privateVisibilityWhere(includePrivate),
+              },
             },
           })
         : Promise.resolve(0),
@@ -138,7 +168,7 @@ export class EagleService {
     return {
       items: page.map(serializeAssetList),
       nextCursor: hasMore && page.length ? encodeEagleAssetCursor(page.at(-1)!) : null,
-      colorCoverage: query.color
+      colorCoverage: filterColor
         ? {
             eligible: colorEligible,
             completed: colorCompleted,
@@ -149,13 +179,33 @@ export class EagleService {
     };
   }
 
-  async getAsset(ownerId: string, assetId: string, trash = false) {
+  async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
+    const query = readEagleFilterQuery(input);
+    return {
+      count: await this.prisma.eagleAsset.count({
+        where: {
+          ownerId,
+          deletedAt: null,
+          ...privateVisibilityWhere(includePrivate),
+          ...buildEagleFilterWhere(query),
+        },
+      }),
+    };
+  }
+
+  async getAsset(
+    ownerId: string,
+    assetId: string,
+    options: { trash?: boolean; includePrivate?: boolean } = {},
+  ) {
+    const { trash = false, includePrivate = false } = options;
     const asset = await this.prisma.eagleAsset.findFirst({
       where: {
         ownerId,
         id: assetId,
         deletedAt: trash ? { not: null } : null,
         purgeAfter: trash ? null : undefined,
+        ...privateVisibilityWhere(includePrivate),
       },
       include: assetInclude,
     });
@@ -163,11 +213,22 @@ export class EagleService {
     return serializeAsset(asset);
   }
 
-  async updateAsset(ownerId: string, assetId: string, input: UpdateEagleAssetDto) {
+  async updateAsset(
+    ownerId: string,
+    assetId: string,
+    input: UpdateEagleAssetDto,
+    includePrivate = false,
+  ) {
     const { data, annotation } = buildAssetChanges(input);
     await this.prisma.$transaction(async (transaction) => {
       const updated = await transaction.eagleAsset.updateMany({
-        where: { ownerId, id: assetId, deletedAt: null, rowVersion: input.rowVersion },
+        where: {
+          ownerId,
+          id: assetId,
+          deletedAt: null,
+          rowVersion: input.rowVersion,
+          ...privateVisibilityWhere(includePrivate),
+        },
         data: { ...data, rowVersion: { increment: 1 } },
       });
       if (updated.count !== 1) await this.throwAssetWriteError(transaction, ownerId, assetId);
@@ -179,13 +240,18 @@ export class EagleService {
         });
       }
     });
-    return this.getAsset(ownerId, assetId);
+    return this.getAsset(ownerId, assetId, { includePrivate });
   }
 
-  listUpdates(ownerId: string, assetIds: string[]) {
+  listUpdates(ownerId: string, assetIds: string[], includePrivate = false) {
     return this.prisma.eagleAsset
       .findMany({
-        where: { ownerId, id: { in: assetIds }, deletedAt: null },
+        where: {
+          ownerId,
+          id: { in: assetIds },
+          deletedAt: null,
+          ...privateVisibilityWhere(includePrivate),
+        },
         select: {
           id: true,
           lifecycleStatus: true,
@@ -217,11 +283,16 @@ export class EagleService {
       );
   }
 
-  async batchUpdate(ownerId: string, input: BatchUpdateEagleAssetsDto) {
+  async batchUpdate(ownerId: string, input: BatchUpdateEagleAssetsDto, includePrivate = false) {
     const { data, annotation } = buildAssetChanges(input);
     const updatedAssets = await this.prisma.$transaction(async (transaction) => {
       const current = await transaction.eagleAsset.findMany({
-        where: { ownerId, id: { in: input.assets.map(({ assetId }) => assetId) }, deletedAt: null },
+        where: {
+          ownerId,
+          id: { in: input.assets.map(({ assetId }) => assetId) },
+          deletedAt: null,
+          ...privateVisibilityWhere(includePrivate),
+        },
         select: { id: true, rowVersion: true },
       });
       if (current.length !== input.assets.length)
@@ -234,6 +305,7 @@ export class EagleService {
         where: {
           ownerId,
           deletedAt: null,
+          ...privateVisibilityWhere(includePrivate),
           OR: input.assets.map(({ assetId, rowVersion }) => ({ id: assetId, rowVersion })),
         },
         data: { ...data, rowVersion: { increment: 1 } },
@@ -255,11 +327,59 @@ export class EagleService {
     return { affectedAssetCount: updatedAssets.length, assets: updatedAssets };
   }
 
-  async batchChangeManualTags(ownerId: string, input: BatchChangeEagleManualTagsDto) {
+  async batchSetPrivacy(
+    ownerId: string,
+    input: BatchSetEagleAssetPrivacyDto,
+    includePrivate = false,
+  ) {
+    const current = await this.prisma.eagleAsset.findMany({
+      where: {
+        ownerId,
+        id: { in: input.assets.map(({ assetId }) => assetId) },
+        deletedAt: null,
+        ...privateVisibilityWhere(includePrivate),
+      },
+      select: { id: true, rowVersion: true },
+    });
+    if (current.length !== input.assets.length) {
+      throw new NotFoundException('一个或多个素材不存在。');
+    }
+    const versions = new Map(current.map(({ id, rowVersion }) => [id, rowVersion]));
+    if (input.assets.some(({ assetId, rowVersion }) => versions.get(assetId) !== rowVersion)) {
+      throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
+    }
+    const updated = await this.prisma.eagleAsset.updateMany({
+      where: {
+        ownerId,
+        deletedAt: null,
+        OR: input.assets.map(({ assetId, rowVersion }) => ({ id: assetId, rowVersion })),
+        ...privateVisibilityWhere(includePrivate),
+      },
+      data: { isPrivate: input.isPrivate, rowVersion: { increment: 1 } },
+    });
+    if (updated.count !== input.assets.length) {
+      throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
+    }
+    return {
+      affectedAssetCount: updated.count,
+      assets: current.map(({ id, rowVersion }) => ({ assetId: id, rowVersion: rowVersion + 1 })),
+    };
+  }
+
+  async batchChangeManualTags(
+    ownerId: string,
+    input: BatchChangeEagleManualTagsDto,
+    includePrivate = false,
+  ) {
     const tagIds = [...new Set([...input.addTagIds, ...input.removeTagIds])];
     const [assets, tags] = await Promise.all([
       this.prisma.eagleAsset.findMany({
-        where: { ownerId, id: { in: input.assetIds }, deletedAt: null },
+        where: {
+          ownerId,
+          id: { in: input.assetIds },
+          deletedAt: null,
+          ...privateVisibilityWhere(includePrivate),
+        },
         select: { id: true },
       }),
       this.prisma.eagleManualTag.findMany({
@@ -296,7 +416,7 @@ export class EagleService {
     return { affectedAssetCount: input.assetIds.length };
   }
 
-  async setTrash(ownerId: string, assetIds: string[], restore: boolean) {
+  async setTrash(ownerId: string, assetIds: string[], restore: boolean, includePrivate = false) {
     const ids = [...new Set(assetIds)];
     if (ids.length !== assetIds.length) throw new BadRequestException('素材 ID 不能重复。');
     const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
@@ -306,6 +426,7 @@ export class EagleService {
           id: { in: ids },
           deletedAt: restore ? { not: null } : null,
           purgeAfter: restore ? null : undefined,
+          ...privateVisibilityWhere(includePrivate),
         },
         data: {
           deletedAt: restore ? null : new Date(),
@@ -347,7 +468,7 @@ export class EagleService {
     return { affectedAssetCount };
   }
 
-  async listManualTags(ownerId: string) {
+  async listManualTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleManualTag.findMany({
       where: { ownerId },
       orderBy: [{ isStarred: 'desc' }, { normalizedName: 'asc' }],
@@ -359,7 +480,13 @@ export class EagleService {
         groupMemberships: { orderBy: { groupId: 'asc' }, select: { groupId: true } },
         isStarred: true,
         rowVersion: true,
-        _count: { select: { assetLinks: { where: { asset: { deletedAt: null } } } } },
+        _count: {
+          select: {
+            assetLinks: {
+              where: { asset: { deletedAt: null, ...privateVisibilityWhere(includePrivate) } },
+            },
+          },
+        },
       },
     });
     return tags.map(({ groupMemberships, _count, ...tag }) => ({
@@ -395,7 +522,12 @@ export class EagleService {
     }
   }
 
-  async updateManualTag(ownerId: string, tagId: string, input: UpdateManualTagDto) {
+  async updateManualTag(
+    ownerId: string,
+    tagId: string,
+    input: UpdateManualTagDto,
+    includePrivate = false,
+  ) {
     const current = await this.prisma.eagleManualTag.findFirst({ where: { ownerId, id: tagId } });
     if (!current) throw new NotFoundException('标签不存在。');
     const name =
@@ -442,7 +574,13 @@ export class EagleService {
         groupMemberships: { orderBy: { groupId: 'asc' }, select: { groupId: true } },
         isStarred: true,
         rowVersion: true,
-        _count: { select: { assetLinks: { where: { asset: { deletedAt: null } } } } },
+        _count: {
+          select: {
+            assetLinks: {
+              where: { asset: { deletedAt: null, ...privateVisibilityWhere(includePrivate) } },
+            },
+          },
+        },
       },
     });
     const { groupMemberships, _count, ...fields } = tag;
@@ -551,13 +689,20 @@ export class EagleService {
     return { deletedId: groupId };
   }
 
-  async listAiTags(ownerId: string) {
+  async listAiTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleAiTag.findMany({
       where: { ownerId },
       orderBy: { normalizedName: 'asc' },
       include: {
         _count: {
-          select: { assetLinks: { where: { status: 'ACTIVE', asset: { deletedAt: null } } } },
+          select: {
+            assetLinks: {
+              where: {
+                status: 'ACTIVE',
+                asset: { deletedAt: null, ...privateVisibilityWhere(includePrivate) },
+              },
+            },
+          },
         },
       },
     });
@@ -568,13 +713,23 @@ export class EagleService {
     }));
   }
 
-  async replaceAssetTags(ownerId: string, assetId: string, tagIds: string[]) {
+  async replaceAssetTags(
+    ownerId: string,
+    assetId: string,
+    tagIds: string[],
+    includePrivate = false,
+  ) {
     const ids = [...new Set(tagIds)];
     if (ids.length !== tagIds.length) throw new BadRequestException('标签不能重复。');
     await this.prisma.$transaction(async (transaction) => {
       const [asset, tagCount] = await Promise.all([
         transaction.eagleAsset.findFirst({
-          where: { ownerId, id: assetId, deletedAt: null },
+          where: {
+            ownerId,
+            id: assetId,
+            deletedAt: null,
+            ...privateVisibilityWhere(includePrivate),
+          },
           select: { id: true },
         }),
         transaction.eagleManualTag.count({ where: { ownerId, id: { in: ids } } }),
@@ -589,7 +744,7 @@ export class EagleService {
         await syncCurrentTagMemberDistances(transaction, ownerId, [assetId], ids);
       }
     });
-    return this.getAsset(ownerId, assetId);
+    return this.getAsset(ownerId, assetId, { includePrivate });
   }
 
   listSmartFolders(ownerId: string) {
@@ -618,6 +773,7 @@ export class EagleService {
             name,
             normalizedName: normalizeKey(name),
             color: normalizeColor(input.color),
+            queryVersion: readStoredQueryVersion(queryJson),
             queryJson,
             position: (position._max.position ?? -1) + 1,
           },
@@ -669,6 +825,7 @@ export class EagleService {
             name,
             normalizedName: normalizeKey(name),
             color: input.color === undefined ? undefined : normalizeColor(input.color),
+            queryVersion: queryJson ? readStoredQueryVersion(queryJson) : undefined,
             queryJson,
             rowVersion: { increment: 1 },
           },
@@ -926,10 +1083,62 @@ function readSmartFolderFilters(value: Prisma.JsonValue): StoredAssetFilters {
   return { ...filters, color: filters.color ?? filters.assetColor };
 }
 
+function isEagleFilterQuery(value: Prisma.JsonValue): boolean {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    (value as Record<string, Prisma.JsonValue>).version === EAGLE_FILTER_QUERY_VERSION,
+  );
+}
+
+function parseEncodedFilterQuery(value: string): EagleFilterQuery {
+  try {
+    return readEagleFilterQuery(JSON.parse(value) as unknown);
+  } catch (error) {
+    if (error instanceof BadRequestException) throw error;
+    throw new BadRequestException('筛选规则 JSON 无效。');
+  }
+}
+
+function readFilterColor(query: EagleFilterQuery | null): string | undefined {
+  for (const condition of query?.conditions ?? []) {
+    const colorRule = condition.rules.find(
+      (rule) => rule.field === 'COLOR' && typeof rule.value === 'string',
+    );
+    if (typeof colorRule?.value === 'string') return colorRule.value;
+  }
+  return undefined;
+}
+
+function readStoredFilterColor(query: Prisma.JsonValue): string | undefined {
+  return isEagleFilterQuery(query)
+    ? readFilterColor(readEagleFilterQuery(query))
+    : readSmartFolderFilters(query).color;
+}
+
+function buildStoredSmartFolderWhere(
+  ownerId: string,
+  query: Prisma.JsonValue,
+  trash: boolean,
+  includePrivate: boolean,
+): Prisma.EagleAssetWhereInput {
+  return isEagleFilterQuery(query)
+    ? {
+        ownerId,
+        deletedAt: trash ? { not: null } : null,
+        ...(trash ? { purgeAfter: null } : {}),
+        ...privateVisibilityWhere(includePrivate),
+        ...buildEagleFilterWhere(readEagleFilterQuery(query)),
+      }
+    : buildAssetWhere(ownerId, readSmartFolderFilters(query), trash, includePrivate);
+}
+
 function buildAssetWhere(
   ownerId: string,
   filters: StoredAssetFilters,
   trash: boolean,
+  includePrivate: boolean,
 ): Prisma.EagleAssetWhereInput {
   const conditions: Prisma.EagleAssetWhereInput[] = [];
   const search = filters.search?.normalize('NFKC').trim();
@@ -976,12 +1185,20 @@ function buildAssetWhere(
   const libraryAddedAt = dateRangeFilter(filters.createdFrom, filters.createdTo);
   if (libraryAddedAt) conditions.push({ libraryAddedAt });
   if (filters.color) conditions.push({ colorAnalyses: buildColorAnalysisWhere(filters.color) });
+  if (filters.privacy === 'PRIVATE' && !includePrivate) conditions.push({ isPrivate: true });
   return {
     ownerId,
     deletedAt: trash ? { not: null } : null,
     ...(trash ? { purgeAfter: null } : {}),
+    ...(filters.privacy === 'PRIVATE' && includePrivate
+      ? { isPrivate: true }
+      : privateVisibilityWhere(includePrivate)),
     ...(conditions.length ? { AND: conditions } : {}),
   };
+}
+
+function privateVisibilityWhere(includePrivate: boolean): { isPrivate?: false } {
+  return includePrivate ? {} : { isPrivate: false };
 }
 
 function omitRepeatedSmartFolderFilters(
@@ -1121,6 +1338,9 @@ function normalizeSmartFolderQuery(
   query: Record<string, unknown>,
   defaultTagMatch?: 'ANY' | 'ALL',
 ): Prisma.InputJsonValue {
+  if (query.version === EAGLE_FILTER_QUERY_VERSION) {
+    return JSON.parse(JSON.stringify(readEagleFilterQuery(query))) as Prisma.InputJsonObject;
+  }
   const candidate =
     query.version === 1 && query.filters && typeof query.filters === 'object'
       ? (query.filters as Record<string, unknown>)
@@ -1162,6 +1382,9 @@ function readSmartFolderDependencies(query: Prisma.InputJsonValue): SmartFolderD
   if (!query || typeof query !== 'object' || Array.isArray(query))
     throw new BadRequestException('智能文件夹条件无效。');
   const root = query as Prisma.InputJsonObject;
+  if (root.version === EAGLE_FILTER_QUERY_VERSION) {
+    return readEagleFilterTagDependencies(readEagleFilterQuery(root));
+  }
   const filters = root.filters;
   if (!filters || typeof filters !== 'object' || Array.isArray(filters))
     throw new BadRequestException('智能文件夹条件无效。');
@@ -1170,6 +1393,15 @@ function readSmartFolderDependencies(query: Prisma.InputJsonValue): SmartFolderD
     manualTagIds: readUniqueStringArray(record.manualTagIds, '人工标签'),
     aiTagIds: readUniqueStringArray(record.aiTagIds, 'AI 标签'),
   };
+}
+
+function readStoredQueryVersion(query: Prisma.InputJsonValue): number {
+  return query &&
+    typeof query === 'object' &&
+    !Array.isArray(query) &&
+    (query as Prisma.InputJsonObject).version === 2
+    ? 2
+    : 1;
 }
 
 function readUniqueStringArray(

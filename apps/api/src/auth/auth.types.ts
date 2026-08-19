@@ -10,6 +10,8 @@ export interface AuthPrincipal {
   authVersion: number;
   kind: 'browser' | 'pat';
   scopes: PatScope[];
+  canViewPrivate: boolean;
+  privacyVisibleUntil: string | null;
 }
 
 export interface BrowserSession {

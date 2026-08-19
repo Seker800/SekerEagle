@@ -191,6 +191,18 @@
   color: var(--eagle-muted);
   font-size: 12px;
 }
+.titleBlock .privacyStatus {
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid rgb(104 151 220 / 35%);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #a9c9f5;
+  background: rgb(65 105 164 / 14%);
+  white-space: nowrap;
+}
 .searchBox {
   min-width: 160px;
   max-width: 420px;
@@ -305,91 +317,6 @@
   color: #e8a0a0;
   background: rgb(232 141 141 / 7%);
   font-size: 12px;
-}
-.filterPanel {
-  max-height: min(520px, calc(100dvh - 180px));
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--eagle-line);
-  display: grid;
-  grid-template-columns: repeat(2, minmax(250px, 1fr));
-  gap: 12px 20px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  background: #151619;
-  font-size: 12px;
-}
-.filterPanel > div {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.filterPanel strong {
-  min-width: 58px;
-  color: #8c9199;
-  font-size: 11px;
-}
-.filterChoices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-.filterChoices button {
-  min-height: 27px;
-  padding: 0 8px;
-  border: 1px solid var(--eagle-line);
-  border-radius: 6px;
-  color: #989da5;
-  background: #1f2125;
-  cursor: pointer;
-  font-size: 10px;
-}
-.filterChoices .choiceActive {
-  border-color: rgb(214 155 72 / 50%);
-  color: #f0ca94;
-  background: rgb(214 155 72 / 12%);
-}
-.filterEmpty {
-  color: #666c75;
-  font-size: 10px;
-  font-style: normal;
-}
-.rangeFields label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: #737982;
-  font-size: 10px;
-}
-.rangeFields input {
-  width: 105px;
-  height: 28px;
-  padding: 0 7px;
-  border: 1px solid var(--eagle-line);
-  border-radius: 6px;
-  outline: 0;
-  color: #c9ccd1;
-  background: #0f1012;
-  font-size: 11px;
-  color-scheme: dark;
-}
-.rangeFields input:focus {
-  border-color: rgb(214 155 72 / 55%);
-}
-.filterPanel .resetFilters {
-  justify-self: end;
-  padding: 0;
-  border: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #858a92;
-  background: transparent;
-  cursor: pointer;
-  font-size: 11px;
-}
-.filterPanel .resetFilters:disabled {
-  opacity: 0.35;
-  cursor: default;
 }
 .assetViewport {
   min-width: 0;
@@ -525,6 +452,21 @@
   color: #d7d9dd;
   background: rgb(8 9 10 / 78%);
   font-size: 10px;
+}
+.privateMark {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 50%;
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: #d8e8ff;
+  background: rgb(14 18 25 / 72%);
+  backdrop-filter: blur(5px);
 }
 
 .emptyState {
@@ -882,9 +824,6 @@
   }
   .workspaceWide {
     grid-template-columns: 190px minmax(0, 1fr);
-  }
-  .filterPanel {
-    grid-template-columns: 1fr;
   }
 }
 

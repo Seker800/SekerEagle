@@ -59,6 +59,38 @@
         "tags": ["auth"]
       }
     },
+    "/api/auth/privacy-visibility": {
+      "get": {
+        "operationId": "AuthController_privacyVisibilityStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["auth"]
+      },
+      "put": {
+        "operationId": "AuthController_updatePrivacyVisibility",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePrivacyVisibilityDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["auth"]
+      }
+    },
     "/api/auth/me/password": {
       "patch": {
         "operationId": "AuthController_changePassword",
@@ -288,10 +320,56 @@
               "maxLength": 32,
               "type": "string"
             }
+          },
+          {
+            "name": "privacy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["PRIVATE"]
+            }
+          },
+          {
+            "name": "rules",
+            "required": false,
+            "in": "query",
+            "description": "JSON encoded Eagle filter query",
+            "schema": {
+              "maxLength": 12000,
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/assets/filter-count": {
+      "post": {
+        "operationId": "EagleController_countAssets",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CountEagleAssetsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -662,6 +740,33 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/batch/privacy": {
+      "patch": {
+        "operationId": "EagleController_setAssetPrivacy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchSetEagleAssetPrivacyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/trash": {
       "post": {
         "operationId": "EagleController_trashAssets",
@@ -794,6 +899,25 @@
             "in": "query",
             "schema": {
               "maxLength": 32,
+              "type": "string"
+            }
+          },
+          {
+            "name": "privacy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["PRIVATE"]
+            }
+          },
+          {
+            "name": "rules",
+            "required": false,
+            "in": "query",
+            "description": "JSON encoded Eagle filter query",
+            "schema": {
+              "maxLength": 12000,
               "type": "string"
             }
           }
@@ -2742,6 +2866,20 @@
         },
         "required": ["email", "password"]
       },
+      "UpdatePrivacyVisibilityDto": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "durationHours": {
+            "type": "number",
+            "enum": [1, 3, 6, 12, 24],
+            "default": 3
+          }
+        },
+        "required": ["enabled", "durationHours"]
+      },
       "ChangePasswordDto": {
         "type": "object",
         "properties": {
@@ -2816,12 +2954,6 @@
               "type": "string",
               "enum": ["import:read", "import:write", "asset:write", "capture:write"]
             }
-          },
-          "expiresInDays": {
-            "type": "object",
-            "minimum": 1,
-            "maximum": 90,
-            "default": 90
           }
         },
         "required": ["name", "scopes"]
@@ -2829,6 +2961,16 @@
       "Object": {
         "type": "object",
         "properties": {}
+      },
+      "CountEagleAssetsDto": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["query"]
       },
       "EagleAssetIdsDto": {
         "type": "object",
@@ -2882,6 +3024,10 @@
           }
         },
         "required": ["rowVersion"]
+      },
+      "BatchSetEagleAssetPrivacyDto": {
+        "type": "object",
+        "properties": {}
       },
       "CreateManualTagDto": {
         "type": "object",

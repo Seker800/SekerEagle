@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
-import { ACCESS_COOKIE_NAME, REFRESH_COOKIE_NAME } from './auth.constants';
+import {
+  ACCESS_COOKIE_NAME,
+  PRIVACY_VISIBILITY_COOKIE_NAME,
+  REFRESH_COOKIE_NAME,
+} from './auth.constants';
 import type { BrowserSession } from './auth.types';
 
 @Injectable()
@@ -24,6 +28,7 @@ export class BrowserSessionService {
   clear(response: Response): void {
     response.clearCookie(ACCESS_COOKIE_NAME, { ...this.options(), path: '/' });
     response.clearCookie(REFRESH_COOKIE_NAME, { ...this.options(), path: '/api/auth' });
+    response.clearCookie(PRIVACY_VISIBILITY_COOKIE_NAME, { ...this.options(), path: '/api' });
   }
 
   refreshToken(request: Request): string | undefined {

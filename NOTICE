@@ -1,0 +1,8 @@
+SekerEagle
+Copyright 2026 SekerEagle contributors
+
+This product includes software developed by third parties. See
+THIRD_PARTY_NOTICES.md for the dependency and model licensing boundary.
+
+The services/mlx-embedding component is not licensed under Apache-2.0. It is
+licensed separately under GPL-3.0-only; see services/mlx-embedding/LICENSE.

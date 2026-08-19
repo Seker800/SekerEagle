@@ -52,14 +52,99 @@
 .workerState small {
   color: var(--text-muted);
 }
+.navigationBar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 5px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 2%);
+}
+.tab,
+.tabActive {
+  min-width: 0;
+  min-height: 55px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  display: grid;
+  gap: 3px;
+  color: var(--text-dim);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.tab strong,
+.tabActive strong {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+.tab span,
+.tabActive span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab:hover {
+  background: rgb(255 255 255 / 3%);
+}
+.tabActive {
+  border-color: rgb(214 155 72 / 34%);
+  background: rgb(214 155 72 / 10%);
+}
+.tabActive strong {
+  color: #f0c78c;
+}
+.taskCenterButton,
+.taskCenterActive {
+  min-width: 150px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 11px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  color: var(--text-soft);
+  background: rgb(255 255 255 / 2%);
+  text-align: left;
+  cursor: pointer;
+}
+.taskCenterButton small,
+.taskCenterActive small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+.taskCenterActive {
+  border-color: rgb(214 155 72 / 34%);
+  background: rgb(214 155 72 / 10%);
+}
+.tab:focus-visible,
+.tabActive:focus-visible,
+.taskCenterButton:focus-visible,
+.taskCenterActive:focus-visible,
+.tabPanel:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.tabPanel {
+  min-width: 0;
+}
+.tabPanel[hidden] {
+  display: none;
+}
 .contentBlock {
   display: grid;
   gap: 10px;
   min-width: 0;
-}
-.contentBlock + .contentBlock {
-  padding-top: 14px;
-  border-top: 1px solid var(--line-subtle);
 }
 .sectionHeading {
   display: flex;
@@ -79,7 +164,7 @@
 }
 .capabilityGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .capability {
@@ -122,12 +207,112 @@
   color: #e8c38d;
   background: rgb(214 155 72 / 10%);
 }
+.capability[data-state='warning'] .capabilityState,
+.featureStatus[data-state='warning'] .capabilityState {
+  color: #f1a3a6;
+  background: rgb(242 63 67 / 10%);
+}
+.featureStatus[data-state='ondemand'] .capabilityState {
+  color: #e8c38d;
+  background: rgb(214 155 72 / 10%);
+}
 .capability[data-state='disabled'] {
   opacity: 0.72;
 }
 .capability[data-state='disabled'] .capabilityState {
   color: #9ca1aa;
   background: rgb(255 255 255 / 6%);
+}
+.featureStatus {
+  padding: 16px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+  background: rgb(255 255 255 / 2%);
+}
+.featureStatus h3 {
+  margin: 9px 0 5px;
+  color: var(--text-strong);
+  font-size: 14px;
+}
+.featureStatus p,
+.featureHint {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.coverageMetric {
+  min-width: 130px;
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+}
+.coverageMetric strong {
+  color: var(--text-strong);
+  font-size: 30px;
+  line-height: 1;
+}
+.coverageMetric span,
+.coverageMetric small {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+.coverageMetric small {
+  color: var(--text-muted);
+}
+.featureHint {
+  padding: 0 3px;
+  color: var(--text-muted);
+}
+.taskCenter {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.taskCenterHeading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.taskCenterHeading h2 {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 15px;
+}
+.taskCenterHeading p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.taskTabs {
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 8px;
+  display: flex;
+  gap: 3px;
+  background: rgb(255 255 255 / 2%);
+}
+.taskTabs button {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+.taskTabs button[data-active='true'] {
+  color: var(--text-soft);
+  background: rgb(255 255 255 / 7%);
+}
+.contentBlock[hidden] {
+  display: none;
 }
 .metrics {
   display: grid;
@@ -336,6 +521,13 @@
   }
 }
 @media (max-width: 900px) {
+  .navigationBar {
+    grid-template-columns: 1fr;
+  }
+  .taskCenterButton,
+  .taskCenterActive {
+    min-width: 0;
+  }
   .capabilityGrid,
   .metrics {
     grid-template-columns: repeat(2, minmax(110px, 1fr));
@@ -345,5 +537,29 @@
   }
   .header {
     align-items: start;
+  }
+}
+@media (max-width: 560px) {
+  .section {
+    padding: 12px;
+  }
+  .capabilityGrid,
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+  .tab,
+  .tabActive {
+    min-height: 48px;
+  }
+  .featureStatus {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .coverageMetric {
+    justify-items: start;
+  }
+  .taskCenterHeading {
+    align-items: start;
+    flex-direction: column;
   }
 }

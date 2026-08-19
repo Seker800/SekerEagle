@@ -8,10 +8,10 @@
   backdrop-filter: blur(6px);
 }
 .dialog {
-  width: min(920px, calc(100vw - 32px));
+  width: min(1180px, calc(100vw - 32px));
   max-height: min(800px, calc(100dvh - 40px));
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 15px;
+  border-radius: 13px;
   display: grid;
   grid-template-rows: 70px minmax(0, 1fr) 62px;
   overflow: hidden;
@@ -75,7 +75,7 @@
   background: rgb(255 255 255 / 6%);
 }
 .body {
-  padding: 20px;
+  padding: 24px 28px;
   overflow: auto;
   display: grid;
   align-content: start;
@@ -115,7 +115,7 @@
 }
 .nameField input,
 .ratingField select {
-  height: 40px;
+  height: 48px;
   padding: 0 11px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 8px;
@@ -124,8 +124,13 @@
   background: #0f1012;
 }
 .nameField input:focus {
-  border-color: rgb(214 155 72 / 55%);
-  box-shadow: 0 0 0 3px rgb(214 155 72 / 7%);
+  border-color: #2f91ed;
+  box-shadow: 0 0 0 2px rgb(47 145 237 / 12%);
+}
+.explainer {
+  margin: 2px 0 12px;
+  color: #858b94;
+  font-size: 13px;
 }
 .sectionHeading {
   display: flex;
@@ -287,9 +292,9 @@
   cursor: pointer;
 }
 .dialog footer .primary {
-  border-color: #d69b48;
-  color: #19130b;
-  background: #d69b48;
+  border-color: #2f91ed;
+  color: #fff;
+  background: #2f91ed;
   font-weight: 700;
 }
 .dialog footer button:disabled {

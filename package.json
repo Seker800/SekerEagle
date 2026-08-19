@@ -1,6 +1,7 @@
 {
   "name": "sekereagle",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {
@@ -19,9 +20,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator",
-    "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/vector-core && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator",
-    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
+    "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator",
+    "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/eagle-filter-core && npm run typecheck --workspace @sekereagle/vector-core && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator",
+    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/eagle-filter-core && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "db:guard": "node ./scripts/assert-safe-target.mjs",
@@ -36,10 +37,13 @@
     "bootstrap-credentials:create": "node ./scripts/create-bootstrap-credentials.mjs",
     "smoke:auth": "node ./scripts/smoke-auth.mjs",
     "smoke:eagle": "node ./scripts/smoke-eagle.mjs",
+    "maintenance:reclassify-small-imported-tags": "npm run maintenance:reclassify-small-imported-tags --workspace @sekereagle/api --",
     "eagle:migrator": "npm run build --workspace @sekereagle/eagle-migrator && node apps/eagle-migrator/dist/main.js",
     "performance:library:100k": "node ./scripts/performance/verify-library-100k.mjs --verify",
     "performance:media-memory": "node ./scripts/performance/verify-media-memory.mjs --verify",
-    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check"
+    "mlx:test": "./scripts/mlx-embedding-host.sh test",
+    "oss:check": "node ./scripts/check-oss-readiness.mjs",
+    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

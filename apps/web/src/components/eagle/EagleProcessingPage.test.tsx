@@ -56,28 +56,65 @@ describe('EagleProcessingPage', () => {
   it('shows worker, queue metrics and background schedule', async () => {
     render(<EagleProcessingPage accessToken="token" />);
     expect(await screen.findByText('在线')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /任务中心/ }));
     expect(screen.getByText('等待中')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByDisplayValue('23:00')).toBeInTheDocument();
   });
 
-  it('separates supported capabilities, current queue and processing history', async () => {
+  it('keeps owner-only access scoped to the intelligent labeling workspace', () => {
+    render(<EagleProcessingPage canManageProcessing={false} />);
+
+    expect(screen.getByTestId('vector-workspace')).toBeVisible();
+    expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    expect(api.fetchEagleProcessingSummary).not.toHaveBeenCalled();
+    expect(api.listEagleProcessingJobs).not.toHaveBeenCalled();
+  });
+
+  it('groups user-facing outcomes separately from operational task views', async () => {
     render(<EagleProcessingPage accessToken="token" />);
 
-    const capabilities = await screen.findByRole('region', { name: '处理能力' });
+    await screen.findByText('在线');
+    const navigation = screen.getByRole('navigation', { name: '素材处理功能' });
+    expect(within(navigation).getAllByRole('button')).toHaveLength(3);
+    expect(within(navigation).getByRole('button', { name: /浏览优化/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    fireEvent.keyDown(within(navigation).getByRole('button', { name: /浏览优化/ }), {
+      key: 'ArrowRight',
+    });
+    expect(within(navigation).getByRole('button', { name: /颜色筛选/ })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    fireEvent.click(within(navigation).getByRole('button', { name: /浏览优化/ }));
+
+    const capabilities = screen.getByRole('region', { name: /浏览优化/ });
     expect(
       within(capabilities).getByRole('heading', { name: '缩略图与预览图' }),
     ).toBeInTheDocument();
-    expect(within(capabilities).getByRole('heading', { name: '图像颜色分析' })).toBeInTheDocument();
-    expect(within(capabilities).getByText('补算中 70%')).toBeInTheDocument();
     expect(within(capabilities).getByRole('heading', { name: '媒体信息检测' })).toBeInTheDocument();
-    expect(within(capabilities).getByRole('heading', { name: 'AI 自动标签' })).toBeInTheDocument();
-    expect(within(capabilities).getByRole('heading', { name: '素材永久清理' })).toBeInTheDocument();
-    expect(within(capabilities).getByText('尚未启用')).toBeInTheDocument();
-    expect(within(capabilities).getAllByTestId('processing-capability')).toHaveLength(5);
+    expect(within(capabilities).getByRole('heading', { name: '大图缩放切片' })).toBeInTheDocument();
+    expect(within(capabilities).getAllByTestId('processing-capability')).toHaveLength(3);
 
-    expect(screen.getByRole('region', { name: '当前队列' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '处理记录' })).toBeInTheDocument();
+    fireEvent.click(within(navigation).getByRole('button', { name: /颜色筛选/ }));
+    const colorPanel = screen.getByRole('region', { name: /颜色筛选/ });
+    expect(within(colorPanel).getByText('补算中 70%')).toBeVisible();
+    expect(within(colorPanel).getByText('70%')).toBeVisible();
+
+    fireEvent.click(within(navigation).getByRole('button', { name: /标签推荐/ }));
+    expect(screen.getByRole('region', { name: /标签推荐/ })).toBeVisible();
+    expect(screen.getByTestId('vector-workspace')).toBeVisible();
+
+    fireEvent.click(screen.getByRole('button', { name: /任务中心/ }));
+    const taskCenter = screen.getByRole('region', { name: '任务中心' });
+    expect(screen.getByRole('heading', { name: '当前队列' })).toBeVisible();
+
+    const taskTabs = within(taskCenter).getByRole('tablist', { name: '任务中心视图' });
+    fireEvent.click(within(taskTabs).getByRole('tab', { name: '处理记录' }));
+    expect(screen.getByRole('heading', { name: '处理记录' })).toBeVisible();
   });
 
   it('keeps API errors distinct from an empty queue', async () => {

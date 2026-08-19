@@ -7,13 +7,12 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
-  IsEmail,
+  IsIn,
   IsInt,
+  IsEmail,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
 import { PAT_SCOPES, type PatScope } from './auth.types';
@@ -69,6 +68,17 @@ export class SetUserDisabledDto {
   disabled!: boolean;
 }
 
+export class UpdatePrivacyVisibilityDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled!: boolean;
+
+  @ApiProperty({ enum: [1, 3, 6, 12, 24], default: 3 })
+  @IsInt()
+  @IsIn([1, 3, 6, 12, 24])
+  durationHours!: number;
+}
+
 export class CreateUserDto {
   @ApiProperty({ example: 'new-user@example.com', format: 'email' })
   @Transform(({ value }: { value: unknown }) => normalizeLowercaseString(value))
@@ -103,11 +113,4 @@ export class CreatePatDto {
   @ArrayMaxSize(PAT_SCOPES.length)
   @IsEnum(PAT_SCOPES, { each: true })
   scopes!: PatScope[];
-
-  @ApiPropertyOptional({ minimum: 1, maximum: 90, default: 90 })
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(90)
-  expiresInDays = 90;
 }

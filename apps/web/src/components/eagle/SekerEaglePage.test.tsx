@@ -30,6 +30,7 @@ const batchRestoreEagleAssetsMock = vi.fn();
 const emptyEagleTrashMock = vi.fn();
 const updateEagleAssetMock = vi.fn();
 const batchUpdateEagleAssetsMock = vi.fn();
+const batchSetEagleAssetPrivacyMock = vi.fn();
 const uploadEagleAssetMock = vi.fn();
 const listEagleSmartFoldersMock = vi.fn();
 const createEagleSmartFolderMock = vi.fn();
@@ -37,6 +38,7 @@ const updateEagleSmartFolderMock = vi.fn();
 const moveEagleSmartFolderMock = vi.fn();
 const listEagleAssetUpdatesMock = vi.fn();
 const getEaglePyramidDescriptorMock = vi.fn();
+const countEagleAssetsMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
@@ -44,6 +46,7 @@ vi.mock('../../lib/eagle-api', () => ({
   getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
     `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,
   getEaglePyramidDescriptor: (...args: unknown[]) => getEaglePyramidDescriptorMock(...args),
+  countEagleAssets: (...args: unknown[]) => countEagleAssetsMock(...args),
   listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
   getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
   getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
@@ -65,6 +68,7 @@ vi.mock('../../lib/eagle-api', () => ({
   emptyEagleTrash: (...args: unknown[]) => emptyEagleTrashMock(...args),
   updateEagleAsset: (...args: unknown[]) => updateEagleAssetMock(...args),
   batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
+  batchSetEagleAssetPrivacy: (...args: unknown[]) => batchSetEagleAssetPrivacyMock(...args),
   uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
   listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
   createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
@@ -109,7 +113,11 @@ const asset = {
   aiTags: [],
 };
 
-function renderPage(ownerId = 'owner-test', canManageProcessing = false) {
+function renderPage(
+  ownerId = 'owner-test',
+  canManageProcessing = false,
+  privacyVisibility?: { enabled: boolean; durationHours: number; expiresAt: string | null },
+) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const page = (currentOwnerId: string) => (
     <QueryClientProvider client={client}>
@@ -118,6 +126,7 @@ function renderPage(ownerId = 'owner-test', canManageProcessing = false) {
           accessToken="token"
           ownerId={currentOwnerId}
           canManageProcessing={canManageProcessing}
+          privacyVisibility={privacyVisibility}
         />
       </MemoryRouter>
     </QueryClientProvider>
@@ -165,6 +174,7 @@ describe('SekerEaglePage', () => {
     );
     listEagleAssetsMock.mockResolvedValue({ items: [asset], nextCursor: null });
     getEaglePyramidDescriptorMock.mockRejectedValue(new Error('图像金字塔不存在'));
+    countEagleAssetsMock.mockResolvedValue({ count: 1 });
     getEagleAssetMock.mockResolvedValue(asset);
     getEagleTrashAssetMock.mockResolvedValue({
       ...asset,
@@ -223,6 +233,10 @@ describe('SekerEaglePage', () => {
         { assetId: 'asset-1', rowVersion: 2 },
         { assetId: 'asset-2', rowVersion: 5 },
       ],
+    });
+    batchSetEagleAssetPrivacyMock.mockResolvedValue({
+      affectedAssetCount: 1,
+      assets: [{ assetId: 'asset-1', rowVersion: 2 }],
     });
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
@@ -313,13 +327,16 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('complementary', { name: '素材详情' })).not.toBeInTheDocument();
   });
 
-  it('places the standalone account entry in its own sidebar section', async () => {
-    const onOpenAccount = vi.fn();
+  it('opens the account view inside the library workspace without replacing the sidebar', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <SekerEaglePage accessToken="token" ownerId="owner-test" onOpenAccount={onOpenAccount} />
+          <SekerEaglePage
+            accessToken="token"
+            ownerId="owner-test"
+            accountView={<div data-testid="embedded-account-view">账号信息</div>}
+          />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -331,7 +348,9 @@ describe('SekerEaglePage', () => {
       { name: '个人账号' },
     );
     fireEvent.click(accountButton);
-    expect(onOpenAccount).toHaveBeenCalledOnce();
+    expect(screen.getByRole('navigation', { name: '素材库导航' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '个人账号' })).toBeInTheDocument();
+    expect(screen.getByTestId('embedded-account-view')).toBeInTheDocument();
   });
 
   it('opens asset processing from the SekerEagle navigation', async () => {
@@ -364,23 +383,25 @@ describe('SekerEaglePage', () => {
     expect(window.localStorage.getItem('seker-eagle.preferences.v1')).toContain('320');
   });
 
-  it('applies common filters from the expandable filter panel', async () => {
+  it('applies common filters from a dedicated quick-filter popover', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '筛选' }));
-    fireEvent.click(within(screen.getByLabelText('素材筛选')).getByRole('button', { name: 'PNG' }));
+    fireEvent.click(await screen.findByRole('button', { name: '格式筛选' }));
+    const formatFilter = screen.getByRole('dialog', { name: '格式筛选' });
+    fireEvent.click(within(formatFilter).getByRole('checkbox', { name: 'PNG' }));
 
     await waitFor(() => {
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({ formats: ['png'] }),
-        expect.any(AbortSignal),
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
+      };
+      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
+        expect.objectContaining({ field: 'FORMAT', value: 'png' }),
       );
     });
   });
 
-  it('keeps large tag collections searchable and bounded inside the filter panel', async () => {
-    const manualTags = Array.from({ length: 80 }, (_, index) => ({
+  it('keeps large tag collections searchable and bounded inside the tag popover', async () => {
+    const manualTags = Array.from({ length: 180 }, (_, index) => ({
       id: `manual-tag-${index + 1}`,
       name: `人工标签 ${String(index + 1).padStart(2, '0')}`,
       color: null,
@@ -394,22 +415,20 @@ describe('SekerEaglePage', () => {
     listEagleManualTagsMock.mockResolvedValue(manualTags);
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '筛选' }));
-    const filterPanel = screen.getByLabelText('素材筛选');
-    const manualTagSearch = within(filterPanel).getByRole('searchbox', {
-      name: '搜索人工标签',
-    });
+    fireEvent.click(await screen.findByRole('button', { name: '标签筛选' }));
+    const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
+    const manualTagSearch = within(filterPanel).getByRole('searchbox', { name: '搜索标签' });
 
-    expect(within(filterPanel).getAllByRole('checkbox').length).toBeLessThan(manualTags.length);
-    expect(within(filterPanel).queryByText('人工标签 01')).not.toBeInTheDocument();
+    expect(within(filterPanel).getAllByRole('checkbox').length).toBeLessThanOrEqual(100);
     fireEvent.change(manualTagSearch, { target: { value: '人工标签 01' } });
-    fireEvent.click(within(filterPanel).getByRole('checkbox', { name: '人工标签 01' }));
+    fireEvent.click(within(filterPanel).getByRole('checkbox', { name: /人工标签 01/ }));
 
     await waitFor(() => {
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({ manualTagIds: ['manual-tag-1'] }),
-        expect.any(AbortSignal),
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
+      };
+      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
+        expect.objectContaining({ field: 'MANUAL_TAGS', value: ['manual-tag-1'] }),
       );
     });
   });
@@ -417,19 +436,22 @@ describe('SekerEaglePage', () => {
   it('applies a canonical color as a server-side asset filter', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '筛选' }));
+    fireEvent.click(await screen.findByRole('button', { name: '颜色筛选' }));
     fireEvent.click(
-      within(screen.getByLabelText('素材筛选')).getByRole('button', { name: '选择青色' }),
+      within(screen.getByRole('dialog', { name: '颜色筛选' })).getByRole('button', {
+        name: '颜色 #2e86ab',
+      }),
     );
 
     await waitFor(() => {
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
-        expect.objectContaining({ color: '#2e86ab' }),
-        expect.any(AbortSignal),
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
+      };
+      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
+        expect.objectContaining({ field: 'COLOR', value: '#2e86ab' }),
       );
     });
-    expect(screen.getByRole('button', { name: '筛选，1 项已启用' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '颜色筛选，#2E86AB' })).toBeInTheDocument();
   });
 
   it('automatically saves edited metadata after leaving the field', async () => {
@@ -795,40 +817,39 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '人工标签' }));
     fireEvent.doubleClick(await screen.findByRole('button', { name: /人工标签 灵感/ }));
-    const filterButton = screen.getByRole('button', { name: '筛选，1 项已启用' });
+    const filterButton = screen.getByRole('button', { name: '标签筛选，1' });
     fireEvent.click(filterButton);
-    const filterPanel = screen.getByLabelText('素材筛选');
-    expect(within(filterPanel).getByRole('checkbox', { name: '灵感' })).toBeChecked();
+    const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
+    expect(within(filterPanel).getByRole('checkbox', { name: /灵感/ })).toBeChecked();
     await waitFor(() => {
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
+      };
+      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
         expect.objectContaining({
-          manualTagIds: ['11111111-1111-4111-8111-111111111111'],
-          aiTagIds: [],
+          field: 'MANUAL_TAGS',
+          value: ['11111111-1111-4111-8111-111111111111'],
         }),
-        expect.any(AbortSignal),
       );
     });
-    fireEvent.click(within(filterPanel).getByRole('button', { name: '重置筛选' }));
-    expect(screen.getByRole('button', { name: '筛选' })).toBeInTheDocument();
+    fireEvent.click(within(filterPanel).getByRole('button', { name: '清除此项' }));
+    expect(screen.getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
     fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
-    expect(screen.getByRole('button', { name: '筛选，1 项已启用' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-    expect(
-      within(screen.getByLabelText('素材筛选')).getByRole('checkbox', { name: '猫头鹰' }),
-    ).toBeChecked();
+    const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
+    fireEvent.click(aiFilterButton);
+    const aiFilterPanel = screen.getByRole('dialog', { name: 'AI 标签筛选' });
+    expect(within(aiFilterPanel).getByRole('checkbox', { name: /猫头鹰/ })).toBeChecked();
     await waitFor(() => {
-      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
-        'token',
+      const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as {
+        rules?: { conditions: Array<{ rules: Array<{ field: string; value: string[] }> }> };
+      };
+      expect(filters.rules?.conditions[0]?.rules[0]).toEqual(
         expect.objectContaining({
-          manualTagIds: [],
-          aiTagIds: ['22222222-2222-4222-8222-222222222222'],
+          field: 'AI_TAGS',
+          value: ['22222222-2222-4222-8222-222222222222'],
         }),
-        expect.any(AbortSignal),
       );
     });
   });
@@ -885,6 +906,27 @@ describe('SekerEaglePage', () => {
         removeTagIds: [],
       });
     });
+  });
+
+  it('shows the temporary privacy view and marks selected assets private from the context menu', async () => {
+    renderPage('owner-test', false, {
+      enabled: true,
+      durationHours: 3,
+      expiresAt: '2026-08-19T15:00:00.000Z',
+    });
+
+    expect(await screen.findByRole('button', { name: '隐私素材' })).toBeInTheDocument();
+    expect(screen.getByText('隐私内容已显示')).toBeInTheDocument();
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.contextMenu(card);
+    fireEvent.click(screen.getByRole('menuitem', { name: '设为隐私' }));
+
+    await waitFor(() =>
+      expect(batchSetEagleAssetPrivacyMock).toHaveBeenCalledWith('token', {
+        assets: [{ assetId: 'asset-1', rowVersion: 1 }],
+        isPrivate: true,
+      }),
+    );
   });
 
   it('creates a new manual tag from the asset context picker and applies it once', async () => {
@@ -1166,13 +1208,16 @@ describe('SekerEaglePage', () => {
     });
   });
 
-  it('keeps filtering behind the filter button without a quick-filter toolbar', async () => {
+  it('shows the Eagle-style quick-filter toolbar without a generic rule-builder button', async () => {
     renderPage();
     await screen.findByRole('heading', { name: '全部素材' });
 
-    expect(screen.getByRole('button', { name: '筛选' })).toBeInTheDocument();
-    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /快捷筛选/ })).not.toBeInTheDocument();
+    const toolbar = screen.getByRole('toolbar', { name: '快捷筛选' });
+    expect(within(toolbar).getByRole('button', { name: '颜色筛选' })).toBeInTheDocument();
+    expect(within(toolbar).getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
+    expect(within(toolbar).getByRole('button', { name: '格式筛选' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '筛选' })).not.toBeInTheDocument();
+    expect(screen.queryByText('规则筛选')).not.toBeInTheDocument();
   });
 
   it('starts inspector content directly with metadata instead of a thumbnail', async () => {
@@ -1211,8 +1256,7 @@ describe('SekerEaglePage', () => {
         'token',
         expect.objectContaining({
           name: '猫头鹰精选',
-          manualTagIds: [],
-          aiTagIds: [],
+          query: expect.objectContaining({ version: 2 }),
         }),
       );
       expect(createEagleSmartFolderMock.mock.calls[0]?.[1]).not.toHaveProperty('limit');
@@ -1244,11 +1288,12 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: '双标签素材' }));
-    fireEvent.click(screen.getByRole('button', { name: '筛选' }));
-
-    const filterPanel = screen.getByLabelText('素材筛选');
-    expect(within(filterPanel).getByRole('checkbox', { name: '灵感' })).not.toBeChecked();
-    expect(within(filterPanel).getByRole('checkbox', { name: '猫头鹰' })).not.toBeChecked();
+    const filterPanel = screen.getByRole('toolbar', { name: '快捷筛选' });
+    expect(within(filterPanel).getByRole('button', { name: '标签筛选' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.queryByRole('button', { name: /清除全部快捷筛选/ })).not.toBeInTheDocument();
   });
 
   it('wires smart-folder color and nesting actions to persistent APIs', async () => {
@@ -1289,8 +1334,7 @@ describe('SekerEaglePage', () => {
         'token',
         expect.objectContaining({
           smartFolderId: 'folder-1',
-          formats: [],
-          manualTagIds: [],
+          rules: undefined,
         }),
         expect.any(AbortSignal),
       ),
@@ -1410,14 +1454,21 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(folder, { clientX: 20, clientY: 30 });
     fireEvent.click(screen.getByRole('menuitem', { name: '修改文件夹参数' }));
 
-    const dialog = screen.getByRole('dialog', { name: '修改智能文件夹' });
+    const dialog = screen.getByRole('dialog', { name: '修改规则' });
     expect(within(dialog).getByRole('textbox', { name: '智能文件夹名称' })).toHaveValue('旧名称');
-    expect(within(dialog).getByRole('checkbox', { name: 'PNG' })).toBeChecked();
-    expect(within(dialog).getByRole('combobox', { name: '智能文件夹星级' })).toHaveValue('3');
+    const groups = within(dialog).getAllByRole('region', { name: /条件组/ });
+    expect(within(groups[0]!).getByRole('combobox', { name: '格式值' })).toHaveValue('png');
+    expect(within(groups[1]!).getByRole('combobox', { name: '评分值' })).toHaveValue('3');
     fireEvent.change(within(dialog).getByRole('textbox', { name: '智能文件夹名称' }), {
       target: { value: '新名称' },
     });
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'WEBP' }));
+    fireEvent.click(within(groups[0]!).getByRole('button', { name: '在规则 1 后添加规则' }));
+    fireEvent.change(within(groups[0]!).getByRole('combobox', { name: '规则 2 字段' }), {
+      target: { value: 'FORMAT' },
+    });
+    fireEvent.change(within(groups[0]!).getAllByRole('combobox', { name: '格式值' }).at(-1)!, {
+      target: { value: 'webp' },
+    });
     fireEvent.click(within(dialog).getByRole('button', { name: '保存智能文件夹' }));
 
     await waitFor(() =>
@@ -1426,11 +1477,19 @@ describe('SekerEaglePage', () => {
         'folder-1',
         expect.objectContaining({
           name: '新名称',
-          formats: ['png', 'webp'],
-          rating: 3,
+          query: expect.objectContaining({ version: 2 }),
           rowVersion: 4,
         }),
       ),
+    );
+    const update = updateEagleSmartFolderMock.mock.calls[0]?.[2] as {
+      query: { conditions: Array<{ rules: Array<{ field: string; value: string }> }> };
+    };
+    expect(update.query.conditions[0]?.rules).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'FORMAT', value: 'png' }),
+        expect.objectContaining({ field: 'FORMAT', value: 'webp' }),
+      ]),
     );
   });
 
@@ -1469,8 +1528,7 @@ describe('SekerEaglePage', () => {
     await waitFor(() => {
       const filters = listEagleAssetsMock.mock.calls.at(-1)?.[1] as Record<string, unknown>;
       expect(filters.smartFolderId).toBe('folder-parent');
-      expect(filters.formats).toEqual([]);
-      expect(filters.rating).toBeUndefined();
+      expect(filters.rules).toBeUndefined();
     });
   });
 

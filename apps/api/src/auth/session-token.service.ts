@@ -75,6 +75,9 @@ export class SessionTokenService {
     } catch {
       throw new UnauthorizedException('访问令牌无效或已过期。');
     }
+    if (payload.kind !== 'browser' || !Number.isInteger(payload.authVersion)) {
+      throw new UnauthorizedException('访问令牌类型无效。');
+    }
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || user.disabledAt || user.authVersion !== payload.authVersion) {
       throw new UnauthorizedException('登录状态已失效。');
@@ -86,6 +89,8 @@ export class SessionTokenService {
       authVersion: user.authVersion,
       kind: 'browser',
       scopes: [],
+      canViewPrivate: false,
+      privacyVisibleUntil: null,
     };
   }
 

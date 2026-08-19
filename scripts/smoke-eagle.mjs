@@ -194,7 +194,6 @@ const importerPat = await api('/api/tokens', {
   body: {
     name: 'importer-smoke',
     scopes: ['import:read', 'import:write', 'asset:write'],
-    expiresInDays: 1,
   },
 });
 if (importerPat.response.status !== 201) throw new Error('导入器 PAT 创建失败');
@@ -320,7 +319,7 @@ if (crossOwnerRun.response.status !== 404) throw new Error('跨用户读取导�
 const readOnlyPat = await api('/api/tokens', {
   method: 'POST',
   cookie: owner.cookie,
-  body: { name: 'read-only-smoke', scopes: ['import:read'], expiresInDays: 1 },
+  body: { name: 'read-only-smoke', scopes: ['import:read'] },
 });
 const rejectedUpload = await api('/api/eagle/uploads', {
   method: 'POST',

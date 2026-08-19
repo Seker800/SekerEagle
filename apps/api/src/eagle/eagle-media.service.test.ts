@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EagleMediaService } from './eagle-media.service';
 
-test('media lookup stays owner-scoped and available in trash until purge is scheduled', async () => {
+test('media lookup stays owner-scoped, hides private assets and remains available in trash until purge', async () => {
   const queries: unknown[] = [];
   const service = new EagleMediaService(
     {
@@ -30,7 +30,7 @@ test('media lookup stays owner-scoped and available in trash until purge is sche
   await service.getOriginal('owner-a', 'asset-1');
 
   assert.deepEqual(queries[0], {
-    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null },
+    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null, isPrivate: false },
     select: {
       originalObjectKey: true,
       originalName: true,
@@ -38,6 +38,30 @@ test('media lookup stays owner-scoped and available in trash until purge is sche
       byteSize: true,
     },
   });
+});
+
+test('media lookup permits private assets only during an active visibility window', async () => {
+  let query: unknown;
+  const service = new EagleMediaService(
+    {
+      eagleAsset: {
+        findFirst: async (input: unknown) => {
+          query = input;
+          return {
+            originalObjectKey: 'users/owner-a/assets/private/original.jpg',
+            originalName: 'private.jpg',
+            mimeType: 'image/jpeg',
+            byteSize: 3n,
+          };
+        },
+      },
+    } as never,
+    { getObject: async () => ({ Body: {}, ContentLength: 3 }) } as never,
+  );
+
+  await service.getOriginal('owner-a', 'asset-1', undefined, undefined, true);
+
+  assert.equal((query as { where: { isPrivate?: boolean } }).where.isPrivate, undefined);
 });
 
 test('conditional media reads preserve an object-storage not-modified response', async () => {
@@ -107,7 +131,7 @@ test('pyramid descriptor is owner-scoped and only exposes the current ready revi
     tileUrlTemplate: '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
   });
   assert.deepEqual(queries[0], {
-    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null },
+    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null, isPrivate: false },
     select: {
       mediaRevision: true,
       imagePyramids: {

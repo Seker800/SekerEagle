@@ -97,6 +97,23 @@ export class ListEagleAssetsDto {
   @IsOptional() @IsString() createdTo?: string;
   @IsOptional() @Matches(COLOR_PATTERN) color?: string;
   @IsOptional() @IsIn(['ANY', 'ALL']) tagMatch?: 'ANY' | 'ALL';
+  @ApiPropertyOptional({ enum: ['PRIVATE'] })
+  @IsOptional()
+  @IsIn(['PRIVATE'])
+  privacy?: 'PRIVATE';
+
+  @ApiPropertyOptional({ description: 'JSON encoded Eagle filter query', maxLength: 12000 })
+  @Transform(({ value }: { value: unknown }) => optionalTrimmed(value))
+  @IsOptional()
+  @IsString()
+  @MaxLength(12000)
+  rules?: string;
+}
+
+export class CountEagleAssetsDto {
+  @ApiProperty({ type: 'object', additionalProperties: true })
+  @IsObject()
+  query!: Record<string, unknown>;
 }
 
 export class UpdateEagleAssetDto {
@@ -178,6 +195,19 @@ export class BatchUpdateEagleAssetsDto {
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)
   sourceUrl?: string | null;
+}
+
+export class BatchSetEagleAssetPrivacyDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)
+  @ValidateNested({ each: true })
+  @Type(() => EagleAssetVersionDto)
+  assets!: EagleAssetVersionDto[];
+
+  @IsBoolean()
+  isPrivate!: boolean;
 }
 
 export class BatchChangeEagleManualTagsDto {

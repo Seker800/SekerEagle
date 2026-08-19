@@ -22,6 +22,8 @@ const browser: AuthPrincipal = {
   authVersion: 0,
   kind: 'browser',
   scopes: [],
+  canViewPrivate: false,
+  privacyVisibleUntil: null,
 };
 
 const pat: AuthPrincipal = {

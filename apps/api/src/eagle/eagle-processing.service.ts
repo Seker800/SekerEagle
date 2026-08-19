@@ -12,7 +12,8 @@ import { buildMissingImageProcessingJobs } from './media-job-plan';
 export class EagleProcessingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async summary(ownerId: string) {
+  async summary(ownerId: string, includePrivate = false) {
+    const visibleAsset = includePrivate ? {} : { isPrivate: false };
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const onlineSince = new Date(Date.now() - 45_000);
     const [workers, running, queued, failed, completedLast24Hours, grouped, coverage, settings] =
@@ -20,20 +21,31 @@ export class EagleProcessingService {
         this.prisma.eagleProcessingWorkerHeartbeat.findMany({
           where: { heartbeatAt: { gte: onlineSince } },
         }),
-        this.prisma.eagleAssetProcessingJob.count({ where: { ownerId, status: 'PROCESSING' } }),
-        this.prisma.eagleAssetProcessingJob.count({ where: { ownerId, status: 'PENDING' } }),
-        this.prisma.eagleAssetProcessingJob.count({ where: { ownerId, status: 'FAILED' } }),
         this.prisma.eagleAssetProcessingJob.count({
-          where: { ownerId, status: 'COMPLETED', completedAt: { gte: since } },
+          where: { ownerId, status: 'PROCESSING', asset: visibleAsset },
+        }),
+        this.prisma.eagleAssetProcessingJob.count({
+          where: { ownerId, status: 'PENDING', asset: visibleAsset },
+        }),
+        this.prisma.eagleAssetProcessingJob.count({
+          where: { ownerId, status: 'FAILED', asset: visibleAsset },
+        }),
+        this.prisma.eagleAssetProcessingJob.count({
+          where: {
+            ownerId,
+            status: 'COMPLETED',
+            completedAt: { gte: since },
+            asset: visibleAsset,
+          },
         }),
         this.prisma.eagleAssetProcessingJob.groupBy({
           by: ['lane', 'status'],
-          where: { ownerId },
+          where: { ownerId, asset: visibleAsset },
           _count: true,
         }),
         this.prisma.eagleAssetColorAnalysis.groupBy({
           by: ['status'],
-          where: { ownerId, isCurrent: true },
+          where: { ownerId, isCurrent: true, asset: visibleAsset },
           _count: true,
         }),
         this.getSettings(ownerId),
@@ -41,7 +53,12 @@ export class EagleProcessingService {
     const countColor = (status: string) =>
       coverage.find((row) => row.status === status)?._count ?? 0;
     const eligible = await this.prisma.eagleAsset.count({
-      where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' } },
+      where: {
+        ownerId,
+        deletedAt: null,
+        mimeType: { startsWith: 'image/' },
+        ...visibleAsset,
+      },
     });
     const completed = countColor('COMPLETED');
     return {
@@ -72,10 +89,16 @@ export class EagleProcessingService {
     };
   }
 
-  async jobs(ownerId: string, query: ListEagleProcessingJobsDto) {
+  async jobs(ownerId: string, query: ListEagleProcessingJobsDto, includePrivate = false) {
     const limit = query.limit ?? 50;
     const rows = await this.prisma.eagleAssetProcessingJob.findMany({
-      where: { ownerId, status: query.status, lane: query.lane, kind: query.kind },
+      where: {
+        ownerId,
+        status: query.status,
+        lane: query.lane,
+        kind: query.kind,
+        asset: includePrivate ? {} : { isPrivate: false },
+      },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
@@ -106,10 +129,15 @@ export class EagleProcessingService {
     };
   }
 
-  async retry(ownerId: string, jobId: string) {
+  async retry(ownerId: string, jobId: string, includePrivate = false) {
     const retried = await this.prisma.$transaction(async (transaction) => {
       const job = await transaction.eagleAssetProcessingJob.findFirst({
-        where: { ownerId, id: jobId, status: 'FAILED' },
+        where: {
+          ownerId,
+          id: jobId,
+          status: 'FAILED',
+          asset: includePrivate ? {} : { isPrivate: false },
+        },
         select: { id: true, assetId: true, assetRevision: true, kind: true },
       });
       if (!job) return 0;
@@ -133,10 +161,14 @@ export class EagleProcessingService {
     if (!retried) throw new NotFoundException('没有可重试的处理任务。');
     return { retried };
   }
-  async retryFailed(ownerId: string) {
+  async retryFailed(ownerId: string, includePrivate = false) {
     const retried = await this.prisma.$transaction(async (transaction) => {
       const jobs = await transaction.eagleAssetProcessingJob.findMany({
-        where: { ownerId, status: 'FAILED' },
+        where: {
+          ownerId,
+          status: 'FAILED',
+          asset: includePrivate ? {} : { isPrivate: false },
+        },
         select: { id: true, assetId: true, assetRevision: true, kind: true },
       });
       if (!jobs.length) return 0;
@@ -160,7 +192,7 @@ export class EagleProcessingService {
     });
     return { retried };
   }
-  async reconcile(ownerId: string) {
+  async reconcile(ownerId: string, includePrivate = false) {
     const pageSize = 500;
     const creationLimit = 500;
     let cursor: string | undefined;
@@ -170,7 +202,12 @@ export class EagleProcessingService {
     let assetsMissingCount = 0;
     do {
       const assets = await this.prisma.eagleAsset.findMany({
-        where: { ownerId, deletedAt: null, mimeType: { not: 'video/mp4' } },
+        where: {
+          ownerId,
+          deletedAt: null,
+          mimeType: { not: 'video/mp4' },
+          ...(includePrivate ? {} : { isPrivate: false }),
+        },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: pageSize,
         ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),

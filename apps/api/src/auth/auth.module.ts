@@ -11,6 +11,7 @@ import { BrowserSessionService } from './browser-session.service';
 import { PasswordService } from './password.service';
 import { PatService } from './pat.service';
 import { PatScopeGuard } from './pat-scope.guard';
+import { PrivacyVisibilityService } from './privacy-visibility.service';
 import { SessionTokenService } from './session-token.service';
 
 @Module({
@@ -34,6 +35,7 @@ import { SessionTokenService } from './session-token.service';
     PasswordService,
     PatService,
     PatScopeGuard,
+    PrivacyVisibilityService,
     SessionTokenService,
   ],
   exports: [
@@ -43,6 +45,7 @@ import { SessionTokenService } from './session-token.service';
     BrowserOrPatOriginGuard,
     BrowserPrincipalGuard,
     PatScopeGuard,
+    PrivacyVisibilityService,
     PasswordService,
     PatService,
     SessionTokenService,

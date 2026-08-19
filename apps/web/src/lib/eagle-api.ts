@@ -1,3 +1,4 @@
+import type { EagleFilterQuery, LegacyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { fetchWithBrowserSession } from './api-client';
 
 export interface EagleRendition {
@@ -51,6 +52,7 @@ export interface EagleAssetListItem {
   mediaRevision: number;
   rowVersion: number;
   rating: 1 | 2 | 3 | 4 | 5 | null;
+  isPrivate?: boolean;
   libraryAddedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -120,7 +122,7 @@ export interface EagleSmartFolder {
   color: string | null;
   parentId: string | null;
   queryVersion: number;
-  queryJson: { version: 1; filters: EagleSmartFolderFilters };
+  queryJson: EagleFilterQuery | LegacyEagleFilterQuery;
   position: number;
   rowVersion: number;
 }
@@ -140,6 +142,8 @@ export interface EagleAssetFilters {
   createdFrom?: string;
   createdTo?: string;
   color?: string;
+  rules?: EagleFilterQuery;
+  privacy?: 'PRIVATE';
 }
 export interface EagleAssetVersion {
   assetId: string;
@@ -195,6 +199,7 @@ function assetQuery(filters: EagleAssetFilters): string {
     'createdFrom',
     'createdTo',
     'color',
+    'privacy',
   ] as const) {
     if (filters[key]) query.set(key, filters[key]);
   }
@@ -204,12 +209,14 @@ function assetQuery(filters: EagleAssetFilters): string {
   for (const key of ['formats', 'manualTagIds', 'aiTagIds'] as const) {
     if (filters[key]?.length) query.set(key, filters[key].join(','));
   }
+  if (filters.rules) query.set('rules', JSON.stringify(filters.rules));
   return query.toString();
 }
 
 function normalizeAsset<T extends EagleAssetListItem>(asset: T): T {
   return {
     ...asset,
+    isPrivate: asset.isPrivate ?? false,
     aiTags: 'aiTags' in asset && Array.isArray(asset.aiTags) ? asset.aiTags : [],
     colorAnalysis: 'colorAnalysis' in asset ? (asset.colorAnalysis ?? null) : null,
   };
@@ -353,24 +360,33 @@ export async function listEagleSmartFolders(_token: string) {
 }
 export async function createEagleSmartFolder(
   _token: string,
-  input: EagleSmartFolderFilters & { name: string },
+  input: { name: string; query: EagleFilterQuery },
 ) {
-  const { name, ...filters } = input;
   return api<EagleSmartFolder>('/eagle/smart-folders', {
     method: 'POST',
-    body: JSON.stringify({ name, query: { version: 1, filters } }),
+    body: JSON.stringify(input),
   });
 }
 export async function updateEagleSmartFolder(
   _token: string,
   id: string,
-  input: EagleSmartFolderFilters & { name?: string; color?: string | null; rowVersion: number },
+  input: {
+    name?: string;
+    color?: string | null;
+    query?: EagleFilterQuery;
+    rowVersion: number;
+  },
 ) {
-  const { name, color, rowVersion, ...filters } = input;
-  const query = Object.keys(filters).length ? { version: 1, filters } : undefined;
   return api<EagleSmartFolder>(`/eagle/smart-folders/${id}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name, color, rowVersion, query }),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function countEagleAssets(_token: string, query: EagleFilterQuery) {
+  return api<{ count: number }>('/eagle/assets/filter-count', {
+    method: 'POST',
+    body: JSON.stringify({ query }),
   });
 }
 export async function moveEagleSmartFolder(
@@ -428,6 +444,16 @@ export async function batchUpdateEagleAssets(
     method: 'PATCH',
     body: JSON.stringify(input),
   });
+}
+
+export async function batchSetEagleAssetPrivacy(
+  _token: string,
+  input: { assets: EagleAssetVersion[]; isPrivate: boolean },
+) {
+  return api<{ affectedAssetCount: number; assets: EagleAssetVersion[] }>(
+    '/eagle/assets/batch/privacy',
+    { method: 'PATCH', body: JSON.stringify(input) },
+  );
 }
 
 export async function uploadEagleAsset(

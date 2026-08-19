@@ -68,6 +68,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/auth/privacy-visibility': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['AuthController_privacyVisibilityStatus'];
+    put: operations['AuthController_updatePrivacyVisibility'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/auth/me/password': {
     parameters: {
       query?: never;
@@ -190,6 +206,22 @@ export interface paths {
     get: operations['EagleController_listAssets'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/filter-count': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_countAssets'];
     delete?: never;
     options?: never;
     head?: never;
@@ -354,6 +386,22 @@ export interface paths {
     options?: never;
     head?: never;
     patch: operations['EagleController_batchUpdate'];
+    trace?: never;
+  };
+  '/api/eagle/assets/batch/privacy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['EagleController_setAssetPrivacy'];
     trace?: never;
   };
   '/api/eagle/assets/trash': {
@@ -1360,6 +1408,14 @@ export interface components {
       email: string;
       password: string;
     };
+    UpdatePrivacyVisibilityDto: {
+      enabled: boolean;
+      /**
+       * @default 3
+       * @enum {number}
+       */
+      durationHours: 1 | 3 | 6 | 12 | 24;
+    };
     ChangePasswordDto: {
       currentPassword: string;
       newPassword: string;
@@ -1386,10 +1442,13 @@ export interface components {
     CreatePatDto: {
       name: string;
       scopes: ('import:read' | 'import:write' | 'asset:write' | 'capture:write')[];
-      /** @default 90 */
-      expiresInDays: Record<string, never>;
     };
     Object: Record<string, never>;
+    CountEagleAssetsDto: {
+      query: {
+        [key: string]: unknown;
+      };
+    };
     EagleAssetIdsDto: {
       assetIds: string[];
     };
@@ -1402,6 +1461,7 @@ export interface components {
       description?: Record<string, never> | null;
       sourceUrl?: Record<string, never> | null;
     };
+    BatchSetEagleAssetPrivacyDto: Record<string, never>;
     CreateManualTagDto: {
       name: string;
       color?: Record<string, never> | null;
@@ -1547,6 +1607,44 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_privacyVisibilityStatus: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  AuthController_updatePrivacyVisibility: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePrivacyVisibilityDto'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -1726,6 +1824,9 @@ export interface operations {
         search?: string;
         rating?: number;
         format?: string;
+        privacy?: 'PRIVATE';
+        /** @description JSON encoded Eagle filter query */
+        rules?: string;
       };
       header?: never;
       path?: never;
@@ -1734,6 +1835,27 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_countAssets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CountEagleAssetsDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -1981,6 +2103,27 @@ export interface operations {
       };
     };
   };
+  EagleController_setAssetPrivacy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['BatchSetEagleAssetPrivacyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   EagleController_trashAssets: {
     parameters: {
       query?: never;
@@ -2052,6 +2195,9 @@ export interface operations {
         search?: string;
         rating?: number;
         format?: string;
+        privacy?: 'PRIVATE';
+        /** @description JSON encoded Eagle filter query */
+        rules?: string;
       };
       header?: never;
       path?: never;

@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible SekerEagle defect without private data
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include tokens, private URLs, user media or vulnerability details. Use the security policy for vulnerabilities.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [macOS Apple Silicon, Linux unsupported, Other unsupported]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include sanitized steps, expected behavior and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: validation
+    attributes:
+      label: Diagnostic evidence
+      description: Sanitized logs, failing test, or screenshots with all private data removed.

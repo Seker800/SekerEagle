@@ -60,6 +60,12 @@ export class EagleAssetEntityStore {
     if (changed) this.#emit();
   }
 
+  clear() {
+    if (!this.#entities.size) return;
+    this.#entities.clear();
+    this.#emit();
+  }
+
   #emit() {
     this.#version += 1;
     for (const listener of this.#listeners) listener();

@@ -1,0 +1,30 @@
+name: MLX sidecar
+
+on:
+  push:
+    paths:
+      - 'services/mlx-embedding/**'
+      - 'scripts/mlx-embedding-host.sh'
+      - '.github/workflows/mlx.yml'
+  pull_request:
+    paths:
+      - 'services/mlx-embedding/**'
+      - 'scripts/mlx-embedding-host.sh'
+      - '.github/workflows/mlx.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+        working-directory: services/mlx-embedding
+      - run: uv run --frozen pytest
+        working-directory: services/mlx-embedding

@@ -76,7 +76,7 @@ if (refreshStatuses.join(',') !== '201,401') {
 const createdPat = await api('/api/tokens', {
   method: 'POST',
   cookie: userCookie,
-  body: { name: 'smoke', scopes: ['import:read'], expiresInDays: 1 },
+  body: { name: 'smoke', scopes: ['import:read'] },
 });
 const pat = createdPat.payload?.token;
 if (createdPat.response.status !== 201 || typeof pat !== 'string') throw new Error('PAT 创建失败');

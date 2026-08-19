@@ -35,6 +35,7 @@ describe('EagleVectorWorkspace', () => {
         queued: 12,
         running: 2,
         missing: 5,
+        blocked: 0,
         processing: 14,
         percentage: 80,
       },

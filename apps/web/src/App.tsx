@@ -4,6 +4,11 @@ import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { request } from './lib/api-client';
+import {
+  DEFAULT_PRIVACY_VISIBILITY,
+  getPrivacyVisibility,
+  type PrivacyVisibilityState,
+} from './lib/privacy-visibility-api';
 
 export interface User {
   id: string;
@@ -18,7 +23,9 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showAccount, setShowAccount] = useState(false);
+  const [privacyVisibility, setPrivacyVisibility] = useState<PrivacyVisibilityState>(
+    DEFAULT_PRIVACY_VISIBILITY,
+  );
 
   useEffect(() => {
     request<{ user: User }>('/api/auth/me')
@@ -26,6 +33,30 @@ export function App() {
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+      return;
+    }
+    void getPrivacyVisibility()
+      .then(setPrivacyVisibility)
+      .catch(() => setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY));
+  }, [user]);
+
+  useEffect(() => {
+    if (!privacyVisibility.enabled || !privacyVisibility.expiresAt) return;
+    const delay = new Date(privacyVisibility.expiresAt).getTime() - Date.now();
+    if (delay <= 0) {
+      setPrivacyVisibility((current) => ({ ...current, enabled: false, expiresAt: null }));
+      return;
+    }
+    const timer = window.setTimeout(
+      () => setPrivacyVisibility((current) => ({ ...current, enabled: false, expiresAt: null })),
+      delay,
+    );
+    return () => window.clearTimeout(timer);
+  }, [privacyVisibility.enabled, privacyVisibility.expiresAt]);
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -37,7 +68,6 @@ export function App() {
         body: JSON.stringify({ email, password }),
       });
       setUser(result.user);
-      setShowAccount(false);
       setPassword('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '登录失败');
@@ -119,23 +149,21 @@ export function App() {
     );
   }
 
-  if (showAccount) {
-    return (
-      <AccountHome
-        user={user}
-        onEnterLibrary={() => setShowAccount(false)}
-        onPasswordChanged={() => logout('密码已修改，请使用新密码重新登录。')}
-        onLogout={() => void logout()}
-      />
-    );
-  }
-
   return (
     <div className="standalone-eagle-shell">
       <SekerEaglePage
         ownerId={user.id}
         canManageProcessing={user.role === 'ADMIN'}
-        onOpenAccount={() => setShowAccount(true)}
+        privacyVisibility={privacyVisibility}
+        accountView={
+          <AccountHome
+            user={user}
+            onPasswordChanged={() => logout('密码已修改，请使用新密码重新登录。')}
+            onLogout={() => void logout()}
+            privacyVisibility={privacyVisibility}
+            onPrivacyVisibilityChange={setPrivacyVisibility}
+          />
+        }
       />
     </div>
   );

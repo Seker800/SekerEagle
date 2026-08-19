@@ -169,6 +169,7 @@ model User {
   personalAccessTokens     PersonalAccessToken[]
   uploadSessions           UploadSession[]
   eagleAssets              EagleAsset[]
+  eaglePrivacyPreference   EaglePrivacyPreference?
   eagleAssetAnnotations    EagleAssetAnnotation[]
   eagleManualTags          EagleManualTag[]
   eagleManualTagGroups     EagleManualTagGroup[]
@@ -195,12 +196,19 @@ model RefreshToken {
   @@index([userId, expiresAt])
 }
 
+model EaglePrivacyPreference {
+  ownerId       String   @id
+  durationHours Int      @default(3)
+  updatedAt     DateTime @updatedAt
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
 model PersonalAccessToken {
   id         String    @id @default(uuid())
   tokenHash  String    @unique
   name       String
   scopes     String[]
-  expiresAt  DateTime
+  expiresAt  DateTime?
   revokedAt  DateTime?
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
@@ -298,6 +306,7 @@ model EagleAsset {
   sha256                         String?
   width                          Int?
   height                         Int?
+  aspectRatio                    Float?                         @default(dbgenerated())
   durationMs                     Int?
   originalObjectKey              String                         @unique
   lifecycleStatus                EagleAssetLifecycleStatus      @default(PROCESSING)
@@ -305,6 +314,7 @@ model EagleAsset {
   mediaRevision                  Int                            @default(0)
   rowVersion                     Int                            @default(1)
   rating                         Int?
+  isPrivate                      Boolean                        @default(false)
   libraryAddedAt                 DateTime                       @default(now())
   deletedAt                      DateTime?
   purgeAfter                     DateTime?
@@ -332,7 +342,9 @@ model EagleAsset {
 
   @@unique([ownerId, id])
   @@index([ownerId, deletedAt, libraryAddedAt, id])
+  @@index([ownerId, isPrivate, deletedAt, libraryAddedAt, id])
   @@index([ownerId, deletedAt, rating])
+  @@index([ownerId, deletedAt, aspectRatio])
   @@index([ownerId, normalizedDisplayName])
   @@index([normalizedDisplayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_normalizedDisplayName_trgm_idx")
   @@index([originalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_originalName_trgm_idx")

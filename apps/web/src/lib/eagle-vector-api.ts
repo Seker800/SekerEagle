@@ -11,6 +11,7 @@ export interface EagleVectorSummary {
     queued: number;
     running: number;
     missing: number;
+    blocked: number;
     processing: number;
     percentage: number;
   };
@@ -144,10 +145,13 @@ export function retryFailedEagleEmbeddings() {
   return request<{ retried: number }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
 }
 export function scanMissingEagleEmbeddings() {
-  return request<{ scanned: number; created: number; repaired: number }>('embeddings/scan-missing', {
-    method: 'POST',
-    body: '{}',
-  });
+  return request<{ scanned: number; created: number; repaired: number }>(
+    'embeddings/scan-missing',
+    {
+      method: 'POST',
+      body: '{}',
+    },
+  );
 }
 export function listEagleTagDistanceAssets(
   tagId: string,

@@ -180,6 +180,9 @@ export function EagleVectorWorkspace() {
             {summary?.embeddingCoverage.running ?? 0} · 未入队{' '}
             {summary?.embeddingCoverage.missing ?? 0}
           </small>
+          {(summary?.embeddingCoverage.blocked ?? 0) > 0 ? (
+            <small>无可用预览 {summary?.embeddingCoverage.blocked}，需先修复图片处理</small>
+          ) : null}
           <button
             type="button"
             disabled={busy || (summary?.embeddingCoverage.missing ?? 0) === 0}

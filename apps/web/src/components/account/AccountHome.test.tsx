@@ -22,10 +22,47 @@ describe('AccountHome', () => {
     );
   });
 
+  it('toggles private visibility directly with a default three-hour duration and no dialog', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path =
+        typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+      if (path === '/api/auth/privacy-visibility' && !init?.method) {
+        return jsonResponse({ enabled: false, durationHours: 3, expiresAt: null });
+      }
+      if (path === '/api/tokens' && !init?.method) return jsonResponse([]);
+      if (path === '/api/auth/privacy-visibility' && init?.method === 'PUT') {
+        expect(typeof init.body).toBe('string');
+        expect(JSON.parse(init.body as string)).toEqual({ enabled: true, durationHours: 3 });
+        return jsonResponse({
+          enabled: true,
+          durationHours: 3,
+          expiresAt: '2026-08-19T15:00:00.000Z',
+        });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
+
+    const toggle = await screen.findByRole('switch', { name: '显示隐私内容' });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByLabelText('自动关闭时间')).toHaveValue('3');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(screen.getByText(/将于/)).toBeInTheDocument();
+  });
+
   it('loads, creates and revokes external connection tokens', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path =
         typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+      if (path === '/api/auth/privacy-visibility' && !init?.method) {
+        return jsonResponse({ enabled: false, durationHours: 3, expiresAt: null });
+      }
       if (path === '/api/tokens' && !init?.method) {
         return jsonResponse([
           {
@@ -33,7 +70,7 @@ describe('AccountHome', () => {
             name: '工作室 Mac',
             scopes: ['import:read', 'import:write', 'asset:write'],
             createdAt: '2026-08-01T00:00:00.000Z',
-            expiresAt: '2099-09-01T00:00:00.000Z',
+            expiresAt: null,
             revokedAt: null,
             lastUsedAt: null,
           },
@@ -44,14 +81,13 @@ describe('AccountHome', () => {
         expect(JSON.parse(init.body)).toEqual({
           name: 'SekerEagle 浏览器插件',
           scopes: ['capture:write'],
-          expiresInDays: 30,
         });
         return jsonResponse({
           id: 'token-2',
           name: 'SekerEagle 浏览器插件',
           scopes: ['capture:write'],
           createdAt: '2026-08-17T00:00:00.000Z',
-          expiresAt: '2099-09-16T00:00:00.000Z',
+          expiresAt: null,
           revokedAt: null,
           lastUsedAt: null,
           token: 'seg_pat_secret',
@@ -64,16 +100,11 @@ describe('AccountHome', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(
-      <AccountHome
-        user={user}
-        onEnterLibrary={vi.fn()}
-        onPasswordChanged={vi.fn()}
-        onLogout={vi.fn()}
-      />,
-    );
+    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
 
     expect(await screen.findByText('工作室 Mac')).toBeInTheDocument();
+    expect(screen.getByText('永久有效')).toBeInTheDocument();
+    expect(screen.queryByLabelText('有效期')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '创建令牌' }));
     const createdToken = await screen.findByRole('textbox', { name: '新创建的令牌' });
     expect(createdToken).toHaveValue('seg_pat_secret');
@@ -102,16 +133,15 @@ describe('AccountHome', () => {
   });
 
   it('validates password confirmation before sending a request', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse([]));
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const path =
+        typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+      return path === '/api/auth/privacy-visibility'
+        ? jsonResponse({ enabled: false, durationHours: 3, expiresAt: null })
+        : jsonResponse([]);
+    });
     vi.stubGlobal('fetch', fetchMock);
-    render(
-      <AccountHome
-        user={user}
-        onEnterLibrary={vi.fn()}
-        onPasswordChanged={vi.fn()}
-        onLogout={vi.fn()}
-      />,
-    );
+    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText('当前密码'), { target: { value: 'current-password' } });
     fireEvent.change(screen.getByLabelText('新密码'), { target: { value: 'new-password-123' } });
@@ -119,6 +149,6 @@ describe('AccountHome', () => {
     fireEvent.click(screen.getByRole('button', { name: '更新密码' }));
 
     expect(await screen.findByText('两次输入的新密码不一致。')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

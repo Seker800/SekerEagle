@@ -76,8 +76,7 @@ select:focus-visible {
   background: linear-gradient(140deg, rgb(255 255 255 / 2%), transparent 45%), #141518;
 }
 
-.auth-brand,
-.account-brand {
+.auth-brand {
   display: inline-flex;
   align-items: center;
   gap: 11px;
@@ -87,8 +86,7 @@ select:focus-visible {
   letter-spacing: -0.01em;
 }
 
-.auth-brand-mark,
-.account-brand-mark {
+.auth-brand-mark {
   width: 34px;
   height: 34px;
   border-radius: 9px;
@@ -98,8 +96,7 @@ select:focus-visible {
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 7%);
 }
 
-.auth-brand-mark img,
-.account-brand-mark img {
+.auth-brand-mark img {
   width: 29px;
   height: 29px;
 }
@@ -259,45 +256,39 @@ select:focus-visible {
   min-height: 100vh;
 }
 
-.account-shell {
-  min-height: 100vh;
-  padding-bottom: 72px;
-  color: #f0f1f3;
-  background: radial-gradient(circle at 80% 10%, rgb(214 155 72 / 5%), transparent 26%), #111214;
+.account-page {
+  --account-panel: #17181b;
+  --account-line: rgb(255 255 255 / 8%);
+  --account-text: #f0f1f3;
+  --account-muted: #8d929b;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  overflow: auto;
+  color: var(--account-text);
+  background: #121316;
 }
 
-.account-header {
-  height: 62px;
-  padding: 0 clamp(20px, 4vw, 56px);
-  border-bottom: 1px solid rgb(255 255 255 / 7%);
+.account-page-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  background: rgb(23 24 27 / 86%);
-  backdrop-filter: blur(16px);
+  gap: 16px;
 }
 
-.account-brand {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
+.account-page-header h1 {
+  margin: 0;
+  font-size: 18px;
 }
 
-.account-brand-mark {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-}
-
-.account-brand-mark img {
-  width: 26px;
-  height: 26px;
-}
-
-.account-header-actions {
-  display: flex;
-  gap: 7px;
+.account-page-header p {
+  margin: 5px 0 0;
+  color: var(--account-muted);
+  font-size: 12px;
 }
 
 .quiet-button,
@@ -315,8 +306,8 @@ select:focus-visible {
 }
 
 .quiet-button {
-  min-height: 34px;
-  padding: 0 11px;
+  min-height: 32px;
+  padding: 0 9px;
   font-size: 12px;
 }
 
@@ -326,104 +317,20 @@ select:focus-visible {
   background: #27292e;
 }
 
-.account-layout {
-  width: min(1160px, calc(100% - 40px));
-  margin: 46px auto 0;
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 28px;
-  align-items: start;
-}
-
-.account-profile {
-  position: sticky;
-  top: 30px;
-  min-width: 0;
-  padding: 24px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 12px;
-  background: #17181b;
-}
-
-.profile-icon {
-  width: 48px;
-  height: 48px;
-  margin-bottom: 20px;
-  border: 1px solid rgb(214 155 72 / 25%);
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  color: #e1ad65;
-  background: rgb(214 155 72 / 8%);
-}
-
-.account-profile h1 {
-  margin: 7px 0 12px;
-  overflow-wrap: anywhere;
-  font-size: 19px;
-  line-height: 1.35;
-  letter-spacing: -0.025em;
-}
-
-.role-badge {
-  width: fit-content;
-  min-height: 26px;
-  padding: 0 9px;
-  border-radius: 13px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: #d9b37e;
-  background: rgb(214 155 72 / 10%);
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.account-profile > p:not(.account-kicker) {
-  margin: 18px 0 22px;
-  color: #858a92;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.account-profile nav {
-  padding-top: 14px;
-  border-top: 1px solid rgb(255 255 255 / 7%);
-  display: grid;
-  gap: 3px;
-}
-
-.account-profile nav a {
-  min-height: 36px;
-  padding: 0 9px;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #a8abb2;
-  text-decoration: none;
-  font-size: 12px;
-}
-
-.account-profile nav a:hover {
-  color: #f0c78c;
-  background: rgb(214 155 72 / 8%);
-}
-
 .account-content {
   min-width: 0;
   display: grid;
-  gap: 22px;
+  align-content: start;
+  gap: 14px;
 }
 
 .account-panel {
   min-width: 0;
-  padding: clamp(22px, 3vw, 32px);
-  scroll-margin-top: 24px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 12px;
-  background: #17181b;
-  box-shadow: 0 20px 54px rgb(0 0 0 / 15%);
+  padding: 18px 20px;
+  scroll-margin-top: 58px;
+  border: 1px solid var(--account-line);
+  border-radius: 7px;
+  background: var(--account-panel);
 }
 
 .panel-heading {
@@ -439,8 +346,8 @@ select:focus-visible {
 }
 
 .panel-heading h2 {
-  margin: 6px 0 7px;
-  font-size: 22px;
+  margin: 4px 0;
+  font-size: 18px;
   letter-spacing: -0.035em;
 }
 
@@ -448,20 +355,126 @@ select:focus-visible {
   max-width: 620px;
   margin: 0;
   color: #858a92;
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
-.token-create-form {
-  margin-top: 25px;
-  padding: 18px;
+.privacy-controls {
+  margin-top: 16px;
+  padding: 12px;
   border: 1px solid rgb(255 255 255 / 7%);
   border-radius: 9px;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) 130px auto;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 18px;
+  align-items: center;
+  background: #131417;
+}
+
+.privacy-switch-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.privacy-switch-row > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.privacy-switch-row strong {
+  color: #e5e7ea;
+  font-size: 13px;
+}
+
+.privacy-switch-row small {
+  color: var(--account-muted);
+  font-size: 11px;
+}
+
+.privacy-switch-row input {
+  appearance: none;
+  width: 38px;
+  height: 22px;
+  margin: 0;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 999px;
+  position: relative;
+  flex: 0 0 auto;
+  background: #292c31;
+  cursor: pointer;
+}
+
+.privacy-switch-row input::after {
+  content: '';
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  background: #aeb2b9;
+  transition:
+    transform 140ms ease,
+    background 140ms ease;
+}
+
+.privacy-switch-row input:checked {
+  border-color: rgb(117 172 255 / 45%);
+  background: #2d568e;
+}
+
+.privacy-switch-row input:checked::after {
+  transform: translateX(16px);
+  background: #fff;
+}
+
+.privacy-duration-field {
+  display: grid;
+  gap: 6px;
+  color: #b5b8be;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.privacy-duration-field select {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  color: #e0e2e5;
+  background: #1d1f23;
+}
+
+.token-create-form {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1.3fr) 96px auto;
+  gap: 10px;
   align-items: end;
   background: #131417;
+}
+
+.account-field-note {
+  min-height: 36px;
+  margin: 0;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  color: #b5b8be;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.account-field-note strong {
+  color: #d7d9dd;
+  font-size: 12px;
 }
 
 .token-create-form select {
@@ -470,8 +483,8 @@ select:focus-visible {
     linear-gradient(45deg, transparent 50%, #777b83 50%),
     linear-gradient(135deg, #777b83 50%, transparent 50%);
   background-position:
-    calc(100% - 16px) 18px,
-    calc(100% - 11px) 18px;
+    calc(100% - 16px) 15px,
+    calc(100% - 11px) 15px;
   background-size:
     5px 5px,
     5px 5px;
@@ -479,8 +492,8 @@ select:focus-visible {
 }
 
 .token-reveal {
-  margin-top: 16px;
-  padding: 16px;
+  margin-top: 12px;
+  padding: 12px;
   border: 1px solid rgb(214 155 72 / 28%);
   border-radius: 9px;
   background: rgb(214 155 72 / 7%);
@@ -492,7 +505,7 @@ select:focus-visible {
 }
 
 .token-reveal p {
-  margin: 4px 0 12px;
+  margin: 3px 0 9px;
   color: #9a8b76;
   font-size: 12px;
 }
@@ -538,8 +551,8 @@ select:focus-visible {
 }
 
 .token-list-heading {
-  margin-top: 26px;
-  padding-bottom: 10px;
+  margin-top: 18px;
+  padding-bottom: 8px;
   border-bottom: 1px solid rgb(255 255 255 / 7%);
   display: flex;
   align-items: center;
@@ -564,11 +577,11 @@ select:focus-visible {
 
 .token-item {
   min-width: 0;
-  padding: 15px 2px;
+  padding: 10px 2px;
   border-bottom: 1px solid rgb(255 255 255 / 6%);
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  gap: 11px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 9px;
   align-items: start;
 }
 
@@ -577,9 +590,9 @@ select:focus-visible {
 }
 
 .token-item-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
   color: #a3a6ad;
@@ -642,7 +655,7 @@ select:focus-visible {
 
 .account-empty {
   margin: 0;
-  padding: 24px 0 6px;
+  padding: 18px 0 2px;
   color: #777b83;
   font-size: 12px;
   text-align: center;
@@ -650,20 +663,39 @@ select:focus-visible {
 
 .password-form {
   max-width: 700px;
-  margin-top: 25px;
+  margin-top: 16px;
   display: grid;
-  gap: 15px;
+  gap: 10px;
 }
 
 .password-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 10px;
 }
 
 .password-submit {
   justify-self: start;
-  margin-top: 2px;
+}
+
+.token-create-form label,
+.password-form label {
+  gap: 5px;
+  font-size: 12px;
+}
+
+.token-create-form input,
+.token-create-form select,
+.password-form input {
+  min-height: 36px;
+  border-radius: 6px;
+}
+
+.token-create-form .primary-button,
+.password-submit {
+  min-height: 36px;
+  border-radius: 6px;
+  font-size: 12px;
 }
 
 @media (max-width: 900px) {
@@ -691,17 +723,29 @@ select:focus-visible {
   .auth-card {
     margin: 0 auto;
   }
+}
 
-  .account-layout {
-    grid-template-columns: 1fr;
+@media (max-width: 1040px) {
+  .token-create-form {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(220px, 1.2fr) auto;
   }
 
-  .account-profile {
-    position: static;
+  .account-field-note {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 720px) {
+  .account-page {
+    padding: 12px;
   }
 
-  .account-profile nav {
+  .token-create-form {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .account-field-note {
+    grid-column: auto;
   }
 }
 
@@ -732,19 +776,6 @@ select:focus-visible {
     padding: 25px;
   }
 
-  .account-shell {
-    padding-bottom: 36px;
-  }
-
-  .account-header {
-    height: 58px;
-    padding: 0 16px;
-  }
-
-  .account-header-actions .quiet-button:first-child {
-    display: none;
-  }
-
   .quiet-button {
     font-size: 0;
   }
@@ -753,23 +784,21 @@ select:focus-visible {
     margin: 0;
   }
 
-  .account-layout {
-    width: calc(100% - 24px);
-    margin-top: 20px;
-    gap: 14px;
-  }
-
-  .account-profile,
   .account-panel {
-    padding: 20px;
+    padding: 16px;
+    border-radius: 7px;
   }
 
-  .account-profile nav {
+  .privacy-controls {
     grid-template-columns: 1fr;
   }
 
   .token-create-form {
     grid-template-columns: 1fr;
+  }
+
+  .account-field-note {
+    grid-column: auto;
   }
 
   .token-create-form .primary-button {

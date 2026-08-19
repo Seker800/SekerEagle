@@ -8,7 +8,7 @@ import { PAT_SCOPES, type AuthPrincipal, type PatScope } from './auth.types';
 export class PatService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, name: string, scopes: PatScope[], expiresInDays: number) {
+  async create(userId: string, name: string, scopes: PatScope[]) {
     const uniqueScopes = [...new Set(scopes)];
     if (uniqueScopes.some((scope) => !PAT_SCOPES.includes(scope))) {
       throw new BadRequestException('PAT scope 不受支持。');
@@ -20,7 +20,7 @@ export class PatService {
         name,
         scopes: uniqueScopes,
         tokenHash: this.hash(token),
-        expiresAt: new Date(Date.now() + expiresInDays * 86_400_000),
+        expiresAt: null,
       },
       select: { id: true, name: true, scopes: true, expiresAt: true, createdAt: true },
     });
@@ -56,7 +56,12 @@ export class PatService {
       where: { tokenHash: this.hash(token) },
       include: { user: true },
     });
-    if (!record || record.revokedAt || record.expiresAt <= new Date() || record.user.disabledAt) {
+    if (
+      !record ||
+      record.revokedAt ||
+      (record.expiresAt && record.expiresAt <= new Date()) ||
+      record.user.disabledAt
+    ) {
       throw new UnauthorizedException('PAT 无效或已过期。');
     }
     const scopes = record.scopes.filter((scope): scope is PatScope =>
@@ -73,6 +78,8 @@ export class PatService {
       authVersion: record.user.authVersion,
       kind: 'pat',
       scopes,
+      canViewPrivate: false,
+      privacyVisibleUntil: null,
     };
   }
 

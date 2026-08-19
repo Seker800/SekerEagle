@@ -1,10 +1,12 @@
 import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import type { EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { mapWithConcurrency } from '../../lib/async-pool';
 import {
   batchChangeEagleManualTags,
   batchUpdateEagleAssets,
   batchRestoreEagleAssets,
+  batchSetEagleAssetPrivacy,
   batchTrashEagleAssets,
   createEagleManualTag,
   createEagleManualTagGroup,
@@ -24,7 +26,6 @@ import {
   type EagleManualTag,
   type EagleManualTagGroup,
   type EagleSmartFolder,
-  type EagleSmartFolderFilters,
 } from '../../lib/eagle-api';
 import type { MoveEagleSmartFolderInput } from './EagleSmartFolderTree';
 import type { createEagleQueryKeys } from './eagle-query-keys';
@@ -32,7 +33,11 @@ import { moveSmartFolderInTree } from './eagle-smart-folder-order';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 type EagleAssetMetadataInput = Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'>;
-type SmartFolderChanges = Partial<EagleSmartFolderFilters & { name: string; color: string | null }>;
+type SmartFolderChanges = {
+  name?: string;
+  color?: string | null;
+  query?: EagleFilterQuery;
+};
 type AssetMutationResult = { asset: EagleAsset | null; versions: EagleAssetVersion[] };
 
 const EAGLE_ASSET_UPDATE_SCOPE = { id: 'eagle-asset-update' };
@@ -221,6 +226,23 @@ export function useEagleMutations(
       await invalidate(queryKeys.assets);
     },
   });
+  const privacyMutation = useMutation({
+    mutationFn: ({ assets, isPrivate }: { assets: EagleAssetVersion[]; isPrivate: boolean }) =>
+      batchSetEagleAssetPrivacy(accessToken, {
+        assets: withLatestVersions(assets),
+        isPrivate,
+      }),
+    onSuccess: async ({ assets }) => {
+      rememberVersions(assets);
+      callbacks.onSelectionMutationCompleted();
+      await invalidate(
+        queryKeys.assets,
+        queryKeys.assetDetails,
+        queryKeys.manualTags,
+        queryKeys.aiTags,
+      );
+    },
+  });
   const restoreMutation = useMutation({
     mutationFn: (assetIds: string[]) => batchRestoreEagleAssets(accessToken, assetIds),
     onSuccess: async () => {
@@ -236,7 +258,7 @@ export function useEagleMutations(
     },
   });
   const smartFolderMutation = useMutation({
-    mutationFn: (input: EagleSmartFolderFilters & { name: string }) =>
+    mutationFn: (input: { name: string; query: EagleFilterQuery }) =>
       createEagleSmartFolder(accessToken, input),
     onSuccess: async () => {
       callbacks.onSmartFolderCreated();
@@ -297,6 +319,7 @@ export function useEagleMutations(
     deleteTagGroupMutation,
     batchTagMutation,
     trashMutation,
+    privacyMutation,
     restoreMutation,
     emptyTrashMutation,
     smartFolderMutation,

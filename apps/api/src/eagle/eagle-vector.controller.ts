@@ -32,12 +32,12 @@ export class EagleVectorController {
 
   @Get('summary')
   summary(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.vectors.summary(principal.sub);
+    return this.vectors.summary(principal.sub, principal.canViewPrivate);
   }
 
   @Get('tags')
   tags(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListVectorTagsDto) {
-    return this.vectors.listTagSemantics(principal.sub, query.query);
+    return this.vectors.listTagSemantics(principal.sub, query.query, principal.canViewPrivate);
   }
 
   @Patch('tags/:tagId')
@@ -65,7 +65,12 @@ export class EagleVectorController {
     @Param('tagId', new ParseUUIDPipe({ version: '4' })) tagId: string,
     @Query() query: ListTagDistanceAssetsDto,
   ) {
-    return this.vectors.listTagDistanceAssets(principal.sub, tagId, query);
+    return this.vectors.listTagDistanceAssets(
+      principal.sub,
+      tagId,
+      query,
+      principal.canViewPrivate,
+    );
   }
 
   @Get('suggestions')
@@ -73,7 +78,7 @@ export class EagleVectorController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Query() query: ListVectorSuggestionsDto,
   ) {
-    return this.vectors.listSuggestions(principal.sub, query);
+    return this.vectors.listSuggestions(principal.sub, query, principal.canViewPrivate);
   }
 
   @Get('unclassified')
@@ -81,7 +86,7 @@ export class EagleVectorController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Query() query: ListUnclassifiedVectorAssetsDto,
   ) {
-    return this.vectors.listUnclassified(principal.sub, query);
+    return this.vectors.listUnclassified(principal.sub, query, principal.canViewPrivate);
   }
 
   @Post('embeddings/retry-failed')
@@ -103,7 +108,12 @@ export class EagleVectorController {
     @Param('suggestionId', new ParseUUIDPipe({ version: '4' })) suggestionId: string,
     @Body() input: ReviewVectorSuggestionDto,
   ) {
-    return this.vectors.reviewSuggestion(principal.sub, suggestionId, input.action);
+    return this.vectors.reviewSuggestion(
+      principal.sub,
+      suggestionId,
+      input.action,
+      principal.canViewPrivate,
+    );
   }
 
   @Post('suggestions/review-batch')
@@ -112,6 +122,11 @@ export class EagleVectorController {
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: BatchReviewVectorSuggestionsDto,
   ) {
-    return this.vectors.reviewSuggestions(principal.sub, input.suggestionIds, input.action);
+    return this.vectors.reviewSuggestions(
+      principal.sub,
+      input.suggestionIds,
+      input.action,
+      principal.canViewPrivate,
+    );
   }
 }

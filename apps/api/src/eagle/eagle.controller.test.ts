@@ -5,6 +5,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
+import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { EagleController } from './eagle.controller';
 
 function controllerMethod(name: keyof EagleController): object {
@@ -40,6 +41,11 @@ test('authenticated media reads use a bounded high-throughput throttle without c
 test('media throttle overrides do not weaken Eagle authentication guards', () => {
   const guards = Reflect.getMetadata(GUARDS_METADATA, EagleController) as unknown[];
   assert.deepEqual(guards, [AccessAuthGuard, BrowserPrincipalGuard]);
+});
+
+test('body-based filter counts require a same-origin browser request', () => {
+  const guards = Reflect.getMetadata(GUARDS_METADATA, controllerMethod('countAssets')) as unknown[];
+  assert.deepEqual(guards, [BrowserOriginGuard]);
 });
 
 test('revision-addressed renditions use immutable private caching', async () => {

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   Res,
   UnauthorizedException,
@@ -28,9 +29,11 @@ import {
   LoginDto,
   ResetPasswordDto,
   SetUserDisabledDto,
+  UpdatePrivacyVisibilityDto,
 } from './dto';
 import { PasswordService } from './password.service';
 import { PatService } from './pat.service';
+import { PrivacyVisibilityService } from './privacy-visibility.service';
 import { SessionTokenService } from './session-token.service';
 import type { AuthPrincipal } from './auth.types';
 
@@ -42,6 +45,7 @@ export class AuthController {
     private readonly tokens: SessionTokenService,
     private readonly browser: BrowserSessionService,
     private readonly pats: PatService,
+    private readonly privacyVisibility: PrivacyVisibilityService,
   ) {}
 
   @Post('auth/login')
@@ -76,6 +80,22 @@ export class AuthController {
   @UseGuards(AccessAuthGuard)
   me(@CurrentPrincipal() principal: AuthPrincipal) {
     return { user: { id: principal.sub, email: principal.email, role: principal.role } };
+  }
+
+  @Get('auth/privacy-visibility')
+  @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
+  privacyVisibilityStatus(@CurrentPrincipal() principal: AuthPrincipal, @Req() request: Request) {
+    return this.privacyVisibility.getStatus(principal.sub, request);
+  }
+
+  @Put('auth/privacy-visibility')
+  @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, BrowserOriginGuard)
+  updatePrivacyVisibility(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() dto: UpdatePrivacyVisibilityDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.privacyVisibility.update(principal.sub, response, dto);
   }
 
   @Patch('auth/me/password')
@@ -125,7 +145,7 @@ export class AuthController {
   @Post('tokens')
   @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, BrowserOriginGuard)
   createToken(@CurrentPrincipal() principal: AuthPrincipal, @Body() dto: CreatePatDto) {
-    return this.pats.create(principal.sub, dto.name, dto.scopes, dto.expiresInDays);
+    return this.pats.create(principal.sub, dto.name, dto.scopes);
   }
 
   @Delete('tokens/:tokenId')

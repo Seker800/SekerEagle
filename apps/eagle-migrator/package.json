@@ -1,6 +1,7 @@
 {
   "name": "@sekereagle/eagle-migrator",
   "version": "0.1.0",
+  "license": "Apache-2.0",
   "private": true,
   "bin": {
     "eagle-migrator": "dist/main.js"

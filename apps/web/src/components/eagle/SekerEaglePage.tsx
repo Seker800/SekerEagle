@@ -7,13 +7,15 @@ import {
   useSyncExternalStore,
   type DragEvent,
   type MouseEvent,
+  type ReactNode,
 } from 'react';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
-  IconAdjustmentsHorizontal,
   IconCheck,
   IconLayoutGrid,
   IconLayoutSidebarRight,
+  IconLock,
   IconPhoto,
   IconPlus,
   IconRefresh,
@@ -42,19 +44,23 @@ import {
   type EagleAssetChanges,
   type EagleAssetVersion,
   type EagleSmartFolder,
-  type EagleSmartFolderFilters,
 } from '../../lib/eagle-api';
+import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
 import { getEaglePreviewContentUrl, needsEagleImagePyramid } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
-import { EagleColorFilter } from './EagleColorFilter';
 import { EagleProcessingPage } from './EagleProcessingPage';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
-import { EagleTagConditionPicker } from './EagleTagConditionPicker';
+import {
+  EagleQuickFilterBar,
+  buildEagleQuickFilterQuery,
+  countActiveEagleQuickFilters,
+  createEmptyEagleQuickFilterState,
+} from './EagleQuickFilterBar';
 import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
@@ -75,11 +81,13 @@ interface SekerEaglePageProps {
   accessToken?: string;
   ownerId: string;
   canManageProcessing?: boolean;
-  onOpenAccount?: () => void;
+  accountView?: ReactNode;
+  privacyVisibility?: PrivacyVisibilityState;
 }
 
 type EagleAssetContextMenu = { x: number; y: number };
-type EagleLibraryView = 'ACTIVE' | 'TRASH' | 'MANUAL_TAGS' | 'AI_TAGS' | 'PROCESSING';
+type EagleLibraryView =
+  'ACTIVE' | 'PRIVATE' | 'TRASH' | 'MANUAL_TAGS' | 'AI_TAGS' | 'PROCESSING' | 'ACCOUNT';
 const EAGLE_PAGE_SIZE = 40;
 const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
@@ -110,9 +118,12 @@ export function SekerEaglePage({
   accessToken: providedAccessToken,
   ownerId,
   canManageProcessing = false,
-  onOpenAccount,
+  accountView,
+  privacyVisibility,
 }: SekerEaglePageProps) {
   const accessToken = providedAccessToken ?? '';
+  const queryClient = useQueryClient();
+  const privateVisible = privacyVisibility?.enabled === true;
   const queryKeys = useMemo(() => {
     if (!ownerId) throw new Error('SekerEagle requires an authenticated owner identity.');
     return createEagleQueryKeys(ownerId);
@@ -128,6 +139,9 @@ export function SekerEaglePage({
   const editorDirtyRef = useRef(false);
   const editorDirtyFieldsRef = useRef<Set<keyof EagleAssetChanges>>(new Set());
   const editorRevisionRef = useRef(0);
+  const privacyStateRef = useRef(
+    `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}`,
+  );
   const metadataFormRef = useRef<HTMLFormElement>(null);
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
@@ -140,16 +154,7 @@ export function SekerEaglePage({
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
   const [tagPickerAssetIds, setTagPickerAssetIds] = useState<string[] | null>(null);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
-  const [manualTagIds, setManualTagIds] = useState<string[]>([]);
-  const [aiTagIds, setAiTagIds] = useState<string[]>([]);
-  const [formats, setFormats] = useState<string[]>([]);
-  const [rating, setRating] = useState<number | undefined>();
-  const [minWidth, setMinWidth] = useState('');
-  const [minHeight, setMinHeight] = useState('');
-  const [createdFrom, setCreatedFrom] = useState('');
-  const [createdTo, setCreatedTo] = useState('');
-  const [color, setColor] = useState<string | undefined>();
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [quickFilters, setQuickFilters] = useState(createEmptyEagleQuickFilterState);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -168,24 +173,16 @@ export function SekerEaglePage({
 
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys);
-  const isAssetView = libraryView === 'ACTIVE' || libraryView === 'TRASH';
-  const smartFolderFilters: EagleSmartFolderFilters = {
-    search: deferredSearch || undefined,
-    formats,
-    manualTagIds,
-    aiTagIds,
-    rating,
-    minWidth: minWidth ? Number(minWidth) : undefined,
-    minHeight: minHeight ? Number(minHeight) : undefined,
-    createdFrom: createdFrom ? new Date(`${createdFrom}T00:00:00`).toISOString() : undefined,
-    createdTo: createdTo ? new Date(`${createdTo}T23:59:59.999`).toISOString() : undefined,
-    assetColor: color,
-  };
+  const isAssetView =
+    libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
+  const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
+  const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
   const assetFilters: EagleAssetFilters = {
     limit: EAGLE_PAGE_SIZE,
-    ...smartFolderFilters,
-    color: smartFolderFilters.assetColor,
+    search: deferredSearch || undefined,
+    rules: activeFilterCount ? filterQuery : undefined,
     smartFolderId: activeSmartFolderId ?? undefined,
+    privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
   const assetStore = useMemo(() => getEagleAssetEntityStore(ownerId), [ownerId]);
   const assetStoreRevision = useSyncExternalStore(
@@ -225,6 +222,7 @@ export function SekerEaglePage({
     smartFolderMutation,
     updateSmartFolderMutation,
     moveSmartFolderMutation,
+    privacyMutation,
   } = useEagleMutations(accessToken, queryKeys, {
     onMetadataSaved: (assetId, revision) => {
       if (editorAssetIdRef.current === assetId && editorRevisionRef.current === revision) {
@@ -246,15 +244,7 @@ export function SekerEaglePage({
       setEditingSmartFolder(null);
       if (activeSmartFolderId !== folder.id || changes.name === undefined) return;
       setSearch('');
-      setFormats([]);
-      setManualTagIds([]);
-      setAiTagIds([]);
-      setRating(undefined);
-      setMinWidth('');
-      setMinHeight('');
-      setCreatedFrom('');
-      setCreatedTo('');
-      setColor(undefined);
+      setQuickFilters(createEmptyEagleQuickFilterState());
     },
   });
 
@@ -265,6 +255,29 @@ export function SekerEaglePage({
     });
     return [...uniqueAssets.values()];
   }, [assetStore, assetStoreRevision, assetsQuery.data]);
+
+  useEffect(() => {
+    const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}`;
+    if (privacyStateRef.current === nextPrivacyState) return;
+    privacyStateRef.current = nextPrivacyState;
+    assetStore.clear();
+    setPreviewAssetId(null);
+    imagePreview.closePreview();
+    setSelectedAssetIds([]);
+    setSelectedAssetId(null);
+    setIsBatchSelection(false);
+    setAssetContextMenu(null);
+    if (!privateVisible && libraryView === 'PRIVATE') setLibraryView('ACTIVE');
+    void queryClient.resetQueries({ queryKey: queryKeys.root });
+  }, [
+    assetStore,
+    imagePreview,
+    libraryView,
+    privateVisible,
+    privacyVisibility?.expiresAt,
+    queryClient,
+    queryKeys.root,
+  ]);
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   const selectedAssetQuery = useQuery({
     queryKey: [...queryKeys.assetDetail(selectedAssetId), libraryView],
@@ -355,16 +368,7 @@ export function SekerEaglePage({
   const isInspectorOpen = isAssetView && isInspectorVisible;
   const activeSmartFolder =
     smartFolders.find((folder) => folder.id === activeSmartFolderId) ?? null;
-  const activeFilterCount =
-    formats.length +
-    manualTagIds.length +
-    aiTagIds.length +
-    (rating ? 1 : 0) +
-    (minWidth ? 1 : 0) +
-    (minHeight ? 1 : 0) +
-    (createdFrom ? 1 : 0) +
-    (createdTo ? 1 : 0) +
-    (color ? 1 : 0);
+  const color = quickFilters.color;
   useEffect(() => {
     if (!isInspectorVisible || !selectedAsset) return;
     const isNewAsset = editorAssetIdRef.current !== selectedAsset.id;
@@ -455,25 +459,8 @@ export function SekerEaglePage({
     });
   };
 
-  const toggleFilterValue = (
-    value: string,
-    current: string[],
-    setCurrent: (next: string[]) => void,
-  ) =>
-    setCurrent(
-      current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
-    );
-
   const resetFilters = () => {
-    setManualTagIds([]);
-    setAiTagIds([]);
-    setFormats([]);
-    setRating(undefined);
-    setMinWidth('');
-    setMinHeight('');
-    setCreatedFrom('');
-    setCreatedTo('');
-    setColor(undefined);
+    setQuickFilters(createEmptyEagleQuickFilterState());
   };
 
   const changeLibraryView = (view: EagleLibraryView) => {
@@ -594,12 +581,14 @@ export function SekerEaglePage({
 
   const showAssetsForTag = (kind: 'MANUAL' | 'AI', tagId: string) => {
     changeLibraryView('ACTIVE');
-    if (kind === 'MANUAL') setManualTagIds([tagId]);
-    else setAiTagIds([tagId]);
+    setQuickFilters({
+      ...createEmptyEagleQuickFilterState(),
+      ...(kind === 'MANUAL' ? { manualTagIds: [tagId] } : { aiTagIds: [tagId] }),
+    });
   };
 
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
-    if (libraryView === 'PROCESSING') return;
+    if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
     if (!event.dataTransfer.types.includes('Files')) return;
     event.preventDefault();
     dragDepthRef.current += 1;
@@ -611,7 +600,7 @@ export function SekerEaglePage({
     if (dragDepthRef.current === 0) setIsDragging(false);
   };
   const handleDrop = (event: DragEvent<HTMLElement>) => {
-    if (libraryView === 'PROCESSING') return;
+    if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
     event.preventDefault();
     dragDepthRef.current = 0;
     setIsDragging(false);
@@ -647,6 +636,18 @@ export function SekerEaglePage({
             全部素材
             {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{assets.length}</span>}
           </button>
+          {privateVisible && (
+            <button
+              className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
+              type="button"
+              onClick={() => changeLibraryView('PRIVATE')}
+              aria-label="隐私素材"
+            >
+              <IconLock size={17} />
+              隐私素材
+              {libraryView === 'PRIVATE' && <span>{assets.length}</span>}
+            </button>
+          )}
           <div className={styles.navSection}>
             <div className={styles.sectionLabel}>
               智能文件夹
@@ -711,9 +712,14 @@ export function SekerEaglePage({
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
-          {onOpenAccount && (
+          {accountView && (
             <div className={styles.accountSection}>
-              <button type="button" onClick={onOpenAccount} aria-label="个人账号">
+              <button
+                className={libraryView === 'ACCOUNT' ? styles.navActive : undefined}
+                type="button"
+                onClick={() => changeLibraryView('ACCOUNT')}
+                aria-label="个人账号"
+              >
                 <IconUserCircle size={17} />
                 个人账号
               </button>
@@ -744,10 +750,22 @@ export function SekerEaglePage({
 
         <section
           className={styles.library}
-          aria-label={libraryView === 'PROCESSING' ? '素材处理' : undefined}
-          aria-labelledby={libraryView === 'PROCESSING' ? undefined : 'eagle-library-title'}
+          aria-label={
+            libraryView === 'PROCESSING'
+              ? '素材处理'
+              : libraryView === 'ACCOUNT'
+                ? '个人账号'
+                : undefined
+          }
+          aria-labelledby={
+            libraryView === 'PROCESSING' || libraryView === 'ACCOUNT'
+              ? undefined
+              : 'eagle-library-title'
+          }
         >
-          {libraryView === 'PROCESSING' ? (
+          {libraryView === 'ACCOUNT' ? (
+            accountView
+          ) : libraryView === 'PROCESSING' ? (
             <EagleProcessingPage
               accessToken={accessToken}
               canManageProcessing={canManageProcessing}
@@ -796,9 +814,18 @@ export function SekerEaglePage({
               <div className={styles.toolbar}>
                 <div className={styles.titleBlock}>
                   <h1 id="eagle-library-title">
-                    {libraryView === 'TRASH' ? '回收站' : (activeSmartFolder?.name ?? '全部素材')}
+                    {libraryView === 'TRASH'
+                      ? '回收站'
+                      : libraryView === 'PRIVATE'
+                        ? '隐私素材'
+                        : (activeSmartFolder?.name ?? '全部素材')}
                   </h1>
                   <span>{assets.length} 项</span>
+                  {privateVisible && privacyVisibility?.expiresAt ? (
+                    <span className={styles.privacyStatus}>
+                      <IconLock size={12} /> 隐私内容已显示
+                    </span>
+                  ) : null}
                 </div>
                 <label className={styles.searchBox}>
                   <IconSearch size={17} aria-hidden="true" />
@@ -816,21 +843,6 @@ export function SekerEaglePage({
                   )}
                 </label>
                 <div className={styles.toolbarActions}>
-                  {libraryView === 'ACTIVE' && (
-                    <button
-                      type="button"
-                      aria-label={
-                        activeFilterCount > 0 ? `筛选，${activeFilterCount} 项已启用` : '筛选'
-                      }
-                      className={activeFilterCount ? styles.filterActive : undefined}
-                      aria-expanded={isFilterOpen}
-                      onClick={() => setIsFilterOpen((value) => !value)}
-                    >
-                      <IconAdjustmentsHorizontal size={18} />
-                      筛选
-                      {activeFilterCount > 0 && <span aria-hidden="true">{activeFilterCount}</span>}
-                    </button>
-                  )}
                   {libraryView === 'TRASH' && (
                     <button
                       type="button"
@@ -890,117 +902,14 @@ export function SekerEaglePage({
                 </div>
               </div>
 
-              {libraryView === 'ACTIVE' && isFilterOpen && (
-                <div className={styles.filterPanel} aria-label="素材筛选">
-                  <EagleTagConditionPicker
-                    label="人工标签"
-                    icon={<IconTags size={15} aria-hidden="true" />}
-                    tags={manualTags}
-                    selectedTagIds={manualTagIds}
-                    emptyText="暂无人工标签"
-                    onChange={setManualTagIds}
-                  />
-                  <EagleTagConditionPicker
-                    label="AI 标签"
-                    icon={<IconSparkles size={15} aria-hidden="true" />}
-                    tags={aiTags}
-                    selectedTagIds={aiTagIds}
-                    emptyText="AI 分析尚未启用"
-                    onChange={setAiTagIds}
-                  />
-                  <div>
-                    <strong>格式</strong>
-                    <span className={styles.filterChoices}>
-                      {['jpeg', 'png', 'webp', 'gif', 'mp4'].map((format) => (
-                        <button
-                          key={format}
-                          type="button"
-                          aria-pressed={formats.includes(format)}
-                          className={formats.includes(format) ? styles.choiceActive : undefined}
-                          onClick={() => toggleFilterValue(format, formats, setFormats)}
-                        >
-                          {format.toUpperCase()}
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                  <div>
-                    <strong>评分</strong>
-                    <span className={styles.filterChoices}>
-                      {[1, 2, 3, 4, 5].map((value) => (
-                        <button
-                          key={value}
-                          type="button"
-                          aria-pressed={rating === value}
-                          className={rating === value ? styles.choiceActive : undefined}
-                          onClick={() => setRating(rating === value ? undefined : value)}
-                        >
-                          {value} 星
-                        </button>
-                      ))}
-                    </span>
-                  </div>
-                  <div>
-                    <strong>相似颜色</strong>
-                    <EagleColorFilter value={color} onChange={setColor} />
-                  </div>
-                  <div className={styles.rangeFields}>
-                    <strong>最小尺寸</strong>
-                    <label>
-                      宽
-                      <input
-                        aria-label="最小宽度"
-                        inputMode="numeric"
-                        min="1"
-                        type="number"
-                        value={minWidth}
-                        onChange={(event) => setMinWidth(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      高
-                      <input
-                        aria-label="最小高度"
-                        inputMode="numeric"
-                        min="1"
-                        type="number"
-                        value={minHeight}
-                        onChange={(event) => setMinHeight(event.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <div className={styles.rangeFields}>
-                    <strong>添加日期</strong>
-                    <label>
-                      从
-                      <input
-                        aria-label="添加日期从"
-                        type="date"
-                        value={createdFrom}
-                        onChange={(event) => setCreatedFrom(event.target.value)}
-                      />
-                    </label>
-                    <label>
-                      到
-                      <input
-                        aria-label="添加日期到"
-                        type="date"
-                        value={createdTo}
-                        onChange={(event) => setCreatedTo(event.target.value)}
-                      />
-                    </label>
-                  </div>
-                  <button
-                    className={styles.resetFilters}
-                    type="button"
-                    disabled={activeFilterCount === 0}
-                    onClick={resetFilters}
-                  >
-                    <IconRefresh size={15} />
-                    重置筛选
-                  </button>
-                </div>
-              )}
+              {libraryView === 'ACTIVE' ? (
+                <EagleQuickFilterBar
+                  value={quickFilters}
+                  manualTags={manualTags}
+                  aiTags={aiTags}
+                  onChange={setQuickFilters}
+                />
+              ) : null}
 
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
@@ -1059,14 +968,18 @@ export function SekerEaglePage({
                         ? '没有匹配的素材'
                         : libraryView === 'TRASH'
                           ? '回收站是空的'
-                          : '把第一份灵感放进来'}
+                          : libraryView === 'PRIVATE'
+                            ? '暂无隐私素材'
+                            : '把第一份灵感放进来'}
                     </strong>
                     <p>
                       {search
                         ? '尝试其他名称或标签。'
                         : libraryView === 'TRASH'
                           ? '移除的素材会暂时保留在这里。'
-                          : '将图片或 MP4 拖入此处。'}
+                          : libraryView === 'PRIVATE'
+                            ? '通过素材右键菜单设为隐私。'
+                            : '将图片或 MP4 拖入此处。'}
                     </p>
                   </div>
                 )}
@@ -1127,6 +1040,11 @@ export function SekerEaglePage({
                           {asset.lifecycleStatus !== 'READY' && (
                             <span className={styles.processing}>
                               {asset.lifecycleStatus === 'FAILED' ? '处理失败' : '处理中'}
+                            </span>
+                          )}
+                          {asset.isPrivate && (
+                            <span className={styles.privateMark} title="隐私素材">
+                              <IconLock size={12} />
                             </span>
                           )}
                         </span>
@@ -1348,8 +1266,10 @@ export function SekerEaglePage({
                       analysis={selectedAsset.colorAnalysis}
                       onSelectColor={(nextColor) => {
                         changeLibraryView('ACTIVE');
-                        setColor(nextColor);
-                        setIsFilterOpen(true);
+                        setQuickFilters({
+                          ...createEmptyEagleQuickFilterState(),
+                          color: nextColor,
+                        });
                       }}
                     />
                   </div>
@@ -1443,7 +1363,7 @@ export function SekerEaglePage({
             style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
           >
             <div className={styles.contextMenuTitle}>已选择 {selectedAssetIds.length} 项</div>
-            {libraryView === 'ACTIVE' && (
+            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
               <button
                 type="button"
                 role="menuitem"
@@ -1460,7 +1380,30 @@ export function SekerEaglePage({
                 添加标签…
               </button>
             )}
-            {libraryView === 'ACTIVE' ? (
+            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
+              <button
+                type="button"
+                role="menuitem"
+                aria-label={
+                  selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
+                    ? '移出隐私'
+                    : '设为隐私'
+                }
+                disabled={privacyMutation.isPending}
+                onClick={() => {
+                  const isPrivate = !selectedAssetIds.every(
+                    (assetId) => assetsById.get(assetId)?.isPrivate,
+                  );
+                  privacyMutation.mutate({ assets: selectedAssetVersions, isPrivate });
+                }}
+              >
+                <IconLock size={15} />
+                {selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
+                  ? '移出隐私'
+                  : '设为隐私'}
+              </button>
+            )}
+            {libraryView === 'ACTIVE' || libraryView === 'PRIVATE' ? (
               <button
                 className={styles.contextMenuDanger}
                 type="button"
@@ -1524,7 +1467,10 @@ export function SekerEaglePage({
       ) : null}
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
-          initialFilters={editingSmartFolder?.queryJson.filters ?? smartFolderFilters}
+          accessToken={accessToken}
+          initialQuery={
+            editingSmartFolder ? toEagleFilterQuery(editingSmartFolder.queryJson) : filterQuery
+          }
           initialName={editingSmartFolder?.name}
           mode={editingSmartFolder ? 'edit' : 'create'}
           manualTags={manualTags}
