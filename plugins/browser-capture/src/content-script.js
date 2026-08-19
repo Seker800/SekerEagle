@@ -29,6 +29,7 @@ function installCaptureInteraction({ createAltRightClickTracker, resolveCaptureT
       elementsAtPoint: collectElementsAtPoint(point.x, point.y),
       baseUrl: location.href,
       getStyle: (element) => window.getComputedStyle(element),
+      matchesMedia: (query) => window.matchMedia(query).matches,
     });
     if (!target) {
       showToast('这里没有检测到可采集的图片', true);

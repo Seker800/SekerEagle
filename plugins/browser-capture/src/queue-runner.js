@@ -1,5 +1,10 @@
 import { CaptureApiClient, CaptureApiError } from './api-client.js';
-import { buildOriginalName, resolveSupportedMimeType } from './capture-metadata.js';
+import {
+  buildOriginalName,
+  resolveSupportedMimeType,
+  sanitizeImageSourceUrl,
+} from './capture-metadata.js';
+import { normalizeCaptureSourceCandidates } from './capture-source.js';
 import { buildServerCandidates } from './connection-config.js';
 import { decideFailure, selectRunnableJobs } from './queue-policy.js';
 import { runtimeFetch } from './runtime-fetch.js';
@@ -56,17 +61,29 @@ export function createQueueRunner({
       let blob = job.blob;
       let mimeType = job.mimeType;
       let originalName = job.originalName;
+      let sourceUrl = job.sourceUrl;
+      let metadata = job.metadata;
       if (!blob) {
         await store.update(job.id, { status: 'FETCHING', lastError: null });
-        blob = await fetchImage(job.sourceUrl, job.metadata.pageUrl, fetchImpl);
-        mimeType = resolveSupportedMimeType(blob.type, job.sourceUrl);
-        if (!mimeType) throw typedError('该图片格式暂不受 SekerEagle 支持。', 'PERMANENT');
+        const downloaded = await downloadFirstSupportedCandidate(job, fetchImpl);
+        ({ blob, mimeType, sourceUrl } = downloaded);
+        metadata = {
+          ...job.metadata,
+          imageUrl: sanitizeImageSourceUrl(sourceUrl),
+        };
         originalName = buildOriginalName({
-          imageUrl: job.sourceUrl,
+          imageUrl: sourceUrl,
           displayName: job.metadata.displayName,
           mimeType,
         });
-        await store.update(job.id, { blob, mimeType, originalName, status: 'UPLOADING' });
+        await store.update(job.id, {
+          blob,
+          mimeType,
+          originalName,
+          sourceUrl,
+          metadata,
+          status: 'UPLOADING',
+        });
       } else {
         await store.update(job.id, { status: 'UPLOADING', lastError: null });
       }
@@ -76,7 +93,7 @@ export function createQueueRunner({
         originalName,
         mimeType,
         size: blob.size,
-        ...job.metadata,
+        ...metadata,
         capturedAt: job.capturedAt,
         extensionVersion: chrome.runtime.getManifest().version,
       };
@@ -125,6 +142,25 @@ export function createQueueRunner({
   }
 
   return { drain };
+}
+
+async function downloadFirstSupportedCandidate(job, fetchImpl) {
+  const candidates = normalizeCaptureSourceCandidates(job);
+  let lastError = typedError('没有可下载的图片地址。', 'PERMANENT');
+  for (const sourceUrl of candidates) {
+    try {
+      const blob = await fetchImage(sourceUrl, job.metadata.pageUrl, fetchImpl);
+      const mimeType = resolveSupportedMimeType(blob.type, sourceUrl);
+      if (!mimeType) {
+        lastError = typedError('该候选图片格式暂不受 SekerEagle 支持。', 'PERMANENT');
+        continue;
+      }
+      return { blob, mimeType, sourceUrl };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 async function initiateWithFallback({ serverCandidates, pat, fetchImpl, declaration }) {

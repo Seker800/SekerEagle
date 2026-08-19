@@ -59,6 +59,9 @@ export function resolveSupportedMimeType(contentType, imageUrl) {
     .trim()
     .toLocaleLowerCase('en-US');
   if (MIME_EXTENSIONS.has(normalized)) return normalized;
+  if (normalized && !['application/octet-stream', 'binary/octet-stream'].includes(normalized)) {
+    return null;
+  }
   const name = fileNameFromUrl(imageUrl)?.toLocaleLowerCase('en-US') ?? '';
   if (name.endsWith('.jpg') || name.endsWith('.jpeg')) return 'image/jpeg';
   for (const [mimeType, extension] of MIME_EXTENSIONS) {

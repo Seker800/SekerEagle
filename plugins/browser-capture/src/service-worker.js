@@ -1,4 +1,5 @@
 import { buildCaptureMetadata } from './capture-metadata.js';
+import { normalizeCaptureSourceCandidates } from './capture-source.js';
 import { createQueueRunner } from './queue-runner.js';
 import { selectCompletedJobIdsToPrune } from './queue-policy.js';
 import { createQueueStore } from './queue-store.js';
@@ -61,17 +62,16 @@ async function enqueue(payload, sender) {
   if (!['http:', 'https:'].includes(senderUrl.protocol) || senderUrl.origin !== pageUrl.origin) {
     throw new Error('网页来源校验失败。');
   }
-  const sourceUrl = String(payload?.sourceUrl || '');
-  const sourceProtocol = new URL(sourceUrl).protocol;
-  if (!['http:', 'https:', 'data:', 'blob:'].includes(sourceProtocol)) {
-    throw new Error('不支持该图片地址。');
-  }
+  const sourceCandidates = normalizeCaptureSourceCandidates(payload);
+  if (!sourceCandidates.length) throw new Error('不支持该图片地址。');
+  const sourceUrl = sourceCandidates[0];
   const id = crypto.randomUUID();
   const now = Date.now();
   await store.put({
     id,
     status: 'PENDING',
     sourceUrl,
+    sourceCandidates,
     metadata: buildCaptureMetadata({
       pageUrl: payload.pageUrl,
       pageTitle: String(payload.pageTitle || '').slice(0, 1000),
@@ -141,6 +141,7 @@ function withoutSensitiveQueueFields(job) {
   const summary = { ...job };
   delete summary.blob;
   delete summary.sourceUrl;
+  delete summary.sourceCandidates;
   return summary;
 }
 
