@@ -19,7 +19,10 @@ test('normalizes, deduplicates and bounds untrusted candidate URLs', () => {
     'https://cdn.example.com/original.jpg',
     'https://cdn.example.com/current.jpg',
   ]);
-  assert.equal(candidates.some((candidate) => candidate.startsWith('javascript:')), false);
+  assert.equal(
+    candidates.some((candidate) => candidate.startsWith('javascript:')),
+    false,
+  );
 });
 
 test('retains supported data and blob fallbacks while rejecting malformed values', () => {

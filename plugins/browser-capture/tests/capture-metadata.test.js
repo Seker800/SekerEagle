@@ -48,7 +48,10 @@ test('keeps page provenance while removing credentials, fragments, and signed im
 });
 
 test('does not trust an image-looking extension when the server declares HTML content', () => {
-  assert.equal(resolveSupportedMimeType('text/html; charset=utf-8', 'https://example.com/photo.jpg'), null);
+  assert.equal(
+    resolveSupportedMimeType('text/html; charset=utf-8', 'https://example.com/photo.jpg'),
+    null,
+  );
   assert.equal(
     resolveSupportedMimeType('application/octet-stream', 'https://example.com/photo.jpg'),
     'image/jpeg',

@@ -2,7 +2,7 @@
 
 这是一个独立的 Manifest V3 Chrome 扩展。用户在网页图片上按住 `Alt` 并点击右键，扩展会把原图、网页来源和 Eagle 风格元数据加入本地可靠队列，再上传到 SekerEagle。
 
-当前扩展版本：`0.1.3`。
+当前扩展版本：`0.1.4`。
 
 ## 给 Agent 的一句话说明
 
@@ -64,6 +64,8 @@ Chrome 内置页、新标签页和 Chrome 应用商店不允许普通扩展注�
 当前能够识别：
 
 - 普通 `<img>` 和 `<picture>` 图片。
+- `srcset` 与匹配当前媒体条件的 `<picture><source>`，按宽度或像素密度优先尝试高清候选。
+- 指向图片文件的外层链接，以及 `data-original`、`data-full`、`data-highres`、`data-large`、`data-zoom-image` 等通用高清来源属性。
 - 元素后方被覆盖层遮挡的图片。
 - 开放 Shadow DOM 内的图片。
 - 非重复平铺的 CSS `background-image`。
@@ -76,6 +78,8 @@ Chrome 内置页、新标签页和 Chrome 应用商店不允许普通扩展注�
 - 视频帧。
 
 支持 JPG/JPEG、PNG、WebP、GIF、HEIC 和 HEIF，单图最大 100MB。
+
+高清识别不会只押注一个猜测地址。内容脚本最多生成 12 个去重候选，并始终为浏览器当前显示的 `currentSrc`/`src` 保留兜底位置；后台依次下载，遇到失效地址、非图片响应或暂不支持的格式会自动尝试下一项。普通详情页链接不会作为图片候选，服务器明确声明为 HTML 的内容也不会因 URL 带图片扩展名而被上传。
 
 Alt 状态会在右键按下阶段记录，因为部分页面触发 `contextmenu` 时已经丢失修饰键状态。一次手势通过按下、抬起和菜单事件关联并去重，防止同一张图重复入队。
 
@@ -150,21 +154,23 @@ DELETE /api/eagle/browser-captures/:clientCaptureId
 
 ## 代码导航
 
-| 文件                         | 职责                                                       |
-| ---------------------------- | ---------------------------------------------------------- |
-| `manifest.json`              | Manifest V3 权限、内容脚本、Service Worker、popup 和设置页 |
-| `src/content-script.js`      | 网页事件入口、消息发送与可见提示                           |
-| `src/capture-interaction.js` | Alt+右键手势、坐标命中、Shadow DOM、图片与背景图识别       |
-| `src/capture-metadata.js`    | 名称、来源和图片元数据规范化                               |
-| `src/service-worker.js`      | 入队、alarm、消息处理、恢复和 badge 更新                   |
-| `src/queue-store.js`         | IndexedDB 持久化                                           |
-| `src/queue-policy.js`        | 可运行任务选择、失败分类、退避和历史清理                   |
-| `src/queue-runner.js`        | 下载图片、并发调度、上传、重放和最终收敛                   |
-| `src/api-client.js`          | 浏览器采集 API 与预签名分片上传客户端                      |
-| `src/runtime-fetch.js`       | 保持 `WorkerGlobalScope` 接收者的原生 fetch 适配器         |
-| `src/connection-config.js`   | 内外网候选、HTTP 安全开关和预签名 URL 改写                 |
-| `src/options.js`             | 配置校验与保存                                             |
-| `src/popup.js`               | 队列摘要与人工重试入口                                     |
+| 文件                           | 职责                                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| `manifest.json`                | Manifest V3 权限、内容脚本、Service Worker、popup 和设置页 |
+| `src/content-script.js`        | 网页事件入口、消息发送与可见提示                           |
+| `src/capture-interaction.js`   | Alt+右键手势、坐标命中、Shadow DOM 与背景图识别            |
+| `src/image-source-resolver.js` | 响应式原图候选、直链与高清属性解析、质量排序和兜底         |
+| `src/capture-source.js`        | 入队前对不可信候选 URL 去重、协议过滤和数量限制            |
+| `src/capture-metadata.js`      | 名称、来源和图片元数据规范化                               |
+| `src/service-worker.js`        | 入队、alarm、消息处理、恢复和 badge 更新                   |
+| `src/queue-store.js`           | IndexedDB 持久化                                           |
+| `src/queue-policy.js`          | 可运行任务选择、失败分类、退避和历史清理                   |
+| `src/queue-runner.js`          | 下载图片、并发调度、上传、重放和最终收敛                   |
+| `src/api-client.js`            | 浏览器采集 API 与预签名分片上传客户端                      |
+| `src/runtime-fetch.js`         | 保持 `WorkerGlobalScope` 接收者的原生 fetch 适配器         |
+| `src/connection-config.js`     | 内外网候选、HTTP 安全开关和预签名 URL 改写                 |
+| `src/options.js`               | 配置校验与保存                                             |
+| `src/popup.js`                 | 队列摘要与人工重试入口                                     |
 
 ## 两个已知高风险契约
 
