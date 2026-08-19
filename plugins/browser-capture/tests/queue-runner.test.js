@@ -167,7 +167,8 @@ test('automatic connection falls back from unavailable loopback to the public en
     getConfig: async () => ({
       connectionMode: 'auto',
       localServerUrl: 'http://localhost:8180',
-      publicServerUrl: 'https://eagle.example.com',
+      publicServerUrl: 'http://203.0.113.10:8180',
+      allowInsecurePublicHttp: true,
       pat: 'seg_pat_test',
       concurrency: 3,
     }),
@@ -194,7 +195,7 @@ test('automatic connection falls back from unavailable loopback to the public en
 
   assert.deepEqual(
     requests.map((url) => new URL(url).origin),
-    ['http://localhost:8180', 'https://eagle.example.com'],
+    ['http://localhost:8180', 'http://203.0.113.10:8180'],
   );
   assert.equal(job.status, 'COMPLETED');
   assert.equal(job.assetId, 'asset-public');
