@@ -151,12 +151,14 @@ describe('EagleImageViewer', () => {
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
     expect(openMock).not.toHaveBeenCalled();
 
-    act(() => handlers.get('canvas-scroll')?.({
-      pointerType: 'mouse',
-      position: { x: 200, y: 100 },
-      scroll: 0.1,
-      preventDefaultAction: false,
-    }));
+    act(() =>
+      handlers.get('canvas-scroll')?.({
+        pointerType: 'mouse',
+        position: { x: 200, y: 100 },
+        scroll: 0.1,
+        preventDefaultAction: false,
+      }),
+    );
     act(() => vi.advanceTimersByTime(119));
     expect(openMock).not.toHaveBeenCalled();
     act(() => vi.advanceTimersByTime(1));

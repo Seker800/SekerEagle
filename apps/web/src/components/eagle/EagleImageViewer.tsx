@@ -141,10 +141,7 @@ export function EagleImageViewer({
 
   const schedulePendingSourceOpen = () => {
     if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
-    const delay = Math.max(
-      0,
-      lastInteractionAtRef.current + PYRAMID_UPGRADE_IDLE_MS - Date.now(),
-    );
+    const delay = Math.max(0, lastInteractionAtRef.current + PYRAMID_UPGRADE_IDLE_MS - Date.now());
     sourceOpenTimerRef.current = setTimeout(openPendingSource, delay);
   };
   schedulePendingSourceOpenRef.current = schedulePendingSourceOpen;
@@ -195,10 +192,7 @@ export function EagleImageViewer({
           if (!isDirectPointer(event.pointerType)) return;
           markDirectInteraction();
           event.preventDefaultAction = true;
-          viewer.viewport.panBy(
-            viewer.viewport.deltaPointsFromPixels(event.delta.negate()),
-            true,
-          );
+          viewer.viewport.panBy(viewer.viewport.deltaPointsFromPixels(event.delta.negate()), true);
         });
         viewer.addHandler('canvas-drag-end', (event) => {
           if (!isDirectPointer(event.pointerType)) return;
@@ -211,11 +205,7 @@ export function EagleImageViewer({
           markDirectInteraction();
           event.preventDefaultAction = true;
           const refPoint = viewer.viewport.pointFromPixel(event.position, true);
-          viewer.viewport.zoomBy(
-            Math.pow(viewer.zoomPerScroll, event.scroll),
-            refPoint,
-            true,
-          );
+          viewer.viewport.zoomBy(Math.pow(viewer.zoomPerScroll, event.scroll), refPoint, true);
           viewer.viewport.applyConstraints(false);
         });
         viewerRef.current = viewer;
