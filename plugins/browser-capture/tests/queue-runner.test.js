@@ -215,9 +215,7 @@ test('uses native WorkerGlobalScope fetch without losing its receiver', async (t
     assert.equal(this, globalThis);
     requests.push(String(url));
     if (String(url).startsWith('https://cdn.example.com/')) {
-      return Promise.resolve(
-        new Response('image', { headers: { 'content-type': 'image/jpeg' } }),
-      );
+      return Promise.resolve(new Response('image', { headers: { 'content-type': 'image/jpeg' } }));
     }
     return Promise.resolve(
       new Response(

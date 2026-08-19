@@ -1,4 +1,5 @@
 import { normalizeServerUrl, rewritePresignedUploadUrl } from './connection-config.js';
+import { runtimeFetch } from './runtime-fetch.js';
 
 export { normalizeServerUrl } from './connection-config.js';
 
@@ -12,7 +13,7 @@ export class CaptureApiError extends Error {
 }
 
 export class CaptureApiClient {
-  constructor({ serverUrl, pat, allowInsecureHttp = false, fetchImpl = fetch }) {
+  constructor({ serverUrl, pat, allowInsecureHttp = false, fetchImpl = runtimeFetch }) {
     this.allowInsecureHttp = allowInsecureHttp;
     this.serverUrl = normalizeServerUrl(serverUrl, { allowRemoteHttp: allowInsecureHttp });
     this.pat = String(pat || '').trim();

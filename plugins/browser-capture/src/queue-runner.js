@@ -2,13 +2,14 @@ import { CaptureApiClient, CaptureApiError } from './api-client.js';
 import { buildOriginalName, resolveSupportedMimeType } from './capture-metadata.js';
 import { buildServerCandidates } from './connection-config.js';
 import { decideFailure, selectRunnableJobs } from './queue-policy.js';
+import { runtimeFetch } from './runtime-fetch.js';
 
 const MAX_BYTES = 100 * 1024 * 1024;
 
 export function createQueueRunner({
   store,
   getConfig,
-  fetchImpl = fetch,
+  fetchImpl = runtimeFetch,
   onStateChange = () => {},
 }) {
   let runningPromise = null;
