@@ -7,11 +7,66 @@ import styles from './EagleImageViewer.module.css';
 
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
+type ViewerPoint = { x: number; y: number };
+
+interface ViewerDragEvent {
+  delta: { negate(): ViewerPoint };
+  pointerType: string;
+  preventDefaultAction: boolean;
+}
+
+interface ViewerDragEndEvent {
+  pointerType: string;
+  preventDefaultAction: boolean;
+}
+
+interface ViewerScrollEvent {
+  pointerType: string;
+  position: ViewerPoint;
+  preventDefaultAction: boolean;
+  scroll: number;
+}
+
+interface ViewerViewport {
+  applyConstraints(immediately?: boolean): void;
+  deltaPointsFromPixels(point: ViewerPoint): ViewerPoint;
+  getCenter(current?: boolean): ViewerPoint;
+  getZoom(current?: boolean): number;
+  panBy(point: ViewerPoint, immediately?: boolean): void;
+  panTo(point: ViewerPoint, immediately?: boolean): void;
+  pointFromPixel(point: ViewerPoint, current?: boolean): ViewerPoint;
+  zoomBy(factor: number, refPoint?: ViewerPoint, immediately?: boolean): void;
+  zoomTo(zoom: number, refPoint?: ViewerPoint, immediately?: boolean): void;
+}
 
 interface ViewerHandle {
   addHandler(name: 'open' | 'open-failed', handler: () => void): void;
+  addHandler(name: 'canvas-drag', handler: (event: ViewerDragEvent) => void): void;
+  addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
+  addHandler(name: 'canvas-scroll', handler: (event: ViewerScrollEvent) => void): void;
   destroy(): void;
   open(source: ViewerSource): void;
+  viewport: ViewerViewport;
+  zoomPerScroll: number;
+}
+
+interface PendingSource {
+  imageKey: string;
+  preserveViewport: boolean;
+  source: ViewerSource;
+  sourceKey: string;
+}
+
+interface ViewportSnapshot {
+  center: ViewerPoint;
+  zoom: number;
+}
+
+const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
+const PYRAMID_UPGRADE_IDLE_MS = 120;
+
+function isDirectPointer(pointerType: string): boolean {
+  return pointerType === 'mouse' || pointerType === 'pen';
 }
 
 async function importOpenSeadragon() {
@@ -54,10 +109,50 @@ export function EagleImageViewer({
   const sourceRef = useRef<ViewerSource>(source);
   const desiredSourceKeyRef = useRef(sourceKey);
   const sourceKeyRef = useRef('');
+  const activeImageKeyRef = useRef(image.assetId ?? image.src);
+  const pendingSourceRef = useRef<PendingSource | null>(null);
+  const pendingViewportRef = useRef<ViewportSnapshot | null>(null);
+  const sourceOpenTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const lastInteractionAtRef = useRef(0);
+  const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<ViewerStatus>('loading');
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
+
+  const openPendingSource = () => {
+    const viewer = viewerRef.current;
+    const pending = pendingSourceRef.current;
+    if (!viewer || !pending) return;
+
+    pendingSourceRef.current = null;
+    sourceOpenTimerRef.current = undefined;
+    pendingViewportRef.current = pending.preserveViewport
+      ? {
+          center: viewer.viewport.getCenter(true),
+          zoom: viewer.viewport.getZoom(true),
+        }
+      : null;
+    sourceKeyRef.current = pending.sourceKey;
+    activeImageKeyRef.current = pending.imageKey;
+    setStatus('loading');
+    viewer.open(pending.source);
+  };
+
+  const schedulePendingSourceOpen = () => {
+    if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
+    const delay = Math.max(
+      0,
+      lastInteractionAtRef.current + PYRAMID_UPGRADE_IDLE_MS - Date.now(),
+    );
+    sourceOpenTimerRef.current = setTimeout(openPendingSource, delay);
+  };
+  schedulePendingSourceOpenRef.current = schedulePendingSourceOpen;
+
+  const markDirectInteraction = () => {
+    lastInteractionAtRef.current = Date.now();
+    if (pendingSourceRef.current) schedulePendingSourceOpenRef.current();
+  };
 
   useEffect(() => {
     const element = viewerElementRef.current;
@@ -76,16 +171,55 @@ export function EagleImageViewer({
           showNavigationControl: false,
           showNavigator: true,
           navigatorAutoFade: true,
-          animationTime: 0.3,
-          blendTime: 0.1,
+          animationTime: DIRECT_INTERACTION_ANIMATION_SECONDS,
+          blendTime: 0,
           immediateRender: true,
-          constrainDuringPan: true,
+          loadDestinationTilesOnAnimation: false,
+          minScrollDeltaTime: 0,
+          constrainDuringPan: false,
           visibilityRatio: 0.5,
         }) as unknown as ViewerHandle;
-        viewer.addHandler('open', () => setStatus('ready'));
+        viewer.addHandler('open', () => {
+          const pendingViewport = pendingViewportRef.current;
+          pendingViewportRef.current = null;
+          if (pendingViewport) {
+            viewer.viewport.zoomTo(pendingViewport.zoom, undefined, true);
+            viewer.viewport.panTo(pendingViewport.center, true);
+            viewer.viewport.applyConstraints(true);
+          }
+          setStatus('ready');
+        });
         viewer.addHandler('open-failed', () => setStatus('error'));
+        viewer.addHandler('canvas-drag', (event) => {
+          if (!isDirectPointer(event.pointerType)) return;
+          markDirectInteraction();
+          event.preventDefaultAction = true;
+          viewer.viewport.panBy(
+            viewer.viewport.deltaPointsFromPixels(event.delta.negate()),
+            true,
+          );
+        });
+        viewer.addHandler('canvas-drag-end', (event) => {
+          if (!isDirectPointer(event.pointerType)) return;
+          markDirectInteraction();
+          event.preventDefaultAction = true;
+          viewer.viewport.applyConstraints(false);
+        });
+        viewer.addHandler('canvas-scroll', (event) => {
+          if (!isDirectPointer(event.pointerType)) return;
+          markDirectInteraction();
+          event.preventDefaultAction = true;
+          const refPoint = viewer.viewport.pointFromPixel(event.position, true);
+          viewer.viewport.zoomBy(
+            Math.pow(viewer.zoomPerScroll, event.scroll),
+            refPoint,
+            true,
+          );
+          viewer.viewport.applyConstraints(false);
+        });
         viewerRef.current = viewer;
         sourceKeyRef.current = desiredSourceKeyRef.current;
+        activeImageKeyRef.current = image.assetId ?? image.src;
       })
       .catch(() => {
         if (!cancelled) setStatus('error');
@@ -93,6 +227,7 @@ export function EagleImageViewer({
 
     return () => {
       cancelled = true;
+      if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
       viewerRef.current?.destroy();
       viewerRef.current = undefined;
     };
@@ -101,10 +236,20 @@ export function EagleImageViewer({
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || sourceKeyRef.current === sourceKey) return;
-    sourceKeyRef.current = sourceKey;
-    setStatus('loading');
-    viewer.open(source);
-  }, [source, sourceKey]);
+    const imageKey = image.assetId ?? image.src;
+    const preserveViewport =
+      activeImageKeyRef.current === imageKey &&
+      sourceKeyRef.current.startsWith('preview:') &&
+      sourceKey.startsWith('pyramid:');
+    pendingSourceRef.current = { imageKey, preserveViewport, source, sourceKey };
+    if (preserveViewport) {
+      lastInteractionAtRef.current = Date.now();
+      schedulePendingSourceOpen();
+      return;
+    }
+    if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
+    openPendingSource();
+  }, [image.assetId, image.src, source, sourceKey]);
 
   const retry = () => {
     const viewer = viewerRef.current;
