@@ -54,3 +54,26 @@ test('treats an in-progress server state conflict as retryable', async () => {
     status: 409,
   });
 });
+
+test('preserves the browser global receiver when using native fetch', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  globalThis.fetch = function () {
+    assert.equal(this, globalThis);
+    return Promise.resolve(
+      new Response(JSON.stringify({ status: 'PENDING' }), {
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+  };
+  const api = new CaptureApiClient({
+    serverUrl: 'https://eagle.example.com',
+    pat: 'sea_pat_secret',
+  });
+
+  const result = await api.initiate({ clientCaptureId: 'capture-1' });
+
+  assert.equal(result.status, 'PENDING');
+});

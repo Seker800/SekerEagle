@@ -200,3 +200,75 @@ test('automatic connection falls back from unavailable loopback to the public en
   assert.equal(job.status, 'COMPLETED');
   assert.equal(job.assetId, 'asset-public');
 });
+
+test('uses native WorkerGlobalScope fetch without losing its receiver', async (t) => {
+  Object.defineProperty(globalThis, 'chrome', {
+    configurable: true,
+    value: { runtime: { getManifest: () => ({ version: '0.1.2' }) } },
+  });
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+  });
+  const requests = [];
+  globalThis.fetch = function (url) {
+    assert.equal(this, globalThis);
+    requests.push(String(url));
+    if (String(url).startsWith('https://cdn.example.com/')) {
+      return Promise.resolve(
+        new Response('image', { headers: { 'content-type': 'image/jpeg' } }),
+      );
+    }
+    return Promise.resolve(
+      new Response(
+        JSON.stringify({
+          clientCaptureId: job.id,
+          uploadSessionId: 'upload-1',
+          status: 'COMPLETED',
+          assetId: 'asset-1',
+          partSize: 5_242_880,
+          replayed: false,
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      ),
+    );
+  };
+  const job = {
+    id: '13e84291-8ad7-4c44-aa76-29a45ce058b2',
+    status: 'PENDING',
+    sourceUrl: 'https://cdn.example.com/photo.jpg',
+    metadata: {
+      displayName: 'Photo',
+      pageTitle: 'Gallery',
+      pageUrl: 'https://example.com/gallery',
+      imageUrl: 'https://cdn.example.com/photo.jpg',
+      altText: 'Photo',
+    },
+    capturedAt: '2026-08-19T00:00:00.000Z',
+    createdAt: 1,
+    attempts: 0,
+    nextAttemptAt: 0,
+    blob: null,
+  };
+  const store = {
+    list: async () => [job],
+    update: async (_id, changes) => Object.assign(job, changes),
+  };
+  const runner = createQueueRunner({
+    store,
+    getConfig: async () => ({
+      serverUrl: 'https://eagle.example.com',
+      pat: 'sea_pat_test',
+      concurrency: 3,
+    }),
+  });
+
+  await runner.drain();
+
+  assert.deepEqual(requests, [
+    'https://cdn.example.com/photo.jpg',
+    `https://eagle.example.com/api/eagle/browser-captures`,
+  ]);
+  assert.equal(job.status, 'COMPLETED');
+  assert.equal(job.assetId, 'asset-1');
+});
