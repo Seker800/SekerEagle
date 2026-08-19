@@ -33,7 +33,7 @@
     "@sekereagle/vector-core": "*",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
-    "class-validator": "^0.14.1",
+    "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "pinyin-pro": "^3.29.2",
     "reflect-metadata": "^0.2.2",
