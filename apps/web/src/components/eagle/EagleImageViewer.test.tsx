@@ -7,6 +7,7 @@ import { EagleImageViewer } from './EagleImageViewer';
 const {
   applyConstraintsMock,
   destroyMock,
+  getBoundsMock,
   getCenterMock,
   getZoomMock,
   handlers,
@@ -20,6 +21,11 @@ const {
 } = vi.hoisted(() => {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
   const hoistedDestroyMock = vi.fn();
+  const hoistedGetBoundsMock = vi.fn(() => ({
+    containsPoint: vi.fn(({ x, y }: { x: number; y: number }) =>
+      x >= 0 && x <= 1 && y >= 0 && y <= 0.75,
+    ),
+  }));
   const hoistedOpenMock = vi.fn();
   const hoistedApplyConstraintsMock = vi.fn();
   const hoistedGetCenterMock = vi.fn(() => ({ x: 0.4, y: 0.6 }));
@@ -46,11 +52,15 @@ const {
       zoomBy: hoistedZoomByMock,
       zoomTo: hoistedZoomToMock,
     },
-    zoomPerScroll: 1.03,
+    world: {
+      getItemAt: vi.fn(() => ({ getBounds: hoistedGetBoundsMock })),
+    },
+    zoomPerScroll: 1.12,
   };
   return {
     applyConstraintsMock: hoistedApplyConstraintsMock,
     destroyMock: hoistedDestroyMock,
+    getBoundsMock: hoistedGetBoundsMock,
     getCenterMock: hoistedGetCenterMock,
     getZoomMock: hoistedGetZoomMock,
     handlers: hoistedHandlers,
@@ -105,7 +115,7 @@ describe('EagleImageViewer', () => {
         minScrollDeltaTime: 0,
         showNavigator: true,
         tileSources: { type: 'image', url: image.src },
-        zoomPerScroll: 1.03,
+        zoomPerScroll: 1.12,
       }),
     );
     expect(screen.getByRole('dialog', { name: image.alt })).toBeInTheDocument();
@@ -135,12 +145,45 @@ describe('EagleImageViewer', () => {
     act(() => handlers.get('canvas-scroll')?.(scrollEvent));
     expect(scrollEvent.preventDefaultAction).toBe(true);
     expect(pointFromPixelMock).toHaveBeenCalledWith(scrollEvent.position, true);
-    expect(zoomByMock).toHaveBeenCalledWith(Math.pow(1.03, 0.5), { x: 0.3, y: 0.7 }, true);
+    expect(zoomByMock).toHaveBeenCalledWith(Math.pow(1.12, 0.5), { x: 0.3, y: 0.7 }, true);
 
     const dragEndEvent = { pointerType: 'mouse', preventDefaultAction: false };
     act(() => handlers.get('canvas-drag-end')?.(dragEndEvent));
     expect(dragEndEvent.preventDefaultAction).toBe(true);
     expect(applyConstraintsMock).toHaveBeenCalledWith(false);
+  });
+
+  it('closes on a quick click outside the displayed image but stays open for image clicks', async () => {
+    const onClose = vi.fn();
+    render(<EagleImageViewer image={image} onClose={onClose} />);
+    await waitFor(() => expect(handlers.has('canvas-click')).toBe(true));
+
+    act(() =>
+      handlers.get('canvas-click')?.({
+        position: { x: 320, y: 180 },
+        quick: true,
+      }),
+    );
+    expect(onClose).not.toHaveBeenCalled();
+
+    pointFromPixelMock.mockReturnValueOnce({ x: 1.2, y: 0.4 });
+    act(() =>
+      handlers.get('canvas-click')?.({
+        position: { x: 900, y: 180 },
+        quick: true,
+      }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    pointFromPixelMock.mockReturnValueOnce({ x: 1.2, y: 0.4 });
+    act(() =>
+      handlers.get('canvas-click')?.({
+        position: { x: 900, y: 180 },
+        quick: false,
+      }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(getBoundsMock).toHaveBeenCalled();
   });
 
   it('upgrades to pyramid tiles after interaction settles and preserves the viewport', async () => {
