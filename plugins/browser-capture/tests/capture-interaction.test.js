@@ -137,6 +137,44 @@ test('uses direct image links and semantic high-resolution attributes before ren
   );
 });
 
+test('ignores ordinary page links and always retains rendered fallbacks within the candidate bound', () => {
+  const image = {
+    tagName: 'IMG',
+    currentSrc: 'https://cdn.example.com/rendered.jpg',
+    src: 'https://cdn.example.com/fallback.jpg',
+    srcset: Array.from(
+      { length: 20 },
+      (_, index) => `https://cdn.example.com/responsive-${index + 1}.jpg ${(index + 1) * 100}w`,
+    ).join(', '),
+    alt: 'Bounded candidates',
+    closest: (selector) =>
+      selector === 'a[href]'
+        ? {
+            href: 'https://example.com/photo/details',
+            download: '',
+            hasAttribute: () => false,
+            getAttribute: () => null,
+          }
+        : null,
+    getAttribute(name) {
+      return name === 'srcset' ? this.srcset : null;
+    },
+  };
+
+  const target = resolveCaptureTarget({
+    path: [image],
+    baseUrl: 'https://example.com/gallery/',
+    getStyle: () => ({ backgroundImage: 'none' }),
+  });
+
+  assert.equal(target.sourceCandidates.length, 12);
+  assert.equal(target.sourceCandidates.includes('https://example.com/photo/details'), false);
+  assert.deepEqual(target.sourceCandidates.slice(-2), [
+    'https://cdn.example.com/rendered.jpg',
+    'https://cdn.example.com/fallback.jpg',
+  ]);
+});
+
 test('collects a non-repeating CSS background image when no img element is hit', () => {
   const card = { tagName: 'DIV', textContent: 'Cover artwork' };
 

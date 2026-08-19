@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   buildCaptureMetadata,
   deriveDisplayName,
+  resolveSupportedMimeType,
   sanitizeImageSourceUrl,
 } from '../src/capture-metadata.js';
 
@@ -44,4 +45,12 @@ test('keeps page provenance while removing credentials, fragments, and signed im
   assert.equal(metadata.pageUrl, 'https://example.com/gallery?id=7');
   assert.equal(metadata.imageUrl, 'https://cdn.example.com/photo.jpg');
   assert.equal(sanitizeImageSourceUrl('blob:https://example.com/id'), null);
+});
+
+test('does not trust an image-looking extension when the server declares HTML content', () => {
+  assert.equal(resolveSupportedMimeType('text/html; charset=utf-8', 'https://example.com/photo.jpg'), null);
+  assert.equal(
+    resolveSupportedMimeType('application/octet-stream', 'https://example.com/photo.jpg'),
+    'image/jpeg',
+  );
 });
