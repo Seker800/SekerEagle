@@ -46,7 +46,7 @@ const {
       zoomBy: hoistedZoomByMock,
       zoomTo: hoistedZoomToMock,
     },
-    zoomPerScroll: 1.2,
+    zoomPerScroll: 1.03,
   };
   return {
     applyConstraintsMock: hoistedApplyConstraintsMock,
@@ -105,6 +105,7 @@ describe('EagleImageViewer', () => {
         minScrollDeltaTime: 0,
         showNavigator: true,
         tileSources: { type: 'image', url: image.src },
+        zoomPerScroll: 1.03,
       }),
     );
     expect(screen.getByRole('dialog', { name: image.alt })).toBeInTheDocument();
@@ -134,7 +135,7 @@ describe('EagleImageViewer', () => {
     act(() => handlers.get('canvas-scroll')?.(scrollEvent));
     expect(scrollEvent.preventDefaultAction).toBe(true);
     expect(pointFromPixelMock).toHaveBeenCalledWith(scrollEvent.position, true);
-    expect(zoomByMock).toHaveBeenCalledWith(Math.pow(1.2, 0.5), { x: 0.3, y: 0.7 }, true);
+    expect(zoomByMock).toHaveBeenCalledWith(Math.pow(1.03, 0.5), { x: 0.3, y: 0.7 }, true);
 
     const dragEndEvent = { pointerType: 'mouse', preventDefaultAction: false };
     act(() => handlers.get('canvas-drag-end')?.(dragEndEvent));
