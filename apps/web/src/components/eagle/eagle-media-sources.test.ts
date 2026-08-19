@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { EagleAssetListItem, EaglePyramidDescriptor } from '../../lib/eagle-api';
 import {
   createEagleTileSource,
+  createEaglePreviewTileSource,
   getEaglePreviewContentUrl,
   getEagleThumbnailSourceSet,
+  needsEagleImagePyramid,
 } from './eagle-media-sources';
 
 const asset = {
@@ -40,6 +42,20 @@ describe('Eagle media sources', () => {
       '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/13/4/2',
     );
     expect(source.maxLevel).toBe(13);
+  });
+
+  it('builds a single-image source for the same zoom viewer', () => {
+    expect(createEaglePreviewTileSource('/api/eagle/assets/asset-1/renditions/preview-1')).toEqual({
+      type: 'image',
+      url: '/api/eagle/assets/asset-1/renditions/preview-1',
+    });
+  });
+
+  it('only requests pyramids for images that can have one', () => {
+    expect(needsEagleImagePyramid(1_200, 800)).toBe(false);
+    expect(needsEagleImagePyramid(4_097, 1)).toBe(true);
+    expect(needsEagleImagePyramid(4_000, 4_001)).toBe(true);
+    expect(needsEagleImagePyramid(null, 8_000)).toBe(false);
   });
 
   it('builds responsive thumbnail candidates in ascending width order', () => {
