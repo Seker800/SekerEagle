@@ -40,7 +40,99 @@ test('finds an image underneath an overlay using point hit-test candidates', () 
     }),
     {
       sourceUrl: 'https://cdn.example.com/full/photo.webp',
+      sourceCandidates: [
+        'https://cdn.example.com/full/photo.webp',
+        'https://cdn.example.com/thumb/photo.webp',
+      ],
       altText: 'Reference photo',
+    },
+  );
+});
+
+test('ranks responsive image candidates by intrinsic quality before rendered fallbacks', () => {
+  const image = {
+    tagName: 'IMG',
+    currentSrc: 'https://cdn.example.com/rendered-640.jpg',
+    src: 'https://cdn.example.com/fallback-320.jpg',
+    srcset:
+      'https://cdn.example.com/responsive-960.jpg 960w, /responsive-2400.jpg 2400w, /responsive-1600.jpg 1600w',
+    naturalWidth: 640,
+    alt: 'Responsive photo',
+    getAttribute(name) {
+      return name === 'srcset' ? this.srcset : null;
+    },
+  };
+  const picture = {
+    tagName: 'PICTURE',
+    querySelector: () => image,
+    querySelectorAll: () => [
+      {
+        tagName: 'SOURCE',
+        srcset: '/picture-3200.webp 3200w, /picture-1280.webp 1280w',
+        media: '(min-width: 1000px)',
+      },
+      {
+        tagName: 'SOURCE',
+        srcset: '/wrong-art-direction-4000.jpg 4000w',
+        media: '(orientation: portrait)',
+      },
+    ],
+  };
+
+  assert.deepEqual(
+    resolveCaptureTarget({
+      path: [picture],
+      elementsAtPoint: [],
+      baseUrl: 'https://example.com/gallery/',
+      getStyle: () => ({ backgroundImage: 'none' }),
+      matchesMedia: (query) => query !== '(orientation: portrait)',
+    }),
+    {
+      sourceUrl: 'https://example.com/picture-3200.webp',
+      sourceCandidates: [
+        'https://example.com/picture-3200.webp',
+        'https://example.com/responsive-2400.jpg',
+        'https://example.com/responsive-1600.jpg',
+        'https://example.com/picture-1280.webp',
+        'https://cdn.example.com/responsive-960.jpg',
+        'https://cdn.example.com/rendered-640.jpg',
+        'https://cdn.example.com/fallback-320.jpg',
+      ],
+      altText: 'Responsive photo',
+    },
+  );
+});
+
+test('uses direct image links and semantic high-resolution attributes before rendered sources', () => {
+  const imageLink = {
+    href: 'https://cdn.example.com/original/photo.png?download=1',
+    getAttribute: (name) => (name === 'href' ? '/original/photo.png?download=1' : null),
+  };
+  const image = {
+    tagName: 'IMG',
+    currentSrc: 'https://cdn.example.com/thumb/photo.webp',
+    src: 'https://cdn.example.com/thumb/photo.webp',
+    alt: 'Linked photo',
+    closest: () => imageLink,
+    getAttribute(name) {
+      return name === 'data-original' ? '/original/from-data.jpg' : null;
+    },
+  };
+
+  assert.deepEqual(
+    resolveCaptureTarget({
+      path: [image],
+      baseUrl: 'https://cdn.example.com/gallery/',
+      getStyle: () => ({ backgroundImage: 'none' }),
+    }),
+    {
+      sourceUrl: 'https://cdn.example.com/original/photo.png?download=1',
+      sourceCandidates: [
+        'https://cdn.example.com/original/photo.png?download=1',
+        'https://cdn.example.com/original/from-data.jpg',
+        'https://cdn.example.com/thumb/photo.webp',
+      ],
+      altText: 'Linked photo',
     },
   );
 });
@@ -60,6 +152,7 @@ test('collects a non-repeating CSS background image when no img element is hit',
     }),
     {
       sourceUrl: 'https://example.com/images/cover.jpg',
+      sourceCandidates: ['https://example.com/images/cover.jpg'],
       altText: 'Cover artwork',
     },
   );
