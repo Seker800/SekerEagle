@@ -4,7 +4,7 @@ version = "0.1.0"
 license = "GPL-3.0-only"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-  "fastapi==0.116.1",
+  "fastapi==0.141.1",
   "huggingface-hub==1.28.0",
   "mlx-embeddings==0.1.0",
   "pillow==11.3.0",
