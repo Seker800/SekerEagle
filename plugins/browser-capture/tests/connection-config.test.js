@@ -14,20 +14,22 @@ test('automatic mode prefers loopback and falls back to a configured HTTPS publi
   );
 });
 
-test('public mode requires a public HTTPS endpoint and never accepts remote HTTP', () => {
+test('public mode accepts remote HTTP only after explicit insecure transport opt-in', () => {
   assert.deepEqual(
     buildServerCandidates({
       connectionMode: 'public',
       localServerUrl: 'http://localhost:8180',
-      publicServerUrl: 'https://eagle.example.com',
+      publicServerUrl: 'http://203.0.113.10:8180',
+      allowInsecurePublicHttp: true,
     }),
-    ['https://eagle.example.com'],
+    ['http://203.0.113.10:8180'],
   );
   assert.throws(() =>
     buildServerCandidates({
       connectionMode: 'public',
       localServerUrl: 'http://localhost:8180',
       publicServerUrl: 'http://eagle.example.com',
+      allowInsecurePublicHttp: false,
     }),
   );
 });
