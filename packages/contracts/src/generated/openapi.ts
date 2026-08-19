@@ -692,6 +692,86 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/browser-captures': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleBrowserCaptureController_initiate'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/browser-captures/{clientCaptureId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleBrowserCaptureController_get'];
+    put?: never;
+    post?: never;
+    delete: operations['EagleBrowserCaptureController_abort'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/browser-captures/{clientCaptureId}/parts/{partNumber}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleBrowserCaptureController_presignPart'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/browser-captures/{clientCaptureId}/parts': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleBrowserCaptureController_listParts'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/browser-captures/{clientCaptureId}/complete': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleBrowserCaptureController_complete'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads': {
     parameters: {
       query?: never;
@@ -1305,7 +1385,7 @@ export interface components {
     };
     CreatePatDto: {
       name: string;
-      scopes: ('import:read' | 'import:write' | 'asset:write')[];
+      scopes: ('import:read' | 'import:write' | 'asset:write' | 'capture:write')[];
       /** @default 90 */
       expiresInDays: Record<string, never>;
     };
@@ -1357,11 +1437,21 @@ export interface components {
       parentId?: Record<string, never> | null;
       position: number;
     };
-    InitiateEagleUploadDto: {
+    InitiateEagleBrowserCaptureDto: {
+      /** Format: uuid */
+      clientCaptureId: string;
       originalName: string;
       mimeType: string;
       size: number;
       contentSha256?: string;
+      displayName: string;
+      pageTitle: string;
+      pageUrl: string;
+      imageUrl?: string;
+      altText?: string;
+      /** Format: date-time */
+      capturedAt: string;
+      extensionVersion: string;
     };
     CompleteUploadPartDto: {
       partNumber: number;
@@ -1369,6 +1459,12 @@ export interface components {
     };
     CompleteEagleUploadDto: {
       parts: components['schemas']['CompleteUploadPartDto'][];
+    };
+    InitiateEagleUploadDto: {
+      originalName: string;
+      mimeType: string;
+      size: number;
+      contentSha256?: string;
     };
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
@@ -2522,6 +2618,127 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['MoveSmartFolderDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_initiate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['InitiateEagleBrowserCaptureDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        clientCaptureId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_abort: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        clientCaptureId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_presignPart: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        clientCaptureId: string;
+        partNumber: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_listParts: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        clientCaptureId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleBrowserCaptureController_complete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        clientCaptureId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CompleteEagleUploadDto'];
       };
     };
     responses: {

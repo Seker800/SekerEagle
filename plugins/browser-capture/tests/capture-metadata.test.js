@@ -8,15 +8,27 @@ import {
 
 test('derives Eagle-like names from alt text, meaningful file names, then page title', () => {
   assert.equal(
-    deriveDisplayName({ altText: '  Mountain Study  ', imageUrl: 'https://cdn.test/a.jpg', pageTitle: 'Page' }),
+    deriveDisplayName({
+      altText: '  Mountain Study  ',
+      imageUrl: 'https://cdn.test/a.jpg',
+      pageTitle: 'Page',
+    }),
     'Mountain Study',
   );
   assert.equal(
-    deriveDisplayName({ altText: '', imageUrl: 'https://cdn.test/reference-board.png', pageTitle: 'Page' }),
+    deriveDisplayName({
+      altText: '',
+      imageUrl: 'https://cdn.test/reference-board.png',
+      pageTitle: 'Page',
+    }),
     'reference-board',
   );
   assert.equal(
-    deriveDisplayName({ altText: '', imageUrl: 'https://cdn.test/4f31c8a927c94f0f.jpg', pageTitle: 'Gallery' }),
+    deriveDisplayName({
+      altText: '',
+      imageUrl: 'https://cdn.test/4f31c8a927c94f0f.jpg',
+      pageTitle: 'Gallery',
+    }),
     'Gallery',
   );
 });

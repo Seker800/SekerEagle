@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SekerEagle 图片采集</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="popup-page">
+    <main>
+      <div class="popup-heading">
+        <div>
+          <p class="eyebrow">SekerEagle</p>
+          <h1>采集队列</h1>
+        </div>
+        <button id="options" type="button" class="secondary">设置</button>
+      </div>
+      <p id="summary">正在读取队列…</p>
+      <ol id="jobs"></ol>
+    </main>
+    <script type="module" src="src/popup.js"></script>
+  </body>
+</html>

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "SekerEagle 图片采集",
+  "version": "0.1.0",
+  "description": "使用 Alt+右键将网页图片可靠收藏到 SekerEagle。",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "src/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content-script.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "action": {
+    "default_title": "SekerEagle 图片采集",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none';"
+  }
+}

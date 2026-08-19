@@ -45,6 +45,24 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ['plugins/browser-capture/**/*.js'],
+    languageOptions: {
+      globals: {
+        Blob: 'readonly',
+        chrome: 'readonly',
+        crypto: 'readonly',
+        document: 'readonly',
+        fetch: 'readonly',
+        HTMLImageElement: 'readonly',
+        indexedDB: 'readonly',
+        location: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+        window: 'readonly',
+      },
+    },
+  },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
     files: ['**/*.ts', '**/*.tsx'],

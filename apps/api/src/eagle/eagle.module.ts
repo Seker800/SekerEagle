@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EagleController } from './eagle.controller';
+import { EagleBrowserCaptureController } from './eagle-browser-capture.controller';
+import { EagleBrowserCaptureService } from './eagle-browser-capture.service';
 import { EagleImportController } from './eagle-import.controller';
 import { EagleImportService } from './eagle-import.service';
 import { EagleMediaService } from './eagle-media.service';
@@ -26,6 +28,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
   imports: [AuthModule, StorageModule],
   controllers: [
     EagleController,
+    EagleBrowserCaptureController,
     EagleUploadController,
     EagleImportController,
     EagleProcessingController,
@@ -33,6 +36,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
   ],
   providers: [
     EagleService,
+    EagleBrowserCaptureService,
     EagleMediaService,
     EagleMaintenanceService,
     EagleMediaCapabilityService,

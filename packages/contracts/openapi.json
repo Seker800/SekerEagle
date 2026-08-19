@@ -1532,6 +1532,197 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/browser-captures": {
+      "post": {
+        "operationId": "EagleBrowserCaptureController_initiate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateEagleBrowserCaptureDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      }
+    },
+    "/api/eagle/browser-captures/{clientCaptureId}": {
+      "get": {
+        "operationId": "EagleBrowserCaptureController_get",
+        "parameters": [
+          {
+            "name": "clientCaptureId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      },
+      "delete": {
+        "operationId": "EagleBrowserCaptureController_abort",
+        "parameters": [
+          {
+            "name": "clientCaptureId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      }
+    },
+    "/api/eagle/browser-captures/{clientCaptureId}/parts/{partNumber}": {
+      "post": {
+        "operationId": "EagleBrowserCaptureController_presignPart",
+        "parameters": [
+          {
+            "name": "clientCaptureId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "partNumber",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      }
+    },
+    "/api/eagle/browser-captures/{clientCaptureId}/parts": {
+      "get": {
+        "operationId": "EagleBrowserCaptureController_listParts",
+        "parameters": [
+          {
+            "name": "clientCaptureId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      }
+    },
+    "/api/eagle/browser-captures/{clientCaptureId}/complete": {
+      "post": {
+        "operationId": "EagleBrowserCaptureController_complete",
+        "parameters": [
+          {
+            "name": "clientCaptureId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompleteEagleUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-browser-captures"]
+      }
+    },
     "/api/eagle/uploads": {
       "post": {
         "operationId": "EagleUploadController_initiate",
@@ -2623,7 +2814,7 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["import:read", "import:write", "asset:write"]
+              "enum": ["import:read", "import:write", "asset:write", "capture:write"]
             }
           },
           "expiresInDays": {
@@ -2813,9 +3004,13 @@
         },
         "required": ["rowVersion", "position"]
       },
-      "InitiateEagleUploadDto": {
+      "InitiateEagleBrowserCaptureDto": {
         "type": "object",
         "properties": {
+          "clientCaptureId": {
+            "type": "string",
+            "format": "uuid"
+          },
           "originalName": {
             "type": "string",
             "minLength": 1,
@@ -2833,9 +3028,50 @@
           "contentSha256": {
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "pageTitle": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "pageUrl": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "imageUrl": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "altText": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "capturedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "extensionVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[0-9A-Za-z._+-]+$"
           }
         },
-        "required": ["originalName", "mimeType", "size"]
+        "required": [
+          "clientCaptureId",
+          "originalName",
+          "mimeType",
+          "size",
+          "displayName",
+          "pageTitle",
+          "pageUrl",
+          "capturedAt",
+          "extensionVersion"
+        ]
       },
       "CompleteUploadPartDto": {
         "type": "object",
@@ -2865,6 +3101,30 @@
           }
         },
         "required": ["parts"]
+      },
+      "InitiateEagleUploadDto": {
+        "type": "object",
+        "properties": {
+          "originalName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "mimeType": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "size": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 104857600
+          },
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          }
+        },
+        "required": ["originalName", "mimeType", "size"]
       },
       "CreateEagleImportRunDto": {
         "type": "object",

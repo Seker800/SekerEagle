@@ -1,6 +1,6 @@
 import type { UserRole } from '@prisma/client';
 
-export const PAT_SCOPES = ['import:read', 'import:write', 'asset:write'] as const;
+export const PAT_SCOPES = ['import:read', 'import:write', 'asset:write', 'capture:write'] as const;
 export type PatScope = (typeof PAT_SCOPES)[number];
 
 export interface AuthPrincipal {

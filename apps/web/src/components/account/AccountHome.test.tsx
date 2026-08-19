@@ -22,7 +22,7 @@ describe('AccountHome', () => {
     );
   });
 
-  it('loads, creates and revokes importer tokens', async () => {
+  it('loads, creates and revokes external connection tokens', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path =
         typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
@@ -40,10 +40,16 @@ describe('AccountHome', () => {
         ]);
       }
       if (path === '/api/tokens' && init?.method === 'POST') {
+        if (typeof init.body !== 'string') throw new Error('expected a JSON request body');
+        expect(JSON.parse(init.body)).toEqual({
+          name: 'SekerEagle 浏览器插件',
+          scopes: ['capture:write'],
+          expiresInDays: 30,
+        });
         return jsonResponse({
           id: 'token-2',
-          name: 'Eagle 导入器',
-          scopes: ['import:read', 'import:write', 'asset:write'],
+          name: 'SekerEagle 浏览器插件',
+          scopes: ['capture:write'],
           createdAt: '2026-08-17T00:00:00.000Z',
           expiresAt: '2099-09-16T00:00:00.000Z',
           revokedAt: null,
@@ -73,7 +79,7 @@ describe('AccountHome', () => {
     expect(createdToken).toHaveValue('seg_pat_secret');
     expect(createdToken).toHaveAttribute('readonly');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByText('Eagle 导入器')).toBeInTheDocument();
+    expect(screen.getByText('SekerEagle 浏览器插件')).toBeInTheDocument();
 
     const selectSpy = vi.spyOn(HTMLInputElement.prototype, 'select');
     vi.stubGlobal('navigator', {

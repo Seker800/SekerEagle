@@ -44,6 +44,18 @@ function getTokenStatus(token: PersonalAccessToken): 'active' | 'expired' | 'rev
 }
 
 const statusLabels = { active: '有效', expired: '已过期', revoked: '已撤销' } as const;
+const tokenPurposes = {
+  capture: {
+    label: '浏览器图片采集',
+    defaultName: 'SekerEagle 浏览器插件',
+    scopes: ['capture:write'],
+  },
+  importer: {
+    label: 'Eagle 图库导入',
+    defaultName: 'Eagle 导入器',
+    scopes: ['import:read', 'import:write', 'asset:write'],
+  },
+} as const;
 
 export function AccountHome({
   user,
@@ -59,7 +71,8 @@ export function AccountHome({
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokenError, setTokenError] = useState('');
-  const [tokenName, setTokenName] = useState('Eagle 导入器');
+  const [tokenPurpose, setTokenPurpose] = useState<keyof typeof tokenPurposes>('capture');
+  const [tokenName, setTokenName] = useState<string>(tokenPurposes.capture.defaultName);
   const [expiresInDays, setExpiresInDays] = useState(30);
   const [createdToken, setCreatedToken] = useState<CreatedToken | null>(null);
   const createdTokenInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +101,7 @@ export function AccountHome({
     void loadTokens();
   }, [loadTokens]);
 
-  async function createImporterToken(event: FormEvent) {
+  async function createConnectionToken(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
     setTokenError('');
@@ -98,14 +111,14 @@ export function AccountHome({
         method: 'POST',
         body: JSON.stringify({
           name: tokenName.trim(),
-          scopes: ['import:read', 'import:write', 'asset:write'],
+          scopes: tokenPurposes[tokenPurpose].scopes,
           expiresInDays,
         }),
       });
       setCreatedToken(result);
       setTokens((current) => [{ ...result, revokedAt: null, lastUsedAt: null }, ...current]);
     } catch (cause) {
-      setTokenError(cause instanceof Error ? cause.message : '创建导入令牌失败');
+      setTokenError(cause instanceof Error ? cause.message : '创建连接令牌失败');
     } finally {
       setCreating(false);
     }
@@ -199,10 +212,10 @@ export function AccountHome({
           <span className="role-badge">
             <IconShieldCheck size={15} /> {user.role === 'ADMIN' ? '管理员' : '成员'}
           </span>
-          <p>账号、安全设置与 Eagle 导入器连接都集中在这里管理。</p>
+          <p>账号、安全设置、浏览器采集与 Eagle 导入器连接都集中在这里管理。</p>
           <nav aria-label="账号设置导航">
             <a href="#connections">
-              <IconKey size={16} /> 导入器连接
+              <IconKey size={16} /> 外部连接
             </a>
             <a href="#security">
               <IconLock size={16} /> 登录安全
@@ -215,16 +228,33 @@ export function AccountHome({
             <div className="panel-heading">
               <div>
                 <p className="account-kicker">连接管理</p>
-                <h2>Eagle 导入器令牌</h2>
-                <p>令牌允许桌面导入器向此账号写入素材，不会获得账号管理权限。</p>
+                <h2>外部连接令牌</h2>
+                <p>为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。</p>
               </div>
               <IconKey size={22} />
             </div>
 
             <form
               className="token-create-form"
-              onSubmit={(event) => void createImporterToken(event)}
+              onSubmit={(event) => void createConnectionToken(event)}
             >
+              <label>
+                令牌用途
+                <select
+                  value={tokenPurpose}
+                  onChange={(event) => {
+                    const purpose = event.target.value as keyof typeof tokenPurposes;
+                    setTokenPurpose(purpose);
+                    setTokenName(tokenPurposes[purpose].defaultName);
+                  }}
+                >
+                  {Object.entries(tokenPurposes).map(([value, purpose]) => (
+                    <option key={value} value={value}>
+                      {purpose.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <label>
                 令牌名称
                 <input
@@ -290,7 +320,7 @@ export function AccountHome({
             {tokensLoading ? (
               <p className="account-empty">正在加载令牌…</p>
             ) : tokens.length === 0 ? (
-              <p className="account-empty">尚未创建导入器令牌。</p>
+              <p className="account-empty">尚未创建外部连接令牌。</p>
             ) : (
               <div className="token-list">
                 {tokens.map((item) => {
@@ -335,7 +365,7 @@ export function AccountHome({
               <div>
                 <p className="account-kicker">登录安全</p>
                 <h2>修改密码</h2>
-                <p>修改成功后会退出所有登录设备，并撤销现有导入令牌。</p>
+                <p>修改成功后会退出所有登录设备，并撤销现有外部连接令牌。</p>
               </div>
               <IconLock size={22} />
             </div>

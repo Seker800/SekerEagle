@@ -54,6 +54,41 @@ test('multipart part listing does not reveal another owner session', async () =>
   await assert.rejects(service.listParts(ownerId, sessionId), NotFoundException);
 });
 
+test('lists committed parts from the database while recovering an assembled upload', async () => {
+  const prisma = {
+    uploadSession: {
+      findFirst: async () => ({
+        id: sessionId,
+        uploaderId: ownerId,
+        status: 'FAILED',
+        completionParts: [
+          { PartNumber: 1, ETag: 'first' },
+          { partNumber: 2, etag: 'second' },
+        ],
+        eagleState: {},
+      }),
+      count: async () => 1,
+    },
+  };
+  const service = new EagleUploadService(
+    prisma as never,
+    {
+      listMultipartUploadParts: async () =>
+        assert.fail('assembled uploads no longer have a live multipart inventory'),
+    } as never,
+    {} as never,
+    {} as never,
+  );
+
+  assert.deepEqual(await service.listParts(ownerId, sessionId), {
+    uploadSessionId: sessionId,
+    parts: [
+      { partNumber: 1, etag: 'first' },
+      { partNumber: 2, etag: 'second' },
+    ],
+  });
+});
+
 test('completion preserves an assembled object for recovery when DB finalization fails', async () => {
   const updates: Array<Record<string, unknown>> = [];
   const session = {
@@ -119,6 +154,7 @@ test('completion preserves an assembled object for recovery when DB finalization
 
 test('finalization skips an owner-scoped duplicate and queues uploaded object cleanup', async () => {
   const writes: Array<Record<string, unknown>> = [];
+  const captureWrites: Array<Record<string, unknown>> = [];
   const session = {
     id: sessionId,
     uploaderId: ownerId,
@@ -139,7 +175,18 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
       update: async ({ data }: { data: Record<string, unknown> }) => writes.push(data),
     },
     $executeRaw: async () => 1,
-    eagleAsset: { findFirst: async () => ({ id: 'asset-existing' }) },
+    eagleAsset: {
+      findFirst: async () => ({ id: 'asset-existing' }),
+      update: async () => assert.fail('a duplicate capture must not overwrite asset metadata'),
+    },
+    eagleBrowserCapture: {
+      findUnique: async () => ({
+        id: 'capture-duplicate',
+        displayName: 'Another page title',
+        pageUrl: 'https://example.com/another-page',
+      }),
+      update: async ({ data }: { data: Record<string, unknown> }) => captureWrites.push(data),
+    },
     eagleAssetProcessingJob: {
       createMany: async () => assert.fail('duplicates must not create processing jobs'),
     },
@@ -170,6 +217,8 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
   assert.equal(result.assetId, 'asset-existing');
   assert.equal(result.duplicate, true);
   assert.equal(writes[0]?.objectCleanupPending, true);
+  assert.equal(captureWrites[0]?.assetId, 'asset-existing');
+  assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
 });
 
 test('content replacement preserves the logical asset id and advances its media revision', async () => {
@@ -205,6 +254,7 @@ test('content replacement preserves the logical asset id and advances its media 
       }),
       update: async ({ data }: { data: Record<string, unknown> }) => assetWrites.push(data),
     },
+    eagleBrowserCapture: { findUnique: async () => null },
     eagleAssetRendition: { deleteMany: async () => ({ count: 1 }) },
     eagleAssetProcessingJob: { createMany: async ({ data }: { data: unknown }) => jobs.push(data) },
     eagleUploadSessionState: {
@@ -268,8 +318,7 @@ test('new browser captures commit provenance and initial metadata with the uploa
       create: async ({ data }: { data: Record<string, unknown> }) => assetWrites.push(data),
     },
     eagleAssetAnnotation: {
-      create: async ({ data }: { data: Record<string, unknown> }) =>
-        annotationWrites.push(data),
+      create: async ({ data }: { data: Record<string, unknown> }) => annotationWrites.push(data),
     },
     eagleBrowserCapture: {
       findUnique: async () => ({
@@ -314,5 +363,6 @@ test('new browser captures commit provenance and initial metadata with the uploa
       sourceUrl: 'https://example.com/gallery?id=7',
     },
   ]);
-  assert.deepEqual(captureWrites, [{ assetId: result.assetId, completedAt: new Date(0) }]);
+  assert.equal(captureWrites[0]?.assetId, result.assetId);
+  assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
 });

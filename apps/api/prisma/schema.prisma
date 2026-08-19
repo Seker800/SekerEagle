@@ -179,6 +179,7 @@ model User {
   eagleExternalLibraries   EagleExternalLibrary[]
   eagleExternalAssets      EagleExternalAsset[]
   eagleImportRuns          EagleImportRun[]
+  eagleBrowserCaptures     EagleBrowserCapture[]
 }
 
 model RefreshToken {
@@ -236,6 +237,7 @@ model UploadSession {
   eagleState            EagleUploadSessionState?
   finalizationMode      String?
   finalizationJob       UploadFinalizationJob?
+  eagleBrowserCapture   EagleBrowserCapture?
 
   @@unique([uploaderId, id])
   @@index([uploaderId, createdAt])
@@ -326,6 +328,7 @@ model EagleAsset {
   embeddings                     EagleAssetEmbedding[]
   vectorSuggestions              EagleVectorTagSuggestion[]
   tagMemberDistances             EagleTagMemberDistance[]
+  browserCaptures                EagleBrowserCapture[]
 
   @@unique([ownerId, id])
   @@index([ownerId, deletedAt, libraryAddedAt, id])
@@ -334,6 +337,33 @@ model EagleAsset {
   @@index([normalizedDisplayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_normalizedDisplayName_trgm_idx")
   @@index([originalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_originalName_trgm_idx")
   @@index([ownerId, sha256])
+}
+
+model EagleBrowserCapture {
+  id               String        @id @default(uuid())
+  ownerId          String
+  clientCaptureId  String
+  uploadSessionId  String        @unique
+  assetId          String?
+  displayName      String
+  pageTitle        String
+  pageUrl          String
+  imageUrl         String?
+  altText          String?
+  capturedAt       DateTime
+  extensionVersion String
+  completedAt      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  owner            User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  uploadSession    UploadSession @relation(fields: [ownerId, uploadSessionId], references: [uploaderId, id], onDelete: Cascade)
+  asset            EagleAsset?   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Restrict)
+
+  @@unique([ownerId, clientCaptureId])
+  @@unique([ownerId, uploadSessionId])
+  @@unique([ownerId, id])
+  @@index([ownerId, createdAt])
+  @@index([ownerId, assetId, capturedAt])
 }
 
 model EagleAssetAnnotation {

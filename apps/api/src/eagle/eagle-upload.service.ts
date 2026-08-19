@@ -11,6 +11,7 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import type { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
+import { normalizeEagleUploadOriginalName } from './eagle-upload-policy';
 import { buildImageProcessingJobs } from './media-job-plan';
 
 @Injectable()
@@ -22,8 +23,12 @@ export class EagleUploadService {
     private readonly inspection: EagleUploadInspectionService,
   ) {}
 
+  partSizeFor(size: number): number {
+    return choosePartSize(size);
+  }
+
   async initiate(ownerId: string, input: InitiateEagleUploadDto) {
-    const originalName = normalizeOriginalName(input.originalName);
+    const originalName = normalizeEagleUploadOriginalName(input.originalName);
     const { mimeType } = this.mediaCapabilities.assertUploadAllowed({
       fileName: originalName,
       mimeType: input.mimeType,
@@ -99,7 +104,16 @@ export class EagleUploadService {
   }
 
   async listParts(ownerId: string, uploadSessionId: string) {
-    const session = await this.requireInitiated(ownerId, uploadSessionId);
+    const session = await this.requirePartListable(ownerId, uploadSessionId);
+    if (session.status !== 'INITIATED') {
+      return {
+        uploadSessionId: session.id,
+        parts: normalizeStoredParts(session.completionParts).map(({ PartNumber, ETag }) => ({
+          partNumber: PartNumber,
+          etag: ETag,
+        })),
+      };
+    }
     return {
       uploadSessionId: session.id,
       parts: await this.storage.listMultipartUploadParts(
@@ -246,6 +260,10 @@ export class EagleUploadService {
           },
         });
         if (claimed.count !== 1) throw new ConflictException('上传会话状态已改变。');
+        const browserCapture = await transaction.eagleBrowserCapture.findUnique({
+          where: { uploadSessionId: session.id },
+          select: { id: true, displayName: true, pageUrl: true },
+        });
         let finalizedAssetId: string = assetId;
         let assetRevision = 1;
         let duplicate = false;
@@ -317,13 +335,14 @@ export class EagleUploadService {
             duplicate = true;
             cleanupObject = true;
           } else {
+            const assetDisplayName = browserCapture?.displayName ?? displayName;
             await transaction.eagleAsset.create({
               data: {
                 id: assetId,
                 ownerId: session.uploaderId,
                 originalName: session.originalName,
-                displayName,
-                normalizedDisplayName: normalizeKey(displayName),
+                displayName: assetDisplayName,
+                normalizedDisplayName: normalizeKey(assetDisplayName),
                 mimeType: session.mimeType,
                 format: inspection.format,
                 byteSize: session.size,
@@ -335,6 +354,15 @@ export class EagleUploadService {
                 mediaRevision: assetRevision,
               },
             });
+            if (browserCapture) {
+              await transaction.eagleAssetAnnotation.create({
+                data: {
+                  ownerId: session.uploaderId,
+                  assetId,
+                  sourceUrl: browserCapture.pageUrl,
+                },
+              });
+            }
           }
         }
         const jobs =
@@ -359,6 +387,12 @@ export class EagleUploadService {
         if (!duplicate) {
           await transaction.eagleAssetProcessingJob.createMany({
             data: jobs,
+          });
+        }
+        if (browserCapture) {
+          await transaction.eagleBrowserCapture.update({
+            where: { id: browserCapture.id },
+            data: { assetId: finalizedAssetId, completedAt: now },
           });
         }
         await transaction.eagleUploadSessionState.update({
@@ -445,19 +479,25 @@ export class EagleUploadService {
     }
     return session;
   }
-}
 
-function normalizeOriginalName(value: string): string {
-  const name = value.normalize('NFKC').split(/[\\/]/).at(-1)?.trim() ?? '';
-  if (!name || name.length > 255 || [...name].some((character) => isControlCharacter(character))) {
-    throw new BadRequestException('文件名无效。');
+  private async requirePartListable(ownerId: string, uploadSessionId: string) {
+    const session = await this.prisma.uploadSession.findFirst({
+      where: {
+        id: uploadSessionId,
+        uploaderId: ownerId,
+        status: { in: ['INITIATED', 'ASSEMBLED', 'FINALIZING', 'FAILED', 'COMPLETED'] },
+      },
+      include: { eagleState: true },
+    });
+    if (!session) {
+      const exists = await this.prisma.uploadSession.count({
+        where: { id: uploadSessionId, uploaderId: ownerId },
+      });
+      if (!exists) throw new NotFoundException('上传会话不存在。');
+      throw new ConflictException('上传会话不再可读取分片。');
+    }
+    return session;
   }
-  return name;
-}
-
-function isControlCharacter(character: string): boolean {
-  const codePoint = character.codePointAt(0) ?? 0;
-  return codePoint <= 31 || codePoint === 127;
 }
 
 function choosePartSize(size: number): number {
