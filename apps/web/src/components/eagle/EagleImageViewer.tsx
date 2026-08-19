@@ -176,6 +176,7 @@ export function EagleImageViewer({
           immediateRender: true,
           loadDestinationTilesOnAnimation: false,
           minScrollDeltaTime: 0,
+          zoomPerScroll: 1.03,
           constrainDuringPan: false,
           visibilityRatio: 0.5,
         }) as unknown as ViewerHandle;
