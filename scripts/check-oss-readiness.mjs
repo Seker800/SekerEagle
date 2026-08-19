@@ -6,6 +6,7 @@ const requiredFiles = [
   'NOTICE',
   'THIRD_PARTY_NOTICES.md',
   'README.md',
+  'README.en.md',
   'SECURITY.md',
   'CONTRIBUTING.md',
   'CODE_OF_CONDUCT.md',
@@ -89,6 +90,21 @@ for (const requiredText of ['Apache-2.0', 'GPL-3.0-only', 'Apple Silicon', '不�
 }
 if (readme.includes('空 Prisma schema'))
   failures.push('README still contains the obsolete initial milestone');
+if (!readme.includes('href="README.en.md"'))
+  failures.push('README is missing the English language switch');
+
+const englishReadme = await read('README.en.md');
+for (const requiredText of [
+  'Apache License 2.0',
+  'GPL-3.0-only',
+  'Apple Silicon',
+  'not an official Eagle product',
+]) {
+  if (!englishReadme.includes(requiredText))
+    failures.push(`English README is missing disclosure: ${requiredText}`);
+}
+if (!englishReadme.includes('href="README.md"'))
+  failures.push('English README is missing the Simplified Chinese language switch');
 
 const lock = JSON.parse(await read('package-lock.json'));
 for (const [path, metadata] of Object.entries(lock.packages ?? {})) {

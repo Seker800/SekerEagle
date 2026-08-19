@@ -5,6 +5,10 @@
 <h1 align="center">SekerEagle</h1>
 
 <p align="center">
+  <strong>简体中文</strong> · <a href="README.en.md">English</a>
+</p>
+
+<p align="center">
   <strong>让灵感，各归其位。</strong><br />
   独立、自托管、多用户隔离的个人视觉素材库。
 </p>
