@@ -1,23 +1,48 @@
 const TOAST_ID = 'sekereagle-capture-toast';
 
-window.addEventListener(
-  'contextmenu',
-  (event) => {
-    if (!event.isTrusted || !event.altKey) return;
-    const image = event.composedPath().find((node) => node instanceof HTMLImageElement);
-    if (!image) return;
-    const sourceUrl = image.currentSrc || image.src;
-    if (!sourceUrl) return;
+void import(chrome.runtime.getURL('src/capture-interaction.js'))
+  .then(({ createAltRightClickTracker, resolveCaptureTarget }) => {
+    installCaptureInteraction({ createAltRightClickTracker, resolveCaptureTarget });
+  })
+  .catch(() => showToast('SekerEagle 插件加载失败，请重新加载扩展', true));
+
+function installCaptureInteraction({ createAltRightClickTracker, resolveCaptureTarget }) {
+  const tracker = createAltRightClickTracker();
+  let lastHandled = null;
+
+  window.addEventListener('mousedown', (event) => tracker.remember(event), { capture: true });
+  window.addEventListener('contextmenu', handleCaptureGesture, { capture: true });
+  window.addEventListener('mouseup', handleCaptureGesture, { capture: true });
+
+  function handleCaptureGesture(event) {
+    if (!tracker.matches(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+
+    const point = { x: Number(event.clientX), y: Number(event.clientY) };
+    if (isDuplicateGesture(lastHandled, point)) return;
+    lastHandled = { ...point, at: Date.now() };
+    tracker.clear();
+
+    const target = resolveCaptureTarget({
+      path: event.composedPath?.() || [event.target],
+      elementsAtPoint: collectElementsAtPoint(point.x, point.y),
+      baseUrl: location.href,
+      getStyle: (element) => window.getComputedStyle(element),
+    });
+    if (!target) {
+      showToast('这里没有检测到可采集的图片', true);
+      return;
+    }
+
+    showToast('正在加入 SekerEagle 队列…');
     chrome.runtime.sendMessage(
       {
         type: 'capture:enqueue',
         payload: {
-          sourceUrl,
+          ...target,
           pageUrl: location.href,
           pageTitle: document.title,
-          altText: image.alt || '',
         },
       },
       (response) => {
@@ -33,9 +58,30 @@ window.addEventListener(
         );
       },
     );
-  },
-  { capture: true },
-);
+  }
+}
+
+function collectElementsAtPoint(x, y, root = document, visited = new WeakSet()) {
+  if (!root || visited.has(root)) return [];
+  visited.add(root);
+  const elements = root.elementsFromPoint?.(x, y) || [];
+  const result = [];
+  for (const element of elements) {
+    if (element.shadowRoot) {
+      result.push(...collectElementsAtPoint(x, y, element.shadowRoot, visited));
+    }
+    result.push(element);
+  }
+  return [...new Set(result)];
+}
+
+function isDuplicateGesture(previous, point) {
+  return (
+    previous &&
+    Date.now() - previous.at < 500 &&
+    Math.hypot(previous.x - point.x, previous.y - point.y) <= 8
+  );
+}
 
 function showToast(message, error = false) {
   document.getElementById(TOAST_ID)?.remove();
@@ -56,5 +102,5 @@ function showToast(message, error = false) {
     font: '13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
   });
   document.documentElement.append(toast);
-  window.setTimeout(() => toast.remove(), 2400);
+  window.setTimeout(() => toast.remove(), 2_400);
 }
