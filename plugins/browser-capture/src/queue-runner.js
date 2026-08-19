@@ -42,7 +42,7 @@ export function createQueueRunner({
       if (
         !String(config.pat || '')
           .trim()
-          .startsWith('seg_pat_')
+          .startsWith('sea_pat_')
       ) {
         throw typedError('请先配置有效的服务器和 PAT。', 'CONFIG');
       }

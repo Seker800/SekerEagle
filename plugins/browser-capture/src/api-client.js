@@ -16,7 +16,7 @@ export class CaptureApiClient {
     this.allowInsecureHttp = allowInsecureHttp;
     this.serverUrl = normalizeServerUrl(serverUrl, { allowRemoteHttp: allowInsecureHttp });
     this.pat = String(pat || '').trim();
-    if (!this.pat.startsWith('seg_pat_')) throw new Error('请配置有效的 SekerEagle PAT。');
+    if (!this.pat.startsWith('sea_pat_')) throw new Error('请配置有效的 SekerEagle PAT。');
     this.fetchImpl = fetchImpl;
   }
 

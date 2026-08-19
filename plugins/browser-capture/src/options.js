@@ -44,7 +44,7 @@ form.addEventListener('submit', async (event) => {
     buildServerCandidates(nextConfig);
     const existing = await chrome.storage.local.get({ pat: '' });
     const nextPat = pat.value.trim() || existing.pat;
-    if (!nextPat.startsWith('seg_pat_')) throw new Error('请输入具有 capture:write 权限的 PAT。');
+    if (!nextPat.startsWith('sea_pat_')) throw new Error('请输入具有 capture:write 权限的 PAT。');
     await chrome.storage.local.set({
       ...nextConfig,
       pat: nextPat,

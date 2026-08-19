@@ -6,7 +6,7 @@ test('ships a minimal Manifest V3 extension with durable queue permissions', asy
   const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
 
   assert.equal(manifest.manifest_version, 3);
-  assert.equal(manifest.version, '0.1.1');
+  assert.equal(manifest.version, '0.1.2');
   assert.equal(manifest.background.service_worker, 'src/service-worker.js');
   assert.deepEqual(manifest.permissions.sort(), ['alarms', 'storage']);
   assert.deepEqual(manifest.host_permissions, ['<all_urls>']);
@@ -26,8 +26,15 @@ test('uses the same PAT prefix as the SekerEagle authentication boundary', async
     new URL('../../../apps/api/src/auth/auth.constants.ts', import.meta.url),
     'utf8',
   );
-  const apiClient = await readFile(new URL('../src/api-client.js', import.meta.url), 'utf8');
+  const extensionSurfaces = await Promise.all(
+    ['../src/api-client.js', '../src/options.js', '../src/queue-runner.js', '../options.html'].map(
+      (path) => readFile(new URL(path, import.meta.url), 'utf8'),
+    ),
+  );
 
   assert.match(authConstants, /PAT_PREFIX = 'sea_pat_'/);
-  assert.match(apiClient, /startsWith\('sea_pat_'\)/);
+  for (const source of extensionSurfaces) {
+    assert.match(source, /sea_pat_/);
+    assert.doesNotMatch(source, /seg_pat_/);
+  }
 });
