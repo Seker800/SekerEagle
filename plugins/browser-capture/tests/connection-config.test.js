@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   buildServerCandidates,
@@ -47,5 +48,17 @@ test('rewrites a loopback-signed upload URL onto the active public gateway only'
       'https://objects.attacker.example/upload?X-Amz-Signature=signed',
       'https://eagle.example.com',
     ),
+  );
+});
+
+test('gateway preserves the loopback signing host behind a public reverse proxy', async () => {
+  const nginx = await readFile(
+    new URL('../../../deploy/gateway/nginx.conf', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(
+    nginx,
+    /location \^~ \/sekereagle-assets\/[\s\S]*proxy_set_header Host localhost:8180;/,
   );
 });
