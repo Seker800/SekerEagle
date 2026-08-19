@@ -29,7 +29,6 @@ import {
 } from '@tabler/icons-react';
 import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { ImagePreviewDialog } from '../media/image-preview/ImagePreviewDialog';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import {
   getEagleAsset,
@@ -46,9 +45,9 @@ import {
   type EagleSmartFolderFilters,
 } from '../../lib/eagle-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
-import { EagleTiledImageViewer } from './EagleTiledImageViewer';
+import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
-import { getEaglePreviewContentUrl } from './eagle-media-sources';
+import { getEaglePreviewContentUrl, needsEagleImagePyramid } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
 import { EagleColorFilter } from './EagleColorFilter';
@@ -339,11 +338,17 @@ export function SekerEaglePage({
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
   const previewAsset = assets.find((asset) => asset.id === previewAssetId) ?? null;
+  const previewImageAsset = imagePreview.previewImage?.assetId
+    ? (assetsById.get(imagePreview.previewImage.assetId) ?? null)
+    : null;
+  const previewCanHavePyramid = Boolean(
+    previewImageAsset && needsEagleImagePyramid(previewImageAsset.width, previewImageAsset.height),
+  );
   const previewPyramidQuery = useQuery({
     queryKey: ['eagle', ownerId, 'pyramid', imagePreview.previewImage?.assetId ?? 'none'],
     queryFn: ({ signal }) =>
       getEaglePyramidDescriptor(accessToken, imagePreview.previewImage!.assetId!, signal),
-    enabled: Boolean(imagePreview.previewImage?.assetId),
+    enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
     retry: false,
     staleTime: Number.POSITIVE_INFINITY,
   });
@@ -555,7 +560,10 @@ export function SekerEaglePage({
       return;
     }
     const src = getEaglePreviewContentUrl(asset);
-    if (src) imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
+    if (src) {
+      preloadEagleImageViewer();
+      imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
+    }
   };
 
   useEffect(() => {
@@ -1507,25 +1515,11 @@ export function SekerEaglePage({
       {previewAsset && (
         <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
       )}
-      {imagePreview.previewImage && previewPyramidQuery.data ? (
-        <EagleTiledImageViewer
-          descriptor={previewPyramidQuery.data}
-          alt={imagePreview.previewImage.alt}
-          onClose={imagePreview.closePreview}
-        />
-      ) : imagePreview.previewImage ? (
-        <ImagePreviewDialog
-          activeDimensions={imagePreview.activeDimensions}
-          canPan={imagePreview.canPan}
-          fitScale={imagePreview.fitScale}
+      {imagePreview.previewImage ? (
+        <EagleImageViewer
           image={imagePreview.previewImage}
-          offset={imagePreview.previewOffset}
-          scale={imagePreview.previewScale}
-          stageRef={imagePreview.previewStageRef}
+          descriptor={previewPyramidQuery.data}
           onClose={imagePreview.closePreview}
-          onImageLoad={imagePreview.setPreviewNaturalSize}
-          onImagePointerDown={imagePreview.handlePreviewPointerDown}
-          onWheel={imagePreview.handlePreviewWheel}
         />
       ) : null}
       {isSmartFolderDialogOpen && (

@@ -5,6 +5,16 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SekerEaglePage } from './SekerEaglePage';
 
+const { openSeadragonMock } = vi.hoisted(() => ({
+  openSeadragonMock: vi.fn(() => ({
+    addHandler: vi.fn(),
+    destroy: vi.fn(),
+    open: vi.fn(),
+  })),
+}));
+
+vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
+
 const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
 const getEagleTrashAssetMock = vi.fn();
@@ -999,14 +1009,18 @@ describe('SekerEaglePage', () => {
     fireEvent.doubleClick(card);
     expect(screen.getByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
     expect(screen.getByText(/滚轮缩放/)).toBeInTheDocument();
-    expect(screen.getByTestId('image-preview-image')).toHaveAttribute(
-      'src',
-      '/api/eagle/assets/asset-1/renditions/rendition-1/content',
+    expect(screen.getByTestId('eagle-image-viewer')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(openSeadragonMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tileSources: {
+            type: 'image',
+            url: '/api/eagle/assets/asset-1/renditions/rendition-1/content',
+          },
+        }),
+      ),
     );
-    expect(screen.getByTestId('image-preview-image')).not.toHaveAttribute(
-      'src',
-      '/api/eagle/assets/asset-1/content',
-    );
+    expect(getEaglePyramidDescriptorMock).not.toHaveBeenCalled();
   });
 
   it('navigates between images with the left and right arrow keys while previewing', async () => {
