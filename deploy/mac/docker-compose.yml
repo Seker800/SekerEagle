@@ -135,7 +135,7 @@ services:
     mem_limit: 256m
 
   gateway:
-    image: nginx:1.27-alpine
+    image: nginx:1.31-alpine
     platform: linux/arm64
     restart: unless-stopped
     depends_on:
