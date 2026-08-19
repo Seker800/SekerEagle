@@ -61,6 +61,12 @@ npm run oss:check
 数据库 migration、seed、测试和导入必须先经过安全目标检查。开发数据库只能是
 `sekereagle` 或 `sekereagle_test`，对象存储 bucket 必须使用 `sekereagle-` 前缀。
 
+## 维护者接手
+
+第一次维护本项目时，从 [`docs/maintainer-guide.md`](docs/maintainer-guide.md) 开始。它汇总了
+项目边界、目录职责、日常开发、Schema/API 变更、部署发布、许可证和交接检查表，并链接到
+各主题的权威文档。
+
 ## 架构与安全边界
 
 - ownerId 只能从认证主体推导，请求 DTO 不接受 ownerId。
