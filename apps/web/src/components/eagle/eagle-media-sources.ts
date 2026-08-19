@@ -4,6 +4,9 @@ import {
   type EaglePyramidDescriptor,
 } from '../../lib/eagle-api';
 
+const IMAGE_PYRAMID_DIMENSION_THRESHOLD = 4_096;
+const IMAGE_PYRAMID_PIXEL_THRESHOLD = 16_000_000;
+
 export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | null {
   const currentRenditions = asset.renditions.filter(
     (rendition) => rendition.revision === asset.mediaRevision,
@@ -50,4 +53,20 @@ export function createEagleTileSource(descriptor: EaglePyramidDescriptor) {
         .replace('{y}', String(y));
     },
   };
+}
+
+export function createEaglePreviewTileSource(url: string) {
+  return { type: 'image' as const, url };
+}
+
+/**
+ * Client-side request optimization. The API remains authoritative about whether
+ * a current READY pyramid exists; these bounds mirror the media job policy.
+ */
+export function needsEagleImagePyramid(width: number | null, height: number | null): boolean {
+  if (width === null || height === null) return false;
+  return (
+    Math.max(width, height) > IMAGE_PYRAMID_DIMENSION_THRESHOLD ||
+    width * height > IMAGE_PYRAMID_PIXEL_THRESHOLD
+  );
 }

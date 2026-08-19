@@ -4,15 +4,25 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { EagleImageViewer } from './EagleImageViewer';
 
-const destroyMock = vi.fn();
-const openMock = vi.fn();
-const handlers = new Map<string, (event?: unknown) => void>();
-const viewer = {
-  addHandler: vi.fn((name: string, handler: (event?: unknown) => void) => handlers.set(name, handler)),
-  destroy: destroyMock,
-  open: openMock,
-};
-const openSeadragonMock = vi.fn(() => viewer);
+const { destroyMock, handlers, openMock, openSeadragonMock } = vi.hoisted(() => {
+  const hoistedHandlers = new Map<string, (event?: unknown) => void>();
+  const hoistedDestroyMock = vi.fn();
+  const hoistedOpenMock = vi.fn();
+  const hoistedViewer = {
+    addHandler: vi.fn((name: string, handler: (event?: unknown) => void) =>
+      hoistedHandlers.set(name, handler),
+    ),
+    destroy: hoistedDestroyMock,
+    open: hoistedOpenMock,
+  };
+  return {
+    destroyMock: hoistedDestroyMock,
+    handlers: hoistedHandlers,
+    openMock: hoistedOpenMock,
+    openSeadragonMock: vi.fn(() => hoistedViewer),
+    viewer: hoistedViewer,
+  };
+});
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
 

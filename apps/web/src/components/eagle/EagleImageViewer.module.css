@@ -1,0 +1,98 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  background: rgb(8 11 18 / 92%);
+}
+
+.dialog {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #090d14;
+}
+
+.viewer {
+  width: 100%;
+  height: 100%;
+}
+
+.loadState {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  color: #dbe4f0;
+  background: rgb(9 13 20 / 82%);
+}
+
+.loadState > span {
+  color: #91a0b5;
+  font-size: 13px;
+}
+
+.progress {
+  width: 160px;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #263246;
+}
+
+.progress span {
+  display: block;
+  width: 45%;
+  height: 100%;
+  border-radius: inherit;
+  background: #74a7ff;
+  animation: progress 1s ease-in-out infinite alternate;
+}
+
+.dialog footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  padding: 8px 18px;
+  color: #dbe4f0;
+  background: #111722;
+}
+
+.dialog footer span {
+  flex: 1;
+  color: #91a0b5;
+  font-size: 13px;
+}
+
+.dialog button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid #344055;
+  border-radius: 7px;
+  padding: 7px 14px;
+  color: inherit;
+  background: #1b2432;
+}
+
+@keyframes progress {
+  from {
+    transform: translateX(-35%);
+  }
+
+  to {
+    transform: translateX(155%);
+  }
+}
