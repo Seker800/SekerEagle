@@ -1,16 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  createAltRightClickTracker,
-  resolveCaptureTarget,
-} from '../src/capture-interaction.js';
+import { createAltRightClickTracker, resolveCaptureTarget } from '../src/capture-interaction.js';
 
 test('recognizes Alt held on right-button down even when contextmenu loses modifier state', () => {
   const tracker = createAltRightClickTracker();
-  tracker.remember(
-    { isTrusted: true, button: 2, altKey: true, clientX: 120, clientY: 80 },
-    1_000,
-  );
+  tracker.remember({ isTrusted: true, button: 2, altKey: true, clientX: 120, clientY: 80 }, 1_000);
 
   assert.equal(
     tracker.matches(
