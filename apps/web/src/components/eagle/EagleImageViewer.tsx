@@ -27,6 +27,11 @@ interface ViewerScrollEvent {
   scroll: number;
 }
 
+interface ViewerClickEvent {
+  position: ViewerPoint;
+  quick: boolean;
+}
+
 interface ViewerViewport {
   applyConstraints(immediately?: boolean): void;
   deltaPointsFromPixels(point: ViewerPoint): ViewerPoint;
@@ -39,14 +44,20 @@ interface ViewerViewport {
   zoomTo(zoom: number, refPoint?: ViewerPoint, immediately?: boolean): void;
 }
 
+interface ViewerWorldItem {
+  getBounds(): { containsPoint(point: ViewerPoint): boolean };
+}
+
 interface ViewerHandle {
   addHandler(name: 'open' | 'open-failed', handler: () => void): void;
+  addHandler(name: 'canvas-click', handler: (event: ViewerClickEvent) => void): void;
   addHandler(name: 'canvas-drag', handler: (event: ViewerDragEvent) => void): void;
   addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
   addHandler(name: 'canvas-scroll', handler: (event: ViewerScrollEvent) => void): void;
   destroy(): void;
   open(source: ViewerSource): void;
   viewport: ViewerViewport;
+  world: { getItemAt(index: number): ViewerWorldItem | undefined };
   zoomPerScroll: number;
 }
 
@@ -106,6 +117,7 @@ export function EagleImageViewer({
   const sourceKey = descriptor ? `pyramid:${descriptor.id}` : `preview:${image.src}`;
   const viewerElementRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerHandle | undefined>(undefined);
+  const onCloseRef = useRef(onClose);
   const sourceRef = useRef<ViewerSource>(source);
   const desiredSourceKeyRef = useRef(sourceKey);
   const sourceKeyRef = useRef('');
@@ -119,6 +131,7 @@ export function EagleImageViewer({
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
+  onCloseRef.current = onClose;
 
   const openPendingSource = () => {
     const viewer = viewerRef.current;
@@ -173,7 +186,7 @@ export function EagleImageViewer({
           immediateRender: true,
           loadDestinationTilesOnAnimation: false,
           minScrollDeltaTime: 0,
-          zoomPerScroll: 1.03,
+          zoomPerScroll: 1.12,
           constrainDuringPan: false,
           visibilityRatio: 0.5,
         }) as unknown as ViewerHandle;
@@ -188,6 +201,13 @@ export function EagleImageViewer({
           setStatus('ready');
         });
         viewer.addHandler('open-failed', () => setStatus('error'));
+        viewer.addHandler('canvas-click', (event) => {
+          if (!event.quick) return;
+          const item = viewer.world.getItemAt(0);
+          if (!item) return;
+          const viewportPoint = viewer.viewport.pointFromPixel(event.position, true);
+          if (!item.getBounds().containsPoint(viewportPoint)) onCloseRef.current();
+        });
         viewer.addHandler('canvas-drag', (event) => {
           if (!isDirectPointer(event.pointerType)) return;
           markDirectInteraction();

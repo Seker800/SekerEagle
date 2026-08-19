@@ -22,8 +22,8 @@ const {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
   const hoistedDestroyMock = vi.fn();
   const hoistedGetBoundsMock = vi.fn(() => ({
-    containsPoint: vi.fn(({ x, y }: { x: number; y: number }) =>
-      x >= 0 && x <= 1 && y >= 0 && y <= 0.75,
+    containsPoint: vi.fn(
+      ({ x, y }: { x: number; y: number }) => x >= 0 && x <= 1 && y >= 0 && y <= 0.75,
     ),
   }));
   const hoistedOpenMock = vi.fn();
