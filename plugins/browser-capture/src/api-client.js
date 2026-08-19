@@ -1,3 +1,7 @@
+import { normalizeServerUrl, rewritePresignedUploadUrl } from './connection-config.js';
+
+export { normalizeServerUrl } from './connection-config.js';
+
 export class CaptureApiError extends Error {
   constructor(message, { status = 0, kind = 'TRANSIENT' } = {}) {
     super(message);
@@ -5,19 +9,6 @@ export class CaptureApiError extends Error {
     this.status = status;
     this.kind = kind;
   }
-}
-
-export function normalizeServerUrl(value) {
-  const url = new URL(String(value || '').trim());
-  if (url.username || url.password || url.search || url.hash) {
-    throw new Error('服务器地址不能包含凭据、查询参数或片段。');
-  }
-  const loopback =
-    url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    throw new Error('远程 SekerEagle 必须使用 HTTPS；HTTP 仅允许 loopback。');
-  }
-  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
 }
 
 export class CaptureApiClient {
@@ -64,7 +55,7 @@ export class CaptureApiClient {
   async uploadPart(uploadUrl, bytes) {
     let response;
     try {
-      response = await this.fetchImpl(uploadUrl, {
+      response = await this.fetchImpl(rewritePresignedUploadUrl(uploadUrl, this.serverUrl), {
         method: 'PUT',
         body: bytes,
         credentials: 'omit',

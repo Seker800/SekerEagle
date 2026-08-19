@@ -64,14 +64,16 @@ label {
   margin-top: 8px;
   font-weight: 650;
 }
-input {
+input,
+select {
   width: 100%;
   padding: 11px 12px;
   border: 1px solid #cfd3dc;
   border-radius: 9px;
   font: inherit;
 }
-input:focus {
+input:focus,
+select:focus {
   outline: 3px solid rgba(47, 111, 237, 0.16);
   border-color: #2f6fed;
 }

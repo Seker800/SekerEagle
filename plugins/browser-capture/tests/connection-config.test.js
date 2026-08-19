@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import {
-  buildServerCandidates,
-  rewritePresignedUploadUrl,
-} from '../src/connection-config.js';
+import { buildServerCandidates, rewritePresignedUploadUrl } from '../src/connection-config.js';
 
 test('automatic mode prefers loopback and falls back to a configured HTTPS public endpoint', () => {
   assert.deepEqual(

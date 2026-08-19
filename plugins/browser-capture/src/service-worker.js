@@ -94,7 +94,14 @@ async function enqueue(payload, sender) {
 }
 
 async function getConfig() {
-  return chrome.storage.local.get({ serverUrl: '', pat: '', concurrency: 3 });
+  return chrome.storage.local.get({
+    connectionMode: 'auto',
+    localServerUrl: 'http://localhost:8180',
+    publicServerUrl: '',
+    serverUrl: '',
+    pat: '',
+    concurrency: 3,
+  });
 }
 
 async function resumeConfiguredJobs() {

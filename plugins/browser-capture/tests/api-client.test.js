@@ -14,9 +14,13 @@ test('keeps PAT authorization on control requests and never leaks it to presigne
   const fetchImpl = async (url, init = {}) => {
     requests.push({ url: String(url), init });
     if (String(url).includes('/parts/1')) {
-      return new Response(JSON.stringify({ uploadUrl: 'https://objects.example/upload' }), {
-        headers: { 'content-type': 'application/json' },
-      });
+      return new Response(
+        JSON.stringify({
+          uploadUrl:
+            'https://eagle.example.com/sekereagle-assets/user/image.jpg?X-Amz-Signature=signed',
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
     }
     return new Response('', { status: 200, headers: { etag: 'part-etag' } });
   };

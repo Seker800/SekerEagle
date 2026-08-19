@@ -1,5 +1,6 @@
 import { CaptureApiClient, CaptureApiError } from './api-client.js';
 import { buildOriginalName, resolveSupportedMimeType } from './capture-metadata.js';
+import { buildServerCandidates } from './connection-config.js';
 import { decideFailure, selectRunnableJobs } from './queue-policy.js';
 
 const MAX_BYTES = 100 * 1024 * 1024;
@@ -38,8 +39,19 @@ export function createQueueRunner({
 
   async function processJob(job, config) {
     try {
-      if (!config.serverUrl || !config.pat) throw typedError('请先配置服务器和 PAT。', 'CONFIG');
-      const api = new CaptureApiClient({ ...config, fetchImpl });
+      if (
+        !String(config.pat || '')
+          .trim()
+          .startsWith('seg_pat_')
+      ) {
+        throw typedError('请先配置有效的服务器和 PAT。', 'CONFIG');
+      }
+      let serverCandidates;
+      try {
+        serverCandidates = buildServerCandidates(config);
+      } catch (cause) {
+        throw typedError(cause instanceof Error ? cause.message : '服务器配置无效。', 'CONFIG');
+      }
       let blob = job.blob;
       let mimeType = job.mimeType;
       let originalName = job.originalName;
@@ -58,7 +70,7 @@ export function createQueueRunner({
         await store.update(job.id, { status: 'UPLOADING', lastError: null });
       }
 
-      const session = await api.initiate({
+      const declaration = {
         clientCaptureId: job.id,
         originalName,
         mimeType,
@@ -66,8 +78,14 @@ export function createQueueRunner({
         ...job.metadata,
         capturedAt: job.capturedAt,
         extensionVersion: chrome.runtime.getManifest().version,
+      };
+      const { api, session } = await initiateWithFallback({
+        serverCandidates,
+        pat: config.pat,
+        fetchImpl,
+        declaration,
       });
-      await store.update(job.id, { server: session });
+      await store.update(job.id, { server: { ...session, serverUrl: api.serverUrl } });
       if (session.status === 'COMPLETED' && session.assetId) {
         await markCompleted(store, job.id, session);
         return;
@@ -106,6 +124,20 @@ export function createQueueRunner({
   }
 
   return { drain };
+}
+
+async function initiateWithFallback({ serverCandidates, pat, fetchImpl, declaration }) {
+  let lastError;
+  for (const serverUrl of serverCandidates) {
+    const api = new CaptureApiClient({ serverUrl, pat, fetchImpl });
+    try {
+      return { api, session: await api.initiate(declaration) };
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof CaptureApiError) || error.status !== 0) throw error;
+    }
+  }
+  throw lastError ?? new CaptureApiError('无法连接 SekerEagle。');
 }
 
 function markCompleted(store, jobId, completed) {

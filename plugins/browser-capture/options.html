@@ -12,8 +12,23 @@
       <h1>图片采集设置</h1>
       <p>在网页图片上按住 Alt 并点击右键，即可加入可靠上传队列。</p>
       <form>
-        <label for="serverUrl">服务器地址</label>
-        <input id="serverUrl" type="url" required autocomplete="url" />
+        <label for="connectionMode">连接模式</label>
+        <select id="connectionMode">
+          <option value="auto">自动：内网优先，失败后尝试公网</option>
+          <option value="local">仅使用内网</option>
+          <option value="public">仅使用公网</option>
+        </select>
+        <label for="localServerUrl">内网服务器地址</label>
+        <input id="localServerUrl" type="url" autocomplete="url" />
+        <small>本机默认使用 <code>http://localhost:8180</code>。</small>
+        <label for="publicServerUrl">公网服务器地址（可选）</label>
+        <input
+          id="publicServerUrl"
+          type="url"
+          inputmode="url"
+          placeholder="https://eagle.example.com"
+        />
+        <small>必须是固定 HTTPS 地址。公网映射未开启时可以留空。</small>
         <label for="pat">浏览器采集 PAT</label>
         <input id="pat" type="password" autocomplete="off" placeholder="seg_pat_…" />
         <small>请只授予 <code>capture:write</code> 权限；令牌只保存在本机扩展存储中。</small>

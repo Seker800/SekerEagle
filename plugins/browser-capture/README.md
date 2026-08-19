@@ -7,9 +7,11 @@
 1. 在 SekerEagle 账号页创建“浏览器采集”令牌；它只应包含 `capture:write` scope。
 2. 打开 `chrome://extensions`，启用开发者模式，选择“加载已解压的扩展程序”。
 3. 选择本目录 `plugins/browser-capture`。
-4. 打开扩展设置，填写 SekerEagle 地址和刚创建的 PAT。
+4. 打开扩展设置，填写内网地址、公网地址（可选）和刚创建的 PAT。
 
-本机默认地址为 `http://localhost:8180`。远程地址必须使用 HTTPS。
+本机默认地址为 `http://localhost:8180`。远程地址必须使用固定 HTTPS 域名。自动模式会优先尝试内网地址，仅在连接失败时回退到公网地址；服务端认证失败不会触发地址切换。
+
+公网反向代理或 Tunnel 应将域名根路径原样转发到本机 `http://localhost:8180`，包括 `/api/` 与 `/sekereagle-assets/`。无需把 PostgreSQL、MinIO 或其他 Compose 端口暴露到公网。
 
 ## 队列语义
 
