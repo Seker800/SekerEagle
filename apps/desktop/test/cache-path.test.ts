@@ -15,9 +15,7 @@ describe('cache paths', () => {
     const root = path.resolve('/tmp/seker-eagle-cache');
     const hash = Buffer.alloc(32, 255);
 
-    expect(cacheFilePath(root, hash)).toBe(
-      path.join(root, 'fff', `${hash.toString('hex')}.media`),
-    );
+    expect(cacheFilePath(root, hash)).toBe(path.join(root, 'fff', `${hash.toString('hex')}.media`));
     expect(() => cacheRelativePath(Buffer.alloc(31))).toThrow();
   });
 });

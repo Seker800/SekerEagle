@@ -11,12 +11,19 @@ const pyramidId = '00000000-0000-4000-8000-000000000003';
 
 describe('desktop media identity', () => {
   it('accepts only immutable rendition and bounded tile identities', () => {
-    expect(
-      parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`),
-    ).toEqual({ kind: 'RENDITION', assetId, renditionId });
-    expect(
-      parseDesktopMediaUrl(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`),
-    ).toEqual({ kind: 'TILE', assetId, pyramidId, level: 13, x: 4, y: 2 });
+    expect(parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`)).toEqual({
+      kind: 'RENDITION',
+      assetId,
+      renditionId,
+    });
+    expect(parseDesktopMediaUrl(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`)).toEqual({
+      kind: 'TILE',
+      assetId,
+      pyramidId,
+      level: 13,
+      x: 4,
+      y: 2,
+    });
   });
 
   it.each([
@@ -31,9 +38,7 @@ describe('desktop media identity', () => {
   });
 
   it('isolates cache keys by normalized server and authenticated owner', () => {
-    const media = parseDesktopMediaUrl(
-      `sekereagle-media://rendition/${assetId}/${renditionId}`,
-    );
+    const media = parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`);
     const first = buildCacheIdentity('https://EXAMPLE.com:443/', 'owner-a', media);
     const equivalent = buildCacheIdentity('https://example.com', 'owner-a', media);
     const otherOwner = buildCacheIdentity('https://example.com', 'owner-b', media);
