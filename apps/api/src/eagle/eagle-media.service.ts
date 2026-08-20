@@ -64,7 +64,12 @@ export class EagleMediaService {
         status: 'READY',
         asset: { purgeAfter: null, ...(includePrivate ? {} : { isPrivate: false }) },
       },
-      select: { storageKey: true, mimeType: true, kind: true },
+      select: {
+        storageKey: true,
+        mimeType: true,
+        kind: true,
+        asset: { select: { isPrivate: true } },
+      },
     });
     if (!rendition) throw new NotFoundException('预览文件不存在。');
     return this.open(
@@ -72,7 +77,7 @@ export class EagleMediaService {
       rendition.storageKey,
       `${rendition.kind.toLowerCase()}.webp`,
       rendition.mimeType,
-      { ifNoneMatch },
+      { ifNoneMatch, desktopCacheEligible: !rendition.asset.isPrivate },
     );
   }
 
@@ -141,6 +146,7 @@ export class EagleMediaService {
         tileSize: true,
         maxLevel: true,
         format: true,
+        asset: { select: { isPrivate: true } },
       },
     });
     if (!pyramid || pyramid.format !== 'webp') {
@@ -162,7 +168,7 @@ export class EagleMediaService {
       `${pyramid.storagePrefix}/${level}/${x}_${y}.webp`,
       `${level}-${x}-${y}.webp`,
       'image/webp',
-      { ifNoneMatch },
+      { ifNoneMatch, desktopCacheEligible: !pyramid.asset.isPrivate },
     );
   }
 
@@ -171,7 +177,12 @@ export class EagleMediaService {
     key: string,
     fileName: string,
     fallbackMimeType: string,
-    options?: { range?: string; ifNoneMatch?: string; fullSize?: bigint },
+    options?: {
+      range?: string;
+      ifNoneMatch?: string;
+      fullSize?: bigint;
+      desktopCacheEligible?: boolean;
+    },
   ): Promise<OpenedEagleMedia> {
     assertOwnedObjectKey(ownerId, key);
     let object;
@@ -189,6 +200,7 @@ export class EagleMediaService {
           mimeType: fallbackMimeType,
           fullSize: options?.fullSize ?? 0n,
           etag: options?.ifNoneMatch,
+          desktopCacheEligible: options?.desktopCacheEligible ?? false,
         };
       }
       throw error;
@@ -204,6 +216,7 @@ export class EagleMediaService {
       fullSize: options?.fullSize ?? BigInt(object.ContentLength ?? 0),
       etag: object.ETag,
       lastModified: object.LastModified,
+      desktopCacheEligible: options?.desktopCacheEligible ?? false,
     };
   }
 }
@@ -218,6 +231,7 @@ interface OpenedEagleMedia {
   fullSize: bigint;
   etag?: string;
   lastModified?: Date;
+  desktopCacheEligible: boolean;
 }
 
 function isNotModifiedError(error: unknown): boolean {

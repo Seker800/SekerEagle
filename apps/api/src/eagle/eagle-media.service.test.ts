@@ -111,13 +111,7 @@ test('derived-media persistence eligibility comes from the actual asset, not ses
     } as never,
   );
 
-  const result = await service.getRendition(
-    'owner-a',
-    'asset-1',
-    'rendition-1',
-    undefined,
-    true,
-  );
+  const result = await service.getRendition('owner-a', 'asset-1', 'rendition-1', undefined, true);
 
   assert.equal(result.desktopCacheEligible, false);
 });

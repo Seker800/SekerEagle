@@ -209,7 +209,7 @@ export class EagleController {
     applyMediaHeaders(
       response,
       media,
-      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=31536000, immutable',
+      media.desktopCacheEligible ? 'private, max-age=31536000, immutable' : 'private, no-store',
     );
     if (media.notModified) {
       response.status(304);
@@ -263,7 +263,7 @@ export class EagleController {
     applyMediaHeaders(
       response,
       media,
-      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=31536000, immutable',
+      media.desktopCacheEligible ? 'private, max-age=31536000, immutable' : 'private, no-store',
     );
     if (media.notModified) {
       response.status(304);
@@ -503,6 +503,7 @@ function applyMediaHeaders(
     contentLength?: number;
     etag?: string;
     lastModified?: Date;
+    desktopCacheEligible?: boolean;
   },
   cacheControl: string,
 ): void {
@@ -517,4 +518,7 @@ function applyMediaHeaders(
     response.setHeader('Content-Length', String(media.contentLength));
   if (media.etag) response.setHeader('ETag', media.etag);
   if (media.lastModified) response.setHeader('Last-Modified', media.lastModified.toUTCString());
+  if (media.desktopCacheEligible) {
+    response.setHeader('X-SekerEagle-Desktop-Cache', 'public-derived-v1');
+  }
 }
