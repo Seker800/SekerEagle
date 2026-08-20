@@ -30,9 +30,9 @@ describe('cache utility RPC', () => {
     });
     client = new CacheRpcClient(clientEndpoint);
 
-    expect(
-      await client.initialize({ cacheRoot: root, limitBytes: 1024 ** 2 }),
-    ).toMatchObject({ fullTreeScans: 0 });
+    expect(await client.initialize({ cacheRoot: root, limitBytes: 1024 ** 2 })).toMatchObject({
+      fullTreeScans: 0,
+    });
     const writeId = await client.beginWrite({
       keyHash,
       namespaceId,
@@ -60,10 +60,10 @@ describe('cache utility RPC', () => {
 });
 
 function pairedEndpoints(): [CacheRpcEndpoint, CacheRpcEndpoint] {
-  const listeners: [Set<(message: CacheRpcMessage) => void>, Set<(message: CacheRpcMessage) => void>] = [
-    new Set(),
-    new Set(),
-  ];
+  const listeners: [
+    Set<(message: CacheRpcMessage) => void>,
+    Set<(message: CacheRpcMessage) => void>,
+  ] = [new Set(), new Set()];
   const endpoint = (own: 0 | 1, peer: 0 | 1): CacheRpcEndpoint => ({
     postMessage(message) {
       queueMicrotask(() => {

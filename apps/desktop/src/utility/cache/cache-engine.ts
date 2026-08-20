@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { CacheIndex, type CacheKind, type ReadyCacheEntry } from './cache-index';
 import { CacheStore, type PendingCacheFile } from './cache-store';
@@ -25,6 +26,7 @@ export class CacheEngine {
       throw new Error('缓存容量无效。');
     }
     this.limitBytes = options.limitBytes;
+    mkdirSync(options.cacheRoot, { recursive: true });
     this.store = new CacheStore(path.join(options.cacheRoot, 'media'));
     this.index = new CacheIndex(path.join(options.cacheRoot, 'index.sqlite'));
   }
