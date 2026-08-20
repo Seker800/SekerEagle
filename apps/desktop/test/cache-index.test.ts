@@ -66,7 +66,12 @@ describe('CacheIndex', () => {
 
   it('batches access updates and promotes a reused probation item', () => {
     for (const value of [3, 4]) {
-      index.beginWrite({ keyHash: hash(value), namespaceId: namespaceA, kind: 'RENDITION', now: 1 });
+      index.beginWrite({
+        keyHash: hash(value),
+        namespaceId: namespaceA,
+        kind: 'RENDITION',
+        now: 1,
+      });
       index.commitReady(hash(value), {
         logicalBytes: 1,
         allocatedBytes: 4_096,

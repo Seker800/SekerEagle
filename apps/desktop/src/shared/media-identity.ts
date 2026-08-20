@@ -59,7 +59,7 @@ export function buildCacheIdentity(
 ): string {
   const serverIdentity = normalizeServerIdentity(serverUrl);
   const ownerId = authenticatedOwnerId.trim();
-  if (!ownerId || ownerId.length > 256 || /[\u0000-\u001f\u007f]/u.test(ownerId)) {
+  if (!ownerId || ownerId.length > 256 || hasControlCharacter(ownerId)) {
     throw new Error('认证主体无效。');
   }
 
@@ -119,4 +119,11 @@ function parseUrl(input: string, message: string): URL {
   } catch {
     throw new Error(message);
   }
+}
+
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint <= 31 || codePoint === 127;
+  });
 }
