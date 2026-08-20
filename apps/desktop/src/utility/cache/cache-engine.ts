@@ -12,11 +12,12 @@ interface ActiveWrite {
 export class CacheEngine {
   private readonly index: CacheIndex;
   private readonly store: CacheStore;
-  private readonly limitBytes: number;
+  private limitBytes: number;
   private readonly activeWrites = new Map<string, ActiveWrite>();
   private readonly writeByKey = new Map<string, string>();
   private readonly readLeases = new Map<string, string>();
   private readonly activeReadCounts = new Map<string, number>();
+  private readonly deferredDeletes = new Map<string, Buffer>();
   private pendingAccesses: Array<{ keyHash: Buffer; at: number }> = [];
   private accessTimer: NodeJS.Timeout | null = null;
   private closed = false;
@@ -51,6 +52,7 @@ export class CacheEngine {
   async beginWrite(input: {
     keyHash: Buffer;
     namespaceId: string;
+    assetId: string;
     kind: CacheKind;
     now: number;
   }): Promise<string> {
@@ -154,13 +156,20 @@ export class CacheEngine {
     return { ...entry, leaseId, filePath: this.store.filePath(keyHash) };
   }
 
-  release(leaseId: string): void {
+  async release(leaseId: string): Promise<void> {
     const keyHex = this.readLeases.get(leaseId);
     if (!keyHex) return;
     this.readLeases.delete(leaseId);
     const remaining = (this.activeReadCounts.get(keyHex) ?? 1) - 1;
     if (remaining > 0) this.activeReadCounts.set(keyHex, remaining);
-    else this.activeReadCounts.delete(keyHex);
+    else {
+      this.activeReadCounts.delete(keyHex);
+      const deferred = this.deferredDeletes.get(keyHex);
+      if (deferred) {
+        this.deferredDeletes.delete(keyHex);
+        await this.store.remove(deferred);
+      }
+    }
   }
 
   flushAccesses(): void {
@@ -180,6 +189,35 @@ export class CacheEngine {
 
   getStats(): { entryCount: number; logicalBytes: number; allocatedBytes: number } {
     return this.index.getTotalStats();
+  }
+
+  getNamespaceStats(namespaceId: string): {
+    entryCount: number;
+    logicalBytes: number;
+    allocatedBytes: number;
+  } {
+    return this.index.getStats(namespaceId);
+  }
+
+  getLimitBytes(): number {
+    return this.limitBytes;
+  }
+
+  async setLimitBytes(limitBytes: number): Promise<void> {
+    if (!Number.isSafeInteger(limitBytes) || limitBytes < 1) throw new Error('缓存容量无效。');
+    this.limitBytes = limitBytes;
+    await this.evictIfNeeded();
+  }
+
+  async invalidateAsset(
+    namespaceId: string,
+    assetId: string,
+  ): Promise<{ deleted: number; deferred: number }> {
+    return this.removeEntries(this.index.listAssetEntries(namespaceId, assetId));
+  }
+
+  async clearNamespace(namespaceId: string): Promise<{ deleted: number; deferred: number }> {
+    return this.removeEntries(this.index.listNamespaceEntries(namespaceId));
   }
 
   renewAuthorization(
@@ -246,6 +284,23 @@ export class CacheEngine {
   private finishWrite(writeId: string, active: ActiveWrite): void {
     this.activeWrites.delete(writeId);
     this.writeByKey.delete(active.keyHex);
+  }
+
+  private async removeEntries(
+    keyHashes: readonly Buffer[],
+  ): Promise<{ deleted: number; deferred: number }> {
+    let deferred = 0;
+    for (const keyHash of keyHashes) {
+      const keyHex = keyHash.toString('hex');
+      if (this.activeReadCounts.has(keyHex)) {
+        this.deferredDeletes.set(keyHex, Buffer.from(keyHash));
+        deferred += 1;
+      } else {
+        await this.store.remove(keyHash);
+      }
+    }
+    const { entries } = this.index.deleteEntries(keyHashes);
+    return { deleted: entries - deferred, deferred };
   }
 
   private assertOpen(): void {

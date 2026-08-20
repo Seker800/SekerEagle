@@ -64,6 +64,7 @@ export class CacheRpcClient {
   async beginWrite(input: {
     keyHash: Buffer;
     namespaceId: string;
+    assetId: string;
     kind: CacheKind;
     now: number;
   }): Promise<string> {
@@ -216,6 +217,7 @@ export class CacheRpcDispatcher {
         return engine.beginWrite({
           keyHash: decodeHash(params.keyHash),
           namespaceId: asString(params.namespaceId),
+          assetId: asString(params.assetId),
           kind: asCacheKind(params.kind),
           now: asNumber(params.now),
         });

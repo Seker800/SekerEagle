@@ -22,6 +22,7 @@ interface CacheBackend {
   beginWrite(input: {
     keyHash: Buffer;
     namespaceId: string;
+    assetId: string;
     kind: CacheKind;
     now: number;
   }): Promise<string>;
@@ -194,6 +195,7 @@ export class MediaCacheController {
     const writeId = await this.cache.beginWrite({
       keyHash,
       namespaceId,
+      assetId: media.assetId,
       kind: media.kind,
       now,
     });

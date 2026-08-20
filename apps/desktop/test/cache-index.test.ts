@@ -7,6 +7,7 @@ import { CacheIndex } from '../src/utility/cache/cache-index';
 const namespaceA = 'a'.repeat(64);
 const namespaceB = 'b'.repeat(64);
 const hash = (value: number) => Buffer.alloc(32, value);
+const asset = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 
 describe('CacheIndex', () => {
   let directory: string;
@@ -23,7 +24,13 @@ describe('CacheIndex', () => {
   });
 
   it('never exposes interrupted writes as cache hits and recovers them without scanning files', () => {
-    index.beginWrite({ keyHash: hash(1), namespaceId: namespaceA, kind: 'RENDITION', now: 10 });
+    index.beginWrite({
+      keyHash: hash(1),
+      namespaceId: namespaceA,
+      assetId: asset(1),
+      kind: 'RENDITION',
+      now: 10,
+    });
 
     expect(index.findReady(hash(1))).toBeNull();
     expect(index.recoverInterruptedWrites()).toEqual([hash(1)]);
@@ -31,7 +38,13 @@ describe('CacheIndex', () => {
   });
 
   it('commits immutable metadata and maintains incremental namespace statistics', () => {
-    index.beginWrite({ keyHash: hash(2), namespaceId: namespaceA, kind: 'TILE', now: 20 });
+    index.beginWrite({
+      keyHash: hash(2),
+      namespaceId: namespaceA,
+      assetId: asset(2),
+      kind: 'TILE',
+      now: 20,
+    });
     index.commitReady(hash(2), {
       logicalBytes: 12_345,
       allocatedBytes: 16_384,
@@ -69,6 +82,7 @@ describe('CacheIndex', () => {
       index.beginWrite({
         keyHash: hash(value),
         namespaceId: namespaceA,
+        assetId: asset(value),
         kind: 'RENDITION',
         now: 1,
       });
@@ -108,7 +122,7 @@ describe('CacheIndex', () => {
       [7, namespaceA, 20],
       [8, namespaceB, 1],
     ] as const) {
-      index.beginWrite({ keyHash: hash(value), namespaceId, kind: 'RENDITION', now });
+      index.beginWrite({ keyHash: hash(value), namespaceId, assetId: asset(value), kind: 'RENDITION', now });
       index.commitReady(hash(value), {
         logicalBytes: 1,
         allocatedBytes: 4_096,
@@ -134,6 +148,7 @@ describe('CacheIndex', () => {
       index.beginWrite({
         keyHash: hash(value),
         namespaceId: namespaceA,
+        assetId: asset(value),
         kind: 'RENDITION',
         now: value,
       });
@@ -176,10 +191,10 @@ describe('CacheIndex', () => {
   it('rejects malformed hashes, namespaces, timestamps, sizes, segments and batches', () => {
     expect(() => index.findReady(Buffer.alloc(31))).toThrow(/hash/);
     expect(() =>
-      index.beginWrite({ keyHash: hash(12), namespaceId: 'bad', kind: 'RENDITION', now: 1 }),
+      index.beginWrite({ keyHash: hash(12), namespaceId: 'bad', assetId: asset(12), kind: 'RENDITION', now: 1 }),
     ).toThrow(/namespace/);
     expect(() =>
-      index.beginWrite({ keyHash: hash(12), namespaceId: namespaceA, kind: 'RENDITION', now: -1 }),
+      index.beginWrite({ keyHash: hash(12), namespaceId: namespaceA, assetId: asset(12), kind: 'RENDITION', now: -1 }),
     ).toThrow(/时间戳/);
     expect(() => index.listEvictionCandidates(namespaceA, 'INVALID' as never, 1)).toThrow(/分段/);
     expect(() => index.listGlobalEvictionCandidates('PROBATION', 0)).toThrow(/批次/);

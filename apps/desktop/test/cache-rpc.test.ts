@@ -11,6 +11,7 @@ import {
 
 const namespaceId = 'a'.repeat(64);
 const keyHash = Buffer.alloc(32, 9);
+const assetId = '00000000-0000-4000-8000-000000000009';
 
 describe('cache utility RPC', () => {
   let root: string | undefined;
@@ -36,11 +37,12 @@ describe('cache utility RPC', () => {
     const writeId = await client.beginWrite({
       keyHash,
       namespaceId,
+      assetId,
       kind: 'RENDITION',
       now: 1,
     });
     await expect(
-      client.beginWrite({ keyHash, namespaceId, kind: 'RENDITION', now: 1 }),
+      client.beginWrite({ keyHash, namespaceId, assetId, kind: 'RENDITION', now: 1 }),
     ).rejects.toThrow(/写入中/);
     await client.append(writeId, Buffer.from('rpc-media'));
     await client.commit(writeId, {

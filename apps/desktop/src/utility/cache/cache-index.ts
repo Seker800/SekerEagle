@@ -5,6 +5,7 @@ export type CacheSegment = 'PROBATION' | 'PROTECTED';
 
 export interface ReadyCacheEntry {
   namespaceId: string;
+  assetId: string;
   kind: CacheKind;
   logicalBytes: number;
   allocatedBytes: number;
@@ -20,6 +21,7 @@ export interface ReadyCacheEntry {
 
 interface CacheEntryRow {
   namespace_id: string;
+  asset_id: string;
   kind: CacheKind;
   logical_bytes: number;
   allocated_bytes: number;
@@ -34,6 +36,7 @@ interface CacheEntryRow {
 }
 
 const NAMESPACE_ID = /^[0-9a-f]{64}$/u;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export class CacheIndex {
   private readonly database: DatabaseSync;
@@ -53,6 +56,7 @@ export class CacheIndex {
       CREATE TABLE IF NOT EXISTS cache_entries (
         key_hash BLOB PRIMARY KEY CHECK(length(key_hash) = 32),
         namespace_id TEXT NOT NULL CHECK(length(namespace_id) = 64),
+        asset_id TEXT NOT NULL,
         kind TEXT NOT NULL CHECK(kind IN ('RENDITION', 'TILE')),
         state TEXT NOT NULL CHECK(state IN ('WRITING', 'READY')),
         logical_bytes INTEGER NOT NULL DEFAULT 0 CHECK(logical_bytes >= 0),
@@ -71,6 +75,9 @@ export class CacheIndex {
       CREATE INDEX IF NOT EXISTS cache_entries_eviction_idx
         ON cache_entries(namespace_id, state, segment, last_access_at, created_at);
 
+      CREATE INDEX IF NOT EXISTS cache_entries_asset_idx
+        ON cache_entries(namespace_id, asset_id, state);
+
       CREATE TABLE IF NOT EXISTS cache_stats (
         namespace_id TEXT PRIMARY KEY CHECK(length(namespace_id) = 64),
         entry_count INTEGER NOT NULL DEFAULT 0 CHECK(entry_count >= 0),
@@ -80,17 +87,24 @@ export class CacheIndex {
     `);
   }
 
-  beginWrite(input: { keyHash: Buffer; namespaceId: string; kind: CacheKind; now: number }): void {
+  beginWrite(input: {
+    keyHash: Buffer;
+    namespaceId: string;
+    assetId: string;
+    kind: CacheKind;
+    now: number;
+  }): void {
     assertHash(input.keyHash);
     assertNamespace(input.namespaceId);
+    assertAssetId(input.assetId);
     assertTimestamp(input.now);
     const result = this.database
       .prepare(
         `INSERT INTO cache_entries (
-          key_hash, namespace_id, kind, state, last_access_at, created_at
-        ) VALUES (?, ?, ?, 'WRITING', ?, ?)`,
+          key_hash, namespace_id, asset_id, kind, state, last_access_at, created_at
+        ) VALUES (?, ?, ?, ?, 'WRITING', ?, ?)`,
       )
-      .run(input.keyHash, input.namespaceId, input.kind, input.now, input.now);
+      .run(input.keyHash, input.namespaceId, input.assetId, input.kind, input.now, input.now);
     if (result.changes !== 1) throw new Error('无法建立缓存写入状态。');
   }
 
@@ -150,7 +164,7 @@ export class CacheIndex {
     assertHash(keyHash);
     const row = this.database
       .prepare(
-        `SELECT namespace_id, kind, logical_bytes, allocated_bytes, content_type, etag,
+        `SELECT namespace_id, asset_id, kind, logical_bytes, allocated_bytes, content_type, etag,
                 last_modified, segment, access_count, last_access_at, verified_at,
                 authorization_lease_until
          FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
@@ -159,6 +173,7 @@ export class CacheIndex {
     if (!row) return null;
     return {
       namespaceId: row.namespace_id,
+      assetId: row.asset_id,
       kind: row.kind,
       logicalBytes: row.logical_bytes,
       allocatedBytes: row.allocated_bytes,
@@ -305,6 +320,25 @@ export class CacheIndex {
     return rows.map(({ key_hash }) => Buffer.from(key_hash));
   }
 
+  listAssetEntries(namespaceId: string, assetId: string): Buffer[] {
+    assertNamespace(namespaceId);
+    assertAssetId(assetId);
+    return this.listHashes(
+      `SELECT key_hash FROM cache_entries
+       WHERE namespace_id = ? AND asset_id = ? AND state = 'READY'`,
+      namespaceId,
+      assetId,
+    );
+  }
+
+  listNamespaceEntries(namespaceId: string): Buffer[] {
+    assertNamespace(namespaceId);
+    return this.listHashes(
+      `SELECT key_hash FROM cache_entries WHERE namespace_id = ? AND state = 'READY'`,
+      namespaceId,
+    );
+  }
+
   recoverInterruptedWrites(): Buffer[] {
     const rows = this.database
       .prepare(`SELECT key_hash FROM cache_entries WHERE state = 'WRITING'`)
@@ -383,6 +417,11 @@ export class CacheIndex {
       throw error;
     }
   }
+
+  private listHashes(sql: string, ...params: string[]): Buffer[] {
+    const rows = this.database.prepare(sql).all(...params) as Array<{ key_hash: Uint8Array }>;
+    return rows.map(({ key_hash }) => Buffer.from(key_hash));
+  }
 }
 
 function assertHash(value: Buffer): void {
@@ -391,6 +430,10 @@ function assertHash(value: Buffer): void {
 
 function assertNamespace(value: string): void {
   if (!NAMESPACE_ID.test(value)) throw new Error('缓存 namespace 无效。');
+}
+
+function assertAssetId(value: string): void {
+  if (!UUID.test(value)) throw new Error('缓存 assetId 无效。');
 }
 
 function assertTimestamp(value: number): void {

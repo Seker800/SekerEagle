@@ -1,5 +1,5 @@
-const GIB = 1024 ** 3;
-export const DEFAULT_CACHE_LIMIT_BYTES = 10 * GIB;
+export const GIBIBYTE = 1024 ** 3;
+export const DEFAULT_CACHE_LIMIT_BYTES = 10 * GIBIBYTE;
 
 export function normalizeCacheLimitGiB(value: number | undefined): number {
   const normalized = value ?? 10;
@@ -10,6 +10,6 @@ export function normalizeCacheLimitGiB(value: number | undefined): number {
 }
 
 export function cacheWatermarks(limitGiB: number): { highBytes: number; lowBytes: number } {
-  const highBytes = normalizeCacheLimitGiB(limitGiB) * GIB;
+  const highBytes = normalizeCacheLimitGiB(limitGiB) * GIBIBYTE;
   return { highBytes, lowBytes: Math.floor(highBytes * 0.9) };
 }

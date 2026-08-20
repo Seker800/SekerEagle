@@ -58,6 +58,7 @@ describe('CacheEngine', () => {
     const writeId = await engine.beginWrite({
       keyHash: hash(2),
       namespaceId: namespaceA,
+      assetId: asset(2),
       kind: 'TILE',
       now: 10,
     });
@@ -153,6 +154,7 @@ describe('CacheEngine', () => {
   });
 
   it('invalidates every derivative for one asset without crossing owner namespaces', async () => {
+    await engine.setLimitBytes(64 * 1024);
     await writeReady(engine, 20, namespaceA, 'asset-a-rendition', asset(20));
     await writeReady(engine, 21, namespaceA, 'asset-a-tile', asset(20));
     await writeReady(engine, 22, namespaceA, 'asset-b', asset(22));
