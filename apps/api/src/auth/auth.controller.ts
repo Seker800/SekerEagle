@@ -80,10 +80,10 @@ export class AuthController {
 
   @Get('auth/me')
   @UseGuards(AccessAuthGuard)
-  me(@CurrentPrincipal() principal: AuthPrincipal) {
+  async me(@CurrentPrincipal() principal: AuthPrincipal) {
     return {
       user: { id: principal.sub, email: principal.email, role: principal.role },
-      desktopCache: { deploymentId: this.deploymentIdentity.id },
+      desktopCache: { deploymentId: await this.deploymentIdentity.get() },
     };
   }
 

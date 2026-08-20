@@ -5,7 +5,12 @@ const MAX_TILE_COORDINATE = 1_000_000;
 const MAX_TILE_LEVEL = 63;
 
 export type DesktopMediaIdentity =
-  | { kind: 'RENDITION'; assetId: string; renditionId: string }
+  | {
+      kind: 'RENDITION';
+      renditionKind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
+      assetId: string;
+      renditionId: string;
+    }
   | {
       kind: 'TILE';
       assetId: string;
@@ -18,7 +23,7 @@ export type DesktopMediaIdentity =
 export function createDesktopMediaUrl(media: DesktopMediaIdentity): string {
   const value =
     media.kind === 'RENDITION'
-      ? `sekereagle-media://rendition/${media.assetId}/${media.renditionId}`
+      ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
       : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`;
   const canonical = parseDesktopMediaUrl(value);
   if (canonical.kind !== media.kind) throw new Error('桌面媒体类型无效。');
@@ -38,10 +43,11 @@ export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
   }
 
   const segments = url.pathname.split('/').filter(Boolean).map(decodePathSegment);
-  if (url.hostname === 'rendition' && segments.length === 2) {
-    const [assetId, renditionId] = segments;
+  if (url.hostname === 'rendition' && segments.length === 3) {
+    const [renditionKind, assetId, renditionId] = segments;
     return {
       kind: 'RENDITION',
+      renditionKind: parseRenditionKind(renditionKind),
       assetId: assertUuid(assetId),
       renditionId: assertUuid(renditionId),
     };
@@ -76,7 +82,7 @@ export function buildCacheIdentity(
 
   const mediaIdentity =
     media.kind === 'RENDITION'
-      ? `rendition:${media.assetId}:${media.renditionId}`
+      ? `rendition:${media.renditionKind}:${media.assetId}:${media.renditionId}`
       : `tile:${media.assetId}:${media.pyramidId}:${media.level}:${media.x}:${media.y}`;
   assertDeploymentId(deploymentId);
   return `v1\n${serverIdentity}\n${deploymentId}\n${ownerId}\n${mediaIdentity}`;
@@ -131,6 +137,14 @@ function parseBoundedInteger(value: string | undefined, maximum: number): number
   const parsed = Number(value);
   if (!Number.isSafeInteger(parsed) || parsed > maximum) throw new Error('切片坐标超出范围。');
   return parsed;
+}
+
+function parseRenditionKind(value: string | undefined): 'THUMBNAIL' | 'PREVIEW' | 'POSTER' {
+  const normalized = value?.toUpperCase();
+  if (normalized !== 'THUMBNAIL' && normalized !== 'PREVIEW' && normalized !== 'POSTER') {
+    throw new Error('派生媒体类型无效。');
+  }
+  return normalized;
 }
 
 function decodePathSegment(value: string): string {

@@ -13,11 +13,9 @@ const deploymentId = 'd'.repeat(64);
 
 describe('desktop media identity', () => {
   it('accepts only immutable rendition and bounded tile identities', () => {
-    expect(parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`)).toEqual({
-      kind: 'RENDITION',
-      assetId,
-      renditionId,
-    });
+    expect(
+      parseDesktopMediaUrl(`sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`),
+    ).toEqual({ kind: 'RENDITION', renditionKind: 'THUMBNAIL', assetId, renditionId });
     expect(parseDesktopMediaUrl(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`)).toEqual({
       kind: 'TILE',
       assetId,
@@ -29,9 +27,9 @@ describe('desktop media identity', () => {
   });
 
   it('creates only canonical custom-scheme URLs for the preload bridge', () => {
-    expect(createDesktopMediaUrl({ kind: 'RENDITION', assetId, renditionId })).toBe(
-      `sekereagle-media://rendition/${assetId}/${renditionId}`,
-    );
+    expect(
+      createDesktopMediaUrl({ kind: 'RENDITION', renditionKind: 'PREVIEW', assetId, renditionId }),
+    ).toBe(`sekereagle-media://rendition/preview/${assetId}/${renditionId}`);
     expect(createDesktopMediaUrl({ kind: 'TILE', assetId, pyramidId, level: 13, x: 4, y: 2 })).toBe(
       `sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`,
     );
@@ -39,6 +37,7 @@ describe('desktop media identity', () => {
 
   it.each([
     `sekereagle-media://original/${assetId}`,
+    `sekereagle-media://rendition/unknown/${assetId}/${renditionId}`,
     'sekereagle-media://rendition/not-a-uuid/not-a-uuid',
     `sekereagle-media://tile/${assetId}/${pyramidId}/-1/0/0`,
     `sekereagle-media://tile/${assetId}/${pyramidId}/1/0/0/extra`,
@@ -49,7 +48,9 @@ describe('desktop media identity', () => {
   });
 
   it('isolates cache keys by normalized server and authenticated owner', () => {
-    const media = parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`);
+    const media = parseDesktopMediaUrl(
+      `sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`,
+    );
     const first = buildCacheIdentity('https://EXAMPLE.com:443/', 'owner-a', deploymentId, media);
     const equivalent = buildCacheIdentity('https://example.com', 'owner-a', deploymentId, media);
     const otherOwner = buildCacheIdentity('https://example.com', 'owner-b', deploymentId, media);
@@ -78,7 +79,7 @@ describe('desktop media identity', () => {
           server,
           'owner-a',
           deploymentId,
-          parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`),
+          parseDesktopMediaUrl(`sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`),
         ),
       ).toThrow();
     }

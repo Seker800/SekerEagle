@@ -11,6 +11,7 @@ import type { AuthenticatedIdentity } from './authenticated-owner';
 const CACHE_ELIGIBILITY = 'public-derived-v1';
 const AUTHORIZATION_LEASE_MS = 5 * 60_000;
 const MAX_RENDITION_BYTES = 64 * 1024 ** 2;
+const MAX_THUMBNAIL_BYTES = 8 * 1024 ** 2;
 const MAX_TILE_BYTES = 8 * 1024 ** 2;
 const MAX_IPC_CHUNK_BYTES = 1024 ** 2;
 
@@ -26,6 +27,7 @@ interface CacheBackend {
     namespaceId: string;
     assetId: string;
     kind: CacheKind;
+    expectedLength: number;
     now: number;
   }): Promise<string>;
   append(writeId: string, chunk: Uint8Array): Promise<void>;
@@ -114,12 +116,16 @@ export class MediaCacheController {
     } catch {
       return { source: 'upstream', response: await this.fetchUpstream(upstreamPath(media), {}) };
     }
-    if (existing && existing.authorizationLeaseUntil >= now) return cacheResolution(existing);
-    if (existing) {
-      await this.cache.release(existing.leaseId);
-      return this.revalidate(media, keyHash, namespaceId, existing);
+    try {
+      if (existing && existing.authorizationLeaseUntil >= now) return cacheResolution(existing);
+      if (existing) {
+        await this.cache.release(existing.leaseId);
+        return await this.revalidate(media, keyHash, namespaceId, existing);
+      }
+      return await this.resolveMiss(media, keyHash, namespaceId);
+    } catch {
+      return { source: 'upstream', response: await this.fetchUpstream(upstreamPath(media), {}) };
     }
-    return this.resolveMiss(media, keyHash, namespaceId);
   }
 
   private async resolveMiss(
@@ -196,10 +202,7 @@ export class MediaCacheController {
     namespaceId: string,
     response: Response,
   ): Promise<MediaResolution> {
-    const expectedLength = cacheableLength(
-      response,
-      media.kind === 'TILE' ? MAX_TILE_BYTES : MAX_RENDITION_BYTES,
-    );
+    const expectedLength = cacheableLength(response, maximumCacheBytes(media));
     const contentType = response.headers.get('content-type');
     if (expectedLength === null || !contentType || !response.body) {
       return { source: 'upstream', response };
@@ -212,6 +215,7 @@ export class MediaCacheController {
         namespaceId,
         assetId: media.assetId,
         kind: media.kind,
+        expectedLength,
         now,
       });
     } catch {
@@ -257,7 +261,7 @@ function isEligible(response: Response): boolean {
 }
 
 function isCacheable(response: Response, media: DesktopMediaIdentity): boolean {
-  const maximumBytes = media.kind === 'TILE' ? MAX_TILE_BYTES : MAX_RENDITION_BYTES;
+  const maximumBytes = maximumCacheBytes(media);
   return (
     response.status === 200 &&
     isEligible(response) &&
@@ -265,6 +269,12 @@ function isCacheable(response: Response, media: DesktopMediaIdentity): boolean {
     cacheableLength(response, maximumBytes) !== null &&
     response.body !== null
   );
+}
+
+function maximumCacheBytes(media: DesktopMediaIdentity): number {
+  return media.kind === 'TILE' || media.renditionKind === 'THUMBNAIL'
+    ? MAX_TILE_BYTES
+    : MAX_RENDITION_BYTES;
 }
 
 function cacheableLength(response: Response, maximumBytes = MAX_RENDITION_BYTES): number | null {

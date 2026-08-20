@@ -15,7 +15,7 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
   const selected =
     currentRenditions.find(({ kind }) => kind === 'PREVIEW') ??
     currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
-  return selected ? getEagleRenditionContentUrl(asset.id, selected.id) : null;
+  return selected ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind) : null;
 }
 
 export function getEagleThumbnailSourceSet(asset: EagleAssetListItem) {
@@ -30,10 +30,11 @@ export function getEagleThumbnailSourceSet(asset: EagleAssetListItem) {
   const first = candidates[0];
   if (!first) return null;
   return {
-    src: getEagleRenditionContentUrl(asset.id, first.id),
+    src: getEagleRenditionContentUrl(asset.id, first.id, first.kind),
     srcSet: candidates
       .map(
-        (rendition) => `${getEagleRenditionContentUrl(asset.id, rendition.id)} ${rendition.width}w`,
+        (rendition) =>
+          `${getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind)} ${rendition.width}w`,
       )
       .join(', '),
   };

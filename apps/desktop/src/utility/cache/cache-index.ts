@@ -42,6 +42,7 @@ export class CacheIndex {
   private readonly database: DatabaseSync;
   private readonly beginWriteStatement: StatementSync;
   private readonly commitReadyStatement: StatementSync;
+  private readonly commitAccessStatement: StatementSync;
   private readonly namespaceStatement: StatementSync;
   private readonly statsUpsertStatement: StatementSync;
   private readonly findReadyStatement: StatementSync;
@@ -58,6 +59,8 @@ export class CacheIndex {
       PRAGMA synchronous = NORMAL;
       PRAGMA busy_timeout = 5000;
       PRAGMA temp_store = MEMORY;
+      PRAGMA cache_size = -16384;
+      PRAGMA mmap_size = 0;
 
       CREATE TABLE IF NOT EXISTS cache_entries (
         key_hash BLOB PRIMARY KEY CHECK(length(key_hash) = 32),
@@ -78,11 +81,37 @@ export class CacheIndex {
         authorization_lease_until INTEGER NOT NULL DEFAULT 0
       ) WITHOUT ROWID;
 
-      CREATE INDEX IF NOT EXISTS cache_entries_eviction_idx
-        ON cache_entries(namespace_id, state, segment, last_access_at, created_at);
+      DROP INDEX IF EXISTS cache_entries_eviction_idx;
+      DROP INDEX IF EXISTS cache_entries_global_eviction_idx;
+
+      CREATE INDEX IF NOT EXISTS cache_entries_state_idx ON cache_entries(state);
 
       CREATE INDEX IF NOT EXISTS cache_entries_asset_idx
         ON cache_entries(namespace_id, asset_id, state);
+
+      CREATE TABLE IF NOT EXISTS cache_access (
+        key_hash BLOB PRIMARY KEY CHECK(length(key_hash) = 32)
+          REFERENCES cache_entries(key_hash) ON DELETE CASCADE,
+        namespace_id TEXT NOT NULL CHECK(length(namespace_id) = 64),
+        segment TEXT NOT NULL CHECK(segment IN ('PROBATION', 'PROTECTED')),
+        access_count INTEGER NOT NULL DEFAULT 0 CHECK(access_count >= 0),
+        last_access_at INTEGER NOT NULL,
+        created_at INTEGER NOT NULL
+      ) WITHOUT ROWID;
+
+      CREATE INDEX IF NOT EXISTS cache_access_global_eviction_idx
+        ON cache_access(segment, last_access_at, created_at);
+
+      CREATE TABLE IF NOT EXISTS cache_tombstones (
+        key_hash BLOB PRIMARY KEY CHECK(length(key_hash) = 32)
+          REFERENCES cache_entries(key_hash) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL
+      ) WITHOUT ROWID;
+
+      CREATE TABLE IF NOT EXISTS cache_schema_migrations (
+        name TEXT PRIMARY KEY,
+        completed_at INTEGER NOT NULL
+      ) WITHOUT ROWID;
 
       CREATE TABLE IF NOT EXISTS cache_stats (
         namespace_id TEXT PRIMARY KEY CHECK(length(namespace_id) = 64),
@@ -93,7 +122,24 @@ export class CacheIndex {
         ,miss_count INTEGER NOT NULL DEFAULT 0 CHECK(miss_count >= 0)
         ,saved_bytes INTEGER NOT NULL DEFAULT 0 CHECK(saved_bytes >= 0)
       ) WITHOUT ROWID;
+
     `);
+    const accessMigration = this.database
+      .prepare(`SELECT 1 FROM cache_schema_migrations WHERE name = 'cache_access_v1'`)
+      .get();
+    if (!accessMigration) {
+      this.transaction(() => {
+        this.database.exec(`
+          INSERT OR IGNORE INTO cache_access(
+            key_hash, namespace_id, segment, access_count, last_access_at, created_at
+          )
+          SELECT key_hash, namespace_id, segment, access_count, last_access_at, created_at
+          FROM cache_entries WHERE state = 'READY';
+          INSERT INTO cache_schema_migrations(name, completed_at)
+          VALUES ('cache_access_v1', unixepoch('subsec') * 1000);
+        `);
+      });
+    }
     this.beginWriteStatement = this.database.prepare(
       `INSERT INTO cache_entries (
         key_hash, namespace_id, asset_id, kind, state, last_access_at, created_at
@@ -104,6 +150,12 @@ export class CacheIndex {
        SET state = 'READY', logical_bytes = ?, allocated_bytes = ?, content_type = ?,
            etag = ?, last_modified = ?, verified_at = ?, authorization_lease_until = ?
        WHERE key_hash = ? AND state = 'WRITING'`,
+    );
+    this.commitAccessStatement = this.database.prepare(
+      `INSERT INTO cache_access(
+         key_hash, namespace_id, segment, access_count, last_access_at, created_at
+       ) SELECT key_hash, namespace_id, 'PROBATION', 0, last_access_at, created_at
+         FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
     );
     this.namespaceStatement = this.database.prepare(
       'SELECT namespace_id FROM cache_entries WHERE key_hash = ?',
@@ -117,15 +169,21 @@ export class CacheIndex {
          allocated_bytes = allocated_bytes + excluded.allocated_bytes`,
     );
     this.findReadyStatement = this.database.prepare(
-      `SELECT namespace_id, asset_id, kind, logical_bytes, allocated_bytes, content_type, etag,
-              last_modified, segment, access_count, last_access_at, verified_at,
-              authorization_lease_until
-       FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
+      `SELECT entries.namespace_id, entries.asset_id, entries.kind, entries.logical_bytes,
+              entries.allocated_bytes, entries.content_type, entries.etag,
+              entries.last_modified, access.segment, access.access_count,
+              access.last_access_at, entries.verified_at, entries.authorization_lease_until
+       FROM cache_entries AS entries
+       JOIN cache_access AS access ON access.key_hash = entries.key_hash
+       WHERE entries.key_hash = ? AND entries.state = 'READY'
+         AND NOT EXISTS (
+           SELECT 1 FROM cache_tombstones WHERE key_hash = entries.key_hash
+         )`,
     );
     this.recordAccessStatement = this.database.prepare(
-      `UPDATE cache_entries
+      `UPDATE cache_access
        SET access_count = access_count + ?, last_access_at = ?, segment = 'PROTECTED'
-       WHERE key_hash = ? AND state = 'READY'`,
+       WHERE key_hash = ?`,
     );
   }
 
@@ -182,6 +240,9 @@ export class CacheIndex {
         keyHash,
       );
       if (result.changes !== 1) throw new Error('缓存写入状态不存在或已经提交。');
+      if (this.commitAccessStatement.run(keyHash).changes !== 1) {
+        throw new Error('无法建立缓存访问状态。');
+      }
       const row = this.getNamespace(keyHash);
       this.statsUpsertStatement.run(row.namespace_id, input.logicalBytes, input.allocatedBytes);
     });
@@ -259,23 +320,6 @@ export class CacheIndex {
         update.run(metric.namespaceId, metric.hitCount, metric.missCount, metric.savedBytes);
       }
     });
-  }
-
-  listEvictionCandidates(namespaceId: string, segment: CacheSegment, limit: number): Buffer[] {
-    assertNamespace(namespaceId);
-    if (segment !== 'PROBATION' && segment !== 'PROTECTED') throw new Error('缓存分段无效。');
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
-      throw new Error('淘汰批次无效。');
-    }
-    const rows = this.database
-      .prepare(
-        `SELECT key_hash FROM cache_entries
-         WHERE namespace_id = ? AND state = 'READY' AND segment = ?
-         ORDER BY last_access_at ASC, created_at ASC
-         LIMIT ?`,
-      )
-      .all(namespaceId, segment, limit) as Array<{ key_hash: Uint8Array }>;
-    return rows.map(({ key_hash }) => Buffer.from(key_hash));
   }
 
   deleteEntries(keyHashes: readonly Buffer[]): { entries: number; allocatedBytes: number } {
@@ -362,6 +406,25 @@ export class CacheIndex {
     );
   }
 
+  markPendingDeletes(keyHashes: readonly Buffer[], now: number): void {
+    if (!keyHashes.length) return;
+    assertTimestamp(now);
+    const insert = this.database.prepare(
+      `INSERT OR IGNORE INTO cache_tombstones(key_hash, created_at)
+       SELECT key_hash, ? FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
+    );
+    this.transaction(() => {
+      for (const keyHash of keyHashes) {
+        assertHash(keyHash);
+        insert.run(now, keyHash);
+      }
+    });
+  }
+
+  listPendingDeletes(): Buffer[] {
+    return this.listHashes(`SELECT key_hash FROM cache_tombstones ORDER BY created_at, key_hash`);
+  }
+
   listGlobalEvictionCandidates(segment: CacheSegment, limit: number): Buffer[] {
     if (segment !== 'PROBATION' && segment !== 'PROTECTED') throw new Error('缓存分段无效。');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
@@ -369,8 +432,8 @@ export class CacheIndex {
     }
     const rows = this.database
       .prepare(
-        `SELECT key_hash FROM cache_entries
-         WHERE state = 'READY' AND segment = ?
+        `SELECT key_hash FROM cache_access
+         WHERE segment = ?
          ORDER BY last_access_at ASC, created_at ASC
          LIMIT ?`,
       )
@@ -463,6 +526,26 @@ export class CacheIndex {
       .get() as { sql: string };
     const journal = this.database.prepare('PRAGMA journal_mode').get() as { journal_mode: string };
     return { withoutRowid: /WITHOUT ROWID/iu.test(table.sql), journalMode: journal.journal_mode };
+  }
+
+  inspectMaintenancePlans(): { recovery: string[]; globalEviction: string[] } {
+    const explain = (sql: string, ...params: Array<string | number>) =>
+      (
+        this.database.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as Array<{
+          detail: string;
+        }>
+      ).map(({ detail }) => detail);
+    return {
+      recovery: explain(`SELECT key_hash FROM cache_entries WHERE state = 'WRITING'`),
+      globalEviction: explain(
+        `SELECT key_hash FROM cache_access
+         WHERE segment = ?
+         ORDER BY last_access_at ASC, created_at ASC
+         LIMIT ?`,
+        'PROBATION',
+        256,
+      ),
+    };
   }
 
   close(): void {

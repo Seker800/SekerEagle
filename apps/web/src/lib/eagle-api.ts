@@ -512,6 +512,10 @@ export function getEaglePyramidDescriptor(_token: string, assetId: string, signa
     signal,
   });
 }
-export function getEagleRenditionContentUrl(assetId: string, renditionId: string) {
-  return resolveEagleRenditionUrl(assetId, renditionId);
+export function getEagleRenditionContentUrl(
+  assetId: string,
+  renditionId: string,
+  renditionKind: EagleRendition['kind'],
+) {
+  return resolveEagleRenditionUrl(assetId, renditionId, renditionKind);
 }

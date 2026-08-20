@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -121,7 +122,7 @@ describe('CacheIndex', () => {
     });
   });
 
-  it('selects bounded eviction candidates within one namespace and segment', () => {
+  it('selects globally oldest bounded eviction candidates', () => {
     for (const [value, namespaceId, now] of [
       [5, namespaceA, 30],
       [6, namespaceA, 10],
@@ -146,13 +147,50 @@ describe('CacheIndex', () => {
       });
     }
 
-    expect(index.listEvictionCandidates(namespaceA, 'PROBATION', 2)).toEqual([hash(6), hash(7)]);
+    expect(index.listGlobalEvictionCandidates('PROBATION', 2)).toEqual([hash(8), hash(6)]);
   });
 
   it('creates a compact WITHOUT ROWID cache table and WAL database', async () => {
     expect(index.inspectSchema()).toMatchObject({ withoutRowid: true, journalMode: 'wal' });
     index.close();
     expect((await readFile(path.join(directory, 'index.sqlite'))).byteLength).toBeGreaterThan(0);
+  });
+
+  it('uses indexed maintenance plans without a temporary eviction sort', () => {
+    const plans = index.inspectMaintenancePlans();
+
+    expect(plans.recovery.join('\n')).toMatch(/SEARCH .*state_idx/iu);
+    expect(plans.globalEviction.join('\n')).toMatch(/SEARCH .*global_eviction_idx/iu);
+    expect(plans.globalEviction.join('\n')).not.toMatch(/TEMP B-TREE/iu);
+  });
+
+  it('recovers an access-table migration interrupted before its completion marker', () => {
+    index.beginWrite({
+      keyHash: hash(9),
+      namespaceId: namespaceA,
+      assetId: asset(9),
+      kind: 'RENDITION',
+      now: 1,
+    });
+    index.commitReady(hash(9), {
+      logicalBytes: 1,
+      allocatedBytes: 4_096,
+      contentType: 'image/webp',
+      etag: null,
+      lastModified: null,
+      verifiedAt: 1,
+      authorizationLeaseUntil: 301,
+    });
+    index.close();
+    const database = new DatabaseSync(path.join(directory, 'index.sqlite'));
+    database.exec(`
+      DELETE FROM cache_access;
+      DELETE FROM cache_schema_migrations WHERE name = 'cache_access_v1';
+    `);
+    database.close();
+
+    index = new CacheIndex(path.join(directory, 'index.sqlite'));
+    expect(index.findReady(hash(9))).toMatchObject({ namespaceId: namespaceA });
   });
 
   it('renews only an owner-isolated ready entry and supports global eviction ordering', () => {
@@ -220,7 +258,7 @@ describe('CacheIndex', () => {
         now: -1,
       }),
     ).toThrow(/时间戳/);
-    expect(() => index.listEvictionCandidates(namespaceA, 'INVALID' as never, 1)).toThrow(/分段/);
+    expect(() => index.listGlobalEvictionCandidates('INVALID' as never, 1)).toThrow(/分段/);
     expect(() => index.listGlobalEvictionCandidates('PROBATION', 0)).toThrow(/批次/);
     expect(index.deleteEntries([])).toEqual({ entries: 0, allocatedBytes: 0 });
     expect(index.getStats(namespaceB)).toEqual({

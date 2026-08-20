@@ -1,14 +1,25 @@
-import { createHmac } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DeploymentIdentityService {
-  readonly id: string;
+  private identity: Promise<string> | null = null;
 
-  constructor(config: ConfigService) {
-    this.id = createHmac('sha256', config.getOrThrow<string>('JWT_ACCESS_SECRET'))
-      .update('sekereagle:desktop-cache:deployment:v1', 'utf8')
-      .digest('hex');
+  constructor(private readonly prisma: PrismaService) {}
+
+  get(): Promise<string> {
+    this.identity ??= this.loadOrCreate();
+    return this.identity;
+  }
+
+  private async loadOrCreate(): Promise<string> {
+    const identity = await this.prisma.appDeploymentIdentity.upsert({
+      where: { id: 'primary' },
+      create: { id: 'primary', value: randomBytes(32).toString('hex') },
+      update: {},
+      select: { value: true },
+    });
+    return identity.value;
   }
 }

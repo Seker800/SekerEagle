@@ -34,7 +34,7 @@ export function getEagleAssetThumbnailUrls(asset: EagleAssetListItem): string[] 
             (left, right) =>
               (left.width ?? Number.MAX_SAFE_INTEGER) - (right.width ?? Number.MAX_SAFE_INTEGER),
           )
-          .map((rendition) => getEagleRenditionContentUrl(asset.id, rendition.id)),
+          .map((rendition) => getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind)),
       ),
     ),
   ];

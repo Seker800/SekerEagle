@@ -7,7 +7,7 @@ import { CacheEngine } from '../src/utility/cache/cache-engine';
 
 const assetId = '00000000-0000-4000-8000-000000000001';
 const renditionId = '00000000-0000-4000-8000-000000000002';
-const mediaUrl = `sekereagle-media://rendition/${assetId}/${renditionId}`;
+const mediaUrl = `sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`;
 
 describe('MediaCacheController', () => {
   let root: string;
@@ -16,7 +16,11 @@ describe('MediaCacheController', () => {
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(os.tmpdir(), 'sekereagle-media-controller-'));
-    engine = new CacheEngine({ cacheRoot: root, limitBytes: 1024 ** 2 });
+    engine = new CacheEngine({
+      cacheRoot: root,
+      limitBytes: 1024 ** 2,
+      enforceDiskSafety: false,
+    });
     await engine.initialize();
     now = 1_000;
   });
@@ -175,6 +179,36 @@ describe('MediaCacheController', () => {
     const result = await controller.resolve(mediaUrl);
 
     expect(result.source).toBe('upstream');
+    expect(engine.getStats().entryCount).toBe(0);
+  });
+
+  it('retries upstream without cache when a streaming cache write fails', async () => {
+    const fetchUpstream = vi.fn(async () => eligibleResponse('network-fallback'));
+    vi.spyOn(engine, 'append').mockRejectedValueOnce(new Error('disk full'));
+    const controller = createController(engine, fetchUpstream, () => now);
+
+    const result = await controller.resolve(mediaUrl);
+
+    expect(result.source).toBe('upstream');
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    expect(engine.getStats().entryCount).toBe(0);
+  });
+
+  it('refuses a thumbnail above the dedicated 8 MiB admission ceiling', async () => {
+    const fetchUpstream = vi.fn(
+      async () =>
+        new Response('oversized', {
+          status: 200,
+          headers: {
+            'content-type': 'image/webp',
+            'content-length': String(8 * 1024 ** 2 + 1),
+            'x-sekereagle-desktop-cache': 'public-derived-v1',
+          },
+        }),
+    );
+    const controller = createController(engine, fetchUpstream, () => now);
+
+    expect(await controller.resolve(mediaUrl)).toMatchObject({ source: 'upstream' });
     expect(engine.getStats().entryCount).toBe(0);
   });
 });

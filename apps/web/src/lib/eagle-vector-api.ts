@@ -100,7 +100,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const getVectorThumbnailUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) =>
-  asset.renditions[0] ? getEagleRenditionContentUrl(asset.id, asset.renditions[0].id) : null;
+  asset.renditions[0]
+    ? getEagleRenditionContentUrl(asset.id, asset.renditions[0].id, 'THUMBNAIL')
+    : null;
 
 export function fetchEagleVectorSummary() {
   return request<EagleVectorSummary>('summary');

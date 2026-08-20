@@ -31,18 +31,30 @@ describe('cache utility RPC', () => {
     });
     client = new CacheRpcClient(clientEndpoint);
 
-    expect(await client.initialize({ cacheRoot: root, limitBytes: 1024 ** 2 })).toMatchObject({
-      fullTreeScans: 0,
-    });
+    expect(
+      await client.initialize({
+        cacheRoot: root,
+        limitBytes: 1024 ** 2,
+        enforceDiskSafety: false,
+      }),
+    ).toMatchObject({ fullTreeScans: 0 });
     const writeId = await client.beginWrite({
       keyHash,
       namespaceId,
       assetId,
       kind: 'RENDITION',
+      expectedLength: 9,
       now: 1,
     });
     await expect(
-      client.beginWrite({ keyHash, namespaceId, assetId, kind: 'RENDITION', now: 1 }),
+      client.beginWrite({
+        keyHash,
+        namespaceId,
+        assetId,
+        kind: 'RENDITION',
+        expectedLength: 9,
+        now: 1,
+      }),
     ).rejects.toThrow(/写入中/);
     await client.append(writeId, Buffer.from('rpc-media'));
     await client.commit(writeId, {

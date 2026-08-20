@@ -62,7 +62,11 @@ export class CacheRpcClient {
     this.unsubscribe = endpoint.subscribe((message) => this.receive(message));
   }
 
-  async initialize(options: { cacheRoot: string; limitBytes: number }) {
+  async initialize(options: {
+    cacheRoot: string;
+    limitBytes: number;
+    enforceDiskSafety?: boolean;
+  }) {
     return asRecord(await this.call('initialize', options));
   }
 
@@ -71,6 +75,7 @@ export class CacheRpcClient {
     namespaceId: string;
     assetId: string;
     kind: CacheKind;
+    expectedLength: number;
     now: number;
   }): Promise<string> {
     return asString(
@@ -246,6 +251,7 @@ export class CacheRpcDispatcher {
       this.engine = new CacheEngine({
         cacheRoot: asString(params.cacheRoot),
         limitBytes: asNumber(params.limitBytes),
+        enforceDiskSafety: asOptionalBoolean(params.enforceDiskSafety),
       });
       return this.engine.initialize();
     }
@@ -257,6 +263,7 @@ export class CacheRpcDispatcher {
           namespaceId: asString(params.namespaceId),
           assetId: asString(params.assetId),
           kind: asCacheKind(params.kind),
+          expectedLength: asNumber(params.expectedLength),
           now: asNumber(params.now),
         });
       case 'append':
@@ -313,6 +320,12 @@ function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('RPC 对象无效。');
   return value as Record<string, unknown>;
+}
+
+function asOptionalBoolean(value: unknown): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'boolean') throw new Error('RPC 布尔值无效。');
+  return value;
 }
 
 function asString(value: unknown): string {

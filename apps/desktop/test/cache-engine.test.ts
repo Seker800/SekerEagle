@@ -15,7 +15,12 @@ describe('CacheEngine', () => {
 
   beforeEach(async () => {
     root = await mkdtemp(path.join(os.tmpdir(), 'sekereagle-cache-engine-'));
-    engine = new CacheEngine({ cacheRoot: root, limitBytes: 12 * 1024 });
+    engine = new CacheEngine({
+      cacheRoot: root,
+      limitBytes: 12 * 1024,
+      accountInfrastructureBytes: false,
+      enforceDiskSafety: false,
+    });
     await engine.initialize();
   });
 
@@ -30,6 +35,7 @@ describe('CacheEngine', () => {
       namespaceId: namespaceA,
       assetId: asset(1),
       kind: 'RENDITION',
+      expectedLength: 12,
       now: 10,
     });
     await engine.append(writeId, Buffer.from('cached-'));
@@ -60,6 +66,7 @@ describe('CacheEngine', () => {
       namespaceId: namespaceA,
       assetId: asset(2),
       kind: 'TILE',
+      expectedLength: 10,
       now: 10,
     });
     await expect(
@@ -68,6 +75,7 @@ describe('CacheEngine', () => {
         namespaceId: namespaceA,
         assetId: asset(2),
         kind: 'TILE',
+        expectedLength: 10,
         now: 10,
       }),
     ).rejects.toThrow(/写入中/);
@@ -119,11 +127,17 @@ describe('CacheEngine', () => {
       namespaceId: namespaceA,
       assetId: asset(7),
       kind: 'RENDITION',
+      expectedLength: 1,
       now: 10,
     });
     await engine.close();
 
-    engine = new CacheEngine({ cacheRoot: root, limitBytes: 12 * 1024 });
+    engine = new CacheEngine({
+      cacheRoot: root,
+      limitBytes: 12 * 1024,
+      accountInfrastructureBytes: false,
+      enforceDiskSafety: false,
+    });
     const recovery = await engine.initialize();
 
     expect(recovery.interruptedWrites).toBe(1);
@@ -138,6 +152,7 @@ describe('CacheEngine', () => {
       namespaceId: namespaceA,
       assetId: asset(8),
       kind: 'RENDITION',
+      expectedLength: 1,
       now: 1,
     });
     await expect(engine.append(writeId, Buffer.alloc(0))).rejects.toThrow(/写入块/);
@@ -151,6 +166,35 @@ describe('CacheEngine', () => {
     engine.release(hit!.leaseId);
     await expect(engine.invalidate(hash(9))).resolves.toBe(true);
     await expect(engine.invalidate(hash(9))).resolves.toBe(false);
+  });
+
+  it('includes index files in the physical quota and rejects writes below the disk safety line', async () => {
+    const physical = new CacheEngine({
+      cacheRoot: path.join(root, 'physical'),
+      limitBytes: 1024 ** 2,
+      diskSpace: async () => ({ freeBytes: 10 * 1024 ** 3, totalBytes: 100 * 1024 ** 3 }),
+    });
+    await physical.initialize();
+    expect(await physical.getPhysicalUsageBytes()).toBeGreaterThan(0);
+    await physical.close();
+
+    const unsafe = new CacheEngine({
+      cacheRoot: path.join(root, 'unsafe'),
+      limitBytes: 1024 ** 2,
+      diskSpace: async () => ({ freeBytes: 4 * 1024 ** 3, totalBytes: 100 * 1024 ** 3 }),
+    });
+    await unsafe.initialize();
+    await expect(
+      unsafe.beginWrite({
+        keyHash: hash(19),
+        namespaceId: namespaceA,
+        assetId: asset(19),
+        kind: 'RENDITION',
+        expectedLength: 1,
+        now: 1,
+      }),
+    ).rejects.toThrow(/安全线/);
+    await unsafe.close();
   });
 
   it('invalidates every derivative for one asset without crossing owner namespaces', async () => {
@@ -171,6 +215,28 @@ describe('CacheEngine', () => {
 
     await engine.release(leased!.leaseId);
     expect(await engine.acquire(hash(20), namespaceA, 32)).toBeNull();
+  });
+
+  it('persists a deferred invalidation across a cache-process restart', async () => {
+    await writeReady(engine, 26, namespaceA, 'leased-before-restart', asset(26));
+    const leased = await engine.acquire(hash(26), namespaceA, 30);
+    expect(leased).not.toBeNull();
+    await expect(engine.invalidateAsset(namespaceA, asset(26))).resolves.toEqual({
+      deleted: 0,
+      deferred: 1,
+    });
+    await engine.close();
+
+    engine = new CacheEngine({
+      cacheRoot: root,
+      limitBytes: 12 * 1024,
+      accountInfrastructureBytes: false,
+      enforceDiskSafety: false,
+    });
+    await engine.initialize();
+
+    expect(await engine.acquire(hash(26), namespaceA, 31)).toBeNull();
+    expect(engine.getStats().entryCount).toBe(0);
   });
 
   it('clears only the selected namespace and supports changing the capacity limit', async () => {
@@ -199,6 +265,7 @@ async function writeReady(
     namespaceId,
     assetId,
     kind: 'RENDITION',
+    expectedLength: Buffer.byteLength(body),
     now: value,
   });
   await engine.append(writeId, Buffer.from(body));

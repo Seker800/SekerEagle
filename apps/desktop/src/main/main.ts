@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import path from 'node:path';
+import { desktopCacheRoot } from './cache-location';
 import { Readable } from 'node:stream';
 import {
   app,
@@ -123,7 +124,13 @@ async function startCacheProcess(
   };
   const client = new CacheRpcClient(endpoint);
   await client.initialize({
-    cacheRoot: path.join(app.getPath('sessionData'), 'MediaCache', 'v2'),
+    cacheRoot: desktopCacheRoot({
+      platform: process.platform,
+      home: app.getPath('home'),
+      appData: app.getPath('appData'),
+      localAppData: process.env.LOCALAPPDATA,
+      xdgCacheHome: process.env.XDG_CACHE_HOME,
+    }),
     limitBytes,
   });
   return { child, client };

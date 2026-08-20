@@ -15,7 +15,7 @@ afterEach(() => {
 
 describe('media resolver', () => {
   it('keeps ordinary web URLs unchanged when no desktop capability exists', () => {
-    expect(resolveEagleRenditionUrl(assetId, renditionId)).toBe(
+    expect(resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL')).toBe(
       `/api/eagle/assets/${assetId}/renditions/${renditionId}`,
     );
   });
@@ -23,7 +23,7 @@ describe('media resolver', () => {
   it('uses the narrow desktop bridge for immutable renditions and tiles', () => {
     const createMediaUrl = vi.fn((media) =>
       media.kind === 'RENDITION'
-        ? `sekereagle-media://rendition/${media.assetId}/${media.renditionId}`
+        ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
         : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`,
     );
     (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
@@ -31,8 +31,8 @@ describe('media resolver', () => {
       createMediaUrl,
     };
 
-    expect(resolveEagleRenditionUrl(assetId, renditionId)).toBe(
-      `sekereagle-media://rendition/${assetId}/${renditionId}`,
+    expect(resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL')).toBe(
+      `sekereagle-media://rendition/thumbnail/${assetId}/${renditionId}`,
     );
     expect(
       resolveEagleMediaPath(`/api/eagle/assets/${assetId}/pyramids/${pyramidId}/tiles/13/4/2`),
@@ -62,6 +62,8 @@ describe('media resolver', () => {
       createMediaUrl: () => 'https://attacker.example/image.webp',
     };
 
-    expect(() => resolveEagleRenditionUrl(assetId, renditionId)).toThrow(/桌面媒体地址/);
+    expect(() => resolveEagleRenditionUrl(assetId, renditionId, 'THUMBNAIL')).toThrow(
+      /桌面媒体地址/,
+    );
   });
 });

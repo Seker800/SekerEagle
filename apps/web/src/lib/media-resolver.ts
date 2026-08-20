@@ -1,12 +1,16 @@
 const UUID_V4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
-const RENDITION_PATH = new RegExp(`^/api/eagle/assets/(${UUID_V4})/renditions/(${UUID_V4})$`, 'i');
 const TILE_PATH = new RegExp(
   `^/api/eagle/assets/(${UUID_V4})/pyramids/(${UUID_V4})/tiles/(0|[1-9]\\d*)/(0|[1-9]\\d*)/(0|[1-9]\\d*)$`,
   'i',
 );
 
 export type DesktopMediaRequest =
-  | { kind: 'RENDITION'; assetId: string; renditionId: string }
+  | {
+      kind: 'RENDITION';
+      renditionKind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
+      assetId: string;
+      renditionId: string;
+    }
   | {
       kind: 'TILE';
       assetId: string;
@@ -50,19 +54,16 @@ export function getDesktopCacheBridge(): DesktopCacheBridge | null {
     : null;
 }
 
-export function resolveEagleRenditionUrl(assetId: string, renditionId: string): string {
+export function resolveEagleRenditionUrl(
+  assetId: string,
+  renditionId: string,
+  renditionKind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER',
+): string {
   const fallback = `/api/eagle/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(renditionId)}`;
-  return resolveMediaRequest({ kind: 'RENDITION', assetId, renditionId }, fallback);
+  return resolveMediaRequest({ kind: 'RENDITION', renditionKind, assetId, renditionId }, fallback);
 }
 
 export function resolveEagleMediaPath(path: string): string {
-  const rendition = RENDITION_PATH.exec(path);
-  if (rendition) {
-    return resolveMediaRequest(
-      { kind: 'RENDITION', assetId: rendition[1], renditionId: rendition[2] },
-      path,
-    );
-  }
   const tile = TILE_PATH.exec(path);
   if (tile) {
     return resolveMediaRequest(
@@ -97,6 +98,6 @@ function desktopBridge(): SekerDesktopBridge | null {
 
 function canonicalDesktopUrl(media: DesktopMediaRequest): string {
   return media.kind === 'RENDITION'
-    ? `sekereagle-media://rendition/${media.assetId}/${media.renditionId}`
+    ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
     : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`;
 }

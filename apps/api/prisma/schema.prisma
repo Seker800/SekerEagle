@@ -1105,3 +1105,9 @@ model EagleProcessingSetting {
   updatedAt  DateTime @updatedAt
   owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
+
+model AppDeploymentIdentity {
+  id        String   @id
+  value     String   @unique
+  createdAt DateTime @default(now())
+}
