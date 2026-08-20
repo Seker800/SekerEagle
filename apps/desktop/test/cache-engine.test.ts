@@ -7,6 +7,7 @@ import { CacheEngine } from '../src/utility/cache/cache-engine';
 const namespaceA = 'a'.repeat(64);
 const namespaceB = 'b'.repeat(64);
 const hash = (value: number) => Buffer.alloc(32, value);
+const asset = (value: number) => `00000000-0000-4000-8000-${String(value).padStart(12, '0')}`;
 
 describe('CacheEngine', () => {
   let root: string;
@@ -27,6 +28,7 @@ describe('CacheEngine', () => {
     const writeId = await engine.beginWrite({
       keyHash: hash(1),
       namespaceId: namespaceA,
+      assetId: asset(1),
       kind: 'RENDITION',
       now: 10,
     });
@@ -63,6 +65,7 @@ describe('CacheEngine', () => {
       engine.beginWrite({
         keyHash: hash(2),
         namespaceId: namespaceA,
+        assetId: asset(2),
         kind: 'TILE',
         now: 10,
       }),
@@ -113,6 +116,7 @@ describe('CacheEngine', () => {
     await engine.beginWrite({
       keyHash: hash(7),
       namespaceId: namespaceA,
+      assetId: asset(7),
       kind: 'RENDITION',
       now: 10,
     });
@@ -131,6 +135,7 @@ describe('CacheEngine', () => {
     const writeId = await engine.beginWrite({
       keyHash: hash(8),
       namespaceId: namespaceA,
+      assetId: asset(8),
       kind: 'RENDITION',
       now: 1,
     });
@@ -146,12 +151,51 @@ describe('CacheEngine', () => {
     await expect(engine.invalidate(hash(9))).resolves.toBe(true);
     await expect(engine.invalidate(hash(9))).resolves.toBe(false);
   });
+
+  it('invalidates every derivative for one asset without crossing owner namespaces', async () => {
+    await writeReady(engine, 20, namespaceA, 'asset-a-rendition', asset(20));
+    await writeReady(engine, 21, namespaceA, 'asset-a-tile', asset(20));
+    await writeReady(engine, 22, namespaceA, 'asset-b', asset(22));
+    await writeReady(engine, 23, namespaceB, 'other-owner', asset(20));
+
+    const leased = await engine.acquire(hash(20), namespaceA, 30);
+    await expect(engine.invalidateAsset(namespaceA, asset(20))).resolves.toEqual({
+      deleted: 1,
+      deferred: 1,
+    });
+    expect(await engine.acquire(hash(21), namespaceA, 31)).toBeNull();
+    expect(await engine.acquire(hash(22), namespaceA, 31)).not.toBeNull();
+    expect(await engine.acquire(hash(23), namespaceB, 31)).not.toBeNull();
+
+    await engine.release(leased!.leaseId);
+    expect(await engine.acquire(hash(20), namespaceA, 32)).toBeNull();
+  });
+
+  it('clears only the selected namespace and supports changing the capacity limit', async () => {
+    await writeReady(engine, 24, namespaceA, 'owner-a', asset(24));
+    await writeReady(engine, 25, namespaceB, 'owner-b', asset(25));
+
+    await expect(engine.clearNamespace(namespaceA)).resolves.toEqual({ deleted: 1, deferred: 0 });
+    expect(engine.getNamespaceStats(namespaceA).entryCount).toBe(0);
+    expect(engine.getNamespaceStats(namespaceB).entryCount).toBe(1);
+    expect(await engine.acquire(hash(25), namespaceB, 40)).not.toBeNull();
+
+    await expect(engine.setLimitBytes(2 * 1024)).resolves.toBeUndefined();
+    expect(engine.getLimitBytes()).toBe(2 * 1024);
+  });
 });
 
-async function writeReady(engine: CacheEngine, value: number, namespaceId: string, body: string) {
+async function writeReady(
+  engine: CacheEngine,
+  value: number,
+  namespaceId: string,
+  body: string,
+  assetId = asset(value),
+) {
   const writeId = await engine.beginWrite({
     keyHash: hash(value),
     namespaceId,
+    assetId,
     kind: 'RENDITION',
     now: value,
   });
