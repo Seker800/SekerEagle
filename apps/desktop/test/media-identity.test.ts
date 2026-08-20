@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildCacheIdentity,
+  createDesktopMediaUrl,
   hashCacheIdentity,
   parseDesktopMediaUrl,
 } from '../src/shared/media-identity';
@@ -24,6 +25,15 @@ describe('desktop media identity', () => {
       x: 4,
       y: 2,
     });
+  });
+
+  it('creates only canonical custom-scheme URLs for the preload bridge', () => {
+    expect(createDesktopMediaUrl({ kind: 'RENDITION', assetId, renditionId })).toBe(
+      `sekereagle-media://rendition/${assetId}/${renditionId}`,
+    );
+    expect(
+      createDesktopMediaUrl({ kind: 'TILE', assetId, pyramidId, level: 13, x: 4, y: 2 }),
+    ).toBe(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`);
   });
 
   it.each([
