@@ -40,6 +40,7 @@
     "mac": {
       "icon": "build/icon.png",
       "category": "public.app-category.graphics-design",
+      "minimumSystemVersion": "13.0",
       "hardenedRuntime": true,
       "target": [
         {

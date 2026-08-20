@@ -190,9 +190,18 @@ export class CacheRpcClient {
 
   async close(): Promise<void> {
     if (this.closed) return;
-    await this.call('close', {});
+    await this.call('close', {}).finally(() => this.disconnect());
+  }
+
+  disconnect(error = new Error('缓存 utility process 已断开。')): void {
+    if (this.closed) return;
     this.closed = true;
     this.unsubscribe();
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    this.pending.clear();
   }
 
   private call(method: CacheRpcMethod, params: unknown): Promise<unknown> {

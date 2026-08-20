@@ -83,6 +83,21 @@ describe('cache utility RPC', () => {
     });
     expect(await client.clearNamespace(namespaceId)).toEqual({ deleted: 0, deferred: 0 });
   });
+
+  it('rejects pending calls immediately when the utility process disconnects', async () => {
+    const endpoint: CacheRpcEndpoint = {
+      postMessage() {},
+      subscribe() {
+        return () => undefined;
+      },
+    };
+    client = new CacheRpcClient(endpoint);
+    const pending = client.getStats();
+
+    client.disconnect(new Error('crashed'));
+
+    await expect(pending).rejects.toThrow('crashed');
+  });
 });
 
 function pairedEndpoints(): [CacheRpcEndpoint, CacheRpcEndpoint] {

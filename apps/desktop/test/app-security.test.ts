@@ -44,4 +44,15 @@ describe('desktop server and navigation security', () => {
     expect(source).toContain("app.on('second-instance'");
     expect(source).toMatch(/mainWindow\?\.focus\(\)/u);
   });
+
+  it('expires authorization leases after a trusted offline-to-online transition', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(preload).toContain(".addEventListener('online'");
+    expect(preload).toContain("ipcRenderer.send('desktop:network-online')");
+    expect(main).toContain("ipcMain.on('desktop:network-online'");
+    expect(main).toMatch(/assertTrustedIpcSender\(event\)[\s\S]*expireAuthorizations/u);
+  });
 });
