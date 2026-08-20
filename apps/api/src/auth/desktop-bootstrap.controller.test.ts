@@ -5,7 +5,7 @@ import { BrowserOriginGuard } from './browser-origin.guard';
 import { DesktopBootstrapController } from './desktop-bootstrap.controller';
 
 void test('desktop bootstrap requires an explicitly trusted browser origin', async () => {
-  const handler = DesktopBootstrapController.prototype.bootstrap;
+  const handler = Reflect.get(DesktopBootstrapController.prototype, 'bootstrap') as object;
   assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);
 
   const controller = new DesktopBootstrapController({ get: async () => 'a'.repeat(64) } as never);

@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 describe('offline-capable desktop connection page', () => {
   it('ships local, LAN and public inputs without inline executable code', async () => {
-    const html = await readFile(new URL('../src/connection-page/index.html', import.meta.url), 'utf8');
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
     expect(html).toContain('name="localUrl"');
     expect(html).toContain('name="lanUrl"');
     expect(html).toContain('name="publicUrl"');

@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  connectionPageAsset,
-  isConnectionPageUrl,
-} from '../src/main/connection-page-protocol';
+import { connectionPageAsset, isConnectionPageUrl } from '../src/main/connection-page-protocol';
 
 describe('desktop connection page protocol', () => {
   it('recognizes the exact custom-scheme document URL without relying on URL.origin', () => {
@@ -13,7 +10,9 @@ describe('desktop connection page protocol', () => {
   });
 
   it('serves only the three packaged connection-page assets', () => {
-    expect(connectionPageAsset('sekereagle-app://connection/')).toMatchObject({ file: 'index.html' });
+    expect(connectionPageAsset('sekereagle-app://connection/')).toMatchObject({
+      file: 'index.html',
+    });
     expect(connectionPageAsset('sekereagle-app://connection/connection.js')).toMatchObject({
       file: 'connection.js',
     });

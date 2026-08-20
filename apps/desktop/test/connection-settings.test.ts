@@ -14,9 +14,13 @@ describe('desktop connection settings', () => {
 
   afterEach(async () => {
     await Promise.all(
-      directories.splice(0).map((directory) =>
-        import('node:fs/promises').then(({ rm }) => rm(directory, { recursive: true, force: true })),
-      ),
+      directories
+        .splice(0)
+        .map((directory) =>
+          import('node:fs/promises').then(({ rm }) =>
+            rm(directory, { recursive: true, force: true }),
+          ),
+        ),
     );
   });
 

@@ -1,7 +1,4 @@
-import {
-  normalizeConnectionSettings,
-  type DesktopConnectionSettings,
-} from './connection-config';
+import { normalizeConnectionSettings, type DesktopConnectionSettings } from './connection-config';
 import type {
   ActiveDesktopConnection,
   ConnectionResolution,

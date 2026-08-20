@@ -63,6 +63,16 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ['apps/desktop/src/connection-page/**/*.js'],
+    languageOptions: {
+      globals: {
+        document: 'readonly',
+        FormData: 'readonly',
+        window: 'readonly',
+      },
+    },
+  },
   ...tseslint.configs.recommendedTypeChecked.map((config) => ({
     ...config,
     files: ['**/*.ts', '**/*.tsx'],

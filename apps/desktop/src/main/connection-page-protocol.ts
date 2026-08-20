@@ -11,7 +11,7 @@ const ASSETS: Readonly<Record<string, ConnectionPageAsset>> = Object.freeze({
 
 export function connectionPageAsset(input: string): ConnectionPageAsset | null {
   const url = parseConnectionPageUrl(input);
-  return url ? ASSETS[url.pathname] ?? null : null;
+  return url ? (ASSETS[url.pathname] ?? null) : null;
 }
 
 export function isConnectionPageUrl(input: string): boolean {

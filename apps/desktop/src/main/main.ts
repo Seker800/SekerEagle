@@ -27,10 +27,7 @@ import { DesktopConnectionSettingsStore } from './connection-settings';
 import { connectionSettingsForServerUrl } from './connection-config';
 import { connectionPageAsset, isConnectionPageUrl } from './connection-page-protocol';
 import { DesktopConnectionResolver } from './connection-resolver';
-import {
-  DesktopConnectionService,
-  type DesktopConnectionSnapshot,
-} from './connection-service';
+import { DesktopConnectionService, type DesktopConnectionSnapshot } from './connection-service';
 import { createDesktopConnectionProbe } from './connection-probe';
 
 protocol.registerSchemesAsPrivileged([
@@ -283,10 +280,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   });
 }
 
-function registerConnectionIpc(
-  owner: AuthenticatedOwner,
-  currentSession: Electron.Session,
-): void {
+function registerConnectionIpc(owner: AuthenticatedOwner, currentSession: Electron.Session): void {
   ipcMain.handle('desktop:get-connection-status', (event) => {
     assertTrustedConnectionSender(event);
     const snapshot = currentConnections();
@@ -367,11 +361,7 @@ function assertTrustedConnectionSender(event: IpcMainInvokeEvent): void {
 
 function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
   const senderUrl = event.senderFrame?.url;
-  if (
-    event.sender !== mainWindow?.webContents ||
-    !senderUrl ||
-    !isConnectionPageUrl(senderUrl)
-  ) {
+  if (event.sender !== mainWindow?.webContents || !senderUrl || !isConnectionPageUrl(senderUrl)) {
     throw new Error('拒绝不受信任的连接配置调用。');
   }
 }
@@ -409,11 +399,14 @@ function createWindow(
       event.preventDefault();
     }
   });
-  window.webContents.on('did-fail-load', (_event, errorCode, _description, validatedUrl, isMainFrame) => {
-    if (isMainFrame && errorCode !== -3 && isAllowedAppNavigation(serverUrl, validatedUrl)) {
-      void recoverConnection(owner, currentSession);
-    }
-  });
+  window.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, _description, validatedUrl, isMainFrame) => {
+      if (isMainFrame && errorCode !== -3 && isAllowedAppNavigation(serverUrl, validatedUrl)) {
+        void recoverConnection(owner, currentSession);
+      }
+    },
+  );
   void window.loadURL(initialUrl);
 }
 

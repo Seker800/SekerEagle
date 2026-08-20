@@ -6,11 +6,7 @@ import {
 } from './connection-config';
 
 export type ConnectionProbeState =
-  | 'AVAILABLE'
-  | 'UNREACHABLE'
-  | 'UNTRUSTED'
-  | 'INCOMPATIBLE'
-  | 'DIFFERENT_DEPLOYMENT';
+  'AVAILABLE' | 'UNREACHABLE' | 'UNTRUSTED' | 'INCOMPATIBLE' | 'DIFFERENT_DEPLOYMENT';
 
 export interface ConnectionProbeResult {
   state: ConnectionProbeState;
@@ -24,10 +20,7 @@ export interface SlotProbeResult extends ConnectionProbeResult {
   slot: ConnectionSlot;
 }
 
-export type ConnectionProbe = (
-  slot: ConnectionSlot,
-  url: string,
-) => Promise<ConnectionProbeResult>;
+export type ConnectionProbe = (slot: ConnectionSlot, url: string) => Promise<ConnectionProbeResult>;
 
 export interface ActiveDesktopConnection {
   slot: ConnectionSlot;
@@ -45,8 +38,7 @@ export class DesktopConnectionResolver {
   constructor(private readonly probe: ConnectionProbe) {}
 
   async resolve(settings: DesktopConnectionSettings): Promise<ConnectionResolution> {
-    const candidates =
-      settings.mode === 'AUTO' ? configuredSlots(settings) : [settings.mode as ConnectionSlot];
+    const candidates = settings.mode === 'AUTO' ? configuredSlots(settings) : [settings.mode];
     const sticky = settings.mode === 'AUTO' ? settings.activeSlot : null;
     const probes: SlotProbeResult[] = [];
 

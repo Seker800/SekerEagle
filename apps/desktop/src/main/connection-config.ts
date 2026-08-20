@@ -45,9 +45,13 @@ export function normalizeConnectionSettings(input: unknown): DesktopConnectionSe
   const allowInsecureLan = value.allowInsecureLan === true;
   const settings: DesktopConnectionSettings = {
     mode,
-    localUrl: normalizeSlotUrl('LOCAL', stringOrDefault(value.localUrl, DEFAULT_DESKTOP_SERVER_URL), {
-      allowInsecureLan,
-    }),
+    localUrl: normalizeSlotUrl(
+      'LOCAL',
+      stringOrDefault(value.localUrl, DEFAULT_DESKTOP_SERVER_URL),
+      {
+        allowInsecureLan,
+      },
+    ),
     lanUrl: normalizeSlotUrl('LAN', stringOrDefault(value.lanUrl, ''), { allowInsecureLan }),
     publicUrl: normalizeSlotUrl('PUBLIC', stringOrDefault(value.publicUrl, ''), {
       allowInsecureLan,
@@ -70,10 +74,7 @@ export function configuredSlots(settings: DesktopConnectionSettings): Connection
   return CONNECTION_SLOTS.filter((slot) => Boolean(connectionUrl(settings, slot)));
 }
 
-export function connectionUrl(
-  settings: DesktopConnectionSettings,
-  slot: ConnectionSlot,
-): string {
+export function connectionUrl(settings: DesktopConnectionSettings, slot: ConnectionSlot): string {
   if (slot === 'LOCAL') return settings.localUrl;
   if (slot === 'LAN') return settings.lanUrl;
   return settings.publicUrl;

@@ -9,7 +9,11 @@ import { normalizeConnectionSettings } from '../src/main/connection-config';
 const DEPLOYMENT_A = 'a'.repeat(64);
 const DEPLOYMENT_B = 'b'.repeat(64);
 
-function available(url: string, deploymentId = DEPLOYMENT_A, latencyMs = 10): ConnectionProbeResult {
+function available(
+  url: string,
+  deploymentId = DEPLOYMENT_A,
+  latencyMs = 10,
+): ConnectionProbeResult {
   return { state: 'AVAILABLE', url, deploymentId, latencyMs };
 }
 
@@ -75,9 +79,7 @@ describe('desktop connection resolver', () => {
     );
 
     expect(result.active?.slot).toBe('PUBLIC');
-    expect(result.probes.find((item) => item.slot === 'LOCAL')?.state).toBe(
-      'DIFFERENT_DEPLOYMENT',
-    );
+    expect(result.probes.find((item) => item.slot === 'LOCAL')?.state).toBe('DIFFERENT_DEPLOYMENT');
   });
 
   it('manual mode probes only the selected endpoint and does not silently fall back', async () => {

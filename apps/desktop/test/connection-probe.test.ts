@@ -3,15 +3,11 @@ import { probeDesktopConnection } from '../src/main/connection-probe';
 
 describe('desktop connection probe', () => {
   it('verifies trusted origin and deployment identity through the bootstrap endpoint', async () => {
-    const fetcher = vi.fn(async () =>
-      Response.json({ version: 1, deploymentId: 'a'.repeat(64) }),
-    );
-    const result = await probeDesktopConnection(
-      fetcher,
-      'LOCAL',
-      'http://localhost:8180',
-      { now: sequenceNow(100, 112), timeoutMs: 1_000 },
-    );
+    const fetcher = vi.fn(async () => Response.json({ version: 1, deploymentId: 'a'.repeat(64) }));
+    const result = await probeDesktopConnection(fetcher, 'LOCAL', 'http://localhost:8180', {
+      now: sequenceNow(100, 112),
+      timeoutMs: 1_000,
+    });
 
     expect(result).toEqual({
       state: 'AVAILABLE',

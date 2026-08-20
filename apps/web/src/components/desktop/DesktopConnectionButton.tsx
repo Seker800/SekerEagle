@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import { IconPlugConnected } from '@tabler/icons-react';
-import {
-  getDesktopConnectionBridge,
-  type DesktopConnectionStatus,
-} from '../../lib/media-resolver';
+import { getDesktopConnectionBridge, type DesktopConnectionStatus } from '../../lib/media-resolver';
 
 const SLOT_LABELS = { LOCAL: '本地', LAN: '局域网', PUBLIC: '外网' } as const;
 
@@ -13,7 +10,10 @@ export function DesktopConnectionButton() {
 
   useEffect(() => {
     if (!bridge) return;
-    void bridge.getConnectionStatus().then(setStatus).catch(() => setStatus(null));
+    void bridge
+      .getConnectionStatus()
+      .then(setStatus)
+      .catch(() => setStatus(null));
   }, [bridge]);
 
   if (!bridge) return null;
