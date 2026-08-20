@@ -250,6 +250,18 @@
         "tags": ["auth"]
       }
     },
+    "/api/desktop/bootstrap": {
+      "get": {
+        "operationId": "DesktopBootstrapController_bootstrap",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["DesktopBootstrap"]
+      }
+    },
     "/api/eagle/media-capabilities": {
       "get": {
         "operationId": "EagleController_getMediaCapabilities",

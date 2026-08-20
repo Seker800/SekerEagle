@@ -24,4 +24,25 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   invalidateAsset(assetId: string) {
     return ipcRenderer.invoke('desktop:invalidate-asset', assetId);
   },
+  getConnectionStatus() {
+    return ipcRenderer.invoke('desktop:get-connection-status');
+  },
+  getConnectionManagerState() {
+    return ipcRenderer.invoke('desktop:get-connection-manager-state');
+  },
+  testConnections(input: unknown) {
+    return ipcRenderer.invoke('desktop:test-connections', input);
+  },
+  saveConnections(input: unknown) {
+    return ipcRenderer.invoke('desktop:save-connections', input);
+  },
+  resetDeploymentBinding() {
+    return ipcRenderer.invoke('desktop:reset-deployment-binding');
+  },
+  openConnectionManager() {
+    return ipcRenderer.invoke('desktop:open-connection-manager');
+  },
+  cancelConnectionManager() {
+    return ipcRenderer.invoke('desktop:cancel-connection-manager');
+  },
 });

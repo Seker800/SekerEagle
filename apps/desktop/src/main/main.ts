@@ -1,4 +1,5 @@
 import { createReadStream } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCacheRoot } from './cache-location';
 import { Readable } from 'node:stream';
@@ -22,6 +23,14 @@ import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../
 import { DEFAULT_CACHE_LIMIT_BYTES } from '../utility/cache/cache-policy';
 import { buildNamespaceId } from '../shared/media-identity';
 import { DesktopSettingsStore } from './desktop-settings';
+import { DesktopConnectionSettingsStore } from './connection-settings';
+import { connectionSettingsForServerUrl } from './connection-config';
+import { DesktopConnectionResolver } from './connection-resolver';
+import {
+  DesktopConnectionService,
+  type DesktopConnectionSnapshot,
+} from './connection-service';
+import { createDesktopConnectionProbe } from './connection-probe';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -34,11 +43,22 @@ protocol.registerSchemesAsPrivileged([
       corsEnabled: false,
     },
   },
+  {
+    scheme: 'sekereagle-app',
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: false,
+      corsEnabled: false,
+    },
+  },
 ]);
 
-const serverUrl = normalizeDesktopServerUrl(
+const initialServerUrl = normalizeDesktopServerUrl(
   process.env.SEKEREAGLE_SERVER_URL ?? DEFAULT_DESKTOP_SERVER_URL,
 );
+const CONNECTION_PAGE_URL = 'sekereagle-app://connection/';
+let serverUrl = initialServerUrl;
 let mainWindow: BrowserWindow | null = null;
 let cacheProcess: UtilityProcess | null = null;
 let cacheClient: CacheRpcClient | null = null;
@@ -46,6 +66,9 @@ let cacheLimitBytes = DEFAULT_CACHE_LIMIT_BYTES;
 let cacheRestartTimer: NodeJS.Timeout | null = null;
 let cacheRestartHistory: number[] = [];
 let shuttingDown = false;
+let connectionService: DesktopConnectionService | null = null;
+let mediaController: MediaCacheController | null = null;
+let connectionRecovery: Promise<void> | null = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -59,11 +82,23 @@ app.on('second-instance', () => {
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
     const settings = new DesktopSettingsStore(app.getPath('userData'));
+    const connectionSettings = new DesktopConnectionSettingsStore(
+      app.getPath('userData'),
+      connectionSettingsForServerUrl(initialServerUrl),
+    );
     const initialSettings = await settings.load();
     cacheLimitBytes = initialSettings.cacheLimitBytes;
     await connectCacheProcess();
 
     const currentSession = session.defaultSession;
+    connectionService = new DesktopConnectionService(
+      connectionSettings,
+      new DesktopConnectionResolver(
+        createDesktopConnectionProbe((url, init) => currentSession.fetch(url, init)),
+      ),
+    );
+    const initialConnection = await connectionService.initialize();
+    if (initialConnection.active) serverUrl = initialConnection.active.url;
     const owner = new AuthenticatedOwner(() =>
       currentSession.fetch(new URL('/api/auth/me', serverUrl).toString(), {
         credentials: 'include',
@@ -74,9 +109,11 @@ if (hasSingleInstanceLock)
     powerMonitor.on('resume', () => {
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
+      void recoverConnection(owner, currentSession);
     });
     lockDownSession(currentSession);
     registerCacheIpc(owner, settings);
+    registerConnectionIpc(owner, currentSession);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -85,35 +122,19 @@ if (hasSingleInstanceLock)
       }
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
+      void recoverConnection(owner, currentSession);
     });
 
-    const cache = cacheBackend();
-
-    const controller = new MediaCacheController({
-      serverUrl,
-      cache,
-      authenticatedOwner: () => owner.get(),
-      fetchUpstream: (() => {
-        const limiter = new MediaRequestLimiter(6, 64);
-        return (mediaPath, options) =>
-          limiter.fetch(() =>
-            currentSession.fetch(new URL(mediaPath, serverUrl).toString(), {
-              credentials: 'include',
-              headers: {
-                'cache-control': 'no-store',
-                accept: 'image/avif,image/webp,image/*',
-                'accept-encoding': 'identity',
-                ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
-              },
-            }),
-          );
-      })(),
-    });
-    protocol.handle('sekereagle-media', (request) => handleMediaRequest(controller, request.url));
-    createWindow();
+    mediaController = createMediaController(owner, currentSession);
+    protocol.handle('sekereagle-media', (request) => handleMediaRequest(request.url));
+    protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
+    createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner, currentSession);
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+      if (BrowserWindow.getAllWindows().length === 0) {
+        const active = connectionService?.current()?.active;
+        createWindow(active ? active.url : CONNECTION_PAGE_URL, owner, currentSession);
+      }
     });
   });
 
@@ -261,6 +282,66 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   });
 }
 
+function registerConnectionIpc(
+  owner: AuthenticatedOwner,
+  currentSession: Electron.Session,
+): void {
+  ipcMain.handle('desktop:get-connection-status', (event) => {
+    assertTrustedConnectionSender(event);
+    const snapshot = currentConnections();
+    return {
+      mode: snapshot.settings.mode,
+      activeSlot: snapshot.active?.slot ?? null,
+      activeUrl: snapshot.active?.url ?? null,
+      latencyMs: snapshot.active?.latencyMs ?? null,
+    };
+  });
+  ipcMain.handle('desktop:get-connection-manager-state', (event) => {
+    assertConnectionPageSender(event);
+    return currentConnections();
+  });
+  ipcMain.handle('desktop:test-connections', async (event, input: unknown) => {
+    assertConnectionPageSender(event);
+    return currentConnectionService().test(input);
+  });
+  ipcMain.handle('desktop:save-connections', async (event, input: unknown) => {
+    assertConnectionPageSender(event);
+    const snapshot = await currentConnectionService().save(input);
+    if (snapshot.active) {
+      setTimeout(() => void applyConnection(snapshot, owner, currentSession), 0).unref();
+    }
+    return snapshot;
+  });
+  ipcMain.handle('desktop:reset-deployment-binding', async (event) => {
+    assertConnectionPageSender(event);
+    const snapshot = await currentConnectionService().resetDeploymentBinding();
+    if (snapshot.active) {
+      setTimeout(() => void applyConnection(snapshot, owner, currentSession), 0).unref();
+    }
+    return snapshot;
+  });
+  ipcMain.handle('desktop:open-connection-manager', async (event) => {
+    assertTrustedConnectionSender(event);
+    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+  });
+  ipcMain.handle('desktop:cancel-connection-manager', async (event) => {
+    assertConnectionPageSender(event);
+    const active = currentConnections().active;
+    if (active) await mainWindow?.loadURL(active.url);
+  });
+}
+
+function currentConnectionService(): DesktopConnectionService {
+  if (!connectionService) throw new Error('连接管理尚未初始化。');
+  return connectionService;
+}
+
+function currentConnections(): DesktopConnectionSnapshot {
+  const snapshot = currentConnectionService().current();
+  if (!snapshot) throw new Error('连接状态尚未初始化。');
+  return snapshot;
+}
+
 function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
   const senderUrl = event.senderFrame?.url;
   if (
@@ -272,7 +353,33 @@ function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
   }
 }
 
-function createWindow(): void {
+function assertTrustedConnectionSender(event: IpcMainInvokeEvent): void {
+  const senderUrl = event.senderFrame?.url;
+  if (
+    event.sender !== mainWindow?.webContents ||
+    !senderUrl ||
+    (!isAllowedAppNavigation(serverUrl, senderUrl) && !isConnectionPageUrl(senderUrl))
+  ) {
+    throw new Error('拒绝不受信任的连接管理调用。');
+  }
+}
+
+function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
+  const senderUrl = event.senderFrame?.url;
+  if (
+    event.sender !== mainWindow?.webContents ||
+    !senderUrl ||
+    !isConnectionPageUrl(senderUrl)
+  ) {
+    throw new Error('拒绝不受信任的连接配置调用。');
+  }
+}
+
+function createWindow(
+  initialUrl: string,
+  owner: AuthenticatedOwner,
+  currentSession: Electron.Session,
+): void {
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -297,9 +404,16 @@ function createWindow(): void {
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, destination) => {
-    if (!isAllowedAppNavigation(serverUrl, destination)) event.preventDefault();
+    if (!isAllowedAppNavigation(serverUrl, destination) && !isConnectionPageUrl(destination)) {
+      event.preventDefault();
+    }
   });
-  void window.loadURL(serverUrl);
+  window.webContents.on('did-fail-load', (_event, errorCode, _description, validatedUrl, isMainFrame) => {
+    if (isMainFrame && errorCode !== -3 && isAllowedAppNavigation(serverUrl, validatedUrl)) {
+      void recoverConnection(owner, currentSession);
+    }
+  });
+  void window.loadURL(initialUrl);
 }
 
 function lockDownSession(currentSession: Electron.Session): void {
@@ -307,27 +421,122 @@ function lockDownSession(currentSession: Electron.Session): void {
   currentSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
     callback(false),
   );
-  currentSession.webRequest.onHeadersReceived({ urls: [`${serverUrl}/*`] }, (details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
-        ],
-      },
-    });
-  });
+  currentSession.webRequest.onHeadersReceived(
+    { urls: ['http://*/*', 'https://*/*'] },
+    (details, callback) => {
+      if (!isAllowedAppNavigation(serverUrl, details.url)) {
+        callback({ responseHeaders: details.responseHeaders });
+        return;
+      }
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+          ],
+        },
+      });
+    },
+  );
 }
 
-async function handleMediaRequest(
-  controller: MediaCacheController,
-  requestUrl: string,
-): Promise<Response> {
+async function handleMediaRequest(requestUrl: string): Promise<Response> {
   try {
-    const resolution = await controller.resolve(requestUrl);
+    if (!mediaController) throw new Error('媒体控制器不可用。');
+    const resolution = await mediaController.resolve(requestUrl);
     return resolutionToResponse(resolution);
   } catch {
     return new Response('媒体缓存暂时不可用。', { status: 502 });
+  }
+}
+
+async function handleAppRequest(requestUrl: string): Promise<Response> {
+  const url = new URL(requestUrl);
+  if (url.origin !== 'sekereagle-app://connection') return new Response('Not found', { status: 404 });
+  const assets: Record<string, { file: string; type: string }> = {
+    '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
+    '/connection.js': { file: 'connection.js', type: 'text/javascript; charset=utf-8' },
+    '/connection.css': { file: 'connection.css', type: 'text/css; charset=utf-8' },
+  };
+  const asset = assets[url.pathname];
+  if (!asset) return new Response('Not found', { status: 404 });
+  try {
+    return new Response(await readFile(path.join(__dirname, 'connection-page', asset.file)), {
+      status: 200,
+      headers: {
+        'content-type': asset.type,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+      },
+    });
+  } catch {
+    return new Response('Connection page unavailable', { status: 500 });
+  }
+}
+
+function createMediaController(
+  owner: AuthenticatedOwner,
+  currentSession: Electron.Session,
+): MediaCacheController {
+  const limiter = new MediaRequestLimiter(6, 64);
+  return new MediaCacheController({
+    serverUrl,
+    cache: cacheBackend(),
+    authenticatedOwner: () => owner.get(),
+    fetchUpstream: (mediaPath, options) =>
+      limiter.fetch(() =>
+        currentSession.fetch(new URL(mediaPath, serverUrl).toString(), {
+          credentials: 'include',
+          headers: {
+            'cache-control': 'no-store',
+            accept: 'image/avif,image/webp,image/*',
+            'accept-encoding': 'identity',
+            ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
+          },
+        }),
+      ),
+  });
+}
+
+async function applyConnection(
+  snapshot: DesktopConnectionSnapshot,
+  owner: AuthenticatedOwner,
+  currentSession: Electron.Session,
+): Promise<void> {
+  if (!snapshot.active) {
+    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+    return;
+  }
+  const changed = serverUrl !== snapshot.active.url;
+  serverUrl = snapshot.active.url;
+  if (changed) {
+    owner.invalidate();
+    void cacheClient?.expireAuthorizations().catch(() => undefined);
+    mediaController = createMediaController(owner, currentSession);
+  }
+  if (mainWindow?.webContents.getURL() !== serverUrl) await mainWindow?.loadURL(serverUrl);
+}
+
+async function recoverConnection(
+  owner: AuthenticatedOwner,
+  currentSession: Electron.Session,
+): Promise<void> {
+  if (connectionRecovery) return connectionRecovery;
+  connectionRecovery = currentConnectionService()
+    .retry()
+    .then((snapshot) => applyConnection(snapshot, owner, currentSession))
+    .finally(() => {
+      connectionRecovery = null;
+    });
+  return connectionRecovery;
+}
+
+function isConnectionPageUrl(input: string): boolean {
+  try {
+    const url = new URL(input);
+    return url.origin === 'sekereagle-app://connection' && url.pathname === '/';
+  } catch {
+    return false;
   }
 }
 

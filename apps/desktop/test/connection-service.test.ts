@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DesktopConnectionService } from '../src/main/connection-service';
-import { DEFAULT_CONNECTION_SETTINGS } from '../src/main/connection-config';
+import {
+  DEFAULT_CONNECTION_SETTINGS,
+  type DesktopConnectionSettings,
+} from '../src/main/connection-config';
 
 const DEPLOYMENT_A = 'a'.repeat(64);
 const DEPLOYMENT_B = 'b'.repeat(64);
@@ -34,9 +37,9 @@ describe('desktop connection service', () => {
       activeSlot: 'LOCAL',
     });
     const resolver = {
-      resolve: vi.fn(async (settings) => ({
+      resolve: vi.fn(async (settings: DesktopConnectionSettings) => ({
         active: {
-          slot: 'LOCAL',
+          slot: 'LOCAL' as const,
           url: settings.localUrl,
           latencyMs: 8,
           deploymentId: DEPLOYMENT_A,
@@ -60,6 +63,7 @@ describe('desktop connection service', () => {
   it('requires an explicit reset before adopting a different deployment', async () => {
     const store = memoryStore({
       ...DEFAULT_CONNECTION_SETTINGS,
+      publicUrl: 'https://new.example.com',
       deploymentId: DEPLOYMENT_A,
       activeSlot: 'LOCAL',
     });
@@ -81,6 +85,39 @@ describe('desktop connection service', () => {
     await service.initialize();
     const snapshot = await service.resetDeploymentBinding();
     expect(snapshot.settings).toMatchObject({ deploymentId: DEPLOYMENT_B, activeSlot: 'PUBLIC' });
+  });
+
+  it('tests every configured address instead of short-circuiting on the sticky connection', async () => {
+    const store = memoryStore({
+      ...DEFAULT_CONNECTION_SETTINGS,
+      publicUrl: 'https://eagle.example.com',
+      deploymentId: DEPLOYMENT_A,
+      activeSlot: 'LOCAL',
+    });
+    const resolver = {
+      resolve: vi
+        .fn()
+        .mockResolvedValueOnce({
+          active: {
+            slot: 'LOCAL' as const,
+            url: 'http://localhost:8180',
+            latencyMs: 8,
+            deploymentId: DEPLOYMENT_A,
+          },
+          probes: [],
+        })
+        .mockResolvedValueOnce({ active: null, probes: [] }),
+    };
+    const service = new DesktopConnectionService(store, resolver);
+    await service.initialize();
+    await service.test({
+      mode: 'AUTO',
+      localUrl: 'http://localhost:8180',
+      publicUrl: 'https://eagle.example.com',
+    });
+    expect(resolver.resolve).toHaveBeenLastCalledWith(
+      expect.objectContaining({ activeSlot: null, deploymentId: DEPLOYMENT_A }),
+    );
   });
 });
 

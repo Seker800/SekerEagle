@@ -71,6 +71,9 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain("ipcMain.handle('desktop:get-connection-status'");
     expect(main).toContain("ipcMain.handle('desktop:save-connections'");
     expect(main).toContain('assertTrustedConnectionSender(event)');
+    expect(main).toMatch(
+      /desktop:reset-deployment-binding'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
+    );
     expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager')");
     expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
     expect(preload).not.toContain('shell.openExternal');

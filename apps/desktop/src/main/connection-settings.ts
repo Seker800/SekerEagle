@@ -8,19 +8,28 @@ import {
 
 export class DesktopConnectionSettingsStore {
   private readonly filePath: string;
+  private readonly defaults: DesktopConnectionSettings;
 
-  constructor(settingsDirectory: string) {
+  constructor(
+    settingsDirectory: string,
+    defaults: DesktopConnectionSettings = DEFAULT_CONNECTION_SETTINGS,
+  ) {
     this.filePath = path.join(settingsDirectory, 'connection-settings.json');
+    this.defaults = normalizeConnectionSettings(defaults);
   }
 
   async load(): Promise<DesktopConnectionSettings> {
+    let contents: string;
     try {
-      return normalizeConnectionSettings(JSON.parse(await readFile(this.filePath, 'utf8')));
+      contents = await readFile(this.filePath, 'utf8');
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) {
-        return { ...DEFAULT_CONNECTION_SETTINGS };
-      }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { ...this.defaults };
       throw error;
+    }
+    try {
+      return normalizeConnectionSettings(JSON.parse(contents));
+    } catch {
+      return { ...this.defaults };
     }
   }
 

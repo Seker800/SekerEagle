@@ -29,6 +29,16 @@ export const DEFAULT_CONNECTION_SETTINGS: DesktopConnectionSettings = Object.fre
   activeSlot: null,
 });
 
+export function connectionSettingsForServerUrl(serverUrl: string): DesktopConnectionSettings {
+  const url = new URL(serverUrl);
+  const loopback = isLoopback(unbracket(url.hostname.toLowerCase()));
+  return normalizeConnectionSettings({
+    ...DEFAULT_CONNECTION_SETTINGS,
+    localUrl: loopback ? serverUrl : '',
+    publicUrl: loopback ? '' : serverUrl,
+  });
+}
+
 export function normalizeConnectionSettings(input: unknown): DesktopConnectionSettings {
   const value = isRecord(input) ? input : {};
   const mode = parseMode(value.mode);

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SekerEagle 连接管理</title>
+    <link rel="stylesheet" href="/connection.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">SEKEREAGLE DESKTOP</p>
+        <h1>连接你的素材库</h1>
+        <p>自动模式优先保留当前连接；不可用时按本地、局域网、外网顺序选择。</p>
+      </header>
+
+      <form id="connection-form">
+        <label>
+          连接模式
+          <select name="mode">
+            <option value="AUTO">自动选择</option>
+            <option value="LOCAL">固定本地</option>
+            <option value="LAN">固定局域网</option>
+            <option value="PUBLIC">固定外网</option>
+          </select>
+        </label>
+
+        <section class="profile">
+          <div><strong>本地</strong><span data-status="LOCAL">未检测</span></div>
+          <input name="localUrl" type="url" placeholder="http://localhost:8180" />
+        </section>
+        <section class="profile">
+          <div><strong>局域网</strong><span data-status="LAN">未配置</span></div>
+          <input name="lanUrl" type="url" placeholder="https://eagle.lan.example" />
+          <label class="checkbox">
+            <input name="allowInsecureLan" type="checkbox" />
+            允许私有 IP 使用 HTTP（仅可信局域网）
+          </label>
+        </section>
+        <section class="profile">
+          <div><strong>外网</strong><span data-status="PUBLIC">未配置</span></div>
+          <input name="publicUrl" type="url" placeholder="https://eagle.example.com" />
+        </section>
+
+        <p id="message" role="status"></p>
+        <div class="actions">
+          <button id="test" type="button">测试全部连接</button>
+          <button class="primary" type="submit">保存并连接</button>
+          <button id="cancel" type="button">返回图库</button>
+        </div>
+        <button id="reset" class="danger-link" type="button">更换为另一套图库…</button>
+      </form>
+    </main>
+    <script src="/connection.js"></script>
+  </body>
+</html>

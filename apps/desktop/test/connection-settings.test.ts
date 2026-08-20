@@ -85,5 +85,25 @@ describe('desktop connection settings', () => {
     await chmod(settingsPath, 0o600);
     await writeFile(settingsPath, '{broken', 'utf8');
     await expect(store.load()).resolves.toEqual(DEFAULT_CONNECTION_SETTINGS);
+
+    await writeFile(settingsPath, JSON.stringify({ mode: 'LAN', lanUrl: 42 }), 'utf8');
+    await expect(store.load()).resolves.toEqual(DEFAULT_CONNECTION_SETTINGS);
+  });
+
+  it('uses an explicit legacy server URL only until connection settings are persisted', async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'sekereagle-connections-'));
+    directories.push(directory);
+    const seeded = new DesktopConnectionSettingsStore(directory, {
+      ...DEFAULT_CONNECTION_SETTINGS,
+      localUrl: '',
+      publicUrl: 'https://eagle.example.com',
+    });
+
+    await expect(seeded.load()).resolves.toMatchObject({
+      localUrl: '',
+      publicUrl: 'https://eagle.example.com',
+    });
+    await seeded.save(DEFAULT_CONNECTION_SETTINGS);
+    await expect(seeded.load()).resolves.toEqual(DEFAULT_CONNECTION_SETTINGS);
   });
 });
