@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { normalizeDesktopServerUrl } from '../src/main/app-config';
 import { isAllowedAppNavigation } from '../src/main/navigation-policy';
@@ -35,5 +36,12 @@ describe('desktop server and navigation security', () => {
     expect(
       isAllowedAppNavigation('https://eagle.example.com', 'javascript:alert(document.cookie)'),
     ).toBe(false);
+  });
+
+  it('holds a single-instance cache writer lock and focuses the existing window', async () => {
+    const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    expect(source).toContain('app.requestSingleInstanceLock()');
+    expect(source).toContain("app.on('second-instance'");
+    expect(source).toMatch(/mainWindow\?\.focus\(\)/u);
   });
 });
