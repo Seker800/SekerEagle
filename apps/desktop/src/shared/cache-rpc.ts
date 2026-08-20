@@ -12,6 +12,10 @@ type CacheRpcMethod =
   | 'renewAuthorization'
   | 'invalidate'
   | 'getStats'
+  | 'getNamespaceStats'
+  | 'setLimitBytes'
+  | 'invalidateAsset'
+  | 'clearNamespace'
   | 'close';
 
 interface CacheRpcRequest {
@@ -145,6 +149,35 @@ export class CacheRpcClient {
     };
   }
 
+  async getNamespaceStats(namespaceId: string) {
+    return asRecord(await this.call('getNamespaceStats', { namespaceId })) as unknown as {
+      entryCount: number;
+      logicalBytes: number;
+      allocatedBytes: number;
+      hitCount: number;
+      missCount: number;
+      savedBytes: number;
+    };
+  }
+
+  async setLimitBytes(limitBytes: number): Promise<void> {
+    await this.call('setLimitBytes', { limitBytes });
+  }
+
+  async invalidateAsset(namespaceId: string, assetId: string) {
+    return asRecord(await this.call('invalidateAsset', { namespaceId, assetId })) as unknown as {
+      deleted: number;
+      deferred: number;
+    };
+  }
+
+  async clearNamespace(namespaceId: string) {
+    return asRecord(await this.call('clearNamespace', { namespaceId })) as unknown as {
+      deleted: number;
+      deferred: number;
+    };
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     await this.call('close', {});
@@ -234,7 +267,7 @@ export class CacheRpcDispatcher {
           asNumber(params.now),
         );
       case 'release':
-        engine.release(asString(params.leaseId));
+        await engine.release(asString(params.leaseId));
         return null;
       case 'renewAuthorization':
         return engine.renewAuthorization(
@@ -246,6 +279,14 @@ export class CacheRpcDispatcher {
         return engine.invalidate(decodeHash(params.keyHash));
       case 'getStats':
         return engine.getStats();
+      case 'getNamespaceStats':
+        return engine.getNamespaceStats(asString(params.namespaceId));
+      case 'setLimitBytes':
+        return engine.setLimitBytes(asNumber(params.limitBytes));
+      case 'invalidateAsset':
+        return engine.invalidateAsset(asString(params.namespaceId), asString(params.assetId));
+      case 'clearNamespace':
+        return engine.clearNamespace(asString(params.namespaceId));
       case 'close':
         await engine.close();
         this.engine = null;

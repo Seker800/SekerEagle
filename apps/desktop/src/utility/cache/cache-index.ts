@@ -83,6 +83,9 @@ export class CacheIndex {
         entry_count INTEGER NOT NULL DEFAULT 0 CHECK(entry_count >= 0),
         logical_bytes INTEGER NOT NULL DEFAULT 0 CHECK(logical_bytes >= 0),
         allocated_bytes INTEGER NOT NULL DEFAULT 0 CHECK(allocated_bytes >= 0)
+        ,hit_count INTEGER NOT NULL DEFAULT 0 CHECK(hit_count >= 0)
+        ,miss_count INTEGER NOT NULL DEFAULT 0 CHECK(miss_count >= 0)
+        ,saved_bytes INTEGER NOT NULL DEFAULT 0 CHECK(saved_bytes >= 0)
       ) WITHOUT ROWID;
     `);
   }
@@ -211,6 +214,36 @@ export class CacheIndex {
     );
     this.transaction(() => {
       for (const access of grouped.values()) update.run(access.count, access.at, access.keyHash);
+    });
+  }
+
+  recordMetrics(
+    metrics: ReadonlyArray<{
+      namespaceId: string;
+      hitCount: number;
+      missCount: number;
+      savedBytes: number;
+    }>,
+  ): void {
+    if (!metrics.length) return;
+    const update = this.database.prepare(
+      `INSERT INTO cache_stats(
+         namespace_id, entry_count, logical_bytes, allocated_bytes,
+         hit_count, miss_count, saved_bytes
+       ) VALUES (?, 0, 0, 0, ?, ?, ?)
+       ON CONFLICT(namespace_id) DO UPDATE SET
+         hit_count = hit_count + excluded.hit_count,
+         miss_count = miss_count + excluded.miss_count,
+         saved_bytes = saved_bytes + excluded.saved_bytes`,
+    );
+    this.transaction(() => {
+      for (const metric of metrics) {
+        assertNamespace(metric.namespaceId);
+        assertByteSize(metric.hitCount);
+        assertByteSize(metric.missCount);
+        assertByteSize(metric.savedBytes);
+        update.run(metric.namespaceId, metric.hitCount, metric.missCount, metric.savedBytes);
+      }
     });
   }
 
@@ -353,19 +386,33 @@ export class CacheIndex {
     entryCount: number;
     logicalBytes: number;
     allocatedBytes: number;
+    hitCount: number;
+    missCount: number;
+    savedBytes: number;
   } {
     assertNamespace(namespaceId);
     const row = this.database
       .prepare(
-        `SELECT entry_count, logical_bytes, allocated_bytes
+        `SELECT entry_count, logical_bytes, allocated_bytes, hit_count, miss_count, saved_bytes
          FROM cache_stats WHERE namespace_id = ?`,
       )
       .get(namespaceId) as
-      { entry_count: number; logical_bytes: number; allocated_bytes: number } | undefined;
+      | {
+          entry_count: number;
+          logical_bytes: number;
+          allocated_bytes: number;
+          hit_count: number;
+          miss_count: number;
+          saved_bytes: number;
+        }
+      | undefined;
     return {
       entryCount: row?.entry_count ?? 0,
       logicalBytes: row?.logical_bytes ?? 0,
       allocatedBytes: row?.allocated_bytes ?? 0,
+      hitCount: row?.hit_count ?? 0,
+      missCount: row?.miss_count ?? 0,
+      savedBytes: row?.saved_bytes ?? 0,
     };
   }
 

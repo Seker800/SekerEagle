@@ -19,6 +19,10 @@ export class CacheEngine {
   private readonly activeReadCounts = new Map<string, number>();
   private readonly deferredDeletes = new Map<string, Buffer>();
   private pendingAccesses: Array<{ keyHash: Buffer; at: number }> = [];
+  private readonly pendingMetrics = new Map<
+    string,
+    { namespaceId: string; hitCount: number; missCount: number; savedBytes: number }
+  >();
   private accessTimer: NodeJS.Timeout | null = null;
   private closed = false;
 
@@ -142,9 +146,13 @@ export class CacheEngine {
   > {
     this.assertOpen();
     const entry = this.index.findReady(keyHash);
-    if (!entry || entry.namespaceId !== namespaceId) return null;
+    if (!entry || entry.namespaceId !== namespaceId) {
+      this.recordMetric(namespaceId, false, 0);
+      return null;
+    }
     if (!(await this.store.exists(keyHash))) {
       this.index.deleteEntries([keyHash]);
+      this.recordMetric(namespaceId, false, 0);
       return null;
     }
     const keyHex = keyHash.toString('hex');
@@ -152,6 +160,7 @@ export class CacheEngine {
     this.readLeases.set(leaseId, keyHex);
     this.activeReadCounts.set(keyHex, (this.activeReadCounts.get(keyHex) ?? 0) + 1);
     this.pendingAccesses.push({ keyHash: Buffer.from(keyHash), at: now });
+    this.recordMetric(namespaceId, true, entry.logicalBytes);
     if (this.pendingAccesses.length >= 1_000) this.flushAccesses();
     return { ...entry, leaseId, filePath: this.store.filePath(keyHash) };
   }
@@ -173,10 +182,17 @@ export class CacheEngine {
   }
 
   flushAccesses(): void {
-    if (!this.pendingAccesses.length || this.closed) return;
-    const batch = this.pendingAccesses;
-    this.pendingAccesses = [];
-    this.index.recordAccesses(batch);
+    if (this.closed) return;
+    if (this.pendingAccesses.length) {
+      const batch = this.pendingAccesses;
+      this.pendingAccesses = [];
+      this.index.recordAccesses(batch);
+    }
+    if (this.pendingMetrics.size) {
+      const metrics = [...this.pendingMetrics.values()];
+      this.pendingMetrics.clear();
+      this.index.recordMetrics(metrics);
+    }
   }
 
   pendingAccessCount(): number {
@@ -195,7 +211,11 @@ export class CacheEngine {
     entryCount: number;
     logicalBytes: number;
     allocatedBytes: number;
+    hitCount: number;
+    missCount: number;
+    savedBytes: number;
   } {
+    this.flushAccesses();
     return this.index.getStats(namespaceId);
   }
 
@@ -301,6 +321,22 @@ export class CacheEngine {
     }
     const { entries } = this.index.deleteEntries(keyHashes);
     return { deleted: entries - deferred, deferred };
+  }
+
+  private recordMetric(namespaceId: string, hit: boolean, savedBytes: number): void {
+    const metric = this.pendingMetrics.get(namespaceId) ?? {
+      namespaceId,
+      hitCount: 0,
+      missCount: 0,
+      savedBytes: 0,
+    };
+    if (hit) {
+      metric.hitCount += 1;
+      metric.savedBytes += savedBytes;
+    } else {
+      metric.missCount += 1;
+    }
+    this.pendingMetrics.set(namespaceId, metric);
   }
 
   private assertOpen(): void {

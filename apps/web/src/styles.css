@@ -550,6 +550,39 @@ select:focus-visible {
   margin-top: 14px;
 }
 
+.desktop-cache-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.desktop-cache-stats span {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.desktop-cache-stats strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.desktop-cache-controls {
+  display: flex;
+  align-items: end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.desktop-cache-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .token-list-heading {
   margin-top: 18px;
   padding-bottom: 8px;

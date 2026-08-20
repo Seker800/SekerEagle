@@ -186,7 +186,8 @@ describe('AccountHome', () => {
 
     expect(await screen.findByRole('heading', { name: '本地媒体缓存' })).toBeInTheDocument();
     expect(screen.getByText('80%')).toBeInTheDocument();
-    expect(screen.getByText('12,345 个文件')).toBeInTheDocument();
+    expect(screen.getByText('12,345')).toBeInTheDocument();
+    expect(screen.getByText('个文件')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('缓存容量上限'), { target: { value: '25' } });
     fireEvent.click(screen.getByRole('button', { name: '保存缓存设置' }));
     await waitFor(() => expect(setCacheLimitGiB).toHaveBeenCalledWith(25));

@@ -67,6 +67,9 @@ describe('CacheIndex', () => {
       entryCount: 1,
       logicalBytes: 12_345,
       allocatedBytes: 16_384,
+      hitCount: 0,
+      missCount: 0,
+      savedBytes: 0,
     });
 
     expect(index.deleteEntries([hash(2)])).toEqual({ entries: 1, allocatedBytes: 16_384 });
@@ -74,6 +77,9 @@ describe('CacheIndex', () => {
       entryCount: 0,
       logicalBytes: 0,
       allocatedBytes: 0,
+      hitCount: 0,
+      missCount: 0,
+      savedBytes: 0,
     });
   });
 
@@ -203,6 +209,9 @@ describe('CacheIndex', () => {
       entryCount: 0,
       logicalBytes: 0,
       allocatedBytes: 0,
+      hitCount: 0,
+      missCount: 0,
+      savedBytes: 0,
     });
   });
 });

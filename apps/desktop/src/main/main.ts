@@ -4,11 +4,13 @@ import { Readable } from 'node:stream';
 import {
   app,
   BrowserWindow,
+  ipcMain,
   powerMonitor,
   protocol,
   session,
   utilityProcess,
   type UtilityProcess,
+  type IpcMainInvokeEvent,
 } from 'electron';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
 import { AuthenticatedOwner } from './authenticated-owner';
@@ -16,6 +18,8 @@ import { MediaCacheController, type MediaResolution } from './media-cache-contro
 import { isAllowedAppNavigation } from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
 import { DEFAULT_CACHE_LIMIT_BYTES } from '../utility/cache/cache-policy';
+import { buildNamespaceId } from '../shared/media-identity';
+import { DesktopSettingsStore } from './desktop-settings';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -38,7 +42,9 @@ let cacheProcess: UtilityProcess | null = null;
 let cacheClient: CacheRpcClient | null = null;
 
 void app.whenReady().then(async () => {
-  const cache = await startCacheProcess();
+  const settings = new DesktopSettingsStore(app.getPath('userData'));
+  const initialSettings = await settings.load();
+  const cache = await startCacheProcess(initialSettings.cacheLimitBytes);
   cacheClient = cache.client;
   cacheProcess = cache.child;
 
@@ -52,6 +58,7 @@ void app.whenReady().then(async () => {
   currentSession.cookies.on('changed', () => owner.invalidate());
   powerMonitor.on('resume', () => owner.invalidate());
   lockDownSession(currentSession);
+  registerCacheIpc(owner, settings, cache.client);
 
   const controller = new MediaCacheController({
     serverUrl,
@@ -85,7 +92,9 @@ app.on('before-quit', () => {
   cacheProcess?.kill();
 });
 
-async function startCacheProcess(): Promise<{ child: UtilityProcess; client: CacheRpcClient }> {
+async function startCacheProcess(
+  limitBytes = DEFAULT_CACHE_LIMIT_BYTES,
+): Promise<{ child: UtilityProcess; client: CacheRpcClient }> {
   const child = utilityProcess.fork(path.join(__dirname, 'utility.cjs'), [], {
     serviceName: 'SekerEagle Media Cache',
   });
@@ -101,10 +110,55 @@ async function startCacheProcess(): Promise<{ child: UtilityProcess; client: Cac
   };
   const client = new CacheRpcClient(endpoint);
   await client.initialize({
-    cacheRoot: path.join(app.getPath('sessionData'), 'MediaCache', 'v1'),
-    limitBytes: DEFAULT_CACHE_LIMIT_BYTES,
+    cacheRoot: path.join(app.getPath('sessionData'), 'MediaCache', 'v2'),
+    limitBytes,
   });
   return { child, client };
+}
+
+function registerCacheIpc(
+  owner: AuthenticatedOwner,
+  settings: DesktopSettingsStore,
+  cache: CacheRpcClient,
+): void {
+  const namespace = async (event: IpcMainInvokeEvent): Promise<string> => {
+    assertTrustedIpcSender(event);
+    const ownerId = await owner.get();
+    if (!ownerId) throw new Error('需要重新登录。');
+    return buildNamespaceId(serverUrl, ownerId);
+  };
+  ipcMain.handle('desktop:cache-status', async (event) => {
+    const namespaceId = await namespace(event);
+    const [stats, currentSettings] = await Promise.all([
+      cache.getNamespaceStats(namespaceId),
+      settings.load(),
+    ]);
+    return { ...stats, limitBytes: currentSettings.cacheLimitBytes };
+  });
+  ipcMain.handle('desktop:set-cache-limit', async (event, limitGiB: unknown) => {
+    assertTrustedIpcSender(event);
+    if (typeof limitGiB !== 'number') throw new Error('缓存容量无效。');
+    const updated = await settings.setCacheLimitGiB(limitGiB);
+    await cache.setLimitBytes(updated.cacheLimitBytes);
+  });
+  ipcMain.handle('desktop:clear-cache', async (event) =>
+    cache.clearNamespace(await namespace(event)),
+  );
+  ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
+    if (typeof assetId !== 'string') throw new Error('资源标识无效。');
+    return cache.invalidateAsset(await namespace(event), assetId);
+  });
+}
+
+function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
+  const senderUrl = event.senderFrame?.url;
+  if (
+    event.sender !== mainWindow?.webContents ||
+    !senderUrl ||
+    !isAllowedAppNavigation(serverUrl, senderUrl)
+  ) {
+    throw new Error('拒绝不受信任的桌面调用。');
+  }
 }
 
 function createWindow(): void {

@@ -19,6 +19,38 @@ export type DesktopMediaRequest =
 export interface SekerDesktopBridge {
   readonly version: 1;
   createMediaUrl(media: DesktopMediaRequest): string;
+  getCacheStatus?(): Promise<DesktopCacheStatus>;
+  setCacheLimitGiB?(limitGiB: number): Promise<void>;
+  clearCache?(): Promise<{ deleted: number; deferred: number }>;
+  invalidateAsset?(assetId: string): Promise<{ deleted: number; deferred: number }>;
+}
+
+export interface DesktopCacheStatus {
+  limitBytes: number;
+  allocatedBytes: number;
+  logicalBytes: number;
+  entryCount: number;
+  hitCount: number;
+  missCount: number;
+  savedBytes: number;
+}
+
+export type DesktopCacheBridge = Required<
+  Pick<
+    SekerDesktopBridge,
+    'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'
+  >
+>;
+
+export function getDesktopCacheBridge(): DesktopCacheBridge | null {
+  const bridge = desktopBridge();
+  return bridge &&
+    typeof bridge.getCacheStatus === 'function' &&
+    typeof bridge.setCacheLimitGiB === 'function' &&
+    typeof bridge.clearCache === 'function' &&
+    typeof bridge.invalidateAsset === 'function'
+    ? (bridge as SekerDesktopBridge & DesktopCacheBridge)
+    : null;
 }
 
 export function resolveEagleRenditionUrl(assetId: string, renditionId: string): string {
