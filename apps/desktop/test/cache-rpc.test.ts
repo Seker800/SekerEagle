@@ -57,7 +57,19 @@ describe('cache utility RPC', () => {
     const hit = await client.acquire(keyHash, namespaceId, 3);
     expect(hit).toMatchObject({ logicalBytes: 9, etag: '"rpc-etag"' });
     await client.release(hit!.leaseId);
-    expect(await client.getStats()).toMatchObject({ entryCount: 1 });
+    expect(await client.acquire(Buffer.alloc(32, 8), namespaceId, 4)).toBeNull();
+    expect(await client.getNamespaceStats(namespaceId)).toMatchObject({
+      entryCount: 1,
+      hitCount: 1,
+      missCount: 1,
+      savedBytes: 9,
+    });
+    await client.setLimitBytes(2 * 1024 ** 2);
+    expect(await client.invalidateAsset(namespaceId, assetId)).toEqual({
+      deleted: 1,
+      deferred: 0,
+    });
+    expect(await client.clearNamespace(namespaceId)).toEqual({ deleted: 0, deferred: 0 });
   });
 });
 

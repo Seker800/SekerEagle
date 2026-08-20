@@ -20,6 +20,7 @@ describe('AccountHome', () => {
       'confirm',
       vi.fn(() => true),
     );
+    delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
   });
 
   it('toggles private visibility directly with a default three-hour duration and no dialog', async () => {
@@ -150,5 +151,47 @@ describe('AccountHome', () => {
 
     expect(await screen.findByText('两次输入的新密码不一致。')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows and manages the owner-scoped cache only inside the desktop client', async () => {
+    const getCacheStatus = vi.fn().mockResolvedValue({
+      limitBytes: 10 * 1024 ** 3,
+      allocatedBytes: 2 * 1024 ** 3,
+      logicalBytes: 1_500_000_000,
+      entryCount: 12_345,
+      hitCount: 80,
+      missCount: 20,
+      savedBytes: 5 * 1024 ** 3,
+    });
+    const setCacheLimitGiB = vi.fn().mockResolvedValue(undefined);
+    const clearCache = vi.fn().mockResolvedValue({ deleted: 12_345, deferred: 0 });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      getCacheStatus,
+      setCacheLimitGiB,
+      clearCache,
+      invalidateAsset: vi.fn(),
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])));
+
+    render(
+      <AccountHome
+        user={user}
+        onPasswordChanged={vi.fn()}
+        onLogout={vi.fn()}
+        privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }}
+      />,
+    );
+
+    expect(await screen.findByRole('heading', { name: '本地媒体缓存' })).toBeInTheDocument();
+    expect(screen.getByText('80%')).toBeInTheDocument();
+    expect(screen.getByText('12,345 个文件')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('缓存容量上限'), { target: { value: '25' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存缓存设置' }));
+    await waitFor(() => expect(setCacheLimitGiB).toHaveBeenCalledWith(25));
+
+    fireEvent.click(screen.getByRole('button', { name: '清空本地缓存' }));
+    await waitFor(() => expect(clearCache).toHaveBeenCalledOnce());
   });
 });
