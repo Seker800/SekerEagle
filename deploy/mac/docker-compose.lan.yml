@@ -1,4 +1,8 @@
 services:
+  api:
+    environment:
+      BROWSER_TRUSTED_ORIGINS: 'http://${SEKEREAGLE_GATEWAY_LAN_ADDRESS:?set a trusted LAN address}:8180'
+
   gateway:
     ports:
       - '${SEKEREAGLE_GATEWAY_LAN_ADDRESS:?set a trusted LAN address}:8180:8080'

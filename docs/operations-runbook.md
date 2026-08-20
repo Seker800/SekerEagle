@@ -36,11 +36,13 @@ SEKEREAGLE_GATEWAY_LAN_ADDRESS=192.168.1.10
 docker compose --env-file .env \
   -f deploy/mac/docker-compose.yml \
   -f deploy/mac/docker-compose.lan.yml \
-  up -d --force-recreate gateway
+  up -d --build --force-recreate api gateway
 curl -fsS http://192.168.1.10:8180/api/health/ready
 ```
 
-Chrome 采集扩展选择“仅使用内网”，内网地址填写 `http://192.168.1.10:8180`，并勾选
+LAN 叠加配置会把该精确地址加入浏览器来源白名单，因此网页登录和所有受 CSRF 来源保护的
+写操作都可通过内网 IP 使用；其他来源仍会 fail closed。Chrome 采集扩展选择“仅使用内网”，
+内网地址填写 `http://192.168.1.10:8180`，并勾选
 “允许内网 HTTP”。不要使用 `0.0.0.0`；通过 macOS 防火墙只允许可信设备访问 8180。
 局域网 HTTP 会明文传输登录信息、PAT 和图片，不适合不可信 Wi-Fi；这种环境应使用 HTTPS。
 

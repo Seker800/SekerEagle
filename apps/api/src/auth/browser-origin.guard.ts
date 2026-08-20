@@ -20,8 +20,8 @@ export class BrowserOriginGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): true {
     const request = context.switchToHttp().getRequest<Request>();
-    const expected = this.config.getOrThrow<string>('CANONICAL_ORIGIN');
-    if (resolveOrigin(request) !== expected) {
+    const trustedOrigins = this.config.getOrThrow<readonly string[]>('BROWSER_TRUSTED_ORIGINS');
+    if (!trustedOrigins.includes(resolveOrigin(request) ?? '')) {
       throw new ForbiddenException({ code: 'ORIGIN_REJECTED', message: '请求来源不受信任。' });
     }
     return true;

@@ -11,14 +11,25 @@ function contextFor(headers: Record<string, string>): ExecutionContext {
 }
 
 const guard = new BrowserOriginGuard(
-  new ConfigService({ CANONICAL_ORIGIN: 'http://localhost:8180' }),
+  new ConfigService({
+    BROWSER_TRUSTED_ORIGINS: ['http://localhost:8180', 'http://192.168.31.139:8180'],
+  }),
 );
 
 void test('accepts the exact canonical origin', () => {
   assert.equal(guard.canActivate(contextFor({ origin: 'http://localhost:8180' })), true);
 });
 
+void test('accepts an explicitly configured LAN browser origin', () => {
+  assert.equal(guard.canActivate(contextFor({ origin: 'http://192.168.31.139:8180' })), true);
+  assert.equal(
+    guard.canActivate(contextFor({ referer: 'http://192.168.31.139:8180/library' })),
+    true,
+  );
+});
+
 void test('rejects missing and cross-site origins', () => {
   assert.throws(() => guard.canActivate(contextFor({})));
   assert.throws(() => guard.canActivate(contextFor({ origin: 'http://evil.local' })));
+  assert.throws(() => guard.canActivate(contextFor({ origin: 'http://192.168.31.140:8180' })));
 });

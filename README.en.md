@@ -201,6 +201,7 @@ To access SekerEagle from another trusted LAN computer at `http://IP:8180`, set
 `SEKEREAGLE_GATEWAY_LAN_ADDRESS` in `.env` to the server's fixed private IP and apply the LAN
 Compose overlay. The default `127.0.0.1` entry remains available; do not use `0.0.0.0`, and
 restrict source devices with the host firewall.
+The overlay also adds that exact address to the trusted browser origins so LAN login and writes work.
 
 ## Migrating from Eagle
 

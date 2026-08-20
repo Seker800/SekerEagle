@@ -21,6 +21,35 @@ const safeEnv = {
 void test('accepts the local isolated runtime', () => {
   const result = validateEnvironment(safeEnv);
   assert.equal(result.CANONICAL_ORIGIN, 'http://localhost:8180');
+  assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, ['http://localhost:8180']);
+});
+
+void test('accepts exact trusted LAN origins while preserving the canonical origin', () => {
+  const result = validateEnvironment({
+    ...safeEnv,
+    BROWSER_TRUSTED_ORIGINS: 'http://192.168.31.139:8180, https://eagle.example.com',
+  });
+  assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, [
+    'http://localhost:8180',
+    'http://192.168.31.139:8180',
+    'https://eagle.example.com',
+  ]);
+});
+
+void test('rejects unsafe trusted browser origins', () => {
+  for (const trustedOrigin of [
+    'http://203.0.113.10:8180',
+    'http://192.168.31.89:8180',
+    'http://*.example.com',
+    'https://*.example.com',
+    'ftp://192.168.31.139:8180',
+    'http://192.168.31.139:8180/path',
+    'http://user:password@192.168.31.139:8180',
+  ]) {
+    assert.throws(() =>
+      validateEnvironment({ ...safeEnv, BROWSER_TRUSTED_ORIGINS: trustedOrigin }),
+    );
+  }
 });
 
 void test('rejects a non-HTTPS remote origin', () => {

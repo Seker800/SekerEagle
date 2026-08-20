@@ -110,6 +110,10 @@ test('LAN gateway overlay preserves loopback and requires an explicit bind addre
     lanCompose,
     /\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180:8080/,
   );
+  assert.match(
+    lanCompose,
+    /BROWSER_TRUSTED_ORIGINS: 'http:\/\/\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180'/,
+  );
   assert.match(exampleEnv, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
   assert.match(envCreator, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
 });
