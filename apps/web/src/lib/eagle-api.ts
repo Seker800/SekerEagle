@@ -1,5 +1,6 @@
 import type { EagleFilterQuery, LegacyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { fetchWithBrowserSession } from './api-client';
+import { resolveEagleRenditionUrl } from './media-resolver';
 
 export interface EagleRendition {
   id: string;
@@ -512,5 +513,5 @@ export function getEaglePyramidDescriptor(_token: string, assetId: string, signa
   });
 }
 export function getEagleRenditionContentUrl(assetId: string, renditionId: string) {
-  return `/api/eagle/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(renditionId)}`;
+  return resolveEagleRenditionUrl(assetId, renditionId);
 }

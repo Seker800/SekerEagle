@@ -35,9 +35,7 @@ describe('media resolver', () => {
       `sekereagle-media://rendition/${assetId}/${renditionId}`,
     );
     expect(
-      resolveEagleMediaPath(
-        `/api/eagle/assets/${assetId}/pyramids/${pyramidId}/tiles/13/4/2`,
-      ),
+      resolveEagleMediaPath(`/api/eagle/assets/${assetId}/pyramids/${pyramidId}/tiles/13/4/2`),
     ).toBe(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`);
     expect(createMediaUrl).toHaveBeenCalledTimes(2);
   });

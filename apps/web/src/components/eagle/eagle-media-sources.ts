@@ -3,6 +3,7 @@ import {
   type EagleAssetListItem,
   type EaglePyramidDescriptor,
 } from '../../lib/eagle-api';
+import { resolveEagleMediaPath } from '../../lib/media-resolver';
 
 const IMAGE_PYRAMID_DIMENSION_THRESHOLD = 4_096;
 const IMAGE_PYRAMID_PIXEL_THRESHOLD = 16_000_000;
@@ -47,10 +48,12 @@ export function createEagleTileSource(descriptor: EaglePyramidDescriptor) {
     minLevel: 0,
     maxLevel: descriptor.maxLevel,
     getTileUrl(level: number, x: number, y: number) {
-      return descriptor.tileUrlTemplate
-        .replace('{level}', String(level))
-        .replace('{x}', String(x))
-        .replace('{y}', String(y));
+      return resolveEagleMediaPath(
+        descriptor.tileUrlTemplate
+          .replace('{level}', String(level))
+          .replace('{x}', String(x))
+          .replace('{y}', String(y)),
+      );
     },
   };
 }
