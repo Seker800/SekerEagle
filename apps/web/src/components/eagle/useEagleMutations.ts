@@ -30,6 +30,7 @@ import {
 import type { MoveEagleSmartFolderInput } from './EagleSmartFolderTree';
 import type { createEagleQueryKeys } from './eagle-query-keys';
 import { moveSmartFolderInTree } from './eagle-smart-folder-order';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 type EagleAssetMetadataInput = Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'>;
@@ -221,7 +222,8 @@ export function useEagleMutations(
   });
   const trashMutation = useMutation({
     mutationFn: (assetIds: string[]) => batchTrashEagleAssets(accessToken, assetIds),
-    onSuccess: async () => {
+    onSuccess: async (_result, assetIds) => {
+      await invalidateDesktopAssets(assetIds);
       callbacks.onSelectionMutationCompleted();
       await invalidate(queryKeys.assets);
     },
@@ -234,6 +236,7 @@ export function useEagleMutations(
       }),
     onSuccess: async ({ assets }) => {
       rememberVersions(assets);
+      await invalidateDesktopAssets(assets.map(({ assetId }) => assetId));
       callbacks.onSelectionMutationCompleted();
       await invalidate(
         queryKeys.assets,
