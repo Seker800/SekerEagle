@@ -10,10 +10,12 @@ void load();
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  void run(async () => render(await bridge.saveConnections(formValue())));
+  const settings = formValue();
+  void run(async () => render(await bridge.saveConnections(settings)));
 });
 testButton.addEventListener('click', () => {
-  void run(async () => render(await bridge.testConnections(formValue())));
+  const settings = formValue();
+  void run(async () => render(await bridge.testConnections(settings)));
 });
 cancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
 resetButton.addEventListener('click', () => {

@@ -25,6 +25,7 @@ import { buildNamespaceId } from '../shared/media-identity';
 import { DesktopSettingsStore } from './desktop-settings';
 import { DesktopConnectionSettingsStore } from './connection-settings';
 import { connectionSettingsForServerUrl } from './connection-config';
+import { connectionPageAsset, isConnectionPageUrl } from './connection-page-protocol';
 import { DesktopConnectionResolver } from './connection-resolver';
 import {
   DesktopConnectionService,
@@ -451,14 +452,7 @@ async function handleMediaRequest(requestUrl: string): Promise<Response> {
 }
 
 async function handleAppRequest(requestUrl: string): Promise<Response> {
-  const url = new URL(requestUrl);
-  if (url.origin !== 'sekereagle-app://connection') return new Response('Not found', { status: 404 });
-  const assets: Record<string, { file: string; type: string }> = {
-    '/': { file: 'index.html', type: 'text/html; charset=utf-8' },
-    '/connection.js': { file: 'connection.js', type: 'text/javascript; charset=utf-8' },
-    '/connection.css': { file: 'connection.css', type: 'text/css; charset=utf-8' },
-  };
-  const asset = assets[url.pathname];
+  const asset = connectionPageAsset(requestUrl);
   if (!asset) return new Response('Not found', { status: 404 });
   try {
     return new Response(await readFile(path.join(__dirname, 'connection-page', asset.file)), {
@@ -529,15 +523,6 @@ async function recoverConnection(
       connectionRecovery = null;
     });
   return connectionRecovery;
-}
-
-function isConnectionPageUrl(input: string): boolean {
-  try {
-    const url = new URL(input);
-    return url.origin === 'sekereagle-app://connection' && url.pathname === '/';
-  } catch {
-    return false;
-  }
 }
 
 function resolutionToResponse(resolution: MediaResolution): Response {
