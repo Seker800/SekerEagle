@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, open, rename, rm, stat, statfs, type FileHandle } from 'node:fs/promises';
+import { mkdir, open, readdir, rename, rm, stat, statfs, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { cacheFilePath } from './cache-path';
 
@@ -86,6 +86,26 @@ export class CacheStore {
       if (isNotFound(error)) return false;
       throw error;
     }
+  }
+
+  async removePartialsForHashes(keyHashes: readonly Buffer[]): Promise<number> {
+    if (!keyHashes.length) return 0;
+    const prefixes = [...new Set(keyHashes.map((keyHash) => `${keyHash.toString('hex')}-`))];
+    let entries;
+    try {
+      entries = await readdir(this.tempRoot, { withFileTypes: true });
+    } catch (error) {
+      if (isNotFound(error)) return 0;
+      throw error;
+    }
+    let removed = 0;
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith('.partial')) continue;
+      if (!prefixes.some((prefix) => entry.name.startsWith(prefix))) continue;
+      await rm(path.join(this.tempRoot, entry.name), { force: true });
+      removed += 1;
+    }
+    return removed;
   }
 
   filePath(keyHash: Buffer): string {

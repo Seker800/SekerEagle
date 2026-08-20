@@ -247,6 +247,31 @@ export class CacheIndex {
     return { entries, allocatedBytes };
   }
 
+  discardWriting(keyHash: Buffer): boolean {
+    assertHash(keyHash);
+    return (
+      this.database
+        .prepare(`DELETE FROM cache_entries WHERE key_hash = ? AND state = 'WRITING'`)
+        .run(keyHash).changes === 1
+    );
+  }
+
+  listGlobalEvictionCandidates(segment: CacheSegment, limit: number): Buffer[] {
+    if (segment !== 'PROBATION' && segment !== 'PROTECTED') throw new Error('缓存分段无效。');
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {
+      throw new Error('淘汰批次无效。');
+    }
+    const rows = this.database
+      .prepare(
+        `SELECT key_hash FROM cache_entries
+         WHERE state = 'READY' AND segment = ?
+         ORDER BY last_access_at ASC, created_at ASC
+         LIMIT ?`,
+      )
+      .all(segment, limit) as Array<{ key_hash: Uint8Array }>;
+    return rows.map(({ key_hash }) => Buffer.from(key_hash));
+  }
+
   recoverInterruptedWrites(): Buffer[] {
     const rows = this.database
       .prepare(`SELECT key_hash FROM cache_entries WHERE state = 'WRITING'`)
@@ -274,6 +299,22 @@ export class CacheIndex {
       entryCount: row?.entry_count ?? 0,
       logicalBytes: row?.logical_bytes ?? 0,
       allocatedBytes: row?.allocated_bytes ?? 0,
+    };
+  }
+
+  getTotalStats(): { entryCount: number; logicalBytes: number; allocatedBytes: number } {
+    const row = this.database
+      .prepare(
+        `SELECT COALESCE(SUM(entry_count), 0) AS entry_count,
+                COALESCE(SUM(logical_bytes), 0) AS logical_bytes,
+                COALESCE(SUM(allocated_bytes), 0) AS allocated_bytes
+         FROM cache_stats`,
+      )
+      .get() as { entry_count: number; logical_bytes: number; allocated_bytes: number };
+    return {
+      entryCount: row.entry_count,
+      logicalBytes: row.logical_bytes,
+      allocatedBytes: row.allocated_bytes,
     };
   }
 

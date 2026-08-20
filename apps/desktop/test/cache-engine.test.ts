@@ -49,7 +49,7 @@ describe('CacheEngine', () => {
       authorizationLeaseUntil: 311,
     });
     expect(hit?.filePath.startsWith(root)).toBe(true);
-    await engine.release(hit!.leaseId);
+    engine.release(hit!.leaseId);
   });
 
   it('deduplicates concurrent writers and removes a length-mismatched partial', async () => {
@@ -84,9 +84,9 @@ describe('CacheEngine', () => {
   it('batches hit metadata and promotes reuse without per-hit SQLite writes', async () => {
     await writeReady(engine, 3, namespaceA, 'one');
     const first = await engine.acquire(hash(3), namespaceA, 20);
-    await engine.release(first!.leaseId);
+    engine.release(first!.leaseId);
     const second = await engine.acquire(hash(3), namespaceA, 21);
-    await engine.release(second!.leaseId);
+    engine.release(second!.leaseId);
 
     expect(engine.pendingAccessCount()).toBe(2);
     expect(engine.inspectEntry(hash(3))).toMatchObject({ accessCount: 0, segment: 'PROBATION' });
@@ -102,8 +102,8 @@ describe('CacheEngine', () => {
 
     await engine.evictIfNeeded();
     expect(await engine.acquire(hash(4), namespaceA, 30)).not.toBeNull();
-    await engine.release(leased!.leaseId);
-    await engine.releaseAllForTesting();
+    engine.release(leased!.leaseId);
+    engine.releaseAllForTesting();
     await engine.evictIfNeeded();
 
     expect(engine.getStats().allocatedBytes).toBeLessThanOrEqual(Math.floor(12 * 1024 * 0.9));
@@ -127,12 +127,7 @@ describe('CacheEngine', () => {
   });
 });
 
-async function writeReady(
-  engine: CacheEngine,
-  value: number,
-  namespaceId: string,
-  body: string,
-) {
+async function writeReady(engine: CacheEngine, value: number, namespaceId: string, body: string) {
   const writeId = await engine.beginWrite({
     keyHash: hash(value),
     namespaceId,
