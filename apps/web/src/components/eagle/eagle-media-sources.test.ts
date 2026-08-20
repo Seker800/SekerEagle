@@ -7,6 +7,7 @@ import {
   getEagleThumbnailSourceSet,
   needsEagleImagePyramid,
 } from './eagle-media-sources';
+import type { SekerDesktopBridge } from '../../lib/media-resolver';
 
 const asset = {
   id: 'asset-1',
@@ -42,6 +43,33 @@ describe('Eagle media sources', () => {
       '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/13/4/2',
     );
     expect(source.maxLevel).toBe(13);
+  });
+
+  it('routes Deep Zoom tiles through the desktop media capability when present', () => {
+    const desktopAssetId = '00000000-0000-4000-8000-000000000001';
+    const desktopPyramidId = '00000000-0000-4000-8000-000000000003';
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: (media) =>
+        media.kind === 'TILE'
+          ? `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`
+          : 'unexpected',
+    };
+    const source = createEagleTileSource({
+      id: desktopPyramidId,
+      width: 8_000,
+      height: 6_000,
+      tileSize: 512,
+      overlap: 1,
+      format: 'webp',
+      maxLevel: 13,
+      tileUrlTemplate: `/api/eagle/assets/${desktopAssetId}/pyramids/${desktopPyramidId}/tiles/{level}/{x}/{y}`,
+    });
+
+    expect(source.getTileUrl(13, 4, 2)).toBe(
+      `sekereagle-media://tile/${desktopAssetId}/${desktopPyramidId}/13/4/2`,
+    );
+    delete (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop;
   });
 
   it('builds a single-image source for the same zoom viewer', () => {
