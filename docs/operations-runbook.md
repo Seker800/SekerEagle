@@ -7,7 +7,7 @@
 3. 运行 `npm run env:ensure-vector` 补齐独立的 MLX 本机 token，再运行 `npm run mlx:install-service`。`launchd` 会在登录后启动 Qwen3-VL Embedding 宿主服务并在崩溃后恢复。
 4. 用带认证的 `http://127.0.0.1:11435/health/ready` 检查固定模型 revision、1024 维和 `metal: true`。宿主服务虽为 Docker Desktop 绑定 `0.0.0.0`，但只接受独立随机 bearer token、受限字节和固定输入类型；不接受 URL 或文件路径。
 5. 运行 `npm run compose:config` 检查编排，再运行 `docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build`。
-6. 只有 `127.0.0.1:8180` 应暴露到宿主机。PostgreSQL、MinIO、API 和 web 不应有宿主端口。
+6. 默认只有 `127.0.0.1:8180` 暴露到宿主机。可信局域网访问可按下节绑定单个内网 IP；PostgreSQL、MinIO、API 和 web 不应有宿主端口。
 7. 用一次性环境变量在 API 容器内创建首个管理员：
 
    ```sh
@@ -20,6 +20,29 @@
 8. 打开 `http://localhost:8180` 登录。
 
 也可以先运行 `npm run bootstrap-credentials:create` 生成本机私有的 `.local/bootstrap.env`。首次登录并修改密码后应删除该文件。
+
+## 局域网 HTTP
+
+需要让另一台可信局域网电脑直接访问时，先为服务器设置固定 DHCP 租约，然后把 `.env` 中的
+gateway 绑定地址改为该内网 IP，例如：
+
+```dotenv
+SEKEREAGLE_GATEWAY_LAN_ADDRESS=192.168.1.10
+```
+
+重新创建 gateway 并验证：
+
+```sh
+docker compose --env-file .env \
+  -f deploy/mac/docker-compose.yml \
+  -f deploy/mac/docker-compose.lan.yml \
+  up -d --force-recreate gateway
+curl -fsS http://192.168.1.10:8180/api/health/ready
+```
+
+Chrome 采集扩展选择“仅使用内网”，内网地址填写 `http://192.168.1.10:8180`，并勾选
+“允许内网 HTTP”。不要使用 `0.0.0.0`；通过 macOS 防火墙只允许可信设备访问 8180。
+局域网 HTTP 会明文传输登录信息、PAT 和图片，不适合不可信 Wi-Fi；这种环境应使用 HTTPS。
 
 从早期用户名版本升级时，数据库中唯一的旧管理员可以直接在新登录页输入希望绑定的邮箱和原密码。只有原密码验证成功后才会写入邮箱，并同时吊销旧 refresh token 与 PAT；普通用户和多个旧管理员不会自动绑定。
 

@@ -10,7 +10,7 @@
 ## Mac runtime
 
 - 目标架构：`linux/arm64`。
-- gateway：`127.0.0.1:8180`。
+- gateway 默认绑定 `127.0.0.1:8180`；可信局域网部署可用独立 Compose 叠加文件增加单个固定内网 IP，同时保留 loopback，禁止使用 `0.0.0.0` 泛化暴露。
 - API、PostgreSQL、MinIO 仅位于 compose 内部网络。
 - compose project name：`sekereagle`。
 

@@ -1,0 +1,4 @@
+services:
+  gateway:
+    ports:
+      - '${SEKEREAGLE_GATEWAY_LAN_ADDRESS:?set a trusted LAN address}:8180:8080'

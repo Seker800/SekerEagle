@@ -34,6 +34,24 @@ test('public mode accepts remote HTTP only after explicit insecure transport opt
   );
 });
 
+test('local mode accepts LAN HTTP only after explicit insecure transport opt-in', () => {
+  assert.deepEqual(
+    buildServerCandidates({
+      connectionMode: 'local',
+      localServerUrl: 'http://192.168.31.139:8180',
+      allowInsecureLocalHttp: true,
+    }),
+    ['http://192.168.31.139:8180'],
+  );
+  assert.throws(() =>
+    buildServerCandidates({
+      connectionMode: 'local',
+      localServerUrl: 'http://192.168.31.139:8180',
+      allowInsecureLocalHttp: false,
+    }),
+  );
+});
+
 test('rewrites a loopback-signed upload URL onto the active public gateway only', () => {
   assert.equal(
     rewritePresignedUploadUrl(
@@ -64,11 +82,36 @@ test('rewrites a loopback-signed upload URL onto the active public gateway only'
   );
 });
 
-test('options page makes insecure public HTTP an explicit visible choice', async () => {
+test('options page makes insecure local and public HTTP explicit visible choices', async () => {
   const options = await readFile(new URL('../options.html', import.meta.url), 'utf8');
 
+  assert.match(options, /id="allowInsecureLocalHttp" type="checkbox"/);
   assert.match(options, /id="allowInsecurePublicHttp" type="checkbox"/);
   assert.match(options, /PAT 和图片将以明文传输/);
+});
+
+test('LAN gateway overlay preserves loopback and requires an explicit bind address', async () => {
+  const compose = await readFile(
+    new URL('../../../deploy/mac/docker-compose.yml', import.meta.url),
+    'utf8',
+  );
+  const lanCompose = await readFile(
+    new URL('../../../deploy/mac/docker-compose.lan.yml', import.meta.url),
+    'utf8',
+  );
+  const exampleEnv = await readFile(new URL('../../../.env.example', import.meta.url), 'utf8');
+  const envCreator = await readFile(
+    new URL('../../../scripts/create-local-env.mjs', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(compose, /127\.0\.0\.1:8180:8080/);
+  assert.match(
+    lanCompose,
+    /\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180:8080/,
+  );
+  assert.match(exampleEnv, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
+  assert.match(envCreator, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
 });
 
 test('gateway preserves the loopback signing host behind a public reverse proxy', async () => {

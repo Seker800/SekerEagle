@@ -16,7 +16,11 @@ export function buildServerCandidates(config) {
   const mode = CONNECTION_MODES.has(config.connectionMode) ? config.connectionMode : 'auto';
   const localValue = String(config.localServerUrl || config.serverUrl || '').trim();
   const publicValue = String(config.publicServerUrl || '').trim();
-  const local = localValue ? normalizeServerUrl(localValue) : null;
+  const local = localValue
+    ? normalizeServerUrl(localValue, {
+        allowRemoteHttp: config.allowInsecureLocalHttp === true,
+      })
+    : null;
   const publicUrl = publicValue
     ? normalizePublicServerUrl(publicValue, {
         allowInsecureHttp: config.allowInsecurePublicHttp === true,

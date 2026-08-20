@@ -197,6 +197,11 @@ expose PostgreSQL, MinIO, the API, or the worker directly. See the
 [local operations runbook](docs/operations-runbook.md) (Chinese) for setup, diagnostics, upgrades,
 and shutdown procedures.
 
+To access SekerEagle from another trusted LAN computer at `http://IP:8180`, set
+`SEKEREAGLE_GATEWAY_LAN_ADDRESS` in `.env` to the server's fixed private IP and apply the LAN
+Compose overlay. The default `127.0.0.1` entry remains available; do not use `0.0.0.0`, and
+restrict source devices with the host firewall.
+
 ## Migrating from Eagle
 
 Migration does not read and mutate the live source library at the same time. Copy the Eagle

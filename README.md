@@ -175,6 +175,10 @@ docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \
 PostgreSQL、MinIO、API 或 worker。完整启动、诊断、升级与停止步骤见
 [本机运行手册](docs/operations-runbook.md)。
 
+需要从另一台可信局域网电脑通过 `http://IP:8180` 访问时，可将 `.env` 中的
+`SEKEREAGLE_GATEWAY_LAN_ADDRESS` 设置为服务器的固定内网 IP，并叠加 LAN Compose 文件。
+默认入口仍为 `127.0.0.1`；不要设为 `0.0.0.0`，并应通过主机防火墙限制来源。具体配置见运行手册的“局域网 HTTP”章节。
+
 ## 从 Eagle 迁移
 
 迁移不是对旧图库边读边写。推荐先复制一份不可变的 Eagle `.library`，通过

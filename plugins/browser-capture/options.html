@@ -19,8 +19,20 @@
           <option value="public">仅使用公网</option>
         </select>
         <label for="localServerUrl">内网服务器地址</label>
-        <input id="localServerUrl" type="url" autocomplete="url" />
-        <small>本机默认使用 <code>http://localhost:8180</code>。</small>
+        <input
+          id="localServerUrl"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="http://192.168.1.10:8180"
+        />
+        <small
+          >本机默认使用 <code>http://localhost:8180</code>；其他电脑填写服务器的内网 IP。</small
+        >
+        <label class="checkbox-row" for="allowInsecureLocalHttp">
+          <input id="allowInsecureLocalHttp" type="checkbox" />
+          <span>允许内网 HTTP（PAT 和图片将以明文传输）</span>
+        </label>
         <label for="publicServerUrl">公网服务器地址（可选）</label>
         <input id="publicServerUrl" type="url" inputmode="url" placeholder="http://公网IP:端口" />
         <small>可以是固定域名或公网 IP 与端口；映射未开启时可以留空。</small>

@@ -97,6 +97,7 @@ async function getConfig() {
   return chrome.storage.local.get({
     connectionMode: 'auto',
     localServerUrl: 'http://localhost:8180',
+    allowInsecureLocalHttp: false,
     publicServerUrl: '',
     allowInsecurePublicHttp: false,
     serverUrl: '',

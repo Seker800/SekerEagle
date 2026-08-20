@@ -7,6 +7,7 @@ import {
 const form = document.querySelector('form');
 const connectionMode = document.querySelector('#connectionMode');
 const localServerUrl = document.querySelector('#localServerUrl');
+const allowInsecureLocalHttp = document.querySelector('#allowInsecureLocalHttp');
 const publicServerUrl = document.querySelector('#publicServerUrl');
 const allowInsecurePublicHttp = document.querySelector('#allowInsecurePublicHttp');
 const pat = document.querySelector('#pat');
@@ -16,6 +17,7 @@ const status = document.querySelector('#status');
 const saved = await chrome.storage.local.get({
   connectionMode: 'auto',
   localServerUrl: '',
+  allowInsecureLocalHttp: false,
   publicServerUrl: '',
   allowInsecurePublicHttp: false,
   serverUrl: 'http://localhost:8180',
@@ -23,6 +25,7 @@ const saved = await chrome.storage.local.get({
 });
 connectionMode.value = saved.connectionMode;
 localServerUrl.value = saved.localServerUrl || saved.serverUrl;
+allowInsecureLocalHttp.checked = saved.allowInsecureLocalHttp;
 publicServerUrl.value = saved.publicServerUrl;
 allowInsecurePublicHttp.checked = saved.allowInsecurePublicHttp;
 concurrency.value = String(saved.concurrency);
@@ -33,7 +36,12 @@ form.addEventListener('submit', async (event) => {
   try {
     const nextConfig = {
       connectionMode: connectionMode.value,
-      localServerUrl: localServerUrl.value.trim() ? normalizeServerUrl(localServerUrl.value) : '',
+      localServerUrl: localServerUrl.value.trim()
+        ? normalizeServerUrl(localServerUrl.value, {
+            allowRemoteHttp: allowInsecureLocalHttp.checked,
+          })
+        : '',
+      allowInsecureLocalHttp: allowInsecureLocalHttp.checked,
       publicServerUrl: publicServerUrl.value.trim()
         ? normalizePublicServerUrl(publicServerUrl.value, {
             allowInsecureHttp: allowInsecurePublicHttp.checked,
