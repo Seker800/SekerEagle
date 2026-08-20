@@ -128,7 +128,13 @@ describe('CacheIndex', () => {
       [7, namespaceA, 20],
       [8, namespaceB, 1],
     ] as const) {
-      index.beginWrite({ keyHash: hash(value), namespaceId, assetId: asset(value), kind: 'RENDITION', now });
+      index.beginWrite({
+        keyHash: hash(value),
+        namespaceId,
+        assetId: asset(value),
+        kind: 'RENDITION',
+        now,
+      });
       index.commitReady(hash(value), {
         logicalBytes: 1,
         allocatedBytes: 4_096,
@@ -197,10 +203,22 @@ describe('CacheIndex', () => {
   it('rejects malformed hashes, namespaces, timestamps, sizes, segments and batches', () => {
     expect(() => index.findReady(Buffer.alloc(31))).toThrow(/hash/);
     expect(() =>
-      index.beginWrite({ keyHash: hash(12), namespaceId: 'bad', assetId: asset(12), kind: 'RENDITION', now: 1 }),
+      index.beginWrite({
+        keyHash: hash(12),
+        namespaceId: 'bad',
+        assetId: asset(12),
+        kind: 'RENDITION',
+        now: 1,
+      }),
     ).toThrow(/namespace/);
     expect(() =>
-      index.beginWrite({ keyHash: hash(12), namespaceId: namespaceA, assetId: asset(12), kind: 'RENDITION', now: -1 }),
+      index.beginWrite({
+        keyHash: hash(12),
+        namespaceId: namespaceA,
+        assetId: asset(12),
+        kind: 'RENDITION',
+        now: -1,
+      }),
     ).toThrow(/时间戳/);
     expect(() => index.listEvictionCandidates(namespaceA, 'INVALID' as never, 1)).toThrow(/分段/);
     expect(() => index.listGlobalEvictionCandidates('PROBATION', 0)).toThrow(/批次/);

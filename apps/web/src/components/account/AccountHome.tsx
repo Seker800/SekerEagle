@@ -18,10 +18,7 @@ import {
   updatePrivacyVisibility,
   type PrivacyVisibilityState,
 } from '../../lib/privacy-visibility-api';
-import {
-  getDesktopCacheBridge,
-  type DesktopCacheStatus,
-} from '../../lib/media-resolver';
+import { getDesktopCacheBridge, type DesktopCacheStatus } from '../../lib/media-resolver';
 
 interface PersonalAccessToken {
   id: string;
@@ -306,10 +303,26 @@ export function AccountHome({
               <IconDatabase size={22} />
             </div>
             <div className="desktop-cache-stats">
-              <span><strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>已占用</span>
-              <span><strong>{cacheStatus ? cacheStatus.entryCount.toLocaleString('zh-CN') : '—'}</strong>{cacheStatus ? ' 个文件' : '文件数'}</span>
-              <span><strong>{cacheStatus ? `${Math.round((cacheStatus.hitCount / Math.max(1, cacheStatus.hitCount + cacheStatus.missCount)) * 100)}%` : '—'}</strong>命中率</span>
-              <span><strong>{cacheStatus ? formatBytes(cacheStatus.savedBytes) : '—'}</strong>已节省流量</span>
+              <span>
+                <strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>已占用
+              </span>
+              <span>
+                <strong>
+                  {cacheStatus ? cacheStatus.entryCount.toLocaleString('zh-CN') : '—'}
+                </strong>
+                {cacheStatus ? ' 个文件' : '文件数'}
+              </span>
+              <span>
+                <strong>
+                  {cacheStatus
+                    ? `${Math.round((cacheStatus.hitCount / Math.max(1, cacheStatus.hitCount + cacheStatus.missCount)) * 100)}%`
+                    : '—'}
+                </strong>
+                命中率
+              </span>
+              <span>
+                <strong>{cacheStatus ? formatBytes(cacheStatus.savedBytes) : '—'}</strong>已节省流量
+              </span>
             </div>
             <div className="desktop-cache-controls">
               <label>
@@ -320,13 +333,27 @@ export function AccountHome({
                   disabled={cacheBusy}
                   onChange={(event) => setCacheLimitGiB(Number(event.currentTarget.value))}
                 >
-                  {[1, 5, 10, 25, 50, 100].map((value) => <option key={value} value={value}>{value} GiB</option>)}
+                  {[1, 5, 10, 25, 50, 100].map((value) => (
+                    <option key={value} value={value}>
+                      {value} GiB
+                    </option>
+                  ))}
                 </select>
               </label>
-              <button className="primary-button" type="button" disabled={cacheBusy} onClick={() => void saveCacheLimit()}>
+              <button
+                className="primary-button"
+                type="button"
+                disabled={cacheBusy}
+                onClick={() => void saveCacheLimit()}
+              >
                 保存缓存设置
               </button>
-              <button className="quiet-button" type="button" disabled={cacheBusy} onClick={() => void clearDesktopCache()}>
+              <button
+                className="quiet-button"
+                type="button"
+                disabled={cacheBusy}
+                onClick={() => void clearDesktopCache()}
+              >
                 <IconTrash size={16} /> 清空本地缓存
               </button>
             </div>

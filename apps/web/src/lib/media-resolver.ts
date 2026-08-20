@@ -36,10 +36,7 @@ export interface DesktopCacheStatus {
 }
 
 export type DesktopCacheBridge = Required<
-  Pick<
-    SekerDesktopBridge,
-    'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'
-  >
+  Pick<SekerDesktopBridge, 'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'>
 >;
 
 export function getDesktopCacheBridge(): DesktopCacheBridge | null {
