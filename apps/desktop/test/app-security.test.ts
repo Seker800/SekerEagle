@@ -60,4 +60,19 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain("ipcMain.on('desktop:network-online'");
     expect(main).toMatch(/assertTrustedIpcSender\(event\)[\s\S]*expireAuthorizations/u);
   });
+
+  it('serves an offline connection manager and exposes only validated connection IPC', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(main).toContain("scheme: 'sekereagle-app'");
+    expect(main).toContain("protocol.handle('sekereagle-app'");
+    expect(main).toContain("ipcMain.handle('desktop:get-connection-status'");
+    expect(main).toContain("ipcMain.handle('desktop:save-connections'");
+    expect(main).toContain('assertTrustedConnectionSender(event)');
+    expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager')");
+    expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
+    expect(preload).not.toContain('shell.openExternal');
+  });
 });
