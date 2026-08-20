@@ -29,4 +29,17 @@ describe('offline-capable desktop connection page', () => {
     }
     expect(script).not.toContain('innerHTML');
   });
+
+  it('captures form values before disabling controls during an async action', async () => {
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
+    expect(script).toMatch(
+      /const settings = formValue\(\);[\s\S]*run\(async \(\) => render\(await bridge\.saveConnections\(settings\)\)\)/u,
+    );
+    expect(script).toMatch(
+      /const settings = formValue\(\);[\s\S]*run\(async \(\) => render\(await bridge\.testConnections\(settings\)\)\)/u,
+    );
+  });
 });
