@@ -27,6 +27,15 @@ export interface SekerDesktopBridge {
   setCacheLimitGiB?(limitGiB: number): Promise<void>;
   clearCache?(): Promise<{ deleted: number; deferred: number }>;
   invalidateAsset?(assetId: string): Promise<{ deleted: number; deferred: number }>;
+  getConnectionStatus?(): Promise<DesktopConnectionStatus>;
+  openConnectionManager?(): Promise<void>;
+}
+
+export interface DesktopConnectionStatus {
+  mode: 'AUTO' | 'LOCAL' | 'LAN' | 'PUBLIC';
+  activeSlot: 'LOCAL' | 'LAN' | 'PUBLIC' | null;
+  activeUrl: string | null;
+  latencyMs: number | null;
 }
 
 export interface DesktopCacheStatus {
@@ -53,6 +62,18 @@ export function getDesktopCacheBridge(): DesktopCacheBridge | null {
     typeof bridge.clearCache === 'function' &&
     typeof bridge.invalidateAsset === 'function'
     ? (bridge as SekerDesktopBridge & DesktopCacheBridge)
+    : null;
+}
+
+export function getDesktopConnectionBridge(): Pick<
+  Required<SekerDesktopBridge>,
+  'getConnectionStatus' | 'openConnectionManager'
+> | null {
+  const bridge = desktopBridge();
+  return bridge &&
+    typeof bridge.getConnectionStatus === 'function' &&
+    typeof bridge.openConnectionManager === 'function'
+    ? (bridge as Required<SekerDesktopBridge>)
     : null;
 }
 

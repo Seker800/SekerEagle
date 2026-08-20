@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
+import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { request } from './lib/api-client';
 import {
@@ -84,9 +85,12 @@ export function App() {
     }
   }
 
+  const connectionButton = <DesktopConnectionButton />;
+
   if (loading) {
     return (
       <main className="auth-loading">
+        {connectionButton}
         <img src={sekerEagleLogo} alt="" />
         <span>正在连接 SekerEagle…</span>
       </main>
@@ -96,6 +100,7 @@ export function App() {
   if (!user) {
     return (
       <main className="auth-shell">
+        {connectionButton}
         <section className="auth-intro" aria-label="SekerEagle 介绍">
           <div className="auth-brand">
             <span className="auth-brand-mark">
@@ -151,6 +156,7 @@ export function App() {
 
   return (
     <div className="standalone-eagle-shell">
+      {connectionButton}
       <SekerEaglePage
         ownerId={user.id}
         canManageProcessing={user.role === 'ADMIN'}

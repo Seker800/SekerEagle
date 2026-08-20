@@ -861,3 +861,36 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+.desktop-connection-button {
+  position: fixed;
+  z-index: 80;
+  top: 14px;
+  right: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #334155;
+  box-shadow: 0 6px 22px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+  cursor: pointer;
+}
+
+.desktop-connection-button > span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ef4444;
+}
+
+.desktop-connection-button > span.is-online {
+  background: #22c55e;
+}
+
+.desktop-connection-button small {
+  color: #64748b;
+}

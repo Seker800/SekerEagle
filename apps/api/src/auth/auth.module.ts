@@ -14,6 +14,7 @@ import { PatScopeGuard } from './pat-scope.guard';
 import { PrivacyVisibilityService } from './privacy-visibility.service';
 import { SessionTokenService } from './session-token.service';
 import { DeploymentIdentityService } from './deployment-identity.service';
+import { DesktopBootstrapController } from './desktop-bootstrap.controller';
 
 @Module({
   imports: [
@@ -25,7 +26,7 @@ import { DeploymentIdentityService } from './deployment-identity.service';
       }),
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, DesktopBootstrapController],
   providers: [
     AccessAuthGuard,
     AdminGuard,
