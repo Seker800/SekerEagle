@@ -31,9 +31,9 @@ describe('desktop media identity', () => {
     expect(createDesktopMediaUrl({ kind: 'RENDITION', assetId, renditionId })).toBe(
       `sekereagle-media://rendition/${assetId}/${renditionId}`,
     );
-    expect(
-      createDesktopMediaUrl({ kind: 'TILE', assetId, pyramidId, level: 13, x: 4, y: 2 }),
-    ).toBe(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`);
+    expect(createDesktopMediaUrl({ kind: 'TILE', assetId, pyramidId, level: 13, x: 4, y: 2 })).toBe(
+      `sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`,
+    );
   });
 
   it.each([

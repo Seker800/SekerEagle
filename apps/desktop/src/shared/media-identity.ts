@@ -15,6 +15,16 @@ export type DesktopMediaIdentity =
       y: number;
     };
 
+export function createDesktopMediaUrl(media: DesktopMediaIdentity): string {
+  const value =
+    media.kind === 'RENDITION'
+      ? `sekereagle-media://rendition/${media.assetId}/${media.renditionId}`
+      : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`;
+  const canonical = parseDesktopMediaUrl(value);
+  if (canonical.kind !== media.kind) throw new Error('桌面媒体类型无效。');
+  return value.toLowerCase();
+}
+
 export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
   const url = parseUrl(input, '媒体地址无效。');
   if (
