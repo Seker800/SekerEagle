@@ -233,11 +233,17 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   };
   ipcMain.handle('desktop:cache-status', async (event) => {
     const namespaceId = await namespace(event);
-    const [stats, currentSettings] = await Promise.all([
+    const [namespaceStats, globalStats, currentSettings] = await Promise.all([
       currentCache().getNamespaceStats(namespaceId),
+      currentCache().getStats(),
       settings.load(),
     ]);
-    return { ...stats, limitBytes: currentSettings.cacheLimitBytes };
+    return {
+      ...namespaceStats,
+      globalAllocatedBytes: globalStats.allocatedBytes,
+      globalEntryCount: globalStats.entryCount,
+      limitBytes: currentSettings.cacheLimitBytes,
+    };
   });
   ipcMain.handle('desktop:set-cache-limit', async (event, limitGiB: unknown) => {
     assertTrustedIpcSender(event);

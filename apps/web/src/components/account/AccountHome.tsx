@@ -304,6 +304,14 @@ export function AccountHome({
             </div>
             <div className="desktop-cache-stats">
               <span>
+                <strong>
+                  {cacheStatus
+                    ? `${formatBytes(cacheStatus.globalAllocatedBytes)} / ${formatBytes(cacheStatus.limitBytes)}`
+                    : '—'}
+                </strong>
+                全部账号占用
+              </span>
+              <span>
                 <strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>
                 当前账号占用
               </span>

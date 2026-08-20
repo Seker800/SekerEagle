@@ -157,6 +157,8 @@ describe('AccountHome', () => {
     const getCacheStatus = vi.fn().mockResolvedValue({
       limitBytes: 10 * 1024 ** 3,
       allocatedBytes: 2 * 1024 ** 3,
+      globalAllocatedBytes: 3 * 1024 ** 3,
+      globalEntryCount: 12_000,
       logicalBytes: 1_500_000_000,
       entryCount: 12_345,
       hitCount: 80,
@@ -185,6 +187,8 @@ describe('AccountHome', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '本地媒体缓存' })).toBeInTheDocument();
+    expect(screen.getByText('3.0 GiB / 10.0 GiB')).toBeInTheDocument();
+    expect(screen.getByText('全部账号占用')).toBeInTheDocument();
     expect(screen.getByText('80%')).toBeInTheDocument();
     expect(screen.getByText('12,345')).toBeInTheDocument();
     expect(screen.getByText('个文件')).toBeInTheDocument();

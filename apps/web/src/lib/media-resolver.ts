@@ -31,6 +31,8 @@ export interface SekerDesktopBridge {
 
 export interface DesktopCacheStatus {
   limitBytes: number;
+  globalAllocatedBytes: number;
+  globalEntryCount: number;
   allocatedBytes: number;
   logicalBytes: number;
   entryCount: number;
