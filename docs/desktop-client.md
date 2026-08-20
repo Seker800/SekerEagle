@@ -2,6 +2,8 @@
 
 The desktop client is a macOS-first wrapper around the same UI served by SekerEagle. It requires a reachable, authenticated SekerEagle server and accelerates repeated derived-image reads with a local, rebuildable cache.
 
+By default it connects to `http://localhost:8180`, matching the local deployment's canonical browser origin. HTTP loopback aliases such as `127.0.0.1` and `::1` are normalized to `localhost`; non-loopback servers must use HTTPS. A custom origin can be supplied through `SEKEREAGLE_SERVER_URL`, and the server must list that exact origin in `BROWSER_TRUSTED_ORIGINS` when it differs from `CANONICAL_ORIGIN`.
+
 ## Cache behavior
 
 - Default capacity is 10 GiB; settings accept 1–100 GiB.

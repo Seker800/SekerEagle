@@ -1,11 +1,16 @@
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
-import { normalizeDesktopServerUrl } from '../src/main/app-config';
+import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from '../src/main/app-config';
 import { isAllowedAppNavigation } from '../src/main/navigation-policy';
 
 describe('desktop server and navigation security', () => {
+  it('uses the canonical local browser origin by default', () => {
+    expect(DEFAULT_DESKTOP_SERVER_URL).toBe('http://localhost:8180');
+  });
+
   it.each([
-    ['http://127.0.0.1:8180', 'http://127.0.0.1:8180'],
+    ['http://127.0.0.1:8180', 'http://localhost:8180'],
+    ['http://[::1]:8180', 'http://localhost:8180'],
     ['http://localhost:8180/', 'http://localhost:8180'],
     ['https://eagle.example.com/', 'https://eagle.example.com'],
   ])('accepts a trusted server origin: %s', (input, expected) => {
