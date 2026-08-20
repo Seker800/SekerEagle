@@ -256,6 +256,39 @@ export class CacheIndex {
     );
   }
 
+  renewAuthorization(
+    keyHash: Buffer,
+    namespaceId: string,
+    input: {
+      verifiedAt: number;
+      authorizationLeaseUntil: number;
+      etag: string | null;
+      lastModified: string | null;
+    },
+  ): boolean {
+    assertHash(keyHash);
+    assertNamespace(namespaceId);
+    assertTimestamp(input.verifiedAt);
+    assertTimestamp(input.authorizationLeaseUntil);
+    return (
+      this.database
+        .prepare(
+          `UPDATE cache_entries SET
+             verified_at = ?, authorization_lease_until = ?,
+             etag = COALESCE(?, etag), last_modified = COALESCE(?, last_modified)
+           WHERE key_hash = ? AND namespace_id = ? AND state = 'READY'`,
+        )
+        .run(
+          input.verifiedAt,
+          input.authorizationLeaseUntil,
+          input.etag,
+          input.lastModified,
+          keyHash,
+          namespaceId,
+        ).changes === 1
+    );
+  }
+
   listGlobalEvictionCandidates(segment: CacheSegment, limit: number): Buffer[] {
     if (segment !== 'PROBATION' && segment !== 'PROTECTED') throw new Error('缓存分段无效。');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {

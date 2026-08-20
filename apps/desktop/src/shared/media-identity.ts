@@ -74,6 +74,15 @@ export function hashCacheIdentity(identity: string): Buffer {
   return createHash('sha256').update(identity, 'utf8').digest();
 }
 
+export function buildNamespaceId(serverUrl: string, authenticatedOwnerId: string): string {
+  const serverIdentity = normalizeServerIdentity(serverUrl);
+  const ownerId = authenticatedOwnerId.trim();
+  if (!ownerId || ownerId.length > 256 || hasControlCharacter(ownerId)) {
+    throw new Error('认证主体无效。');
+  }
+  return createHash('sha256').update(`v1\n${serverIdentity}\n${ownerId}`, 'utf8').digest('hex');
+}
+
 export function normalizeServerIdentity(input: string): string {
   const url = parseUrl(input, '服务器地址无效。');
   if (

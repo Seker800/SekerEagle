@@ -180,6 +180,27 @@ export class CacheEngine {
     return this.index.getTotalStats();
   }
 
+  renewAuthorization(
+    keyHash: Buffer,
+    namespaceId: string,
+    input: {
+      verifiedAt: number;
+      authorizationLeaseUntil: number;
+      etag: string | null;
+      lastModified: string | null;
+    },
+  ): boolean {
+    return this.index.renewAuthorization(keyHash, namespaceId, input);
+  }
+
+  async invalidate(keyHash: Buffer): Promise<boolean> {
+    this.assertOpen();
+    const keyHex = keyHash.toString('hex');
+    if (this.activeReadCounts.has(keyHex)) throw new Error('缓存对象仍在读取中。');
+    await this.store.remove(keyHash);
+    return this.index.deleteEntries([keyHash]).entries === 1;
+  }
+
   async evictIfNeeded(): Promise<void> {
     this.assertOpen();
     const lowBytes = Math.floor(this.limitBytes * 0.9);
