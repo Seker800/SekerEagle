@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, type StatementSync } from 'node:sqlite';
 
 export type CacheKind = 'RENDITION' | 'TILE';
 export type CacheSegment = 'PROBATION' | 'PROTECTED';
@@ -40,6 +40,12 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 
 export class CacheIndex {
   private readonly database: DatabaseSync;
+  private readonly beginWriteStatement: StatementSync;
+  private readonly commitReadyStatement: StatementSync;
+  private readonly namespaceStatement: StatementSync;
+  private readonly statsUpsertStatement: StatementSync;
+  private readonly findReadyStatement: StatementSync;
+  private readonly recordAccessStatement: StatementSync;
   private closed = false;
 
   constructor(databasePath: string) {
@@ -88,6 +94,39 @@ export class CacheIndex {
         ,saved_bytes INTEGER NOT NULL DEFAULT 0 CHECK(saved_bytes >= 0)
       ) WITHOUT ROWID;
     `);
+    this.beginWriteStatement = this.database.prepare(
+      `INSERT INTO cache_entries (
+        key_hash, namespace_id, asset_id, kind, state, last_access_at, created_at
+      ) VALUES (?, ?, ?, ?, 'WRITING', ?, ?)`,
+    );
+    this.commitReadyStatement = this.database.prepare(
+      `UPDATE cache_entries
+       SET state = 'READY', logical_bytes = ?, allocated_bytes = ?, content_type = ?,
+           etag = ?, last_modified = ?, verified_at = ?, authorization_lease_until = ?
+       WHERE key_hash = ? AND state = 'WRITING'`,
+    );
+    this.namespaceStatement = this.database.prepare(
+      'SELECT namespace_id FROM cache_entries WHERE key_hash = ?',
+    );
+    this.statsUpsertStatement = this.database.prepare(
+      `INSERT INTO cache_stats(namespace_id, entry_count, logical_bytes, allocated_bytes)
+       VALUES (?, 1, ?, ?)
+       ON CONFLICT(namespace_id) DO UPDATE SET
+         entry_count = entry_count + 1,
+         logical_bytes = logical_bytes + excluded.logical_bytes,
+         allocated_bytes = allocated_bytes + excluded.allocated_bytes`,
+    );
+    this.findReadyStatement = this.database.prepare(
+      `SELECT namespace_id, asset_id, kind, logical_bytes, allocated_bytes, content_type, etag,
+              last_modified, segment, access_count, last_access_at, verified_at,
+              authorization_lease_until
+       FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
+    );
+    this.recordAccessStatement = this.database.prepare(
+      `UPDATE cache_entries
+       SET access_count = access_count + ?, last_access_at = ?, segment = 'PROTECTED'
+       WHERE key_hash = ? AND state = 'READY'`,
+    );
   }
 
   beginWrite(input: {
@@ -101,13 +140,14 @@ export class CacheIndex {
     assertNamespace(input.namespaceId);
     assertAssetId(input.assetId);
     assertTimestamp(input.now);
-    const result = this.database
-      .prepare(
-        `INSERT INTO cache_entries (
-          key_hash, namespace_id, asset_id, kind, state, last_access_at, created_at
-        ) VALUES (?, ?, ?, ?, 'WRITING', ?, ?)`,
-      )
-      .run(input.keyHash, input.namespaceId, input.assetId, input.kind, input.now, input.now);
+    const result = this.beginWriteStatement.run(
+      input.keyHash,
+      input.namespaceId,
+      input.assetId,
+      input.kind,
+      input.now,
+      input.now,
+    );
     if (result.changes !== 1) throw new Error('无法建立缓存写入状态。');
   }
 
@@ -131,48 +171,25 @@ export class CacheIndex {
     if (!input.contentType || input.contentType.length > 255) throw new Error('媒体类型无效。');
 
     this.transaction(() => {
-      const result = this.database
-        .prepare(
-          `UPDATE cache_entries
-           SET state = 'READY', logical_bytes = ?, allocated_bytes = ?, content_type = ?,
-               etag = ?, last_modified = ?, verified_at = ?, authorization_lease_until = ?
-           WHERE key_hash = ? AND state = 'WRITING'`,
-        )
-        .run(
-          input.logicalBytes,
-          input.allocatedBytes,
-          input.contentType,
-          input.etag,
-          input.lastModified,
-          input.verifiedAt,
-          input.authorizationLeaseUntil,
-          keyHash,
-        );
+      const result = this.commitReadyStatement.run(
+        input.logicalBytes,
+        input.allocatedBytes,
+        input.contentType,
+        input.etag,
+        input.lastModified,
+        input.verifiedAt,
+        input.authorizationLeaseUntil,
+        keyHash,
+      );
       if (result.changes !== 1) throw new Error('缓存写入状态不存在或已经提交。');
       const row = this.getNamespace(keyHash);
-      this.database
-        .prepare(
-          `INSERT INTO cache_stats(namespace_id, entry_count, logical_bytes, allocated_bytes)
-           VALUES (?, 1, ?, ?)
-           ON CONFLICT(namespace_id) DO UPDATE SET
-             entry_count = entry_count + 1,
-             logical_bytes = logical_bytes + excluded.logical_bytes,
-             allocated_bytes = allocated_bytes + excluded.allocated_bytes`,
-        )
-        .run(row.namespace_id, input.logicalBytes, input.allocatedBytes);
+      this.statsUpsertStatement.run(row.namespace_id, input.logicalBytes, input.allocatedBytes);
     });
   }
 
   findReady(keyHash: Buffer): ReadyCacheEntry | null {
     assertHash(keyHash);
-    const row = this.database
-      .prepare(
-        `SELECT namespace_id, asset_id, kind, logical_bytes, allocated_bytes, content_type, etag,
-                last_modified, segment, access_count, last_access_at, verified_at,
-                authorization_lease_until
-         FROM cache_entries WHERE key_hash = ? AND state = 'READY'`,
-      )
-      .get(keyHash) as CacheEntryRow | undefined;
+    const row = this.findReadyStatement.get(keyHash) as CacheEntryRow | undefined;
     if (!row) return null;
     return {
       namespaceId: row.namespace_id,
@@ -207,13 +224,10 @@ export class CacheIndex {
     }
     if (!grouped.size) return;
 
-    const update = this.database.prepare(
-      `UPDATE cache_entries
-       SET access_count = access_count + ?, last_access_at = ?, segment = 'PROTECTED'
-       WHERE key_hash = ? AND state = 'READY'`,
-    );
     this.transaction(() => {
-      for (const access of grouped.values()) update.run(access.count, access.at, access.keyHash);
+      for (const access of grouped.values()) {
+        this.recordAccessStatement.run(access.count, access.at, access.keyHash);
+      }
     });
   }
 
@@ -447,9 +461,7 @@ export class CacheIndex {
   }
 
   private getNamespace(keyHash: Buffer): { namespace_id: string } {
-    const row = this.database
-      .prepare('SELECT namespace_id FROM cache_entries WHERE key_hash = ?')
-      .get(keyHash) as { namespace_id: string } | undefined;
+    const row = this.namespaceStatement.get(keyHash) as { namespace_id: string } | undefined;
     if (!row) throw new Error('缓存条目不存在。');
     return row;
   }
