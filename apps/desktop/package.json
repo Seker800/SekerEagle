@@ -10,7 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "start": "npm run build && electron ."
+    "start": "npm run build && electron .",
+    "package:mac": "npm run build && electron-builder --mac dmg zip",
+    "package:win": "npm run build && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -19,5 +21,52 @@
     "esbuild": "^0.25.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
+  },
+  "build": {
+    "appId": "com.sekereagle.desktop",
+    "productName": "SekerEagle",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "mac": {
+      "category": "public.app-category.graphics-design",
+      "hardenedRuntime": true,
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
