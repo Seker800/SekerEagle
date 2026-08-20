@@ -41,47 +41,57 @@ let mainWindow: BrowserWindow | null = null;
 let cacheProcess: UtilityProcess | null = null;
 let cacheClient: CacheRpcClient | null = null;
 
-void app.whenReady().then(async () => {
-  const settings = new DesktopSettingsStore(app.getPath('userData'));
-  const initialSettings = await settings.load();
-  const cache = await startCacheProcess(initialSettings.cacheLimitBytes);
-  cacheClient = cache.client;
-  cacheProcess = cache.child;
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) app.quit();
 
-  const currentSession = session.defaultSession;
-  const owner = new AuthenticatedOwner(() =>
-    currentSession.fetch(new URL('/api/auth/me', serverUrl).toString(), {
-      credentials: 'include',
-      headers: { 'cache-control': 'no-store' },
-    }),
-  );
-  currentSession.cookies.on('changed', () => owner.invalidate());
-  powerMonitor.on('resume', () => owner.invalidate());
-  lockDownSession(currentSession);
-  registerCacheIpc(owner, settings, cache.client);
-
-  const controller = new MediaCacheController({
-    serverUrl,
-    cache: cache.client,
-    authenticatedOwner: () => owner.get(),
-    fetchUpstream: (mediaPath, options) =>
-      currentSession.fetch(new URL(mediaPath, serverUrl).toString(), {
-        credentials: 'include',
-        headers: {
-          'cache-control': 'no-store',
-          accept: 'image/avif,image/webp,image/*',
-          'accept-encoding': 'identity',
-          ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
-        },
-      }),
-  });
-  protocol.handle('sekereagle-media', (request) => handleMediaRequest(controller, request.url));
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
+app.on('second-instance', () => {
+  if (mainWindow?.isMinimized()) mainWindow.restore();
+  mainWindow?.show();
+  mainWindow?.focus();
 });
+
+if (hasSingleInstanceLock)
+  void app.whenReady().then(async () => {
+    const settings = new DesktopSettingsStore(app.getPath('userData'));
+    const initialSettings = await settings.load();
+    const cache = await startCacheProcess(initialSettings.cacheLimitBytes);
+    cacheClient = cache.client;
+    cacheProcess = cache.child;
+
+    const currentSession = session.defaultSession;
+    const owner = new AuthenticatedOwner(() =>
+      currentSession.fetch(new URL('/api/auth/me', serverUrl).toString(), {
+        credentials: 'include',
+        headers: { 'cache-control': 'no-store' },
+      }),
+    );
+    currentSession.cookies.on('changed', () => owner.invalidate());
+    powerMonitor.on('resume', () => owner.invalidate());
+    lockDownSession(currentSession);
+    registerCacheIpc(owner, settings, cache.client);
+
+    const controller = new MediaCacheController({
+      serverUrl,
+      cache: cache.client,
+      authenticatedOwner: () => owner.get(),
+      fetchUpstream: (mediaPath, options) =>
+        currentSession.fetch(new URL(mediaPath, serverUrl).toString(), {
+          credentials: 'include',
+          headers: {
+            'cache-control': 'no-store',
+            accept: 'image/avif,image/webp,image/*',
+            'accept-encoding': 'identity',
+            ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
+          },
+        }),
+    });
+    protocol.handle('sekereagle-media', (request) => handleMediaRequest(controller, request.url));
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
