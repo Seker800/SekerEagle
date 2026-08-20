@@ -351,6 +351,17 @@ export class CacheIndex {
     );
   }
 
+  expireAuthorizations(): number {
+    return Number(
+      this.database
+        .prepare(
+          `UPDATE cache_entries SET authorization_lease_until = 0
+         WHERE state = 'READY' AND authorization_lease_until > 0`,
+        )
+        .run().changes,
+    );
+  }
+
   listGlobalEvictionCandidates(segment: CacheSegment, limit: number): Buffer[] {
     if (segment !== 'PROBATION' && segment !== 'PROTECTED') throw new Error('缓存分段无效。');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 10_000) {

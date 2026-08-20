@@ -65,6 +65,7 @@ export function parseDesktopMediaUrl(input: string): DesktopMediaIdentity {
 export function buildCacheIdentity(
   serverUrl: string,
   authenticatedOwnerId: string,
+  deploymentId: string,
   media: DesktopMediaIdentity,
 ): string {
   const serverIdentity = normalizeServerIdentity(serverUrl);
@@ -77,20 +78,32 @@ export function buildCacheIdentity(
     media.kind === 'RENDITION'
       ? `rendition:${media.assetId}:${media.renditionId}`
       : `tile:${media.assetId}:${media.pyramidId}:${media.level}:${media.x}:${media.y}`;
-  return `v1\n${serverIdentity}\n${ownerId}\n${mediaIdentity}`;
+  assertDeploymentId(deploymentId);
+  return `v1\n${serverIdentity}\n${deploymentId}\n${ownerId}\n${mediaIdentity}`;
 }
 
 export function hashCacheIdentity(identity: string): Buffer {
   return createHash('sha256').update(identity, 'utf8').digest();
 }
 
-export function buildNamespaceId(serverUrl: string, authenticatedOwnerId: string): string {
+export function buildNamespaceId(
+  serverUrl: string,
+  authenticatedOwnerId: string,
+  deploymentId: string,
+): string {
   const serverIdentity = normalizeServerIdentity(serverUrl);
   const ownerId = authenticatedOwnerId.trim();
   if (!ownerId || ownerId.length > 256 || hasControlCharacter(ownerId)) {
     throw new Error('认证主体无效。');
   }
-  return createHash('sha256').update(`v1\n${serverIdentity}\n${ownerId}`, 'utf8').digest('hex');
+  assertDeploymentId(deploymentId);
+  return createHash('sha256')
+    .update(`v1\n${serverIdentity}\n${deploymentId}\n${ownerId}`, 'utf8')
+    .digest('hex');
+}
+
+function assertDeploymentId(value: string): void {
+  if (!/^[0-9a-f]{64}$/u.test(value)) throw new Error('deployment identity 无效。');
 }
 
 export function normalizeServerIdentity(input: string): string {

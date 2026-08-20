@@ -13,15 +13,14 @@ if (!Number.isSafeInteger(count) || count < 1 || count > 500_000) {
 const directory = await mkdtemp(path.join(os.tmpdir(), 'sekereagle-cache-scale-'));
 const databasePath = path.join(directory, 'index.sqlite');
 const namespaceId = 'a'.repeat(64);
-const hashes: Buffer[] = [];
 const startedRss = process.memoryUsage().rss;
+const hashFor = (value: number) => createHash('sha256').update(String(value)).digest();
 
 try {
   let index = new CacheIndex(databasePath);
   const insertStarted = performance.now();
   for (let value = 0; value < count; value += 1) {
-    const keyHash = createHash('sha256').update(String(value)).digest();
-    hashes.push(keyHash);
+    const keyHash = hashFor(value);
     const assetId = `00000000-0000-4000-8000-${String(value % 100_000).padStart(12, '0')}`;
     index.beginWrite({ keyHash, namespaceId, assetId, kind: 'RENDITION', now: value });
     index.commitReady(keyHash, {
@@ -44,14 +43,15 @@ try {
   const querySamples: number[] = [];
   for (let value = 0; value < 10_000; value += 1) {
     const queryStarted = performance.now();
-    index.findReady(hashes[(value * 7919) % count]);
+    index.findReady(hashFor((value * 7919) % count));
     querySamples.push(performance.now() - queryStarted);
   }
   const accessStarted = performance.now();
-  index.recordAccesses(hashes.slice(0, 1_000).map((keyHash, at) => ({ keyHash, at: count + at })));
+  index.recordAccesses(
+    Array.from({ length: 1_000 }, (_, at) => ({ keyHash: hashFor(at), at: count + at })),
+  );
   const accessFlushMs = performance.now() - accessStarted;
   index.close();
-  hashes.length = 0;
   (globalThis as { gc?: () => void }).gc?.();
 
   querySamples.sort((left, right) => left - right);

@@ -6,10 +6,12 @@ import {
   type DesktopMediaIdentity,
 } from '../shared/media-identity';
 import type { CacheKind, ReadyCacheEntry } from '../utility/cache/cache-index';
+import type { AuthenticatedIdentity } from './authenticated-owner';
 
 const CACHE_ELIGIBILITY = 'public-derived-v1';
 const AUTHORIZATION_LEASE_MS = 5 * 60_000;
-const MAX_CACHEABLE_MEDIA_BYTES = 64 * 1024 ** 2;
+const MAX_RENDITION_BYTES = 64 * 1024 ** 2;
+const MAX_TILE_BYTES = 8 * 1024 ** 2;
 const MAX_IPC_CHUNK_BYTES = 1024 ** 2;
 
 interface CacheBackend {
@@ -68,7 +70,7 @@ export type MediaResolution =
 export class MediaCacheController {
   private readonly serverUrl: string;
   private readonly cache: CacheBackend;
-  private readonly authenticatedOwner: () => Promise<string | null>;
+  private readonly authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
   private readonly fetchUpstream: (
     path: string,
     options: { ifNoneMatch?: string },
@@ -79,7 +81,7 @@ export class MediaCacheController {
   constructor(options: {
     serverUrl: string;
     cache: CacheBackend;
-    authenticatedOwner: () => Promise<string | null>;
+    authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
     fetchUpstream: (path: string, options: { ifNoneMatch?: string }) => Promise<Response>;
     now?: () => number;
   }) {
@@ -97,13 +99,21 @@ export class MediaCacheController {
     } catch {
       return { source: 'error', status: 404, message: '媒体地址不存在。' };
     }
-    const ownerId = await this.authenticatedOwner();
-    if (!ownerId) return { source: 'error', status: 401, message: '需要重新登录。' };
+    const identity = await this.authenticatedOwner();
+    if (!identity) return { source: 'error', status: 401, message: '需要重新登录。' };
+    const { ownerId, deploymentId } = identity;
 
-    const namespaceId = buildNamespaceId(this.serverUrl, ownerId);
-    const keyHash = hashCacheIdentity(buildCacheIdentity(this.serverUrl, ownerId, media));
+    const namespaceId = buildNamespaceId(this.serverUrl, ownerId, deploymentId);
+    const keyHash = hashCacheIdentity(
+      buildCacheIdentity(this.serverUrl, ownerId, deploymentId, media),
+    );
     const now = this.now();
-    const existing = await this.cache.acquire(keyHash, namespaceId, now);
+    let existing;
+    try {
+      existing = await this.cache.acquire(keyHash, namespaceId, now);
+    } catch {
+      return { source: 'upstream', response: await this.fetchUpstream(upstreamPath(media), {}) };
+    }
     if (existing && existing.authorizationLeaseUntil >= now) return cacheResolution(existing);
     if (existing) {
       await this.cache.release(existing.leaseId);
@@ -164,7 +174,7 @@ export class MediaCacheController {
     }
 
     await this.cache.invalidate(keyHash);
-    if (!isCacheable(response)) return { source: 'upstream', response };
+    if (!isCacheable(response, media)) return { source: 'upstream', response };
     return this.populateResponse(media, keyHash, namespaceId, response);
   }
 
@@ -174,7 +184,7 @@ export class MediaCacheController {
     namespaceId: string,
   ): Promise<Response | null> {
     const response = await this.fetchUpstream(upstreamPath(media), {});
-    if (!isCacheable(response)) return response;
+    if (!isCacheable(response, media)) return response;
     const result = await this.populateResponse(media, keyHash, namespaceId, response);
     if (result.source === 'cache') await this.cache.release(result.leaseId);
     return result.source === 'upstream' ? result.response : null;
@@ -186,19 +196,27 @@ export class MediaCacheController {
     namespaceId: string,
     response: Response,
   ): Promise<MediaResolution> {
-    const expectedLength = cacheableLength(response);
+    const expectedLength = cacheableLength(
+      response,
+      media.kind === 'TILE' ? MAX_TILE_BYTES : MAX_RENDITION_BYTES,
+    );
     const contentType = response.headers.get('content-type');
     if (expectedLength === null || !contentType || !response.body) {
       return { source: 'upstream', response };
     }
     const now = this.now();
-    const writeId = await this.cache.beginWrite({
-      keyHash,
-      namespaceId,
-      assetId: media.assetId,
-      kind: media.kind,
-      now,
-    });
+    let writeId: string;
+    try {
+      writeId = await this.cache.beginWrite({
+        keyHash,
+        namespaceId,
+        assetId: media.assetId,
+        kind: media.kind,
+        now,
+      });
+    } catch {
+      return { source: 'upstream', response };
+    }
     try {
       const reader = response.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
       for (;;) {
@@ -238,21 +256,22 @@ function isEligible(response: Response): boolean {
   return response.headers.get('x-sekereagle-desktop-cache') === CACHE_ELIGIBILITY;
 }
 
-function isCacheable(response: Response): boolean {
+function isCacheable(response: Response, media: DesktopMediaIdentity): boolean {
+  const maximumBytes = media.kind === 'TILE' ? MAX_TILE_BYTES : MAX_RENDITION_BYTES;
   return (
     response.status === 200 &&
     isEligible(response) &&
-    response.headers.get('content-type')?.toLowerCase().startsWith('image/') === true &&
-    cacheableLength(response) !== null &&
+    response.headers.get('content-type')?.split(';', 1)[0]?.toLowerCase() === 'image/webp' &&
+    cacheableLength(response, maximumBytes) !== null &&
     response.body !== null
   );
 }
 
-function cacheableLength(response: Response): number | null {
+function cacheableLength(response: Response, maximumBytes = MAX_RENDITION_BYTES): number | null {
   const raw = response.headers.get('content-length');
   if (!raw || !/^[1-9]\d*$/u.test(raw)) return null;
   const value = Number(raw);
-  return Number.isSafeInteger(value) && value <= MAX_CACHEABLE_MEDIA_BYTES ? value : null;
+  return Number.isSafeInteger(value) && value <= maximumBytes ? value : null;
 }
 
 function cacheResolution(

@@ -16,6 +16,7 @@ type CacheRpcMethod =
   | 'setLimitBytes'
   | 'invalidateAsset'
   | 'clearNamespace'
+  | 'expireAuthorizations'
   | 'close';
 
 interface CacheRpcRequest {
@@ -178,6 +179,10 @@ export class CacheRpcClient {
     };
   }
 
+  async expireAuthorizations(): Promise<number> {
+    return asNumber(await this.call('expireAuthorizations', {}));
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     await this.call('close', {});
@@ -287,6 +292,8 @@ export class CacheRpcDispatcher {
         return engine.invalidateAsset(asString(params.namespaceId), asString(params.assetId));
       case 'clearNamespace':
         return engine.clearNamespace(asString(params.namespaceId));
+      case 'expireAuthorizations':
+        return engine.expireAuthorizations();
       case 'close':
         await engine.close();
         this.engine = null;

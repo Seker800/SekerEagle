@@ -13,6 +13,7 @@ import { PatService } from './pat.service';
 import { PatScopeGuard } from './pat-scope.guard';
 import { PrivacyVisibilityService } from './privacy-visibility.service';
 import { SessionTokenService } from './session-token.service';
+import { DeploymentIdentityService } from './deployment-identity.service';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { SessionTokenService } from './session-token.service';
     PatScopeGuard,
     PrivacyVisibilityService,
     SessionTokenService,
+    DeploymentIdentityService,
   ],
   exports: [
     AccessAuthGuard,

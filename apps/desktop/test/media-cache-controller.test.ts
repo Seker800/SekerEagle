@@ -125,7 +125,10 @@ describe('MediaCacheController', () => {
   });
 
   it('rejects malformed custom URLs before authentication and bypasses ineligible body shapes', async () => {
-    const authenticatedOwner = vi.fn(async () => 'owner-a');
+    const authenticatedOwner = vi.fn(async () => ({
+      ownerId: 'owner-a',
+      deploymentId: 'd'.repeat(64),
+    }));
     const fetchUpstream = vi.fn(
       async () =>
         new Response('unknown-size', {
@@ -184,7 +187,7 @@ function createController(
   return new MediaCacheController({
     serverUrl: 'https://example.com',
     cache,
-    authenticatedOwner: async () => 'owner-a',
+    authenticatedOwner: async () => ({ ownerId: 'owner-a', deploymentId: 'd'.repeat(64) }),
     fetchUpstream,
     now: clock,
   });

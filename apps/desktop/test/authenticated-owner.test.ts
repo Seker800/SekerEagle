@@ -2,17 +2,23 @@ import { describe, expect, it, vi } from 'vitest';
 import { AuthenticatedOwner } from '../src/main/authenticated-owner';
 
 describe('AuthenticatedOwner', () => {
+  const deploymentId = 'd'.repeat(64);
   it('single-flights identity checks and leases the authenticated owner briefly', async () => {
     let now = 1_000;
-    const fetchMe = vi.fn(async () => Response.json({ user: { id: 'owner-a' } }));
+    const fetchMe = vi.fn(async () =>
+      Response.json({ user: { id: 'owner-a' }, desktopCache: { deploymentId } }),
+    );
     const owner = new AuthenticatedOwner(fetchMe, () => now);
 
-    expect(await Promise.all([owner.get(), owner.get()])).toEqual(['owner-a', 'owner-a']);
-    expect(await owner.get()).toBe('owner-a');
+    expect(await Promise.all([owner.get(), owner.get()])).toEqual([
+      { ownerId: 'owner-a', deploymentId },
+      { ownerId: 'owner-a', deploymentId },
+    ]);
+    expect(await owner.get()).toEqual({ ownerId: 'owner-a', deploymentId });
     expect(fetchMe).toHaveBeenCalledTimes(1);
 
     now += 60_001;
-    expect(await owner.get()).toBe('owner-a');
+    expect(await owner.get()).toEqual({ ownerId: 'owner-a', deploymentId });
     expect(fetchMe).toHaveBeenCalledTimes(2);
   });
 
@@ -20,6 +26,7 @@ describe('AuthenticatedOwner', () => {
     const responses = [
       async () => new Response(null, { status: 401 }),
       async () => Response.json({ user: {} }),
+      async () => Response.json({ user: { id: 'owner-a' } }),
       async () => Promise.reject(new Error('offline')),
     ];
     for (const fetchMe of responses) {
@@ -29,7 +36,9 @@ describe('AuthenticatedOwner', () => {
   });
 
   it('drops its lease immediately when session cookies change or the app resumes', async () => {
-    const fetchMe = vi.fn(async () => Response.json({ user: { id: 'owner-a' } }));
+    const fetchMe = vi.fn(async () =>
+      Response.json({ user: { id: 'owner-a' }, desktopCache: { deploymentId } }),
+    );
     const owner = new AuthenticatedOwner(fetchMe);
 
     await owner.get();

@@ -304,7 +304,8 @@ export function AccountHome({
             </div>
             <div className="desktop-cache-stats">
               <span>
-                <strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>已占用
+                <strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>
+                当前账号占用
               </span>
               <span>
                 <strong>
@@ -327,18 +328,17 @@ export function AccountHome({
             <div className="desktop-cache-controls">
               <label>
                 缓存容量上限
-                <select
+                <input
+                  type="number"
                   aria-label="缓存容量上限"
+                  min={1}
+                  max={100}
+                  step={1}
                   value={cacheLimitGiB}
                   disabled={cacheBusy}
                   onChange={(event) => setCacheLimitGiB(Number(event.currentTarget.value))}
-                >
-                  {[1, 5, 10, 25, 50, 100].map((value) => (
-                    <option key={value} value={value}>
-                      {value} GiB
-                    </option>
-                  ))}
-                </select>
+                />
+                <small>1–100 GiB，默认 10 GiB</small>
               </label>
               <button
                 className="primary-button"
@@ -354,7 +354,7 @@ export function AccountHome({
                 disabled={cacheBusy}
                 onClick={() => void clearDesktopCache()}
               >
-                <IconTrash size={16} /> 清空本地缓存
+                <IconTrash size={16} /> 清空当前账号缓存
               </button>
             </div>
             {cacheError ? <p className="auth-error">{cacheError}</p> : null}

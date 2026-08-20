@@ -9,6 +9,7 @@ import {
 const assetId = '00000000-0000-4000-8000-000000000001';
 const renditionId = '00000000-0000-4000-8000-000000000002';
 const pyramidId = '00000000-0000-4000-8000-000000000003';
+const deploymentId = 'd'.repeat(64);
 
 describe('desktop media identity', () => {
   it('accepts only immutable rendition and bounded tile identities', () => {
@@ -49,12 +50,19 @@ describe('desktop media identity', () => {
 
   it('isolates cache keys by normalized server and authenticated owner', () => {
     const media = parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`);
-    const first = buildCacheIdentity('https://EXAMPLE.com:443/', 'owner-a', media);
-    const equivalent = buildCacheIdentity('https://example.com', 'owner-a', media);
-    const otherOwner = buildCacheIdentity('https://example.com', 'owner-b', media);
+    const first = buildCacheIdentity('https://EXAMPLE.com:443/', 'owner-a', deploymentId, media);
+    const equivalent = buildCacheIdentity('https://example.com', 'owner-a', deploymentId, media);
+    const otherOwner = buildCacheIdentity('https://example.com', 'owner-b', deploymentId, media);
+    const otherDeployment = buildCacheIdentity(
+      'https://example.com',
+      'owner-a',
+      'e'.repeat(64),
+      media,
+    );
 
     expect(first).toBe(equivalent);
     expect(first).not.toBe(otherOwner);
+    expect(first).not.toBe(otherDeployment);
     expect(hashCacheIdentity(first)).toHaveLength(32);
   });
 
@@ -69,6 +77,7 @@ describe('desktop media identity', () => {
         buildCacheIdentity(
           server,
           'owner-a',
+          deploymentId,
           parseDesktopMediaUrl(`sekereagle-media://rendition/${assetId}/${renditionId}`),
         ),
       ).toThrow();

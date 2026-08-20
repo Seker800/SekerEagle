@@ -192,7 +192,7 @@ describe('AccountHome', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存缓存设置' }));
     await waitFor(() => expect(setCacheLimitGiB).toHaveBeenCalledWith(25));
 
-    fireEvent.click(screen.getByRole('button', { name: '清空本地缓存' }));
+    fireEvent.click(screen.getByRole('button', { name: '清空当前账号缓存' }));
     await waitFor(() => expect(clearCache).toHaveBeenCalledOnce());
   });
 });

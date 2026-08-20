@@ -66,7 +66,10 @@ if (hasSingleInstanceLock)
       }),
     );
     currentSession.cookies.on('changed', () => owner.invalidate());
-    powerMonitor.on('resume', () => owner.invalidate());
+    powerMonitor.on('resume', () => {
+      owner.invalidate();
+      void cache.client.expireAuthorizations().catch(() => undefined);
+    });
     lockDownSession(currentSession);
     registerCacheIpc(owner, settings, cache.client);
 
@@ -133,9 +136,9 @@ function registerCacheIpc(
 ): void {
   const namespace = async (event: IpcMainInvokeEvent): Promise<string> => {
     assertTrustedIpcSender(event);
-    const ownerId = await owner.get();
-    if (!ownerId) throw new Error('需要重新登录。');
-    return buildNamespaceId(serverUrl, ownerId);
+    const identity = await owner.get();
+    if (!identity) throw new Error('需要重新登录。');
+    return buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
   };
   ipcMain.handle('desktop:cache-status', async (event) => {
     const namespaceId = await namespace(event);
@@ -211,7 +214,7 @@ function lockDownSession(currentSession: Electron.Session): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self' ws: wss:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: sekereagle-media:; media-src 'self' blob:; connect-src 'self'; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
         ],
       },
     });

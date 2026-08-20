@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { CacheIndex, type CacheKind, type ReadyCacheEntry } from './cache-index';
 import { CacheStore, type PendingCacheFile } from './cache-store';
@@ -31,7 +31,11 @@ export class CacheEngine {
       throw new Error('缓存容量无效。');
     }
     this.limitBytes = options.limitBytes;
-    mkdirSync(options.cacheRoot, { recursive: true });
+    mkdirSync(options.cacheRoot, { recursive: true, mode: 0o700 });
+    chmodSync(options.cacheRoot, 0o700);
+    if (process.platform === 'darwin') {
+      writeFileSync(path.join(options.cacheRoot, '.metadata_never_index'), '', { mode: 0o600 });
+    }
     this.store = new CacheStore(path.join(options.cacheRoot, 'media'));
     this.index = new CacheIndex(path.join(options.cacheRoot, 'index.sqlite'));
   }
@@ -145,6 +149,7 @@ export class CacheEngine {
     | null
   > {
     this.assertOpen();
+    if (this.deferredDeletes.has(keyHash.toString('hex'))) return null;
     const entry = this.index.findReady(keyHash);
     if (!entry || entry.namespaceId !== namespaceId) {
       this.recordMetric(namespaceId, false, 0);
@@ -177,6 +182,7 @@ export class CacheEngine {
       if (deferred) {
         this.deferredDeletes.delete(keyHex);
         await this.store.remove(deferred);
+        this.index.deleteEntries([deferred]);
       }
     }
   }
@@ -253,6 +259,10 @@ export class CacheEngine {
     return this.index.renewAuthorization(keyHash, namespaceId, input);
   }
 
+  expireAuthorizations(): number {
+    return this.index.expireAuthorizations();
+  }
+
   async invalidate(keyHash: Buffer): Promise<boolean> {
     this.assertOpen();
     const keyHex = keyHash.toString('hex');
@@ -310,6 +320,7 @@ export class CacheEngine {
     keyHashes: readonly Buffer[],
   ): Promise<{ deleted: number; deferred: number }> {
     let deferred = 0;
+    const immediate: Buffer[] = [];
     for (const keyHash of keyHashes) {
       const keyHex = keyHash.toString('hex');
       if (this.activeReadCounts.has(keyHex)) {
@@ -317,10 +328,11 @@ export class CacheEngine {
         deferred += 1;
       } else {
         await this.store.remove(keyHash);
+        immediate.push(keyHash);
       }
     }
-    const { entries } = this.index.deleteEntries(keyHashes);
-    return { deleted: entries - deferred, deferred };
+    const { entries } = this.index.deleteEntries(immediate);
+    return { deleted: entries, deferred };
   }
 
   private recordMetric(namespaceId: string, hit: boolean, savedBytes: number): void {

@@ -36,6 +36,7 @@ import { PatService } from './pat.service';
 import { PrivacyVisibilityService } from './privacy-visibility.service';
 import { SessionTokenService } from './session-token.service';
 import type { AuthPrincipal } from './auth.types';
+import { DeploymentIdentityService } from './deployment-identity.service';
 
 @ApiTags('auth')
 @Controller()
@@ -46,6 +47,7 @@ export class AuthController {
     private readonly browser: BrowserSessionService,
     private readonly pats: PatService,
     private readonly privacyVisibility: PrivacyVisibilityService,
+    private readonly deploymentIdentity: DeploymentIdentityService,
   ) {}
 
   @Post('auth/login')
@@ -79,7 +81,10 @@ export class AuthController {
   @Get('auth/me')
   @UseGuards(AccessAuthGuard)
   me(@CurrentPrincipal() principal: AuthPrincipal) {
-    return { user: { id: principal.sub, email: principal.email, role: principal.role } };
+    return {
+      user: { id: principal.sub, email: principal.email, role: principal.role },
+      desktopCache: { deploymentId: this.deploymentIdentity.id },
+    };
   }
 
   @Get('auth/privacy-visibility')
