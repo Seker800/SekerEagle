@@ -1,6 +1,8 @@
 {
   "name": "@sekereagle/desktop",
   "version": "0.1.0",
+  "description": "SekerEagle online-first desktop media library with a secure local cache.",
+  "author": "SekerEagle contributors",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -11,11 +13,12 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "start": "npm run build && electron .",
-    "package:mac": "npm run build && electron-builder --mac dmg zip",
+    "package:mac": "npm run build && electron-builder --mac --arm64 --x64",
     "package:win": "npm run build && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^3.2.7",
     "electron": "43.4.1",
     "electron-builder": "26.15.3",
     "esbuild": "^0.25.0",
@@ -35,6 +38,7 @@
     },
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "mac": {
+      "icon": "build/icon.png",
       "category": "public.app-category.graphics-design",
       "hardenedRuntime": true,
       "target": [
@@ -55,6 +59,7 @@
       ]
     },
     "win": {
+      "icon": "build/icon.png",
       "target": [
         {
           "target": "nsis",

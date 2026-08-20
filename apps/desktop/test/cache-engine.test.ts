@@ -125,6 +125,27 @@ describe('CacheEngine', () => {
     expect(recovery.fullTreeScans).toBe(0);
     expect(await engine.acquire(hash(7), namespaceA, 20)).toBeNull();
   });
+
+  it('fails safely for invalid write chunks, missing sessions, and active invalidation', async () => {
+    expect(() => new CacheEngine({ cacheRoot: root, limitBytes: 0 })).toThrow(/容量/);
+    const writeId = await engine.beginWrite({
+      keyHash: hash(8),
+      namespaceId: namespaceA,
+      kind: 'RENDITION',
+      now: 1,
+    });
+    await expect(engine.append(writeId, Buffer.alloc(0))).rejects.toThrow(/写入块/);
+    await expect(engine.append('missing', Buffer.from('x'))).rejects.toThrow(/会话/);
+    await engine.abort(writeId);
+    await engine.abort(writeId);
+
+    await writeReady(engine, 9, namespaceA, 'leased');
+    const hit = await engine.acquire(hash(9), namespaceA, 2);
+    await expect(engine.invalidate(hash(9))).rejects.toThrow(/读取中/);
+    engine.release(hit!.leaseId);
+    await expect(engine.invalidate(hash(9))).resolves.toBe(true);
+    await expect(engine.invalidate(hash(9))).resolves.toBe(false);
+  });
 });
 
 async function writeReady(engine: CacheEngine, value: number, namespaceId: string, body: string) {

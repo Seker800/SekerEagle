@@ -123,6 +123,57 @@ describe('MediaCacheController', () => {
       { ifNoneMatch: '"etag-1"' },
     );
   });
+
+  it('rejects malformed custom URLs before authentication and bypasses ineligible body shapes', async () => {
+    const authenticatedOwner = vi.fn(async () => 'owner-a');
+    const fetchUpstream = vi.fn(
+      async () =>
+        new Response('unknown-size', {
+          status: 200,
+          headers: {
+            'content-type': 'image/webp',
+            'x-sekereagle-desktop-cache': 'public-derived-v1',
+          },
+        }),
+    );
+    const controller = new MediaCacheController({
+      serverUrl: 'https://example.com',
+      cache: engine,
+      authenticatedOwner,
+      fetchUpstream,
+      now: () => now,
+    });
+
+    expect(await controller.resolve('https://attacker.example/image.webp')).toMatchObject({
+      source: 'error',
+      status: 404,
+    });
+    expect(authenticatedOwner).not.toHaveBeenCalled();
+    const response = await controller.resolve(mediaUrl);
+    expect(response.source).toBe('upstream');
+    expect(engine.getStats().entryCount).toBe(0);
+  });
+
+  it('purges an expired hit when the server withdraws persistence eligibility', async () => {
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(
+        new Response('now-private', {
+          status: 200,
+          headers: { 'content-type': 'image/webp', 'content-length': '11' },
+        }),
+      );
+    const controller = createController(engine, fetchUpstream, () => now);
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'cache') engine.release(first.leaseId);
+    now += 5 * 60_000 + 1;
+
+    const result = await controller.resolve(mediaUrl);
+
+    expect(result.source).toBe('upstream');
+    expect(engine.getStats().entryCount).toBe(0);
+  });
 });
 
 function createController(

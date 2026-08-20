@@ -128,4 +128,66 @@ describe('CacheIndex', () => {
     index.close();
     expect((await readFile(path.join(directory, 'index.sqlite'))).byteLength).toBeGreaterThan(0);
   });
+
+  it('renews only an owner-isolated ready entry and supports global eviction ordering', () => {
+    for (const value of [10, 11]) {
+      index.beginWrite({
+        keyHash: hash(value),
+        namespaceId: namespaceA,
+        kind: 'RENDITION',
+        now: value,
+      });
+      index.commitReady(hash(value), {
+        logicalBytes: 1,
+        allocatedBytes: 4_096,
+        contentType: 'image/webp',
+        etag: null,
+        lastModified: null,
+        verifiedAt: value,
+        authorizationLeaseUntil: value + 300,
+      });
+    }
+
+    expect(
+      index.renewAuthorization(hash(10), namespaceB, {
+        verifiedAt: 20,
+        authorizationLeaseUntil: 320,
+        etag: '"wrong-owner"',
+        lastModified: null,
+      }),
+    ).toBe(false);
+    expect(
+      index.renewAuthorization(hash(10), namespaceA, {
+        verifiedAt: 20,
+        authorizationLeaseUntil: 320,
+        etag: '"renewed"',
+        lastModified: 'now',
+      }),
+    ).toBe(true);
+    expect(index.findReady(hash(10))).toMatchObject({ etag: '"renewed"', verifiedAt: 20 });
+    expect(index.listGlobalEvictionCandidates('PROBATION', 1)).toEqual([hash(10)]);
+    expect(index.getTotalStats()).toEqual({
+      entryCount: 2,
+      logicalBytes: 2,
+      allocatedBytes: 8_192,
+    });
+  });
+
+  it('rejects malformed hashes, namespaces, timestamps, sizes, segments and batches', () => {
+    expect(() => index.findReady(Buffer.alloc(31))).toThrow(/hash/);
+    expect(() =>
+      index.beginWrite({ keyHash: hash(12), namespaceId: 'bad', kind: 'RENDITION', now: 1 }),
+    ).toThrow(/namespace/);
+    expect(() =>
+      index.beginWrite({ keyHash: hash(12), namespaceId: namespaceA, kind: 'RENDITION', now: -1 }),
+    ).toThrow(/时间戳/);
+    expect(() => index.listEvictionCandidates(namespaceA, 'INVALID' as never, 1)).toThrow(/分段/);
+    expect(() => index.listGlobalEvictionCandidates('PROBATION', 0)).toThrow(/批次/);
+    expect(index.deleteEntries([])).toEqual({ entries: 0, allocatedBytes: 0 });
+    expect(index.getStats(namespaceB)).toEqual({
+      entryCount: 0,
+      logicalBytes: 0,
+      allocatedBytes: 0,
+    });
+  });
 });

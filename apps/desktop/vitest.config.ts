@@ -5,6 +5,8 @@ export default defineConfig({
     environment: 'node',
     coverage: {
       provider: 'v8',
+      include: ['src/**/*.ts'],
+      exclude: ['src/main/main.ts', 'src/preload/preload.ts', 'src/utility/entry.ts'],
       thresholds: {
         branches: 80,
         functions: 80,

@@ -61,4 +61,17 @@ describe('CacheStore', () => {
     await expect(store.remove(keyHash)).resolves.toBe(true);
     await expect(store.remove(keyHash)).resolves.toBe(false);
   });
+
+  it('cleans only interrupted hashes from the temp generation', async () => {
+    const first = await store.createPartial(keyHash);
+    const otherHash = Buffer.alloc(32, 8);
+    const second = await store.createPartial(otherHash);
+    await first.handle.close();
+    await second.handle.close();
+
+    await expect(store.removePartialsForHashes([keyHash])).resolves.toBe(1);
+    await expect(store.removePartialsForHashes([])).resolves.toBe(0);
+    await expect(store.removePartialsForHashes([keyHash])).resolves.toBe(0);
+    await store.abandonPartial(second);
+  });
 });
