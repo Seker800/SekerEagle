@@ -72,6 +72,7 @@ test('conditional media reads preserve an object-storage not-modified response',
           storageKey: 'users/owner-a/assets/asset-1/renditions/1/preview.webp',
           mimeType: 'image/webp',
           kind: 'PREVIEW',
+          asset: { isPrivate: false },
         }),
       },
     } as never,
@@ -90,6 +91,35 @@ test('conditional media reads preserve an object-storage not-modified response',
   assert.equal(result.notModified, true);
   assert.equal(result.etag, 'etag-1');
   assert.equal(result.stream, null);
+  assert.equal(result.desktopCacheEligible, true);
+});
+
+test('derived-media persistence eligibility comes from the actual asset, not session capability', async () => {
+  const service = new EagleMediaService(
+    {
+      eagleAssetRendition: {
+        findFirst: async () => ({
+          storageKey: 'users/owner-a/assets/private/renditions/1/preview.webp',
+          mimeType: 'image/webp',
+          kind: 'PREVIEW',
+          asset: { isPrivate: true },
+        }),
+      },
+    } as never,
+    {
+      getObject: async () => ({ Body: {}, ContentType: 'image/webp', ContentLength: 3 }),
+    } as never,
+  );
+
+  const result = await service.getRendition(
+    'owner-a',
+    'asset-1',
+    'rendition-1',
+    undefined,
+    true,
+  );
+
+  assert.equal(result.desktopCacheEligible, false);
 });
 
 test('pyramid descriptor is owner-scoped and only exposes the current ready revision', async () => {
@@ -164,6 +194,7 @@ test('pyramid tiles validate coordinates and remain owner-scoped', async () => {
           tileSize: 512,
           maxLevel: 13,
           format: 'webp',
+          asset: { isPrivate: false },
         }),
       },
     } as never,
