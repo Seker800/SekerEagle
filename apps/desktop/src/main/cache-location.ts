@@ -18,7 +18,7 @@ export function desktopCacheRoot(options: {
 }
 
 function absoluteOrFallback(
-  paths: typeof path.posix | typeof path.win32,
+  paths: { isAbsolute(candidate: string): boolean },
   candidate: string | undefined,
   fallback: string,
 ): string {

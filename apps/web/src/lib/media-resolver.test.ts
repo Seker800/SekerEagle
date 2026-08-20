@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   resolveEagleMediaPath,
   resolveEagleRenditionUrl,
+  type DesktopMediaRequest,
   type SekerDesktopBridge,
 } from './media-resolver';
 
@@ -21,7 +22,7 @@ describe('media resolver', () => {
   });
 
   it('uses the narrow desktop bridge for immutable renditions and tiles', () => {
-    const createMediaUrl = vi.fn((media) =>
+    const createMediaUrl = vi.fn((media: DesktopMediaRequest) =>
       media.kind === 'RENDITION'
         ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`
         : `sekereagle-media://tile/${media.assetId}/${media.pyramidId}/${media.level}/${media.x}/${media.y}`,

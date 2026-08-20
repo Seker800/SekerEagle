@@ -422,7 +422,9 @@ export class CacheEngine {
 
   private async ensureDiskSafetyReserve(expectedLength: number): Promise<void> {
     if (!this.enforceDiskSafety) return;
-    let { freeBytes, totalBytes } = await this.diskSpace();
+    const diskSpace = await this.diskSpace();
+    let { freeBytes } = diskSpace;
+    const { totalBytes } = diskSpace;
     if (!Number.isFinite(freeBytes) || !Number.isFinite(totalBytes) || totalBytes <= 0) {
       throw new Error('无法确认缓存磁盘剩余空间。');
     }

@@ -272,9 +272,8 @@ function isCacheable(response: Response, media: DesktopMediaIdentity): boolean {
 }
 
 function maximumCacheBytes(media: DesktopMediaIdentity): number {
-  return media.kind === 'TILE' || media.renditionKind === 'THUMBNAIL'
-    ? MAX_TILE_BYTES
-    : MAX_RENDITION_BYTES;
+  if (media.kind === 'TILE') return MAX_TILE_BYTES;
+  return media.renditionKind === 'THUMBNAIL' ? MAX_THUMBNAIL_BYTES : MAX_RENDITION_BYTES;
 }
 
 function cacheableLength(response: Response, maximumBytes = MAX_RENDITION_BYTES): number | null {

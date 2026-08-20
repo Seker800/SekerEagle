@@ -22,7 +22,7 @@ export class MediaRequestLimiter {
         this.release();
         return response;
       }
-      const reader = response.body.getReader();
+      const reader = response.body.getReader() as ReadableStreamDefaultReader<Uint8Array>;
       let released = false;
       const release = () => {
         if (released) return;
