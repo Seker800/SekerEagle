@@ -122,6 +122,7 @@ export function EagleImageViewer({
   const sourceRef = useRef<ViewerSource>(source);
   const desiredSourceKeyRef = useRef(sourceKey);
   const sourceKeyRef = useRef('');
+  const openedSourceKeyRef = useRef('');
   const activeImageKeyRef = useRef(image.assetId ?? image.src);
   const pendingSourceRef = useRef<PendingSource | null>(null);
   const pendingViewportRef = useRef<ViewportSnapshot | null>(null);
@@ -147,6 +148,7 @@ export function EagleImageViewer({
           zoom: viewer.viewport.getZoom(true),
         }
       : null;
+    openedSourceKeyRef.current = '';
     sourceKeyRef.current = pending.sourceKey;
     activeImageKeyRef.current = pending.imageKey;
     setStatus('loading');
@@ -184,6 +186,8 @@ export function EagleImageViewer({
           navigatorAutoFade: true,
           animationTime: DIRECT_INTERACTION_ANIMATION_SECONDS,
           blendTime: 0,
+          // Electron's WebGL drawer can miss its first texture commit until the viewport changes.
+          drawer: 'canvas',
           immediateRender: true,
           loadDestinationTilesOnAnimation: true,
           minScrollDeltaTime: 0,
@@ -192,6 +196,7 @@ export function EagleImageViewer({
           visibilityRatio: 0.5,
         }) as unknown as ViewerHandle;
         viewer.addHandler('open', () => {
+          openedSourceKeyRef.current = sourceKeyRef.current;
           const pendingViewport = pendingViewportRef.current;
           pendingViewportRef.current = null;
           if (pendingViewport) {
@@ -202,7 +207,10 @@ export function EagleImageViewer({
           viewer.forceRedraw();
           setStatus('ready');
         });
-        viewer.addHandler('open-failed', () => setStatus('error'));
+        viewer.addHandler('open-failed', () => {
+          openedSourceKeyRef.current = '';
+          setStatus('error');
+        });
         viewer.addHandler('canvas-click', (event) => {
           if (!event.quick) return;
           const item = viewer.world.getItemAt(0);
@@ -252,6 +260,7 @@ export function EagleImageViewer({
     const imageKey = image.assetId ?? image.src;
     const preserveViewport =
       activeImageKeyRef.current === imageKey &&
+      openedSourceKeyRef.current === sourceKeyRef.current &&
       sourceKeyRef.current.startsWith('preview:') &&
       sourceKey.startsWith('pyramid:');
     pendingSourceRef.current = { imageKey, preserveViewport, source, sourceKey };

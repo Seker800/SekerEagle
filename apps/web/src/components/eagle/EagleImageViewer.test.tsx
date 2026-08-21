@@ -113,6 +113,7 @@ describe('EagleImageViewer', () => {
         animationTime: 0.08,
         blendTime: 0,
         constrainDuringPan: false,
+        drawer: 'canvas',
         imageLoaderLimit: 4,
         loadDestinationTilesOnAnimation: true,
         maxImageCacheCount: 64,
@@ -199,9 +200,32 @@ describe('EagleImageViewer', () => {
     expect(getBoundsMock).toHaveBeenCalled();
   });
 
-  it('upgrades to pyramid tiles after interaction settles and preserves the viewport', async () => {
+  it('opens pyramid tiles at their natural home view when the preview has not opened yet', async () => {
     const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
+
+    expect(openMock).toHaveBeenCalledTimes(1);
+    expect(openMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        width: descriptor.width,
+        height: descriptor.height,
+        tileSize: descriptor.tileSize,
+      }),
+    );
+    expect(getCenterMock).not.toHaveBeenCalled();
+    expect(getZoomMock).not.toHaveBeenCalled();
+
+    act(() => handlers.get('open')?.());
+    expect(zoomToMock).not.toHaveBeenCalled();
+    expect(panToMock).not.toHaveBeenCalled();
+  });
+
+  it('upgrades to pyramid tiles after interaction settles and preserves an opened viewport', async () => {
+    const view = render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+    act(() => handlers.get('open')?.());
 
     vi.useFakeTimers();
     view.rerender(<EagleImageViewer image={image} descriptor={descriptor} onClose={vi.fn()} />);
