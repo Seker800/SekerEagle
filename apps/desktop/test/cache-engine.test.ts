@@ -197,6 +197,27 @@ describe('CacheEngine', () => {
     await unsafe.close();
   });
 
+  it('caps the proportional disk reserve so large disks can still cache above the 5 GiB floor', async () => {
+    const largeDisk = new CacheEngine({
+      cacheRoot: path.join(root, 'large-disk'),
+      limitBytes: 10 * 1024 ** 3,
+      diskSpace: async () => ({ freeBytes: 6 * 1024 ** 3, totalBytes: 500 * 1024 ** 3 }),
+    });
+    await largeDisk.initialize();
+
+    const writeId = await largeDisk.beginWrite({
+      keyHash: hash(24),
+      namespaceId: namespaceA,
+      assetId: asset(24),
+      kind: 'RENDITION',
+      expectedLength: 1,
+      now: 1,
+    });
+
+    await largeDisk.abort(writeId);
+    await largeDisk.close();
+  });
+
   it('invalidates every derivative for one asset without crossing owner namespaces', async () => {
     await engine.setLimitBytes(64 * 1024);
     await writeReady(engine, 20, namespaceA, 'asset-a-rendition', asset(20));
