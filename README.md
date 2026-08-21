@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>让灵感，各归其位。</strong><br />
-  独立、自托管、多用户隔离的个人视觉素材库。
+  由采集插件、桌面应用、自托管服务端与网页端组成的个人视觉素材系统。
 </p>
 
 <p align="center">
@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#产品组成">产品组成</a> ·
   <a href="#功能一览">功能</a> ·
   <a href="#快速开始">快速开始</a> ·
   <a href="#从-eagle-迁移">Eagle 迁移</a> ·
@@ -30,10 +31,23 @@
   <a href="#文档导航">文档</a>
 </p>
 
+## 产品组成
+
+SekerEagle 不是单一的网页应用，而是一套围绕自托管素材库协同工作的客户端、采集入口与服务端：
+
+| 组成         | 负责什么                                                                       | 形态                                               |
+| ------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| **采集插件** | 从网页采集原图、来源与描述；从 Eagle 导出可校验的迁移快照                      | Chrome Manifest V3 扩展 + Eagle 导出插件           |
+| **桌面应用** | 连接本机、局域网或公网服务，在统一界面中管理素材，并用可重建的本机缓存加速浏览 | Electron 桌面客户端，当前以 macOS 为主             |
+| **服务端**   | 统一处理认证、用户隔离、上传、去重、媒体加工、检索与数据持久化                 | Gateway + NestJS API + Worker + PostgreSQL + MinIO |
+| **网页端**   | 提供瀑布流浏览、筛选、标签、智能文件夹、预览和管理界面                         | React / Vite Web 应用，可直接通过浏览器使用        |
+
+各部分通过同一个 gateway 协作：桌面应用和网页端共享同一套服务端数据，采集插件只负责把素材可靠送入你的素材库。Eagle 本机迁移器与可选的本地 MLX 向量服务提供批量迁移和智能标签能力。
+
 ![SekerEagle 素材库总览](docs/screenshots/library-overview.jpg)
 
-SekerEagle 把散落的图片、海报、界面参考和短视频收进自己的素材库：用瀑布流浏览，
-用标签、颜色、评分、格式和智能文件夹整理，再通过浏览器扩展或 Eagle 迁移器持续收集。
+这套系统把散落的图片、海报、界面参考和短视频收进自己的素材库：用桌面应用或网页端浏览，
+用标签、颜色、评分、格式和智能文件夹整理，再通过采集插件或 Eagle 迁移器持续收集。
 原文件与元数据保存在你自己的 PostgreSQL 和 MinIO 中；默认部署不包含遥测。
 
 > [!IMPORTANT]
@@ -128,6 +142,7 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 | --------------------- | :---------: | ------------------------------------------------------ |
 | macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                           |
 | Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway         |
+| macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存   |
 | Web 素材库            |     ✅      | 桌面浏览器优先                                         |
 | Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                              |
 | Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                              |
@@ -223,8 +238,10 @@ MinIO 原图 + PostgreSQL 元数据 + worker 派生任务
 
 ```mermaid
 flowchart LR
-  Browser["Web / Chrome 扩展"] --> Gateway["同源 Gateway"]
+  Capture["Chrome 采集扩展"] --> Gateway["统一 Gateway"]
   Eagle["Eagle 导出插件 / 迁移器"] --> Gateway
+  Desktop["桌面应用"] --> Gateway
+  Web["网页端"] --> Gateway
   Gateway --> API["NestJS API"]
   API --> Postgres[("PostgreSQL\n业务事实源")]
   API --> MinIO[("MinIO\n原图与派生文件")]
@@ -233,6 +250,7 @@ flowchart LR
   Worker -. 可选 .-> MLX["本机 MLX Sidecar"]
 ```
 
+- 桌面应用加载与网页端一致的管理界面，并以按部署、按账号隔离的可重建缓存加速媒体读取。
 - NestJS 持有认证、owner 隔离、上传状态机和业务规则。
 - PostgreSQL 是业务事实源；MinIO 保存原文件与派生文件，二者通过可恢复状态机收敛。
 - worker 崩溃不会改变已经提交的素材事实，失败任务可以安全重试。

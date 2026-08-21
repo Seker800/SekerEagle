@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>A place for every spark of inspiration.</strong><br />
-  An independent, self-hosted visual asset library with multi-user isolation.
+  A personal visual asset system built from capture plugins, a desktop app, a self-hosted server, and a web app.
 </p>
 
 <p align="center">
@@ -22,6 +22,7 @@
 </p>
 
 <p align="center">
+  <a href="#product-components">Components</a> ·
   <a href="#features">Features</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#migrating-from-eagle">Eagle migration</a> ·
@@ -30,13 +31,26 @@
   <a href="#documentation">Documentation</a>
 </p>
 
+## Product components
+
+SekerEagle is not a single web application. It is a coordinated set of clients, capture tools, and self-hosted services built around one asset library:
+
+| Component           | Responsibility                                                                                                                           | Form                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **Capture plugins** | Capture original images, provenance, and descriptions from the web; export verifiable migration snapshots from Eagle                     | Chrome Manifest V3 extension + Eagle export plugin  |
+| **Desktop app**     | Connect to a local, LAN, or public server, manage assets in the shared interface, and accelerate browsing with a rebuildable local cache | Electron desktop client, currently macOS-first      |
+| **Server**          | Own authentication, user isolation, uploads, deduplication, media processing, search, and persistence                                    | Gateway + NestJS API + worker + PostgreSQL + MinIO  |
+| **Web app**         | Provide masonry browsing, filters, tags, smart folders, previews, and administration                                                     | React / Vite application used directly in a browser |
+
+Every component works through the same gateway. The desktop and web apps share the same server-side library, while capture plugins reliably deliver new assets into it. A local Eagle migrator and an optional MLX vector service add bulk migration and intelligent tag suggestions.
+
 ![SekerEagle library overview](docs/screenshots/library-overview.jpg)
 
-SekerEagle brings scattered images, posters, interface references, and short videos into one
-library. Browse them in a masonry layout, organize them with tags, colors, ratings, formats, and
-smart folders, and keep collecting through the browser extension or Eagle migration tools. Your
-original files and metadata remain in your own PostgreSQL and MinIO deployment, with no telemetry
-enabled by default.
+The system brings scattered images, posters, interface references, and short videos into one
+library. Browse them from the desktop or web app, organize them with tags, colors, ratings,
+formats, and smart folders, and keep collecting through capture plugins or Eagle migration tools.
+Your original files and metadata remain in your own PostgreSQL and MinIO deployment, with no
+telemetry enabled by default.
 
 > [!IMPORTANT]
 > SekerEagle is currently in its early public `0.1.x` stage. Core asset management and ingestion
@@ -143,16 +157,17 @@ photo management project instead.
 
 ## Support matrix
 
-| Capability                |      Status       | Notes                                                                     |
-| ------------------------- | :---------------: | ------------------------------------------------------------------------- |
-| macOS + Apple Silicon     | ✅ Supported path | Current development, deployment, and performance test environment         |
-| Docker Desktop deployment |        ✅         | PostgreSQL, MinIO, API, web, worker, and gateway                          |
-| Web asset library         |        ✅         | Desktop browsers first                                                    |
-| Chrome browser capture    |        ✅         | Unpacked Manifest V3 extension                                            |
-| Eagle snapshot migration  |        ✅         | Local CLI plus Eagle export plugin                                        |
-| Local MLX vectors         |     Optional      | Requires Apple Silicon, `uv`, and a model download                        |
-| Linux / x64               |   Experimental    | Non-vector TypeScript components may work; no complete supported path yet |
-| Native mobile app         |        ❌         | Not currently available                                                   |
+| Capability                |        Status        | Notes                                                                     |
+| ------------------------- | :------------------: | ------------------------------------------------------------------------- |
+| macOS + Apple Silicon     |  ✅ Supported path   | Current development, deployment, and performance test environment         |
+| Docker Desktop deployment |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
+| macOS desktop app         | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
+| Web asset library         |          ✅          | Desktop browsers first                                                    |
+| Chrome browser capture    |          ✅          | Unpacked Manifest V3 extension                                            |
+| Eagle snapshot migration  |          ✅          | Local CLI plus Eagle export plugin                                        |
+| Local MLX vectors         |       Optional       | Requires Apple Silicon, `uv`, and a model download                        |
+| Linux / x64               |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
+| Native mobile app         |          ❌          | Not currently available                                                   |
 
 Allocate at least 16 GiB of memory and 8 CPUs to Docker Desktop. The PostgreSQL metadata path has
 been independently benchmarked with 100,000 assets. That result does not mean object-storage
@@ -249,8 +264,10 @@ installation, PAT scopes, local/public connection modes, and supported formats.
 
 ```mermaid
 flowchart LR
-  Browser["Web / Chrome extension"] --> Gateway["Same-origin gateway"]
+  Capture["Chrome capture extension"] --> Gateway["Unified gateway"]
   Eagle["Eagle export plugin / migrator"] --> Gateway
+  Desktop["Desktop app"] --> Gateway
+  Web["Web app"] --> Gateway
   Gateway --> API["NestJS API"]
   API --> Postgres[("PostgreSQL\nsource of truth")]
   API --> MinIO[("MinIO\noriginals and derivatives")]
@@ -259,6 +276,8 @@ flowchart LR
   Worker -. optional .-> MLX["Local MLX sidecar"]
 ```
 
+- The desktop app loads the same management interface as the web app and accelerates media reads
+  with a rebuildable cache isolated by deployment and account.
 - NestJS owns authentication, owner isolation, upload state machines, and business rules.
 - PostgreSQL is the source of truth. MinIO stores originals and derivatives, and recoverable state
   machines converge changes across both systems.
