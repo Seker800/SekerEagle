@@ -8,6 +8,7 @@ import {
   IconLock,
   IconLogout,
   IconRefresh,
+  IconSettings,
   IconTrash,
 } from '@tabler/icons-react';
 import { request } from '../../lib/api-client';
@@ -18,7 +19,7 @@ import {
   updatePrivacyVisibility,
   type PrivacyVisibilityState,
 } from '../../lib/privacy-visibility-api';
-import { getDesktopCacheBridge, type DesktopCacheStatus } from '../../lib/media-resolver';
+import { getDesktopConnectionBridge } from '../../lib/media-resolver';
 
 interface PersonalAccessToken {
   id: string;
@@ -52,12 +53,6 @@ function getTokenStatus(token: PersonalAccessToken): 'active' | 'expired' | 'rev
 
 function formatTokenExpiry(expiresAt: string | null): string {
   return expiresAt ? formatDate(expiresAt) : '永久有效';
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KiB`;
-  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
-  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }
 
 const statusLabels = { active: '有效', expired: '已过期', revoked: '已撤销' } as const;
@@ -107,11 +102,7 @@ export function AccountHome({
   const [privacyError, setPrivacyError] = useState('');
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
-  const desktopCache = getDesktopCacheBridge();
-  const [cacheStatus, setCacheStatus] = useState<DesktopCacheStatus | null>(null);
-  const [cacheLimitGiB, setCacheLimitGiB] = useState(10);
-  const [cacheBusy, setCacheBusy] = useState(false);
-  const [cacheError, setCacheError] = useState('');
+  const desktopConnection = getDesktopConnectionBridge();
 
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
@@ -139,50 +130,6 @@ export function AccountHome({
       )
       .finally(() => setPrivacyLoading(false));
   }, [providedPrivacyVisibility]);
-
-  const loadCacheStatus = useCallback(async () => {
-    if (!desktopCache) return;
-    try {
-      const status = await desktopCache.getCacheStatus();
-      setCacheStatus(status);
-      setCacheLimitGiB(Math.round(status.limitBytes / 1024 ** 3));
-      setCacheError('');
-    } catch (cause) {
-      setCacheError(cause instanceof Error ? cause.message : '加载本地缓存状态失败');
-    }
-  }, [desktopCache]);
-
-  useEffect(() => {
-    void loadCacheStatus();
-  }, [loadCacheStatus]);
-
-  async function saveCacheLimit() {
-    if (!desktopCache) return;
-    setCacheBusy(true);
-    setCacheError('');
-    try {
-      await desktopCache.setCacheLimitGiB(cacheLimitGiB);
-      await loadCacheStatus();
-    } catch (cause) {
-      setCacheError(cause instanceof Error ? cause.message : '保存缓存设置失败');
-    } finally {
-      setCacheBusy(false);
-    }
-  }
-
-  async function clearDesktopCache() {
-    if (!desktopCache || !window.confirm('确定清空当前账号的本地媒体缓存吗？')) return;
-    setCacheBusy(true);
-    setCacheError('');
-    try {
-      await desktopCache.clearCache();
-      await loadCacheStatus();
-    } catch (cause) {
-      setCacheError(cause instanceof Error ? cause.message : '清空本地缓存失败');
-    } finally {
-      setCacheBusy(false);
-    }
-  }
 
   async function changePrivacyVisibility(enabled: boolean, durationHours: number) {
     setPrivacyLoading(true);
@@ -292,80 +239,23 @@ export function AccountHome({
       </header>
 
       <div className="account-content">
-        {desktopCache ? (
+        {desktopConnection ? (
           <section className="account-panel desktop-cache-panel" id="desktop-cache">
             <div className="panel-heading">
               <div>
                 <p className="account-kicker">桌面客户端</p>
                 <h2>本地媒体缓存</h2>
-                <p>常用缩略图和切片保存在本机，按当前账号隔离并自动淘汰旧文件。</p>
+                <p>容量、占用、命中率、磁盘空间与清理操作统一放在桌面设置中。</p>
               </div>
               <IconDatabase size={22} />
             </div>
-            <div className="desktop-cache-stats">
-              <span>
-                <strong>
-                  {cacheStatus
-                    ? `${formatBytes(cacheStatus.globalAllocatedBytes)} / ${formatBytes(cacheStatus.limitBytes)}`
-                    : '—'}
-                </strong>
-                全部账号占用
-              </span>
-              <span>
-                <strong>{cacheStatus ? formatBytes(cacheStatus.allocatedBytes) : '—'}</strong>
-                当前账号占用
-              </span>
-              <span>
-                <strong>
-                  {cacheStatus ? cacheStatus.entryCount.toLocaleString('zh-CN') : '—'}
-                </strong>
-                {cacheStatus ? ' 个文件' : '文件数'}
-              </span>
-              <span>
-                <strong>
-                  {cacheStatus
-                    ? `${Math.round((cacheStatus.hitCount / Math.max(1, cacheStatus.hitCount + cacheStatus.missCount)) * 100)}%`
-                    : '—'}
-                </strong>
-                命中率
-              </span>
-              <span>
-                <strong>{cacheStatus ? formatBytes(cacheStatus.savedBytes) : '—'}</strong>已节省流量
-              </span>
-            </div>
-            <div className="desktop-cache-controls">
-              <label>
-                缓存容量上限
-                <input
-                  type="number"
-                  aria-label="缓存容量上限"
-                  min={1}
-                  max={100}
-                  step={1}
-                  value={cacheLimitGiB}
-                  disabled={cacheBusy}
-                  onChange={(event) => setCacheLimitGiB(Number(event.currentTarget.value))}
-                />
-                <small>1–100 GiB，默认 10 GiB</small>
-              </label>
-              <button
-                className="primary-button"
-                type="button"
-                disabled={cacheBusy}
-                onClick={() => void saveCacheLimit()}
-              >
-                保存缓存设置
-              </button>
-              <button
-                className="quiet-button"
-                type="button"
-                disabled={cacheBusy}
-                onClick={() => void clearDesktopCache()}
-              >
-                <IconTrash size={16} /> 清空当前账号缓存
-              </button>
-            </div>
-            {cacheError ? <p className="auth-error">{cacheError}</p> : null}
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => void desktopConnection.openConnectionManager()}
+            >
+              <IconSettings size={16} /> 打开桌面设置
+            </button>
           </section>
         ) : null}
         <section className="account-panel privacy-panel" id="privacy">

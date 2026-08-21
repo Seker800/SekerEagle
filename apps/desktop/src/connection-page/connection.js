@@ -5,6 +5,12 @@ const testButton = document.querySelector('#test');
 const cancelButton = document.querySelector('#cancel');
 const resetButton = document.querySelector('#reset');
 const submitButton = form.querySelector('button[type="submit"]');
+const cacheForm = document.querySelector('#cache-form');
+const cacheMessage = document.querySelector('#cache-message');
+const saveCacheButton = document.querySelector('#save-cache');
+const clearCacheButton = document.querySelector('#clear-cache');
+const openCacheFolderButton = document.querySelector('#open-cache-folder');
+let canClearCurrentAccount = false;
 
 void load();
 
@@ -22,13 +28,60 @@ resetButton.addEventListener('click', () => {
   if (!window.confirm('这会解除当前图库身份绑定。仅在这些地址确实属于另一套图库时继续。')) return;
   void run(async () => render(await bridge.resetDeploymentBinding()));
 });
+cacheForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const limitGiB = Number(cacheForm.elements.cacheLimitGiB.value);
+  void runCache(async () => {
+    await bridge.setCacheLimitGiB(limitGiB);
+    await loadCacheStatus();
+    cacheMessage.textContent = '缓存容量设置已保存。';
+  });
+});
+clearCacheButton.addEventListener('click', () => {
+  if (!window.confirm('确定清空当前账号的本地媒体缓存吗？')) return;
+  void runCache(async () => {
+    const result = await bridge.clearCache();
+    await loadCacheStatus();
+    cacheMessage.textContent = `已清理 ${result.deleted.toLocaleString('zh-CN')} 个缓存文件${result.deferred ? `，另有 ${result.deferred.toLocaleString('zh-CN')} 个文件将在使用结束后清理` : ''}。`;
+  });
+});
+openCacheFolderButton.addEventListener('click', () => {
+  void runCache(async () => bridge.openCacheFolder());
+});
 
 async function load() {
-  await run(async () => {
-    const state = await bridge.getConnectionManagerState();
-    fill(state.settings);
-    render(state);
-  });
+  await Promise.all([
+    run(async () => {
+      const state = await bridge.getConnectionManagerState();
+      fill(state.settings);
+      render(state);
+    }),
+    runCache(loadCacheStatus),
+  ]);
+}
+
+async function loadCacheStatus() {
+  const state = await bridge.getCacheManagerStatus();
+  const account = state.currentAccountStats;
+  document.querySelector('#cache-global-usage').textContent =
+    `${formatBytes(state.globalAllocatedBytes)} / ${formatBytes(state.limitBytes)}`;
+  document.querySelector('#cache-account-usage').textContent = account
+    ? formatBytes(account.allocatedBytes)
+    : '未登录';
+  document.querySelector('#cache-entry-count').textContent = (
+    account?.entryCount ?? state.globalEntryCount
+  ).toLocaleString('zh-CN');
+  document.querySelector('#cache-hit-rate').textContent = account
+    ? `${Math.round((account.hitCount / Math.max(1, account.hitCount + account.missCount)) * 100)}%`
+    : '—';
+  document.querySelector('#cache-saved-bytes').textContent = account
+    ? formatBytes(account.savedBytes)
+    : '—';
+  document.querySelector('#cache-free-space').textContent = formatBytes(state.availableBytes);
+  document.querySelector('#cache-path').textContent = state.cachePath;
+  cacheForm.elements.cacheLimitGiB.value = String(Math.round(state.limitBytes / 1024 ** 3));
+  canClearCurrentAccount = Boolean(account);
+  clearCacheButton.disabled = !canClearCurrentAccount;
 }
 
 function formValue() {
@@ -92,7 +145,33 @@ async function run(action) {
   }
 }
 
+async function runCache(action) {
+  setCacheBusy(true);
+  cacheMessage.textContent = '正在读取缓存状态…';
+  try {
+    await action();
+    if (cacheMessage.textContent === '正在读取缓存状态…') cacheMessage.textContent = '';
+  } catch (error) {
+    cacheMessage.textContent = error instanceof Error ? error.message : '缓存设置失败。';
+  } finally {
+    setCacheBusy(false);
+  }
+}
+
 function setBusy(busy) {
   for (const element of form.elements) element.disabled = busy;
   submitButton.disabled = busy;
+}
+
+function setCacheBusy(busy) {
+  for (const element of cacheForm.elements) element.disabled = busy;
+  saveCacheButton.disabled = busy;
+  clearCacheButton.disabled = busy || !canClearCurrentAccount;
+  openCacheFolderButton.disabled = busy;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024 ** 2) return `${Math.round(bytes / 1024)} KiB`;
+  if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} MiB`;
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }

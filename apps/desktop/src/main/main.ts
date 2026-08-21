@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, statfs } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCacheRoot } from './cache-location';
 import { Readable } from 'node:stream';
@@ -10,6 +10,7 @@ import {
   powerMonitor,
   protocol,
   session,
+  shell,
   utilityProcess,
   type UtilityProcess,
   type IpcMainInvokeEvent,
@@ -166,13 +167,7 @@ async function startCacheProcess(
   const client = new CacheRpcClient(endpoint);
   try {
     await client.initialize({
-      cacheRoot: desktopCacheRoot({
-        platform: process.platform,
-        home: app.getPath('home'),
-        appData: app.getPath('appData'),
-        localAppData: process.env.LOCALAPPDATA,
-        xdgCacheHome: process.env.XDG_CACHE_HOME,
-      }),
+      cacheRoot: currentDesktopCacheRoot(),
       limitBytes,
     });
   } catch (error) {
@@ -244,8 +239,12 @@ function cacheBackend() {
 }
 
 function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsStore): void {
-  const namespace = async (event: IpcMainInvokeEvent): Promise<string> => {
-    assertTrustedIpcSender(event);
+  const namespace = async (
+    event: IpcMainInvokeEvent,
+    allowConnectionPage = false,
+  ): Promise<string> => {
+    if (allowConnectionPage) assertTrustedConnectionSender(event);
+    else assertTrustedIpcSender(event);
     const identity = await owner.get();
     if (!identity) throw new Error('需要重新登录。');
     return buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
@@ -264,19 +263,57 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
       limitBytes: currentSettings.cacheLimitBytes,
     };
   });
+  ipcMain.handle('desktop:get-cache-manager-status', async (event) => {
+    assertConnectionPageSender(event);
+    const cacheRoot = currentDesktopCacheRoot();
+    const [globalStats, currentSettings, fileSystem, identity] = await Promise.all([
+      currentCache().getStats(),
+      settings.load(),
+      statfs(cacheRoot),
+      owner.get(),
+    ]);
+    const currentAccountStats = identity
+      ? await currentCache().getNamespaceStats(
+          buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId),
+        )
+      : null;
+    return {
+      cachePath: cacheRoot,
+      availableBytes: fileSystem.bavail * fileSystem.bsize,
+      limitBytes: currentSettings.cacheLimitBytes,
+      globalAllocatedBytes: globalStats.allocatedBytes,
+      globalEntryCount: globalStats.entryCount,
+      currentAccountStats,
+    };
+  });
   ipcMain.handle('desktop:set-cache-limit', async (event, limitGiB: unknown) => {
-    assertTrustedIpcSender(event);
+    assertTrustedConnectionSender(event);
     if (typeof limitGiB !== 'number') throw new Error('缓存容量无效。');
     const updated = await settings.setCacheLimitGiB(limitGiB);
     cacheLimitBytes = updated.cacheLimitBytes;
     await currentCache().setLimitBytes(updated.cacheLimitBytes);
   });
   ipcMain.handle('desktop:clear-cache', async (event) =>
-    currentCache().clearNamespace(await namespace(event)),
+    currentCache().clearNamespace(await namespace(event, true)),
   );
+  ipcMain.handle('desktop:open-cache-folder', async (event) => {
+    assertConnectionPageSender(event);
+    const error = await shell.openPath(currentDesktopCacheRoot());
+    if (error) throw new Error(`无法打开缓存目录：${error}`);
+  });
   ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
     if (typeof assetId !== 'string') throw new Error('资源标识无效。');
     return currentCache().invalidateAsset(await namespace(event), assetId);
+  });
+}
+
+function currentDesktopCacheRoot(): string {
+  return desktopCacheRoot({
+    platform: process.platform,
+    home: app.getPath('home'),
+    appData: app.getPath('appData'),
+    localAppData: process.env.LOCALAPPDATA,
+    xdgCacheHome: process.env.XDG_CACHE_HOME,
   });
 }
 

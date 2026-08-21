@@ -15,11 +15,17 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   getCacheStatus() {
     return ipcRenderer.invoke('desktop:cache-status');
   },
+  getCacheManagerStatus() {
+    return ipcRenderer.invoke('desktop:get-cache-manager-status');
+  },
   setCacheLimitGiB(limitGiB: number) {
     return ipcRenderer.invoke('desktop:set-cache-limit', limitGiB);
   },
   clearCache() {
     return ipcRenderer.invoke('desktop:clear-cache');
+  },
+  openCacheFolder() {
+    return ipcRenderer.invoke('desktop:open-cache-folder');
   },
   invalidateAsset(assetId: string) {
     return ipcRenderer.invoke('desktop:invalidate-asset', assetId);
