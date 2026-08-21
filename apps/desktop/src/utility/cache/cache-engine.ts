@@ -428,7 +428,7 @@ export class CacheEngine {
     if (!Number.isFinite(freeBytes) || !Number.isFinite(totalBytes) || totalBytes <= 0) {
       throw new Error('无法确认缓存磁盘剩余空间。');
     }
-    const safetyReserve = Math.max(5 * 1024 ** 3, Math.floor(totalBytes * 0.05));
+    const safetyReserve = Math.min(5 * 1024 ** 3, Math.max(1024 ** 3, Math.floor(totalBytes * 0.05)));
     const requiredFreeBytes = safetyReserve + expectedLength;
     if (freeBytes < requiredFreeBytes) {
       await this.reclaimBytes(requiredFreeBytes - freeBytes);

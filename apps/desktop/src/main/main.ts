@@ -30,6 +30,7 @@ import { connectionPageAsset, isConnectionPageUrl } from './connection-page-prot
 import { DesktopConnectionResolver } from './connection-resolver';
 import { DesktopConnectionService, type DesktopConnectionSnapshot } from './connection-service';
 import { createDesktopConnectionProbe } from './connection-probe';
+import { DesktopBrowserSession } from './browser-session';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -68,6 +69,7 @@ let shuttingDown = false;
 let connectionService: DesktopConnectionService | null = null;
 let mediaController: MediaCacheController | null = null;
 let connectionRecovery: Promise<void> | null = null;
+let browserSession: DesktopBrowserSession | null = null;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -90,6 +92,10 @@ if (hasSingleInstanceLock)
     await connectCacheProcess();
 
     const currentSession = session.defaultSession;
+    browserSession = new DesktopBrowserSession(
+      (url, init) => currentSession.fetch(url, init),
+      () => serverUrl,
+    );
     connectionService = new DesktopConnectionService(
       connectionSettings,
       new DesktopConnectionResolver(
@@ -99,7 +105,7 @@ if (hasSingleInstanceLock)
     const initialConnection = await connectionService.initialize();
     if (initialConnection.active) serverUrl = initialConnection.active.url;
     const owner = new AuthenticatedOwner(() =>
-      currentSession.fetch(new URL('/api/auth/me', serverUrl).toString(), {
+      currentBrowserSession().fetch('/api/auth/me', {
         credentials: 'include',
         headers: { 'cache-control': 'no-store' },
       }),
@@ -108,11 +114,11 @@ if (hasSingleInstanceLock)
     powerMonitor.on('resume', () => {
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
-      void recoverConnection(owner, currentSession);
+      void recoverConnection(owner);
     });
     lockDownSession(currentSession);
     registerCacheIpc(owner, settings);
-    registerConnectionIpc(owner, currentSession);
+    registerConnectionIpc(owner);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -121,18 +127,18 @@ if (hasSingleInstanceLock)
       }
       owner.invalidate();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
-      void recoverConnection(owner, currentSession);
+      void recoverConnection(owner);
     });
 
-    mediaController = createMediaController(owner, currentSession);
+    mediaController = createMediaController(owner);
     protocol.handle('sekereagle-media', (request) => handleMediaRequest(request.url));
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
-    createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner, currentSession);
+    createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         const active = connectionService?.current()?.active;
-        createWindow(active ? active.url : CONNECTION_PAGE_URL, owner, currentSession);
+        createWindow(active ? active.url : CONNECTION_PAGE_URL, owner);
       }
     });
   });
@@ -317,7 +323,7 @@ function currentDesktopCacheRoot(): string {
   });
 }
 
-function registerConnectionIpc(owner: AuthenticatedOwner, currentSession: Electron.Session): void {
+function registerConnectionIpc(owner: AuthenticatedOwner): void {
   ipcMain.handle('desktop:get-connection-status', (event) => {
     assertTrustedConnectionSender(event);
     const snapshot = currentConnections();
@@ -340,7 +346,7 @@ function registerConnectionIpc(owner: AuthenticatedOwner, currentSession: Electr
     assertConnectionPageSender(event);
     const snapshot = await currentConnectionService().save(input);
     if (snapshot.active) {
-      setTimeout(() => void applyConnection(snapshot, owner, currentSession), 0).unref();
+      setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
     }
     return snapshot;
   });
@@ -348,7 +354,7 @@ function registerConnectionIpc(owner: AuthenticatedOwner, currentSession: Electr
     assertConnectionPageSender(event);
     const snapshot = await currentConnectionService().resetDeploymentBinding();
     if (snapshot.active) {
-      setTimeout(() => void applyConnection(snapshot, owner, currentSession), 0).unref();
+      setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
     }
     return snapshot;
   });
@@ -366,6 +372,11 @@ function registerConnectionIpc(owner: AuthenticatedOwner, currentSession: Electr
 function currentConnectionService(): DesktopConnectionService {
   if (!connectionService) throw new Error('连接管理尚未初始化。');
   return connectionService;
+}
+
+function currentBrowserSession(): DesktopBrowserSession {
+  if (!browserSession) throw new Error('桌面登录会话尚未初始化。');
+  return browserSession;
 }
 
 function currentConnections(): DesktopConnectionSnapshot {
@@ -406,7 +417,6 @@ function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
 function createWindow(
   initialUrl: string,
   owner: AuthenticatedOwner,
-  currentSession: Electron.Session,
 ): void {
   const window = new BrowserWindow({
     width: 1440,
@@ -440,7 +450,7 @@ function createWindow(
     'did-fail-load',
     (_event, errorCode, _description, validatedUrl, isMainFrame) => {
       if (isMainFrame && errorCode !== -3 && isAllowedAppNavigation(serverUrl, validatedUrl)) {
-        void recoverConnection(owner, currentSession);
+        void recoverConnection(owner);
       }
     },
   );
@@ -498,10 +508,7 @@ async function handleAppRequest(requestUrl: string): Promise<Response> {
   }
 }
 
-function createMediaController(
-  owner: AuthenticatedOwner,
-  currentSession: Electron.Session,
-): MediaCacheController {
+function createMediaController(owner: AuthenticatedOwner): MediaCacheController {
   const limiter = new MediaRequestLimiter(6, 64);
   return new MediaCacheController({
     serverUrl,
@@ -509,7 +516,7 @@ function createMediaController(
     authenticatedOwner: () => owner.get(),
     fetchUpstream: (mediaPath, options) =>
       limiter.fetch(() =>
-        currentSession.fetch(new URL(mediaPath, serverUrl).toString(), {
+        currentBrowserSession().fetch(mediaPath, {
           credentials: 'include',
           headers: {
             'cache-control': 'no-store',
@@ -525,7 +532,6 @@ function createMediaController(
 async function applyConnection(
   snapshot: DesktopConnectionSnapshot,
   owner: AuthenticatedOwner,
-  currentSession: Electron.Session,
 ): Promise<void> {
   if (!snapshot.active) {
     await mainWindow?.loadURL(CONNECTION_PAGE_URL);
@@ -536,19 +542,16 @@ async function applyConnection(
   if (changed) {
     owner.invalidate();
     void cacheClient?.expireAuthorizations().catch(() => undefined);
-    mediaController = createMediaController(owner, currentSession);
+    mediaController = createMediaController(owner);
   }
   if (mainWindow?.webContents.getURL() !== serverUrl) await mainWindow?.loadURL(serverUrl);
 }
 
-async function recoverConnection(
-  owner: AuthenticatedOwner,
-  currentSession: Electron.Session,
-): Promise<void> {
+async function recoverConnection(owner: AuthenticatedOwner): Promise<void> {
   if (connectionRecovery) return connectionRecovery;
   connectionRecovery = currentConnectionService()
     .retry()
-    .then((snapshot) => applyConnection(snapshot, owner, currentSession))
+    .then((snapshot) => applyConnection(snapshot, owner))
     .finally(() => {
       connectionRecovery = null;
     });

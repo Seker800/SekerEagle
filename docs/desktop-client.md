@@ -15,7 +15,7 @@ The API must list every desktop-reachable web origin in `BROWSER_TRUSTED_ORIGINS
 - Default capacity is 10 GiB; settings accept 1–100 GiB.
 - Only non-private WebP thumbnails, previews, posters, and tiles explicitly authorized by the API are stored.
 - Cache entries are isolated by deployment and account. Signing out locks old entries; clearing the current account does not delete server media.
-- Physical quota includes media allocation, SQLite/WAL files, and active partial files. Writes stop below the larger of 5 GiB or 5% free disk space, after first attempting cache eviction.
+- Physical quota includes media allocation, SQLite/WAL files, and active partial files. Writes preserve 5% free space, bounded to a 1–5 GiB reserve so a large volume does not disable caching unnecessarily; cache eviction runs before a write is rejected.
 - macOS data lives in `~/Library/Caches/SekerEagle/MediaCache/v2`, is excluded from Spotlight and Time Machine, and may be removed by the OS or user at any time.
 
 ## Failure and recovery
