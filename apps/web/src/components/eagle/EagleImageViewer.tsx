@@ -185,7 +185,7 @@ export function EagleImageViewer({
           animationTime: DIRECT_INTERACTION_ANIMATION_SECONDS,
           blendTime: 0,
           immediateRender: true,
-          loadDestinationTilesOnAnimation: false,
+          loadDestinationTilesOnAnimation: true,
           minScrollDeltaTime: 0,
           zoomPerScroll: 1.12,
           constrainDuringPan: false,
