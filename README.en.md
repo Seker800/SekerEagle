@@ -10,11 +10,7 @@
 
 <p align="center">
   <strong>A place for every spark of inspiration.</strong><br />
-  An open-source, self-hosted visual asset manager for collecting, organizing, searching, and migrating images and videos.
-</p>
-
-<p align="center">
-  <sub>Personal digital asset management (DAM) · Eagle library migration · Web image capture · Desktop and web apps · Local AI tagging</sub>
+  A self-hosted image and video library with web capture, Eagle migration, desktop, and web apps.
 </p>
 
 <p align="center">
@@ -27,7 +23,6 @@
 
 <p align="center">
   <a href="#product-components">Components</a> ·
-  <a href="#why-sekereagle">Why SekerEagle</a> ·
   <a href="#features">Features</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#migrating-from-eagle">Eagle migration</a> ·
@@ -35,21 +30,6 @@
   <a href="#architecture-and-data-boundaries">Architecture</a> ·
   <a href="#documentation">Documentation</a>
 </p>
-
-## Why SekerEagle?
-
-SekerEagle is an open-source image and video library for designers, developers, and visual
-collectors who want to keep their assets on infrastructure they control. It is built for people
-looking for a **self-hosted image organizer**, a **personal digital asset management (DAM) system**,
-or a reliable **Eagle alternative and migration path** spanning web capture, bulk import, long-term
-organization, and search.
-
-| What matters                      | SekerEagle's approach                                                                                  |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Ownership of files and metadata   | Store originals and records in your own PostgreSQL and MinIO deployment; no telemetry by default       |
-| A dependable path out of Eagle    | Immutable snapshots, preflight checks, resumable uploads, idempotent replay, and verification          |
-| Usability with large libraries    | Masonry browsing, compound filters, smart folders, background processing, and a 100k metadata baseline |
-| Freedom from AI and cloud lock-in | Optional local tagging on Apple Silicon; the core library works without it                             |
 
 ## Product components
 
