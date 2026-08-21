@@ -46,7 +46,7 @@
     "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
     "deepmerge-ts": "^8.0.0",
     "eslint": "^9.39.1",
