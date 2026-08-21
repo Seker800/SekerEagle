@@ -11,7 +11,7 @@
     "bootstrap:admin": "node dist/bootstrap-admin.js",
     "maintenance:reclassify-small-imported-tags": "node dist/maintenance/reclassify-small-imported-manual-tags.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "pretest": "npm --prefix ../.. run build --workspace @sekereagle/config",
+    "pretest": "npm --prefix ../.. run build --workspace @sekereagle/config && npm --prefix ../.. run build --workspace @sekereagle/eagle-filter-core && npm --prefix ../.. run build --workspace @sekereagle/vector-core",
     "test": "node --require ts-node/register --test src/**/*.test.ts src/*/**/*.test.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
