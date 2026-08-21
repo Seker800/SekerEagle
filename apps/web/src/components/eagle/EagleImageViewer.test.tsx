@@ -7,6 +7,7 @@ import { EagleImageViewer } from './EagleImageViewer';
 const {
   applyConstraintsMock,
   destroyMock,
+  forceRedrawMock,
   getBoundsMock,
   getCenterMock,
   getZoomMock,
@@ -21,6 +22,7 @@ const {
 } = vi.hoisted(() => {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
   const hoistedDestroyMock = vi.fn();
+  const hoistedForceRedrawMock = vi.fn();
   const hoistedGetBoundsMock = vi.fn(() => ({
     containsPoint: vi.fn(
       ({ x, y }: { x: number; y: number }) => x >= 0 && x <= 1 && y >= 0 && y <= 0.75,
@@ -40,6 +42,7 @@ const {
       hoistedHandlers.set(name, handler),
     ),
     destroy: hoistedDestroyMock,
+    forceRedraw: hoistedForceRedrawMock,
     open: hoistedOpenMock,
     viewport: {
       applyConstraints: hoistedApplyConstraintsMock,
@@ -60,6 +63,7 @@ const {
   return {
     applyConstraintsMock: hoistedApplyConstraintsMock,
     destroyMock: hoistedDestroyMock,
+    forceRedrawMock: hoistedForceRedrawMock,
     getBoundsMock: hoistedGetBoundsMock,
     getCenterMock: hoistedGetCenterMock,
     getZoomMock: hoistedGetZoomMock,
@@ -120,6 +124,15 @@ describe('EagleImageViewer', () => {
     );
     expect(screen.getByRole('dialog', { name: image.alt })).toBeInTheDocument();
     expect(screen.getByTestId('eagle-image-viewer')).toBeInTheDocument();
+  });
+
+  it('forces the first visible frame when the image opens without waiting for wheel input', async () => {
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+
+    act(() => handlers.get('open')?.());
+
+    expect(forceRedrawMock).toHaveBeenCalledOnce();
   });
 
   it('pans and zooms immediately for direct mouse input', async () => {

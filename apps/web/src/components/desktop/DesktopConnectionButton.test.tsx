@@ -10,7 +10,8 @@ describe('DesktopConnectionButton', () => {
 
   it('stays absent in a browser and exposes the active desktop connection in Electron', async () => {
     const openConnectionManager = vi.fn().mockResolvedValue(undefined);
-    const { rerender } = render(<DesktopConnectionButton />);
+    const reloadPage = vi.fn();
+    const { rerender } = render(<DesktopConnectionButton reloadPage={reloadPage} />);
     expect(screen.queryByRole('button', { name: /桌面连接/u })).not.toBeInTheDocument();
 
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
@@ -24,11 +25,15 @@ describe('DesktopConnectionButton', () => {
       }),
       openConnectionManager,
     };
-    rerender(<DesktopConnectionButton />);
+    rerender(<DesktopConnectionButton reloadPage={reloadPage} />);
 
-    const button = await screen.findByRole('button', { name: '桌面连接：本地，12 毫秒' });
-    expect(button).toHaveTextContent('本地');
-    fireEvent.click(button);
+    const refreshButton = await screen.findByRole('button', { name: '刷新当前页面，本地连接' });
+    expect(refreshButton).toHaveTextContent('本地');
+    expect(refreshButton).not.toHaveTextContent('12ms');
+    fireEvent.click(refreshButton);
+    expect(reloadPage).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: '管理桌面连接' }));
     await waitFor(() => expect(openConnectionManager).toHaveBeenCalledOnce());
   });
 });
