@@ -16,6 +16,24 @@ describe('offline-capable desktop connection page', () => {
     expect(html).not.toMatch(/<script(?![^>]+src=)/u);
   });
 
+  it('shows cache capacity, runtime statistics, disk state and maintenance actions', async () => {
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    expect(html).toContain('id="cache-settings"');
+    expect(html).toContain('name="cacheLimitGiB"');
+    expect(html).toContain('id="cache-global-usage"');
+    expect(html).toContain('id="cache-account-usage"');
+    expect(html).toContain('id="cache-hit-rate"');
+    expect(html).toContain('id="cache-saved-bytes"');
+    expect(html).toContain('id="cache-free-space"');
+    expect(html).toContain('id="cache-path"');
+    expect(html).toContain('id="save-cache"');
+    expect(html).toContain('id="clear-cache"');
+    expect(html).toContain('id="open-cache-folder"');
+  });
+
   it('tests, saves, resets deployment binding and returns to the active library through preload only', async () => {
     const script = await readFile(
       new URL('../src/connection-page/connection.js', import.meta.url),
@@ -27,6 +45,14 @@ describe('offline-capable desktop connection page', () => {
       'saveConnections',
       'resetDeploymentBinding',
       'cancelConnectionManager',
+    ]) {
+      expect(script).toContain(`bridge.${method}`);
+    }
+    for (const method of [
+      'getCacheManagerStatus',
+      'setCacheLimitGiB',
+      'clearCache',
+      'openCacheFolder',
     ]) {
       expect(script).toContain(`bridge.${method}`);
     }

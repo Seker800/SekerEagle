@@ -78,4 +78,19 @@ describe('desktop server and navigation security', () => {
     expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
     expect(preload).not.toContain('shell.openExternal');
   });
+
+  it('exposes cache management only through sender-validated desktop IPC', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(main).toMatch(
+      /desktop:get-cache-manager-status'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
+    );
+    expect(main).toMatch(
+      /desktop:open-cache-folder'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
+    );
+    expect(preload).toContain("ipcRenderer.invoke('desktop:get-cache-manager-status')");
+    expect(preload).toContain("ipcRenderer.invoke('desktop:open-cache-folder')");
+  });
 });

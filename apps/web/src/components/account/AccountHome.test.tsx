@@ -153,7 +153,7 @@ describe('AccountHome', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('shows and manages the owner-scoped cache only inside the desktop client', async () => {
+  it('routes desktop cache management to the unified desktop settings page', async () => {
     const getCacheStatus = vi.fn().mockResolvedValue({
       limitBytes: 10 * 1024 ** 3,
       allocatedBytes: 2 * 1024 ** 3,
@@ -167,6 +167,7 @@ describe('AccountHome', () => {
     });
     const setCacheLimitGiB = vi.fn().mockResolvedValue(undefined);
     const clearCache = vi.fn().mockResolvedValue({ deleted: 12_345, deferred: 0 });
+    const openConnectionManager = vi.fn().mockResolvedValue(undefined);
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
       createMediaUrl: vi.fn(),
@@ -174,6 +175,8 @@ describe('AccountHome', () => {
       setCacheLimitGiB,
       clearCache,
       invalidateAsset: vi.fn(),
+      getConnectionStatus: vi.fn(),
+      openConnectionManager,
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])));
 
@@ -187,16 +190,10 @@ describe('AccountHome', () => {
     );
 
     expect(await screen.findByRole('heading', { name: '本地媒体缓存' })).toBeInTheDocument();
-    expect(screen.getByText('3.0 GiB / 10.0 GiB')).toBeInTheDocument();
-    expect(screen.getByText('全部账号占用')).toBeInTheDocument();
-    expect(screen.getByText('80%')).toBeInTheDocument();
-    expect(screen.getByText('12,345')).toBeInTheDocument();
-    expect(screen.getByText('个文件')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('缓存容量上限'), { target: { value: '25' } });
-    fireEvent.click(screen.getByRole('button', { name: '保存缓存设置' }));
-    await waitFor(() => expect(setCacheLimitGiB).toHaveBeenCalledWith(25));
-
-    fireEvent.click(screen.getByRole('button', { name: '清空当前账号缓存' }));
-    await waitFor(() => expect(clearCache).toHaveBeenCalledOnce());
+    fireEvent.click(screen.getByRole('button', { name: '打开桌面设置' }));
+    await waitFor(() => expect(openConnectionManager).toHaveBeenCalledOnce());
+    expect(getCacheStatus).not.toHaveBeenCalled();
+    expect(setCacheLimitGiB).not.toHaveBeenCalled();
+    expect(clearCache).not.toHaveBeenCalled();
   });
 });
