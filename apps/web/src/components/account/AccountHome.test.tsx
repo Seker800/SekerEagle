@@ -33,10 +33,15 @@ describe('AccountHome', () => {
       if (path === '/api/tokens' && !init?.method) return jsonResponse([]);
       if (path === '/api/auth/privacy-visibility' && init?.method === 'PUT') {
         expect(typeof init.body).toBe('string');
-        expect(JSON.parse(init.body as string)).toEqual({ enabled: true, durationHours: 3 });
+        const body = JSON.parse(init.body as string) as {
+          enabled: boolean;
+          durationHours: number;
+        };
+        expect(body.enabled).toBe(true);
+        expect([3, 6]).toContain(body.durationHours);
         return jsonResponse({
           enabled: true,
-          durationHours: 3,
+          durationHours: body.durationHours,
           expiresAt: '2026-08-19T15:00:00.000Z',
         });
       }
@@ -55,6 +60,8 @@ describe('AccountHome', () => {
 
     await waitFor(() => expect(toggle).toBeChecked());
     expect(screen.getByText(/将于/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('自动关闭时间'), { target: { value: '6' } });
+    await waitFor(() => expect(screen.getByLabelText('自动关闭时间')).toHaveValue('6'));
   });
 
   it('loads, creates and revokes external connection tokens', async () => {
@@ -106,6 +113,9 @@ describe('AccountHome', () => {
     expect(await screen.findByText('工作室 Mac')).toBeInTheDocument();
     expect(screen.getByText('永久有效')).toBeInTheDocument();
     expect(screen.queryByLabelText('有效期')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('令牌用途'), { target: { value: 'importer' } });
+    expect(screen.getByPlaceholderText('例如：工作室 Mac')).toHaveValue('Eagle 导入器');
+    fireEvent.change(screen.getByLabelText('令牌用途'), { target: { value: 'capture' } });
     fireEvent.click(screen.getByRole('button', { name: '创建令牌' }));
     const createdToken = await screen.findByRole('textbox', { name: '新创建的令牌' });
     expect(createdToken).toHaveValue('seg_pat_secret');
