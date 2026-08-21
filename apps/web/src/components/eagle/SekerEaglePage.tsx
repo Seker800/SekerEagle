@@ -48,6 +48,7 @@ import {
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
+import { useEagleAssetViewport } from './eagle-asset-viewport';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
 import { getEaglePreviewContentUrl, needsEagleImagePyramid } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
@@ -129,10 +130,9 @@ export function SekerEaglePage({
     return createEagleQueryKeys(ownerId);
   }, [ownerId]);
   const thumbnailScheduler = useMemo(() => new MediaLoadScheduler(), [ownerId]);
-  const assetViewportRef = useRef<HTMLDivElement>(null);
+  const assetViewport = useEagleAssetViewport();
+  const assetViewportRef = assetViewport.elementRef;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
-  const scrollFrameRef = useRef<number | null>(null);
-  const pendingScrollTopRef = useRef(0);
   const dragDepthRef = useRef(0);
   const selectionAnchorIdRef = useRef<string | null>(null);
   const editorAssetIdRef = useRef<string | null>(null);
@@ -158,8 +158,7 @@ export function SekerEaglePage({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [viewportHeight, setViewportHeight] = useState(0);
-  const [scrollTop, setScrollTop] = useState(0);
+  const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(readThumbnailSize);
   const [editorTitle, setEditorTitle] = useState('');
   const [editorDescription, setEditorDescription] = useState('');
@@ -417,19 +416,8 @@ export function SekerEaglePage({
     });
   };
 
-  useEffect(() => {
-    const viewport = assetViewportRef.current;
-    if (!viewport || typeof ResizeObserver === 'undefined') return undefined;
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.height > 0) setViewportHeight(entry.contentRect.height);
-    });
-    observer.observe(viewport);
-    return () => observer.disconnect();
-  }, []);
-
   useEffect(
     () => () => {
-      if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current);
       thumbnailScheduler.clear({ abortActive: true });
     },
     [thumbnailScheduler],
@@ -449,15 +437,6 @@ export function SekerEaglePage({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [assetsQuery.fetchNextPage, assetsQuery.hasNextPage, assetsQuery.isFetchingNextPage]);
-
-  const handleAssetScroll = (nextScrollTop: number) => {
-    pendingScrollTopRef.current = nextScrollTop;
-    if (scrollFrameRef.current !== null) return;
-    scrollFrameRef.current = requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
-      setScrollTop(pendingScrollTopRef.current);
-    });
-  };
 
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
@@ -940,12 +919,12 @@ export function SekerEaglePage({
                 </div>
               )}
               <div
-                ref={assetViewportRef}
+                ref={assetViewport.containerRef}
                 className={styles.assetViewport}
                 role="region"
                 aria-label="素材瀑布流"
                 onClick={clearAssetSelection}
-                onScroll={(event) => handleAssetScroll(event.currentTarget.scrollTop)}
+                onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
               >
                 {assetsQuery.isLoading && (
                   <div className={styles.emptyState}>正在加载个人素材库…</div>

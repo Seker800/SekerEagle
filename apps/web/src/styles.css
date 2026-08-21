@@ -861,23 +861,48 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
-.desktop-connection-button {
+.desktop-connection-controls {
   position: fixed;
-  z-index: 80;
-  top: 14px;
+  z-index: 70;
+  bottom: 18px;
   right: 18px;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 32px;
-  padding: 0 10px;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid rgba(148, 163, 184, 0.35);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.9);
-  color: #334155;
   box-shadow: 0 6px 22px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(12px);
+}
+
+.desktop-connection-button,
+.desktop-connection-settings {
+  min-height: 32px;
+  border: 0;
+  border-radius: 999px;
+  color: #334155;
+  background: transparent;
   cursor: pointer;
+}
+
+.desktop-connection-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.desktop-connection-settings {
+  width: 32px;
+  display: grid;
+  place-items: center;
+}
+
+.desktop-connection-button:hover,
+.desktop-connection-settings:hover {
+  background: rgba(148, 163, 184, 0.16);
 }
 
 .desktop-connection-button > span {
@@ -889,8 +914,4 @@ select:focus-visible {
 
 .desktop-connection-button > span.is-online {
   background: #22c55e;
-}
-
-.desktop-connection-button small {
-  color: #64748b;
 }

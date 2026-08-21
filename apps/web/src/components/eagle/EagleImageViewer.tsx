@@ -55,6 +55,7 @@ interface ViewerHandle {
   addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
   addHandler(name: 'canvas-scroll', handler: (event: ViewerScrollEvent) => void): void;
   destroy(): void;
+  forceRedraw(): void;
   open(source: ViewerSource): void;
   viewport: ViewerViewport;
   world: { getItemAt(index: number): ViewerWorldItem | undefined };
@@ -198,6 +199,7 @@ export function EagleImageViewer({
             viewer.viewport.panTo(pendingViewport.center, true);
             viewer.viewport.applyConstraints(true);
           }
+          viewer.forceRedraw();
           setStatus('ready');
         });
         viewer.addHandler('open-failed', () => setStatus('error'));
