@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { createEmptyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
+import {
+  createEmptyEagleFilterQuery,
+  type EagleFilterQuery,
+} from '@sekereagle/eagle-filter-core';
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 
@@ -29,7 +32,13 @@ const aiTags: EagleAiTag[] = [
   { id: 'industrial', name: '工业', assetCount: 18, pinyin: 'gongye', pinyinInitials: 'gy' },
 ];
 
-function renderDialog(onSave = vi.fn()) {
+function renderDialog(
+  onSave = vi.fn(),
+  options: {
+    initialQuery?: EagleFilterQuery;
+    mode?: 'create' | 'edit';
+  } = {},
+) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return {
     onSave,
@@ -37,7 +46,8 @@ function renderDialog(onSave = vi.fn()) {
       <QueryClientProvider client={queryClient}>
         <EagleSmartFolderDialog
           initialName="KIT"
-          initialQuery={createEmptyEagleFilterQuery()}
+          initialQuery={options.initialQuery ?? createEmptyEagleFilterQuery()}
+          mode={options.mode}
           manualTags={manualTags}
           aiTags={aiTags}
           onClose={vi.fn()}
@@ -49,6 +59,32 @@ function renderDialog(onSave = vi.fn()) {
 }
 
 describe('EagleSmartFolderDialog', () => {
+  it.each(['create', 'edit'] as const)(
+    'turns an empty %s query into an editable blank filter rule',
+    (mode) => {
+      const onSave = vi.fn();
+      renderDialog(onSave, { initialQuery: { version: 2, conditions: [] }, mode });
+
+      const builder = screen.getByLabelText('筛选规则编辑器');
+      expect(within(builder).getByRole('region', { name: '条件组 1' })).toBeVisible();
+      fireEvent.change(within(builder).getByRole('combobox', { name: '规则 1 字段' }), {
+        target: { value: 'FORMAT' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
+
+      expect(onSave).toHaveBeenCalledWith({
+        name: 'KIT',
+        query: expect.objectContaining({
+          conditions: [
+            expect.objectContaining({
+              rules: [expect.objectContaining({ field: 'FORMAT' })],
+            }),
+          ],
+        }),
+      });
+    },
+  );
+
   it('shows the Eagle-style rule sentence and live result count', async () => {
     renderDialog();
 
