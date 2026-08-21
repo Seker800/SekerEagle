@@ -10,7 +10,9 @@ describe('DesktopBrowserSession', () => {
       .mockResolvedValueOnce(Response.json({ user: { id: 'owner-a' } }));
     const session = new DesktopBrowserSession(fetcher, () => 'http://localhost:8180');
 
-    const response = await session.fetch('/api/auth/me', { headers: { 'cache-control': 'no-store' } });
+    const response = await session.fetch('/api/auth/me', {
+      headers: { 'cache-control': 'no-store' },
+    });
 
     expect(response.status).toBe(200);
     expect(fetcher).toHaveBeenNthCalledWith(
@@ -51,12 +53,14 @@ describe('DesktopBrowserSession', () => {
       session.fetch('/api/eagle/assets/c/renditions/d'),
     ]);
     await vi.waitFor(() =>
-      expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/api/auth/refresh'))).toHaveLength(1),
+      expect(fetcher.mock.calls.filter(([url]) => url.endsWith('/api/auth/refresh'))).toHaveLength(
+        1,
+      ),
     );
     releaseRefresh();
 
-    await expect(requests.then((responses) => responses.map(({ status }) => status))).resolves.toEqual([
-      200, 200,
-    ]);
+    await expect(
+      requests.then((responses) => responses.map(({ status }) => status)),
+    ).resolves.toEqual([200, 200]);
   });
 });

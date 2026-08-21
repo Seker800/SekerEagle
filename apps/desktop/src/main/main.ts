@@ -414,10 +414,7 @@ function assertConnectionPageSender(event: IpcMainInvokeEvent): void {
   }
 }
 
-function createWindow(
-  initialUrl: string,
-  owner: AuthenticatedOwner,
-): void {
+function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
   const window = new BrowserWindow({
     width: 1440,
     height: 960,
