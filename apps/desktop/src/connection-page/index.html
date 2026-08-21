@@ -11,102 +11,159 @@
     <link rel="stylesheet" href="/connection.css" />
   </head>
   <body>
-    <main>
-      <header>
-        <p class="eyebrow">SEKEREAGLE DESKTOP</p>
-        <h1>桌面设置</h1>
-        <p>管理素材库连接与本机媒体缓存。设置只保存在这台电脑上。</p>
-      </header>
-
-      <section class="settings-card" aria-labelledby="connection-title">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">素材库</p>
-            <h2 id="connection-title">连接</h2>
-          </div>
-          <p>自动模式优先保留当前连接；不可用时按本地、局域网、外网顺序选择。</p>
-        </div>
-        <form id="connection-form">
-          <label>
-            连接模式
-            <select name="mode">
-              <option value="AUTO">自动选择</option>
-              <option value="LOCAL">固定本地</option>
-              <option value="LAN">固定局域网</option>
-              <option value="PUBLIC">固定外网</option>
-            </select>
-          </label>
-
-          <section class="profile">
-            <div><strong>本地</strong><span data-status="LOCAL">未检测</span></div>
-            <input name="localUrl" type="url" placeholder="http://localhost:8180" />
-          </section>
-          <section class="profile">
-            <div><strong>局域网</strong><span data-status="LAN">未配置</span></div>
-            <input name="lanUrl" type="url" placeholder="https://eagle.lan.example" />
-            <label class="checkbox">
-              <input name="allowInsecureLan" type="checkbox" />
-              允许私有 IP 使用 HTTP（仅可信局域网）
-            </label>
-          </section>
-          <section class="profile">
-            <div><strong>外网</strong><span data-status="PUBLIC">未配置</span></div>
-            <input name="publicUrl" type="url" placeholder="https://eagle.example.com" />
-          </section>
-
-          <p id="message" role="status"></p>
-          <div class="actions">
-            <button id="test" type="button">测试全部连接</button>
-            <button class="primary" type="submit">保存并连接</button>
-            <button id="cancel" type="button">返回图库</button>
-          </div>
-          <button id="reset" class="danger-link" type="button">更换为另一套图库…</button>
-        </form>
-      </section>
-
-      <section id="cache-settings" class="settings-card" aria-labelledby="cache-title">
-        <div class="section-heading">
-          <div>
-            <p class="section-kicker">本机存储</p>
-            <h2 id="cache-title">本地媒体缓存</h2>
-          </div>
-          <p>常用缩略图、预览图和大图切片保存在本机，并按账号隔离。</p>
-        </div>
-
-        <div class="cache-stats" aria-label="缓存状态">
-          <span><strong id="cache-global-usage">—</strong>全部账号占用</span>
-          <span><strong id="cache-account-usage">—</strong>当前账号占用</span>
-          <span><strong id="cache-entry-count">—</strong>缓存文件</span>
-          <span><strong id="cache-hit-rate">—</strong>命中率</span>
-          <span><strong id="cache-saved-bytes">—</strong>已节省流量</span>
-          <span><strong id="cache-free-space">—</strong>磁盘剩余</span>
-        </div>
-
-        <form id="cache-form" class="cache-controls">
-          <label>
-            缓存容量上限
-            <span class="input-with-unit">
-              <input name="cacheLimitGiB" type="number" min="1" max="100" step="1" required />
-              <span>GiB</span>
+    <div class="workspace">
+      <aside class="sidebar" aria-label="桌面设置导航">
+        <div class="sidebar-header">
+          <div class="brand">
+            <span class="brand-mark" aria-hidden="true">
+              <img src="/seker-eagle-logo.svg" alt="" />
             </span>
-            <small>允许 1–100 GiB；达到上限后自动淘汰较少使用的文件。</small>
-          </label>
-          <div class="actions">
-            <button id="save-cache" class="primary" type="submit">保存缓存设置</button>
-            <button id="clear-cache" type="button">清空当前账号缓存</button>
+            <span>SekerEagle</span>
           </div>
-        </form>
-
-        <div class="cache-location">
-          <div>
-            <span>缓存目录</span>
-            <code id="cache-path">—</code>
-          </div>
-          <button id="open-cache-folder" type="button">在访达中打开</button>
         </div>
-        <p id="cache-message" role="status"></p>
-      </section>
-    </main>
+
+        <div class="nav-section">
+          <div class="section-label">桌面设置</div>
+          <a class="nav-item" href="#connection-settings" aria-current="page">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg>
+            连接
+          </a>
+          <a class="nav-item" href="#cache-settings">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <ellipse cx="12" cy="5" rx="8" ry="3" />
+              <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+              <path d="M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+            </svg>
+            本地媒体缓存
+          </a>
+        </div>
+
+        <div class="sidebar-spacer"></div>
+        <div class="sidebar-footer">
+          <button id="sidebar-cancel" class="nav-item" type="button">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="m15 18-6-6 6-6" />
+            </svg>
+            返回图库
+          </button>
+        </div>
+      </aside>
+
+      <main class="settings-main">
+        <header class="page-toolbar">
+          <div>
+            <h1>桌面设置</h1>
+            <span>仅保存在这台电脑上</span>
+          </div>
+        </header>
+
+        <div class="settings-scroll">
+          <div class="settings-content">
+            <header class="intro">
+              <p class="eyebrow">SEKEREAGLE DESKTOP</p>
+              <h2>连接与本机存储</h2>
+              <p>管理素材库连接与本地媒体缓存，不会改变服务端素材。</p>
+            </header>
+
+            <section
+              id="connection-settings"
+              class="settings-card"
+              aria-labelledby="connection-title"
+            >
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">素材库</p>
+                  <h2 id="connection-title">连接</h2>
+                </div>
+                <p>自动模式优先保留当前连接；不可用时按本地、局域网、外网顺序选择。</p>
+              </div>
+              <form id="connection-form">
+                <label>
+                  连接模式
+                  <select name="mode">
+                    <option value="AUTO">自动选择</option>
+                    <option value="LOCAL">固定本地</option>
+                    <option value="LAN">固定局域网</option>
+                    <option value="PUBLIC">固定外网</option>
+                  </select>
+                </label>
+
+                <section class="profile">
+                  <div><strong>本地</strong><span data-status="LOCAL">未检测</span></div>
+                  <input name="localUrl" type="url" placeholder="http://localhost:8180" />
+                </section>
+                <section class="profile">
+                  <div><strong>局域网</strong><span data-status="LAN">未配置</span></div>
+                  <input name="lanUrl" type="url" placeholder="https://eagle.lan.example" />
+                  <label class="checkbox">
+                    <input name="allowInsecureLan" type="checkbox" />
+                    允许私有 IP 使用 HTTP（仅可信局域网）
+                  </label>
+                </section>
+                <section class="profile">
+                  <div><strong>外网</strong><span data-status="PUBLIC">未配置</span></div>
+                  <input name="publicUrl" type="url" placeholder="https://eagle.example.com" />
+                </section>
+
+                <p id="message" role="status"></p>
+                <div class="actions">
+                  <button id="test" type="button">测试全部连接</button>
+                  <button class="primary" type="submit">保存并连接</button>
+                  <button id="cancel" type="button">返回图库</button>
+                </div>
+                <button id="reset" class="danger-link" type="button">更换为另一套图库…</button>
+              </form>
+            </section>
+
+            <section id="cache-settings" class="settings-card" aria-labelledby="cache-title">
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">本机存储</p>
+                  <h2 id="cache-title">本地媒体缓存</h2>
+                </div>
+                <p>常用缩略图、预览图和大图切片保存在本机，并按账号隔离。</p>
+              </div>
+
+              <div class="cache-stats" aria-label="缓存状态">
+                <span><strong id="cache-global-usage">—</strong>全部账号占用</span>
+                <span><strong id="cache-account-usage">—</strong>当前账号占用</span>
+                <span><strong id="cache-entry-count">—</strong>缓存文件</span>
+                <span><strong id="cache-hit-rate">—</strong>命中率</span>
+                <span><strong id="cache-saved-bytes">—</strong>已节省流量</span>
+                <span><strong id="cache-free-space">—</strong>磁盘剩余</span>
+              </div>
+
+              <form id="cache-form" class="cache-controls">
+                <label>
+                  缓存容量上限
+                  <span class="input-with-unit">
+                    <input name="cacheLimitGiB" type="number" min="1" max="100" step="1" required />
+                    <span>GiB</span>
+                  </span>
+                  <small>允许 1–100 GiB；达到上限后自动淘汰较少使用的文件。</small>
+                </label>
+                <div class="actions">
+                  <button id="save-cache" class="primary" type="submit">保存缓存设置</button>
+                  <button id="clear-cache" type="button">清空当前账号缓存</button>
+                </div>
+              </form>
+
+              <div class="cache-location">
+                <div>
+                  <span>缓存目录</span>
+                  <code id="cache-path">—</code>
+                </div>
+                <button id="open-cache-folder" type="button">在访达中打开</button>
+              </div>
+              <p id="cache-message" role="status"></p>
+            </section>
+          </div>
+        </div>
+      </main>
+    </div>
     <script src="/connection.js"></script>
   </body>
 </html>

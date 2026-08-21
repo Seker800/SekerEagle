@@ -20,3 +20,4 @@ await Promise.all([
 ]);
 
 await cp('src/connection-page', 'dist/connection-page', { recursive: true });
+await cp('../web/src/assets/seker-eagle-logo.svg', 'dist/connection-page/seker-eagle-logo.svg');

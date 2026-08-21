@@ -34,6 +34,26 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="open-cache-folder"');
   });
 
+  it('uses the library workspace structure and persistent settings sidebar', async () => {
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    const css = await readFile(
+      new URL('../src/connection-page/connection.css', import.meta.url),
+      'utf8',
+    );
+    expect(html).toContain('class="workspace"');
+    expect(html).toContain('class="sidebar"');
+    expect(html).toContain('aria-label="桌面设置导航"');
+    expect(html).toContain('href="#connection-settings"');
+    expect(html).toContain('href="#cache-settings"');
+    expect(html).toContain('class="page-toolbar"');
+    expect(html).toContain('src="/seker-eagle-logo.svg"');
+    expect(css).toMatch(/grid-template-columns:\s*216px minmax\(0, 1fr\)/u);
+    expect(css).toContain('height: 44px');
+  });
+
   it('tests, saves, resets deployment binding and returns to the active library through preload only', async () => {
     const script = await readFile(
       new URL('../src/connection-page/connection.js', import.meta.url),
@@ -70,5 +90,16 @@ describe('offline-capable desktop connection page', () => {
     expect(script).toMatch(
       /const settings = formValue\(\);[\s\S]*run\(async \(\) => render\(await bridge\.testConnections\(settings\)\)\)/u,
     );
+  });
+
+  it('switches settings panels from the sidebar instead of stacking a long page', async () => {
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
+    expect(script).toContain('activateSettingsSection(window.location.hash.slice(1))');
+    expect(script).toContain("requestedSection === 'cache-settings'");
+    expect(script).toContain('section.hidden = section.id !== sectionId');
+    expect(script).toContain("navigation.setAttribute('aria-current', 'page')");
   });
 });

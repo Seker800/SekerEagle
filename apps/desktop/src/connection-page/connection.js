@@ -3,6 +3,7 @@ const form = document.querySelector('#connection-form');
 const message = document.querySelector('#message');
 const testButton = document.querySelector('#test');
 const cancelButton = document.querySelector('#cancel');
+const sidebarCancelButton = document.querySelector('#sidebar-cancel');
 const resetButton = document.querySelector('#reset');
 const submitButton = form.querySelector('button[type="submit"]');
 const cacheForm = document.querySelector('#cache-form');
@@ -10,8 +11,10 @@ const cacheMessage = document.querySelector('#cache-message');
 const saveCacheButton = document.querySelector('#save-cache');
 const clearCacheButton = document.querySelector('#clear-cache');
 const openCacheFolderButton = document.querySelector('#open-cache-folder');
+const settingsNavigations = [...document.querySelectorAll('.nav-item[href]')];
 let canClearCurrentAccount = false;
 
+activateSettingsSection(window.location.hash.slice(1));
 void load();
 
 form.addEventListener('submit', (event) => {
@@ -24,6 +27,16 @@ testButton.addEventListener('click', () => {
   void run(async () => render(await bridge.testConnections(settings)));
 });
 cancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
+sidebarCancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
+for (const navigation of settingsNavigations) {
+  navigation.addEventListener('click', (event) => {
+    event.preventDefault();
+    const target = navigation.getAttribute('href').slice(1);
+    window.location.hash = target;
+    activateSettingsSection(target);
+  });
+}
+window.addEventListener('hashchange', () => activateSettingsSection(window.location.hash.slice(1)));
 resetButton.addEventListener('click', () => {
   if (!window.confirm('这会解除当前图库身份绑定。仅在这些地址确实属于另一套图库时继续。')) return;
   void run(async () => render(await bridge.resetDeploymentBinding()));
@@ -111,6 +124,7 @@ function render(state) {
     target.dataset.state = probe?.state ?? 'IDLE';
   }
   cancelButton.hidden = !state.active;
+  sidebarCancelButton.hidden = !state.active;
   resetButton.hidden = !state.settings.deploymentId;
   message.textContent = state.active
     ? `已选择 ${state.active.url}（${Math.round(state.active.latencyMs)}ms）`
@@ -131,6 +145,20 @@ function probeLabel(probe) {
 function connectionConfigured(settings, slot) {
   const key = slot === 'LOCAL' ? 'localUrl' : slot === 'LAN' ? 'lanUrl' : 'publicUrl';
   return settings[key] ? '未检测' : '未配置';
+}
+
+function activateSettingsSection(requestedSection) {
+  const sectionId =
+    requestedSection === 'cache-settings' ? requestedSection : 'connection-settings';
+  for (const navigation of settingsNavigations) {
+    const isActive = navigation.getAttribute('href') === `#${sectionId}`;
+    if (isActive) navigation.setAttribute('aria-current', 'page');
+    else navigation.removeAttribute('aria-current');
+  }
+  for (const section of document.querySelectorAll('.settings-card')) {
+    section.hidden = section.id !== sectionId;
+  }
+  document.querySelector('.settings-scroll').scrollTop = 0;
 }
 
 async function run(action) {

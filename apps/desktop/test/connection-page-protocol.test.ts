@@ -9,7 +9,7 @@ describe('desktop connection page protocol', () => {
     expect(isConnectionPageUrl('https://connection/')).toBe(false);
   });
 
-  it('serves only the three packaged connection-page assets', () => {
+  it('serves only the packaged connection-page assets', () => {
     expect(connectionPageAsset('sekereagle-app://connection/')).toMatchObject({
       file: 'index.html',
     });
@@ -18,6 +18,10 @@ describe('desktop connection page protocol', () => {
     });
     expect(connectionPageAsset('sekereagle-app://connection/connection.css')).toMatchObject({
       file: 'connection.css',
+    });
+    expect(connectionPageAsset('sekereagle-app://connection/seker-eagle-logo.svg')).toMatchObject({
+      file: 'seker-eagle-logo.svg',
+      type: 'image/svg+xml',
     });
     expect(connectionPageAsset('sekereagle-app://connection/unknown')).toBeNull();
     expect(connectionPageAsset('sekereagle-app://other/')).toBeNull();
