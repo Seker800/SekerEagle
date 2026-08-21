@@ -114,7 +114,7 @@ describe('EagleImageViewer', () => {
         blendTime: 0,
         constrainDuringPan: false,
         imageLoaderLimit: 4,
-        loadDestinationTilesOnAnimation: false,
+        loadDestinationTilesOnAnimation: true,
         maxImageCacheCount: 64,
         minScrollDeltaTime: 0,
         showNavigator: true,
