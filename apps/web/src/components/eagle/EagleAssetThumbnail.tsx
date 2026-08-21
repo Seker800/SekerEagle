@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto } from '@tabler/icons-react';
 import {
   getEagleAssetContentUrl,
@@ -13,6 +13,7 @@ const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
 const RETRY_BASE_DELAY_MS = 500;
 const RETRY_MAX_DELAY_MS = 4_000;
 const ATTEMPTS_PER_RENDITION = 2;
+const THUMBNAIL_LOAD_TIMEOUT_MS = 12_000;
 const VIDEO_HOVER_DELAY_MS = 500;
 
 function retryDelayMs(assetId: string, attempt: number): number {
@@ -61,6 +62,7 @@ export function EagleAssetThumbnail({
   const [failed, setFailed] = useState(false);
   const [isVideoPreviewActive, setIsVideoPreviewActive] = useState(false);
   const settleRef = useRef<(() => void) | null>(null);
+  const loadTimeoutRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const videoHoverTimerRef = useRef<number | null>(null);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
@@ -72,6 +74,12 @@ export function EagleAssetThumbnail({
     retryTimerRef.current = null;
   };
 
+  const clearLoadTimeout = useCallback(() => {
+    if (loadTimeoutRef.current === null) return;
+    window.clearTimeout(loadTimeoutRef.current);
+    loadTimeoutRef.current = null;
+  }, []);
+
   const clearVideoHoverTimer = () => {
     if (videoHoverTimerRef.current === null) return;
     window.clearTimeout(videoHoverTimerRef.current);
@@ -79,6 +87,7 @@ export function EagleAssetThumbnail({
   };
 
   useEffect(() => {
+    clearLoadTimeout();
     clearRetryTimer();
     settleRef.current?.();
     settleRef.current = null;
@@ -86,7 +95,29 @@ export function EagleAssetThumbnail({
     setActiveSource(null);
     setFailed(false);
     setIsVideoPreviewActive(false);
-  }, [sourceKey]);
+  }, [clearLoadTimeout, sourceKey]);
+
+  const handleFailure = useCallback(
+    (failedSource: string) => {
+      clearLoadTimeout();
+      settleRef.current?.();
+      setActiveSource((current) => (current === failedSource ? null : current));
+      if (retryTimerRef.current !== null) return;
+      const nextAttempt = attempt + 1;
+      if (nextAttempt >= maxAttempts) {
+        setFailed(true);
+        return;
+      }
+      retryTimerRef.current = window.setTimeout(
+        () => {
+          retryTimerRef.current = null;
+          setAttempt(nextAttempt);
+        },
+        retryDelayMs(asset.id, nextAttempt),
+      );
+    },
+    [asset.id, attempt, clearLoadTimeout, maxAttempts],
+  );
 
   useEffect(() => {
     if (!source || failed) return undefined;
@@ -100,6 +131,7 @@ export function EagleAssetThumbnail({
           const settle = () => {
             if (settled) return;
             settled = true;
+            clearLoadTimeout();
             signal.removeEventListener('abort', handleAbort);
             if (settleRef.current === settle) settleRef.current = null;
             resolve();
@@ -116,44 +148,37 @@ export function EagleAssetThumbnail({
           signal.addEventListener('abort', handleAbort, { once: true });
           settleRef.current = settle;
           setActiveSource(source);
+          loadTimeoutRef.current = window.setTimeout(
+            () => handleFailure(source),
+            THUMBNAIL_LOAD_TIMEOUT_MS,
+          );
         }),
     });
-  }, [asset.id, attempt, failed, order, scheduler, source]);
+  }, [asset.id, attempt, clearLoadTimeout, failed, handleFailure, order, scheduler, source]);
 
   useEffect(
     () => () => {
+      clearLoadTimeout();
       clearRetryTimer();
       clearVideoHoverTimer();
       settleRef.current?.();
       settleRef.current = null;
     },
-    [],
+    [clearLoadTimeout],
   );
 
   const handleLoad = () => {
+    clearLoadTimeout();
     settleRef.current?.();
   };
 
   const handleError = () => {
-    settleRef.current?.();
-    setActiveSource(null);
-    if (retryTimerRef.current !== null) return;
-    const nextAttempt = attempt + 1;
-    if (nextAttempt >= maxAttempts) {
-      setFailed(true);
-      return;
-    }
-    retryTimerRef.current = window.setTimeout(
-      () => {
-        retryTimerRef.current = null;
-        setAttempt(nextAttempt);
-      },
-      retryDelayMs(asset.id, nextAttempt),
-    );
+    if (activeSource) handleFailure(activeSource);
   };
 
   const retry = () => {
     clearRetryTimer();
+    clearLoadTimeout();
     settleRef.current?.();
     settleRef.current = null;
     setActiveSource(null);

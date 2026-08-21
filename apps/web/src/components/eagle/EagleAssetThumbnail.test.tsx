@@ -37,11 +37,100 @@ const videoAsset: EagleAssetListItem = {
   manualTags: [],
 };
 
+const imageAsset: EagleAssetListItem = {
+  ...videoAsset,
+  id: 'image-1',
+  originalName: 'still.webp',
+  displayName: 'Still',
+  mimeType: 'image/webp',
+  format: 'webp',
+  durationMs: null,
+  renditions: [
+    {
+      ...videoAsset.renditions[0],
+      id: 'thumbnail-1',
+      kind: 'THUMBNAIL',
+    },
+  ],
+};
+
 afterEach(() => {
   vi.useRealTimers();
 });
 
 describe('EagleAssetThumbnail', () => {
+  it('retries a stalled thumbnail instead of occupying a scheduler slot forever', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <EagleAssetThumbnail
+        asset={imageAsset}
+        scheduler={new MediaLoadScheduler({ maxConcurrent: 1 })}
+        order={0}
+        displayWidth={240}
+      />,
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/image-1/renditions/thumbnail-1',
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(12_000);
+      await Promise.resolve();
+    });
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_000);
+      await Promise.resolve();
+    });
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/image-1/renditions/thumbnail-1',
+    );
+  });
+
+  it('releases the scheduler so another visible thumbnail can load after a request stalls', async () => {
+    vi.useFakeTimers();
+    const scheduler = new MediaLoadScheduler({ maxConcurrent: 1 });
+    const nextAsset: EagleAssetListItem = {
+      ...imageAsset,
+      id: 'image-2',
+      renditions: [{ ...imageAsset.renditions[0], id: 'thumbnail-2' }],
+    };
+    const { container } = render(
+      <>
+        <EagleAssetThumbnail
+          asset={imageAsset}
+          scheduler={scheduler}
+          order={1}
+          displayWidth={240}
+        />
+        <EagleAssetThumbnail asset={nextAsset} scheduler={scheduler} order={0} displayWidth={240} />
+      </>,
+    );
+    await act(async () => undefined);
+
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/image-1/renditions/thumbnail-1',
+    );
+
+    await act(async () => {
+      vi.advanceTimersByTime(12_000);
+      await Promise.resolve();
+    });
+
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/image-2/renditions/thumbnail-2',
+    );
+  });
+
   it('starts a muted inline video only after hovering for 500ms and stops on leave', async () => {
     vi.useFakeTimers();
     const { container } = render(
