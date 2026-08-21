@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>A place for every spark of inspiration.</strong><br />
-  A personal visual asset system built from capture plugins, a desktop app, a self-hosted server, and a web app.
+  A self-hosted image and video library with web capture, Eagle migration, desktop, and web apps.
 </p>
 
 <p align="center">
