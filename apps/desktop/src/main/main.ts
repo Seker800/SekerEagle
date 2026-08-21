@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readFile, statfs } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { desktopCacheRoot } from './cache-location';
 import { Readable } from 'node:stream';
@@ -31,6 +31,7 @@ import { DesktopConnectionResolver } from './connection-resolver';
 import { DesktopConnectionService, type DesktopConnectionSnapshot } from './connection-service';
 import { createDesktopConnectionProbe } from './connection-probe';
 import { DesktopBrowserSession } from './browser-session';
+import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -272,10 +273,10 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   ipcMain.handle('desktop:get-cache-manager-status', async (event) => {
     assertConnectionPageSender(event);
     const cacheRoot = currentDesktopCacheRoot();
-    const [globalStats, currentSettings, fileSystem, identity] = await Promise.all([
+    const [globalStats, currentSettings, availableBytes, identity] = await Promise.all([
       currentCache().getStats(),
       settings.load(),
-      statfs(cacheRoot),
+      availableBytesForPath(cacheRoot),
       owner.get(),
     ]);
     const currentAccountStats = identity
@@ -285,7 +286,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
       : null;
     return {
       cachePath: cacheRoot,
-      availableBytes: fileSystem.bavail * fileSystem.bsize,
+      availableBytes,
       limitBytes: currentSettings.cacheLimitBytes,
       globalAllocatedBytes: globalStats.allocatedBytes,
       globalEntryCount: globalStats.entryCount,
@@ -304,7 +305,9 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
   );
   ipcMain.handle('desktop:open-cache-folder', async (event) => {
     assertConnectionPageSender(event);
-    const error = await shell.openPath(currentDesktopCacheRoot());
+    const cacheRoot = currentDesktopCacheRoot();
+    await ensureCacheDirectory(cacheRoot);
+    const error = await shell.openPath(cacheRoot);
     if (error) throw new Error(`无法打开缓存目录：${error}`);
   });
   ipcMain.handle('desktop:invalidate-asset', async (event, assetId: unknown) => {
