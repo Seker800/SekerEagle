@@ -1,7 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconFolderBolt, IconX } from '@tabler/icons-react';
-import { countActiveEagleFilterRules, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
+import {
+  countActiveEagleFilterRules,
+  createEmptyEagleFilterQuery,
+  type EagleFilterQuery,
+} from '@sekereagle/eagle-filter-core';
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 import { countEagleAssets } from '../../lib/eagle-api';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -21,6 +25,10 @@ interface EagleSmartFolderDialogProps {
   onSave: (input: { name: string; query: EagleFilterQuery }) => void;
 }
 
+function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
+  return query.conditions.length > 0 ? query : createEmptyEagleFilterQuery();
+}
+
 export function EagleSmartFolderDialog({
   accessToken = '',
   initialQuery,
@@ -34,7 +42,7 @@ export function EagleSmartFolderDialog({
   onSave,
 }: EagleSmartFolderDialogProps) {
   const [name, setName] = useState(initialName);
-  const [query, setQuery] = useState(initialQuery);
+  const [query, setQuery] = useState(() => createEditableQuery(initialQuery));
   const deferredQuery = useDebouncedValue(query, 250);
   const activeConditionCount = countActiveEagleFilterRules(query);
   const countQuery = useQuery({
