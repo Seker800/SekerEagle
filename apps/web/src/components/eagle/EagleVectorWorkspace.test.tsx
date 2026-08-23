@@ -184,6 +184,12 @@ describe('EagleVectorWorkspace', () => {
     fireEvent.click(first);
     expect(first).toHaveAttribute('aria-pressed', 'true');
 
+    document.dispatchEvent(new Event('visibilitychange'));
+    await waitFor(() =>
+      expect(vi.mocked(api.listEagleVectorSuggestions).mock.calls.length).toBeGreaterThan(1),
+    );
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+
     fireEvent.click(third, { metaKey: true });
     expect(first).toHaveAttribute('aria-pressed', 'true');
     expect(third).toHaveAttribute('aria-pressed', 'true');

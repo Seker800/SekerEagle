@@ -98,11 +98,10 @@ export function EagleVectorWorkspace({
       setUnclassified(nextUnclassified.items);
       setSuggestionCursor(nextSuggestions.nextCursor);
       setUnclassifiedCursor(nextUnclassified.nextCursor);
-      clearSelection();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取向量处理状态失败');
     }
-  }, [clearSelection, tagFilter]);
+  }, [tagFilter]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -200,11 +199,13 @@ export function EagleVectorWorkspace({
     }
   };
 
-  const review = (ids: string[], action: 'ACCEPT' | 'REJECT') =>
-    act(
+  const review = async (ids: string[], action: 'ACCEPT' | 'REJECT') => {
+    const reviewed = await act(
       () => reviewEagleVectorSuggestions(ids, action),
       action === 'ACCEPT' ? `已确认 ${ids.length} 条人工标签建议` : `已拒绝 ${ids.length} 条建议`,
     );
+    if (reviewed) clearSelection();
+  };
 
   const selectItem = (itemId: string, orderedIds: string[], gesture: EagleSelectionGesture) => {
     const nextSelection = applyEagleSelection({
@@ -336,7 +337,13 @@ export function EagleVectorWorkspace({
           <div className={styles.toolbar}>
             <label>
               推荐标签
-              <select value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+              <select
+                value={tagFilter}
+                onChange={(event) => {
+                  clearSelection();
+                  setTagFilter(event.target.value);
+                }}
+              >
                 <option value="">全部建议</option>
                 {tags
                   .filter((tag) => tag.recommendationEnabled && tag.currentSnapshotId)
