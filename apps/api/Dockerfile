@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
+WORKDIR /sekereagle
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
@@ -19,12 +19,12 @@ RUN npm run db:generate && npm run build --workspace @sekereagle/config && npm r
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg openssl && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
-WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/apps/api ./apps/api
-COPY --from=build /app/packages/config ./packages/config
-COPY --from=build /app/packages/eagle-filter-core ./packages/eagle-filter-core
-COPY --from=build /app/packages/vector-core ./packages/vector-core
+WORKDIR /sekereagle
+COPY --from=build /sekereagle/node_modules ./node_modules
+COPY --from=build /sekereagle/apps/api ./apps/api
+COPY --from=build /sekereagle/packages/config ./packages/config
+COPY --from=build /sekereagle/packages/eagle-filter-core ./packages/eagle-filter-core
+COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY scripts ./scripts
 COPY package.json package-lock.json ./
 USER node
