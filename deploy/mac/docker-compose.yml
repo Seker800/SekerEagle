@@ -25,7 +25,7 @@ x-api-environment: &api-environment
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.1-pg16
+    image: pgvector/pgvector:0.8.6-pg16
     platform: linux/arm64
     restart: unless-stopped
     environment:
@@ -135,7 +135,7 @@ services:
     mem_limit: 256m
 
   gateway:
-    image: nginx:1.27-alpine
+    image: nginx:1.31-alpine
     platform: linux/arm64
     restart: unless-stopped
     depends_on:

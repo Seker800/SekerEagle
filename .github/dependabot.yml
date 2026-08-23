@@ -7,6 +7,9 @@ updates:
     groups:
       npm-minor-patch:
         update-types: [minor, patch]
+        exclude-patterns:
+          - class-validator
+          - esbuild
   - package-ecosystem: pip
     directory: /services/mlx-embedding
     schedule:
@@ -19,3 +22,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      codeql:
+        patterns:
+          - github/codeql-action/*
