@@ -59,6 +59,7 @@ test('batch tag changes fail closed before writes when any asset belongs elsewhe
 
 test('batch clear removes every manual tag and distance for owned assets without enumerating tags', async () => {
   const deletes: Array<{ table: string; where: unknown }> = [];
+  const suggestionRefreshes: unknown[] = [];
   const transaction = {
     eagleAssetManualTag: {
       deleteMany: async ({ where }: { where: unknown }) => {
@@ -71,6 +72,10 @@ test('batch clear removes every manual tag and distance for owned assets without
         deletes.push({ table: 'tag-distances', where });
         return { count: 3 };
       },
+    },
+    $queryRaw: async (statement: unknown) => {
+      suggestionRefreshes.push(statement);
+      return [{ scanned: 2, matched: 1 }];
     },
   };
   const prisma = {
@@ -98,6 +103,39 @@ test('batch clear removes every manual tag and distance for owned assets without
       where: { ownerId: 'owner-a', assetId: { in: ['asset-a', 'asset-b'] } },
     },
   ]);
+  assert.equal(suggestionRefreshes.length, 1);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /owner-a/);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-a/);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-b/);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /EagleAssetEmbedding/);
+});
+
+test('batch tag removal refreshes only assets that end without any manual tag', async () => {
+  const suggestionRefreshes: unknown[] = [];
+  const transaction = {
+    eagleAssetManualTag: { deleteMany: async () => ({ count: 1 }) },
+    eagleTagMemberDistance: { deleteMany: async () => ({ count: 1 }) },
+    $queryRaw: async (statement: unknown) => {
+      suggestionRefreshes.push(statement);
+      return [{ scanned: 1, matched: 1 }];
+    },
+  };
+  const service = new EagleService({
+    eagleAsset: { findMany: async () => [{ id: 'asset-a' }, { id: 'asset-b' }] },
+    eagleManualTag: { findMany: async () => [{ id: 'tag-a' }] },
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  } as never);
+
+  await service.batchChangeManualTags('owner-a', {
+    assetIds: ['asset-a', 'asset-b'],
+    addTagIds: [],
+    removeTagIds: ['tag-a'],
+  });
+
+  assert.equal(suggestionRefreshes.length, 1);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /manualTag/);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-a/);
+  assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-b/);
 });
 
 test('large batch tag additions split relation inserts into bounded chunks', async () => {

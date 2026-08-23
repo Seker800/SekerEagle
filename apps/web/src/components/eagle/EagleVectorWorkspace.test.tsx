@@ -19,6 +19,7 @@ vi.mock('../../lib/eagle-vector-api', () => ({
   reviewEagleVectorSuggestions: vi.fn(),
   retryFailedEagleEmbeddings: vi.fn(),
   scanMissingEagleEmbeddings: vi.fn(),
+  scanUnclassifiedEagleSuggestions: vi.fn(),
   getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
 }));
 
@@ -105,6 +106,10 @@ describe('EagleVectorWorkspace', () => {
       scanned: 5,
       created: 5,
       repaired: 0,
+    });
+    vi.mocked(api.scanUnclassifiedEagleSuggestions).mockResolvedValue({
+      scanned: 12,
+      matched: 3,
     });
   });
 
@@ -287,6 +292,17 @@ describe('EagleVectorWorkspace', () => {
 
     fireEvent.contextMenu(card, { clientX: 120, clientY: 160 });
     expect(screen.getByRole('menuitem', { name: '添加人工标签' })).toBeInTheDocument();
+  });
+
+  it('lets owners rescan untagged assets for suggestions from the unclassified page', async () => {
+    render(<EagleVectorWorkspace view="UNCLASSIFIED" />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '扫描无标签图片' }));
+
+    await waitFor(() => expect(api.scanUnclassifiedEagleSuggestions).toHaveBeenCalledOnce());
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      '已扫描 12 张无标签图片，新生成 3 条建议',
+    );
   });
 
   it('rejects the current recommendation before assigning a different manual tag', async () => {

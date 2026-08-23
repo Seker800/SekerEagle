@@ -204,3 +204,24 @@ test('missing embedding scan repairs drift and bulk-enqueues every owner-scoped 
   assert.match(JSON.stringify(statements), /GENERATE_RENDITIONS/);
   assert.match(JSON.stringify(statements), /rendition-v2/);
 });
+
+test('unclassified suggestion scan reuses ready embeddings without enqueueing embedding work', async () => {
+  const statements: unknown[] = [];
+  const service = new EagleVectorService({
+    $queryRaw: async (statement: unknown) => {
+      statements.push(statement);
+      return [{ scanned: 42, matched: 9 }];
+    },
+  } as never);
+
+  const result = await service.scanUnclassifiedSuggestions('owner-1', false);
+
+  assert.deepEqual(result, { scanned: 42, matched: 9 });
+  assert.equal(statements.length, 1);
+  const sql = JSON.stringify(statements[0]);
+  assert.match(sql, /owner-1/);
+  assert.match(sql, /EagleAssetEmbedding/);
+  assert.match(sql, /EagleTagPrototype/);
+  assert.match(sql, /manualTag/);
+  assert.doesNotMatch(sql, /EagleMediaJob/);
+});
