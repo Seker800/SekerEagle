@@ -23,6 +23,7 @@ MODEL_REVISION = os.getenv(
 DIMENSIONS = int(os.getenv("MLX_EMBEDDING_DIMENSIONS", "1024"))
 MAX_BODY_BYTES = int(os.getenv("MLX_EMBEDDING_MAX_PAYLOAD_BYTES", str(20 * 1024 * 1024)))
 TOKEN = os.getenv("MLX_EMBEDDING_TOKEN", "")
+ALLOWED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
 
 
 @dataclass
@@ -112,9 +113,10 @@ async def embed_image(
         raise HTTPException(status_code=415, detail="unsupported image content type")
     body = await read_bounded_body(request)
     try:
-        image = Image.open(io.BytesIO(body))
-        image.verify()
-        image = Image.open(io.BytesIO(body)).convert("RGB")
+        with Image.open(io.BytesIO(body), formats=ALLOWED_IMAGE_FORMATS) as probe:
+            probe.verify()
+        with Image.open(io.BytesIO(body), formats=ALLOWED_IMAGE_FORMATS) as opened:
+            image = opened.convert("RGB")
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
         raise HTTPException(status_code=422, detail="invalid image payload") from error
     if runtime.model is None or runtime.processor is None:
