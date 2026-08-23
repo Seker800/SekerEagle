@@ -10,7 +10,7 @@ dependencies = [
   "pillow==12.3.0",
   "torch==2.13.0",
   "torchvision==0.28.0",
-  "uvicorn[standard]==0.35.0",
+  "uvicorn[standard]==0.52.4",
 ]
 
 [dependency-groups]
