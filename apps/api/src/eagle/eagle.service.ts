@@ -391,7 +391,11 @@ export class EagleService {
       throw new NotFoundException('一个或多个素材或标签不存在。');
     }
     await this.prisma.$transaction(async (transaction) => {
-      if (input.removeTagIds.length) {
+      if (input.clearAll) {
+        const where = { ownerId, assetId: { in: input.assetIds } };
+        await transaction.eagleAssetManualTag.deleteMany({ where });
+        await transaction.eagleTagMemberDistance.deleteMany({ where });
+      } else if (input.removeTagIds.length) {
         await transaction.eagleAssetManualTag.deleteMany({
           where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
         });

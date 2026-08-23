@@ -210,11 +210,19 @@ export function useEagleMutations(
       assetIds,
       addTagIds = [],
       removeTagIds = [],
+      clearAll,
     }: {
       assetIds: string[];
       addTagIds?: string[];
       removeTagIds?: string[];
-    }) => batchChangeEagleManualTags(accessToken, { assetIds, addTagIds, removeTagIds }),
+      clearAll?: boolean;
+    }) =>
+      batchChangeEagleManualTags(accessToken, {
+        assetIds,
+        addTagIds,
+        removeTagIds,
+        ...(clearAll ? { clearAll: true } : {}),
+      }),
     onSuccess: async () => {
       callbacks.onBatchTagsApplied();
       await invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags);

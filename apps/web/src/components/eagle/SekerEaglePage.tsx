@@ -329,16 +329,25 @@ export function SekerEaglePage({
   )
     ? assetsById.get(selectedAssetIds[0])?.rating
     : undefined;
-  const selectedManualTags = useMemo(() => {
-    const tagsById = new Map<string, EagleAsset['manualTags'][number]>();
+  const selectedManualTagSummaries = useMemo(() => {
+    const tagsById = new Map<
+      string,
+      { tag: EagleAsset['manualTags'][number]; assetCount: number }
+    >();
     for (const assetId of selectedAssetIds) {
       const tags =
         assetId === selectedAsset?.id
           ? selectedAsset.manualTags
           : (assetsById.get(assetId)?.manualTags ?? []);
-      tags.forEach((tag) => tagsById.set(tag.id, tag));
+      const uniqueTags = new Map(tags.map((tag) => [tag.id, tag]));
+      uniqueTags.forEach((tag) => {
+        const current = tagsById.get(tag.id);
+        tagsById.set(tag.id, { tag, assetCount: (current?.assetCount ?? 0) + 1 });
+      });
     }
-    return [...tagsById.values()].sort((left, right) => left.name.localeCompare(right.name));
+    return [...tagsById.values()].sort((left, right) =>
+      left.tag.name.localeCompare(right.tag.name),
+    );
   }, [assetsById, selectedAsset, selectedAssetIds]);
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
@@ -1164,14 +1173,23 @@ export function SekerEaglePage({
                   </div>
                 </section>
                 <section className={styles.detailSection}>
-                  <h3>人工标签</h3>
+                  <h3>{selectedAssetIds.length > 1 ? '批量编辑人工标签' : '人工标签'}</h3>
+                  {selectedAssetIds.length > 1 && (
+                    <p className={styles.batchTagSummary}>
+                      标签后的数字表示拥有该标签的素材数；移除操作会作用于全部所选素材。
+                    </p>
+                  )}
                   <div className={styles.tagEditor}>
-                    {selectedManualTags.map((tag) => (
+                    {selectedManualTagSummaries.map(({ tag, assetCount }) => (
                       <button
                         key={tag.id}
                         type="button"
                         className={styles.tagAssigned}
-                        aria-label={`移除人工标签 ${tag.name}`}
+                        aria-label={
+                          selectedAssetIds.length > 1
+                            ? `移除人工标签 ${tag.name}，应用于 ${assetCount}/${selectedAssetIds.length} 项素材`
+                            : `移除人工标签 ${tag.name}`
+                        }
                         disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
                         onClick={() =>
                           batchTagMutation.mutate({
@@ -1181,6 +1199,9 @@ export function SekerEaglePage({
                         }
                       >
                         {tag.name}
+                        {selectedAssetIds.length > 1
+                          ? ` · ${assetCount}/${selectedAssetIds.length}`
+                          : ''}
                       </button>
                     ))}
                     <button
@@ -1197,6 +1218,27 @@ export function SekerEaglePage({
                       <IconPlus size={14} />
                       添加标签…
                     </button>
+                    {selectedAssetIds.length > 1 && selectedManualTagSummaries.length > 0 && (
+                      <button
+                        type="button"
+                        className={styles.tagClearAll}
+                        aria-label="清空所有人工标签"
+                        disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
+                        onClick={() => {
+                          const confirmed = window.confirm(
+                            `将清除 ${selectedAssetIds.length} 项素材上的全部人工标签，共涉及 ${selectedManualTagSummaries.length} 个不同标签。AI 自动标签不受影响。确认继续？`,
+                          );
+                          if (!confirmed) return;
+                          batchTagMutation.mutate({
+                            assetIds: selectedAssetIds,
+                            clearAll: true,
+                          });
+                        }}
+                      >
+                        <IconTrash size={14} />
+                        清空所有人工标签
+                      </button>
+                    )}
                   </div>
                   {batchTagMutation.isError && (
                     <p className={styles.inlineError}>{batchTagMutation.error.message}</p>

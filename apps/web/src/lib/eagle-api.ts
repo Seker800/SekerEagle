@@ -406,7 +406,12 @@ export async function replaceEagleAssetManualTags(_token: string, id: string, ta
 }
 export async function batchChangeEagleManualTags(
   _token: string,
-  input: { assetIds: string[]; addTagIds: string[]; removeTagIds: string[] },
+  input: {
+    assetIds: string[];
+    addTagIds: string[];
+    removeTagIds: string[];
+    clearAll?: boolean;
+  },
 ) {
   return api<{ affectedAssetCount: number }>('/eagle/assets/batch/manual-tags', {
     method: 'POST',

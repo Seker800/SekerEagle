@@ -3090,7 +3090,12 @@
       },
       "BatchChangeEagleManualTagsDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "clearAll": {
+            "type": "boolean",
+            "description": "清除所选素材的全部人工标签，不影响 AI 标签。"
+          }
+        }
       },
       "CreateSmartFolderDto": {
         "type": "object",

@@ -807,7 +807,11 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '显示素材详情' }));
     const inspector = await screen.findByRole('complementary', { name: '素材详情' });
 
-    fireEvent.click(await within(inspector).findByRole('button', { name: '移除人工标签 灵感' }));
+    fireEvent.click(
+      await within(inspector).findByRole('button', {
+        name: '移除人工标签 灵感，应用于 1/2 项素材',
+      }),
+    );
     await waitFor(() => {
       expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
         assetIds: ['asset-1', 'asset-2'],
@@ -852,7 +856,7 @@ describe('SekerEaglePage', () => {
       nextCursor: null,
     });
     getEagleAssetMock.mockResolvedValue(secondAsset);
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
@@ -867,10 +871,13 @@ describe('SekerEaglePage', () => {
     expect(within(inspector).getByText('未分类 · 2/2')).toBeInTheDocument();
 
     fireEvent.click(within(inspector).getByRole('button', { name: '清空所有人工标签' }));
-
     expect(confirm).toHaveBeenCalledWith(
       '将清除 2 项素材上的全部人工标签，共涉及 2 个不同标签。AI 自动标签不受影响。确认继续？',
     );
+    expect(batchChangeEagleManualTagsMock).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    fireEvent.click(within(inspector).getByRole('button', { name: '清空所有人工标签' }));
     await waitFor(() => {
       expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
         assetIds: ['asset-1', 'asset-2'],

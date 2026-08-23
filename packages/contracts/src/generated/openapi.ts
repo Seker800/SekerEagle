@@ -1490,7 +1490,10 @@ export interface components {
     ReplaceAssetTagsDto: {
       tagIds: string[];
     };
-    BatchChangeEagleManualTagsDto: Record<string, never>;
+    BatchChangeEagleManualTagsDto: {
+      /** @description 清除所选素材的全部人工标签，不影响 AI 标签。 */
+      clearAll?: boolean;
+    };
     CreateSmartFolderDto: {
       name: string;
       parentId?: Record<string, never> | null;
