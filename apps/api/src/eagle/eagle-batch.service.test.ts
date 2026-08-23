@@ -100,6 +100,41 @@ test('batch clear removes every manual tag and distance for owned assets without
   ]);
 });
 
+test('large batch tag additions split relation inserts into bounded chunks', async () => {
+  const assetIds = Array.from({ length: 201 }, (_, index) => `asset-${index}`);
+  const tagIds = Array.from({ length: 100 }, (_, index) => `tag-${index}`);
+  const insertedRows: number[] = [];
+  let distanceSyncs = 0;
+  const transaction = {
+    eagleAssetManualTag: {
+      updateMany: async () => ({ count: 0 }),
+      createMany: async ({ data }: { data: unknown[] }) => {
+        insertedRows.push(data.length);
+        return { count: data.length };
+      },
+    },
+    $executeRaw: async () => {
+      distanceSyncs += 1;
+      return 0;
+    },
+  };
+  const prisma = {
+    eagleAsset: { findMany: async () => assetIds.map((id) => ({ id })) },
+    eagleManualTag: { findMany: async () => tagIds.map((id) => ({ id })) },
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  };
+  const service = new EagleService(prisma as never);
+
+  await service.batchChangeManualTags('owner-a', {
+    assetIds,
+    addTagIds: tagIds,
+    removeTagIds: [],
+  });
+
+  assert.deepEqual(insertedRows, [10_000, 10_000, 100]);
+  assert.equal(distanceSyncs, 3);
+});
+
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {
   let rejectionWasInsideTransaction = false;
   const service = new EagleService({
