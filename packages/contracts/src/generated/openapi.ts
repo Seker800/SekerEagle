@@ -1491,6 +1491,9 @@ export interface components {
       tagIds: string[];
     };
     BatchChangeEagleManualTagsDto: {
+      assetIds: string[];
+      addTagIds: string[];
+      removeTagIds: string[];
       /** @description 清除所选素材的全部人工标签，不影响 AI 标签。 */
       clearAll?: boolean;
     };

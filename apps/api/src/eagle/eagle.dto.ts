@@ -211,14 +211,25 @@ export class BatchSetEagleAssetPrivacyDto {
 }
 
 export class BatchChangeEagleManualTagsDto {
+  @ApiProperty({ type: [String], minItems: 1, maxItems: 1000 })
   @IsArray()
   @ArrayMinSize(1)
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(1000)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   assetIds!: string[];
-  @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) addTagIds!: string[];
-  @IsArray() @ArrayMaxSize(100) @ArrayUnique() @IsUUID('4', { each: true }) removeTagIds!: string[];
+  @ApiProperty({ type: [String], maxItems: 100 })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  addTagIds!: string[];
+  @ApiProperty({ type: [String], maxItems: 100 })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  removeTagIds!: string[];
   @ApiPropertyOptional({ description: '清除所选素材的全部人工标签，不影响 AI 标签。' })
   @IsOptional()
   @IsBoolean()

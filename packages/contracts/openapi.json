@@ -3091,11 +3091,34 @@
       "BatchChangeEagleManualTagsDto": {
         "type": "object",
         "properties": {
+          "assetIds": {
+            "minItems": 1,
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "addTagIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "removeTagIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "clearAll": {
             "type": "boolean",
             "description": "清除所选素材的全部人工标签，不影响 AI 标签。"
           }
-        }
+        },
+        "required": ["assetIds", "addTagIds", "removeTagIds"]
       },
       "CreateSmartFolderDto": {
         "type": "object",

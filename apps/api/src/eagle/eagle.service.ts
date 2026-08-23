@@ -69,6 +69,7 @@ const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
 type AssetListRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetListInclude }>;
 type AssetRecord = Prisma.EagleAssetGetPayload<{ include: typeof assetInclude }>;
 type AssetListOptions = { trash?: boolean; includePrivate?: boolean };
+const BATCH_TAG_WRITE_ASSET_CHUNK_SIZE = 100;
 
 @Injectable()
 export class EagleService {
@@ -404,17 +405,24 @@ export class EagleService {
         });
       }
       if (input.addTagIds.length) {
-        await transaction.eagleAssetManualTag.updateMany({
-          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.addTagIds } },
-          data: { assignedByUser: true },
-        });
-        await transaction.eagleAssetManualTag.createMany({
-          data: input.assetIds.flatMap((assetId) =>
-            input.addTagIds.map((tagId) => ({ ownerId, assetId, tagId })),
-          ),
-          skipDuplicates: true,
-        });
-        await syncCurrentTagMemberDistances(transaction, ownerId, input.assetIds, input.addTagIds);
+        for (
+          let offset = 0;
+          offset < input.assetIds.length;
+          offset += BATCH_TAG_WRITE_ASSET_CHUNK_SIZE
+        ) {
+          const assetIds = input.assetIds.slice(offset, offset + BATCH_TAG_WRITE_ASSET_CHUNK_SIZE);
+          await transaction.eagleAssetManualTag.updateMany({
+            where: { ownerId, assetId: { in: assetIds }, tagId: { in: input.addTagIds } },
+            data: { assignedByUser: true },
+          });
+          await transaction.eagleAssetManualTag.createMany({
+            data: assetIds.flatMap((assetId) =>
+              input.addTagIds.map((tagId) => ({ ownerId, assetId, tagId })),
+            ),
+            skipDuplicates: true,
+          });
+          await syncCurrentTagMemberDistances(transaction, ownerId, assetIds, input.addTagIds);
+        }
       }
     });
     return { affectedAssetCount: input.assetIds.length };
