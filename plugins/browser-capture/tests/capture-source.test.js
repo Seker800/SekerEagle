@@ -14,15 +14,11 @@ test('normalizes, deduplicates and bounds untrusted candidate URLs', () => {
     ],
   });
 
-  assert.equal(candidates.length, 12);
-  assert.deepEqual(candidates.slice(0, 2), [
+  assert.deepEqual(candidates, [
     'https://cdn.example.com/original.jpg',
     'https://cdn.example.com/current.jpg',
+    ...Array.from({ length: 10 }, (_, index) => `https://cdn.example.com/${index}.jpg`),
   ]);
-  assert.equal(
-    candidates.some((candidate) => candidate.startsWith('javascript:')),
-    false,
-  );
 });
 
 test('retains supported data and blob fallbacks while rejecting malformed values', () => {

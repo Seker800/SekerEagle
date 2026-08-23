@@ -167,9 +167,11 @@ test('ignores ordinary page links and always retains rendered fallbacks within t
     getStyle: () => ({ backgroundImage: 'none' }),
   });
 
-  assert.equal(target.sourceCandidates.length, 12);
-  assert.equal(target.sourceCandidates.includes('https://example.com/photo/details'), false);
-  assert.deepEqual(target.sourceCandidates.slice(-2), [
+  assert.deepEqual(target.sourceCandidates, [
+    ...Array.from(
+      { length: 10 },
+      (_, index) => `https://cdn.example.com/responsive-${20 - index}.jpg`,
+    ),
     'https://cdn.example.com/rendered.jpg',
     'https://cdn.example.com/fallback.jpg',
   ]);
