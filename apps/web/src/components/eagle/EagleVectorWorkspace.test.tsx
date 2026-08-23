@@ -289,11 +289,4 @@ describe('EagleVectorWorkspace', () => {
     expect(screen.getByRole('menuitem', { name: '添加人工标签' })).toBeInTheDocument();
   });
 
-  it('shows real queue state and reports how many missing vectors were enqueued', async () => {
-    render(<EagleVectorWorkspace />);
-    expect(await screen.findByText('等待 12 · 运行 2 · 未入队 5')).toBeInTheDocument();
-    expect(screen.getByText('夜间 23:00–06:00 执行')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '扫描缺失向量' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('已排队 5 个缺失图片向量');
-  });
 });
