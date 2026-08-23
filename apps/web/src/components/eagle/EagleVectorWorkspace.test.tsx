@@ -205,8 +205,7 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('reuses the full tag picker search so owners can browse and find tags by pinyin', async () => {
-    render(<EagleVectorWorkspace />);
-    fireEvent.click(await screen.findByRole('button', { name: /标签推荐设置/ }));
+    render(<EagleVectorWorkspace view="TAGS" />);
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByText('还没有参与推荐的标签，请从上方搜索并添加。')).toBeInTheDocument();
     expect(await screen.findByText('驾驶')).toBeInTheDocument();
@@ -229,6 +228,65 @@ describe('EagleVectorWorkspace', () => {
     const addButton = screen.getByRole('button', { name: '添加驾驶到标签推荐' });
     fireEvent.click(addButton);
     await waitFor(() => expect(api.setEagleVectorTagEnabled).toHaveBeenCalledWith('driver', true));
+  });
+
+  it('renders one focused workflow without nesting the three peer entries again', async () => {
+    render(<EagleVectorWorkspace view="REVIEW" />);
+
+    expect(await screen.findByRole('heading', { name: '智能标签确认' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: '向量处理视图' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/标签推荐设置/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/待手动分类/)).not.toBeInTheDocument();
+  });
+
+  it('lets owners classify selected fallback assets from a visible action or the context menu', async () => {
+    vi.mocked(api.listEagleUnclassifiedAssets).mockResolvedValue({
+      items: [
+        {
+          id: 'asset-unclassified',
+          displayName: 'unclassified.jpg',
+          width: 800,
+          height: 600,
+          renditions: [],
+          embeddings: [],
+        },
+      ],
+      nextCursor: null,
+    });
+    const assignManualTags = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <EagleVectorWorkspace
+        view="UNCLASSIFIED"
+        manualTags={[
+          {
+            id: 'driver',
+            name: '驾驶',
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 42,
+            pinyin: 'jia shi',
+            pinyinInitials: 'js',
+          },
+        ]}
+        onAssignManualTags={assignManualTags}
+      />,
+    );
+
+    const card = await screen.findByRole('button', { name: '选择 unclassified.jpg' });
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: '添加人工标签' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '驾驶' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
+    await waitFor(() =>
+      expect(assignManualTags).toHaveBeenCalledWith(['asset-unclassified'], ['driver']),
+    );
+
+    fireEvent.contextMenu(card, { clientX: 120, clientY: 160 });
+    expect(screen.getByRole('menuitem', { name: '添加人工标签' })).toBeInTheDocument();
   });
 
   it('shows real queue state and reports how many missing vectors were enqueued', async () => {

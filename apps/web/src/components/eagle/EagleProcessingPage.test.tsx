@@ -11,8 +11,8 @@ vi.mock('../../lib/eagle-processing-admin-api', () => ({
   retryAllFailedEagleProcessingJobs: vi.fn(),
   reconcileEagleProcessingJobs: vi.fn(),
 }));
-vi.mock('./EagleVectorWorkspace', () => ({
-  EagleVectorWorkspace: () => <div data-testid="vector-workspace">人工标签建议</div>,
+vi.mock('./EagleVectorProcessingPanel', () => ({
+  EagleVectorProcessingPanel: () => <div data-testid="vector-processing-panel">图片向量状态</div>,
 }));
 
 const summary = {
@@ -62,10 +62,12 @@ describe('EagleProcessingPage', () => {
     expect(screen.getByDisplayValue('23:00')).toBeInTheDocument();
   });
 
-  it('keeps owner-only access scoped to the intelligent labeling workspace', () => {
+  it('shows owners an operational vector status without nesting labeling workflows', () => {
     render(<EagleProcessingPage canManageProcessing={false} />);
 
-    expect(screen.getByTestId('vector-workspace')).toBeVisible();
+    expect(screen.getByTestId('vector-processing-panel')).toBeVisible();
+    expect(screen.queryByText('智能标签确认')).not.toBeInTheDocument();
+    expect(screen.queryByText('标签推荐设置')).not.toBeInTheDocument();
     expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     expect(api.fetchEagleProcessingSummary).not.toHaveBeenCalled();
     expect(api.listEagleProcessingJobs).not.toHaveBeenCalled();
@@ -104,9 +106,10 @@ describe('EagleProcessingPage', () => {
     expect(within(colorPanel).getByText('补算中 70%')).toBeVisible();
     expect(within(colorPanel).getByText('70%')).toBeVisible();
 
-    fireEvent.click(within(navigation).getByRole('button', { name: /标签推荐/ }));
-    expect(screen.getByRole('region', { name: /标签推荐/ })).toBeVisible();
-    expect(screen.getByTestId('vector-workspace')).toBeVisible();
+    expect(within(navigation).queryByRole('button', { name: /标签推荐/ })).not.toBeInTheDocument();
+    fireEvent.click(within(navigation).getByRole('button', { name: /图片向量/ }));
+    expect(screen.getByRole('region', { name: /图片向量/ })).toBeVisible();
+    expect(screen.getByTestId('vector-processing-panel')).toBeVisible();
 
     fireEvent.click(screen.getByRole('button', { name: /任务中心/ }));
     const taskCenter = screen.getByRole('region', { name: '任务中心' });

@@ -1268,7 +1268,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '标签推荐设置 15' }));
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
 
-    fireEvent.click(screen.getByRole('button', { name: '没有可用建议 6' }));
+    fireEvent.click(screen.getByRole('button', { name: '待手动分类 6' }));
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute(
       'data-view',
       'UNCLASSIFIED',
