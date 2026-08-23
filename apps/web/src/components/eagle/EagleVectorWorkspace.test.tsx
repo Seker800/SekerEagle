@@ -108,10 +108,10 @@ describe('EagleVectorWorkspace', () => {
     });
   });
 
-  it('states the Ollama boundary and confirms vector suggestions into manual tags', async () => {
+  it('states the manual-tag boundary and confirms vector suggestions into manual tags', async () => {
     render(<EagleVectorWorkspace />);
     expect(
-      await screen.findByText('AI 自动标签未来由 Ollama 视觉模型独立生成，并写入 AI 标签体系。'),
+      await screen.findByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
     ).toBeInTheDocument();
     expect(screen.getByText('建议：汽车')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
@@ -289,4 +289,40 @@ describe('EagleVectorWorkspace', () => {
     expect(screen.getByRole('menuitem', { name: '添加人工标签' })).toBeInTheDocument();
   });
 
+  it('rejects the current recommendation before assigning a different manual tag', async () => {
+    const assignManualTags = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EagleVectorWorkspace
+        view="REVIEW"
+        manualTags={[
+          {
+            id: 'night',
+            name: '夜间氛围',
+            color: null,
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 18,
+            pinyin: 'ye jian fen wei',
+            pinyinInitials: 'yjfw',
+          },
+        ]}
+        onAssignManualTags={assignManualTags}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /选择 red-car\.jpg/ }));
+    fireEvent.click(screen.getByRole('button', { name: '指定其他标签' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '夜间氛围' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
+
+    await waitFor(() => {
+      expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'REJECT');
+      expect(assignManualTags).toHaveBeenCalledWith(['asset-1'], ['night']);
+    });
+    expect(
+      vi.mocked(api.reviewEagleVectorSuggestions).mock.invocationCallOrder.at(-1),
+    ).toBeLessThan(assignManualTags.mock.invocationCallOrder[0]);
+  });
 });

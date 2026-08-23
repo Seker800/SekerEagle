@@ -100,12 +100,6 @@ type EagleLibraryView =
   | 'VECTOR_UNCLASSIFIED'
   | 'PROCESSING'
   | 'ACCOUNT';
-const VECTOR_LIBRARY_VIEWS: Record<EagleVectorWorkspaceView, EagleLibraryView> = {
-  REVIEW: 'VECTOR_REVIEW',
-  TAGS: 'VECTOR_TAGS',
-  UNCLASSIFIED: 'VECTOR_UNCLASSIFIED',
-};
-
 function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceView | null {
   if (view === 'VECTOR_REVIEW') return 'REVIEW';
   if (view === 'VECTOR_TAGS') return 'TAGS';
@@ -742,10 +736,10 @@ export function SekerEaglePage({
             <button
               type="button"
               className={`${styles.navSubItem} ${libraryView === 'VECTOR_UNCLASSIFIED' ? styles.navActive : ''}`}
-              aria-label={`没有可用建议 ${unavailableSuggestionCount}`}
+              aria-label={`待手动分类 ${unavailableSuggestionCount}`}
               onClick={() => changeLibraryView('VECTOR_UNCLASSIFIED')}
             >
-              没有可用建议<span>{unavailableSuggestionCount}</span>
+              待手动分类<span>{unavailableSuggestionCount}</span>
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
@@ -814,7 +808,11 @@ export function SekerEaglePage({
           ) : getVectorWorkspaceView(libraryView) ? (
             <EagleVectorWorkspace
               view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
-              onViewChange={(view) => changeLibraryView(VECTOR_LIBRARY_VIEWS[view])}
+              manualTags={manualTags}
+              onCreateManualTag={(name) => createBatchTagMutation.mutateAsync(name)}
+              onAssignManualTags={async (assetIds, tagIds) => {
+                await batchTagMutation.mutateAsync({ assetIds, addTagIds: tagIds });
+              }}
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage

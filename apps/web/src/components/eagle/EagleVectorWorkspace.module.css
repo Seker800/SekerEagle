@@ -1,22 +1,26 @@
 .workspace {
+  min-height: 0;
+  height: 100%;
   display: grid;
+  align-content: start;
   gap: 12px;
+  padding: 16px;
+  overflow: auto;
   color: #d9dadd;
 }
-.hero {
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 16px;
-  border: 1px solid rgb(214 155 72 / 28%);
-  border-radius: 12px;
-  background: linear-gradient(135deg, rgb(214 155 72 / 12%), rgb(255 255 255 / 2%));
+.pageHeader {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
 }
-.hero h2 {
+.pageHeader h2 {
   margin: 4px 0;
   font-size: 18px;
 }
-.hero p,
+.pageHeader p {
+  margin: 0;
+  color: #999fa8;
+  font-size: 12px;
+}
 .explainer {
   margin: 0;
   color: #999fa8;
@@ -27,29 +31,6 @@
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-}
-.coverage {
-  min-width: 150px;
-  display: grid;
-  text-align: right;
-}
-.coverage strong {
-  color: #f2d09b;
-  font-size: 25px;
-}
-.coverage span,
-.coverage small {
-  color: #9da2aa;
-  font-size: 10px;
-}
-.coverage button {
-  margin-top: 5px;
-  min-height: 27px;
-  border: 1px solid rgb(214 155 72 / 35%);
-  border-radius: 6px;
-  color: #e5c18b;
-  background: rgb(214 155 72 / 8%);
-  cursor: pointer;
 }
 .boundary {
   display: flex;
@@ -63,27 +44,6 @@
 .boundary strong {
   color: #d3d5d8;
   white-space: nowrap;
-}
-.tabs {
-  display: flex;
-  gap: 4px;
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
-}
-.tabs button {
-  padding: 9px 11px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: #8e949d;
-  background: transparent;
-  cursor: pointer;
-}
-.tabs button[data-active='true'] {
-  border-color: #d69b48;
-  color: #f0f1f3;
-}
-.tabs span {
-  margin-left: 4px;
-  color: #d69b48;
 }
 .panel {
   display: grid;
@@ -334,6 +294,33 @@
   color: #858b94;
   font-size: 10px;
 }
+.contextMenu {
+  position: fixed;
+  z-index: 40;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: #202226;
+  box-shadow: 0 12px 35px rgb(0 0 0 / 42%);
+}
+.contextMenu button {
+  width: 100%;
+  min-height: 30px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d9dadd;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.contextMenu button:hover {
+  background: rgb(255 255 255 / 7%);
+}
 .loadMore {
   justify-self: center;
   min-width: 120px;
@@ -382,12 +369,6 @@
   background: rgb(73 182 117 / 12%);
 }
 @media (max-width: 800px) {
-  .hero {
-    display: grid;
-  }
-  .coverage {
-    text-align: left;
-  }
   .tagRow {
     grid-template-columns: 12px 1fr;
   }

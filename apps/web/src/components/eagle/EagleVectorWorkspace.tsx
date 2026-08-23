@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { IconCheck } from '@tabler/icons-react';
+import { IconCheck, IconTags } from '@tabler/icons-react';
 import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
 import {
-  fetchEagleVectorSummary,
   getVectorThumbnailUrl,
   listEagleTagDistanceAssets,
   listEagleUnclassifiedAssets,
   listEagleVectorSuggestions,
   listEagleVectorTags,
   rebuildEagleVectorTag,
-  retryFailedEagleEmbeddings,
-  scanMissingEagleEmbeddings,
   reviewEagleVectorSuggestions,
   setEagleVectorTagEnabled,
   type EagleTagDistanceAsset,
   type EagleUnclassifiedAsset,
   type EagleVectorSuggestion,
-  type EagleVectorSummary,
   type EagleVectorTag,
 } from '../../lib/eagle-vector-api';
+import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { EagleVirtualList } from './EagleVirtualList';
@@ -29,14 +26,17 @@ type View = EagleVectorWorkspaceView | 'DISTANCE';
 
 interface EagleVectorWorkspaceProps {
   view?: EagleVectorWorkspaceView;
-  onViewChange?: (view: EagleVectorWorkspaceView) => void;
+  manualTags?: EagleManualTag[];
+  onAssignManualTags?: (assetIds: string[], tagIds: string[]) => Promise<void>;
+  onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
 }
 
 export function EagleVectorWorkspace({
   view: controlledView,
-  onViewChange,
+  manualTags: providedManualTags,
+  onAssignManualTags,
+  onCreateManualTag,
 }: EagleVectorWorkspaceProps = {}) {
-  const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
   const [unclassified, setUnclassified] = useState<EagleUnclassifiedAsset[]>([]);
@@ -53,8 +53,17 @@ export function EagleVectorWorkspace({
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const selectionAnchorIdRef = useRef<string | null>(null);
   const [search, setSearch] = useState('');
-  const [manualTags, setManualTags] = useState<EagleManualTag[]>([]);
+  const [loadedManualTags, setLoadedManualTags] = useState<EagleManualTag[]>([]);
   const [loadingManualTags, setLoadingManualTags] = useState(false);
+  const [tagPickerTarget, setTagPickerTarget] = useState<{
+    assetIds: string[];
+    suggestionIds: string[];
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    itemIds: string[];
+  } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -66,16 +75,6 @@ export function EagleVectorWorkspace({
     selectionAnchorIdRef.current = null;
   }, []);
 
-  const changeView = useCallback(
-    (nextView: EagleVectorWorkspaceView) => {
-      setView(nextView);
-      setDistanceTag(null);
-      clearSelection();
-      onViewChange?.(nextView);
-    },
-    [clearSelection, onViewChange],
-  );
-
   useEffect(() => {
     if (!controlledView) return;
     setView(controlledView);
@@ -86,26 +85,34 @@ export function EagleVectorWorkspace({
   const reload = useCallback(async () => {
     setError('');
     try {
-      const [nextSummary, nextTags, nextSuggestions, nextUnclassified] = await Promise.all([
-        fetchEagleVectorSummary(),
-        listEagleVectorTags(),
-        listEagleVectorSuggestions(tagFilter || undefined),
-        listEagleUnclassifiedAssets(),
+      const [nextTags, nextSuggestions, nextUnclassified] = await Promise.all([
+        view === 'REVIEW' || view === 'TAGS' || view === 'DISTANCE'
+          ? listEagleVectorTags()
+          : Promise.resolve(null),
+        view === 'REVIEW'
+          ? listEagleVectorSuggestions(tagFilter || undefined)
+          : Promise.resolve(null),
+        view === 'UNCLASSIFIED' ? listEagleUnclassifiedAssets() : Promise.resolve(null),
       ]);
-      setSummary(nextSummary);
-      setTags(nextTags);
-      setSuggestions(nextSuggestions.items);
-      setUnclassified(nextUnclassified.items);
-      setSuggestionCursor(nextSuggestions.nextCursor);
-      setUnclassifiedCursor(nextUnclassified.nextCursor);
+      if (nextTags) setTags(nextTags);
+      if (nextSuggestions) {
+        setSuggestions(nextSuggestions.items);
+        setSuggestionCursor(nextSuggestions.nextCursor);
+      }
+      if (nextUnclassified) {
+        setUnclassified(nextUnclassified.items);
+        setUnclassifiedCursor(nextUnclassified.nextCursor);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取向量处理状态失败');
     }
-  }, [tagFilter]);
+  }, [tagFilter, view]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') clearSelection();
+      if (event.key !== 'Escape') return;
+      setContextMenu(null);
+      clearSelection();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -130,12 +137,12 @@ export function EagleVectorWorkspace({
   }, [reload]);
 
   useEffect(() => {
-    if (view !== 'TAGS') return;
+    if (view !== 'TAGS' || providedManualTags) return;
     let cancelled = false;
     setLoadingManualTags(true);
     void listEagleManualTags('')
       .then((results) => {
-        if (!cancelled) setManualTags(results);
+        if (!cancelled) setLoadedManualTags(results);
       })
       .catch((cause: unknown) => {
         if (!cancelled) setError(cause instanceof Error ? cause.message : '读取人工标签失败');
@@ -146,7 +153,9 @@ export function EagleVectorWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [view]);
+  }, [providedManualTags, view]);
+
+  const manualTags = providedManualTags ?? loadedManualTags;
 
   const availableTags = useMemo(() => {
     const enabledIds = new Set(tags.map((tag) => tag.id));
@@ -222,73 +231,99 @@ export function EagleVectorWorkspace({
     selectionAnchorIdRef.current = nextSelection.anchorId;
   };
 
+  const getTagPickerTarget = (itemIds: string[]) => {
+    if (view === 'REVIEW') {
+      const suggestionIds = new Set(itemIds);
+      return {
+        suggestionIds: itemIds,
+        assetIds: suggestions
+          .filter((suggestion) => suggestionIds.has(suggestion.id))
+          .map((suggestion) => suggestion.asset.id),
+      };
+    }
+    return { suggestionIds: [], assetIds: itemIds };
+  };
+
+  const openTagPicker = (itemIds: string[]) => {
+    if (!onAssignManualTags || itemIds.length === 0) return;
+    setContextMenu(null);
+    setTagPickerTarget(getTagPickerTarget(itemIds));
+  };
+
+  const assignManualTags = async (tagIds: string[]) => {
+    if (!tagPickerTarget || !onAssignManualTags) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      if (tagPickerTarget.suggestionIds.length) {
+        await reviewEagleVectorSuggestions(tagPickerTarget.suggestionIds, 'REJECT');
+      }
+      await onAssignManualTags(tagPickerTarget.assetIds, tagIds);
+      setNotice(`已为 ${tagPickerTarget.assetIds.length} 项素材添加人工标签`);
+      setTagPickerTarget(null);
+      clearSelection();
+      await reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '添加人工标签失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openContextMenu = (
+    event: MouseEvent<HTMLButtonElement>,
+    itemId: string,
+    orderedIds: string[],
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const itemIds = selected.includes(itemId) ? selected : [itemId];
+    if (!selected.includes(itemId)) selectItem(itemId, orderedIds, 'single');
+    setContextMenu({
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 184)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 48)),
+      itemIds,
+    });
+  };
+
+  const pageCopy =
+    view === 'TAGS' || view === 'DISTANCE'
+      ? {
+          eyebrow: '推荐语义',
+          title: view === 'DISTANCE' ? `距离检查 · ${distanceTag?.name ?? ''}` : '标签推荐设置',
+          description: '选择哪些人工标签参与推荐，并管理每个标签的向量中心。',
+        }
+      : view === 'UNCLASSIFIED'
+        ? {
+            eyebrow: '人工归类',
+            title: '待手动分类',
+            description: '这些素材暂时没有可靠推荐，请直接添加一个或多个人工标签。',
+          }
+        : {
+            eyebrow: '人工标签建议',
+            title: '智能标签确认',
+            description: '确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。',
+          };
+
   return (
-    <section className={styles.workspace} aria-label="图片向量与人工标签建议">
-      <header className={styles.hero}>
-        <div>
-          <span className={styles.eyebrow}>Qwen 图片向量</span>
-          <h2>人工标签建议</h2>
-          <p>从已开启且已建立中心的人工标签中推荐一个；确认后才写入人工标签。</p>
-        </div>
-        <div className={styles.coverage}>
-          <strong>{summary?.embeddingCoverage.percentage ?? 0}%</strong>
-          <span>图片向量覆盖</span>
-          <small>
-            {summary?.embeddingCoverage.ready ?? 0}/{summary?.embeddingCoverage.eligible ?? 0} ·{' '}
-            {summary?.dimensions ?? 1024} 维
-          </small>
-          <small>
-            等待 {summary?.embeddingCoverage.queued ?? 0} · 运行{' '}
-            {summary?.embeddingCoverage.running ?? 0} · 未入队{' '}
-            {summary?.embeddingCoverage.missing ?? 0}
-          </small>
-          {(summary?.embeddingCoverage.blocked ?? 0) > 0 ? (
-            <small>无可用预览 {summary?.embeddingCoverage.blocked}，需先修复图片处理</small>
-          ) : null}
-          <button
-            type="button"
-            disabled={busy || (summary?.embeddingCoverage.missing ?? 0) === 0}
-            onClick={() =>
-              void act(scanMissingEagleEmbeddings, ({ created, repaired }) =>
-                created || repaired
-                  ? `已排队 ${created + repaired} 个缺失图片向量`
-                  : '没有发现可排队的缺失图片向量',
-              )
-            }
-          >
-            扫描缺失向量
-          </button>
-          <small>
-            {summary?.processingSchedule.mode === 'ALWAYS'
-              ? '后台任务全天执行'
-              : summary?.processingSchedule.mode === 'MANUAL'
-                ? '后台任务已暂停'
-                : `夜间 ${summary?.processingSchedule.nightStart ?? '23:00'}–${summary?.processingSchedule.nightEnd ?? '06:00'} 执行`}
-          </small>
-          <small>
-            Metal 宿主：
-            {summary?.host.status === 'ONLINE'
-              ? '在线'
-              : summary?.host.status === 'DRIFTED'
-                ? '合同不一致'
-                : '离线'}
-          </small>
-          {(summary?.embeddingCoverage.failed ?? 0) > 0 ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void act(retryFailedEagleEmbeddings, '失败的图片向量任务已重新排队')}
-            >
-              重试 {summary?.embeddingCoverage.failed} 个失败任务
-            </button>
-          ) : null}
-        </div>
+    <section
+      className={styles.workspace}
+      aria-label={pageCopy.title}
+      onClick={() => setContextMenu(null)}
+    >
+      <header className={styles.pageHeader}>
+        <span className={styles.eyebrow}>{pageCopy.eyebrow}</span>
+        <h2>{pageCopy.title}</h2>
+        <p>{pageCopy.description}</p>
       </header>
 
-      <div className={styles.boundary}>
-        <strong>与 AI 自动标签分开</strong>
-        <span>AI 自动标签未来由 Ollama 视觉模型独立生成，并写入 AI 标签体系。</span>
-      </div>
+      {view === 'REVIEW' ? (
+        <div className={styles.boundary}>
+          <strong>只写入人工标签</strong>
+          <span>这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。</span>
+        </div>
+      ) : null}
 
       {error ? (
         <div className={styles.error} role="alert">
@@ -300,37 +335,6 @@ export function EagleVectorWorkspace({
           {notice}
         </div>
       ) : null}
-
-      <nav className={styles.tabs} aria-label="向量处理视图">
-        <button data-active={view === 'REVIEW'} onClick={() => changeView('REVIEW')} type="button">
-          智能标签确认 <span>{summary?.suggestions.pending ?? 0}</span>
-        </button>
-        <button data-active={view === 'TAGS'} onClick={() => changeView('TAGS')} type="button">
-          标签推荐设置 <span>{summary?.tags.enabled ?? 0}</span>
-        </button>
-        <button
-          data-active={view === 'UNCLASSIFIED'}
-          onClick={() => changeView('UNCLASSIFIED')}
-          type="button"
-        >
-          没有可用建议{' '}
-          <span>
-            {Math.max(
-              0,
-              (summary?.suggestions.unclassified ?? 0) - (summary?.suggestions.pending ?? 0),
-            )}
-          </span>
-        </button>
-        {distanceTag ? (
-          <button
-            data-active={view === 'DISTANCE'}
-            onClick={() => setView('DISTANCE')}
-            type="button"
-          >
-            距离检查 · {distanceTag.name}
-          </button>
-        ) : null}
-      </nav>
 
       {view === 'REVIEW' ? (
         <section className={styles.panel} aria-label="智能标签确认">
@@ -369,6 +373,13 @@ export function EagleVectorWorkspace({
             >
               批量拒绝
             </button>
+            <button
+              type="button"
+              disabled={!selected.length || busy || !onAssignManualTags}
+              onClick={() => openTagPicker(selected)}
+            >
+              指定其他标签
+            </button>
           </div>
           <AssetGrid ariaLabel="待确认的智能标签建议" onClear={clearSelection}>
             {suggestions.map((suggestion) => (
@@ -385,6 +396,13 @@ export function EagleVectorWorkspace({
                   )
                 }
                 onReview={(action) => void review([suggestion.id], action)}
+                onContextMenu={(event) =>
+                  openContextMenu(
+                    event,
+                    suggestion.id,
+                    suggestions.map((item) => item.id),
+                  )
+                }
                 disabled={busy}
               />
             ))}
@@ -458,7 +476,7 @@ export function EagleVectorWorkspace({
 
           <div className={styles.sectionHeading}>
             <strong>参与推荐</strong>
-            <span>{summary?.tags.enabled ?? tags.length} 个标签</span>
+            <span>{tags.length} 个标签</span>
           </div>
           {tags.length ? (
             <div className={styles.tagList}>
@@ -520,11 +538,21 @@ export function EagleVectorWorkspace({
       ) : null}
 
       {view === 'UNCLASSIFIED' ? (
-        <section className={styles.panel} aria-label="没有可用建议">
+        <section className={styles.panel} aria-label="待手动分类">
+          <div className={styles.toolbar}>
+            <span className={styles.selectionCount}>已选择 {selected.length} 项</span>
+            <button
+              type="button"
+              disabled={!selected.length || busy || !onAssignManualTags}
+              onClick={() => openTagPicker(selected)}
+            >
+              添加人工标签
+            </button>
+          </div>
           <p className={styles.explainer}>
-            这些图片没有任何人工标签，也没有当前可审核建议。向量仍在处理或最高相似度不足时都会出现在这里。
+            可能原因包括向量仍在处理、相似度不足，或当前没有可用的标签中心。选择素材后可直接完成归类。
           </p>
-          <AssetGrid ariaLabel="没有可用建议的素材" onClear={clearSelection}>
+          <AssetGrid ariaLabel="待手动分类的素材" onClear={clearSelection}>
             {unclassified.map((asset) => (
               <UnclassifiedCard
                 key={asset.id}
@@ -536,6 +564,13 @@ export function EagleVectorWorkspace({
                     asset.id,
                     unclassified.map((item) => item.id),
                     gesture,
+                  )
+                }
+                onContextMenu={(event) =>
+                  openContextMenu(
+                    event,
+                    asset.id,
+                    unclassified.map((item) => item.id),
                   )
                 }
               />
@@ -558,6 +593,15 @@ export function EagleVectorWorkspace({
       {view === 'DISTANCE' && distanceTag ? (
         <section className={styles.panel} aria-label="标签向量距离检查">
           <div className={styles.toolbar}>
+            <button
+              type="button"
+              onClick={() => {
+                setView('TAGS');
+                setDistanceTag(null);
+              }}
+            >
+              返回标签推荐设置
+            </button>
             <strong>{distanceTag.name}</strong>
             <label>
               排序
@@ -603,6 +647,37 @@ export function EagleVectorWorkspace({
             />
           ) : null}
         </section>
+      ) : null}
+
+      {contextMenu && onAssignManualTags ? (
+        <div
+          className={styles.contextMenu}
+          role="menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            aria-label={view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
+            onClick={() => openTagPicker(contextMenu.itemIds)}
+          >
+            <IconTags size={15} />
+            {view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
+          </button>
+        </div>
+      ) : null}
+
+      {tagPickerTarget ? (
+        <EagleBatchTagPicker
+          assetCount={tagPickerTarget.assetIds.length}
+          tags={manualTags}
+          pending={busy}
+          error={error || undefined}
+          onCreate={onCreateManualTag}
+          onClose={() => setTagPickerTarget(null)}
+          onApply={(tagIds) => void assignManualTags(tagIds)}
+        />
       ) : null}
     </section>
   );
@@ -662,6 +737,7 @@ function SuggestionCard({
   batchSelection,
   onSelect,
   onReview,
+  onContextMenu,
   disabled,
 }: {
   suggestion: EagleVectorSuggestion;
@@ -669,6 +745,7 @@ function SuggestionCard({
   batchSelection: boolean;
   onSelect: (gesture: EagleSelectionGesture) => void;
   onReview: (action: 'ACCEPT' | 'REJECT') => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
   disabled: boolean;
 }) {
   return (
@@ -682,6 +759,7 @@ function SuggestionCard({
           event.stopPropagation();
           onSelect(getSelectionGesture(event));
         }}
+        onContextMenu={onContextMenu}
       >
         <Preview asset={suggestion.asset} />
         {batchSelection ? <SelectionMark selected={selected} /> : null}
@@ -721,11 +799,13 @@ function UnclassifiedCard({
   selected,
   batchSelection,
   onSelect,
+  onContextMenu,
 }: {
   asset: EagleUnclassifiedAsset;
   selected: boolean;
   batchSelection: boolean;
   onSelect: (gesture: EagleSelectionGesture) => void;
+  onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const embedding = asset.embeddings[0];
   const state = !embedding
@@ -744,6 +824,7 @@ function UnclassifiedCard({
           event.stopPropagation();
           onSelect(getSelectionGesture(event));
         }}
+        onContextMenu={onContextMenu}
       >
         <Preview asset={asset} />
         {batchSelection ? <SelectionMark selected={selected} /> : null}

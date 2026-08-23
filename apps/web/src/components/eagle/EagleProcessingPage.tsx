@@ -13,7 +13,7 @@ import {
   type EagleProcessingSummary,
 } from '../../lib/eagle-processing-admin-api';
 import styles from './EagleProcessingPage.module.css';
-import { EagleVectorWorkspace } from './EagleVectorWorkspace';
+import { EagleVectorProcessingPanel } from './EagleVectorProcessingPanel';
 
 const LANE_LABELS: Record<EagleProcessingLane, string> = {
   INTERACTIVE: '上传处理',
@@ -39,7 +39,7 @@ const KIND_LABELS: Record<string, string> = {
   PURGE_ASSET: '永久清理素材',
 };
 
-type ProcessingTab = 'BROWSE' | 'COLOR' | 'TAGS';
+type ProcessingTab = 'BROWSE' | 'COLOR' | 'VECTOR';
 type ProcessingPage = ProcessingTab | 'TASKS';
 type TaskCenterTab = 'QUEUE' | 'HISTORY';
 
@@ -50,7 +50,7 @@ const PROCESSING_TABS: ReadonlyArray<{
 }> = [
   { id: 'BROWSE', label: '浏览优化', description: '缩略图、预览与大图切片' },
   { id: 'COLOR', label: '颜色筛选', description: '代表色提取与覆盖率' },
-  { id: 'TAGS', label: '标签推荐', description: '图片向量与人工确认' },
+  { id: 'VECTOR', label: '图片向量', description: '模型、覆盖率与运行状态' },
 ];
 
 const TASK_CENTER_TABS: ReadonlyArray<{ id: TaskCenterTab; label: string }> = [
@@ -187,10 +187,10 @@ export function EagleProcessingPage({
         <header className={styles.header}>
           <div>
             <h1>素材处理</h1>
-            <p>管理图片向量、人工标签建议与审核。</p>
+            <p>查看图片向量的自动处理状态；标签业务在左侧“标签”区域完成。</p>
           </div>
         </header>
-        <EagleVectorWorkspace />
+        <EagleVectorProcessingPanel />
       </section>
     );
 
@@ -283,14 +283,14 @@ export function EagleProcessingPage({
       </div>
 
       <div
-        id="processing-panel-tags"
+        id="processing-panel-vector"
         className={styles.tabPanel}
         role="region"
-        aria-labelledby="processing-tab-tags"
+        aria-labelledby="processing-tab-vector"
         tabIndex={0}
-        hidden={activePage !== 'TAGS'}
+        hidden={activePage !== 'VECTOR'}
       >
-        <EagleVectorWorkspace />
+        <EagleVectorProcessingPanel />
       </div>
 
       <section
