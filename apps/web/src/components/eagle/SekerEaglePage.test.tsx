@@ -829,6 +829,58 @@ describe('SekerEaglePage', () => {
     });
   });
 
+  it('summarizes mixed manual tags and clears all manual tags across the selection', async () => {
+    const inspirationTag = {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: '灵感',
+      color: null,
+    };
+    const unclassifiedTag = {
+      id: '44444444-4444-4444-8444-444444444444',
+      name: '未分类',
+      color: null,
+    };
+    const secondAsset = {
+      ...asset,
+      id: 'asset-2',
+      displayName: 'Second Asset',
+      rowVersion: 4,
+      manualTags: [unclassifiedTag],
+    };
+    listEagleAssetsMock.mockResolvedValue({
+      items: [{ ...asset, manualTags: [inspirationTag, unclassifiedTag] }, secondAsset],
+      nextCursor: null,
+    });
+    getEagleAssetMock.mockResolvedValue(secondAsset);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Second Asset/ }), { ctrlKey: true });
+    fireEvent.click(screen.getByRole('button', { name: '显示素材详情' }));
+    const inspector = await screen.findByRole('complementary', { name: '素材详情' });
+
+    expect(
+      await within(inspector).findByRole('heading', { name: '批量编辑人工标签' }),
+    ).toBeInTheDocument();
+    expect(within(inspector).getByText('灵感 · 1/2')).toBeInTheDocument();
+    expect(within(inspector).getByText('未分类 · 2/2')).toBeInTheDocument();
+
+    fireEvent.click(within(inspector).getByRole('button', { name: '清空所有人工标签' }));
+
+    expect(confirm).toHaveBeenCalledWith(
+      '将清除 2 项素材上的全部人工标签，共涉及 2 个不同标签。AI 自动标签不受影响。确认继续？',
+    );
+    await waitFor(() => {
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+        assetIds: ['asset-1', 'asset-2'],
+        addTagIds: [],
+        removeTagIds: [],
+        clearAll: true,
+      });
+    });
+  });
+
   it('keeps manual and AI tag filters separate in the server query', async () => {
     renderPage();
 

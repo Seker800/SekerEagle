@@ -57,6 +57,52 @@ test('batch tag changes fail closed before writes when any asset belongs elsewhe
   assert.equal(transactions, 0);
 });
 
+test('batch clear removes every manual tag and distance for owned assets without enumerating tags', async () => {
+  const deletes: Array<{ table: string; where: unknown }> = [];
+  const transaction = {
+    eagleAssetManualTag: {
+      deleteMany: async ({ where }: { where: unknown }) => {
+        deletes.push({ table: 'manual-tags', where });
+        return { count: 3 };
+      },
+    },
+    eagleTagMemberDistance: {
+      deleteMany: async ({ where }: { where: unknown }) => {
+        deletes.push({ table: 'tag-distances', where });
+        return { count: 3 };
+      },
+    },
+  };
+  const prisma = {
+    eagleAsset: { findMany: async () => [{ id: 'asset-a' }, { id: 'asset-b' }] },
+    eagleManualTag: { findMany: async () => [] },
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  };
+  const service = new EagleService(prisma as never);
+
+  const result = await service.batchChangeManualTags(
+    'owner-a',
+    {
+      assetIds: ['asset-a', 'asset-b'],
+      addTagIds: [],
+      removeTagIds: [],
+      clearAll: true,
+    } as never,
+  );
+
+  assert.deepEqual(result, { affectedAssetCount: 2 });
+  assert.deepEqual(deletes, [
+    {
+      table: 'manual-tags',
+      where: { ownerId: 'owner-a', assetId: { in: ['asset-a', 'asset-b'] } },
+    },
+    {
+      table: 'tag-distances',
+      where: { ownerId: 'owner-a', assetId: { in: ['asset-a', 'asset-b'] } },
+    },
+  ]);
+});
+
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {
   let rejectionWasInsideTransaction = false;
   const service = new EagleService({
