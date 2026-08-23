@@ -18,9 +18,9 @@ class FakeModel:
         return mx.array([[3.0, 4.0] + [0.0] * 2046])
 
 
-def image_bytes() -> bytes:
+def image_bytes(format: str = "JPEG") -> bytes:
     output = io.BytesIO()
-    Image.new("RGB", (8, 8), "red").save(output, format="JPEG")
+    Image.new("RGB", (8, 8), "red").save(output, format=format)
     return output.getvalue()
 
 
@@ -99,3 +99,23 @@ def test_streaming_image_limit_fails_before_accepting_an_oversized_body(monkeypa
         },
     )
     assert response.status_code == 413
+
+
+def test_embedding_endpoint_rejects_non_allowlisted_image_content(monkeypatch):
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "DIMENSIONS", 1024)
+    service.runtime.model = FakeModel()
+    service.runtime.processor = object()
+    client = TestClient(service.app)
+
+    response = client.post(
+        "/v1/embeddings/image",
+        content=image_bytes("BMP"),
+        headers={
+            "authorization": "Bearer test-secret",
+            "content-type": "image/jpeg",
+            "x-embedding-dimensions": "1024",
+        },
+    )
+
+    assert response.status_code == 422
