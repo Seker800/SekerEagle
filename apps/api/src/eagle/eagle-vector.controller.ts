@@ -101,6 +101,12 @@ export class EagleVectorController {
     return this.vectors.scanMissingEmbeddings(principal.sub);
   }
 
+  @Post('suggestions/scan-unclassified')
+  @UseGuards(BrowserOriginGuard)
+  scanUnclassifiedSuggestions(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.vectors.scanUnclassifiedSuggestions(principal.sub, principal.canViewPrivate);
+  }
+
   @Post('suggestions/:suggestionId/review')
   @UseGuards(BrowserOriginGuard)
   review(

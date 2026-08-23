@@ -2773,6 +2773,18 @@
         "tags": ["EagleVector"]
       }
     },
+    "/api/eagle/vector/suggestions/scan-unclassified": {
+      "post": {
+        "operationId": "EagleVectorController_scanUnclassifiedSuggestions",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleVector"]
+      }
+    },
     "/api/eagle/vector/suggestions/{suggestionId}/review": {
       "post": {
         "operationId": "EagleVectorController_review",

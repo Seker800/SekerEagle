@@ -12,7 +12,10 @@ import type {
   ListVectorSuggestionsDto,
 } from './eagle-vector.dto';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
-import { upsertAcceptedSuggestionMemberDistance } from './eagle-vector.persistence';
+import {
+  refreshUnclassifiedSuggestions,
+  upsertAcceptedSuggestionMemberDistance,
+} from './eagle-vector.persistence';
 import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
 
 @Injectable()
@@ -149,6 +152,10 @@ export class EagleVectorService {
       },
     });
     return { retried: result.count };
+  }
+
+  scanUnclassifiedSuggestions(ownerId: string, includePrivate = false) {
+    return refreshUnclassifiedSuggestions(this.prisma, { ownerId, includePrivate });
   }
 
   async scanMissingEmbeddings(ownerId: string) {

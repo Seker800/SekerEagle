@@ -9,6 +9,7 @@ import {
   listEagleVectorTags,
   rebuildEagleVectorTag,
   reviewEagleVectorSuggestions,
+  scanUnclassifiedEagleSuggestions,
   setEagleVectorTagEnabled,
   type EagleTagDistanceAsset,
   type EagleUnclassifiedAsset,
@@ -541,6 +542,19 @@ export function EagleVectorWorkspace({
         <section className={styles.panel} aria-label="待手动分类">
           <div className={styles.toolbar}>
             <span className={styles.selectionCount}>已选择 {selected.length} 项</span>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  scanUnclassifiedEagleSuggestions,
+                  ({ scanned, matched }) =>
+                    `已扫描 ${scanned} 张无标签图片，新生成 ${matched} 条建议`,
+                )
+              }
+            >
+              扫描无标签图片
+            </button>
             <button
               type="button"
               disabled={!selected.length || busy || !onAssignManualTags}

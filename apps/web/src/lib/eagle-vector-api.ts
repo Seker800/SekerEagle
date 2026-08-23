@@ -155,6 +155,12 @@ export function scanMissingEagleEmbeddings() {
     },
   );
 }
+export function scanUnclassifiedEagleSuggestions() {
+  return request<{ scanned: number; matched: number }>('suggestions/scan-unclassified', {
+    method: 'POST',
+    body: '{}',
+  });
+}
 export function listEagleTagDistanceAssets(
   tagId: string,
   direction: 'ASC' | 'DESC',

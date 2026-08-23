@@ -24,7 +24,10 @@ import type {
 import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
-import { syncCurrentTagMemberDistances } from './eagle-vector.persistence';
+import {
+  refreshUnclassifiedSuggestions,
+  syncCurrentTagMemberDistances,
+} from './eagle-vector.persistence';
 import {
   buildEagleFilterWhere,
   readEagleFilterQuery,
@@ -424,6 +427,13 @@ export class EagleService {
           await syncCurrentTagMemberDistances(transaction, ownerId, assetIds, input.addTagIds);
         }
       }
+      if (input.clearAll || input.removeTagIds.length) {
+        await refreshUnclassifiedSuggestions(transaction, {
+          ownerId,
+          assetIds: input.assetIds,
+          includePrivate,
+        });
+      }
     });
     return { affectedAssetCount: input.assetIds.length };
   }
@@ -754,6 +764,12 @@ export class EagleService {
           data: ids.map((tagId) => ({ ownerId, assetId, tagId, assignedByUser: true })),
         });
         await syncCurrentTagMemberDistances(transaction, ownerId, [assetId], ids);
+      } else {
+        await refreshUnclassifiedSuggestions(transaction, {
+          ownerId,
+          assetIds: [assetId],
+          includePrivate,
+        });
       }
     });
     return this.getAsset(ownerId, assetId, { includePrivate });
