@@ -80,15 +80,12 @@ test('batch clear removes every manual tag and distance for owned assets without
   };
   const service = new EagleService(prisma as never);
 
-  const result = await service.batchChangeManualTags(
-    'owner-a',
-    {
-      assetIds: ['asset-a', 'asset-b'],
-      addTagIds: [],
-      removeTagIds: [],
-      clearAll: true,
-    } as never,
-  );
+  const result = await service.batchChangeManualTags('owner-a', {
+    assetIds: ['asset-a', 'asset-b'],
+    addTagIds: [],
+    removeTagIds: [],
+    clearAll: true,
+  } as never);
 
   assert.deepEqual(result, { affectedAssetCount: 2 });
   assert.deepEqual(deletes, [
