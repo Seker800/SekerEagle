@@ -19,7 +19,9 @@ try {
   );
 } catch (error) {
   if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
-    throw new Error('.local/bootstrap.env already exists; refusing to overwrite it');
+    throw new Error('.local/bootstrap.env already exists; refusing to overwrite it', {
+      cause: error,
+    });
   }
   throw error;
 }

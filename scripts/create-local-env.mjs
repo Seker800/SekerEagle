@@ -30,7 +30,7 @@ try {
   process.stdout.write('Created private .env with random SekerEagle-only secrets\n');
 } catch (error) {
   if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') {
-    throw new Error('.env already exists; refusing to overwrite it');
+    throw new Error('.env already exists; refusing to overwrite it', { cause: error });
   }
   throw error;
 }

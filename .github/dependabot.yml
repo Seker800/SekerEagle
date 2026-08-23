@@ -10,6 +10,11 @@ updates:
         exclude-patterns:
           - class-validator
           - esbuild
+    ignore:
+      - dependency-name: vite
+        update-types: [version-update:semver-major]
+      - dependency-name: esbuild
+        update-types: [version-update:semver-minor]
   - package-ecosystem: pip
     directory: /services/mlx-embedding
     schedule:

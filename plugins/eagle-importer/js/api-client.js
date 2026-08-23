@@ -102,7 +102,7 @@ class ApiClient {
         await this.sleep(1200);
         return this.request(pathname, { ...options, retries: retries - 1 });
       }
-      throw new Error(`无法连接服务器：${error.message}`);
+      throw new Error(`无法连接服务器：${error.message}`, { cause: error });
     }
 
     if (response.status === 401 && !anonymous && allowRefresh && this.refreshToken) {
