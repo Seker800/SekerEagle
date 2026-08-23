@@ -36,7 +36,7 @@ jobs:
       - run: npm run package:mac --workspace @sekereagle/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sekereagle-macos-internal-unsigned
           path: apps/desktop/release/*
@@ -57,7 +57,7 @@ jobs:
       - run: npm run package:win --workspace @sekereagle/desktop
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sekereagle-windows-x64-internal-unsigned
           path: apps/desktop/release/*
