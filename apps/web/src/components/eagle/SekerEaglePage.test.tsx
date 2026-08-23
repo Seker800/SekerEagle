@@ -39,6 +39,7 @@ const moveEagleSmartFolderMock = vi.fn();
 const listEagleAssetUpdatesMock = vi.fn();
 const getEaglePyramidDescriptorMock = vi.fn();
 const countEagleAssetsMock = vi.fn();
+const fetchEagleVectorSummaryMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
@@ -78,6 +79,18 @@ vi.mock('../../lib/eagle-api', () => ({
 
 vi.mock('./EagleProcessingPage', () => ({
   EagleProcessingPage: () => <div data-testid="eagle-processing-page">素材处理状态</div>,
+}));
+
+vi.mock('../../lib/eagle-vector-api', () => ({
+  fetchEagleVectorSummary: (...args: unknown[]) => fetchEagleVectorSummaryMock(...args),
+}));
+
+vi.mock('./EagleVectorWorkspace', () => ({
+  EagleVectorWorkspace: ({ view }: { view: string }) => (
+    <div data-testid="eagle-vector-workspace" data-view={view}>
+      智能标签工作区
+    </div>
+  ),
 }));
 
 const asset = {
@@ -271,6 +284,10 @@ describe('SekerEaglePage', () => {
     });
     listEagleAssetUpdatesMock.mockResolvedValue([]);
     uploadEagleAssetMock.mockResolvedValue({ duplicate: false });
+    fetchEagleVectorSummaryMock.mockResolvedValue({
+      tags: { enabled: 15, ready: 12, awaitingCenter: 3 },
+      suggestions: { unclassified: 38, pending: 32 },
+    });
   });
 
   it('uses a fresh cache namespace when the owner changes', async () => {
@@ -1240,6 +1257,22 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
     expect(screen.getByRole('heading', { name: 'AI 自动标签' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
+  });
+
+  it('exposes the three smart-tag workflows directly below the tag entries with live counts', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '智能标签确认 32' }));
+    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
+
+    fireEvent.click(screen.getByRole('button', { name: '标签推荐设置 15' }));
+    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
+
+    fireEvent.click(screen.getByRole('button', { name: '没有可用建议 6' }));
+    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute(
+      'data-view',
+      'UNCLASSIFIED',
+    );
   });
 
   it('opens the smart-folder creator and saves its filter definition', async () => {

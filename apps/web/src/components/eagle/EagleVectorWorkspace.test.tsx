@@ -120,6 +120,84 @@ describe('EagleVectorWorkspace', () => {
     );
   });
 
+  it('matches the library single, command-toggle, shift-range, and background-clear selection gestures', async () => {
+    vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
+      items: [
+        {
+          id: 'suggestion-1',
+          score: 0.91,
+          distance: 0.09,
+          prototypeRank: 0,
+          createdAt: '2026-08-19T00:00:00Z',
+          suggestedTag: { id: 'tag-1', name: '汽车', color: null },
+          asset: {
+            id: 'asset-1',
+            displayName: 'red-car.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+          representativeAssets: [],
+        },
+        {
+          id: 'suggestion-2',
+          score: 0.89,
+          distance: 0.11,
+          prototypeRank: 0,
+          createdAt: '2026-08-19T00:00:01Z',
+          suggestedTag: { id: 'tag-2', name: '夜景', color: null },
+          asset: {
+            id: 'asset-2',
+            displayName: 'night-road.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+          representativeAssets: [],
+        },
+        {
+          id: 'suggestion-3',
+          score: 0.87,
+          distance: 0.13,
+          prototypeRank: 0,
+          createdAt: '2026-08-19T00:00:02Z',
+          suggestedTag: { id: 'tag-3', name: '城市', color: null },
+          asset: {
+            id: 'asset-3',
+            displayName: 'city-light.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+          representativeAssets: [],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(<EagleVectorWorkspace />);
+    const grid = await screen.findByRole('grid', { name: '待确认的智能标签建议' });
+    const first = within(grid).getByRole('button', { name: /red-car\.jpg/ });
+    const second = within(grid).getByRole('button', { name: /night-road\.jpg/ });
+    const third = within(grid).getByRole('button', { name: /city-light\.jpg/ });
+
+    fireEvent.click(first);
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(third, { metaKey: true });
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(third).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(second, { shiftKey: true });
+    expect(first).toHaveAttribute('aria-pressed', 'false');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(third).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(grid);
+    expect(second).toHaveAttribute('aria-pressed', 'false');
+    expect(third).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('reuses the full tag picker search so owners can browse and find tags by pinyin', async () => {
     render(<EagleVectorWorkspace />);
     fireEvent.click(await screen.findByRole('button', { name: /标签推荐设置/ }));
