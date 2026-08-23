@@ -107,7 +107,7 @@
 .tagSearch input,
 .tagCandidate button,
 .tagRow button,
-.assetInfo button {
+.cardActions button {
   min-height: 31px;
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 7px;
@@ -182,14 +182,14 @@
 .toolbar button,
 .tagCandidate button,
 .tagRow button,
-.assetInfo button {
+.cardActions button {
   padding: 0 10px;
   cursor: pointer;
 }
 .toolbar button:disabled,
 .tagCandidate button:disabled,
 .tagRow button:disabled,
-.assetInfo button:disabled {
+.cardActions button:disabled {
   cursor: default;
   opacity: 0.45;
 }
@@ -233,8 +233,30 @@
   border: 1px solid rgb(255 255 255 / 8%);
   border-radius: 9px;
   background: rgb(255 255 255 / 2%);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
-.assetCard > img,
+.assetCardSelected {
+  border-color: #d69b48;
+  box-shadow: 0 0 0 2px rgb(214 155 72 / 18%);
+}
+.assetSelectionTarget {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  display: block;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.assetSelectionTarget:focus-visible {
+  outline: 2px solid #e4bc7e;
+  outline-offset: -2px;
+}
+.assetSelectionTarget > img,
 .placeholder {
   width: 100%;
   aspect-ratio: 4 / 3;
@@ -248,13 +270,22 @@
   color: #626872;
   font-size: 10px;
 }
-.check {
+.selectionMark {
   position: absolute;
   top: 7px;
   left: 7px;
-  padding: 4px;
+  width: 22px;
+  height: 22px;
   border-radius: 5px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 55%);
+  color: #121316;
   background: rgb(0 0 0 / 58%);
+}
+.assetCardSelected .selectionMark {
+  border-color: #e4bc7e;
+  background: #e4bc7e;
 }
 .assetInfo {
   display: grid;
@@ -275,13 +306,10 @@
   color: #858b94;
   font-size: 9px;
 }
-.assetInfo > div {
-  display: flex;
-  gap: 5px;
-  margin-top: 3px;
-}
 .assetInfo .evidence {
+  display: flex;
   align-items: center;
+  gap: 5px;
   margin-top: 2px;
 }
 .evidence span {
@@ -294,6 +322,17 @@
   border: 1px solid rgb(255 255 255 / 12%);
   border-radius: 4px;
   object-fit: cover;
+}
+.cardActions {
+  display: flex;
+  gap: 5px;
+  padding: 0 9px 9px;
+}
+.selectionCount {
+  align-self: center;
+  min-width: 72px;
+  color: #858b94;
+  font-size: 10px;
 }
 .loadMore {
   justify-self: center;

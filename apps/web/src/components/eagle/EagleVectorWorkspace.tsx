@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { IconCheck } from '@tabler/icons-react';
 import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
 import {
   fetchEagleVectorSummary,
@@ -19,12 +20,22 @@ import {
   type EagleVectorTag,
 } from '../../lib/eagle-vector-api';
 import { searchAndSortEagleTags } from './eagle-tag-index';
+import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleVectorWorkspace.module.css';
 
-type View = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED' | 'DISTANCE';
+export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
+type View = EagleVectorWorkspaceView | 'DISTANCE';
 
-export function EagleVectorWorkspace() {
+interface EagleVectorWorkspaceProps {
+  view?: EagleVectorWorkspaceView;
+  onViewChange?: (view: EagleVectorWorkspaceView) => void;
+}
+
+export function EagleVectorWorkspace({
+  view: controlledView,
+  onViewChange,
+}: EagleVectorWorkspaceProps = {}) {
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
@@ -33,17 +44,44 @@ export function EagleVectorWorkspace() {
   const [suggestionCursor, setSuggestionCursor] = useState<string | null>(null);
   const [unclassifiedCursor, setUnclassifiedCursor] = useState<string | null>(null);
   const [distanceCursor, setDistanceCursor] = useState<string | null>(null);
-  const [view, setView] = useState<View>('REVIEW');
+  const [view, setView] = useState<View>(controlledView ?? 'REVIEW');
   const [tagFilter, setTagFilter] = useState('');
   const [distanceTag, setDistanceTag] = useState<EagleVectorTag | null>(null);
   const [distanceDirection, setDistanceDirection] = useState<'ASC' | 'DESC'>('DESC');
   const [selected, setSelected] = useState<string[]>([]);
+  const [activeSelectionId, setActiveSelectionId] = useState<string | null>(null);
+  const [isBatchSelection, setIsBatchSelection] = useState(false);
+  const selectionAnchorIdRef = useRef<string | null>(null);
   const [search, setSearch] = useState('');
   const [manualTags, setManualTags] = useState<EagleManualTag[]>([]);
   const [loadingManualTags, setLoadingManualTags] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  const clearSelection = useCallback(() => {
+    setSelected([]);
+    setActiveSelectionId(null);
+    setIsBatchSelection(false);
+    selectionAnchorIdRef.current = null;
+  }, []);
+
+  const changeView = useCallback(
+    (nextView: EagleVectorWorkspaceView) => {
+      setView(nextView);
+      setDistanceTag(null);
+      clearSelection();
+      onViewChange?.(nextView);
+    },
+    [clearSelection, onViewChange],
+  );
+
+  useEffect(() => {
+    if (!controlledView) return;
+    setView(controlledView);
+    setDistanceTag(null);
+    clearSelection();
+  }, [clearSelection, controlledView]);
 
   const reload = useCallback(async () => {
     setError('');
@@ -60,11 +98,19 @@ export function EagleVectorWorkspace() {
       setUnclassified(nextUnclassified.items);
       setSuggestionCursor(nextSuggestions.nextCursor);
       setUnclassifiedCursor(nextUnclassified.nextCursor);
-      setSelected([]);
+      clearSelection();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取向量处理状态失败');
     }
-  }, [tagFilter]);
+  }, [clearSelection, tagFilter]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') clearSelection();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [clearSelection]);
 
   useEffect(() => {
     void reload();
@@ -160,6 +206,21 @@ export function EagleVectorWorkspace() {
       action === 'ACCEPT' ? `已确认 ${ids.length} 条人工标签建议` : `已拒绝 ${ids.length} 条建议`,
     );
 
+  const selectItem = (itemId: string, orderedIds: string[], gesture: EagleSelectionGesture) => {
+    const nextSelection = applyEagleSelection({
+      orderedIds,
+      selectedIds: selected,
+      activeId: activeSelectionId,
+      anchorId: selectionAnchorIdRef.current,
+      clickedId: itemId,
+      gesture,
+    });
+    setSelected(nextSelection.selectedIds);
+    setActiveSelectionId(nextSelection.activeId);
+    setIsBatchSelection(nextSelection.isBatchSelection);
+    selectionAnchorIdRef.current = nextSelection.anchorId;
+  };
+
   return (
     <section className={styles.workspace} aria-label="图片向量与人工标签建议">
       <header className={styles.hero}>
@@ -240,15 +301,15 @@ export function EagleVectorWorkspace() {
       ) : null}
 
       <nav className={styles.tabs} aria-label="向量处理视图">
-        <button data-active={view === 'REVIEW'} onClick={() => setView('REVIEW')} type="button">
+        <button data-active={view === 'REVIEW'} onClick={() => changeView('REVIEW')} type="button">
           智能标签确认 <span>{summary?.suggestions.pending ?? 0}</span>
         </button>
-        <button data-active={view === 'TAGS'} onClick={() => setView('TAGS')} type="button">
+        <button data-active={view === 'TAGS'} onClick={() => changeView('TAGS')} type="button">
           标签推荐设置 <span>{summary?.tags.enabled ?? 0}</span>
         </button>
         <button
           data-active={view === 'UNCLASSIFIED'}
-          onClick={() => setView('UNCLASSIFIED')}
+          onClick={() => changeView('UNCLASSIFIED')}
           type="button"
         >
           没有可用建议{' '}
@@ -286,6 +347,7 @@ export function EagleVectorWorkspace() {
                   ))}
               </select>
             </label>
+            <span className={styles.selectionCount}>已选择 {selected.length} 项</span>
             <button
               type="button"
               disabled={!selected.length || busy}
@@ -301,17 +363,18 @@ export function EagleVectorWorkspace() {
               批量拒绝
             </button>
           </div>
-          <AssetGrid>
+          <AssetGrid ariaLabel="待确认的智能标签建议" onClear={clearSelection}>
             {suggestions.map((suggestion) => (
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
-                checked={selected.includes(suggestion.id)}
-                onCheck={(checked) =>
-                  setSelected((current) =>
-                    checked
-                      ? [...current, suggestion.id]
-                      : current.filter((id) => id !== suggestion.id),
+                selected={selected.includes(suggestion.id)}
+                batchSelection={isBatchSelection}
+                onSelect={(gesture) =>
+                  selectItem(
+                    suggestion.id,
+                    suggestions.map((item) => item.id),
+                    gesture,
                   )
                 }
                 onReview={(action) => void review([suggestion.id], action)}
@@ -454,9 +517,21 @@ export function EagleVectorWorkspace() {
           <p className={styles.explainer}>
             这些图片没有任何人工标签，也没有当前可审核建议。向量仍在处理或最高相似度不足时都会出现在这里。
           </p>
-          <AssetGrid>
+          <AssetGrid ariaLabel="没有可用建议的素材" onClear={clearSelection}>
             {unclassified.map((asset) => (
-              <UnclassifiedCard key={asset.id} asset={asset} />
+              <UnclassifiedCard
+                key={asset.id}
+                asset={asset}
+                selected={selected.includes(asset.id)}
+                batchSelection={isBatchSelection}
+                onSelect={(gesture) =>
+                  selectItem(
+                    asset.id,
+                    unclassified.map((item) => item.id),
+                    gesture,
+                  )
+                }
+              />
             ))}
           </AssetGrid>
           {!unclassified.length ? <Empty text="当前没有遗漏的未分类图片。" /> : null}
@@ -526,8 +601,20 @@ export function EagleVectorWorkspace() {
   );
 }
 
-function AssetGrid({ children }: { children: React.ReactNode }) {
-  return <div className={styles.assetGrid}>{children}</div>;
+function AssetGrid({
+  children,
+  ariaLabel,
+  onClear,
+}: {
+  children: React.ReactNode;
+  ariaLabel: string;
+  onClear: () => void;
+}) {
+  return (
+    <div className={styles.assetGrid} role="grid" aria-label={ariaLabel} onClick={onClear}>
+      {children}
+    </div>
+  );
 }
 function Empty({ text }: { text: string }) {
   return <div className={styles.empty}>{text}</div>;
@@ -564,59 +651,75 @@ function Preview({
 
 function SuggestionCard({
   suggestion,
-  checked,
-  onCheck,
+  selected,
+  batchSelection,
+  onSelect,
   onReview,
   disabled,
 }: {
   suggestion: EagleVectorSuggestion;
-  checked: boolean;
-  onCheck: (checked: boolean) => void;
+  selected: boolean;
+  batchSelection: boolean;
+  onSelect: (gesture: EagleSelectionGesture) => void;
   onReview: (action: 'ACCEPT' | 'REJECT') => void;
   disabled: boolean;
 }) {
   return (
-    <article className={styles.assetCard}>
-      <Preview asset={suggestion.asset} />
-      <label className={styles.check}>
-        <input
-          aria-label={`选择 ${suggestion.asset.displayName}`}
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onCheck(event.target.checked)}
-        />
-      </label>
-      <div className={styles.assetInfo}>
-        <strong>{suggestion.asset.displayName}</strong>
-        <span>建议：{suggestion.suggestedTag.name}</span>
-        <small>
-          相似度 {(suggestion.score * 100).toFixed(1)}% · 中心 {suggestion.prototypeRank + 1}
-        </small>
-        {suggestion.representativeAssets.length ? (
-          <div className={styles.evidence} aria-label="该中心代表图片">
-            <span>代表图</span>
-            {suggestion.representativeAssets.map((asset) => {
-              const src = getVectorThumbnailUrl(asset);
-              return src ? (
-                <img key={asset.id} src={src} alt={asset.displayName} loading="lazy" />
-              ) : null;
-            })}
-          </div>
-        ) : null}
-        <div>
-          <button disabled={disabled} type="button" onClick={() => onReview('ACCEPT')}>
-            确认
-          </button>
-          <button disabled={disabled} type="button" onClick={() => onReview('REJECT')}>
-            拒绝
-          </button>
+    <article className={`${styles.assetCard} ${selected ? styles.assetCardSelected : ''}`}>
+      <button
+        className={styles.assetSelectionTarget}
+        type="button"
+        aria-label={`选择 ${suggestion.asset.displayName}，建议${suggestion.suggestedTag.name}`}
+        aria-pressed={selected}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(getSelectionGesture(event));
+        }}
+      >
+        <Preview asset={suggestion.asset} />
+        {batchSelection ? <SelectionMark selected={selected} /> : null}
+        <div className={styles.assetInfo}>
+          <strong>{suggestion.asset.displayName}</strong>
+          <span>建议：{suggestion.suggestedTag.name}</span>
+          <small>
+            相似度 {(suggestion.score * 100).toFixed(1)}% · 中心 {suggestion.prototypeRank + 1}
+          </small>
+          {suggestion.representativeAssets.length ? (
+            <div className={styles.evidence} aria-label="该中心代表图片">
+              <span>代表图</span>
+              {suggestion.representativeAssets.map((asset) => {
+                const src = getVectorThumbnailUrl(asset);
+                return src ? (
+                  <img key={asset.id} src={src} alt={asset.displayName} loading="lazy" />
+                ) : null;
+              })}
+            </div>
+          ) : null}
         </div>
+      </button>
+      <div className={styles.cardActions}>
+        <button disabled={disabled} type="button" onClick={() => onReview('ACCEPT')}>
+          确认
+        </button>
+        <button disabled={disabled} type="button" onClick={() => onReview('REJECT')}>
+          拒绝
+        </button>
       </div>
     </article>
   );
 }
 
-function UnclassifiedCard({ asset }: { asset: EagleUnclassifiedAsset }) {
+function UnclassifiedCard({
+  asset,
+  selected,
+  batchSelection,
+  onSelect,
+}: {
+  asset: EagleUnclassifiedAsset;
+  selected: boolean;
+  batchSelection: boolean;
+  onSelect: (gesture: EagleSelectionGesture) => void;
+}) {
   const embedding = asset.embeddings[0];
   const state = !embedding
     ? '向量处理中'
@@ -624,12 +727,38 @@ function UnclassifiedCard({ asset }: { asset: EagleUnclassifiedAsset }) {
       ? `向量失败：${embedding.errorCode ?? '未知原因'}`
       : '相似度不足或没有可用标签中心';
   return (
-    <article className={styles.assetCard}>
-      <Preview asset={asset} />
-      <div className={styles.assetInfo}>
-        <strong>{asset.displayName}</strong>
-        <span>{state}</span>
-      </div>
+    <article className={`${styles.assetCard} ${selected ? styles.assetCardSelected : ''}`}>
+      <button
+        className={styles.assetSelectionTarget}
+        type="button"
+        aria-label={`选择 ${asset.displayName}`}
+        aria-pressed={selected}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(getSelectionGesture(event));
+        }}
+      >
+        <Preview asset={asset} />
+        {batchSelection ? <SelectionMark selected={selected} /> : null}
+        <div className={styles.assetInfo}>
+          <strong>{asset.displayName}</strong>
+          <span>{state}</span>
+        </div>
+      </button>
     </article>
   );
+}
+
+function SelectionMark({ selected }: { selected: boolean }) {
+  return (
+    <span className={styles.selectionMark} aria-hidden="true">
+      {selected ? <IconCheck size={14} stroke={3} /> : null}
+    </span>
+  );
+}
+
+function getSelectionGesture(event: MouseEvent<HTMLButtonElement>): EagleSelectionGesture {
+  if (event.shiftKey) return 'range';
+  if (event.metaKey || event.ctrlKey) return 'toggle';
+  return 'single';
 }

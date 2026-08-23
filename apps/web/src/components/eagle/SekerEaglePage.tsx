@@ -46,6 +46,7 @@ import {
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
+import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
@@ -54,6 +55,7 @@ import { getEaglePreviewContentUrl, needsEagleImagePyramid } from './eagle-media
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
 import { EagleProcessingPage } from './EagleProcessingPage';
+import { EagleVectorWorkspace, type EagleVectorWorkspaceView } from './EagleVectorWorkspace';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
 import {
@@ -88,7 +90,28 @@ interface SekerEaglePageProps {
 
 type EagleAssetContextMenu = { x: number; y: number };
 type EagleLibraryView =
-  'ACTIVE' | 'PRIVATE' | 'TRASH' | 'MANUAL_TAGS' | 'AI_TAGS' | 'PROCESSING' | 'ACCOUNT';
+  | 'ACTIVE'
+  | 'PRIVATE'
+  | 'TRASH'
+  | 'MANUAL_TAGS'
+  | 'AI_TAGS'
+  | 'VECTOR_REVIEW'
+  | 'VECTOR_TAGS'
+  | 'VECTOR_UNCLASSIFIED'
+  | 'PROCESSING'
+  | 'ACCOUNT';
+const VECTOR_LIBRARY_VIEWS: Record<EagleVectorWorkspaceView, EagleLibraryView> = {
+  REVIEW: 'VECTOR_REVIEW',
+  TAGS: 'VECTOR_TAGS',
+  UNCLASSIFIED: 'VECTOR_UNCLASSIFIED',
+};
+
+function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceView | null {
+  if (view === 'VECTOR_REVIEW') return 'REVIEW';
+  if (view === 'VECTOR_TAGS') return 'TAGS';
+  if (view === 'VECTOR_UNCLASSIFIED') return 'UNCLASSIFIED';
+  return null;
+}
 const EAGLE_PAGE_SIZE = 40;
 const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
@@ -172,6 +195,17 @@ export function SekerEaglePage({
 
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys);
+  const vectorSummaryQuery = useQuery({
+    queryKey: ['eagle', ownerId, 'vector-summary'],
+    queryFn: fetchEagleVectorSummary,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
+  });
+  const vectorSummary = vectorSummaryQuery.data;
+  const unavailableSuggestionCount = Math.max(
+    0,
+    (vectorSummary?.suggestions.unclassified ?? 0) - (vectorSummary?.suggestions.pending ?? 0),
+  );
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
@@ -689,6 +723,30 @@ export function SekerEaglePage({
               <IconSparkles size={17} />
               AI 自动标签<span>{aiTags.length}</span>
             </button>
+            <button
+              type="button"
+              className={`${styles.navSubItem} ${libraryView === 'VECTOR_REVIEW' ? styles.navActive : ''}`}
+              aria-label={`智能标签确认 ${vectorSummary?.suggestions.pending ?? 0}`}
+              onClick={() => changeLibraryView('VECTOR_REVIEW')}
+            >
+              智能标签确认<span>{vectorSummary?.suggestions.pending ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.navSubItem} ${libraryView === 'VECTOR_TAGS' ? styles.navActive : ''}`}
+              aria-label={`标签推荐设置 ${vectorSummary?.tags.enabled ?? 0}`}
+              onClick={() => changeLibraryView('VECTOR_TAGS')}
+            >
+              标签推荐设置<span>{vectorSummary?.tags.enabled ?? 0}</span>
+            </button>
+            <button
+              type="button"
+              className={`${styles.navSubItem} ${libraryView === 'VECTOR_UNCLASSIFIED' ? styles.navActive : ''}`}
+              aria-label={`没有可用建议 ${unavailableSuggestionCount}`}
+              onClick={() => changeLibraryView('VECTOR_UNCLASSIFIED')}
+            >
+              没有可用建议<span>{unavailableSuggestionCount}</span>
+            </button>
           </div>
           <div className={styles.sidebarSpacer} />
           {accountView && (
@@ -734,10 +792,14 @@ export function SekerEaglePage({
               ? '素材处理'
               : libraryView === 'ACCOUNT'
                 ? '个人账号'
-                : undefined
+                : getVectorWorkspaceView(libraryView)
+                  ? '智能标签'
+                  : undefined
           }
           aria-labelledby={
-            libraryView === 'PROCESSING' || libraryView === 'ACCOUNT'
+            libraryView === 'PROCESSING' ||
+            libraryView === 'ACCOUNT' ||
+            getVectorWorkspaceView(libraryView)
               ? undefined
               : 'eagle-library-title'
           }
@@ -748,6 +810,11 @@ export function SekerEaglePage({
             <EagleProcessingPage
               accessToken={accessToken}
               canManageProcessing={canManageProcessing}
+            />
+          ) : getVectorWorkspaceView(libraryView) ? (
+            <EagleVectorWorkspace
+              view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
+              onViewChange={(view) => changeLibraryView(VECTOR_LIBRARY_VIEWS[view])}
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
