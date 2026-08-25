@@ -1,6 +1,7 @@
 import type { EagleFilterQuery, LegacyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { fetchWithBrowserSession } from './api-client';
 import { resolveEagleRenditionUrl } from './media-resolver';
+import { resolveObjectUploadUrl } from './object-upload-url';
 
 export interface EagleRendition {
   id: string;
@@ -484,12 +485,13 @@ export async function uploadEagleAsset(
         `/eagle/uploads/${session.id}/parts/${partNumber}`,
         { method: 'POST', body: '{}' },
       );
-      const response = await fetch(uploadUrl, {
+      const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
         method: 'PUT',
         body: file.slice(
           index * session.partSize,
           Math.min(file.size, (index + 1) * session.partSize),
         ),
+        credentials: 'omit',
       });
       if (!response.ok) throw new Error(`上传分片失败（${response.status}）`);
       const etag = response.headers.get('etag');

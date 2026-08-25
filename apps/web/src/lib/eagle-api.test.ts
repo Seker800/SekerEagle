@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { listEagleAssetUpdates } from './eagle-api';
+import { listEagleAssetUpdates, uploadEagleAsset } from './eagle-api';
 
 describe('listEagleAssetUpdates', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('sends asset ids in a bounded POST body instead of an expanding URL', async () => {
@@ -23,5 +24,33 @@ describe('listEagleAssetUpdates', () => {
       method: 'POST',
       body: JSON.stringify({ assetIds: [assetId] }),
     });
+  });
+
+  it('uploads object parts through the current LAN gateway without browser credentials', async () => {
+    vi.stubGlobal('window', { location: { origin: 'http://192.168.1.10:8180' } });
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ id: 'session-1', partSize: 10 }, { status: 201 }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            uploadUrl:
+              'http://localhost:8180/sekereagle-assets/users/user-1/file.png?X-Amz-Signature=signed',
+          },
+          { status: 201 },
+        ),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'part-etag' } }))
+      .mockResolvedValueOnce(Response.json({ message: 'stop after upload' }, { status: 500 }))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(
+      uploadEagleAsset('', new File(['image'], 'image.png', { type: 'image/png' }), vi.fn()),
+    ).rejects.toThrow('stop after upload');
+
+    expect(fetchMock.mock.calls[2]).toEqual([
+      'http://192.168.1.10:8180/sekereagle-assets/users/user-1/file.png?X-Amz-Signature=signed',
+      expect.objectContaining({ method: 'PUT', credentials: 'omit' }),
+    ]);
   });
 });
