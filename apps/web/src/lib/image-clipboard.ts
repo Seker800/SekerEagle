@@ -31,7 +31,11 @@ export async function copyImageToClipboard(
     !writeClipboard ||
     (!dependencies.createClipboardItem && typeof globalThis.ClipboardItem !== 'function')
   ) {
-    throw new Error('当前环境不支持复制图片。');
+    throw new Error(
+      globalThis.isSecureContext === false
+        ? '当前网页地址不支持复制图片，请使用 localhost 或 HTTPS。'
+        : '当前环境不支持复制图片。',
+    );
   }
   const pngPromise = loadClipboardPng(sourceUrl, dependencies);
   await writeClipboard([createClipboardItem({ 'image/png': pngPromise })]);

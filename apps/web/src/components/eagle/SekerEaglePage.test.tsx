@@ -275,8 +275,26 @@ describe('SekerEaglePage', () => {
       assets: [{ assetId: 'asset-1', rowVersion: 2 }],
     });
     copyImageToClipboardMock.mockResolvedValue(undefined);
-    saveOriginalFileMock.mockResolvedValue({ saved: true });
-    downloadOriginalFilesMock.mockResolvedValue({ downloaded: 2 });
+    saveOriginalFileMock.mockImplementation((target: { id: string }) => {
+      const bridge = (
+        globalThis as {
+          sekerDesktop?: { saveOriginalFile?: (assetId: string) => Promise<{ saved: boolean }> };
+        }
+      ).sekerDesktop?.saveOriginalFile;
+      return bridge ? bridge(target.id) : Promise.resolve({ saved: true });
+    });
+    downloadOriginalFilesMock.mockImplementation((targets: Array<{ id: string }>) => {
+      const bridge = (
+        globalThis as {
+          sekerDesktop?: {
+            downloadOriginalFiles?: (assetIds: string[]) => Promise<{ downloaded: number }>;
+          };
+        }
+      ).sekerDesktop?.downloadOriginalFiles;
+      return bridge
+        ? bridge(targets.map(({ id }) => id))
+        : Promise.resolve({ downloaded: targets.length });
+    });
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
       id: 'folder-1',
@@ -1431,7 +1449,9 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(firstCard);
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
-    await waitFor(() => expect(downloadOriginalFilesMock).toHaveBeenCalledWith([asset, secondAsset]));
+    await waitFor(() =>
+      expect(downloadOriginalFilesMock).toHaveBeenCalledWith([asset, secondAsset]),
+    );
   });
 
   it('shows batch download only for multiple selections with a desktop capability', async () => {

@@ -51,10 +51,7 @@ import {
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
 import { copyImageToClipboard } from '../../lib/image-clipboard';
-import {
-  getDesktopOriginalFileBridge,
-  getDesktopOriginalFileDownloadBridge,
-} from '../../lib/media-resolver';
+import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
@@ -621,8 +618,6 @@ export function SekerEaglePage({
   };
 
   const desktopAssetDragBridge = getDesktopAssetDragBridge();
-  const desktopOriginalFileBridge = getDesktopOriginalFileBridge();
-  const desktopOriginalFileDownloadBridge = getDesktopOriginalFileDownloadBridge();
   const assetDragSession = useMemo(
     () =>
       desktopAssetDragBridge
@@ -675,21 +670,20 @@ export function SekerEaglePage({
     primeAssetDrag(hoveredAssetId);
   }, [assetDragSession, libraryView, selectedAssetIds]);
   const saveSelectedOriginal = () => {
-    if (!contextMenuAsset || !desktopOriginalFileBridge || assetActionPending) return;
+    if (!contextMenuAsset || assetActionPending) return;
     setAssetActionPending('save');
     setAssetActionError(null);
-    void Promise.resolve()
-      .then(() => desktopOriginalFileBridge.saveOriginalFile(contextMenuAsset.id))
-      .then(
-        () => {
-          setAssetActionPending(null);
-          setAssetContextMenu(null);
-        },
-        () => {
-          setAssetActionPending(null);
-          setAssetActionError('另存原文件失败，请重试。');
-        },
-      );
+    void saveOriginalFile(contextMenuAsset).then(
+      () => {
+        setAssetActionPending(null);
+        setAssetContextMenu(null);
+      },
+      (error: unknown) => {
+        setAssetActionPending(null);
+        const detail = error instanceof Error ? `：${error.message}` : '，请重试。';
+        setAssetActionError(`另存原文件失败${detail}`);
+      },
+    );
   };
   const copySelectedImage = () => {
     const previewUrl = contextMenuAsset ? getEaglePreviewContentUrl(contextMenuAsset) : null;
@@ -698,18 +692,17 @@ export function SekerEaglePage({
     }
     setAssetActionPending('copy');
     setAssetActionError(null);
-    void Promise.resolve()
-      .then(() => copyImageToClipboard(previewUrl))
-      .then(
-        () => {
-          setAssetActionPending(null);
-          setAssetContextMenu(null);
-        },
-        () => {
-          setAssetActionPending(null);
-          setAssetActionError('复制图片失败，请重试。');
-        },
-      );
+    void copyImageToClipboard(previewUrl).then(
+      () => {
+        setAssetActionPending(null);
+        setAssetContextMenu(null);
+      },
+      (error: unknown) => {
+        setAssetActionPending(null);
+        const detail = error instanceof Error ? `：${error.message}` : '，请重试。';
+        setAssetActionError(`复制图片失败${detail}`);
+      },
+    );
   };
   const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
@@ -724,25 +717,23 @@ export function SekerEaglePage({
   };
 
   const batchDownloadSelectedOriginals = () => {
-    if (!desktopOriginalFileDownloadBridge || isBatchDownloading) return;
+    if (isBatchDownloading) return;
     const selected = new Set(selectedAssetIds);
-    const assetIds = assets.map((asset) => asset.id).filter((assetId) => selected.has(assetId));
-    if (assetIds.length < 2) return;
+    const selectedAssets = assets.filter((asset) => selected.has(asset.id));
+    if (selectedAssets.length < 2) return;
     setIsBatchDownloading(true);
     setOriginalFileError(null);
-    void Promise.resolve()
-      .then(() => desktopOriginalFileDownloadBridge.downloadOriginalFiles(assetIds))
-      .then(
-        () => {
-          setAssetContextMenu(null);
-          setIsBatchDownloading(false);
-        },
-        (error: unknown) => {
-          setAssetContextMenu(null);
-          setIsBatchDownloading(false);
-          setOriginalFileError(error instanceof Error ? error.message : '批量下载原文件失败。');
-        },
-      );
+    void downloadOriginalFiles(selectedAssets).then(
+      () => {
+        setAssetContextMenu(null);
+        setIsBatchDownloading(false);
+      },
+      (error: unknown) => {
+        setAssetContextMenu(null);
+        setIsBatchDownloading(false);
+        setOriginalFileError(error instanceof Error ? error.message : '批量下载原文件失败。');
+      },
+    );
   };
 
   const openAssetPreview = (asset: EagleAssetListItem) => {
@@ -1679,7 +1670,7 @@ export function SekerEaglePage({
             style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
           >
             <div className={styles.contextMenuTitle}>已选择 {selectedAssetIds.length} 项</div>
-            {contextMenuAsset && desktopOriginalFileBridge ? (
+            {contextMenuAsset && libraryView !== 'TRASH' ? (
               <button
                 type="button"
                 role="menuitem"
@@ -1704,7 +1695,7 @@ export function SekerEaglePage({
                 {assetActionPending === 'copy' ? '正在复制…' : '复制图片'}
               </button>
             ) : null}
-            {selectedAssetIds.length > 1 && desktopOriginalFileDownloadBridge ? (
+            {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
               <button
                 type="button"
                 role="menuitem"
