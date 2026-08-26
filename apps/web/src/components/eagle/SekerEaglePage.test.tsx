@@ -971,6 +971,7 @@ describe('SekerEaglePage', () => {
     const menu = screen.getByRole('menu', { name: '素材操作' });
     expect(menu).toHaveTextContent('已选择 1 项');
     expect(within(menu).queryByRole('menuitem', { name: '添加标签 灵感' })).not.toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: '删除人工标签' })).toBeDisabled();
     fireEvent.click(within(menu).getByRole('menuitem', { name: '添加标签' }));
     const picker = screen.getByRole('dialog', { name: '添加标签' });
     fireEvent.click(within(picker).getByRole('checkbox', { name: '灵感' }));
@@ -983,6 +984,59 @@ describe('SekerEaglePage', () => {
         removeTagIds: [],
       });
     });
+  });
+
+  it('removes selected manual tags from the asset context menu', async () => {
+    const inspirationTag = {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: '灵感',
+      color: null,
+    };
+    const unclassifiedTag = {
+      id: '44444444-4444-4444-8444-444444444444',
+      name: '未分类',
+      color: null,
+    };
+    const secondAsset = {
+      ...asset,
+      id: 'asset-2',
+      displayName: 'Second Asset',
+      rowVersion: 4,
+      manualTags: [inspirationTag],
+    };
+    listEagleAssetsMock.mockResolvedValue({
+      items: [
+        { ...asset, manualTags: [inspirationTag, unclassifiedTag] },
+        secondAsset,
+      ],
+      nextCursor: null,
+    });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(firstCard);
+    fireEvent.click(secondCard, { ctrlKey: true });
+    fireEvent.contextMenu(secondCard, { clientX: 180, clientY: 120 });
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: '素材操作' })).getByRole('menuitem', {
+        name: '删除人工标签',
+      }),
+    );
+
+    const picker = screen.getByRole('dialog', { name: '删除人工标签' });
+    expect(within(picker).getByText('灵感 · 2/2')).toBeInTheDocument();
+    expect(within(picker).getByText('未分类 · 1/2')).toBeInTheDocument();
+    fireEvent.click(within(picker).getByRole('checkbox', { name: '灵感' }));
+    fireEvent.click(within(picker).getByRole('button', { name: '从 2 项素材删除 1 个标签' }));
+
+    await waitFor(() =>
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('token', {
+        assetIds: ['asset-1', 'asset-2'],
+        addTagIds: [],
+        removeTagIds: ['11111111-1111-4111-8111-111111111111'],
+      }),
+    );
   });
 
   it('shows the temporary privacy view and marks selected assets private from the context menu', async () => {

@@ -108,4 +108,35 @@ describe('EagleBatchTagPicker', () => {
     expect(within(dialog).getByRole('checkbox', { name: '夜间氛围' })).toBeVisible();
     expect(within(dialog).queryByRole('button', { name: '创建标签 yjfw' })).not.toBeInTheDocument();
   });
+
+  it('removes selected manual tags and shows their coverage in the current asset selection', () => {
+    const onApply = vi.fn();
+
+    render(
+      <EagleBatchTagPicker
+        mode="remove"
+        assetCount={2}
+        tags={[
+          tag('inspiration', '灵感', 'ling gan', 'lg'),
+          tag('night', '夜间氛围', 'ye jian fen wei', 'yjfw'),
+        ]}
+        selectedAssetCountByTagId={{ inspiration: 2, night: 1 }}
+        onApply={onApply}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const dialog = screen.getByRole('dialog', { name: '删除人工标签' });
+    expect(within(dialog).getByText('灵感 · 2/2')).toBeInTheDocument();
+    expect(within(dialog).getByText('夜间氛围 · 1/2')).toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: /创建标签/ })).not.toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: '搜索可删除标签' }), {
+      target: { value: 'lg' },
+    });
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: '灵感' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: '从 2 项素材删除 1 个标签' }));
+
+    expect(onApply).toHaveBeenCalledWith(['inspiration']);
+  });
 });
