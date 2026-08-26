@@ -198,17 +198,24 @@ function sanitizeFileName(input: string): string {
 }
 
 function uniqueFileName(fileName: string, usedNames: Set<string>): string {
-  const extension = path.extname(fileName);
-  const stem = extension ? fileName.slice(0, -extension.length) : fileName;
   let candidate = fileName;
   let duplicate = 2;
   while (usedNames.has(candidate.toLocaleLowerCase('en-US'))) {
-    const suffix = ` (${duplicate})`;
-    candidate = fitFileName(`${stem}${suffix}${extension}`, suffix);
+    candidate = addDuplicateFileNameSuffix(fileName, duplicate);
     duplicate += 1;
   }
   usedNames.add(candidate.toLocaleLowerCase('en-US'));
   return candidate;
+}
+
+export function addDuplicateFileNameSuffix(fileName: string, duplicate: number): string {
+  if (!Number.isSafeInteger(duplicate) || duplicate < 2) {
+    throw new Error('原文件重名序号无效。');
+  }
+  const extension = path.extname(fileName);
+  const stem = extension ? fileName.slice(0, -extension.length) : fileName;
+  const suffix = ` (${duplicate})`;
+  return fitFileName(`${stem}${suffix}${extension}`, suffix);
 }
 
 function fitFileName(fileName: string, suffix = ''): string {

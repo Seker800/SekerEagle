@@ -39,6 +39,7 @@ import { createDesktopConnectionProbe } from './connection-probe';
 import { DesktopBrowserSession } from './browser-session';
 import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
 import { parseClipboardImageInput } from './clipboard-image';
+import { copyPreparedFilesToDirectory } from './original-file-destination';
 import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
@@ -153,7 +154,7 @@ if (hasSingleInstanceLock)
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
     clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
-    registerOriginalFileSaveIpc(owner, originalDragExporter);
+    registerOriginalFileExportIpc(owner, originalDragExporter);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -515,15 +516,15 @@ function registerOriginalDragIpc(
   };
 }
 
-function registerOriginalFileSaveIpc(
+function registerOriginalFileExportIpc(
   owner: AuthenticatedOwner,
   exporter: OriginalDragExporter,
 ): void {
-  let saveInFlight = false;
+  let exportInFlight = false;
   ipcMain.handle('desktop:save-original-file', async (event, input: unknown) => {
     assertTrustedIpcSender(event);
-    if (saveInFlight) throw new Error('已有原文件正在另存，请稍候。');
-    saveInFlight = true;
+    if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
+    exportInFlight = true;
     const saveServerUrl = serverUrl;
     let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
     try {
@@ -548,7 +549,41 @@ function registerOriginalFileSaveIpc(
       return { saved: true };
     } finally {
       if (prepared) await exporter.remove(prepared).catch(() => undefined);
-      saveInFlight = false;
+      exportInFlight = false;
+    }
+  });
+
+  ipcMain.handle('desktop:download-original-files', async (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
+    const assetIds = parseAssetDragInput(input);
+    if (assetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
+    exportInFlight = true;
+    const downloadServerUrl = serverUrl;
+    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
+    try {
+      const identity = await owner.get();
+      if (!identity) throw new Error('需要重新登录。');
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) throw new Error('桌面窗口不可用。');
+      const result = await dialog.showOpenDialog(window, {
+        title: '选择批量下载文件夹',
+        buttonLabel: '下载到此处',
+        properties: ['openDirectory', 'createDirectory'],
+      });
+      if (result.canceled || result.filePaths.length !== 1) return { downloaded: 0 };
+      const destinationDirectory = result.filePaths[0]!;
+      await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
+      prepared = await exporter.prepare(
+        buildNamespaceId(downloadServerUrl, identity.ownerId, identity.deploymentId),
+        assetIds,
+      );
+      await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
+      const copied = await copyPreparedFilesToDirectory(prepared.files, destinationDirectory);
+      return { downloaded: copied.length };
+    } finally {
+      if (prepared) await exporter.remove(prepared).catch(() => undefined);
+      exportInFlight = false;
     }
   });
 }
@@ -566,7 +601,7 @@ async function assertOriginalAccessStillCurrent(
     currentIdentity.ownerId !== identity.ownerId ||
     currentIdentity.deploymentId !== identity.deploymentId
   ) {
-    throw new Error('账号或服务器已切换，请重新另存素材。');
+    throw new Error('账号或服务器已切换，请重新导出素材。');
   }
   assertTrustedIpcSender(event);
 }

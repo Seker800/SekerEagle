@@ -55,6 +55,13 @@ operating-system save dialog with the server-provided filename, and removes the 
 after saving or canceling. The renderer passes only one validated asset ID; local source and
 destination paths never cross the renderer bridge.
 
+When two or more library items are selected, their context menu provides **Batch download (N)…**.
+The desktop asks for one destination folder before downloading, preserves visible library order,
+and writes every exact-byte original there. Existing files are never overwritten: collisions gain
+a numbered suffix. A failed copy removes only files created by that batch, while canceling the
+folder picker performs no download. The same 100-item bound and authenticated owner/deployment
+checks used by native dragging apply to batch downloads.
+
 ## Packaging
 
 Run `npm run package:mac --workspace @sekereagle/desktop` for arm64 and x64 development DMG/ZIP artifacts. Run `npm run package:win --workspace @sekereagle/desktop` on a native Windows x64 runner for the internal unsigned NSIS artifact. The repository workflow exposes both targets manually.

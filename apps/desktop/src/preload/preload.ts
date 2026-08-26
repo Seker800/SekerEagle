@@ -87,4 +87,25 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
     }
     return { saved: result.saved };
   },
+  async downloadOriginalFiles(assetIds: unknown): Promise<{ downloaded: number }> {
+    const validatedAssetIds = parseAssetDragInput(assetIds);
+    if (validatedAssetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
+    const result: unknown = await ipcRenderer.invoke(
+      'desktop:download-original-files',
+      validatedAssetIds,
+    );
+    const downloaded =
+      result && typeof result === 'object' && 'downloaded' in result
+        ? result.downloaded
+        : null;
+    if (
+      typeof downloaded !== 'number' ||
+      !Number.isSafeInteger(downloaded) ||
+      downloaded < 0 ||
+      downloaded > validatedAssetIds.length
+    ) {
+      throw new Error('批量下载结果无效。');
+    }
+    return { downloaded };
+  },
 });

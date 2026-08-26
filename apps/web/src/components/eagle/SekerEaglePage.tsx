@@ -13,6 +13,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
+  IconDownload,
   IconLayoutGrid,
   IconLayoutSidebarRight,
   IconLock,
@@ -46,6 +47,7 @@ import {
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
+import { getDesktopOriginalFileDownloadBridge } from '../../lib/media-resolver';
 import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
@@ -176,7 +178,8 @@ export function SekerEaglePage({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [assetDragError, setAssetDragError] = useState<string | null>(null);
+  const [originalFileError, setOriginalFileError] = useState<string | null>(null);
+  const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [preparedAssetDrag, setPreparedAssetDrag] = useState<{
     key: string;
     token: string;
@@ -195,7 +198,7 @@ export function SekerEaglePage({
 
   useEffect(() => {
     setPreparedAssetDrag(null);
-    setAssetDragError(null);
+    setOriginalFileError(null);
   }, [ownerId]);
 
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
@@ -569,6 +572,7 @@ export function SekerEaglePage({
   };
 
   const desktopAssetDragBridge = getDesktopAssetDragBridge();
+  const desktopOriginalFileDownloadBridge = getDesktopOriginalFileDownloadBridge();
   const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
     if (!desktopAssetDragBridge || libraryView === 'TRASH') return;
@@ -582,10 +586,10 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     if (preparedAssetDrag?.key === dragKey) {
       desktopAssetDragBridge.startPreparedAssetDrag(preparedAssetDrag.token);
-      setAssetDragError(null);
+      setOriginalFileError(null);
       return;
     }
-    setAssetDragError(null);
+    setOriginalFileError(null);
     void Promise.resolve()
       .then(() => desktopAssetDragBridge.prepareAssetDrag(assetIds))
       .then(
@@ -593,7 +597,29 @@ export function SekerEaglePage({
           setPreparedAssetDrag({ key: dragKey, token });
         },
         (error: unknown) =>
-          setAssetDragError(error instanceof Error ? error.message : '原文件拖出失败。'),
+          setOriginalFileError(error instanceof Error ? error.message : '原文件拖出失败。'),
+      );
+  };
+
+  const batchDownloadSelectedOriginals = () => {
+    if (!desktopOriginalFileDownloadBridge || isBatchDownloading) return;
+    const selected = new Set(selectedAssetIds);
+    const assetIds = assets.map((asset) => asset.id).filter((assetId) => selected.has(assetId));
+    if (assetIds.length < 2) return;
+    setIsBatchDownloading(true);
+    setOriginalFileError(null);
+    void Promise.resolve()
+      .then(() => desktopOriginalFileDownloadBridge.downloadOriginalFiles(assetIds))
+      .then(
+        () => {
+          setAssetContextMenu(null);
+          setIsBatchDownloading(false);
+        },
+        (error: unknown) => {
+          setAssetContextMenu(null);
+          setIsBatchDownloading(false);
+          setOriginalFileError(error instanceof Error ? error.message : '批量下载原文件失败。');
+        },
       );
   };
 
@@ -1009,9 +1035,9 @@ export function SekerEaglePage({
                   {uploadStatus}
                 </div>
               )}
-              {assetDragError && (
+              {originalFileError && (
                 <div className={styles.errorBar} role="alert">
-                  {assetDragError}
+                  {originalFileError}
                 </div>
               )}
               {color && colorCoverage && colorCoverage.percentage < 100 ? (
@@ -1500,6 +1526,20 @@ export function SekerEaglePage({
             style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
           >
             <div className={styles.contextMenuTitle}>已选择 {selectedAssetIds.length} 项</div>
+            {selectedAssetIds.length > 1 && desktopOriginalFileDownloadBridge ? (
+              <button
+                type="button"
+                role="menuitem"
+                aria-label={`批量下载（${selectedAssetIds.length}）…`}
+                disabled={isBatchDownloading}
+                onClick={batchDownloadSelectedOriginals}
+              >
+                <IconDownload size={15} />
+                {isBatchDownloading
+                  ? `正在下载 ${selectedAssetIds.length} 项…`
+                  : `批量下载（${selectedAssetIds.length}）…`}
+              </button>
+            ) : null}
             {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
               <button
                 type="button"
