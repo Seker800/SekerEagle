@@ -32,8 +32,7 @@ async function copyWithoutReplacing(
 ): Promise<string> {
   const fileName = path.basename(sourceFile);
   for (let attempt = 1; attempt <= MAX_DESTINATION_ATTEMPTS; attempt += 1) {
-    const candidateName =
-      attempt === 1 ? fileName : addDuplicateFileNameSuffix(fileName, attempt);
+    const candidateName = attempt === 1 ? fileName : addDuplicateFileNameSuffix(fileName, attempt);
     const candidate = path.join(destinationDirectory, candidateName);
     try {
       await copyFile(sourceFile, candidate, constants.COPYFILE_EXCL);

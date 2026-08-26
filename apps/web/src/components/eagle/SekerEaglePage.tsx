@@ -1660,10 +1660,12 @@ export function SekerEaglePage({
             tagPicker.mode === 'remove' ? selectedAssetCountByTagId : undefined
           }
           pending={batchTagMutation.isPending}
-          error={(
-            batchTagMutation.error ??
-            (tagPicker.mode === 'add' ? createBatchTagMutation.error : null)
-          )?.message}
+          error={
+            (
+              batchTagMutation.error ??
+              (tagPicker.mode === 'add' ? createBatchTagMutation.error : null)
+            )?.message
+          }
           onCreate={
             tagPicker.mode === 'add'
               ? (name) => createBatchTagMutation.mutateAsync(name)

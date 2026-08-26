@@ -33,7 +33,9 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
     const failures = results.flatMap((result) => (result.error ? [result.error] : []));
     const uploaded = results.length - failures.length;
     await queryClient.invalidateQueries({ queryKey: assetsQueryKey });
-    setUploadStatus(failures.length > 0 ? `完成 ${uploaded}/${files.length}，${failures[0]}` : null);
+    setUploadStatus(
+      failures.length > 0 ? `完成 ${uploaded}/${files.length}，${failures[0]}` : null,
+    );
   };
 
   return { importFiles, uploadStatus };

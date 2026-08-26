@@ -171,10 +171,7 @@ export function EagleBatchTagPicker({
               )}
             />
           ) : (
-            <div
-              className={styles.empty}
-              aria-label={isRemoving ? '可删除标签' : '可添加标签'}
-            >
+            <div className={styles.empty} aria-label={isRemoving ? '可删除标签' : '可添加标签'}>
               {isRemoving && !query ? '所选素材没有人工标签' : '没有匹配的标签'}
             </div>
           )}

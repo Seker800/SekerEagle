@@ -95,9 +95,7 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
       validatedAssetIds,
     );
     const downloaded =
-      result && typeof result === 'object' && 'downloaded' in result
-        ? result.downloaded
-        : null;
+      result && typeof result === 'object' && 'downloaded' in result ? result.downloaded : null;
     if (
       typeof downloaded !== 'number' ||
       !Number.isSafeInteger(downloaded) ||

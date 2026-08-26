@@ -1005,10 +1005,7 @@ describe('SekerEaglePage', () => {
       manualTags: [inspirationTag],
     };
     listEagleAssetsMock.mockResolvedValue({
-      items: [
-        { ...asset, manualTags: [inspirationTag, unclassifiedTag] },
-        secondAsset,
-      ],
+      items: [{ ...asset, manualTags: [inspirationTag, unclassifiedTag] }, secondAsset],
       nextCursor: null,
     });
     renderPage();
@@ -1274,9 +1271,7 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(firstCard);
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
-    await waitFor(() =>
-      expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2']),
-    );
+    await waitFor(() => expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2']));
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
   });
 
