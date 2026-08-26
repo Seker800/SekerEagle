@@ -89,6 +89,7 @@ import {
   selectVisibleMasonryItemsFromIndex,
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
+import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
 
 interface SekerEaglePageProps {
@@ -163,6 +164,7 @@ export function SekerEaglePage({
     return createEagleQueryKeys(ownerId);
   }, [ownerId]);
   const thumbnailScheduler = useMemo(() => new MediaLoadScheduler(), [ownerId]);
+  const thumbnailLoadService = useMemo(() => new ThumbnailLoadService(), [ownerId]);
   const assetViewport = useEagleAssetViewport();
   const assetViewportRef = assetViewport.elementRef;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
@@ -511,8 +513,9 @@ export function SekerEaglePage({
   useEffect(
     () => () => {
       thumbnailScheduler.clear({ abortActive: true });
+      thumbnailLoadService.dispose();
     },
-    [thumbnailScheduler],
+    [thumbnailLoadService, thumbnailScheduler],
   );
 
   useEffect(() => {
@@ -1313,6 +1316,7 @@ export function SekerEaglePage({
                           <EagleAssetThumbnail
                             asset={asset}
                             scheduler={thumbnailScheduler}
+                            loadService={thumbnailLoadService}
                             order={-masonryItem.top}
                             displayWidth={thumbnailSize}
                           />

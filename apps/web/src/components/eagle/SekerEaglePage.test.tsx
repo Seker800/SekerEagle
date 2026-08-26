@@ -15,6 +15,16 @@ const { openSeadragonMock } = vi.hoisted(() => ({
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
 
+vi.mock('../media/loading/thumbnailLoadService', () => ({
+  ThumbnailLoadError: class ThumbnailLoadError extends Error {},
+  ThumbnailLoadService: class ThumbnailLoadService {
+    async load(_key: string, url: string) {
+      return { url, release: () => undefined };
+    }
+    dispose() {}
+  },
+}));
+
 const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
 const getEagleTrashAssetMock = vi.fn();
@@ -322,7 +332,9 @@ describe('SekerEaglePage', () => {
     expect(assetCard).not.toHaveTextContent('1200 × 800');
     expect(assetCard).not.toHaveTextContent('PNG');
     expect(assetCard).toHaveAttribute('aria-pressed', 'false');
-    expect(assetCard.querySelector('img')).toHaveAttribute('draggable', 'false');
+    await waitFor(() =>
+      expect(assetCard.querySelector('img')).toHaveAttribute('draggable', 'false'),
+    );
     expect(screen.queryByRole('complementary', { name: '素材详情' })).not.toBeInTheDocument();
     const inspectorToggle = screen.getByRole('button', { name: '显示素材详情' });
     expect(inspectorToggle).toBeEnabled();
@@ -648,11 +660,13 @@ describe('SekerEaglePage', () => {
     });
     const { container } = renderPage();
     await screen.findByRole('button', { name: /Owl Reference/ });
-    let image = container.querySelector<HTMLImageElement>(
-      'img[src="/api/eagle/assets/asset-1/renditions/rendition-1/content"]',
-    );
-
-    expect(image).not.toBeNull();
+    let image: HTMLImageElement | null = null;
+    await waitFor(() => {
+      image = container.querySelector<HTMLImageElement>(
+        'img[src="/api/eagle/assets/asset-1/renditions/rendition-1/content"]',
+      );
+      expect(image).not.toBeNull();
+    });
     vi.useFakeTimers();
     try {
       fireEvent.error(image!);

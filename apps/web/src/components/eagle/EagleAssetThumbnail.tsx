@@ -6,6 +6,11 @@ import {
   type EagleAssetListItem,
 } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
+import {
+  ThumbnailLoadError,
+  type LoadedThumbnail,
+  type ThumbnailLoadService,
+} from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
 
 const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
@@ -45,12 +50,14 @@ export function getEagleAssetThumbnailUrls(
 export function EagleAssetThumbnail({
   asset,
   scheduler,
+  loadService,
   order,
   displayWidth,
   alt = '',
 }: {
   asset: EagleAssetListItem;
   scheduler: MediaLoadScheduler;
+  loadService?: ThumbnailLoadService;
   order: number;
   displayWidth: number;
   alt?: string;
@@ -67,11 +74,14 @@ export function EagleAssetThumbnail({
   const [attempt, setAttempt] = useState(0);
   const [activeSource, setActiveSource] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  const [requestCycle, setRequestCycle] = useState(0);
   const [isVideoPreviewActive, setIsVideoPreviewActive] = useState(false);
   const settleRef = useRef<(() => void) | null>(null);
   const loadTimeoutRef = useRef<number | null>(null);
   const retryTimerRef = useRef<number | null>(null);
   const videoHoverTimerRef = useRef<number | null>(null);
+  const loadedThumbnailRef = useRef<LoadedThumbnail | null>(null);
+  const transientRetriesRef = useRef(0);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
   const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
 
@@ -93,24 +103,34 @@ export function EagleAssetThumbnail({
     videoHoverTimerRef.current = null;
   };
 
+  const releaseLoadedThumbnail = useCallback(() => {
+    loadedThumbnailRef.current?.release();
+    loadedThumbnailRef.current = null;
+  }, []);
+
   useEffect(() => {
     clearLoadTimeout();
     clearRetryTimer();
     settleRef.current?.();
     settleRef.current = null;
+    releaseLoadedThumbnail();
     setAttempt(0);
     setActiveSource(null);
     setFailed(false);
+    transientRetriesRef.current = 0;
     setIsVideoPreviewActive(false);
-  }, [clearLoadTimeout, sourceKey]);
+  }, [clearLoadTimeout, releaseLoadedThumbnail, sourceKey]);
 
   const handleFailure = useCallback(
-    (failedSource: string) => {
+    (failedSource: string, skipRemainingAttempts = false) => {
       clearLoadTimeout();
       settleRef.current?.();
+      releaseLoadedThumbnail();
       setActiveSource((current) => (current === failedSource ? null : current));
       if (retryTimerRef.current !== null) return;
-      const nextAttempt = attempt + 1;
+      const nextAttempt = skipRemainingAttempts
+        ? (Math.floor(attempt / ATTEMPTS_PER_RENDITION) + 1) * ATTEMPTS_PER_RENDITION
+        : attempt + 1;
       if (nextAttempt >= maxAttempts) {
         setFailed(true);
         return;
@@ -123,7 +143,38 @@ export function EagleAssetThumbnail({
         retryDelayMs(asset.id, nextAttempt),
       );
     },
-    [asset.id, attempt, clearLoadTimeout, maxAttempts],
+    [asset.id, attempt, clearLoadTimeout, maxAttempts, releaseLoadedThumbnail],
+  );
+
+  const handleRequestFailure = useCallback(
+    (failedSource: string, error: unknown) => {
+      if (
+        error instanceof ThumbnailLoadError &&
+        (error.failure === 'rate-limited' || error.failure === 'transient')
+      ) {
+        if (error.failure === 'transient') {
+          transientRetriesRef.current += 1;
+          if (transientRetriesRef.current > 2) {
+            setFailed(true);
+            return;
+          }
+        }
+        const retryAfterMs = Math.max(500, error.retryAfterMs);
+        scheduler.coolDown(retryAfterMs);
+        if (retryTimerRef.current !== null) return;
+        retryTimerRef.current = window.setTimeout(() => {
+          retryTimerRef.current = null;
+          setRequestCycle((cycle) => cycle + 1);
+        }, retryAfterMs);
+        return;
+      }
+      if (error instanceof ThumbnailLoadError && error.failure === 'unauthorized') {
+        setFailed(true);
+        return;
+      }
+      handleFailure(failedSource, error instanceof ThumbnailLoadError);
+    },
+    [handleFailure, scheduler],
   );
 
   useEffect(() => {
@@ -132,8 +183,29 @@ export function EagleAssetThumbnail({
       id: `eagle-thumbnail:${asset.id}`,
       priority: 'visible',
       order,
-      run: (signal) =>
-        new Promise<void>((resolve) => {
+      run: async (signal) => {
+        let displaySource = source;
+        if (loadService && source.startsWith('/api/')) {
+          try {
+            const loaded = await loadService.load(
+              `${asset.id}:${asset.mediaRevision}:${source}`,
+              source,
+              signal,
+            );
+            if (signal.aborted) {
+              loaded.release();
+              return;
+            }
+            releaseLoadedThumbnail();
+            loadedThumbnailRef.current = loaded;
+            transientRetriesRef.current = 0;
+            displaySource = loaded.url;
+          } catch (error) {
+            if (!signal.aborted) handleRequestFailure(source, error);
+            return;
+          }
+        }
+        await new Promise<void>((resolve) => {
           let settled = false;
           const settle = () => {
             if (settled) return;
@@ -144,7 +216,8 @@ export function EagleAssetThumbnail({
             resolve();
           };
           const handleAbort = () => {
-            setActiveSource((current) => (current === source ? null : current));
+            setActiveSource((current) => (current === displaySource ? null : current));
+            releaseLoadedThumbnail();
             settle();
           };
 
@@ -154,14 +227,29 @@ export function EagleAssetThumbnail({
           }
           signal.addEventListener('abort', handleAbort, { once: true });
           settleRef.current = settle;
-          setActiveSource(source);
+          setActiveSource(displaySource);
           loadTimeoutRef.current = window.setTimeout(
-            () => handleFailure(source),
+            () => handleFailure(displaySource),
             THUMBNAIL_LOAD_TIMEOUT_MS,
           );
-        }),
+        });
+      },
     });
-  }, [asset.id, attempt, clearLoadTimeout, failed, handleFailure, order, scheduler, source]);
+  }, [
+    asset.id,
+    asset.mediaRevision,
+    attempt,
+    clearLoadTimeout,
+    failed,
+    handleFailure,
+    handleRequestFailure,
+    loadService,
+    order,
+    releaseLoadedThumbnail,
+    requestCycle,
+    scheduler,
+    source,
+  ]);
 
   useEffect(
     () => () => {
@@ -170,8 +258,9 @@ export function EagleAssetThumbnail({
       clearVideoHoverTimer();
       settleRef.current?.();
       settleRef.current = null;
+      releaseLoadedThumbnail();
     },
-    [clearLoadTimeout],
+    [clearLoadTimeout, releaseLoadedThumbnail],
   );
 
   const handleLoad = () => {
@@ -188,6 +277,7 @@ export function EagleAssetThumbnail({
     clearLoadTimeout();
     settleRef.current?.();
     settleRef.current = null;
+    releaseLoadedThumbnail();
     setActiveSource(null);
     setFailed(false);
     setAttempt(0);
