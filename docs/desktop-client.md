@@ -42,10 +42,12 @@ part of the persistent derivative media cache. Partial batches are removed on fa
 batches expire after one hour, and stale batches are cleaned at the next desktop startup.
 
 The operating system requires every dragged file to exist locally before a native drag begins. On
-the first drag of an uncached selection, the desktop prepares the originals and asks the user to
-drag once more. The second and later drags start synchronously without another download. This
-two-step fallback avoids incomplete files and avoids starting a native drag after the mouse button
-has already been released.
+the first drag of an uncached selection, the desktop silently prepares the originals. Repeating the
+drag starts synchronously without another download. Successful preparation and duplicate imports
+do not add persistent status rows to the library; only actionable failures remain visible. Native
+drags use the operating system's normal-sized icon for the prepared original instead of the app's
+large artwork. This two-step fallback avoids incomplete files and avoids starting a native drag
+after the mouse button has already been released.
 
 ## Packaging
 
