@@ -1,10 +1,14 @@
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
 
-export type DesktopAssetDragBridge = Required<Pick<SekerDesktopBridge, 'startAssetDrag'>>;
+export type DesktopAssetDragBridge = Required<
+  Pick<SekerDesktopBridge, 'prepareAssetDrag' | 'startPreparedAssetDrag'>
+>;
 
 export function getDesktopAssetDragBridge(): DesktopAssetDragBridge | null {
   const candidate = (globalThis as { sekerDesktop?: Partial<SekerDesktopBridge> }).sekerDesktop;
-  return candidate?.version === 1 && typeof candidate.startAssetDrag === 'function'
+  return candidate?.version === 1 &&
+    typeof candidate.prepareAssetDrag === 'function' &&
+    typeof candidate.startPreparedAssetDrag === 'function'
     ? (candidate as SekerDesktopBridge & DesktopAssetDragBridge)
     : null;
 }

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { createDesktopMediaUrl, type DesktopMediaIdentity } from '../shared/media-identity';
-import { parseAssetDragInput } from '../main/original-drag-export';
+import { parseAssetDragInput, parsePreparedDragToken } from '../main/original-drag-export';
 
 (
   globalThis as unknown as { addEventListener(type: 'online', listener: () => void): void }
@@ -58,7 +58,17 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   cancelConnectionManager() {
     return ipcRenderer.invoke('desktop:cancel-connection-manager');
   },
-  startAssetDrag(assetIds: unknown) {
-    return ipcRenderer.invoke('desktop:start-asset-drag', parseAssetDragInput(assetIds));
+  async prepareAssetDrag(assetIds: unknown): Promise<{ token: string }> {
+    const result: unknown = await ipcRenderer.invoke(
+      'desktop:prepare-asset-drag',
+      parseAssetDragInput(assetIds),
+    );
+    if (!result || typeof result !== 'object' || !('token' in result)) {
+      throw new Error('原文件拖拽凭据无效。');
+    }
+    return { token: parsePreparedDragToken(result.token) };
+  },
+  startPreparedAssetDrag(token: unknown) {
+    ipcRenderer.send('desktop:start-prepared-asset-drag', parsePreparedDragToken(token));
   },
 });

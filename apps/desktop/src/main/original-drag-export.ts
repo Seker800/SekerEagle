@@ -9,6 +9,7 @@ const NAMESPACE_ID = /^[0-9a-f]{64}$/u;
 const MAX_DRAG_ASSETS = 100;
 const MAX_FILE_NAME_BYTES = 240;
 const DEFAULT_REQUEST_INTERVAL_MS = 110;
+const DRAG_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export const ORIGINAL_DRAG_EXPORT_TTL_MS = 60 * 60 * 1_000;
 
@@ -27,8 +28,11 @@ interface OriginalDragExporterOptions {
 }
 
 export function parseAssetDragInput(input: unknown): string[] {
-  if (!Array.isArray(input) || input.length === 0 || input.length > MAX_DRAG_ASSETS) {
+  if (!Array.isArray(input) || input.length === 0) {
     throw new Error('待拖出的素材数量无效。');
+  }
+  if (input.length > MAX_DRAG_ASSETS) {
+    throw new Error(`一次最多只能拖出 ${MAX_DRAG_ASSETS} 个原文件。`);
   }
   const assetIds = input.map((value) => {
     if (typeof value !== 'string' || !UUID_V4.test(value)) {
@@ -38,6 +42,13 @@ export function parseAssetDragInput(input: unknown): string[] {
   });
   if (new Set(assetIds).size !== assetIds.length) throw new Error('待拖出的素材标识重复。');
   return assetIds;
+}
+
+export function parsePreparedDragToken(input: unknown): string {
+  if (typeof input !== 'string' || !DRAG_TOKEN.test(input)) {
+    throw new Error('原文件拖拽凭据无效。');
+  }
+  return input.toLowerCase();
 }
 
 export class OriginalDragExporter {
@@ -172,9 +183,13 @@ function readResponseFileName(headers: Headers): string | null {
 }
 
 function sanitizeFileName(input: string): string {
-  let name = input
-    .normalize('NFKC')
-    .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/gu, '_')
+  let name = input.normalize('NFKC').replace(/[<>:"/\\|?*]/gu, '_');
+  name = [...name]
+    .map((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint <= 31 || codePoint === 127 ? '_' : character;
+    })
+    .join('')
     .replace(/^\.+/u, '')
     .replace(/[ .]+$/u, '');
   if (!name) name = 'original.bin';

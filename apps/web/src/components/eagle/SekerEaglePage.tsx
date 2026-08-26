@@ -177,6 +177,10 @@ export function SekerEaglePage({
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [assetDragStatus, setAssetDragStatus] = useState<string | null>(null);
+  const [preparedAssetDrag, setPreparedAssetDrag] = useState<{
+    key: string;
+    token: string;
+  } | null>(null);
   const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(readThumbnailSize);
   const [editorTitle, setEditorTitle] = useState('');
@@ -188,6 +192,11 @@ export function SekerEaglePage({
   useEffect(() => {
     window.localStorage.setItem(EAGLE_PREFERENCES_KEY, JSON.stringify({ thumbnailSize }));
   }, [thumbnailSize]);
+
+  useEffect(() => {
+    setPreparedAssetDrag(null);
+    setAssetDragStatus(null);
+  }, [ownerId]);
 
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys);
@@ -568,14 +577,25 @@ export function SekerEaglePage({
       selectedIds: selectedAssetIds,
       draggedId: assetId,
     });
+    const dragKey = assetIds.join('\u0000');
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
     setAssetContextMenu(null);
+    if (preparedAssetDrag?.key === dragKey) {
+      desktopAssetDragBridge.startPreparedAssetDrag(preparedAssetDrag.token);
+      setAssetDragStatus(null);
+      return;
+    }
     setAssetDragStatus(`正在准备 ${assetIds.length} 个原文件…`);
-    void desktopAssetDragBridge.startAssetDrag(assetIds).then(
-      () => setAssetDragStatus(null),
-      (error: unknown) =>
-        setAssetDragStatus(error instanceof Error ? error.message : '原文件拖出失败。'),
-    );
+    void Promise.resolve()
+      .then(() => desktopAssetDragBridge.prepareAssetDrag(assetIds))
+      .then(
+        ({ token }) => {
+          setPreparedAssetDrag({ key: dragKey, token });
+          setAssetDragStatus('原文件已准备好；如果刚才没有拖出，请再拖一次。');
+        },
+        (error: unknown) =>
+          setAssetDragStatus(error instanceof Error ? error.message : '原文件拖出失败。'),
+      );
   };
 
   const openAssetPreview = (asset: EagleAssetListItem) => {
@@ -1094,6 +1114,10 @@ export function SekerEaglePage({
                         }}
                         onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
                         onDragStart={(event) => handleAssetDragStart(event, asset.id)}
+                        onDragEnd={() => {
+                          dragDepthRef.current = 0;
+                          setIsDragging(false);
+                        }}
                         onDoubleClick={() => openAssetPreview(asset)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {

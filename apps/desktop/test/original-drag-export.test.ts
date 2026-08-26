@@ -6,6 +6,7 @@ import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
   parseAssetDragInput,
+  parsePreparedDragToken,
 } from '../src/main/original-drag-export';
 
 const firstAssetId = '00000000-0000-4000-8000-000000000001';
@@ -60,6 +61,14 @@ describe('parseAssetDragInput', () => {
     ),
   ])('rejects an unsafe drag payload', (input) => {
     expect(() => parseAssetDragInput(input)).toThrow();
+  });
+});
+
+describe('parsePreparedDragToken', () => {
+  it('accepts only a canonical UUID v4 capability token', () => {
+    expect(parsePreparedDragToken(firstAssetId.toUpperCase())).toBe(firstAssetId);
+    expect(() => parsePreparedDragToken('../../tmp/original.png')).toThrow();
+    expect(() => parsePreparedDragToken('00000000-0000-1000-8000-000000000001')).toThrow();
   });
 });
 

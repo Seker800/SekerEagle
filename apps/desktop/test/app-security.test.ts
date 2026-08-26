@@ -108,19 +108,24 @@ describe('desktop server and navigation security', () => {
     expect(preload).toContain("ipcRenderer.invoke('desktop:write-clipboard-image'");
   });
 
-  it('starts native original-file drags only from validated asset IDs and trusted senders', async () => {
+  it('prepares and starts native original-file drags only through trusted capabilities', async () => {
     const [main, preload] = await Promise.all([
       readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
-    expect(main).toContain("ipcMain.handle('desktop:start-asset-drag'");
+    expect(main).toContain("ipcMain.handle('desktop:prepare-asset-drag'");
     expect(main).toMatch(
-      /desktop:start-asset-drag'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
+      /desktop:prepare-asset-drag'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
     );
+    expect(main).toContain("ipcMain.on('desktop:start-prepared-asset-drag'");
     expect(main).toContain('parseAssetDragInput(input)');
     expect(main).toContain('webContents.startDrag');
+    expect(main).toContain('dragServerUrl !== serverUrl');
+    expect(main).toContain('currentIdentity.ownerId !== identity.ownerId');
     expect(preload).toContain('parseAssetDragInput(assetIds)');
-    expect(preload).toContain("ipcRenderer.invoke('desktop:start-asset-drag'");
+    expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:prepare-asset-drag'/u);
+    expect(preload).toContain('parsePreparedDragToken(result.token)');
+    expect(preload).toContain("ipcRenderer.send('desktop:start-prepared-asset-drag'");
     expect(preload).not.toContain('filePath');
   });
 });

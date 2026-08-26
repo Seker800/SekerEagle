@@ -1204,11 +1204,15 @@ describe('SekerEaglePage', () => {
 
   it('drags selected originals through the desktop bridge and preserves browser behavior', async () => {
     const pendingDrag = createDeferred<void>();
-    const startAssetDrag = vi.fn(() => pendingDrag.promise);
+    const prepareAssetDrag = vi.fn(() =>
+      pendingDrag.promise.then(() => ({ token: '11111111-1111-4111-8111-111111111111' })),
+    );
+    const startPreparedAssetDrag = vi.fn();
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
       createMediaUrl: vi.fn(),
-      startAssetDrag,
+      prepareAssetDrag,
+      startPreparedAssetDrag,
     };
     const secondAsset = {
       ...asset,
@@ -1227,18 +1231,26 @@ describe('SekerEaglePage', () => {
 
     fireEvent.dragStart(secondCard);
 
-    expect(startAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']);
+    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
     expect(firstCard).toHaveAttribute('aria-pressed', 'true');
     expect(secondCard).toHaveAttribute('aria-pressed', 'true');
     expect(await screen.findByRole('status')).toHaveTextContent('正在准备 2 个原文件');
+
+    pendingDrag.resolve();
+    expect(await screen.findByRole('status')).toHaveTextContent('原文件已准备好');
+    fireEvent.dragStart(secondCard);
+    expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
 
   it('replaces a previous selection when dragging an unselected desktop card', async () => {
-    const startAssetDrag = vi.fn().mockResolvedValue(undefined);
+    const prepareAssetDrag = vi
+      .fn()
+      .mockResolvedValue({ token: '22222222-2222-4222-8222-222222222222' });
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
       createMediaUrl: vi.fn(),
-      startAssetDrag,
+      prepareAssetDrag,
+      startPreparedAssetDrag: vi.fn(),
     };
     const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
     listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
@@ -1249,9 +1261,26 @@ describe('SekerEaglePage', () => {
     fireEvent.click(firstCard);
     fireEvent.dragStart(secondCard);
 
-    expect(startAssetDrag).toHaveBeenCalledWith(['asset-2']);
+    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-2']));
     await waitFor(() => expect(firstCard).toHaveAttribute('aria-pressed', 'false'));
     expect(secondCard).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows a desktop preparation error even when the bridge rejects synchronously', async () => {
+    const prepareAssetDrag = vi.fn(() => {
+      throw new Error('最多只能拖出 100 个原文件。');
+    });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      prepareAssetDrag,
+      startPreparedAssetDrag: vi.fn(),
+    };
+    renderPage();
+
+    fireEvent.dragStart(await screen.findByRole('button', { name: /Owl Reference/ }));
+
+    expect(await screen.findByRole('status')).toHaveTextContent('最多只能拖出 100 个原文件');
   });
 
   it('exits batch selection with Escape', async () => {

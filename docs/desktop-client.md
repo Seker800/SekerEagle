@@ -32,11 +32,20 @@ Dragging an unselected library thumbnail exports that asset's original file. Dra
 thumbnail exports the complete selection in the library's visible order. The browser build keeps
 cards non-draggable; only the desktop bridge can request a native file drag.
 
+One native drag can contain up to 100 originals. Requests are paced below the original-download
+burst limit so a selection of small files does not fail partway through with rate limiting.
+
 The renderer sends validated asset IDs, never a URL or local path. The main process downloads each
 original with the authenticated desktop session into an owner-and-deployment-isolated temporary
 directory, then gives those local paths to the operating system. These exact-byte exports are not
 part of the persistent derivative media cache. Partial batches are removed on failure, completed
 batches expire after one hour, and stale batches are cleaned at the next desktop startup.
+
+The operating system requires every dragged file to exist locally before a native drag begins. On
+the first drag of an uncached selection, the desktop prepares the originals and asks the user to
+drag once more. The second and later drags start synchronously without another download. This
+two-step fallback avoids incomplete files and avoids starting a native drag after the mouse button
+has already been released.
 
 ## Packaging
 

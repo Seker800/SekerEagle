@@ -1,5 +1,6 @@
 import { createReadStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { desktopCacheRoot } from './cache-location';
 import { Readable } from 'node:stream';
@@ -15,6 +16,7 @@ import {
   shell,
   utilityProcess,
   type UtilityProcess,
+  type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron';
 import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from './app-config';
@@ -39,6 +41,7 @@ import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
   parseAssetDragInput,
+  parsePreparedDragToken,
 } from './original-drag-export';
 
 protocol.registerSchemesAsPrivileged([
@@ -79,6 +82,7 @@ let connectionService: DesktopConnectionService | null = null;
 let mediaController: MediaCacheController | null = null;
 let connectionRecovery: Promise<void> | null = null;
 let browserSession: DesktopBrowserSession | null = null;
+let clearPreparedOriginalDrags: () => void = () => undefined;
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
@@ -119,9 +123,13 @@ if (hasSingleInstanceLock)
         headers: { 'cache-control': 'no-store' },
       }),
     );
-    currentSession.cookies.on('changed', () => owner.invalidate());
+    currentSession.cookies.on('changed', () => {
+      owner.invalidate();
+      clearPreparedOriginalDrags();
+    });
     powerMonitor.on('resume', () => {
       owner.invalidate();
+      clearPreparedOriginalDrags();
       void cacheClient?.expireAuthorizations().catch(() => undefined);
       void recoverConnection(owner);
     });
@@ -141,8 +149,8 @@ if (hasSingleInstanceLock)
           },
         }),
     });
-    await originalDragExporter.cleanupExpired();
-    registerOriginalDragIpc(owner, originalDragExporter);
+    await originalDragExporter.cleanupExpired().catch(() => undefined);
+    clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -176,6 +184,7 @@ app.on('before-quit', () => {
   if (cacheRestartTimer) clearTimeout(cacheRestartTimer);
   if (cacheClient) void cacheClient.close().catch(() => undefined);
   cacheProcess?.kill();
+  clearPreparedOriginalDrags();
 });
 
 async function startCacheProcess(
@@ -404,32 +413,100 @@ function registerClipboardIpc(): void {
   });
 }
 
-function registerOriginalDragIpc(owner: AuthenticatedOwner, exporter: OriginalDragExporter): void {
-  ipcMain.handle('desktop:start-asset-drag', async (event, input: unknown) => {
+function registerOriginalDragIpc(
+  owner: AuthenticatedOwner,
+  exporter: OriginalDragExporter,
+): () => void {
+  const preparedDrags = new Map<
+    string,
+    {
+      prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>;
+      serverUrl: string;
+      cleanupTimer: NodeJS.Timeout;
+    }
+  >();
+  let dragInFlight = false;
+  const removePreparedDrag = (token: string) => {
+    const entry = preparedDrags.get(token);
+    if (!entry) return;
+    preparedDrags.delete(token);
+    clearTimeout(entry.cleanupTimer);
+    void exporter.remove(entry.prepared).catch(() => undefined);
+  };
+  const startNativeDrag = (
+    event: IpcMainEvent | IpcMainInvokeEvent,
+    prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>,
+  ) => {
+    const webContents = event.sender;
+    webContents.startDrag({
+      file: prepared.files[0],
+      files: prepared.files,
+      icon: path.join(__dirname, 'drag-icon.png'),
+    });
+  };
+
+  ipcMain.handle('desktop:prepare-asset-drag', async (event, input: unknown) => {
     assertTrustedIpcSender(event);
-    const assetIds = parseAssetDragInput(input);
-    const identity = await owner.get();
-    if (!identity) throw new Error('需要重新登录。');
-    const namespaceId = buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
-    const prepared = await exporter.prepare(namespaceId, assetIds);
+    if (dragInFlight) throw new Error('已有原文件正在准备，请稍候。');
+    dragInFlight = true;
+    const dragServerUrl = serverUrl;
+    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
+    let preparedToken: string | null = null;
     try {
+      const assetIds = parseAssetDragInput(input);
+      const identity = await owner.get();
+      if (!identity) throw new Error('需要重新登录。');
+      const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
+      prepared = await exporter.prepare(namespaceId, assetIds);
+      const currentIdentity = await owner.get();
+      if (
+        dragServerUrl !== serverUrl ||
+        !currentIdentity ||
+        currentIdentity.ownerId !== identity.ownerId ||
+        currentIdentity.deploymentId !== identity.deploymentId
+      ) {
+        throw new Error('账号或服务器已切换，请重新拖动素材。');
+      }
       assertTrustedIpcSender(event);
-      const webContents = event.sender;
-      webContents.startDrag({
-        file: prepared.files[0],
-        files: prepared.files,
-        icon: path.join(__dirname, 'drag-icon.png'),
-      });
-      const cleanupTimer = setTimeout(
-        () => void exporter.remove(prepared).catch(() => undefined),
-        ORIGINAL_DRAG_EXPORT_TTL_MS,
-      );
+      while (preparedDrags.size >= 8) removePreparedDrag(preparedDrags.keys().next().value!);
+      const token = randomUUID();
+      preparedToken = token;
+      const cleanupTimer = setTimeout(() => removePreparedDrag(token), ORIGINAL_DRAG_EXPORT_TTL_MS);
       cleanupTimer.unref();
+      preparedDrags.set(token, { prepared, serverUrl: dragServerUrl, cleanupTimer });
+      return { token };
     } catch (error) {
-      await exporter.remove(prepared);
+      if (preparedToken) removePreparedDrag(preparedToken);
+      else if (prepared) await exporter.remove(prepared);
       throw error;
+    } finally {
+      dragInFlight = false;
     }
   });
+
+  ipcMain.on('desktop:start-prepared-asset-drag', (event, input: unknown) => {
+    try {
+      assertTrustedIpcSender(event);
+      const token = parsePreparedDragToken(input);
+      const entry = preparedDrags.get(token);
+      if (!entry || entry.serverUrl !== serverUrl) {
+        if (entry) removePreparedDrag(token);
+        return;
+      }
+      startNativeDrag(event, entry.prepared);
+    } catch {
+      return;
+    }
+  });
+
+  return () => {
+    const entries = [...preparedDrags.values()];
+    preparedDrags.clear();
+    for (const entry of entries) {
+      clearTimeout(entry.cleanupTimer);
+      void exporter.remove(entry.prepared).catch(() => undefined);
+    }
+  };
 }
 
 function currentConnectionService(): DesktopConnectionService {
@@ -448,7 +525,7 @@ function currentConnections(): DesktopConnectionSnapshot {
   return snapshot;
 }
 
-function assertTrustedIpcSender(event: IpcMainInvokeEvent): void {
+function assertTrustedIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): void {
   const senderUrl = event.senderFrame?.url;
   if (
     event.sender !== mainWindow?.webContents ||
@@ -601,6 +678,7 @@ async function applyConnection(
   serverUrl = snapshot.active.url;
   if (changed) {
     owner.invalidate();
+    clearPreparedOriginalDrags();
     void cacheClient?.expireAuthorizations().catch(() => undefined);
     mediaController = createMediaController(owner);
   }
