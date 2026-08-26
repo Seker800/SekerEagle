@@ -176,7 +176,7 @@ export function SekerEaglePage({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [assetDragStatus, setAssetDragStatus] = useState<string | null>(null);
+  const [assetDragError, setAssetDragError] = useState<string | null>(null);
   const [preparedAssetDrag, setPreparedAssetDrag] = useState<{
     key: string;
     token: string;
@@ -195,7 +195,7 @@ export function SekerEaglePage({
 
   useEffect(() => {
     setPreparedAssetDrag(null);
-    setAssetDragStatus(null);
+    setAssetDragError(null);
   }, [ownerId]);
 
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
@@ -582,19 +582,18 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     if (preparedAssetDrag?.key === dragKey) {
       desktopAssetDragBridge.startPreparedAssetDrag(preparedAssetDrag.token);
-      setAssetDragStatus(null);
+      setAssetDragError(null);
       return;
     }
-    setAssetDragStatus(`正在准备 ${assetIds.length} 个原文件…`);
+    setAssetDragError(null);
     void Promise.resolve()
       .then(() => desktopAssetDragBridge.prepareAssetDrag(assetIds))
       .then(
         ({ token }) => {
           setPreparedAssetDrag({ key: dragKey, token });
-          setAssetDragStatus('原文件已准备好；如果刚才没有拖出，请再拖一次。');
         },
         (error: unknown) =>
-          setAssetDragStatus(error instanceof Error ? error.message : '原文件拖出失败。'),
+          setAssetDragError(error instanceof Error ? error.message : '原文件拖出失败。'),
       );
   };
 
@@ -1010,9 +1009,9 @@ export function SekerEaglePage({
                   {uploadStatus}
                 </div>
               )}
-              {assetDragStatus && (
-                <div className={styles.statusBar} role="status">
-                  {assetDragStatus}
+              {assetDragError && (
+                <div className={styles.errorBar} role="alert">
+                  {assetDragError}
                 </div>
               )}
               {color && colorCoverage && colorCoverage.percentage < 100 ? (

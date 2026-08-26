@@ -16,6 +16,7 @@ import {
   shell,
   utilityProcess,
   type UtilityProcess,
+  type NativeImage,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
 } from 'electron';
@@ -422,6 +423,7 @@ function registerOriginalDragIpc(
     {
       prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>;
       serverUrl: string;
+      icon: NativeImage;
       cleanupTimer: NodeJS.Timeout;
     }
   >();
@@ -436,12 +438,13 @@ function registerOriginalDragIpc(
   const startNativeDrag = (
     event: IpcMainEvent | IpcMainInvokeEvent,
     prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>>,
+    icon: NativeImage,
   ) => {
     const webContents = event.sender;
     webContents.startDrag({
       file: prepared.files[0],
       files: prepared.files,
-      icon: path.join(__dirname, 'drag-icon.png'),
+      icon,
     });
   };
 
@@ -458,6 +461,7 @@ function registerOriginalDragIpc(
       if (!identity) throw new Error('需要重新登录。');
       const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
       prepared = await exporter.prepare(namespaceId, assetIds);
+      const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
       const currentIdentity = await owner.get();
       if (
         dragServerUrl !== serverUrl ||
@@ -473,7 +477,7 @@ function registerOriginalDragIpc(
       preparedToken = token;
       const cleanupTimer = setTimeout(() => removePreparedDrag(token), ORIGINAL_DRAG_EXPORT_TTL_MS);
       cleanupTimer.unref();
-      preparedDrags.set(token, { prepared, serverUrl: dragServerUrl, cleanupTimer });
+      preparedDrags.set(token, { prepared, serverUrl: dragServerUrl, icon, cleanupTimer });
       return { token };
     } catch (error) {
       if (preparedToken) removePreparedDrag(preparedToken);
@@ -493,7 +497,7 @@ function registerOriginalDragIpc(
         if (entry) removePreparedDrag(token);
         return;
       }
-      startNativeDrag(event, entry.prepared);
+      startNativeDrag(event, entry.prepared, entry.icon);
     } catch {
       return;
     }

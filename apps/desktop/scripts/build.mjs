@@ -1,7 +1,8 @@
 import { build } from 'esbuild';
-import { cp, mkdir } from 'node:fs/promises';
+import { cp, mkdir, rm } from 'node:fs/promises';
 
 await mkdir('dist', { recursive: true });
+await rm('dist/drag-icon.png', { force: true });
 
 const common = {
   bundle: true,
@@ -21,4 +22,3 @@ await Promise.all([
 
 await cp('src/connection-page', 'dist/connection-page', { recursive: true });
 await cp('../web/src/assets/seker-eagle-logo.svg', 'dist/connection-page/seker-eagle-logo.svg');
-await cp('build/icon.png', 'dist/drag-icon.png');

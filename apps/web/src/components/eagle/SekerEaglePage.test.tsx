@@ -1237,10 +1237,11 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByText('正在准备 2 个原文件…')).not.toBeInTheDocument();
 
     pendingDrag.resolve();
-    await waitFor(() => expect(prepareAssetDrag).toHaveReturned());
+    await waitFor(() => {
+      fireEvent.dragStart(secondCard);
+      expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    });
     expect(screen.queryByText(/原文件已准备好/u)).not.toBeInTheDocument();
-    fireEvent.dragStart(secondCard);
-    expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
 
   it('replaces a previous selection when dragging an unselected desktop card', async () => {
