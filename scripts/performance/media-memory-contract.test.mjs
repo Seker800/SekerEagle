@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   assertMediaMemoryTarget,
   evaluateMediaMemoryMeasurements,
   percentile,
 } from './media-memory-contract.mjs';
+
+test('PostgreSQL has an explicit shared-memory budget for parallel image-library queries', async () => {
+  const compose = await readFile(
+    new URL('../../deploy/mac/docker-compose.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(compose, /postgres:[\s\S]*?shm_size:\s*512m/u);
+});
 
 test('media memory verification only accepts the dedicated test database', () => {
   assert.doesNotThrow(() =>
