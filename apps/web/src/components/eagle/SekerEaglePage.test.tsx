@@ -40,6 +40,7 @@ const listEagleAssetUpdatesMock = vi.fn();
 const getEaglePyramidDescriptorMock = vi.fn();
 const countEagleAssetsMock = vi.fn();
 const fetchEagleVectorSummaryMock = vi.fn();
+const copyImageToClipboardMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
@@ -83,6 +84,10 @@ vi.mock('./EagleProcessingPage', () => ({
 
 vi.mock('../../lib/eagle-vector-api', () => ({
   fetchEagleVectorSummary: (...args: unknown[]) => fetchEagleVectorSummaryMock(...args),
+}));
+
+vi.mock('../../lib/image-clipboard', () => ({
+  copyImageToClipboard: (...args: unknown[]) => copyImageToClipboardMock(...args),
 }));
 
 vi.mock('./EagleVectorWorkspace', () => ({
@@ -252,6 +257,7 @@ describe('SekerEaglePage', () => {
       affectedAssetCount: 1,
       assets: [{ assetId: 'asset-1', rowVersion: 2 }],
     });
+    copyImageToClipboardMock.mockResolvedValue(undefined);
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
       id: 'folder-1',
@@ -984,6 +990,54 @@ describe('SekerEaglePage', () => {
         removeTagIds: [],
       });
     });
+  });
+
+  it('uses the same complete asset menu from thumbnails and the large-image viewer', async () => {
+    const saveOriginalFile = vi.fn().mockResolvedValue({ saved: true });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      saveOriginalFile,
+    };
+    renderPage();
+
+    const expectedActions = [
+      '另存为…',
+      '复制图片',
+      '添加标签',
+      '删除人工标签',
+      '设为隐私',
+      '删除所选素材',
+    ];
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.contextMenu(card, { clientX: 180, clientY: 120 });
+    const thumbnailMenu = screen.getByRole('menu', { name: '素材操作' });
+    expect(
+      within(thumbnailMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()),
+    ).toEqual(expectedActions);
+    fireEvent.click(within(thumbnailMenu).getByRole('menuitem', { name: '另存为…' }));
+    await waitFor(() => expect(saveOriginalFile).toHaveBeenCalledWith('asset-1'));
+
+    fireEvent.doubleClick(card);
+    await screen.findByRole('dialog', { name: 'Owl Reference' });
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
+      clientX: 240,
+      clientY: 160,
+    });
+    const viewerMenu = screen.getByRole('menu', { name: '素材操作' });
+    expect(
+      within(viewerMenu)
+        .getAllByRole('menuitem')
+        .map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()),
+    ).toEqual(expectedActions);
+    fireEvent.click(within(viewerMenu).getByRole('menuitem', { name: '复制图片' }));
+    await waitFor(() =>
+      expect(copyImageToClipboardMock).toHaveBeenCalledWith(
+        '/api/eagle/assets/asset-1/renditions/rendition-1/content',
+      ),
+    );
   });
 
   it('removes selected manual tags from the asset context menu', async () => {

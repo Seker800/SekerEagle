@@ -2,8 +2,6 @@ import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
-import { copyImageToClipboard } from '../../lib/image-clipboard';
-import type { SekerDesktopBridge } from '../../lib/media-resolver';
 import { EagleImageViewer } from './EagleImageViewer';
 
 const {
@@ -82,8 +80,6 @@ const {
 });
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
-vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: vi.fn() }));
-
 const image = {
   src: '/api/eagle/assets/asset-1/renditions/preview-1',
   alt: 'Owl Reference',
@@ -105,80 +101,26 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
-    delete (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop;
   });
 
-  it('offers native Save As for the exact original in the desktop app', async () => {
-    const saveOriginalFile = vi.fn().mockResolvedValue({ saved: true });
-    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
-      version: 1,
-      createMediaUrl: vi.fn(),
-      saveOriginalFile,
-    };
-    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
-    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
-
-    await waitFor(() => expect(saveOriginalFile).toHaveBeenCalledWith(image.assetId));
-  });
-
-  it('does not offer Save As without a native original-file capability', async () => {
-    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
-    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-
-    expect(screen.queryByRole('menuitem', { name: '另存为…' })).not.toBeInTheDocument();
-  });
-
-  it('keeps Save As failures visible and recoverable', async () => {
-    const saveOriginalFile = vi.fn().mockRejectedValue(new Error('save denied'));
-    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
-      version: 1,
-      createMediaUrl: vi.fn(),
-      saveOriginalFile,
-    };
-    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
-    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
-
-    expect(await screen.findByRole('alert', { name: '原文件另存状态' })).toHaveTextContent(
-      '另存失败',
+  it('delegates the context menu to the shared asset action surface', async () => {
+    const onOpenAssetMenu = vi.fn();
+    render(
+      <EagleImageViewer
+        image={image}
+        onClose={vi.fn()}
+        onOpenAssetMenu={onOpenAssetMenu}
+      />,
     );
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-    expect(screen.getByRole('menuitem', { name: '另存为…' })).toBeEnabled();
-  });
-
-  it('restores image copy through the viewer context menu', async () => {
-    vi.mocked(copyImageToClipboard).mockResolvedValue();
-    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
 
     fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
       clientX: 240,
       clientY: 160,
     });
-    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
 
-    await waitFor(() => expect(copyImageToClipboard).toHaveBeenCalledWith(image.src));
-    expect(screen.getByRole('status', { name: '图片复制状态' })).toHaveTextContent('图片已复制');
-  });
-
-  it('keeps copy failures visible and recoverable', async () => {
-    vi.mocked(copyImageToClipboard).mockRejectedValue(new Error('clipboard denied'));
-    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
-    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('复制失败');
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
-    expect(screen.getByRole('menuitem', { name: '复制图片' })).toBeEnabled();
+    expect(onOpenAssetMenu).toHaveBeenCalledWith({ x: 240, y: 160 });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
   it('uses a low-latency navigator viewer for an ordinary preview image', async () => {
