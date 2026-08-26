@@ -51,6 +51,8 @@ const getEaglePyramidDescriptorMock = vi.fn();
 const countEagleAssetsMock = vi.fn();
 const fetchEagleVectorSummaryMock = vi.fn();
 const copyImageToClipboardMock = vi.fn();
+const saveOriginalFileMock = vi.fn();
+const downloadOriginalFilesMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
@@ -98,6 +100,11 @@ vi.mock('../../lib/eagle-vector-api', () => ({
 
 vi.mock('../../lib/image-clipboard', () => ({
   copyImageToClipboard: (...args: unknown[]) => copyImageToClipboardMock(...args),
+}));
+
+vi.mock('../../lib/original-file-export', () => ({
+  saveOriginalFile: (...args: unknown[]) => saveOriginalFileMock(...args),
+  downloadOriginalFiles: (...args: unknown[]) => downloadOriginalFilesMock(...args),
 }));
 
 vi.mock('./EagleVectorWorkspace', () => ({
@@ -268,6 +275,8 @@ describe('SekerEaglePage', () => {
       assets: [{ assetId: 'asset-1', rowVersion: 2 }],
     });
     copyImageToClipboardMock.mockResolvedValue(undefined);
+    saveOriginalFileMock.mockResolvedValue({ saved: true });
+    downloadOriginalFilesMock.mockResolvedValue({ downloaded: 2 });
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
       id: 'folder-1',
@@ -1054,6 +1063,29 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it('offers Save As from the browser asset menu without a desktop bridge', async () => {
+    renderPage();
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
+
+    await waitFor(() => expect(saveOriginalFileMock).toHaveBeenCalledWith(asset));
+  });
+
+  it('requests browser image clipboard access before the click handler returns', async () => {
+    let copyStarted = false;
+    copyImageToClipboardMock.mockImplementationOnce(() => {
+      copyStarted = true;
+      return Promise.resolve();
+    });
+    renderPage();
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
+
+    expect(copyStarted).toBe(true);
+  });
+
   it('keeps shared Save As failures visible and retryable', async () => {
     const saveOriginalFile = vi
       .fn()
@@ -1385,6 +1417,21 @@ describe('SekerEaglePage', () => {
 
     await waitFor(() => expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2']));
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
+  });
+
+  it('batch-downloads selected originals from the browser context menu in library order', async () => {
+    const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(secondCard);
+    fireEvent.click(firstCard, { metaKey: true });
+    fireEvent.contextMenu(firstCard);
+    fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
+
+    await waitFor(() => expect(downloadOriginalFilesMock).toHaveBeenCalledWith([asset, secondAsset]));
   });
 
   it('shows batch download only for multiple selections with a desktop capability', async () => {
