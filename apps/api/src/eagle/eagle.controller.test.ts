@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { THROTTLER_LIMIT, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
+import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { EagleController } from './eagle.controller';
+import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 
 function controllerMethod(name: keyof EagleController): object {
   const method = Object.getOwnPropertyDescriptor(EagleController.prototype, name)?.value as unknown;
@@ -14,7 +15,7 @@ function controllerMethod(name: keyof EagleController): object {
   return method as object;
 }
 
-test('authenticated media reads use a bounded high-throughput throttle without changing API limits', () => {
+test('authenticated media reads use a dedicated owner-aware guard without changing API limits', () => {
   const mediaHandlers = [
     controllerMethod('getRendition'),
     controllerMethod('getRenditionContent'),
@@ -22,18 +23,17 @@ test('authenticated media reads use a bounded high-throughput throttle without c
   ];
 
   for (const handler of mediaHandlers) {
-    assert.equal(Reflect.getMetadata(`${THROTTLER_LIMIT}short`, handler), 120);
-    assert.equal(Reflect.getMetadata(`${THROTTLER_TTL}short`, handler), 1_000);
-    assert.equal(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler), 3_600);
-    assert.equal(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler), 60_000);
+    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}short`, handler), true);
+    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}default`, handler), true);
+    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [EagleMediaThrottleGuard]);
   }
 
   assert.equal(
-    Reflect.getMetadata(`${THROTTLER_LIMIT}short`, controllerMethod('listAssets')),
+    Reflect.getMetadata(`${THROTTLER_SKIP}short`, controllerMethod('listAssets')),
     undefined,
   );
   assert.equal(
-    Reflect.getMetadata(`${THROTTLER_LIMIT}short`, controllerMethod('getOriginal')),
+    Reflect.getMetadata(`${THROTTLER_SKIP}short`, controllerMethod('getOriginal')),
     undefined,
   );
 });

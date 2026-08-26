@@ -9,6 +9,7 @@ import { EagleImportService } from './eagle-import.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMaintenanceService } from './eagle-maintenance.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
+import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 import { EagleProcessingController } from './eagle-processing.controller';
 import { EagleProcessingService } from './eagle-processing.service';
 import { EagleVectorController } from './eagle-vector.controller';
@@ -40,6 +41,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
     EagleMediaService,
     EagleMaintenanceService,
     EagleMediaCapabilityService,
+    EagleMediaThrottleGuard,
     EagleUploadService,
     EagleUploadRecoveryService,
     EagleUploadInspectionService,

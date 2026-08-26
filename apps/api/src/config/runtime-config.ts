@@ -31,6 +31,29 @@ function positiveInteger(env: Record<string, unknown>, key: string): number {
   return value;
 }
 
+function boundedInteger(
+  env: Record<string, unknown>,
+  key: string,
+  fallback: number,
+  minimum: number,
+  maximum: number,
+): number {
+  const raw = env[key] ?? fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${key} must be an integer between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+function optionalBoolean(env: Record<string, unknown>, key: string, fallback: boolean): boolean {
+  const raw = env[key];
+  if (raw === undefined) return fallback;
+  if (raw === true || raw === 'true') return true;
+  if (raw === false || raw === 'false') return false;
+  throw new Error(`${key} must be true or false`);
+}
+
 function parseTrustedBrowserOrigins(
   env: Record<string, unknown>,
   canonicalOrigin: string,
@@ -147,5 +170,34 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
     S3_BUCKET: s3Bucket,
     S3_ACCESS_KEY_ID: required(env, 'S3_ACCESS_KEY_ID'),
     S3_SECRET_ACCESS_KEY: required(env, 'S3_SECRET_ACCESS_KEY'),
+    EAGLE_MEDIA_THROTTLE_V2_ENABLED: optionalBoolean(env, 'EAGLE_MEDIA_THROTTLE_V2_ENABLED', true),
+    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: boundedInteger(
+      env,
+      'EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND',
+      256,
+      32,
+      2_000,
+    ),
+    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE: boundedInteger(
+      env,
+      'EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE',
+      6_000,
+      1_000,
+      120_000,
+    ),
+    EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND: boundedInteger(
+      env,
+      'EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND',
+      1_024,
+      128,
+      10_000,
+    ),
+    EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: boundedInteger(
+      env,
+      'EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE',
+      24_000,
+      4_000,
+      1_000_000,
+    ),
   };
 }

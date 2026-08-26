@@ -22,6 +22,34 @@ void test('accepts the local isolated runtime', () => {
   const result = validateEnvironment(safeEnv);
   assert.equal(result.CANONICAL_ORIGIN, 'http://localhost:8180');
   assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, ['http://localhost:8180']);
+  assert.equal(result.EAGLE_MEDIA_THROTTLE_V2_ENABLED, true);
+  assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, 256);
+  assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE, 6_000);
+  assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND, 1_024);
+  assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE, 24_000);
+});
+
+void test('validates bounded media throttle configuration and its rollback flag', () => {
+  const configured = validateEnvironment({
+    ...safeEnv,
+    EAGLE_MEDIA_THROTTLE_V2_ENABLED: 'false',
+    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: '128',
+    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE: '5000',
+    EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND: '512',
+    EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: '20000',
+  });
+  assert.equal(configured.EAGLE_MEDIA_THROTTLE_V2_ENABLED, false);
+  assert.equal(configured.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, 128);
+
+  for (const [key, value] of [
+    ['EAGLE_MEDIA_THROTTLE_V2_ENABLED', 'maybe'],
+    ['EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND', '31'],
+    ['EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE', '999'],
+    ['EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND', '10001'],
+    ['EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE', '1000001'],
+  ] as const) {
+    assert.throws(() => validateEnvironment({ ...safeEnv, [key]: value }), new RegExp(key));
+  }
 });
 
 void test('accepts exact trusted LAN origins while preserving the canonical origin', () => {
