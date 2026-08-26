@@ -41,15 +41,26 @@ export function getRecommendedMediaConcurrency(): number {
 
 export class MediaLoadScheduler {
   private readonly maxConcurrent: number;
+  private readonly startsPerMillisecond: number;
+  private readonly burst: number;
   private readonly queue = new Map<string, QueuedTask>();
   private readonly active = new Map<string, ActiveTask>();
   private sequence = 0;
   private flushScheduled = false;
+  private availableTokens: number;
+  private lastRefillAt = performance.now();
+  private rateWakeTimer: ReturnType<typeof setTimeout> | null = null;
+  private cooldownUntil = 0;
 
   constructor({
     maxConcurrent = getRecommendedMediaConcurrency(),
-  }: { maxConcurrent?: number } = {}) {
+    startsPerSecond = 32,
+    burst = 16,
+  }: { maxConcurrent?: number; startsPerSecond?: number; burst?: number } = {}) {
     this.maxConcurrent = Math.max(1, Math.floor(maxConcurrent));
+    this.startsPerMillisecond = Math.max(1, startsPerSecond) / 1_000;
+    this.burst = Math.max(1, Math.floor(burst));
+    this.availableTokens = this.burst;
   }
 
   enqueue(task: MediaLoadTask): () => void {
@@ -70,9 +81,15 @@ export class MediaLoadScheduler {
 
   clear({ abortActive = false }: { abortActive?: boolean } = {}) {
     this.queue.clear();
+    this.clearRateWake();
     if (abortActive) {
       for (const task of this.active.values()) task.controller.abort();
     }
+  }
+
+  coolDown(delayMs: number) {
+    this.cooldownUntil = Math.max(this.cooldownUntil, performance.now() + Math.max(0, delayMs));
+    this.scheduleFlush();
   }
 
   private scheduleFlush() {
@@ -96,6 +113,7 @@ export class MediaLoadScheduler {
           return left.sequence - right.sequence;
         })[0];
       if (!next) return;
+      if (!this.consumeStartToken()) return;
       this.queue.delete(next.id);
       const controller = new AbortController();
       const activeTask = { controller, sequence: next.sequence };
@@ -110,5 +128,43 @@ export class MediaLoadScheduler {
           this.scheduleFlush();
         });
     }
+  }
+
+  private consumeStartToken(): boolean {
+    const now = performance.now();
+    const elapsed = Math.max(0, now - this.lastRefillAt);
+    this.availableTokens = Math.min(
+      this.burst,
+      this.availableTokens + elapsed * this.startsPerMillisecond,
+    );
+    this.lastRefillAt = now;
+
+    if (now < this.cooldownUntil) {
+      this.scheduleRateWake(this.cooldownUntil - now);
+      return false;
+    }
+    if (this.availableTokens < 1) {
+      this.scheduleRateWake((1 - this.availableTokens) / this.startsPerMillisecond);
+      return false;
+    }
+    this.availableTokens -= 1;
+    return true;
+  }
+
+  private scheduleRateWake(delayMs: number) {
+    if (this.rateWakeTimer !== null) return;
+    this.rateWakeTimer = setTimeout(
+      () => {
+        this.rateWakeTimer = null;
+        this.scheduleFlush();
+      },
+      Math.max(1, Math.ceil(delayMs)),
+    );
+  }
+
+  private clearRateWake() {
+    if (this.rateWakeTimer === null) return;
+    clearTimeout(this.rateWakeTimer);
+    this.rateWakeTimer = null;
   }
 }
