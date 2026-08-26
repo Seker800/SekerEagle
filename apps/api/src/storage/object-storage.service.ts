@@ -14,6 +14,9 @@ import {
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { NodeHttpHandler, type NodeHttpHandlerOptions } from '@smithy/node-http-handler';
+import { Agent as HttpAgent } from 'node:http';
+import { Agent as HttpsAgent } from 'node:https';
 import {
   executeObjectReadWithRetry,
   isRetryableObjectReadError,
@@ -38,10 +41,12 @@ export class ObjectStorageService implements OnModuleDestroy {
     this.client = new S3Client({
       ...clientOptions,
       endpoint: config.getOrThrow<string>('S3_ENDPOINT'),
+      requestHandler: createObjectStorageRequestHandler(config),
     });
     this.publicClient = new S3Client({
       ...clientOptions,
       endpoint: config.getOrThrow<string>('S3_PUBLIC_ENDPOINT'),
+      requestHandler: createObjectStorageRequestHandler(config),
     });
   }
 
@@ -146,4 +151,20 @@ export class ObjectStorageService implements OnModuleDestroy {
     this.client.destroy();
     this.publicClient.destroy();
   }
+}
+
+export function createObjectStorageRequestHandler(config: ConfigService): NodeHttpHandler {
+  return new NodeHttpHandler(objectStorageHttpHandlerOptions(config));
+}
+
+export function objectStorageHttpHandlerOptions(config: ConfigService): NodeHttpHandlerOptions {
+  const maxSockets = config.getOrThrow<number>('S3_MAX_SOCKETS');
+  return {
+    connectionTimeout: config.getOrThrow<number>('S3_CONNECTION_TIMEOUT_MS'),
+    requestTimeout: config.getOrThrow<number>('S3_REQUEST_TIMEOUT_MS'),
+    throwOnRequestTimeout: true,
+    socketTimeout: config.getOrThrow<number>('S3_SOCKET_TIMEOUT_MS'),
+    httpAgent: new HttpAgent({ keepAlive: true, maxSockets }),
+    httpsAgent: new HttpsAgent({ keepAlive: true, maxSockets }),
+  };
 }

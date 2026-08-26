@@ -170,6 +170,10 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
     S3_BUCKET: s3Bucket,
     S3_ACCESS_KEY_ID: required(env, 'S3_ACCESS_KEY_ID'),
     S3_SECRET_ACCESS_KEY: required(env, 'S3_SECRET_ACCESS_KEY'),
+    S3_CONNECTION_TIMEOUT_MS: boundedInteger(env, 'S3_CONNECTION_TIMEOUT_MS', 3_000, 250, 30_000),
+    S3_REQUEST_TIMEOUT_MS: boundedInteger(env, 'S3_REQUEST_TIMEOUT_MS', 12_000, 1_000, 60_000),
+    S3_SOCKET_TIMEOUT_MS: boundedInteger(env, 'S3_SOCKET_TIMEOUT_MS', 10_000, 1_000, 60_000),
+    S3_MAX_SOCKETS: boundedInteger(env, 'S3_MAX_SOCKETS', 64, 4, 512),
     EAGLE_MEDIA_THROTTLE_V2_ENABLED: optionalBoolean(env, 'EAGLE_MEDIA_THROTTLE_V2_ENABLED', true),
     EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: boundedInteger(
       env,

@@ -27,6 +27,21 @@ void test('accepts the local isolated runtime', () => {
   assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE, 6_000);
   assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND, 1_024);
   assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE, 24_000);
+  assert.equal(result.S3_CONNECTION_TIMEOUT_MS, 3_000);
+  assert.equal(result.S3_REQUEST_TIMEOUT_MS, 12_000);
+  assert.equal(result.S3_SOCKET_TIMEOUT_MS, 10_000);
+  assert.equal(result.S3_MAX_SOCKETS, 64);
+});
+
+void test('rejects unsafe object-storage timeout and connection-pool settings', () => {
+  for (const [key, value] of [
+    ['S3_CONNECTION_TIMEOUT_MS', '0'],
+    ['S3_REQUEST_TIMEOUT_MS', '60001'],
+    ['S3_SOCKET_TIMEOUT_MS', '999'],
+    ['S3_MAX_SOCKETS', '513'],
+  ] as const) {
+    assert.throws(() => validateEnvironment({ ...safeEnv, [key]: value }), new RegExp(key));
+  }
 });
 
 void test('validates bounded media throttle configuration and its rollback flag', () => {
