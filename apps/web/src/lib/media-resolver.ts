@@ -3,6 +3,10 @@ const TILE_PATH = new RegExp(
   `^/api/eagle/assets/(${UUID_V4})/pyramids/(${UUID_V4})/tiles/(0|[1-9]\\d*)/(0|[1-9]\\d*)/(0|[1-9]\\d*)$`,
   'i',
 );
+const DESKTOP_CLIPBOARD_RENDITION_URL = new RegExp(
+  `^sekereagle-media://rendition/(?:thumbnail|preview)/(${UUID_V4})/(${UUID_V4})$`,
+  'i',
+);
 
 export type DesktopMediaRequest =
   | {
@@ -27,6 +31,7 @@ export interface SekerDesktopBridge {
   setCacheLimitGiB?(limitGiB: number): Promise<void>;
   clearCache?(): Promise<{ deleted: number; deferred: number }>;
   invalidateAsset?(assetId: string): Promise<{ deleted: number; deferred: number }>;
+  writeClipboardImage?(pngBytes: Uint8Array): Promise<void>;
   getConnectionStatus?(): Promise<DesktopConnectionStatus>;
   openConnectionManager?(): Promise<void>;
 }
@@ -53,6 +58,15 @@ export interface DesktopCacheStatus {
 export type DesktopCacheBridge = Required<
   Pick<SekerDesktopBridge, 'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'>
 >;
+
+export type DesktopClipboardBridge = Required<Pick<SekerDesktopBridge, 'writeClipboardImage'>>;
+
+export function getDesktopClipboardBridge(): DesktopClipboardBridge | null {
+  const bridge = desktopBridge();
+  return bridge && typeof bridge.writeClipboardImage === 'function'
+    ? (bridge as SekerDesktopBridge & DesktopClipboardBridge)
+    : null;
+}
 
 export function getDesktopCacheBridge(): DesktopCacheBridge | null {
   const bridge = desktopBridge();
@@ -102,6 +116,13 @@ export function resolveEagleMediaPath(path: string): string {
     );
   }
   return path;
+}
+
+export function resolveClipboardImageUrl(url: string): string {
+  if (!url.startsWith('sekereagle-media:')) return url;
+  const rendition = DESKTOP_CLIPBOARD_RENDITION_URL.exec(url);
+  if (!rendition) throw new Error('图片复制来源未通过能力校验。');
+  return `/api/eagle/assets/${rendition[1]}/renditions/${rendition[2]}`;
 }
 
 function resolveMediaRequest(media: DesktopMediaRequest, fallback: string): string {

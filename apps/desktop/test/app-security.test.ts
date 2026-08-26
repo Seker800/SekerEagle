@@ -103,8 +103,8 @@ describe('desktop server and navigation security', () => {
     expect(main).toMatch(
       /desktop:write-clipboard-image'[\s\S]{0,180}assertTrustedIpcSender\(event\)/u,
     );
-    expect(main).toContain('MAX_CLIPBOARD_IMAGE_BYTES');
-    expect(main).toContain("contentType: 'image/png'");
+    expect(main).toContain('parseClipboardImageInput(input)');
+    expect(preload).toContain("contentType: 'image/png'");
     expect(preload).toContain("ipcRenderer.invoke('desktop:write-clipboard-image'");
   });
 });

@@ -6,7 +6,9 @@ import { Readable } from 'node:stream';
 import {
   app,
   BrowserWindow,
+  clipboard,
   ipcMain,
+  nativeImage,
   powerMonitor,
   protocol,
   session,
@@ -32,6 +34,7 @@ import { DesktopConnectionService, type DesktopConnectionSnapshot } from './conn
 import { createDesktopConnectionProbe } from './connection-probe';
 import { DesktopBrowserSession } from './browser-session';
 import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
+import { parseClipboardImageInput } from './clipboard-image';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -120,6 +123,7 @@ if (hasSingleInstanceLock)
     lockDownSession(currentSession);
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
+    registerClipboardIpc();
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -369,6 +373,15 @@ function registerConnectionIpc(owner: AuthenticatedOwner): void {
     assertConnectionPageSender(event);
     const active = currentConnections().active;
     if (active) await mainWindow?.loadURL(active.url);
+  });
+}
+
+function registerClipboardIpc(): void {
+  ipcMain.handle('desktop:write-clipboard-image', (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    const image = nativeImage.createFromBuffer(Buffer.from(parseClipboardImageInput(input)));
+    if (image.isEmpty()) throw new Error('剪贴板图片无法解码。');
+    clipboard.writeImage(image);
   });
 }
 

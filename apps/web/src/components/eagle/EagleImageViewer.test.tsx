@@ -118,7 +118,7 @@ describe('EagleImageViewer', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
 
     await waitFor(() => expect(copyImageToClipboard).toHaveBeenCalledWith(image.src));
-    expect(screen.getByRole('status')).toHaveTextContent('图片已复制');
+    expect(screen.getByRole('status', { name: '图片复制状态' })).toHaveTextContent('图片已复制');
   });
 
   it('keeps copy failures visible and recoverable', async () => {

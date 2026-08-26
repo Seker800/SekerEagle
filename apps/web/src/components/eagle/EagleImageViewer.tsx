@@ -1,11 +1,13 @@
-import { IconRefresh } from '@tabler/icons-react';
+import { IconCopy, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
+import { copyImageToClipboard } from '../../lib/image-clipboard';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import styles from './EagleImageViewer.module.css';
 
 type ViewerStatus = 'loading' | 'ready' | 'error';
+type CopyStatus = 'idle' | 'copying' | 'success' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = { x: number; y: number };
 
@@ -130,6 +132,8 @@ export function EagleImageViewer({
   const lastInteractionAtRef = useRef(0);
   const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<ViewerStatus>('loading');
+  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
@@ -273,6 +277,17 @@ export function EagleImageViewer({
     openPendingSource();
   }, [image.assetId, image.src, source, sourceKey]);
 
+  useEffect(() => {
+    if (!contextMenu) return undefined;
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest('[data-image-context-menu]')) return;
+      setContextMenu(null);
+    };
+    window.addEventListener('pointerdown', dismiss);
+    return () => window.removeEventListener('pointerdown', dismiss);
+  }, [contextMenu]);
+
   const retry = () => {
     const viewer = viewerRef.current;
     if (!viewer) {
@@ -284,6 +299,19 @@ export function EagleImageViewer({
     viewer.open(sourceRef.current);
   };
 
+  const copyImage = async () => {
+    if (copyStatus === 'copying') return;
+    setCopyStatus('copying');
+    try {
+      await copyImageToClipboard(image.src);
+      setContextMenu(null);
+      setCopyStatus('success');
+    } catch {
+      setContextMenu(null);
+      setCopyStatus('error');
+    }
+  };
+
   return (
     <div className={styles.backdrop} role="presentation" onClick={onClose}>
       <section
@@ -293,7 +321,18 @@ export function EagleImageViewer({
         aria-label={image.alt}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className={styles.stage}>
+        <div
+          className={styles.stage}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setCopyStatus('idle');
+            setContextMenu({
+              x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
+              y: Math.max(8, Math.min(event.clientY, window.innerHeight - 52)),
+            });
+          }}
+        >
           <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
           {status !== 'ready' ? (
             <div className={styles.loadState} role={status === 'error' ? 'alert' : 'status'}>
@@ -316,15 +355,46 @@ export function EagleImageViewer({
               )}
             </div>
           ) : null}
+          {copyStatus === 'success' || copyStatus === 'error' ? (
+            <div
+              className={styles.copyNotice}
+              role={copyStatus === 'error' ? 'alert' : 'status'}
+              aria-label="图片复制状态"
+            >
+              {copyStatus === 'success' ? '图片已复制' : '复制失败，请重试'}
+            </div>
+          ) : null}
         </div>
         <footer>
           <strong>{image.alt}</strong>
-          <span>滚轮缩放 · 拖拽移动 · {descriptor ? '按需加载高清切片' : '优化预览'}</span>
+          <span>
+            滚轮缩放 · 拖拽移动 · 右键复制 · {descriptor ? '按需加载高清切片' : '优化预览'}
+          </span>
           <button type="button" onClick={onClose}>
             关闭
           </button>
         </footer>
       </section>
+      {contextMenu ? (
+        <div
+          className={styles.contextMenu}
+          data-image-context-menu
+          role="menu"
+          aria-label="图片操作"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={copyStatus === 'copying'}
+            onClick={() => void copyImage()}
+          >
+            <IconCopy size={16} />
+            {copyStatus === 'copying' ? '正在复制…' : '复制图片'}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

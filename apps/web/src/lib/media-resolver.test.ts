@@ -45,16 +45,12 @@ describe('media resolver', () => {
 
   it('uses the authenticated browser URL when copying a desktop rendition', () => {
     expect(
-      resolveClipboardImageUrl(
-        `sekereagle-media://rendition/preview/${assetId}/${renditionId}`,
-      ),
+      resolveClipboardImageUrl(`sekereagle-media://rendition/preview/${assetId}/${renditionId}`),
     ).toBe(`/api/eagle/assets/${assetId}/renditions/${renditionId}`);
     expect(resolveClipboardImageUrl('/api/eagle/assets/a/renditions/b')).toBe(
       '/api/eagle/assets/a/renditions/b',
     );
-    expect(() => resolveClipboardImageUrl('sekereagle-media://tile/a/b/1/2/3')).toThrow(
-      /复制来源/,
-    );
+    expect(() => resolveClipboardImageUrl('sekereagle-media://tile/a/b/1/2/3')).toThrow(/复制来源/);
   });
 
   it('exposes clipboard writing only when the desktop bridge implements it', () => {

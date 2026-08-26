@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   invalidateAsset(assetId: string) {
     return ipcRenderer.invoke('desktop:invalidate-asset', assetId);
   },
+  writeClipboardImage(pngBytes: Uint8Array) {
+    return ipcRenderer.invoke('desktop:write-clipboard-image', {
+      contentType: 'image/png',
+      bytes: pngBytes,
+    });
+  },
   getConnectionStatus() {
     return ipcRenderer.invoke('desktop:get-connection-status');
   },
