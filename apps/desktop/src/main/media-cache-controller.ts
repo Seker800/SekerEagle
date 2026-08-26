@@ -75,7 +75,7 @@ export class MediaCacheController {
   private readonly authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
   private readonly fetchUpstream: (
     path: string,
-    options: { ifNoneMatch?: string },
+    options: { ifNoneMatch?: string; signal?: AbortSignal },
   ) => Promise<Response>;
   private readonly now: () => number;
   private readonly populating = new Map<string, Promise<void>>();
@@ -84,7 +84,10 @@ export class MediaCacheController {
     serverUrl: string;
     cache: CacheBackend;
     authenticatedOwner: () => Promise<AuthenticatedIdentity | null>;
-    fetchUpstream: (path: string, options: { ifNoneMatch?: string }) => Promise<Response>;
+    fetchUpstream: (
+      path: string,
+      options: { ifNoneMatch?: string; signal?: AbortSignal },
+    ) => Promise<Response>;
     now?: () => number;
   }) {
     this.serverUrl = options.serverUrl;
@@ -94,7 +97,7 @@ export class MediaCacheController {
     this.now = options.now ?? Date.now;
   }
 
-  async resolve(url: string): Promise<MediaResolution> {
+  async resolve(url: string, signal?: AbortSignal): Promise<MediaResolution> {
     let media: DesktopMediaIdentity;
     try {
       media = parseDesktopMediaUrl(url);
@@ -114,17 +117,24 @@ export class MediaCacheController {
     try {
       existing = await this.cache.acquire(keyHash, namespaceId, now);
     } catch {
-      return { source: 'upstream', response: await this.fetchUpstream(upstreamPath(media), {}) };
+      return {
+        source: 'upstream',
+        response: await this.fetchUpstream(upstreamPath(media), signal ? { signal } : {}),
+      };
     }
     try {
       if (existing && existing.authorizationLeaseUntil >= now) return cacheResolution(existing);
       if (existing) {
         await this.cache.release(existing.leaseId);
-        return await this.revalidate(media, keyHash, namespaceId, existing);
+        return await this.revalidate(media, keyHash, namespaceId, existing, signal);
       }
-      return await this.resolveMiss(media, keyHash, namespaceId);
-    } catch {
-      return { source: 'upstream', response: await this.fetchUpstream(upstreamPath(media), {}) };
+      return await this.resolveMiss(media, keyHash, namespaceId, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return {
+        source: 'upstream',
+        response: await this.fetchUpstream(upstreamPath(media), signal ? { signal } : {}),
+      };
     }
   }
 
@@ -132,14 +142,15 @@ export class MediaCacheController {
     media: DesktopMediaIdentity,
     keyHash: Buffer,
     namespaceId: string,
+    signal?: AbortSignal,
   ): Promise<MediaResolution> {
     const keyHex = keyHash.toString('hex');
     const active = this.populating.get(keyHex);
     if (active) {
-      await active;
+      await waitForSignal(active, signal);
       const hit = await this.cache.acquire(keyHash, namespaceId, this.now());
       if (hit) return cacheResolution(hit);
-      return this.resolveMiss(media, keyHash, namespaceId);
+      return this.resolveMiss(media, keyHash, namespaceId, signal);
     }
 
     let resolveClient!: (response: Response) => void;
@@ -148,7 +159,7 @@ export class MediaCacheController {
       resolveClient = resolve;
       rejectClient = reject;
     });
-    const populate = this.fetchUpstream(upstreamPath(media), {})
+    const populate = this.fetchUpstream(upstreamPath(media), signal ? { signal } : {})
       .then(async (response) => {
         if (!isCacheable(response, media) || !response.body) {
           resolveClient(response);
@@ -179,9 +190,11 @@ export class MediaCacheController {
     keyHash: Buffer,
     namespaceId: string,
     existing: ReadyCacheEntry,
+    signal?: AbortSignal,
   ): Promise<MediaResolution> {
     const response = await this.fetchUpstream(upstreamPath(media), {
       ...(existing.etag ? { ifNoneMatch: existing.etag } : {}),
+      ...(signal ? { signal } : {}),
     });
     if (response.status === 304 && isEligible(response)) {
       const now = this.now();
@@ -268,6 +281,20 @@ function responseWithBody(response: Response, body: ReadableStream<Uint8Array>):
     statusText: response.statusText,
     headers: response.headers,
   });
+}
+
+function waitForSignal(work: Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.reject(abortError(signal));
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(abortError(signal));
+    signal.addEventListener('abort', abort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
+
+function abortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError');
 }
 
 function upstreamPath(media: DesktopMediaIdentity): string {

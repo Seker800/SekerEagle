@@ -1,7 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MediaRequestLimiter } from '../src/main/media-request-limiter';
 
 describe('MediaRequestLimiter', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('holds a permit until the response body is consumed and bounds its queue', async () => {
     const limiter = new MediaRequestLimiter(2, 1);
     const first = await limiter.fetch(async () => new Response('first'));
@@ -25,5 +29,54 @@ describe('MediaRequestLimiter', () => {
     ).rejects.toThrow('network');
     await limiter.fetch(async () => new Response(null, { status: 304 }));
     expect(limiter.stats()).toEqual({ active: 0, queued: 0 });
+  });
+
+  it('removes an aborted queued request without consuming a permit', async () => {
+    const limiter = new MediaRequestLimiter(1, 2);
+    const active = await limiter.fetch(async () => new Response('active'));
+    const controller = new AbortController();
+    const queued = limiter.fetch(async () => new Response('never'), controller.signal);
+
+    expect(limiter.stats()).toEqual({ active: 1, queued: 1 });
+    controller.abort();
+
+    await expect(queued).rejects.toMatchObject({ name: 'AbortError' });
+    expect(limiter.stats()).toEqual({ active: 1, queued: 0 });
+    await active.body?.cancel();
+  });
+
+  it('cancels an active response body and releases its permit when the consumer aborts', async () => {
+    const limiter = new MediaRequestLimiter(1, 0);
+    const cancelled = vi.fn();
+    const controller = new AbortController();
+    const response = await limiter.fetch(
+      async () =>
+        new Response(
+          new ReadableStream({
+            cancel: cancelled,
+          }),
+        ),
+      controller.signal,
+    );
+
+    controller.abort();
+
+    await vi.waitFor(() => expect(limiter.stats()).toEqual({ active: 0, queued: 0 }));
+    expect(cancelled).toHaveBeenCalledTimes(1);
+    await response.body?.cancel().catch(() => undefined);
+  });
+
+  it('bounds time spent waiting in the queue', async () => {
+    vi.useFakeTimers();
+    const limiter = new MediaRequestLimiter(1, 1, 500, 2_000);
+    const active = await limiter.fetch(async () => new Response('active'));
+    const queued = limiter.fetch(async () => new Response('never'));
+    const queueTimeout = expect(queued).rejects.toThrow(/排队超时/u);
+
+    await vi.advanceTimersByTimeAsync(500);
+
+    await queueTimeout;
+    expect(limiter.stats()).toEqual({ active: 1, queued: 0 });
+    await active.body?.cancel();
   });
 });

@@ -167,7 +167,9 @@ if (hasSingleInstanceLock)
     });
 
     mediaController = createMediaController(owner);
-    protocol.handle('sekereagle-media', (request) => handleMediaRequest(request.url));
+    protocol.handle('sekereagle-media', (request) =>
+      handleMediaRequest(request.url, request.signal),
+    );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
     createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner);
 
@@ -715,12 +717,13 @@ function lockDownSession(currentSession: Electron.Session): void {
   );
 }
 
-async function handleMediaRequest(requestUrl: string): Promise<Response> {
+async function handleMediaRequest(requestUrl: string, signal: AbortSignal): Promise<Response> {
   try {
     if (!mediaController) throw new Error('媒体控制器不可用。');
-    const resolution = await mediaController.resolve(requestUrl);
+    const resolution = await mediaController.resolve(requestUrl, signal);
     return resolutionToResponse(resolution);
   } catch {
+    if (signal.aborted) return new Response(null, { status: 499 });
     return new Response('媒体缓存暂时不可用。', { status: 502 });
   }
 }
@@ -749,16 +752,19 @@ function createMediaController(owner: AuthenticatedOwner): MediaCacheController 
     cache: cacheBackend(),
     authenticatedOwner: () => owner.get(),
     fetchUpstream: (mediaPath, options) =>
-      limiter.fetch(() =>
-        currentBrowserSession().fetch(mediaPath, {
-          credentials: 'include',
-          headers: {
-            'cache-control': 'no-store',
-            accept: 'image/avif,image/webp,image/*',
-            'accept-encoding': 'identity',
-            ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
-          },
-        }),
+      limiter.fetch(
+        (signal) =>
+          currentBrowserSession().fetch(mediaPath, {
+            signal,
+            credentials: 'include',
+            headers: {
+              'cache-control': 'no-store',
+              accept: 'image/avif,image/webp,image/*',
+              'accept-encoding': 'identity',
+              ...(options.ifNoneMatch ? { 'if-none-match': options.ifNoneMatch } : {}),
+            },
+          }),
+        options.signal,
       ),
   });
 }

@@ -103,6 +103,33 @@ describe('MediaCacheController', () => {
     expect(fetchUpstream).not.toHaveBeenCalled();
   });
 
+  it('propagates consumer cancellation without retrying the upstream request', async () => {
+    const fetchUpstream = vi.fn(
+      async (_path: string, options: { signal?: AbortSignal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          options.signal?.addEventListener(
+            'abort',
+            () =>
+              reject(
+                options.signal?.reason instanceof Error
+                  ? options.signal.reason
+                  : new DOMException('Aborted', 'AbortError'),
+              ),
+            { once: true },
+          );
+        }),
+    );
+    const controller = createController(engine, fetchUpstream, () => now);
+    const abort = new AbortController();
+    const resolution = controller.resolve(mediaUrl, abort.signal);
+
+    await vi.waitFor(() => expect(fetchUpstream).toHaveBeenCalledTimes(1));
+    abort.abort();
+
+    await expect(resolution).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchUpstream).toHaveBeenCalledTimes(1);
+  });
+
   it('revalidates an expired authorization lease with ETag without transferring the body', async () => {
     const fetchUpstream = vi
       .fn()
@@ -246,7 +273,10 @@ describe('MediaCacheController', () => {
 
 function createController(
   cache: CacheEngine,
-  fetchUpstream: (path: string, options: { ifNoneMatch?: string }) => Promise<Response>,
+  fetchUpstream: (
+    path: string,
+    options: { ifNoneMatch?: string; signal?: AbortSignal },
+  ) => Promise<Response>,
   clock: () => number,
 ) {
   return new MediaCacheController({

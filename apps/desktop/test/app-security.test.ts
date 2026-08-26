@@ -50,6 +50,13 @@ describe('desktop server and navigation security', () => {
     expect(source).toMatch(/mainWindow\?\.focus\(\)/u);
   });
 
+  it('propagates custom-protocol cancellation into media resolution', async () => {
+    const source = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    expect(source).toContain('handleMediaRequest(request.url, request.signal)');
+    expect(source).toContain('mediaController.resolve(requestUrl, signal)');
+    expect(source).toContain('options.signal');
+  });
+
   it('expires authorization leases after a trusted offline-to-online transition', async () => {
     const [main, preload] = await Promise.all([
       readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
