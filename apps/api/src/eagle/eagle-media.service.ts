@@ -71,10 +71,13 @@ export class EagleMediaService {
         storageKey: true,
         mimeType: true,
         kind: true,
-        asset: { select: { isPrivate: true } },
+        revision: true,
+        asset: { select: { isPrivate: true, mediaRevision: true } },
       },
     });
-    if (!rendition) throw new NotFoundException('预览文件不存在。');
+    if (!rendition || rendition.revision !== rendition.asset.mediaRevision) {
+      throw new NotFoundException('预览文件不存在。');
+    }
     return this.open(
       ownerId,
       rendition.storageKey,
@@ -150,10 +153,11 @@ export class EagleMediaService {
         tileSize: true,
         maxLevel: true,
         format: true,
-        asset: { select: { isPrivate: true } },
+        revision: true,
+        asset: { select: { isPrivate: true, mediaRevision: true } },
       },
     });
-    if (!pyramid || pyramid.format !== 'webp') {
+    if (!pyramid || pyramid.format !== 'webp' || pyramid.revision !== pyramid.asset.mediaRevision) {
       throw new NotFoundException('切片不存在。');
     }
     if (![level, x, y].every(Number.isSafeInteger) || level < 0 || level > pyramid.maxLevel) {

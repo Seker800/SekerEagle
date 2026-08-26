@@ -78,7 +78,8 @@ test('conditional media reads preserve an object-storage not-modified response',
           storageKey: 'users/owner-a/assets/asset-1/renditions/1/preview.webp',
           mimeType: 'image/webp',
           kind: 'PREVIEW',
-          asset: { isPrivate: false },
+          revision: 2,
+          asset: { isPrivate: false, mediaRevision: 2 },
         }),
       },
     } as never,
@@ -108,7 +109,8 @@ test('derived-media persistence eligibility comes from the actual asset, not ses
           storageKey: 'users/owner-a/assets/private/renditions/1/preview.webp',
           mimeType: 'image/webp',
           kind: 'PREVIEW',
-          asset: { isPrivate: true },
+          revision: 2,
+          asset: { isPrivate: true, mediaRevision: 2 },
         }),
       },
     } as never,
@@ -120,6 +122,32 @@ test('derived-media persistence eligibility comes from the actual asset, not ses
   const result = await service.getRendition('owner-a', 'asset-1', 'rendition-1', undefined, true);
 
   assert.equal(result.desktopCacheEligible, false);
+});
+
+test('old rendition revisions are hidden before object storage access', async () => {
+  let objectRead = false;
+  const service = new EagleMediaService(
+    {
+      eagleAssetRendition: {
+        findFirst: async () => ({
+          storageKey: 'users/owner-a/assets/asset-1/renditions/1/preview.webp',
+          mimeType: 'image/webp',
+          kind: 'PREVIEW',
+          revision: 1,
+          asset: { isPrivate: false, mediaRevision: 2 },
+        }),
+      },
+    } as never,
+    {
+      getObject: async () => {
+        objectRead = true;
+        return { Body: {} };
+      },
+    } as never,
+  );
+
+  await assert.rejects(service.getRendition('owner-a', 'asset-1', 'old-rendition'), /不存在/u);
+  assert.equal(objectRead, false);
 });
 
 test('pyramid descriptor is owner-scoped and only exposes the current ready revision', async () => {
@@ -194,7 +222,8 @@ test('pyramid tiles validate coordinates and remain owner-scoped', async () => {
           tileSize: 512,
           maxLevel: 13,
           format: 'webp',
-          asset: { isPrivate: false },
+          revision: 4,
+          asset: { isPrivate: false, mediaRevision: 4 },
         }),
       },
     } as never,
