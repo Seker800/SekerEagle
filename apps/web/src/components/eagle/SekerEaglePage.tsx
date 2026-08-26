@@ -77,6 +77,7 @@ import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
+import { DesktopAssetDragSession } from './eagle-asset-drag-session';
 import { getEagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
@@ -143,6 +144,10 @@ function formatBytes(value: number): string {
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
 
+function isFileDrag(event: DragEvent<HTMLElement>): boolean {
+  return event.dataTransfer?.types?.includes('Files') === true;
+}
+
 export function SekerEaglePage({
   accessToken: providedAccessToken,
   ownerId,
@@ -162,6 +167,9 @@ export function SekerEaglePage({
   const assetViewportRef = assetViewport.elementRef;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
+  const importDragActiveRef = useRef(false);
+  const hoveredDragAssetIdRef = useRef<string | null>(null);
+  const dragPrimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionAnchorIdRef = useRef<string | null>(null);
   const editorAssetIdRef = useRef<string | null>(null);
   const editorDirtyRef = useRef(false);
@@ -190,10 +198,6 @@ export function SekerEaglePage({
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
-  const [preparedAssetDrag, setPreparedAssetDrag] = useState<{
-    key: string;
-    token: string;
-  } | null>(null);
   const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(readThumbnailSize);
   const [editorTitle, setEditorTitle] = useState('');
@@ -207,7 +211,6 @@ export function SekerEaglePage({
   }, [thumbnailSize]);
 
   useEffect(() => {
-    setPreparedAssetDrag(null);
     setOriginalFileError(null);
   }, [ownerId]);
 
@@ -617,6 +620,57 @@ export function SekerEaglePage({
   const desktopAssetDragBridge = getDesktopAssetDragBridge();
   const desktopOriginalFileBridge = getDesktopOriginalFileBridge();
   const desktopOriginalFileDownloadBridge = getDesktopOriginalFileDownloadBridge();
+  const assetDragSession = useMemo(
+    () =>
+      desktopAssetDragBridge
+        ? new DesktopAssetDragSession(desktopAssetDragBridge, (error) =>
+            setOriginalFileError(error instanceof Error ? error.message : '原文件拖出失败。'),
+          )
+        : null,
+    [desktopAssetDragBridge, ownerId],
+  );
+  useEffect(
+    () => () => {
+      if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
+      assetDragSession?.reset();
+    },
+    [assetDragSession],
+  );
+  useEffect(() => {
+    if (!assetDragSession) return undefined;
+    const endPendingGesture = () => {
+      if (!assetDragSession.hasNativeDragStarted()) assetDragSession.end();
+    };
+    window.addEventListener('pointerup', endPendingGesture, true);
+    return () => window.removeEventListener('pointerup', endPendingGesture, true);
+  }, [assetDragSession]);
+
+  const getDragAssetIds = (assetId: string) =>
+    getAssetDragIds({
+      orderedIds: assets.map((asset) => asset.id),
+      selectedIds: selectedAssetIds,
+      draggedId: assetId,
+    });
+  const primeAssetDrag = (assetId: string) => {
+    if (!assetDragSession || libraryView === 'TRASH') return;
+    setOriginalFileError(null);
+    void assetDragSession.prime(getDragAssetIds(assetId));
+  };
+  const scheduleAssetDragPrime = (assetId: string) => {
+    hoveredDragAssetIdRef.current = assetId;
+    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
+    dragPrimeTimerRef.current = setTimeout(() => {
+      dragPrimeTimerRef.current = null;
+      if (hoveredDragAssetIdRef.current === assetId) primeAssetDrag(assetId);
+    }, 80);
+  };
+  useEffect(() => {
+    const hoveredAssetId = hoveredDragAssetIdRef.current;
+    if (!hoveredAssetId || !assetDragSession || libraryView === 'TRASH') return;
+    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
+    dragPrimeTimerRef.current = null;
+    primeAssetDrag(hoveredAssetId);
+  }, [assetDragSession, libraryView, selectedAssetIds]);
   const saveSelectedOriginal = () => {
     if (!contextMenuAsset || !desktopOriginalFileBridge || assetActionPending) return;
     setAssetActionPending('save');
@@ -656,30 +710,14 @@ export function SekerEaglePage({
   };
   const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
-    if (!desktopAssetDragBridge || libraryView === 'TRASH') return;
-    const assetIds = getAssetDragIds({
-      orderedIds: assets.map((asset) => asset.id),
-      selectedIds: selectedAssetIds,
-      draggedId: assetId,
-    });
-    const dragKey = assetIds.join('\u0000');
+    if (!assetDragSession || libraryView === 'TRASH') return;
+    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
+    dragPrimeTimerRef.current = null;
+    const assetIds = getDragAssetIds(assetId);
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
     setAssetContextMenu(null);
-    if (preparedAssetDrag?.key === dragKey) {
-      desktopAssetDragBridge.startPreparedAssetDrag(preparedAssetDrag.token);
-      setOriginalFileError(null);
-      return;
-    }
     setOriginalFileError(null);
-    void Promise.resolve()
-      .then(() => desktopAssetDragBridge.prepareAssetDrag(assetIds))
-      .then(
-        ({ token }) => {
-          setPreparedAssetDrag({ key: dragKey, token });
-        },
-        (error: unknown) =>
-          setOriginalFileError(error instanceof Error ? error.message : '原文件拖出失败。'),
-      );
+    assetDragSession.begin(assetIds);
   };
 
   const batchDownloadSelectedOriginals = () => {
@@ -752,19 +790,35 @@ export function SekerEaglePage({
 
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
     if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
-    if (!event.dataTransfer.types.includes('Files')) return;
+    if (assetDragSession?.isOutboundDrag()) return;
+    if (!isFileDrag(event)) return;
     event.preventDefault();
+    importDragActiveRef.current = true;
     dragDepthRef.current += 1;
     setIsDragging(true);
   };
   const handleDragLeave = (event: DragEvent<HTMLElement>) => {
+    if (!importDragActiveRef.current) return;
     event.preventDefault();
     dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
-    if (dragDepthRef.current === 0) setIsDragging(false);
+    if (dragDepthRef.current === 0) {
+      importDragActiveRef.current = false;
+      setIsDragging(false);
+    }
   };
   const handleDrop = (event: DragEvent<HTMLElement>) => {
     if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
+    if (assetDragSession?.isOutboundDrag()) {
+      event.preventDefault();
+      assetDragSession.end();
+      importDragActiveRef.current = false;
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+      return;
+    }
+    if (!isFileDrag(event) && event.dataTransfer.files.length === 0) return;
     event.preventDefault();
+    importDragActiveRef.current = false;
     dragDepthRef.current = 0;
     setIsDragging(false);
     void importFiles([...event.dataTransfer.files]);
@@ -774,7 +828,11 @@ export function SekerEaglePage({
     <main
       className={styles.page}
       onDragEnter={handleDragEnter}
-      onDragOver={(event) => event.preventDefault()}
+      onDragOver={(event) => {
+        if (!assetDragSession?.isOutboundDrag() && isFileDrag(event)) {
+          event.preventDefault();
+        }
+      }}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
@@ -1219,8 +1277,18 @@ export function SekerEaglePage({
                           handleAssetClick(event, asset.id);
                         }}
                         onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
+                        onPointerEnter={() => scheduleAssetDragPrime(asset.id)}
+                        onPointerLeave={() => {
+                          if (hoveredDragAssetIdRef.current === asset.id) {
+                            hoveredDragAssetIdRef.current = null;
+                          }
+                          if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
+                          dragPrimeTimerRef.current = null;
+                        }}
+                        onFocus={() => primeAssetDrag(asset.id)}
                         onDragStart={(event) => handleAssetDragStart(event, asset.id)}
                         onDragEnd={() => {
+                          assetDragSession?.end();
                           dragDepthRef.current = 0;
                           setIsDragging(false);
                         }}

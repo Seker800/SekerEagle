@@ -41,13 +41,15 @@ directory, then gives those local paths to the operating system. These exact-byt
 part of the persistent derivative media cache. Partial batches are removed on failure, completed
 batches expire after one hour, and stale batches are cleaned at the next desktop startup.
 
-The operating system requires every dragged file to exist locally before a native drag begins. On
-the first drag of an uncached selection, the desktop silently prepares the originals. Repeating the
-drag starts synchronously without another download. Successful preparation and duplicate imports
-do not add persistent status rows to the library; only actionable failures remain visible. Native
-drags use the operating system's normal-sized icon for the prepared original instead of the app's
-large artwork. This two-step fallback avoids incomplete files and avoids starting a native drag
-after the mouse button has already been released.
+The operating system requires every dragged file to exist locally before a native drag begins. The
+renderer therefore owns one outbound-drag session: hovering or focusing a drag target primes its
+current selection, rapid selection changes are serialized, and the first drag gesture starts as soon
+as that exact selection is ready. A gesture that ends before preparation finishes is never restarted
+after mouse-up. Outbound file drags are explicitly excluded from the page-level import state machine,
+so returning across the app window cannot display the import overlay or upload an exported file.
+Successful preparation and duplicate imports do not add persistent status rows to the library; only
+actionable drag failures remain visible. Native drags use the operating system's normal-sized icon
+for the prepared original instead of the app's large artwork.
 
 The image viewer's context menu also provides **Save As…** in the desktop client. It downloads the
 same authenticated, exact-byte original into the isolated temporary export area, opens the native

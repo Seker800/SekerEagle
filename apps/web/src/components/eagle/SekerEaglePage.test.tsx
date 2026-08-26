@@ -1473,6 +1473,27 @@ describe('SekerEaglePage', () => {
     expect(uploadEagleAssetMock).not.toHaveBeenCalled();
   });
 
+  it('does not launch a delayed native drag after the first gesture is released', async () => {
+    const preparation = createDeferred<{ token: string }>();
+    const startPreparedAssetDrag = vi.fn();
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      prepareAssetDrag: vi.fn(() => preparation.promise),
+      startPreparedAssetDrag,
+    };
+    renderPage();
+
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.dragStart(card);
+    fireEvent.pointerUp(window);
+    preparation.resolve({ token: 'drag-token' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(startPreparedAssetDrag).not.toHaveBeenCalled();
+  });
+
   it('replaces a previous selection when dragging an unselected desktop card', async () => {
     const prepareAssetDrag = vi
       .fn()
