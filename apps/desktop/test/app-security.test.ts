@@ -122,6 +122,8 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain('webContents.startDrag');
     expect(main).toContain('dragServerUrl !== serverUrl');
     expect(main).toContain('currentIdentity.ownerId !== identity.ownerId');
+    expect(main).toContain("nativeImage.createFromPath(path.join(__dirname, 'drag-icon.png'))");
+    expect(main).toContain('.resize({ width: 32, height: 32 })');
     expect(preload).toContain('parseAssetDragInput(assetIds)');
     expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:prepare-asset-drag'/u);
     expect(preload).toContain('parsePreparedDragToken(result.token)');

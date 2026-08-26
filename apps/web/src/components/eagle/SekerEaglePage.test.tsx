@@ -1234,10 +1234,11 @@ describe('SekerEaglePage', () => {
     await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
     expect(firstCard).toHaveAttribute('aria-pressed', 'true');
     expect(secondCard).toHaveAttribute('aria-pressed', 'true');
-    expect(await screen.findByRole('status')).toHaveTextContent('正在准备 2 个原文件');
+    expect(screen.queryByText('正在准备 2 个原文件…')).not.toBeInTheDocument();
 
     pendingDrag.resolve();
-    expect(await screen.findByRole('status')).toHaveTextContent('原文件已准备好');
+    await waitFor(() => expect(prepareAssetDrag).toHaveReturned());
+    expect(screen.queryByText(/原文件已准备好/u)).not.toBeInTheDocument();
     fireEvent.dragStart(secondCard);
     expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
   });
@@ -1280,7 +1281,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.dragStart(await screen.findByRole('button', { name: /Owl Reference/ }));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('最多只能拖出 100 个原文件');
+    expect(await screen.findByRole('alert')).toHaveTextContent('最多只能拖出 100 个原文件');
   });
 
   it('exits batch selection with Escape', async () => {
@@ -1364,6 +1365,22 @@ describe('SekerEaglePage', () => {
     await waitFor(() => {
       expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', file, expect.any(Function));
     });
+  });
+
+  it('keeps successful duplicate imports silent after the library refreshes', async () => {
+    uploadEagleAssetMock.mockResolvedValueOnce({ duplicate: true });
+    renderPage();
+    await screen.findByRole('heading', { name: '全部素材' });
+    const listCallsBeforeDrop = listEagleAssetsMock.mock.calls.length;
+
+    fireEvent.drop(screen.getByRole('main'), {
+      dataTransfer: { files: [new File(['duplicate'], 'duplicate.png', { type: 'image/png' })] },
+    });
+
+    await waitFor(() =>
+      expect(listEagleAssetsMock.mock.calls.length).toBeGreaterThan(listCallsBeforeDrop),
+    );
+    expect(screen.queryByText('导入完成，跳过 1 个重复素材')).not.toBeInTheDocument();
   });
 
   it('shows the Eagle-style quick-filter toolbar without a generic rule-builder button', async () => {
