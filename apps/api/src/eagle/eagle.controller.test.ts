@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
@@ -6,7 +7,7 @@ import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
-import { EagleController } from './eagle.controller';
+import { bindMediaStreamLifetime, EagleController } from './eagle.controller';
 import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 
 function controllerMethod(name: keyof EagleController): object {
@@ -54,6 +55,7 @@ test('revision-addressed renditions use immutable private caching', async () => 
     setHeader: (name: string, value: string) => headers.set(name, value),
     vary: () => undefined,
     status: () => undefined,
+    once: () => undefined,
   };
   const controller = new EagleController(
     {} as never,
@@ -92,6 +94,7 @@ test('private derived media remains no-store even for a principal with a private
     setHeader: (name: string, value: string) => headers.set(name, value),
     vary: () => undefined,
     status: () => undefined,
+    once: () => undefined,
   };
   const controller = new EagleController(
     {} as never,
@@ -119,4 +122,14 @@ test('private derived media remains no-store even for a principal with a private
 
   assert.equal(headers.get('Cache-Control'), 'private, no-store');
   assert.equal(headers.has('X-SekerEagle-Desktop-Cache'), false);
+});
+
+test('client disconnect destroys an unfinished media stream', () => {
+  const response = Object.assign(new EventEmitter(), { writableEnded: false });
+  const stream = new Readable({ read() {} });
+
+  bindMediaStreamLifetime(response as never, stream);
+  response.emit('close');
+
+  assert.equal(stream.destroyed, true);
 });

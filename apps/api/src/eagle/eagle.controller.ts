@@ -17,6 +17,7 @@ import {
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
+import type { Readable } from 'node:stream';
 import {
   isObjectRangeNotSatisfiableError,
   parseRangeHeader,
@@ -173,9 +174,7 @@ export class EagleController {
       media.contentLength,
       media.fullSize,
     );
-    response.once('close', () => {
-      if (!response.writableEnded && !media.stream!.destroyed) media.stream!.destroy();
-    });
+    bindMediaStreamLifetime(response, media.stream!);
     return new StreamableFile(media.stream!);
   }
 
@@ -215,6 +214,7 @@ export class EagleController {
       response.status(304);
       return;
     }
+    bindMediaStreamLifetime(response, media.stream!);
     return new StreamableFile(media.stream!);
   }
 
@@ -269,6 +269,7 @@ export class EagleController {
       response.status(304);
       return;
     }
+    bindMediaStreamLifetime(response, media.stream!);
     return new StreamableFile(media.stream!);
   }
 
@@ -493,6 +494,12 @@ export class EagleController {
   ) {
     return this.eagle.deleteSmartFolder(principal.sub, folderId);
   }
+}
+
+export function bindMediaStreamLifetime(response: Response, stream: Readable): void {
+  response.once('close', () => {
+    if (!response.writableEnded && !stream.destroyed) stream.destroy();
+  });
 }
 
 function applyMediaHeaders(
