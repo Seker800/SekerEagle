@@ -4,6 +4,7 @@ import { EagleMediaService } from './eagle-media.service';
 
 test('media lookup stays owner-scoped, hides private assets and remains available in trash until purge', async () => {
   const queries: unknown[] = [];
+  let objectOptions: unknown;
   const service = new EagleMediaService(
     {
       eagleAsset: {
@@ -19,15 +20,19 @@ test('media lookup stays owner-scoped, hides private assets and remains availabl
       },
     } as never,
     {
-      getObject: async () => ({
-        Body: {},
-        ContentType: 'image/jpeg',
-        ContentLength: 3,
-      }),
+      getObject: async (_key: string, options: unknown) => {
+        objectOptions = options;
+        return {
+          Body: {},
+          ContentType: 'image/jpeg',
+          ContentLength: 3,
+        };
+      },
     } as never,
   );
 
-  await service.getOriginal('owner-a', 'asset-1');
+  const abort = new AbortController();
+  await service.getOriginal('owner-a', 'asset-1', undefined, undefined, false, abort.signal);
 
   assert.deepEqual(queries[0], {
     where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null, isPrivate: false },
@@ -38,6 +43,7 @@ test('media lookup stays owner-scoped, hides private assets and remains availabl
       byteSize: true,
     },
   });
+  assert.equal((objectOptions as { abortSignal: AbortSignal }).abortSignal, abort.signal);
 });
 
 test('media lookup permits private assets only during an active visibility window', async () => {

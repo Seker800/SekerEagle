@@ -7,7 +7,11 @@ import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
-import { bindMediaStreamLifetime, EagleController } from './eagle.controller';
+import {
+  bindMediaStreamLifetime,
+  createMediaAbortSignal,
+  EagleController,
+} from './eagle.controller';
 import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 
 function controllerMethod(name: keyof EagleController): object {
@@ -132,4 +136,13 @@ test('client disconnect destroys an unfinished media stream', () => {
   response.emit('close');
 
   assert.equal(stream.destroyed, true);
+});
+
+test('client disconnect aborts a media request before object headers arrive', () => {
+  const response = Object.assign(new EventEmitter(), { writableEnded: false });
+  const signal = createMediaAbortSignal(response as never);
+
+  response.emit('close');
+
+  assert.equal(signal.aborted, true);
 });

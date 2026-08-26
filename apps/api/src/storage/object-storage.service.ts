@@ -124,7 +124,10 @@ export class ObjectStorageService implements OnModuleDestroy {
     return this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
   }
 
-  async getObject(key: string, options?: { range?: string; ifNoneMatch?: string }) {
+  async getObject(
+    key: string,
+    options?: { range?: string; ifNoneMatch?: string; abortSignal?: AbortSignal },
+  ) {
     try {
       return await executeObjectReadWithRetry(() =>
         this.client.send(
@@ -134,6 +137,7 @@ export class ObjectStorageService implements OnModuleDestroy {
             Range: options?.range,
             IfNoneMatch: options?.ifNoneMatch,
           }),
+          { abortSignal: options?.abortSignal },
         ),
       );
     } catch (error) {

@@ -17,6 +17,7 @@ export class EagleMediaService {
     range?: string,
     ifNoneMatch?: string,
     includePrivate = false,
+    abortSignal?: AbortSignal,
   ) {
     const asset = await this.prisma.eagleAsset.findFirst({
       where: {
@@ -32,6 +33,7 @@ export class EagleMediaService {
       range,
       ifNoneMatch,
       fullSize: asset.byteSize,
+      abortSignal,
     });
   }
 
@@ -55,6 +57,7 @@ export class EagleMediaService {
     renditionId: string,
     ifNoneMatch?: string,
     includePrivate = false,
+    abortSignal?: AbortSignal,
   ) {
     const rendition = await this.prisma.eagleAssetRendition.findFirst({
       where: {
@@ -77,7 +80,7 @@ export class EagleMediaService {
       rendition.storageKey,
       `${rendition.kind.toLowerCase()}.webp`,
       rendition.mimeType,
-      { ifNoneMatch, desktopCacheEligible: !rendition.asset.isPrivate },
+      { ifNoneMatch, desktopCacheEligible: !rendition.asset.isPrivate, abortSignal },
     );
   }
 
@@ -130,6 +133,7 @@ export class EagleMediaService {
     y: number,
     ifNoneMatch?: string,
     includePrivate = false,
+    abortSignal?: AbortSignal,
   ) {
     const pyramid = await this.prisma.eagleImagePyramid.findFirst({
       where: {
@@ -168,7 +172,7 @@ export class EagleMediaService {
       `${pyramid.storagePrefix}/${level}/${x}_${y}.webp`,
       `${level}-${x}-${y}.webp`,
       'image/webp',
-      { ifNoneMatch, desktopCacheEligible: !pyramid.asset.isPrivate },
+      { ifNoneMatch, desktopCacheEligible: !pyramid.asset.isPrivate, abortSignal },
     );
   }
 
@@ -182,6 +186,7 @@ export class EagleMediaService {
       ifNoneMatch?: string;
       fullSize?: bigint;
       desktopCacheEligible?: boolean;
+      abortSignal?: AbortSignal;
     },
   ): Promise<OpenedEagleMedia> {
     assertOwnedObjectKey(ownerId, key);
@@ -190,6 +195,7 @@ export class EagleMediaService {
       object = await this.storage.getObject(key, {
         range: options?.range,
         ifNoneMatch: options?.ifNoneMatch,
+        abortSignal: options?.abortSignal,
       });
     } catch (error) {
       if (isNotModifiedError(error)) {

@@ -127,6 +127,7 @@ export class EagleController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
+    const abortSignal = createMediaAbortSignal(response);
     let parsedRange: string | undefined;
     try {
       parsedRange = parseRangeHeader(range);
@@ -147,6 +148,7 @@ export class EagleController {
         parsedRange,
         ifNoneMatch,
         principal.canViewPrivate,
+        abortSignal,
       );
     } catch (error) {
       if (!isObjectRangeNotSatisfiableError(error)) throw error;
@@ -198,12 +200,14 @@ export class EagleController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
+    const abortSignal = createMediaAbortSignal(response);
     const media = await this.media.getRendition(
       principal.sub,
       assetId,
       renditionId,
       ifNoneMatch,
       principal.canViewPrivate,
+      abortSignal,
     );
     applyMediaHeaders(
       response,
@@ -250,6 +254,7 @@ export class EagleController {
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
   ) {
+    const abortSignal = createMediaAbortSignal(response);
     const media = await this.media.getPyramidTile(
       principal.sub,
       assetId,
@@ -259,6 +264,7 @@ export class EagleController {
       y,
       ifNoneMatch,
       principal.canViewPrivate,
+      abortSignal,
     );
     applyMediaHeaders(
       response,
@@ -500,6 +506,14 @@ export function bindMediaStreamLifetime(response: Response, stream: Readable): v
   response.once('close', () => {
     if (!response.writableEnded && !stream.destroyed) stream.destroy();
   });
+}
+
+export function createMediaAbortSignal(response: Response): AbortSignal {
+  const controller = new AbortController();
+  response.once('close', () => {
+    if (!response.writableEnded) controller.abort(new Error('媒体客户端已断开。'));
+  });
+  return controller.signal;
 }
 
 function applyMediaHeaders(
