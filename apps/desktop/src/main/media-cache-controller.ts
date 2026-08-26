@@ -179,6 +179,9 @@ export class MediaCacheController {
         : { source: 'error', status: 502, message: '缓存重验后不可用。' };
     }
 
+    if (isTransientRevalidationFailure(response.status)) {
+      return { source: 'upstream', response };
+    }
     await this.cache.invalidate(keyHash);
     if (!isCacheable(response, media)) return { source: 'upstream', response };
     return this.populateResponse(media, keyHash, namespaceId, response);
@@ -247,6 +250,10 @@ export class MediaCacheController {
       ? cacheResolution(hit)
       : { source: 'error', status: 502, message: '缓存提交后不可用。' };
   }
+}
+
+function isTransientRevalidationFailure(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
 }
 
 function upstreamPath(media: DesktopMediaIdentity): string {

@@ -182,6 +182,25 @@ describe('MediaCacheController', () => {
     expect(engine.getStats().entryCount).toBe(0);
   });
 
+  it.each([429, 503])(
+    'preserves an expired READY cache entry after transient HTTP %s',
+    async (status) => {
+      const fetchUpstream = vi
+        .fn()
+        .mockResolvedValueOnce(eligibleResponse('cached-image'))
+        .mockResolvedValueOnce(new Response('try-later', { status }));
+      const controller = createController(engine, fetchUpstream, () => now);
+      const first = await controller.resolve(mediaUrl);
+      if (first.source === 'cache') engine.release(first.leaseId);
+      now += 5 * 60_000 + 1;
+
+      const result = await controller.resolve(mediaUrl);
+
+      expect(result).toMatchObject({ source: 'upstream' });
+      expect(engine.getStats().entryCount).toBe(1);
+    },
+  );
+
   it('retries upstream without cache when a streaming cache write fails', async () => {
     const fetchUpstream = vi.fn(async () => eligibleResponse('network-fallback'));
     vi.spyOn(engine, 'append').mockRejectedValueOnce(new Error('disk full'));
