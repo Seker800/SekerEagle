@@ -215,7 +215,32 @@ export class MediaCacheController {
     }
     await this.cache.invalidate(keyHash);
     if (!isCacheable(response, media)) return { source: 'upstream', response };
-    return this.populateResponse(media, keyHash, namespaceId, response);
+    return this.streamRevalidatedResponse(media, keyHash, namespaceId, response);
+  }
+
+  private streamRevalidatedResponse(
+    media: DesktopMediaIdentity,
+    keyHash: Buffer,
+    namespaceId: string,
+    response: Response,
+  ): MediaResolution {
+    const [clientBody, cacheBody] = response.body!.tee();
+    const keyHex = keyHash.toString('hex');
+    const populate = this.populateResponse(
+      media,
+      keyHash,
+      namespaceId,
+      responseWithBody(response, cacheBody),
+    )
+      .then(async (result) => {
+        if (result.source === 'cache') await this.cache.release(result.leaseId);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.populating.get(keyHex) === populate) this.populating.delete(keyHex);
+      });
+    this.populating.set(keyHex, populate);
+    return { source: 'upstream', response: responseWithBody(response, clientBody) };
   }
 
   private async populateResponse(

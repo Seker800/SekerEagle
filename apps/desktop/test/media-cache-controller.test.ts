@@ -252,6 +252,28 @@ describe('MediaCacheController', () => {
     expect(engine.getStats().entryCount).toBe(0);
   });
 
+  it('does not redownload a revalidated response when its cache write fails', async () => {
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(eligibleResponse('new-image', '"etag-2"'));
+    const controller = createController(engine, fetchUpstream, () => now);
+    const first = await controller.resolve(mediaUrl);
+    if (first.source === 'upstream') await first.response.text();
+    const populated = await controller.resolve(mediaUrl);
+    if (populated.source === 'cache') engine.release(populated.leaseId);
+    now += 5 * 60_000 + 1;
+    vi.spyOn(engine, 'append').mockRejectedValueOnce(new Error('disk full'));
+    const abortWrite = vi.spyOn(engine, 'abort');
+
+    const result = await controller.resolve(mediaUrl);
+
+    expect(result.source).toBe('upstream');
+    if (result.source === 'upstream') expect(await result.response.text()).toBe('new-image');
+    await vi.waitFor(() => expect(abortWrite).toHaveBeenCalledTimes(1));
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+  });
+
   it('refuses a thumbnail above the dedicated 8 MiB admission ceiling', async () => {
     const fetchUpstream = vi.fn(
       async () =>
