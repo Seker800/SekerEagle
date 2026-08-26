@@ -1408,7 +1408,7 @@ describe('SekerEaglePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('目标文件夹不可写');
   });
 
-  it('drags selected originals through the desktop bridge and preserves browser behavior', async () => {
+  it('primes selected originals and starts them on the first drag gesture', async () => {
     const pendingDrag = createDeferred<void>();
     const prepareAssetDrag = vi.fn(() =>
       pendingDrag.promise.then(() => ({ token: '11111111-1111-4111-8111-111111111111' })),
@@ -1435,19 +1435,42 @@ describe('SekerEaglePage', () => {
     fireEvent.click(firstCard);
     fireEvent.click(secondCard, { ctrlKey: true });
 
-    fireEvent.dragStart(secondCard);
-
+    fireEvent.pointerEnter(secondCard);
     await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
     expect(firstCard).toHaveAttribute('aria-pressed', 'true');
     expect(secondCard).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText('正在准备 2 个原文件…')).not.toBeInTheDocument();
 
     pendingDrag.resolve();
-    await waitFor(() => {
-      fireEvent.dragStart(secondCard);
-      expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
-    });
+    await waitFor(() => expect(prepareAssetDrag).toHaveReturned());
+    fireEvent.dragStart(secondCard);
+    expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
     expect(screen.queryByText(/原文件已准备好/u)).not.toBeInTheDocument();
+  });
+
+  it('never routes an outbound native file drag into the import drop zone', async () => {
+    const prepareAssetDrag = vi.fn().mockResolvedValue({ token: 'drag-token' });
+    const startPreparedAssetDrag = vi.fn();
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      prepareAssetDrag,
+      startPreparedAssetDrag,
+    };
+    renderPage();
+
+    const main = screen.getByRole('main');
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.pointerEnter(card);
+    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1']));
+    fireEvent.dragStart(card);
+    await waitFor(() => expect(startPreparedAssetDrag).toHaveBeenCalledWith('drag-token'));
+
+    const outboundFile = new File(['outbound'], 'owl.png', { type: 'image/png' });
+    fireEvent.dragEnter(main, { dataTransfer: { types: ['Files'] } });
+    expect(screen.queryByText('松手导入素材')).not.toBeInTheDocument();
+    fireEvent.drop(main, { dataTransfer: { types: ['Files'], files: [outboundFile] } });
+    expect(uploadEagleAssetMock).not.toHaveBeenCalled();
   });
 
   it('replaces a previous selection when dragging an unselected desktop card', async () => {
