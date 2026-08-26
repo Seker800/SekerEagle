@@ -7,6 +7,7 @@ const path = require('node:path');
 const { clampText, chunksOf } = require('./utils');
 
 const MIME_BY_EXTENSION = Object.freeze({
+  avif: 'image/avif',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
   png: 'image/png',

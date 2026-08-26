@@ -11,8 +11,16 @@ test('publishes the frozen P0 media capability matrix', () => {
   assert.deepEqual(service.getCapabilities(), {
     version: 1,
     images: {
-      mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'],
-      extensions: ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'],
+      mimeTypes: [
+        'image/avif',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
+        'image/heic',
+        'image/heif',
+      ],
+      extensions: ['.avif', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'],
       maxBytes: MEDIA_MAX_BYTES,
       maxPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
     },
@@ -25,7 +33,11 @@ test('publishes the frozen P0 media capability matrix', () => {
   });
 });
 
-test('accepts exactly the original supported media matrix', () => {
+test('accepts the supported media matrix including AVIF', () => {
+  assert.deepEqual(
+    service.assertUploadAllowed({ fileName: 'reference.AVIF', mimeType: 'image/avif', size: 2048 }),
+    { mediaType: 'image', mimeType: 'image/avif' },
+  );
   assert.deepEqual(
     service.assertUploadAllowed({ fileName: 'reference.WEBP', mimeType: 'image/webp', size: 2048 }),
     { mediaType: 'image', mimeType: 'image/webp' },

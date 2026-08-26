@@ -47,26 +47,36 @@ export function resolveCaptureTarget({
 
 function backgroundImageTarget(element, baseUrl, getStyle) {
   if (!element?.tagName || typeof getStyle !== 'function') return null;
-  let style;
-  try {
-    style = getStyle(element);
-  } catch {
-    return null;
+  const sourceCandidates = [];
+  for (const pseudo of [null, '::before', '::after']) {
+    let style;
+    try {
+      style = getStyle(element, pseudo);
+    } catch {
+      continue;
+    }
+    for (const property of ['backgroundImage', 'maskImage', 'webkitMaskImage', 'content']) {
+      sourceCandidates.push(...extractCssUrls(style?.[property], baseUrl));
+    }
   }
-  const backgroundImage = String(style?.backgroundImage || '');
-  const backgroundRepeat = String(style?.backgroundRepeat || '');
-  if (
-    !backgroundImage.includes('url(') ||
-    backgroundImage.includes('gradient') ||
-    ['repeat', 'repeat-x', 'repeat-y'].includes(backgroundRepeat)
-  ) {
-    return null;
-  }
-  const match = backgroundImage.match(/url\(\s*["']?(.+?)["']?\s*\)/i);
-  const sourceUrl = resolveCaptureUrl(match?.[1], baseUrl);
-  if (!sourceUrl) return null;
+  const uniqueCandidates = [...new Set(sourceCandidates)];
+  if (!uniqueCandidates.length) return null;
   const altText = cleanText(element.getAttribute?.('aria-label') || element.textContent);
-  return { sourceUrl, sourceCandidates: [sourceUrl], altText };
+  return {
+    sourceUrl: uniqueCandidates[0],
+    sourceCandidates: uniqueCandidates,
+    altText,
+  };
+}
+
+function extractCssUrls(value, baseUrl) {
+  const result = [];
+  const expression = /url\(\s*(["']?)(.*?)\1\s*\)/gi;
+  for (const match of String(value || '').matchAll(expression)) {
+    const resolved = resolveCaptureUrl(match[2], baseUrl);
+    if (resolved) result.push(resolved);
+  }
+  return result;
 }
 
 function cleanText(value) {

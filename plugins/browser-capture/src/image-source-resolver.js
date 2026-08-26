@@ -12,8 +12,11 @@ const HIGH_RESOLUTION_ATTRIBUTES = [
   'data-zoom-image',
   'data-zoom-src',
   'data-src',
+  'data-lazy-src',
+  'data-url',
 ];
-const DIRECT_IMAGE_PATH = /\.(?:gif|heic|heif|jpe?g|png|webp)(?:$|[?#])/i;
+const HIGH_RESOLUTION_SRCSET_ATTRIBUTES = ['data-srcset', 'data-lazy-srcset'];
+const DIRECT_IMAGE_PATH = /\.(?:avif|gif|heic|heif|jpe?g|png|webp)(?:$|[?#])/i;
 
 export function resolveImageSourceTarget(
   element,
@@ -21,12 +24,29 @@ export function resolveImageSourceTarget(
   matchesMedia = () => true,
   picture = null,
 ) {
-  if (String(element?.tagName || '').toUpperCase() === 'PICTURE') {
+  const tagName = String(element?.tagName || '').toUpperCase();
+  if (tagName === 'VIDEO') {
+    const poster = resolveCaptureUrl(element.poster || element.getAttribute?.('poster'), baseUrl);
+    return poster ? captureTarget([poster], element.getAttribute?.('aria-label')) : null;
+  }
+  if (tagName === 'IMAGE') {
+    const href = resolveCaptureUrl(
+      element.href?.baseVal || element.getAttribute?.('href') || element.getAttribute?.('xlink:href'),
+      baseUrl,
+    );
+    return href ? captureTarget([href], element.getAttribute?.('aria-label')) : null;
+  }
+  if (tagName === 'PICTURE') {
     return resolveImageSourceTarget(element.querySelector?.('img'), baseUrl, matchesMedia, element);
   }
   if (String(element?.tagName || '').toUpperCase() !== 'IMG') return null;
   const containingPicture = picture || closestPicture(element);
   const responsive = responsiveImageCandidates(element, containingPicture, baseUrl, matchesMedia);
+  const lazyResponsive = HIGH_RESOLUTION_SRCSET_ATTRIBUTES.flatMap((attribute) => {
+    const candidates = [];
+    addSrcsetCandidates(candidates, element.getAttribute?.(attribute), baseUrl, 1_000);
+    return candidates.sort((left, right) => right.quality - left.quality).map(({ url }) => url);
+  });
   const directLink = directImageLinkCandidate(element, baseUrl);
   const declaredHighResolution = HIGH_RESOLUTION_ATTRIBUTES.map((attribute) =>
     resolveCaptureUrl(element.getAttribute?.(attribute), baseUrl),
@@ -37,6 +57,7 @@ export function resolveImageSourceTarget(
   ]);
   const highResolutionCandidates = uniqueUrls([
     ...responsive,
+    ...lazyResponsive,
     directLink,
     ...declaredHighResolution,
   ]);
@@ -49,6 +70,14 @@ export function resolveImageSourceTarget(
     sourceUrl: sourceCandidates[0],
     sourceCandidates,
     altText: cleanText(element.alt),
+  };
+}
+
+function captureTarget(sourceCandidates, altText) {
+  return {
+    sourceUrl: sourceCandidates[0],
+    sourceCandidates,
+    altText: cleanText(altText),
   };
 }
 

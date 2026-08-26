@@ -1,4 +1,5 @@
 const RUNNABLE = new Set(['PENDING', 'RETRY']);
+const CONNECTIVITY_FAILURE_STAGES = new Set(['SERVER_CONNECT', 'UPLOAD', 'COMMIT']);
 
 export function selectRunnableJobs(jobs, now, limit) {
   return jobs
@@ -18,6 +19,18 @@ export function decideFailure(error, attempts, now, random = Math.random) {
     status: 'RETRY',
     nextAttemptAt: now + Math.round(exponential * (1 + random() * 0.25)),
   };
+}
+
+export function selectConnectivityRetryJobIds(jobs, successfulJobId) {
+  return jobs
+    .filter(
+      (job) =>
+        job.id !== successfulJobId &&
+        job.status === 'RETRY' &&
+        (CONNECTIVITY_FAILURE_STAGES.has(job.lastFailureStage) ||
+          (!job.lastFailureStage && job.blob instanceof Blob)),
+    )
+    .map(({ id }) => id);
 }
 
 export function selectCompletedJobIdsToPrune(

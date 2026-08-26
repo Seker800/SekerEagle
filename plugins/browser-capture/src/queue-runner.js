@@ -16,6 +16,8 @@ export function createQueueRunner({
   getConfig,
   fetchImpl = runtimeFetch,
   onStateChange = () => {},
+  onTerminalState = () => {},
+  onConnectionRestored = () => {},
 }) {
   let runningPromise = null;
 
@@ -44,6 +46,7 @@ export function createQueueRunner({
   }
 
   async function processJob(job, config) {
+    let failureStage = 'CONFIG';
     try {
       if (
         !String(config.pat || '')
@@ -64,12 +67,23 @@ export function createQueueRunner({
       let sourceUrl = job.sourceUrl;
       let metadata = job.metadata;
       if (!blob) {
+        failureStage = 'SOURCE_DOWNLOAD';
         await store.update(job.id, { status: 'FETCHING', lastError: null });
-        const downloaded = await downloadFirstSupportedCandidate(job, fetchImpl);
+        let downloaded;
+        try {
+          downloaded = await downloadFirstSupportedCandidate(job, fetchImpl);
+        } catch (error) {
+          if (!job.fallbackBlob) throw error;
+          downloaded = {
+            blob: job.fallbackBlob,
+            mimeType: 'image/png',
+            sourceUrl: job.sourceUrl || job.metadata.pageUrl,
+          };
+        }
         ({ blob, mimeType, sourceUrl } = downloaded);
         metadata = {
           ...job.metadata,
-          imageUrl: sanitizeImageSourceUrl(sourceUrl),
+          imageUrl: sanitizeImageSourceUrl(job.sourceUrl || sourceUrl),
         };
         originalName = buildOriginalName({
           imageUrl: sourceUrl,
@@ -81,11 +95,17 @@ export function createQueueRunner({
           mimeType,
           originalName,
           sourceUrl,
+          sourceCandidates: [],
+          fallbackBlob: null,
           metadata,
           status: 'UPLOADING',
         });
       } else {
-        await store.update(job.id, { status: 'UPLOADING', lastError: null });
+        await store.update(job.id, {
+          status: 'UPLOADING',
+          lastError: null,
+          fallbackBlob: null,
+        });
       }
 
       const declaration = {
@@ -97,6 +117,7 @@ export function createQueueRunner({
         capturedAt: job.capturedAt,
         extensionVersion: chrome.runtime.getManifest().version,
       };
+      failureStage = 'SERVER_CONNECT';
       const { api, session } = await initiateWithFallback({
         serverCandidates,
         pat: config.pat,
@@ -106,8 +127,15 @@ export function createQueueRunner({
       await store.update(job.id, { server: { ...session, serverUrl: api.serverUrl } });
       if (session.status === 'COMPLETED' && session.assetId) {
         await markCompleted(store, job.id, session);
+        await safelyReportConnectionRestored(onConnectionRestored, job.id);
+        await safelyReportTerminalState(onTerminalState, job, {
+          status: 'COMPLETED',
+          assetId: session.assetId,
+          duplicate: session.duplicate,
+        });
         return;
       }
+      failureStage = 'UPLOAD';
       const uploaded = session.replayed ? await api.listParts(job.id) : { parts: [] };
       const knownParts = new Map(uploaded.parts.map((part) => [part.partNumber, part]));
       const parts = [];
@@ -127,21 +155,57 @@ export function createQueueRunner({
         const uploadedPart = await api.uploadPart(signed.uploadUrl, bytes);
         parts.push({ partNumber, etag: uploadedPart.etag });
       }
+      failureStage = 'COMMIT';
       await store.update(job.id, { status: 'COMMITTING' });
       const completed = await api.complete(job.id, parts);
       await markCompleted(store, job.id, completed);
+      await safelyReportConnectionRestored(onConnectionRestored, job.id);
+      await safelyReportTerminalState(onTerminalState, job, {
+        status: 'COMPLETED',
+        assetId: completed.assetId,
+        duplicate: completed.duplicate,
+      });
     } catch (error) {
       const attempts = (job.attempts || 0) + 1;
       const decision = decideFailure(error, attempts, Date.now());
       await store.update(job.id, {
         ...decision,
         attempts,
+        lastFailureStage: failureStage,
         lastError: error instanceof Error ? error.message.slice(0, 500) : '未知错误',
       });
+      if (['FAILED', 'PAUSED_AUTH', 'WAITING_CONFIG'].includes(decision.status)) {
+        await safelyReportTerminalState(onTerminalState, job, {
+          status: decision.status,
+          lastError: error instanceof Error ? error.message.slice(0, 500) : '未知错误',
+        });
+      }
     }
   }
 
   return { drain };
+}
+
+async function safelyReportConnectionRestored(report, successfulJobId) {
+  try {
+    await report({ successfulJobId });
+  } catch {
+    // Queue recovery feedback must never fail the capture that proved connectivity.
+  }
+}
+
+async function safelyReportTerminalState(report, job, result) {
+  try {
+    await report({
+      id: job.id,
+      metadata: job.metadata,
+      originTabId: job.originTabId,
+      originFrameId: job.originFrameId,
+      ...result,
+    });
+  } catch {
+    // Feedback must never turn a successfully persisted capture into a failed job.
+  }
 }
 
 async function downloadFirstSupportedCandidate(job, fetchImpl) {
@@ -191,10 +255,12 @@ function markCompleted(store, jobId, completed) {
   return store.update(jobId, {
     status: 'COMPLETED',
     blob: null,
+    fallbackBlob: null,
     assetId: completed.assetId,
     duplicate: completed.duplicate,
     completedAt: Date.now(),
     nextAttemptAt: null,
+    lastFailureStage: null,
     lastError: null,
   });
 }
