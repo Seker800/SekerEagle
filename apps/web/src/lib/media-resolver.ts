@@ -34,6 +34,7 @@ export interface SekerDesktopBridge {
   writeClipboardImage?(pngBytes: Uint8Array): Promise<void>;
   getConnectionStatus?(): Promise<DesktopConnectionStatus>;
   openConnectionManager?(): Promise<void>;
+  startAssetDrag?(assetIds: string[]): Promise<void>;
 }
 
 export interface DesktopConnectionStatus {

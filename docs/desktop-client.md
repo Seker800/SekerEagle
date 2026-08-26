@@ -26,6 +26,18 @@ An unavailable or corrupt cache falls back to the normal authenticated network p
 
 The web shell (`index.html`) is always revalidated, while content-hashed assets are immutable for one year. This prevents an installed desktop client from remaining pinned to an old UI after the server is upgraded without sacrificing static-asset efficiency.
 
+## Dragging originals to other apps
+
+Dragging an unselected library thumbnail exports that asset's original file. Dragging a selected
+thumbnail exports the complete selection in the library's visible order. The browser build keeps
+cards non-draggable; only the desktop bridge can request a native file drag.
+
+The renderer sends validated asset IDs, never a URL or local path. The main process downloads each
+original with the authenticated desktop session into an owner-and-deployment-isolated temporary
+directory, then gives those local paths to the operating system. These exact-byte exports are not
+part of the persistent derivative media cache. Partial batches are removed on failure, completed
+batches expire after one hour, and stale batches are cleaned at the next desktop startup.
+
 ## Packaging
 
 Run `npm run package:mac --workspace @sekereagle/desktop` for arm64 and x64 development DMG/ZIP artifacts. Run `npm run package:win --workspace @sekereagle/desktop` on a native Windows x64 runner for the internal unsigned NSIS artifact. The repository workflow exposes both targets manually.

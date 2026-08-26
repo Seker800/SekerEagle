@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { createDesktopMediaUrl, type DesktopMediaIdentity } from '../shared/media-identity';
+import { parseAssetDragInput } from '../main/original-drag-export';
 
 (
   globalThis as unknown as { addEventListener(type: 'online', listener: () => void): void }
@@ -56,5 +57,8 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   },
   cancelConnectionManager() {
     return ipcRenderer.invoke('desktop:cancel-connection-manager');
+  },
+  startAssetDrag(assetIds: unknown) {
+    return ipcRenderer.invoke('desktop:start-asset-drag', parseAssetDragInput(assetIds));
   },
 });

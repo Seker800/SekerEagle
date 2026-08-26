@@ -35,6 +35,11 @@ import { createDesktopConnectionProbe } from './connection-probe';
 import { DesktopBrowserSession } from './browser-session';
 import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
 import { parseClipboardImageInput } from './clipboard-image';
+import {
+  ORIGINAL_DRAG_EXPORT_TTL_MS,
+  OriginalDragExporter,
+  parseAssetDragInput,
+} from './original-drag-export';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -124,6 +129,20 @@ if (hasSingleInstanceLock)
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
+    const originalDragExporter = new OriginalDragExporter({
+      rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
+      fetchOriginal: (assetId) =>
+        currentBrowserSession().fetch(`/api/eagle/assets/${assetId}/original`, {
+          credentials: 'include',
+          headers: {
+            accept: 'application/octet-stream',
+            'accept-encoding': 'identity',
+            'cache-control': 'no-store',
+          },
+        }),
+    });
+    await originalDragExporter.cleanupExpired();
+    registerOriginalDragIpc(owner, originalDragExporter);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -382,6 +401,34 @@ function registerClipboardIpc(): void {
     const image = nativeImage.createFromBuffer(Buffer.from(parseClipboardImageInput(input)));
     if (image.isEmpty()) throw new Error('剪贴板图片无法解码。');
     clipboard.writeImage(image);
+  });
+}
+
+function registerOriginalDragIpc(owner: AuthenticatedOwner, exporter: OriginalDragExporter): void {
+  ipcMain.handle('desktop:start-asset-drag', async (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    const assetIds = parseAssetDragInput(input);
+    const identity = await owner.get();
+    if (!identity) throw new Error('需要重新登录。');
+    const namespaceId = buildNamespaceId(serverUrl, identity.ownerId, identity.deploymentId);
+    const prepared = await exporter.prepare(namespaceId, assetIds);
+    try {
+      assertTrustedIpcSender(event);
+      const webContents = event.sender;
+      webContents.startDrag({
+        file: prepared.files[0],
+        files: prepared.files,
+        icon: path.join(__dirname, 'drag-icon.png'),
+      });
+      const cleanupTimer = setTimeout(
+        () => void exporter.remove(prepared).catch(() => undefined),
+        ORIGINAL_DRAG_EXPORT_TTL_MS,
+      );
+      cleanupTimer.unref();
+    } catch (error) {
+      await exporter.remove(prepared);
+      throw error;
+    }
   });
 }
 

@@ -15,9 +15,13 @@ const temporaryRoots: string[] = [];
 
 afterEach(async () => {
   await Promise.all(
-    temporaryRoots.splice(0).map((directory) =>
-      import('node:fs/promises').then(({ rm }) => rm(directory, { recursive: true, force: true })),
-    ),
+    temporaryRoots
+      .splice(0)
+      .map((directory) =>
+        import('node:fs/promises').then(({ rm }) =>
+          rm(directory, { recursive: true, force: true }),
+        ),
+      ),
   );
 });
 
@@ -50,8 +54,9 @@ describe('parseAssetDragInput', () => {
     [],
     [firstAssetId, firstAssetId],
     ['../../etc/passwd'],
-    Array.from({ length: 513 }, (_, index) =>
-      `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    Array.from(
+      { length: 101 },
+      (_, index) => `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
     ),
   ])('rejects an unsafe drag payload', (input) => {
     expect(() => parseAssetDragInput(input)).toThrow();
@@ -72,9 +77,12 @@ describe('OriginalDragExporter', () => {
 
     const prepared = await exporter.prepare(namespaceId, [firstAssetId, secondAssetId]);
 
-    expect(prepared.files.map(path.basename)).toEqual(['reference.png', 'reference (2).png']);
+    expect(prepared.files.map((file) => path.basename(file))).toEqual([
+      'reference.png',
+      'reference (2).png',
+    ]);
     expect(new Uint8Array(await readFile(prepared.files[0]))).toEqual(payloads.get(firstAssetId));
-    expect(new Uint8Array(await readFile(prepared.files[1]))).toEqual(payloads.get(secondAssetId));
+    expect(new Uint8Array(await readFile(prepared.files[1]!))).toEqual(payloads.get(secondAssetId));
     expect((await stat(prepared.directory)).mode & 0o777).toBe(0o700);
     expect((await stat(prepared.files[0])).mode & 0o777).toBe(0o600);
   });
@@ -90,6 +98,21 @@ describe('OriginalDragExporter', () => {
 
     expect(path.dirname(prepared.files[0])).toBe(prepared.directory);
     expect(path.basename(prepared.files[0])).toBe('_CON_.png');
+  });
+
+  it('keeps long Unicode filenames within cross-platform byte limits while preserving extension', async () => {
+    const rootPath = await createRoot();
+    const exporter = new OriginalDragExporter({
+      rootPath,
+      fetchOriginal: async () =>
+        originalResponse(new Uint8Array([1]), `${'参考图片'.repeat(40)}.png`),
+    });
+
+    const prepared = await exporter.prepare(namespaceId, [firstAssetId]);
+    const fileName = path.basename(prepared.files[0]);
+
+    expect(Buffer.byteLength(fileName, 'utf8')).toBeLessThanOrEqual(240);
+    expect(fileName).toMatch(/\.png$/u);
   });
 
   it('removes the entire partial export if any authenticated original request fails', async () => {

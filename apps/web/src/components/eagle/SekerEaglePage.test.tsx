@@ -1203,7 +1203,8 @@ describe('SekerEaglePage', () => {
   });
 
   it('drags selected originals through the desktop bridge and preserves browser behavior', async () => {
-    const startAssetDrag = vi.fn().mockResolvedValue(undefined);
+    const pendingDrag = createDeferred<void>();
+    const startAssetDrag = vi.fn(() => pendingDrag.promise);
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
       createMediaUrl: vi.fn(),

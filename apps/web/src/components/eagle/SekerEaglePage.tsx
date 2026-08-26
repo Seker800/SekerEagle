@@ -67,6 +67,7 @@ import {
 import { EagleTagPage } from './EagleTagPage';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
+import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { getEagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
@@ -175,6 +176,7 @@ export function SekerEaglePage({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [assetDragStatus, setAssetDragStatus] = useState<string | null>(null);
   const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(readThumbnailSize);
   const [editorTitle, setEditorTitle] = useState('');
@@ -555,6 +557,25 @@ export function SekerEaglePage({
       x: Math.max(8, Math.min(event.clientX, window.innerWidth - 228)),
       y: Math.max(8, Math.min(event.clientY, window.innerHeight - 240)),
     });
+  };
+
+  const desktopAssetDragBridge = getDesktopAssetDragBridge();
+  const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
+    event.preventDefault();
+    if (!desktopAssetDragBridge || libraryView === 'TRASH') return;
+    const assetIds = getAssetDragIds({
+      orderedIds: assets.map((asset) => asset.id),
+      selectedIds: selectedAssetIds,
+      draggedId: assetId,
+    });
+    if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
+    setAssetContextMenu(null);
+    setAssetDragStatus(`正在准备 ${assetIds.length} 个原文件…`);
+    void desktopAssetDragBridge.startAssetDrag(assetIds).then(
+      () => setAssetDragStatus(null),
+      (error: unknown) =>
+        setAssetDragStatus(error instanceof Error ? error.message : '原文件拖出失败。'),
+    );
   };
 
   const openAssetPreview = (asset: EagleAssetListItem) => {
@@ -969,6 +990,11 @@ export function SekerEaglePage({
                   {uploadStatus}
                 </div>
               )}
+              {assetDragStatus && (
+                <div className={styles.statusBar} role="status">
+                  {assetDragStatus}
+                </div>
+              )}
               {color && colorCoverage && colorCoverage.percentage < 100 ? (
                 <div className={styles.statusBar} role="status">
                   颜色结果仍在补全：{colorCoverage.completed}/{colorCoverage.eligible} 已分析（
@@ -1052,6 +1078,7 @@ export function SekerEaglePage({
                         className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
                         aria-pressed={isSelected}
                         aria-label={`${asset.displayName}，${asset.format.toUpperCase()}`}
+                        draggable={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
                         style={
                           masonryItem
                             ? {
@@ -1066,6 +1093,7 @@ export function SekerEaglePage({
                           handleAssetClick(event, asset.id);
                         }}
                         onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
+                        onDragStart={(event) => handleAssetDragStart(event, asset.id)}
                         onDoubleClick={() => openAssetPreview(asset)}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
