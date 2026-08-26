@@ -28,7 +28,7 @@
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/throttler": "^6.5.0",
     "@smithy/node-http-handler": "^4.11.3",
-    "@prisma/client": "6.19.3",
+    "@prisma/client": "7.9.1",
     "@sekereagle/config": "*",
     "@sekereagle/eagle-filter-core": "*",
     "@sekereagle/vector-core": "*",
