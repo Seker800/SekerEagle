@@ -11,4 +11,8 @@ void test('API trusts exactly one gateway hop and gateway replaces untrusted for
   assert.doesNotMatch(main, /trust proxy', 'loopback'/u);
   assert.match(gateway, /proxy_set_header X-Forwarded-For \$remote_addr;/u);
   assert.doesNotMatch(gateway, /proxy_add_x_forwarded_for/u);
+  assert.match(gateway, /location \/api\/[\s\S]*proxy_connect_timeout 3s;/u);
+  assert.match(gateway, /location \/api\/[\s\S]*proxy_read_timeout 15s;/u);
+  assert.match(gateway, /location \/api\/[\s\S]*proxy_send_timeout 15s;/u);
+  assert.match(gateway, /location \/api\/[\s\S]*proxy_buffering off;/u);
 });
