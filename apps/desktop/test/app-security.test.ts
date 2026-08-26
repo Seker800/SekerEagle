@@ -93,4 +93,18 @@ describe('desktop server and navigation security', () => {
     expect(preload).toContain("ipcRenderer.invoke('desktop:get-cache-manager-status')");
     expect(preload).toContain("ipcRenderer.invoke('desktop:open-cache-folder')");
   });
+
+  it('writes only bounded PNG payloads through sender-validated clipboard IPC', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(main).toContain("ipcMain.handle('desktop:write-clipboard-image'");
+    expect(main).toMatch(
+      /desktop:write-clipboard-image'[\s\S]{0,180}assertTrustedIpcSender\(event\)/u,
+    );
+    expect(main).toContain('MAX_CLIPBOARD_IMAGE_BYTES');
+    expect(main).toContain("contentType: 'image/png'");
+    expect(preload).toContain("ipcRenderer.invoke('desktop:write-clipboard-image'");
+  });
 });

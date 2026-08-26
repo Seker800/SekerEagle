@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
+import { copyImageToClipboard } from '../../lib/image-clipboard';
 import { EagleImageViewer } from './EagleImageViewer';
 
 const {
@@ -80,6 +81,7 @@ const {
 });
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
+vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: vi.fn() }));
 
 const image = {
   src: '/api/eagle/assets/asset-1/renditions/preview-1',
@@ -102,6 +104,34 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
+  });
+
+  it('restores image copy through the viewer context menu', async () => {
+    vi.mocked(copyImageToClipboard).mockResolvedValue();
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
+      clientX: 240,
+      clientY: 160,
+    });
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
+
+    await waitFor(() => expect(copyImageToClipboard).toHaveBeenCalledWith(image.src));
+    expect(screen.getByRole('status')).toHaveTextContent('图片已复制');
+  });
+
+  it('keeps copy failures visible and recoverable', async () => {
+    vi.mocked(copyImageToClipboard).mockRejectedValue(new Error('clipboard denied'));
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('复制失败');
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    expect(screen.getByRole('menuitem', { name: '复制图片' })).toBeEnabled();
   });
 
   it('uses a low-latency navigator viewer for an ordinary preview image', async () => {

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getDesktopClipboardBridge,
+  resolveClipboardImageUrl,
   resolveEagleMediaPath,
   resolveEagleRenditionUrl,
   type DesktopMediaRequest,
@@ -39,6 +41,31 @@ describe('media resolver', () => {
       resolveEagleMediaPath(`/api/eagle/assets/${assetId}/pyramids/${pyramidId}/tiles/13/4/2`),
     ).toBe(`sekereagle-media://tile/${assetId}/${pyramidId}/13/4/2`);
     expect(createMediaUrl).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses the authenticated browser URL when copying a desktop rendition', () => {
+    expect(
+      resolveClipboardImageUrl(
+        `sekereagle-media://rendition/preview/${assetId}/${renditionId}`,
+      ),
+    ).toBe(`/api/eagle/assets/${assetId}/renditions/${renditionId}`);
+    expect(resolveClipboardImageUrl('/api/eagle/assets/a/renditions/b')).toBe(
+      '/api/eagle/assets/a/renditions/b',
+    );
+    expect(() => resolveClipboardImageUrl('sekereagle-media://tile/a/b/1/2/3')).toThrow(
+      /复制来源/,
+    );
+  });
+
+  it('exposes clipboard writing only when the desktop bridge implements it', () => {
+    const writeClipboardImage = vi.fn().mockResolvedValue(undefined);
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      writeClipboardImage,
+    };
+
+    expect(getDesktopClipboardBridge()?.writeClipboardImage).toBe(writeClipboardImage);
   });
 
   it('never transports originals, arbitrary URLs, or malformed media identities through desktop', () => {
