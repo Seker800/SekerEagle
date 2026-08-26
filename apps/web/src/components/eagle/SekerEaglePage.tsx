@@ -25,6 +25,7 @@ import {
   IconSparkles,
   IconStar,
   IconStarFilled,
+  IconTagsOff,
   IconTags,
   IconTrash,
   IconUserCircle,
@@ -44,6 +45,7 @@ import {
   type EagleAssetFilters,
   type EagleAssetChanges,
   type EagleAssetVersion,
+  type EagleManualTag,
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
@@ -92,6 +94,7 @@ interface SekerEaglePageProps {
 }
 
 type EagleAssetContextMenu = { x: number; y: number };
+type EagleTagPickerState = { mode: 'add' | 'remove'; assetIds: string[] };
 type EagleLibraryView =
   | 'ACTIVE'
   | 'PRIVATE'
@@ -172,7 +175,7 @@ export function SekerEaglePage({
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
-  const [tagPickerAssetIds, setTagPickerAssetIds] = useState<string[] | null>(null);
+  const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
   const [quickFilters, setQuickFilters] = useState(createEmptyEagleQuickFilterState);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -271,7 +274,7 @@ export function SekerEaglePage({
         editorDirtyFieldsRef.current.clear();
       }
     },
-    onBatchTagsApplied: () => setTagPickerAssetIds(null),
+    onBatchTagsApplied: () => setTagPicker(null),
     onSelectionMutationCompleted: () => {
       setSelectedAssetIds([]);
       setSelectedAssetId(null);
@@ -343,6 +346,7 @@ export function SekerEaglePage({
   )
     ? assetsById.get(selectedAssetIds[0])?.rating
     : undefined;
+  const manualTags = manualTagsQuery.data ?? [];
   const selectedManualTagSummaries = useMemo(() => {
     const tagsById = new Map<
       string,
@@ -363,6 +367,30 @@ export function SekerEaglePage({
       left.tag.name.localeCompare(right.tag.name),
     );
   }, [assetsById, selectedAsset, selectedAssetIds]);
+  const removableManualTags = useMemo(() => {
+    const manualTagsById = new Map(manualTags.map((tag) => [tag.id, tag]));
+    return selectedManualTagSummaries.map(({ tag, assetCount }) => {
+      const completeTag = manualTagsById.get(tag.id);
+      if (completeTag) return completeTag;
+      return {
+        ...tag,
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        rowVersion: 0,
+        assetCount,
+        pinyin: tag.name,
+        pinyinInitials: tag.name,
+      } satisfies EagleManualTag;
+    });
+  }, [manualTags, selectedManualTagSummaries]);
+  const selectedAssetCountByTagId = useMemo(
+    () =>
+      Object.fromEntries(
+        selectedManualTagSummaries.map(({ tag, assetCount }) => [tag.id, assetCount]),
+      ),
+    [selectedManualTagSummaries],
+  );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
   });
@@ -396,7 +424,6 @@ export function SekerEaglePage({
     updatesQueryKey: queryKeys.assetUpdates,
   });
   const colorCoverage = assetsQuery.data?.pages[0]?.colorCoverage ?? null;
-  const manualTags = manualTagsQuery.data ?? [];
   const manualTagGroups = manualTagGroupsQuery.data ?? [];
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
@@ -539,7 +566,7 @@ export function SekerEaglePage({
   }, []);
 
   useEffect(() => {
-    if (tagPickerAssetIds) return undefined;
+    if (tagPicker) return undefined;
     if (!isBatchSelection && !assetContextMenu) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -549,7 +576,7 @@ export function SekerEaglePage({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [assetContextMenu, clearAssetSelection, isBatchSelection, tagPickerAssetIds]);
+  }, [assetContextMenu, clearAssetSelection, isBatchSelection, tagPicker]);
 
   const handleAssetClick = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     setAssetContextMenu(null);
@@ -1289,7 +1316,7 @@ export function SekerEaglePage({
                       onClick={() => {
                         batchTagMutation.reset();
                         createBatchTagMutation.reset();
-                        setTagPickerAssetIds([...selectedAssetIds]);
+                        setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
                       }}
                     >
                       <IconPlus size={14} />
@@ -1550,11 +1577,27 @@ export function SekerEaglePage({
                   setAssetContextMenu(null);
                   batchTagMutation.reset();
                   createBatchTagMutation.reset();
-                  setTagPickerAssetIds([...selectedAssetIds]);
+                  setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
                 }}
               >
                 <IconTags size={15} />
                 添加标签…
+              </button>
+            )}
+            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
+              <button
+                type="button"
+                role="menuitem"
+                aria-label="删除人工标签"
+                disabled={batchTagMutation.isPending || selectedManualTagSummaries.length === 0}
+                onClick={() => {
+                  setAssetContextMenu(null);
+                  batchTagMutation.reset();
+                  setTagPicker({ mode: 'remove', assetIds: [...selectedAssetIds] });
+                }}
+              >
+                <IconTagsOff size={15} />
+                删除人工标签…
               </button>
             )}
             {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
@@ -1608,18 +1651,30 @@ export function SekerEaglePage({
         </>
       )}
 
-      {tagPickerAssetIds && tagPickerAssetIds.length > 0 && (
+      {tagPicker && tagPicker.assetIds.length > 0 && (
         <EagleBatchTagPicker
-          assetCount={tagPickerAssetIds.length}
-          tags={manualTags}
+          mode={tagPicker.mode}
+          assetCount={tagPicker.assetIds.length}
+          tags={tagPicker.mode === 'remove' ? removableManualTags : manualTags}
+          selectedAssetCountByTagId={
+            tagPicker.mode === 'remove' ? selectedAssetCountByTagId : undefined
+          }
           pending={batchTagMutation.isPending}
-          error={(batchTagMutation.error ?? createBatchTagMutation.error)?.message}
-          onCreate={(name) => createBatchTagMutation.mutateAsync(name)}
-          onClose={() => setTagPickerAssetIds(null)}
+          error={(
+            batchTagMutation.error ??
+            (tagPicker.mode === 'add' ? createBatchTagMutation.error : null)
+          )?.message}
+          onCreate={
+            tagPicker.mode === 'add'
+              ? (name) => createBatchTagMutation.mutateAsync(name)
+              : undefined
+          }
+          onClose={() => setTagPicker(null)}
           onApply={(tagIds) =>
             batchTagMutation.mutate({
-              assetIds: tagPickerAssetIds,
-              addTagIds: tagIds,
+              assetIds: tagPicker.assetIds,
+              addTagIds: tagPicker.mode === 'add' ? tagIds : [],
+              removeTagIds: tagPicker.mode === 'remove' ? tagIds : [],
             })
           }
         />

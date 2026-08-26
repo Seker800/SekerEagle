@@ -6,8 +6,10 @@ import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleBatchTagPicker.module.css';
 
 interface EagleBatchTagPickerProps {
+  mode?: 'add' | 'remove';
   assetCount: number;
   tags: EagleManualTag[];
+  selectedAssetCountByTagId?: Readonly<Record<string, number>>;
   pending?: boolean;
   error?: string;
   onApply: (tagIds: string[]) => void;
@@ -16,14 +18,18 @@ interface EagleBatchTagPickerProps {
 }
 
 export function EagleBatchTagPicker({
+  mode = 'add',
   assetCount,
   tags,
+  selectedAssetCountByTagId = {},
   pending = false,
   error,
   onApply,
   onCreate,
   onClose,
 }: EagleBatchTagPickerProps) {
+  const isRemoving = mode === 'remove';
+  const dialogTitle = isRemoving ? '删除人工标签' : '添加标签';
   const [query, setQuery] = useState('');
   const [createdTags, setCreatedTags] = useState<EagleManualTag[]>([]);
   const [isCreating, setIsCreating] = useState(false);
@@ -40,6 +46,7 @@ export function EagleBatchTagPicker({
   const trimmedQuery = query.trim();
   const normalizedQuery = trimmedQuery.toLocaleLowerCase('zh-CN');
   const canCreate = Boolean(
+    !isRemoving &&
     onCreate &&
     trimmedQuery &&
     visibleTags.length === 0 &&
@@ -93,13 +100,13 @@ export function EagleBatchTagPicker({
         className={styles.dialog}
         role="dialog"
         aria-modal="true"
-        aria-label="添加标签"
+        aria-label={dialogTitle}
         onSubmit={submit}
       >
         <header>
           <div>
             <IconTags size={19} />
-            <h2>添加标签</h2>
+            <h2>{dialogTitle}</h2>
             <span>{assetCount} 项素材</span>
           </div>
           <button type="button" aria-label="关闭标签选择" onClick={onClose}>
@@ -111,7 +118,7 @@ export function EagleBatchTagPicker({
           <input
             autoFocus
             type="search"
-            aria-label="搜索可添加标签"
+            aria-label={isRemoving ? '搜索可删除标签' : '搜索可添加标签'}
             placeholder="搜索名称、拼音或首字母"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -132,7 +139,7 @@ export function EagleBatchTagPicker({
           )}
           {visibleTags.length > 0 ? (
             <EagleVirtualList
-              ariaLabel="可添加标签"
+              ariaLabel={isRemoving ? '可删除标签' : '可添加标签'}
               className={styles.virtualTagList}
               items={visibleTags}
               itemKey={({ tag }) => tag.id}
@@ -150,14 +157,25 @@ export function EagleBatchTagPicker({
                     className={styles.color}
                     style={tag.color ? { background: tag.color } : undefined}
                   />
-                  <span>{tag.name}</span>
-                  <small>{tag.assetCount}</small>
+                  {isRemoving ? (
+                    <span>
+                      {tag.name} · {selectedAssetCountByTagId[tag.id] ?? 0}/{assetCount}
+                    </span>
+                  ) : (
+                    <>
+                      <span>{tag.name}</span>
+                      <small>{tag.assetCount}</small>
+                    </>
+                  )}
                 </label>
               )}
             />
           ) : (
-            <div className={styles.empty} aria-label="可添加标签">
-              没有匹配的标签
+            <div
+              className={styles.empty}
+              aria-label={isRemoving ? '可删除标签' : '可添加标签'}
+            >
+              {isRemoving && !query ? '所选素材没有人工标签' : '没有匹配的标签'}
             </div>
           )}
         </div>
@@ -178,10 +196,14 @@ export function EagleBatchTagPicker({
           <button
             className={styles.primary}
             type="submit"
-            aria-label={`添加 ${selectedTagIds.length} 个标签到 ${assetCount} 项素材`}
+            aria-label={
+              isRemoving
+                ? `从 ${assetCount} 项素材删除 ${selectedTagIds.length} 个标签`
+                : `添加 ${selectedTagIds.length} 个标签到 ${assetCount} 项素材`
+            }
             disabled={selectedTagIds.length === 0 || pending || isCreating}
           >
-            添加
+            {isRemoving ? '删除' : '添加'}
           </button>
         </footer>
       </form>
