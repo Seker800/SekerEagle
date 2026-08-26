@@ -5,10 +5,7 @@ import {
 } from './capture-metadata.js';
 import { normalizeCaptureSourceCandidates } from './capture-source.js';
 import { createQueueRunner } from './queue-runner.js';
-import {
-  selectCompletedJobIdsToPrune,
-  selectConnectivityRetryJobIds,
-} from './queue-policy.js';
+import { selectCompletedJobIdsToPrune, selectConnectivityRetryJobIds } from './queue-policy.js';
 import { createQueueStore } from './queue-store.js';
 
 const ALARM_NAME = 'sekereagle-capture-drain';
@@ -115,8 +112,7 @@ async function enqueue(payload, sender) {
     altText: String(payload.altText || '').slice(0, 1000),
   });
   const initialBlob = browserCopy?.blob ?? (!sourceUrl ? screenshot : null);
-  const initialMimeType =
-    browserCopy?.mimeType ?? (!sourceUrl && screenshot ? 'image/png' : null);
+  const initialMimeType = browserCopy?.mimeType ?? (!sourceUrl && screenshot ? 'image/png' : null);
   await store.put({
     id,
     status: 'PENDING',
@@ -153,7 +149,9 @@ async function enqueue(payload, sender) {
 async function decodeBrowserCopy(copy, sourceCandidates) {
   if (!copy || typeof copy.dataUrl !== 'string') return null;
   if (!sourceCandidates.includes(String(copy.originalUrl || ''))) return null;
-  const declaredMimeType = String(copy.mimeType || '').trim().toLowerCase();
+  const declaredMimeType = String(copy.mimeType || '')
+    .trim()
+    .toLowerCase();
   const declaredSize = Number(copy.size);
   if (
     !Number.isSafeInteger(declaredSize) ||
@@ -219,10 +217,7 @@ function normalizeCrop(rectangle, viewport, imageWidth, imageHeight) {
   const scaleY = imageHeight / viewportHeight;
   const x = Math.max(0, Math.floor(Number(rectangle.x) * scaleX));
   const y = Math.max(0, Math.floor(Number(rectangle.y) * scaleY));
-  const width = Math.min(
-    imageWidth - x,
-    Math.max(1, Math.ceil(Number(rectangle.width) * scaleX)),
-  );
+  const width = Math.min(imageWidth - x, Math.max(1, Math.ceil(Number(rectangle.width) * scaleX)));
   const height = Math.min(
     imageHeight - y,
     Math.max(1, Math.ceil(Number(rectangle.height) * scaleY)),

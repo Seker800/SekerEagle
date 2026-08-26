@@ -121,7 +121,9 @@ describe('AccountHome', () => {
     expect(createdToken).toHaveValue('seg_pat_secret');
     expect(createdToken).toHaveAttribute('readonly');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(screen.getByText('SekerEagle 灵感采集', { selector: '.token-item strong' })).toBeInTheDocument();
+    expect(
+      screen.getByText('SekerEagle 灵感采集', { selector: '.token-item strong' }),
+    ).toBeInTheDocument();
 
     const selectSpy = vi.spyOn(HTMLInputElement.prototype, 'select');
     vi.stubGlobal('navigator', {

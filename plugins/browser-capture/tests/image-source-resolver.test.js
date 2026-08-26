@@ -117,16 +117,13 @@ test('recognizes video posters, SVG image references and lazy responsive attribu
     getAttribute: (name) =>
       name === 'data-lazy-srcset' ? '/large.avif 2000w, /medium.webp 1000w' : null,
   };
-  assert.deepEqual(
-    resolveImageSourceTarget(lazyImage, 'https://example.com/gallery'),
-    {
-      sourceUrl: 'https://example.com/large.avif',
-      sourceCandidates: [
-        'https://example.com/large.avif',
-        'https://example.com/medium.webp',
-        'https://example.com/small.jpg',
-      ],
-      altText: 'Lazy image',
-    },
-  );
+  assert.deepEqual(resolveImageSourceTarget(lazyImage, 'https://example.com/gallery'), {
+    sourceUrl: 'https://example.com/large.avif',
+    sourceCandidates: [
+      'https://example.com/large.avif',
+      'https://example.com/medium.webp',
+      'https://example.com/small.jpg',
+    ],
+    altText: 'Lazy image',
+  });
 });

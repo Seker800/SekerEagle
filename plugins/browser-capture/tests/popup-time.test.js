@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  failureStageLabel,
-  jobTimestamp,
-  relativeTime,
-  retrySchedule,
-} from '../src/popup-time.js';
+import { failureStageLabel, jobTimestamp, relativeTime, retrySchedule } from '../src/popup-time.js';
 
 test('uses completion time for completed captures and update time for failures', () => {
   assert.equal(
@@ -29,7 +24,10 @@ test('shows the next automatic retry and a useful failure stage', () => {
     retrySchedule({ status: 'RETRY', nextAttemptAt: now + 3 * 60_000 }, now),
     '预计 3 分钟后重试',
   );
-  assert.equal(retrySchedule({ status: 'RETRY', nextAttemptAt: now + 30_000 }, now), '即将自动重试');
+  assert.equal(
+    retrySchedule({ status: 'RETRY', nextAttemptAt: now + 30_000 }, now),
+    '即将自动重试',
+  );
   assert.equal(retrySchedule({ status: 'COMPLETED', nextAttemptAt: now }, now), '');
   assert.equal(failureStageLabel('SOURCE_DOWNLOAD'), '源图下载失败');
   assert.equal(failureStageLabel('SERVER_CONNECT'), '服务器连接失败');

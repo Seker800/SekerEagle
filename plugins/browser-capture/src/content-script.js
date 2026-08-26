@@ -108,7 +108,9 @@ async function prepareBrowserCopy(target) {
       const declaredSize = Number(response.headers.get('content-length') || 0);
       if (declaredSize > MAX_BROWSER_COPY_BYTES) continue;
       const blob = await response.blob();
-      const mimeType = String(blob.type || '').split(';', 1)[0].toLowerCase();
+      const mimeType = String(blob.type || '')
+        .split(';', 1)[0]
+        .toLowerCase();
       if (
         !blob.size ||
         blob.size > MAX_BROWSER_COPY_BYTES ||

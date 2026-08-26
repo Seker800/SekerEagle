@@ -31,7 +31,9 @@ export function resolveImageSourceTarget(
   }
   if (tagName === 'IMAGE') {
     const href = resolveCaptureUrl(
-      element.href?.baseVal || element.getAttribute?.('href') || element.getAttribute?.('xlink:href'),
+      element.href?.baseVal ||
+        element.getAttribute?.('href') ||
+        element.getAttribute?.('xlink:href'),
       baseUrl,
     );
     return href ? captureTarget([href], element.getAttribute?.('aria-label')) : null;
