@@ -147,4 +147,21 @@ describe('desktop server and navigation security', () => {
     expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:save-original-file'/u);
     expect(preload).toContain('parseAssetDragInput([assetId])');
   });
+
+  it('downloads a validated original batch only into a native-selected directory', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(main).toContain("ipcMain.handle('desktop:download-original-files'");
+    expect(main).toMatch(
+      /desktop:download-original-files'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
+    );
+    expect(main).toContain("properties: ['openDirectory', 'createDirectory']");
+    expect(main).toContain('copyPreparedFilesToDirectory(prepared.files, destinationDirectory)');
+    expect(main).toContain('assertOriginalAccessStillCurrent');
+    expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:download-original-files'/u);
+    expect(preload).toContain('parseAssetDragInput(assetIds)');
+    expect(preload).not.toContain('destinationDirectory');
+  });
 });

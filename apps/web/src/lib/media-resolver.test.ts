@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getDesktopClipboardBridge,
   getDesktopOriginalFileBridge,
+  getDesktopOriginalFileDownloadBridge,
   resolveClipboardImageUrl,
   resolveEagleMediaPath,
   resolveEagleRenditionUrl,
@@ -74,6 +75,19 @@ describe('media resolver', () => {
     };
 
     expect(getDesktopOriginalFileBridge()?.saveOriginalFile).toBe(saveOriginalFile);
+  });
+
+  it('exposes batch original downloads only when the desktop bridge implements them', () => {
+    const downloadOriginalFiles = vi.fn().mockResolvedValue({ downloaded: 2 });
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      downloadOriginalFiles,
+    };
+
+    expect(getDesktopOriginalFileDownloadBridge()?.downloadOriginalFiles).toBe(
+      downloadOriginalFiles,
+    );
   });
 
   it('never transports originals, arbitrary URLs, or malformed media identities through desktop', () => {

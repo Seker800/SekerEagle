@@ -1202,6 +1202,65 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('button', { name: '进入多选' })).not.toBeInTheDocument();
   });
 
+  it('batch-downloads selected originals from the desktop context menu in library order', async () => {
+    const downloadOriginalFiles = vi.fn().mockResolvedValue({ downloaded: 2 });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      downloadOriginalFiles,
+    };
+    const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(secondCard);
+    fireEvent.click(firstCard, { metaKey: true });
+    fireEvent.contextMenu(firstCard);
+    fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
+
+    await waitFor(() =>
+      expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2']),
+    );
+    expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
+  });
+
+  it('shows batch download only for multiple selections with a desktop capability', async () => {
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      downloadOriginalFiles: vi.fn(),
+    };
+    renderPage();
+
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.contextMenu(card);
+
+    expect(screen.queryByRole('menuitem', { name: /批量下载/u })).not.toBeInTheDocument();
+  });
+
+  it('keeps batch download failures visible and recoverable', async () => {
+    const downloadOriginalFiles = vi.fn().mockRejectedValue(new Error('目标文件夹不可写。'));
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      downloadOriginalFiles,
+    };
+    const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(firstCard);
+    fireEvent.click(secondCard, { metaKey: true });
+    fireEvent.contextMenu(secondCard);
+    fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('目标文件夹不可写');
+  });
+
   it('drags selected originals through the desktop bridge and preserves browser behavior', async () => {
     const pendingDrag = createDeferred<void>();
     const prepareAssetDrag = vi.fn(() =>
