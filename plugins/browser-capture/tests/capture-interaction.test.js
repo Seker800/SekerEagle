@@ -197,3 +197,35 @@ test('collects a non-repeating CSS background image when no img element is hit',
     },
   );
 });
+
+test('collects repeated, layered, masked and pseudo-element CSS images', () => {
+  const card = {
+    tagName: 'DIV',
+    textContent: 'Layered artwork',
+    getAttribute: () => null,
+  };
+
+  assert.deepEqual(
+    resolveCaptureTarget({
+      path: [card],
+      baseUrl: 'https://example.com/gallery/',
+      getStyle: (_element, pseudo) =>
+        pseudo === '::before'
+          ? { content: 'url("/images/badge.avif")' }
+          : {
+              backgroundImage: 'linear-gradient(#000, transparent), url("../images/cover.jpg")',
+              backgroundRepeat: 'repeat',
+              maskImage: 'url("/images/mask.png")',
+            },
+    }),
+    {
+      sourceUrl: 'https://example.com/images/cover.jpg',
+      sourceCandidates: [
+        'https://example.com/images/cover.jpg',
+        'https://example.com/images/mask.png',
+        'https://example.com/images/badge.avif',
+      ],
+      altText: 'Layered artwork',
+    },
+  );
+});

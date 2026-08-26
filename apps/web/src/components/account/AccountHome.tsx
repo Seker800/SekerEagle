@@ -58,8 +58,8 @@ function formatTokenExpiry(expiresAt: string | null): string {
 const statusLabels = { active: '有效', expired: '已过期', revoked: '已撤销' } as const;
 const tokenPurposes = {
   capture: {
-    label: '浏览器图片采集',
-    defaultName: 'SekerEagle 浏览器插件',
+    label: 'SekerEagle 灵感采集',
+    defaultName: 'SekerEagle 灵感采集',
     scopes: ['capture:write'],
   },
   importer: {

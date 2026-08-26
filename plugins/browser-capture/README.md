@@ -1,8 +1,8 @@
-# SekerEagle 浏览器图片采集
+# SekerEagle 灵感采集
 
 这是一个独立的 Manifest V3 Chrome 扩展。用户在网页图片上按住 `Alt` 并点击右键，扩展会把原图、网页来源和 Eagle 风格元数据加入本地可靠队列，再上传到 SekerEagle。
 
-当前扩展版本：`0.1.5`。
+当前扩展版本：`0.2.0`。
 
 ## 给 Agent 的一句话说明
 
@@ -70,19 +70,17 @@ Chrome 内置页、新标签页和 Chrome 应用商店不允许普通扩展注�
 
 - 普通 `<img>` 和 `<picture>` 图片。
 - `srcset` 与匹配当前媒体条件的 `<picture><source>`，按宽度或像素密度优先尝试高清候选。
-- 指向图片文件的外层链接，以及 `data-original`、`data-full`、`data-highres`、`data-large`、`data-zoom-image` 等通用高清来源属性。
+- 指向图片文件的外层链接，以及 `data-original`、`data-full`、`data-highres`、`data-large`、`data-zoom-image`、`data-srcset`、`data-lazy-srcset` 等通用高清来源属性。
 - 元素后方被覆盖层遮挡的图片。
 - 开放 Shadow DOM 内的图片。
-- 非重复平铺的 CSS `background-image`。
-- `http:`、`https:` 和 `data:` 图片地址。
+- CSS 多层 `background-image`、mask、`::before` 和 `::after` 伪元素图片。
+- `<video poster>` 与 SVG `<image href>` 引用。
+- `http:`、`https:`、`data:` 和网页临时 `blob:` 图片地址。
+- Canvas、内联 SVG、WebGL 和无法下载的受限图片会使用点击元素的可见截图兜底。
 
-当前不支持：
+当前不支持视频帧提取；`<video>` 只采集海报图。支持 AVIF、JPG/JPEG、PNG、WebP、GIF、HEIC 和 HEIF，单图最大 100MB。
 
-- 网页临时 `blob:` 图片的后台重取。
-- Canvas 像素内容。
-- 视频帧。
-
-支持 JPG/JPEG、PNG、WebP、GIF、HEIC 和 HEIF，单图最大 100MB。
+同源登录图片与 `blob:` 图片优先在网页上下文读取，单次浏览器侧副本最大 16MB。PAT 始终只保存在扩展后台，不会发送到网页；超过该限制或读取失败时仍会尝试后台原图下载，并保留可见截图作为最终兜底。
 
 高清识别不会只押注一个猜测地址。内容脚本最多生成 12 个去重候选，并始终为浏览器当前显示的 `currentSrc`/`src` 保留兜底位置；后台依次下载，遇到失效地址、非图片响应或暂不支持的格式会自动尝试下一项。普通详情页链接不会作为图片候选，服务器明确声明为 HTML 的内容也不会因 URL 带图片扩展名而被上传。
 
@@ -93,6 +91,8 @@ Alt 状态会在右键按下阶段记录，因为部分页面触发 `contextmenu
 - `正在加入 SekerEagle 队列`
 - `已加入 SekerEagle 队列 · N`
 - 或明确的失败原因
+
+入队只是开始，不代表采集已经成功。任务真正完成或进入需要人工处理的失败状态时，扩展会同时显示网页提示和 Chrome 系统通知；原采集页面仍然打开时还会播放成功或失败音效。扩展弹窗中的每条任务会显示“刚刚 / N 分钟前 / N 小时前 / N 天前”，悬停可查看精确日期时间。成功任务使用完成时间，失败任务使用最后更新时间。
 
 ## 保存的元数据
 
@@ -134,6 +134,8 @@ PENDING
 - Alt+右键只负责可靠入队，不阻塞网页。
 - Service Worker 或浏览器中断后，`FETCHING`、`UPLOADING`、`COMMITTING` 会恢复为 `RETRY`。
 - 瞬时错误使用指数退避，最长 10 分钟；Chrome alarm 每分钟唤醒队列。
+- 一条采集成功后，会提前唤醒因服务器连接、上传或提交失败而退避的旧任务；源图下载失败仍按原退避执行。
+- popup 会显示失败阶段、预计重试时间，并提供“立即重试全部”入口。
 - PAT 或配置修复后，暂停任务可以继续。
 - 服务端使用 `clientCaptureId` 保证重放幂等。
 - 已上传分片可以复用，最终提交失败不必重新上传图片。
@@ -225,7 +227,7 @@ npm run build
 
 Node 测试不能替代真实 Chrome 测试。至少验证一次：
 
-1. 确认 ChatGPT Chrome 控制扩展已经连接。它与 SekerEagle 图片采集扩展是两个不同扩展。
+1. 确认 ChatGPT Chrome 控制扩展已经连接。它与 SekerEagle 灵感采集扩展是两个不同扩展。
 2. 在 `chrome://extensions` 确认 SekerEagle 版本并重新加载。
 3. 刷新一个普通网页图片页，让新版内容脚本重新注入。
 4. 对真实图片执行 `Alt+右键`。

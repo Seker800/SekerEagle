@@ -1,6 +1,7 @@
 import { extname } from 'node:path';
 
 export const EAGLE_IMAGE_MIME_BY_EXTENSION = new Map<string, string>([
+  ['.avif', 'image/avif'],
   ['.jpg', 'image/jpeg'],
   ['.jpeg', 'image/jpeg'],
   ['.png', 'image/png'],

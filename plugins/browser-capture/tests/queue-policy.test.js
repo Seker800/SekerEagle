@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   decideFailure,
   selectCompletedJobIdsToPrune,
+  selectConnectivityRetryJobIds,
   selectRunnableJobs,
 } from '../src/queue-policy.js';
 
@@ -36,6 +37,26 @@ test('selects only due jobs in stable capture order and respects concurrency', (
     selectRunnableJobs(jobs, 1_000, 2).map(({ id }) => id),
     ['first', 'second'],
   );
+});
+
+test('selects only server-side transient retries after connectivity is restored', () => {
+  const jobs = [
+    { id: 'successful', status: 'COMPLETED', lastFailureStage: null },
+    { id: 'source', status: 'RETRY', lastFailureStage: 'SOURCE_DOWNLOAD' },
+    { id: 'server', status: 'RETRY', lastFailureStage: 'SERVER_CONNECT' },
+    { id: 'upload', status: 'RETRY', lastFailureStage: 'UPLOAD' },
+    { id: 'commit', status: 'RETRY', lastFailureStage: 'COMMIT' },
+    { id: 'legacy-upload', status: 'RETRY', blob: new Blob(['queued']) },
+    { id: 'legacy-source', status: 'RETRY', blob: null },
+    { id: 'terminal', status: 'FAILED', lastFailureStage: 'UPLOAD' },
+  ];
+
+  assert.deepEqual(selectConnectivityRetryJobIds(jobs, 'successful'), [
+    'server',
+    'upload',
+    'commit',
+    'legacy-upload',
+  ]);
 });
 
 test('bounds completed history without ever pruning pending or failed work', () => {

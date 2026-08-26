@@ -1,4 +1,22 @@
 const TOAST_ID = 'sekereagle-capture-toast';
+const MAX_BROWSER_COPY_BYTES = 16 * 1024 * 1024;
+const BROWSER_COPY_MIME_TYPES = new Set([
+  'image/avif',
+  'image/gif',
+  'image/heic',
+  'image/heif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]);
+let feedbackAudioContext = null;
+
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type !== 'capture:result') return;
+  const succeeded = message.status === 'COMPLETED';
+  showToast(message.message, !succeeded, 5_000);
+  void playFeedbackSound(succeeded ? 'success' : 'failure').catch(() => {});
+});
 
 void import(chrome.runtime.getURL('src/capture-interaction.js'))
   .then(({ createAltRightClickTracker, resolveCaptureTarget }) => {
@@ -18,48 +36,132 @@ function installCaptureInteraction({ createAltRightClickTracker, resolveCaptureT
     if (!tracker.matches(event)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    prepareFeedbackSound();
 
     const point = { x: Number(event.clientX), y: Number(event.clientY) };
     if (isDuplicateGesture(lastHandled, point)) return;
     lastHandled = { ...point, at: Date.now() };
     tracker.clear();
 
+    const path = event.composedPath?.() || [event.target];
+    const elementsAtPoint = collectElementsAtPoint(point.x, point.y);
     const target = resolveCaptureTarget({
-      path: event.composedPath?.() || [event.target],
-      elementsAtPoint: collectElementsAtPoint(point.x, point.y),
+      path,
+      elementsAtPoint,
       baseUrl: location.href,
-      getStyle: (element) => window.getComputedStyle(element),
+      getStyle: (element, pseudo) => window.getComputedStyle(element, pseudo),
       matchesMedia: (query) => window.matchMedia(query).matches,
     });
-    if (!target) {
-      showToast('这里没有检测到可采集的图片', true);
-      return;
-    }
-
-    showToast('正在加入 SekerEagle 队列…');
-    chrome.runtime.sendMessage(
-      {
-        type: 'capture:enqueue',
-        payload: {
-          ...target,
-          pageUrl: location.href,
-          pageTitle: document.title,
-        },
-      },
-      (response) => {
-        if (chrome.runtime.lastError) {
-          showToast('SekerEagle 插件暂时无法响应', true);
-          return;
-        }
-        showToast(
-          response?.ok
-            ? `已加入 SekerEagle 队列 · ${response.pendingCount}`
-            : response?.error || '图片加入队列失败',
-          !response?.ok,
-        );
-      },
+    const captureElement = selectCaptureElement(path, elementsAtPoint);
+    const captureRect = captureRectangle(captureElement, point);
+    showToast(target ? '正在读取图片并加入队列…' : '正在截取可见内容并加入队列…');
+    void enqueueCapture(target, captureRect).catch(() =>
+      showToast('图片读取失败，请重新加载扩展后再试', true),
     );
   }
+}
+
+async function enqueueCapture(target, captureRect) {
+  const browserCopy = await prepareBrowserCopy(target);
+  document.getElementById(TOAST_ID)?.remove();
+  chrome.runtime.sendMessage(
+    {
+      type: 'capture:enqueue',
+      payload: {
+        ...(target || { sourceUrl: null, sourceCandidates: [], altText: '' }),
+        browserCopy,
+        captureRect,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        pageUrl: location.href,
+        pageTitle: document.title,
+      },
+    },
+    (response) => {
+      if (chrome.runtime.lastError) {
+        showToast('SekerEagle 插件暂时无法响应', true);
+        return;
+      }
+      showToast(
+        response?.ok
+          ? `已加入 SekerEagle 队列 · ${response.pendingCount}`
+          : response?.error || '图片加入队列失败',
+        !response?.ok,
+      );
+    },
+  );
+}
+
+async function prepareBrowserCopy(target) {
+  if (!target) return null;
+  for (const sourceUrl of target.sourceCandidates || []) {
+    let url;
+    try {
+      url = new URL(sourceUrl, location.href);
+    } catch {
+      continue;
+    }
+    const canReadInPage = url.protocol === 'blob:' || url.origin === location.origin;
+    if (!canReadInPage) continue;
+    try {
+      const response = await fetch(url.href, { credentials: 'include', cache: 'no-store' });
+      if (!response.ok) continue;
+      const declaredSize = Number(response.headers.get('content-length') || 0);
+      if (declaredSize > MAX_BROWSER_COPY_BYTES) continue;
+      const blob = await response.blob();
+      const mimeType = String(blob.type || '').split(';', 1)[0].toLowerCase();
+      if (
+        !blob.size ||
+        blob.size > MAX_BROWSER_COPY_BYTES ||
+        !BROWSER_COPY_MIME_TYPES.has(mimeType)
+      ) {
+        continue;
+      }
+      return {
+        dataUrl: await blobToDataUrl(blob),
+        mimeType,
+        size: blob.size,
+        originalUrl: url.href,
+      };
+    } catch {
+      // The background downloader and screenshot remain available as fallbacks.
+    }
+  }
+  return null;
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('无法读取图片内容。'));
+    reader.readAsDataURL(blob);
+  });
+}
+
+function selectCaptureElement(path, elementsAtPoint) {
+  const elements = [...new Set([...path, ...elementsAtPoint])];
+  return (
+    elements.find((element) => ['CANVAS', 'IMG', 'SVG', 'VIDEO'].includes(element?.tagName)) ||
+    elements.find((element) => typeof element?.getBoundingClientRect === 'function') ||
+    null
+  );
+}
+
+function captureRectangle(element, point) {
+  const rectangle = element?.getBoundingClientRect?.();
+  if (!rectangle || rectangle.width <= 0 || rectangle.height <= 0) {
+    return { x: point.x - 1, y: point.y - 1, width: 2, height: 2 };
+  }
+  const left = Math.max(0, rectangle.left);
+  const top = Math.max(0, rectangle.top);
+  const right = Math.min(window.innerWidth, rectangle.right);
+  const bottom = Math.min(window.innerHeight, rectangle.bottom);
+  return {
+    x: left,
+    y: top,
+    width: Math.max(1, right - left),
+    height: Math.max(1, bottom - top),
+  };
 }
 
 function collectElementsAtPoint(x, y, root = document, visited = new WeakSet()) {
@@ -84,7 +186,7 @@ function isDuplicateGesture(previous, point) {
   );
 }
 
-function showToast(message, error = false) {
+function showToast(message, error = false, duration = 2_400) {
   document.getElementById(TOAST_ID)?.remove();
   const toast = document.createElement('div');
   toast.id = TOAST_ID;
@@ -103,5 +205,37 @@ function showToast(message, error = false) {
     font: '13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
   });
   document.documentElement.append(toast);
-  window.setTimeout(() => toast.remove(), 2_400);
+  window.setTimeout(() => toast.remove(), duration);
+}
+
+function prepareFeedbackSound() {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+  feedbackAudioContext ??= new AudioContext();
+  if (feedbackAudioContext.state === 'suspended') {
+    void feedbackAudioContext.resume().catch(() => {});
+  }
+}
+
+async function playFeedbackSound(kind) {
+  prepareFeedbackSound();
+  const context = feedbackAudioContext;
+  if (!context) return;
+  if (context.state === 'suspended') await context.resume();
+
+  const notes = kind === 'success' ? [659, 880] : [330, 220];
+  const start = context.currentTime;
+  notes.forEach((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    const noteStart = start + index * 0.14;
+    oscillator.type = kind === 'success' ? 'sine' : 'triangle';
+    oscillator.frequency.setValueAtTime(frequency, noteStart);
+    gain.gain.setValueAtTime(0.0001, noteStart);
+    gain.gain.exponentialRampToValueAtTime(0.16, noteStart + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, noteStart + 0.18);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(noteStart);
+    oscillator.stop(noteStart + 0.2);
+  });
 }

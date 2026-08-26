@@ -1,5 +1,6 @@
 const HASH_LIKE_NAME = /^[a-f0-9_-]{12,}$/i;
 const MIME_EXTENSIONS = new Map([
+  ['image/avif', '.avif'],
   ['image/jpeg', '.jpg'],
   ['image/png', '.png'],
   ['image/webp', '.webp'],

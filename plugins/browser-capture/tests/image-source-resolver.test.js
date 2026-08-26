@@ -82,3 +82,51 @@ test('accepts a pathless direct link only when the anchor explicitly declares an
     'https://cdn.example.com/download?id=1',
   );
 });
+
+test('recognizes video posters, SVG image references and lazy responsive attributes', () => {
+  assert.deepEqual(
+    resolveImageSourceTarget(
+      { tagName: 'VIDEO', poster: '/poster.avif', getAttribute: () => null },
+      'https://example.com/watch',
+    ),
+    {
+      sourceUrl: 'https://example.com/poster.avif',
+      sourceCandidates: ['https://example.com/poster.avif'],
+      altText: '',
+    },
+  );
+  assert.deepEqual(
+    resolveImageSourceTarget(
+      {
+        tagName: 'image',
+        href: { baseVal: '/artwork.png' },
+        getAttribute: () => null,
+      },
+      'https://example.com/vector.svg',
+    ),
+    {
+      sourceUrl: 'https://example.com/artwork.png',
+      sourceCandidates: ['https://example.com/artwork.png'],
+      altText: '',
+    },
+  );
+  const lazyImage = {
+    tagName: 'IMG',
+    currentSrc: '/small.jpg',
+    alt: 'Lazy image',
+    getAttribute: (name) =>
+      name === 'data-lazy-srcset' ? '/large.avif 2000w, /medium.webp 1000w' : null,
+  };
+  assert.deepEqual(
+    resolveImageSourceTarget(lazyImage, 'https://example.com/gallery'),
+    {
+      sourceUrl: 'https://example.com/large.avif',
+      sourceCandidates: [
+        'https://example.com/large.avif',
+        'https://example.com/medium.webp',
+        'https://example.com/small.jpg',
+      ],
+      altText: 'Lazy image',
+    },
+  );
+});
