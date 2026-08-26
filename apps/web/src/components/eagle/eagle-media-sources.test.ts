@@ -4,7 +4,6 @@ import {
   createEagleTileSource,
   createEaglePreviewTileSource,
   getEaglePreviewContentUrl,
-  getEagleThumbnailSourceSet,
   needsEagleImagePyramid,
 } from './eagle-media-sources';
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
@@ -84,21 +83,5 @@ describe('Eagle media sources', () => {
     expect(needsEagleImagePyramid(4_097, 1)).toBe(true);
     expect(needsEagleImagePyramid(4_000, 4_001)).toBe(true);
     expect(needsEagleImagePyramid(null, 8_000)).toBe(false);
-  });
-
-  it('builds responsive thumbnail candidates in ascending width order', () => {
-    const responsiveAsset = {
-      ...asset,
-      renditions: [
-        { id: 'large', kind: 'THUMBNAIL', revision: 3, width: 512 },
-        { id: 'small', kind: 'THUMBNAIL', revision: 3, width: 256 },
-      ],
-    } as EagleAssetListItem;
-
-    expect(getEagleThumbnailSourceSet(responsiveAsset)).toEqual({
-      src: '/api/eagle/assets/asset-1/renditions/small',
-      srcSet:
-        '/api/eagle/assets/asset-1/renditions/small 256w, /api/eagle/assets/asset-1/renditions/large 512w',
-    });
   });
 });

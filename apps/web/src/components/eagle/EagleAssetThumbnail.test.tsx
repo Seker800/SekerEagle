@@ -2,7 +2,7 @@ import { act, fireEvent, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
-import { EagleAssetThumbnail } from './EagleAssetThumbnail';
+import { EagleAssetThumbnail, getEagleAssetThumbnailUrls } from './EagleAssetThumbnail';
 
 const videoAsset: EagleAssetListItem = {
   id: 'video-1',
@@ -59,6 +59,25 @@ afterEach(() => {
 });
 
 describe('EagleAssetThumbnail', () => {
+  it('selects one current rendition for the target pixel width', () => {
+    const asset = {
+      ...imageAsset,
+      mediaRevision: 2,
+      renditions: [
+        { ...imageAsset.renditions[0], id: 'old', revision: 1, width: 256 },
+        { ...imageAsset.renditions[0], id: 'small', revision: 2, width: 256 },
+        { ...imageAsset.renditions[0], id: 'large', revision: 2, width: 512 },
+      ],
+    };
+
+    expect(getEagleAssetThumbnailUrls(asset, 400)).toEqual([
+      '/api/eagle/assets/image-1/renditions/large',
+    ]);
+    expect(getEagleAssetThumbnailUrls(asset, 200)).toEqual([
+      '/api/eagle/assets/image-1/renditions/small',
+    ]);
+  });
+
   it('retries a stalled thumbnail instead of occupying a scheduler slot forever', async () => {
     vi.useFakeTimers();
     const { container } = render(

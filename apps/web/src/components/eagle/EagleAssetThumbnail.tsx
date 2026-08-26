@@ -7,7 +7,6 @@ import {
 } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
-import { getEagleThumbnailSourceSet } from './eagle-media-sources';
 
 const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
 const RETRY_BASE_DELAY_MS = 500;
@@ -25,20 +24,22 @@ function retryDelayMs(assetId: string, attempt: number): number {
   );
 }
 
-export function getEagleAssetThumbnailUrls(asset: EagleAssetListItem): string[] {
-  return [
-    ...new Set(
-      RENDITION_PRIORITY.flatMap((kind) =>
-        asset.renditions
-          .filter((rendition) => rendition.kind === kind)
-          .sort(
-            (left, right) =>
-              (left.width ?? Number.MAX_SAFE_INTEGER) - (right.width ?? Number.MAX_SAFE_INTEGER),
-          )
-          .map((rendition) => getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind)),
-      ),
-    ),
-  ];
+export function getEagleAssetThumbnailUrls(
+  asset: EagleAssetListItem,
+  targetPixelWidth: number,
+): string[] {
+  return RENDITION_PRIORITY.flatMap((kind) => {
+    const candidates = asset.renditions
+      .filter((rendition) => rendition.kind === kind && rendition.revision === asset.mediaRevision)
+      .sort(
+        (left, right) =>
+          (left.width ?? Number.MAX_SAFE_INTEGER) - (right.width ?? Number.MAX_SAFE_INTEGER),
+      );
+    const selected =
+      candidates.find((rendition) => (rendition.width ?? 0) >= targetPixelWidth) ??
+      candidates.at(-1);
+    return selected ? [getEagleRenditionContentUrl(asset.id, selected.id, selected.kind)] : [];
+  });
 }
 
 export function EagleAssetThumbnail({
@@ -54,8 +55,14 @@ export function EagleAssetThumbnail({
   displayWidth: number;
   alt?: string;
 }) {
-  const urls = useMemo(() => getEagleAssetThumbnailUrls(asset), [asset]);
-  const responsiveSource = useMemo(() => getEagleThumbnailSourceSet(asset), [asset]);
+  const targetPixelWidth = Math.max(
+    1,
+    Math.ceil(displayWidth * (globalThis.devicePixelRatio || 1)),
+  );
+  const urls = useMemo(
+    () => getEagleAssetThumbnailUrls(asset, targetPixelWidth),
+    [asset, targetPixelWidth],
+  );
   const sourceKey = urls.join('\u0000');
   const [attempt, setAttempt] = useState(0);
   const [activeSource, setActiveSource] = useState<string | null>(null);
@@ -200,8 +207,6 @@ export function EagleAssetThumbnail({
     thumbnailContent = (
       <img
         src={activeSource}
-        srcSet={responsiveSource?.src === activeSource ? responsiveSource.srcSet : undefined}
-        sizes={`${Math.max(1, Math.round(displayWidth))}px`}
         alt={alt}
         draggable={false}
         onLoad={handleLoad}

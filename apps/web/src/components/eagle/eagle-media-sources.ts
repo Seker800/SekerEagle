@@ -18,28 +18,6 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
   return selected ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind) : null;
 }
 
-export function getEagleThumbnailSourceSet(asset: EagleAssetListItem) {
-  const candidates = asset.renditions
-    .filter(
-      (rendition) =>
-        rendition.kind === 'THUMBNAIL' &&
-        rendition.revision === asset.mediaRevision &&
-        rendition.width,
-    )
-    .sort((left, right) => left.width! - right.width!);
-  const first = candidates[0];
-  if (!first) return null;
-  return {
-    src: getEagleRenditionContentUrl(asset.id, first.id, first.kind),
-    srcSet: candidates
-      .map(
-        (rendition) =>
-          `${getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind)} ${rendition.width}w`,
-      )
-      .join(', '),
-  };
-}
-
 export function createEagleTileSource(descriptor: EaglePyramidDescriptor) {
   return {
     width: descriptor.width,
