@@ -35,14 +35,16 @@ describe('MediaCacheController', () => {
     const controller = createController(engine, fetchUpstream, () => now);
 
     const first = await controller.resolve(mediaUrl);
-    expect(first.source).toBe('cache');
-    if (first.source !== 'cache') throw new Error('expected cache response');
-    expect(await readFile(first.filePath, 'utf8')).toBe('cached-image');
-    engine.release(first.leaseId);
+    expect(first.source).toBe('upstream');
+    if (first.source !== 'upstream') throw new Error('expected stream-through response');
+    expect(await first.response.text()).toBe('cached-image');
 
     const second = await controller.resolve(mediaUrl);
     expect(second.source).toBe('cache');
-    if (second.source === 'cache') engine.release(second.leaseId);
+    if (second.source === 'cache') {
+      expect(await readFile(second.filePath, 'utf8')).toBe('cached-image');
+      engine.release(second.leaseId);
+    }
     expect(fetchUpstream).toHaveBeenCalledTimes(1);
   });
 
@@ -63,8 +65,9 @@ describe('MediaCacheController', () => {
     const results = await Promise.all([first, second]);
 
     expect(fetchUpstream).toHaveBeenCalledTimes(1);
+    expect(results.map(({ source }) => source).sort()).toEqual(['cache', 'upstream']);
     for (const result of results) {
-      expect(result.source).toBe('cache');
+      if (result.source === 'upstream') expect(await result.response.text()).toBe('one-download');
       if (result.source === 'cache') engine.release(result.leaseId);
     }
   });
@@ -115,7 +118,9 @@ describe('MediaCacheController', () => {
       );
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
-    if (first.source === 'cache') engine.release(first.leaseId);
+    if (first.source === 'upstream') await first.response.text();
+    const populated = await controller.resolve(mediaUrl);
+    if (populated.source === 'cache') engine.release(populated.leaseId);
     now += 5 * 60_000 + 1;
 
     const second = await controller.resolve(mediaUrl);
@@ -173,7 +178,9 @@ describe('MediaCacheController', () => {
       );
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
-    if (first.source === 'cache') engine.release(first.leaseId);
+    if (first.source === 'upstream') await first.response.text();
+    const populated = await controller.resolve(mediaUrl);
+    if (populated.source === 'cache') engine.release(populated.leaseId);
     now += 5 * 60_000 + 1;
 
     const result = await controller.resolve(mediaUrl);
@@ -191,7 +198,9 @@ describe('MediaCacheController', () => {
         .mockResolvedValueOnce(new Response('try-later', { status }));
       const controller = createController(engine, fetchUpstream, () => now);
       const first = await controller.resolve(mediaUrl);
-      if (first.source === 'cache') engine.release(first.leaseId);
+      if (first.source === 'upstream') await first.response.text();
+      const populated = await controller.resolve(mediaUrl);
+      if (populated.source === 'cache') engine.release(populated.leaseId);
       now += 5 * 60_000 + 1;
 
       const result = await controller.resolve(mediaUrl);
@@ -204,12 +213,15 @@ describe('MediaCacheController', () => {
   it('retries upstream without cache when a streaming cache write fails', async () => {
     const fetchUpstream = vi.fn(async () => eligibleResponse('network-fallback'));
     vi.spyOn(engine, 'append').mockRejectedValueOnce(new Error('disk full'));
+    const abortWrite = vi.spyOn(engine, 'abort');
     const controller = createController(engine, fetchUpstream, () => now);
 
     const result = await controller.resolve(mediaUrl);
 
     expect(result.source).toBe('upstream');
-    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    if (result.source === 'upstream') expect(await result.response.text()).toBe('network-fallback');
+    await vi.waitFor(() => expect(abortWrite).toHaveBeenCalledTimes(1));
+    expect(fetchUpstream).toHaveBeenCalledTimes(1);
     expect(engine.getStats().entryCount).toBe(0);
   });
 

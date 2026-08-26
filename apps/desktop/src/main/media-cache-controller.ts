@@ -78,7 +78,7 @@ export class MediaCacheController {
     options: { ifNoneMatch?: string },
   ) => Promise<Response>;
   private readonly now: () => number;
-  private readonly populating = new Map<string, Promise<Response | null>>();
+  private readonly populating = new Map<string, Promise<void>>();
 
   constructor(options: {
     serverUrl: string;
@@ -142,18 +142,36 @@ export class MediaCacheController {
       return this.resolveMiss(media, keyHash, namespaceId);
     }
 
-    const populate = this.fetchAndPopulate(media, keyHash, namespaceId);
+    let resolveClient!: (response: Response) => void;
+    let rejectClient!: (error: unknown) => void;
+    const clientResponse = new Promise<Response>((resolve, reject) => {
+      resolveClient = resolve;
+      rejectClient = reject;
+    });
+    const populate = this.fetchUpstream(upstreamPath(media), {})
+      .then(async (response) => {
+        if (!isCacheable(response, media) || !response.body) {
+          resolveClient(response);
+          return;
+        }
+        const [clientBody, cacheBody] = response.body.tee();
+        resolveClient(responseWithBody(response, clientBody));
+        const result = await this.populateResponse(
+          media,
+          keyHash,
+          namespaceId,
+          responseWithBody(response, cacheBody),
+        );
+        if (result.source === 'cache') await this.cache.release(result.leaseId);
+      })
+      .catch((error: unknown) => {
+        rejectClient(error);
+      })
+      .finally(() => {
+        this.populating.delete(keyHex);
+      });
     this.populating.set(keyHex, populate);
-    try {
-      const upstream = await populate;
-      if (upstream) return { source: 'upstream', response: upstream };
-      const hit = await this.cache.acquire(keyHash, namespaceId, this.now());
-      return hit
-        ? cacheResolution(hit)
-        : { source: 'error', status: 502, message: '缓存提交后不可用。' };
-    } finally {
-      this.populating.delete(keyHex);
-    }
+    return { source: 'upstream', response: await clientResponse };
   }
 
   private async revalidate(
@@ -185,18 +203,6 @@ export class MediaCacheController {
     await this.cache.invalidate(keyHash);
     if (!isCacheable(response, media)) return { source: 'upstream', response };
     return this.populateResponse(media, keyHash, namespaceId, response);
-  }
-
-  private async fetchAndPopulate(
-    media: DesktopMediaIdentity,
-    keyHash: Buffer,
-    namespaceId: string,
-  ): Promise<Response | null> {
-    const response = await this.fetchUpstream(upstreamPath(media), {});
-    if (!isCacheable(response, media)) return response;
-    const result = await this.populateResponse(media, keyHash, namespaceId, response);
-    if (result.source === 'cache') await this.cache.release(result.leaseId);
-    return result.source === 'upstream' ? result.response : null;
   }
 
   private async populateResponse(
@@ -254,6 +260,14 @@ export class MediaCacheController {
 
 function isTransientRevalidationFailure(status: number): boolean {
   return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+function responseWithBody(response: Response, body: ReadableStream<Uint8Array>): Response {
+  return new Response(body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
 }
 
 function upstreamPath(media: DesktopMediaIdentity): string {
