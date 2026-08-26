@@ -166,6 +166,7 @@ async function selectAssetAndOpenInspector() {
 describe('SekerEaglePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
     window.localStorage.clear();
     intersectionCallback = null;
     vi.stubGlobal(
@@ -1199,6 +1200,57 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(thirdCard);
     expect(screen.getByRole('menu', { name: '素材操作' })).toHaveTextContent('已选择 3 项');
     expect(screen.queryByRole('button', { name: '进入多选' })).not.toBeInTheDocument();
+  });
+
+  it('drags selected originals through the desktop bridge and preserves browser behavior', async () => {
+    const startAssetDrag = vi.fn().mockResolvedValue(undefined);
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      startAssetDrag,
+    };
+    const secondAsset = {
+      ...asset,
+      id: 'asset-2',
+      originalName: 'second.png',
+      displayName: 'Second Asset',
+    };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    expect(firstCard).toHaveAttribute('draggable', 'true');
+    fireEvent.click(firstCard);
+    fireEvent.click(secondCard, { ctrlKey: true });
+
+    fireEvent.dragStart(secondCard);
+
+    expect(startAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']);
+    expect(firstCard).toHaveAttribute('aria-pressed', 'true');
+    expect(secondCard).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByRole('status')).toHaveTextContent('正在准备 2 个原文件');
+  });
+
+  it('replaces a previous selection when dragging an unselected desktop card', async () => {
+    const startAssetDrag = vi.fn().mockResolvedValue(undefined);
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      startAssetDrag,
+    };
+    const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, secondAsset], nextCursor: null });
+    renderPage();
+
+    const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
+    const secondCard = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(firstCard);
+    fireEvent.dragStart(secondCard);
+
+    expect(startAssetDrag).toHaveBeenCalledWith(['asset-2']);
+    await waitFor(() => expect(firstCard).toHaveAttribute('aria-pressed', 'false'));
+    expect(secondCard).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('exits batch selection with Escape', async () => {
