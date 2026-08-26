@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { copyFile, readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { desktopCacheRoot } from './cache-location';
@@ -8,6 +8,7 @@ import {
   app,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   nativeImage,
   powerMonitor,
@@ -152,6 +153,7 @@ if (hasSingleInstanceLock)
     });
     await originalDragExporter.cleanupExpired().catch(() => undefined);
     clearPreparedOriginalDrags = registerOriginalDragIpc(owner, originalDragExporter);
+    registerOriginalFileSaveIpc(owner, originalDragExporter);
     ipcMain.on('desktop:network-online', (event) => {
       try {
         assertTrustedIpcSender(event);
@@ -511,6 +513,62 @@ function registerOriginalDragIpc(
       void exporter.remove(entry.prepared).catch(() => undefined);
     }
   };
+}
+
+function registerOriginalFileSaveIpc(
+  owner: AuthenticatedOwner,
+  exporter: OriginalDragExporter,
+): void {
+  let saveInFlight = false;
+  ipcMain.handle('desktop:save-original-file', async (event, input: unknown) => {
+    assertTrustedIpcSender(event);
+    if (saveInFlight) throw new Error('已有原文件正在另存，请稍候。');
+    saveInFlight = true;
+    const saveServerUrl = serverUrl;
+    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
+    try {
+      const [assetId] = parseAssetDragInput([input]);
+      const identity = await owner.get();
+      if (!identity) throw new Error('需要重新登录。');
+      prepared = await exporter.prepare(
+        buildNamespaceId(saveServerUrl, identity.ownerId, identity.deploymentId),
+        [assetId],
+      );
+      await assertOriginalAccessStillCurrent(event, owner, saveServerUrl, identity);
+      const window = BrowserWindow.fromWebContents(event.sender);
+      if (!window) throw new Error('桌面窗口不可用。');
+      const result = await dialog.showSaveDialog(window, {
+        title: '另存原文件',
+        buttonLabel: '保存',
+        defaultPath: path.join(app.getPath('downloads'), path.basename(prepared.files[0])),
+      });
+      if (result.canceled || !result.filePath) return { saved: false };
+      await assertOriginalAccessStillCurrent(event, owner, saveServerUrl, identity);
+      await copyFile(prepared.files[0], result.filePath);
+      return { saved: true };
+    } finally {
+      if (prepared) await exporter.remove(prepared).catch(() => undefined);
+      saveInFlight = false;
+    }
+  });
+}
+
+async function assertOriginalAccessStillCurrent(
+  event: IpcMainInvokeEvent,
+  owner: AuthenticatedOwner,
+  expectedServerUrl: string,
+  identity: { ownerId: string; deploymentId: string },
+): Promise<void> {
+  const currentIdentity = await owner.get();
+  if (
+    expectedServerUrl !== serverUrl ||
+    !currentIdentity ||
+    currentIdentity.ownerId !== identity.ownerId ||
+    currentIdentity.deploymentId !== identity.deploymentId
+  ) {
+    throw new Error('账号或服务器已切换，请重新另存素材。');
+  }
+  assertTrustedIpcSender(event);
 }
 
 function currentConnectionService(): DesktopConnectionService {

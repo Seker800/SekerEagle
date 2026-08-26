@@ -144,7 +144,7 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain('dialog.showSaveDialog');
     expect(main).toContain('copyFile(prepared.files[0], result.filePath)');
     expect(main).toContain('currentIdentity.ownerId !== identity.ownerId');
-    expect(preload).toContain("ipcRenderer.invoke('desktop:save-original-file'");
+    expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:save-original-file'/u);
     expect(preload).toContain('parseAssetDragInput([assetId])');
   });
 });

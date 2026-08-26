@@ -133,6 +133,26 @@ describe('EagleImageViewer', () => {
     expect(screen.queryByRole('menuitem', { name: '另存为…' })).not.toBeInTheDocument();
   });
 
+  it('keeps Save As failures visible and recoverable', async () => {
+    const saveOriginalFile = vi.fn().mockRejectedValue(new Error('save denied'));
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      saveOriginalFile,
+    };
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
+
+    expect(await screen.findByRole('alert', { name: '原文件另存状态' })).toHaveTextContent(
+      '另存失败',
+    );
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    expect(screen.getByRole('menuitem', { name: '另存为…' })).toBeEnabled();
+  });
+
   it('restores image copy through the viewer context menu', async () => {
     vi.mocked(copyImageToClipboard).mockResolvedValue();
     render(<EagleImageViewer image={image} onClose={vi.fn()} />);

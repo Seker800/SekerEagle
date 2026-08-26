@@ -49,6 +49,12 @@ drags use the operating system's normal-sized icon for the prepared original ins
 large artwork. This two-step fallback avoids incomplete files and avoids starting a native drag
 after the mouse button has already been released.
 
+The image viewer's context menu also provides **Save As…** in the desktop client. It downloads the
+same authenticated, exact-byte original into the isolated temporary export area, opens the native
+operating-system save dialog with the server-provided filename, and removes the temporary copy
+after saving or canceling. The renderer passes only one validated asset ID; local source and
+destination paths never cross the renderer bridge.
+
 ## Packaging
 
 Run `npm run package:mac --workspace @sekereagle/desktop` for arm64 and x64 development DMG/ZIP artifacts. Run `npm run package:win --workspace @sekereagle/desktop` on a native Windows x64 runner for the internal unsigned NSIS artifact. The repository workflow exposes both targets manually.

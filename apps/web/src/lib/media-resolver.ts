@@ -36,6 +36,7 @@ export interface SekerDesktopBridge {
   openConnectionManager?(): Promise<void>;
   prepareAssetDrag?(assetIds: string[]): Promise<{ token: string }>;
   startPreparedAssetDrag?(token: string): void;
+  saveOriginalFile?(assetId: string): Promise<{ saved: boolean }>;
 }
 
 export interface DesktopConnectionStatus {
@@ -63,10 +64,19 @@ export type DesktopCacheBridge = Required<
 
 export type DesktopClipboardBridge = Required<Pick<SekerDesktopBridge, 'writeClipboardImage'>>;
 
+export type DesktopOriginalFileBridge = Required<Pick<SekerDesktopBridge, 'saveOriginalFile'>>;
+
 export function getDesktopClipboardBridge(): DesktopClipboardBridge | null {
   const bridge = desktopBridge();
   return bridge && typeof bridge.writeClipboardImage === 'function'
     ? (bridge as SekerDesktopBridge & DesktopClipboardBridge)
+    : null;
+}
+
+export function getDesktopOriginalFileBridge(): DesktopOriginalFileBridge | null {
+  const bridge = desktopBridge();
+  return bridge && typeof bridge.saveOriginalFile === 'function'
+    ? (bridge as SekerDesktopBridge & DesktopOriginalFileBridge)
     : null;
 }
 

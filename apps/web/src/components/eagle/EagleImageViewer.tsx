@@ -1,13 +1,15 @@
-import { IconCopy, IconRefresh } from '@tabler/icons-react';
+import { IconCopy, IconDownload, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { copyImageToClipboard } from '../../lib/image-clipboard';
+import { getDesktopOriginalFileBridge } from '../../lib/media-resolver';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import styles from './EagleImageViewer.module.css';
 
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type CopyStatus = 'idle' | 'copying' | 'success' | 'error';
+type SaveStatus = 'idle' | 'saving' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = { x: number; y: number };
 
@@ -133,6 +135,7 @@ export function EagleImageViewer({
   const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<ViewerStatus>('loading');
   const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
@@ -312,6 +315,20 @@ export function EagleImageViewer({
     }
   };
 
+  const originalFileBridge = getDesktopOriginalFileBridge();
+  const saveOriginalFile = async () => {
+    if (saveStatus === 'saving' || !image.assetId || !originalFileBridge) return;
+    setSaveStatus('saving');
+    try {
+      await originalFileBridge.saveOriginalFile(image.assetId);
+      setContextMenu(null);
+      setSaveStatus('idle');
+    } catch {
+      setContextMenu(null);
+      setSaveStatus('error');
+    }
+  };
+
   return (
     <div className={styles.backdrop} role="presentation" onClick={onClose}>
       <section
@@ -327,9 +344,10 @@ export function EagleImageViewer({
             event.preventDefault();
             event.stopPropagation();
             setCopyStatus('idle');
+            setSaveStatus('idle');
             setContextMenu({
               x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
-              y: Math.max(8, Math.min(event.clientY, window.innerHeight - 52)),
+              y: Math.max(8, Math.min(event.clientY, window.innerHeight - 92)),
             });
           }}
         >
@@ -364,11 +382,16 @@ export function EagleImageViewer({
               {copyStatus === 'success' ? '图片已复制' : '复制失败，请重试'}
             </div>
           ) : null}
+          {saveStatus === 'error' ? (
+            <div className={styles.copyNotice} role="alert" aria-label="原文件另存状态">
+              另存失败，请重试
+            </div>
+          ) : null}
         </div>
         <footer>
           <strong>{image.alt}</strong>
           <span>
-            滚轮缩放 · 拖拽移动 · 右键复制 · {descriptor ? '按需加载高清切片' : '优化预览'}
+            滚轮缩放 · 拖拽移动 · 右键操作 · {descriptor ? '按需加载高清切片' : '优化预览'}
           </span>
           <button type="button" onClick={onClose}>
             关闭
@@ -384,6 +407,17 @@ export function EagleImageViewer({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
+          {image.assetId && originalFileBridge ? (
+            <button
+              type="button"
+              role="menuitem"
+              disabled={saveStatus === 'saving'}
+              onClick={() => void saveOriginalFile()}
+            >
+              <IconDownload size={16} />
+              {saveStatus === 'saving' ? '正在准备…' : '另存为…'}
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"

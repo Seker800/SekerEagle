@@ -71,4 +71,20 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   startPreparedAssetDrag(token: unknown) {
     ipcRenderer.send('desktop:start-prepared-asset-drag', parsePreparedDragToken(token));
   },
+  async saveOriginalFile(assetId: unknown): Promise<{ saved: boolean }> {
+    const [validatedAssetId] = parseAssetDragInput([assetId]);
+    const result: unknown = await ipcRenderer.invoke(
+      'desktop:save-original-file',
+      validatedAssetId,
+    );
+    if (
+      !result ||
+      typeof result !== 'object' ||
+      !('saved' in result) ||
+      typeof result.saved !== 'boolean'
+    ) {
+      throw new Error('原文件另存结果无效。');
+    }
+    return { saved: result.saved };
+  },
 });
