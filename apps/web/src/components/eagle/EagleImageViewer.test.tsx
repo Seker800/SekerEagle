@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { copyImageToClipboard } from '../../lib/image-clipboard';
+import type { SekerDesktopBridge } from '../../lib/media-resolver';
 import { EagleImageViewer } from './EagleImageViewer';
 
 const {
@@ -104,6 +105,32 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
+    delete (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop;
+  });
+
+  it('offers native Save As for the exact original in the desktop app', async () => {
+    const saveOriginalFile = vi.fn().mockResolvedValue({ saved: true });
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      saveOriginalFile,
+    };
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
+
+    await waitFor(() => expect(saveOriginalFile).toHaveBeenCalledWith(image.assetId));
+  });
+
+  it('does not offer Save As without a native original-file capability', async () => {
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+
+    expect(screen.queryByRole('menuitem', { name: '另存为…' })).not.toBeInTheDocument();
   });
 
   it('restores image copy through the viewer context menu', async () => {

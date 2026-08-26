@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getDesktopClipboardBridge,
+  getDesktopOriginalFileBridge,
   resolveClipboardImageUrl,
   resolveEagleMediaPath,
   resolveEagleRenditionUrl,
@@ -62,6 +63,17 @@ describe('media resolver', () => {
     };
 
     expect(getDesktopClipboardBridge()?.writeClipboardImage).toBe(writeClipboardImage);
+  });
+
+  it('exposes original-file saving only when the desktop bridge implements it', () => {
+    const saveOriginalFile = vi.fn().mockResolvedValue({ saved: true });
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      saveOriginalFile,
+    };
+
+    expect(getDesktopOriginalFileBridge()?.saveOriginalFile).toBe(saveOriginalFile);
   });
 
   it('never transports originals, arbitrary URLs, or malformed media identities through desktop', () => {

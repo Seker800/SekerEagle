@@ -130,4 +130,21 @@ describe('desktop server and navigation security', () => {
     expect(preload).toContain("ipcRenderer.send('desktop:start-prepared-asset-drag'");
     expect(preload).not.toContain('filePath');
   });
+
+  it('saves one authenticated original only through a native Save As dialog', async () => {
+    const [main, preload] = await Promise.all([
+      readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
+      readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
+    ]);
+    expect(main).toContain("ipcMain.handle('desktop:save-original-file'");
+    expect(main).toMatch(
+      /desktop:save-original-file'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
+    );
+    expect(main).toContain('parseAssetDragInput([input])');
+    expect(main).toContain('dialog.showSaveDialog');
+    expect(main).toContain('copyFile(prepared.files[0], result.filePath)');
+    expect(main).toContain('currentIdentity.ownerId !== identity.ownerId');
+    expect(preload).toContain("ipcRenderer.invoke('desktop:save-original-file'");
+    expect(preload).toContain('parseAssetDragInput([assetId])');
+  });
 });
