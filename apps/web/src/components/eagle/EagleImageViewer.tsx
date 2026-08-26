@@ -1,15 +1,11 @@
-import { IconCopy, IconDownload, IconRefresh } from '@tabler/icons-react';
+import { IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
-import { copyImageToClipboard } from '../../lib/image-clipboard';
-import { getDesktopOriginalFileBridge } from '../../lib/media-resolver';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import styles from './EagleImageViewer.module.css';
 
 type ViewerStatus = 'loading' | 'ready' | 'error';
-type CopyStatus = 'idle' | 'copying' | 'success' | 'error';
-type SaveStatus = 'idle' | 'saving' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = { x: number; y: number };
 
@@ -109,10 +105,12 @@ export function EagleImageViewer({
   image,
   descriptor,
   onClose,
+  onOpenAssetMenu,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
   onClose: () => void;
+  onOpenAssetMenu?: (position: { x: number; y: number }) => void;
 }) {
   const source = useMemo(
     () =>
@@ -134,9 +132,6 @@ export function EagleImageViewer({
   const lastInteractionAtRef = useRef(0);
   const schedulePendingSourceOpenRef = useRef<() => void>(() => undefined);
   const [status, setStatus] = useState<ViewerStatus>('loading');
-  const [copyStatus, setCopyStatus] = useState<CopyStatus>('idle');
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
@@ -280,17 +275,6 @@ export function EagleImageViewer({
     openPendingSource();
   }, [image.assetId, image.src, source, sourceKey]);
 
-  useEffect(() => {
-    if (!contextMenu) return undefined;
-    const dismiss = (event: PointerEvent) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest('[data-image-context-menu]')) return;
-      setContextMenu(null);
-    };
-    window.addEventListener('pointerdown', dismiss);
-    return () => window.removeEventListener('pointerdown', dismiss);
-  }, [contextMenu]);
-
   const retry = () => {
     const viewer = viewerRef.current;
     if (!viewer) {
@@ -300,33 +284,6 @@ export function EagleImageViewer({
     }
     setStatus('loading');
     viewer.open(sourceRef.current);
-  };
-
-  const copyImage = async () => {
-    if (copyStatus === 'copying') return;
-    setCopyStatus('copying');
-    try {
-      await copyImageToClipboard(image.src);
-      setContextMenu(null);
-      setCopyStatus('success');
-    } catch {
-      setContextMenu(null);
-      setCopyStatus('error');
-    }
-  };
-
-  const originalFileBridge = getDesktopOriginalFileBridge();
-  const saveOriginalFile = async () => {
-    if (saveStatus === 'saving' || !image.assetId || !originalFileBridge) return;
-    setSaveStatus('saving');
-    try {
-      await originalFileBridge.saveOriginalFile(image.assetId);
-      setContextMenu(null);
-      setSaveStatus('idle');
-    } catch {
-      setContextMenu(null);
-      setSaveStatus('error');
-    }
   };
 
   return (
@@ -343,12 +300,7 @@ export function EagleImageViewer({
           onContextMenu={(event) => {
             event.preventDefault();
             event.stopPropagation();
-            setCopyStatus('idle');
-            setSaveStatus('idle');
-            setContextMenu({
-              x: Math.max(8, Math.min(event.clientX, window.innerWidth - 180)),
-              y: Math.max(8, Math.min(event.clientY, window.innerHeight - 92)),
-            });
+            onOpenAssetMenu?.({ x: event.clientX, y: event.clientY });
           }}
         >
           <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
@@ -373,20 +325,6 @@ export function EagleImageViewer({
               )}
             </div>
           ) : null}
-          {copyStatus === 'success' || copyStatus === 'error' ? (
-            <div
-              className={styles.copyNotice}
-              role={copyStatus === 'error' ? 'alert' : 'status'}
-              aria-label="图片复制状态"
-            >
-              {copyStatus === 'success' ? '图片已复制' : '复制失败，请重试'}
-            </div>
-          ) : null}
-          {saveStatus === 'error' ? (
-            <div className={styles.copyNotice} role="alert" aria-label="原文件另存状态">
-              另存失败，请重试
-            </div>
-          ) : null}
         </div>
         <footer>
           <strong>{image.alt}</strong>
@@ -398,37 +336,6 @@ export function EagleImageViewer({
           </button>
         </footer>
       </section>
-      {contextMenu ? (
-        <div
-          className={styles.contextMenu}
-          data-image-context-menu
-          role="menu"
-          aria-label="图片操作"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          {image.assetId && originalFileBridge ? (
-            <button
-              type="button"
-              role="menuitem"
-              disabled={saveStatus === 'saving'}
-              onClick={() => void saveOriginalFile()}
-            >
-              <IconDownload size={16} />
-              {saveStatus === 'saving' ? '正在准备…' : '另存为…'}
-            </button>
-          ) : null}
-          <button
-            type="button"
-            role="menuitem"
-            disabled={copyStatus === 'copying'}
-            onClick={() => void copyImage()}
-          >
-            <IconCopy size={16} />
-            {copyStatus === 'copying' ? '正在复制…' : '复制图片'}
-          </button>
-        </div>
-      ) : null}
     </div>
   );
 }

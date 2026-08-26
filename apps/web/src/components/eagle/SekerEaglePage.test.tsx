@@ -1040,6 +1040,50 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it('keeps shared Save As failures visible and retryable', async () => {
+    const saveOriginalFile = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('save denied'))
+      .mockResolvedValueOnce({ saved: true });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      saveOriginalFile,
+    };
+    renderPage();
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '另存为…' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('另存原文件失败');
+    const retry = screen.getByRole('menuitem', { name: '另存为…' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(saveOriginalFile).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument(),
+    );
+  });
+
+  it('keeps shared image-copy failures visible and retryable', async () => {
+    copyImageToClipboardMock
+      .mockRejectedValueOnce(new Error('clipboard denied'))
+      .mockResolvedValueOnce(undefined);
+    renderPage();
+
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('复制图片失败');
+    const retry = screen.getByRole('menuitem', { name: '复制图片' });
+    expect(retry).toBeEnabled();
+    fireEvent.click(retry);
+
+    await waitFor(() => expect(copyImageToClipboardMock).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument(),
+    );
+  });
+
   it('removes selected manual tags from the asset context menu', async () => {
     const inspirationTag = {
       id: '11111111-1111-4111-8111-111111111111',

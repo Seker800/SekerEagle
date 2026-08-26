@@ -769,7 +769,7 @@
 .contextMenuDismiss {
   position: fixed;
   inset: 0;
-  z-index: 40;
+  z-index: 91;
   padding: 0;
   border: 0;
   background: transparent;
@@ -777,7 +777,7 @@
 }
 .contextMenu {
   position: fixed;
-  z-index: 41;
+  z-index: 92;
   width: 220px;
   padding: 6px;
   border: 1px solid rgb(255 255 255 / 11%);
@@ -818,6 +818,13 @@
 }
 .contextMenu .contextMenuDanger {
   color: #e9a0a0;
+}
+.contextMenuError {
+  margin: 4px 6px 2px;
+  padding-top: 7px;
+  border-top: 1px solid var(--eagle-line);
+  color: #e9a0a0;
+  font-size: 10px;
 }
 
 .dropOverlay {

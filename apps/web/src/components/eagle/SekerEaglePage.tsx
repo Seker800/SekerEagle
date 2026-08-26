@@ -13,6 +13,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
+  IconCopy,
   IconDownload,
   IconLayoutGrid,
   IconLayoutSidebarRight,
@@ -49,7 +50,11 @@ import {
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
-import { getDesktopOriginalFileDownloadBridge } from '../../lib/media-resolver';
+import { copyImageToClipboard } from '../../lib/image-clipboard';
+import {
+  getDesktopOriginalFileBridge,
+  getDesktopOriginalFileDownloadBridge,
+} from '../../lib/media-resolver';
 import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
@@ -183,6 +188,8 @@ export function SekerEaglePage({
   const [isDragging, setIsDragging] = useState(false);
   const [originalFileError, setOriginalFileError] = useState<string | null>(null);
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
+  const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
+  const [assetActionError, setAssetActionError] = useState<string | null>(null);
   const [preparedAssetDrag, setPreparedAssetDrag] = useState<{
     key: string;
     token: string;
@@ -276,6 +283,8 @@ export function SekerEaglePage({
     },
     onBatchTagsApplied: () => setTagPicker(null),
     onSelectionMutationCompleted: () => {
+      setPreviewAssetId(null);
+      imagePreview.closePreview();
       setSelectedAssetIds([]);
       setSelectedAssetId(null);
       setIsBatchSelection(false);
@@ -323,6 +332,8 @@ export function SekerEaglePage({
     queryKeys.root,
   ]);
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
+  const contextMenuAsset =
+    selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
   const selectedAssetQuery = useQuery({
     queryKey: [...queryKeys.assetDetail(selectedAssetId), libraryView],
     queryFn: ({ signal }) =>
@@ -592,14 +603,57 @@ export function SekerEaglePage({
     event.preventDefault();
     event.stopPropagation();
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
+    openAssetContextMenu(event.clientX, event.clientY);
+  };
+
+  const openAssetContextMenu = (x: number, y: number) => {
+    setAssetActionError(null);
     setAssetContextMenu({
-      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 228)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 240)),
+      x: Math.max(8, Math.min(x, window.innerWidth - 228)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 280)),
     });
   };
 
   const desktopAssetDragBridge = getDesktopAssetDragBridge();
+  const desktopOriginalFileBridge = getDesktopOriginalFileBridge();
   const desktopOriginalFileDownloadBridge = getDesktopOriginalFileDownloadBridge();
+  const saveSelectedOriginal = () => {
+    if (!contextMenuAsset || !desktopOriginalFileBridge || assetActionPending) return;
+    setAssetActionPending('save');
+    setAssetActionError(null);
+    void Promise.resolve()
+      .then(() => desktopOriginalFileBridge.saveOriginalFile(contextMenuAsset.id))
+      .then(
+        () => {
+          setAssetActionPending(null);
+          setAssetContextMenu(null);
+        },
+        () => {
+          setAssetActionPending(null);
+          setAssetActionError('另存原文件失败，请重试。');
+        },
+      );
+  };
+  const copySelectedImage = () => {
+    const previewUrl = contextMenuAsset ? getEaglePreviewContentUrl(contextMenuAsset) : null;
+    if (!contextMenuAsset?.mimeType.startsWith('image/') || !previewUrl || assetActionPending) {
+      return;
+    }
+    setAssetActionPending('copy');
+    setAssetActionError(null);
+    void Promise.resolve()
+      .then(() => copyImageToClipboard(previewUrl))
+      .then(
+        () => {
+          setAssetActionPending(null);
+          setAssetContextMenu(null);
+        },
+        () => {
+          setAssetActionPending(null);
+          setAssetActionError('复制图片失败，请重试。');
+        },
+      );
+  };
   const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
     if (!desktopAssetDragBridge || libraryView === 'TRASH') return;
@@ -1553,6 +1607,31 @@ export function SekerEaglePage({
             style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
           >
             <div className={styles.contextMenuTitle}>已选择 {selectedAssetIds.length} 项</div>
+            {contextMenuAsset && desktopOriginalFileBridge ? (
+              <button
+                type="button"
+                role="menuitem"
+                aria-label="另存为…"
+                disabled={assetActionPending !== null}
+                onClick={saveSelectedOriginal}
+              >
+                <IconDownload size={15} />
+                {assetActionPending === 'save' ? '正在准备…' : '另存为…'}
+              </button>
+            ) : null}
+            {contextMenuAsset?.mimeType.startsWith('image/') &&
+            getEaglePreviewContentUrl(contextMenuAsset) ? (
+              <button
+                type="button"
+                role="menuitem"
+                aria-label="复制图片"
+                disabled={assetActionPending !== null}
+                onClick={copySelectedImage}
+              >
+                <IconCopy size={15} />
+                {assetActionPending === 'copy' ? '正在复制…' : '复制图片'}
+              </button>
+            ) : null}
             {selectedAssetIds.length > 1 && desktopOriginalFileDownloadBridge ? (
               <button
                 type="button"
@@ -1647,6 +1726,11 @@ export function SekerEaglePage({
                 恢复
               </button>
             )}
+            {assetActionError ? (
+              <div className={styles.contextMenuError} role="alert">
+                {assetActionError}
+              </div>
+            ) : null}
           </div>
         </>
       )}
@@ -1697,6 +1781,12 @@ export function SekerEaglePage({
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
           onClose={imagePreview.closePreview}
+          onOpenAssetMenu={({ x, y }) => {
+            const assetId = imagePreview.previewImage?.assetId;
+            if (!assetId || !assetsById.has(assetId)) return;
+            selectAsset(assetId, 'single');
+            openAssetContextMenu(x, y);
+          }}
         />
       ) : null}
       {isSmartFolderDialogOpen && (

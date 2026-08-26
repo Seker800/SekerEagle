@@ -87,43 +87,6 @@
   background: #1b2432;
 }
 
-.contextMenu {
-  position: fixed;
-  z-index: 82;
-  min-width: 172px;
-  padding: 5px;
-  border: 1px solid #344055;
-  border-radius: 8px;
-  background: #182130;
-  box-shadow: 0 14px 36px rgb(0 0 0 / 38%);
-}
-
-.contextMenu button {
-  width: 100%;
-  justify-content: flex-start;
-  border: 0;
-  padding: 8px 10px;
-  color: #e7edf7;
-  background: transparent;
-}
-
-.contextMenu button:hover:not(:disabled) {
-  background: #263246;
-}
-
-.copyNotice {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 2;
-  padding: 9px 13px;
-  border: 1px solid #344055;
-  border-radius: 8px;
-  color: #e7edf7;
-  background: rgb(24 33 48 / 96%);
-  box-shadow: 0 10px 28px rgb(0 0 0 / 28%);
-}
-
 @keyframes progress {
   from {
     transform: translateX(-35%);

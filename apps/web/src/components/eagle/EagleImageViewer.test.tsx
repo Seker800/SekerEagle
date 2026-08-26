@@ -105,13 +105,7 @@ describe('EagleImageViewer', () => {
 
   it('delegates the context menu to the shared asset action surface', async () => {
     const onOpenAssetMenu = vi.fn();
-    render(
-      <EagleImageViewer
-        image={image}
-        onClose={vi.fn()}
-        onOpenAssetMenu={onOpenAssetMenu}
-      />,
-    );
+    render(<EagleImageViewer image={image} onClose={vi.fn()} onOpenAssetMenu={onOpenAssetMenu} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
 
     fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
