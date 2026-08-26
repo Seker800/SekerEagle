@@ -79,6 +79,13 @@ export class MediaLoadScheduler {
     };
   }
 
+  reprioritize(id: string, { priority, order }: Pick<MediaLoadTask, 'priority' | 'order'>): void {
+    const queuedTask = this.queue.get(id);
+    if (!queuedTask) return;
+    this.queue.set(id, { ...queuedTask, priority, order });
+    this.scheduleFlush();
+  }
+
   clear({ abortActive = false }: { abortActive?: boolean } = {}) {
     this.queue.clear();
     this.clearRateWake();

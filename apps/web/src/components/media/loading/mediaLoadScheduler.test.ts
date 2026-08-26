@@ -87,4 +87,43 @@ describe('MediaLoadScheduler', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(started).toEqual(['after-cooldown']);
   });
+
+  it('reprioritizes queued work without restarting active work', async () => {
+    const started: string[] = [];
+    let releaseActive!: () => void;
+    const scheduler = new MediaLoadScheduler({ maxConcurrent: 1 });
+    scheduler.enqueue({
+      id: 'active',
+      priority: 'immediate',
+      order: 0,
+      run: () =>
+        new Promise<void>((resolve) => {
+          started.push('active');
+          releaseActive = resolve;
+        }),
+    });
+    scheduler.enqueue({
+      id: 'first-queued',
+      priority: 'visible',
+      order: 1,
+      run: async () => {
+        started.push('first-queued');
+      },
+    });
+    scheduler.enqueue({
+      id: 'reprioritized',
+      priority: 'visible',
+      order: 0,
+      run: async () => {
+        started.push('reprioritized');
+      },
+    });
+    await Promise.resolve();
+
+    scheduler.reprioritize('reprioritized', { priority: 'visible', order: 2 });
+    releaseActive();
+    await vi.waitFor(() => expect(started).toContain('reprioritized'));
+
+    expect(started.slice(0, 2)).toEqual(['active', 'reprioritized']);
+  });
 });

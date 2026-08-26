@@ -84,6 +84,7 @@ export function EagleAssetThumbnail({
   const transientRetriesRef = useRef(0);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
   const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
+  const taskId = `eagle-thumbnail:${asset.id}`;
 
   const clearRetryTimer = () => {
     if (retryTimerRef.current === null) return;
@@ -178,9 +179,13 @@ export function EagleAssetThumbnail({
   );
 
   useEffect(() => {
+    scheduler.reprioritize(taskId, { priority: 'visible', order });
+  }, [order, scheduler, taskId]);
+
+  useEffect(() => {
     if (!source || failed) return undefined;
     return scheduler.enqueue({
-      id: `eagle-thumbnail:${asset.id}`,
+      id: taskId,
       priority: 'visible',
       order,
       run: async (signal) => {
@@ -244,11 +249,11 @@ export function EagleAssetThumbnail({
     handleFailure,
     handleRequestFailure,
     loadService,
-    order,
     releaseLoadedThumbnail,
     requestCycle,
     scheduler,
     source,
+    taskId,
   ]);
 
   useEffect(

@@ -150,6 +150,46 @@ describe('EagleAssetThumbnail', () => {
     );
   });
 
+  it('keeps loading newly visible thumbnails when masonry order changes after deletion', async () => {
+    const scheduler = new MediaLoadScheduler({ maxConcurrent: 1 });
+    const nextAsset: EagleAssetListItem = {
+      ...imageAsset,
+      id: 'image-2',
+      renditions: [{ ...imageAsset.renditions[0], id: 'thumbnail-2' }],
+    };
+    const gallery = (firstOrder: number, includeNext: boolean) => (
+      <>
+        <EagleAssetThumbnail
+          asset={imageAsset}
+          scheduler={scheduler}
+          order={firstOrder}
+          displayWidth={240}
+        />
+        {includeNext && (
+          <EagleAssetThumbnail
+            asset={nextAsset}
+            scheduler={scheduler}
+            order={0}
+            displayWidth={240}
+          />
+        )}
+      </>
+    );
+    const { container, rerender } = render(gallery(1, false));
+    await act(async () => undefined);
+
+    fireEvent.load(container.querySelector('img')!);
+    await act(async () => undefined);
+    rerender(gallery(2, true));
+    await act(async () => undefined);
+
+    expect(container.querySelectorAll('img')).toHaveLength(2);
+    expect(container.querySelectorAll('img')[1]).toHaveAttribute(
+      'src',
+      '/api/eagle/assets/image-2/renditions/thumbnail-2',
+    );
+  });
+
   it('starts a muted inline video only after hovering for 500ms and stops on leave', async () => {
     vi.useFakeTimers();
     const { container } = render(
