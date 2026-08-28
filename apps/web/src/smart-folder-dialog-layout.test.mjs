@@ -24,6 +24,6 @@ test('tag choices expand inside the scrollable dialog instead of being clipped a
   const tagMenuRule = ruleStyles.match(/\.tagMenu\s*\{[^}]*\}/s)?.[0] ?? '';
 
   assert.match(tagMenuRule, /position:\s*static/);
-  assert.doesNotMatch(tagMenuRule, /top\s*:/);
-  assert.doesNotMatch(tagMenuRule, /left\s*:/);
+  assert.doesNotMatch(tagMenuRule, /^\s*top\s*:/m);
+  assert.doesNotMatch(tagMenuRule, /^\s*left\s*:/m);
 });

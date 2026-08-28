@@ -5,11 +5,10 @@
   display: grid;
   place-items: center;
   background: rgb(3 4 5 / 68%);
-  backdrop-filter: blur(6px);
 }
 .dialog {
-  width: min(1180px, calc(100vw - 32px));
-  max-height: min(800px, calc(100dvh - 40px));
+  width: min(1440px, calc(100vw - 48px));
+  height: min(900px, calc(100dvh - 48px));
   border: 1px solid rgb(255 255 255 / 10%);
   border-radius: 13px;
   display: grid;
@@ -305,7 +304,7 @@
 @media (max-width: 760px) {
   .dialog {
     width: min(640px, calc(100vw - 20px));
-    max-height: calc(100dvh - 20px);
+    height: calc(100dvh - 20px);
   }
 
   .layout {

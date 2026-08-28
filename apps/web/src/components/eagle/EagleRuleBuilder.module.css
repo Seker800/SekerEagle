@@ -180,11 +180,10 @@
 }
 
 .tagMenu {
-  position: absolute;
-  z-index: 40;
-  top: calc(100% + 6px);
-  left: 0;
-  width: min(360px, 90vw);
+  position: static;
+  box-sizing: border-box;
+  width: 100%;
+  margin-top: 6px;
   padding: 8px;
   border: 1px solid #444b54;
   border-radius: 9px;
@@ -221,7 +220,7 @@
 }
 
 .tagOptions {
-  max-height: 220px;
+  max-height: 300px;
   margin-top: 7px;
   overflow: auto;
 }

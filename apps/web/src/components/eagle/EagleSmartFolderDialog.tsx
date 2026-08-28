@@ -4,6 +4,7 @@ import { IconFolderBolt, IconX } from '@tabler/icons-react';
 import {
   countActiveEagleFilterRules,
   createEmptyEagleFilterQuery,
+  createEagleFilterRule,
   type EagleFilterQuery,
 } from '@sekereagle/eagle-filter-core';
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
@@ -26,7 +27,16 @@ interface EagleSmartFolderDialogProps {
 }
 
 function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
-  return query.conditions.length > 0 ? query : createEmptyEagleFilterQuery();
+  if (countActiveEagleFilterRules(query) > 0) return query;
+
+  const emptyQuery = createEmptyEagleFilterQuery();
+  return {
+    ...emptyQuery,
+    conditions: emptyQuery.conditions.map((condition) => ({
+      ...condition,
+      rules: [createEagleFilterRule('MANUAL_TAGS')],
+    })),
+  };
 }
 
 export function EagleSmartFolderDialog({
