@@ -9,6 +9,14 @@ type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = { x: number; y: number };
 
+interface ViewerRect {
+  containsPoint(point: ViewerPoint): boolean;
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+
 interface ViewerDragEvent {
   delta: { negate(): ViewerPoint };
   pointerType: string;
@@ -45,7 +53,7 @@ interface ViewerViewport {
 }
 
 interface ViewerWorldItem {
-  getBounds(): { containsPoint(point: ViewerPoint): boolean };
+  getBounds(): ViewerRect;
 }
 
 interface ViewerHandle {
@@ -54,6 +62,11 @@ interface ViewerHandle {
   addHandler(name: 'canvas-drag', handler: (event: ViewerDragEvent) => void): void;
   addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
   addHandler(name: 'canvas-scroll', handler: (event: ViewerScrollEvent) => void): void;
+  addOverlay(options: {
+    checkResize: boolean;
+    element: HTMLImageElement;
+    location: ViewerRect;
+  }): void;
   destroy(): void;
   forceRedraw(): void;
   open(source: ViewerSource): void;
@@ -119,6 +132,7 @@ export function EagleImageViewer({
   const sourceKey = descriptor ? `pyramid:${descriptor.id}` : `preview:${image.src}`;
   const viewerElementRef = useRef<HTMLDivElement>(null);
   const viewerRef = useRef<ViewerHandle | undefined>(undefined);
+  const imageRef = useRef(image);
   const onCloseRef = useRef(onClose);
   const sourceRef = useRef<ViewerSource>(source);
   const desiredSourceKeyRef = useRef(sourceKey);
@@ -134,6 +148,7 @@ export function EagleImageViewer({
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   sourceRef.current = source;
   desiredSourceKeyRef.current = sourceKey;
+  imageRef.current = image;
   onCloseRef.current = onClose;
 
   const openPendingSource = () => {
@@ -197,6 +212,14 @@ export function EagleImageViewer({
           constrainDuringPan: false,
           visibilityRatio: 0.5,
         }) as unknown as ViewerHandle;
+        const browserImageTarget = document.createElement('img');
+        browserImageTarget.alt = '';
+        browserImageTarget.setAttribute('aria-hidden', 'true');
+        browserImageTarget.className = styles.browserImageTarget;
+        browserImageTarget.dataset.testid = 'eagle-image-browser-target';
+        browserImageTarget.decoding = 'async';
+        browserImageTarget.draggable = false;
+        browserImageTarget.src = imageRef.current.src;
         viewer.addHandler('open', () => {
           openedSourceKeyRef.current = sourceKeyRef.current;
           const pendingViewport = pendingViewportRef.current;
@@ -205,6 +228,15 @@ export function EagleImageViewer({
             viewer.viewport.zoomTo(pendingViewport.zoom, undefined, true);
             viewer.viewport.panTo(pendingViewport.center, true);
             viewer.viewport.applyConstraints(true);
+          }
+          const item = viewer.world.getItemAt(0);
+          if (item) {
+            browserImageTarget.src = imageRef.current.src;
+            viewer.addOverlay({
+              checkResize: false,
+              element: browserImageTarget,
+              location: item.getBounds(),
+            });
           }
           viewer.forceRedraw();
           setStatus('ready');

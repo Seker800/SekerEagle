@@ -27,6 +27,12 @@
   height: 100%;
 }
 
+.browserImageTarget {
+  display: block;
+  opacity: 0.001;
+  user-select: none;
+}
+
 .loadState {
   position: absolute;
   inset: 0;

@@ -29,6 +29,10 @@ const {
     containsPoint: vi.fn(
       ({ x, y }: { x: number; y: number }) => x >= 0 && x <= 1 && y >= 0 && y <= 0.75,
     ),
+    height: 0.75,
+    width: 1,
+    x: 0,
+    y: 0,
   }));
   const hoistedOpenMock = vi.fn();
   const hoistedApplyConstraintsMock = vi.fn();
