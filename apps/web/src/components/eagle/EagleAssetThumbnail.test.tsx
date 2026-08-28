@@ -1,4 +1,4 @@
-import { act, fireEvent, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
@@ -76,6 +76,28 @@ describe('EagleAssetThumbnail', () => {
     expect(getEagleAssetThumbnailUrls(asset, 200)).toEqual([
       '/api/eagle/assets/image-1/renditions/small',
     ]);
+  });
+
+  it('labels video thumbnails without marking image thumbnails as video', () => {
+    render(
+      <>
+        <EagleAssetThumbnail
+          asset={videoAsset}
+          scheduler={new MediaLoadScheduler({ maxConcurrent: 1 })}
+          order={0}
+          displayWidth={240}
+        />
+        <EagleAssetThumbnail
+          asset={imageAsset}
+          scheduler={new MediaLoadScheduler({ maxConcurrent: 1 })}
+          order={1}
+          displayWidth={240}
+        />
+      </>,
+    );
+
+    expect(screen.getByLabelText('视频素材')).toHaveTextContent('视频');
+    expect(screen.getAllByText('视频')).toHaveLength(1);
   });
 
   it('retries a stalled thumbnail instead of occupying a scheduler slot forever', async () => {
