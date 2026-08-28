@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SekerDesktopBridge } from './media-resolver';
-import { copyImageToClipboard } from './image-clipboard';
+import { canCopyImageToClipboard, copyImageToClipboard } from './image-clipboard';
 
 const pngBytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10]);
 const png = {
@@ -16,6 +16,27 @@ afterEach(() => {
 });
 
 describe('image clipboard', () => {
+  it('reports image clipboard availability for secure web and desktop contexts', () => {
+    class TestClipboardItem {}
+    vi.stubGlobal('ClipboardItem', TestClipboardItem);
+    vi.stubGlobal('isSecureContext', true);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { write: vi.fn() },
+    });
+    expect(canCopyImageToClipboard()).toBe(true);
+
+    vi.stubGlobal('isSecureContext', false);
+    expect(canCopyImageToClipboard()).toBe(false);
+
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      writeClipboardImage: vi.fn(),
+    };
+    expect(canCopyImageToClipboard()).toBe(true);
+  });
+
   it('fails before fetching when the browser has no image clipboard capability', async () => {
     const fetchImage = vi.fn();
 
