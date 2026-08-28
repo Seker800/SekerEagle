@@ -76,6 +76,7 @@ interface ViewportSnapshot {
 
 const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
 const PYRAMID_UPGRADE_IDLE_MS = 120;
+const MAX_ZOOM_PIXEL_RATIO = 8;
 
 function isDirectPointer(pointerType: string): boolean {
   return pointerType === 'mouse' || pointerType === 'pen';
@@ -192,6 +193,7 @@ export function EagleImageViewer({
           drawer: 'canvas',
           immediateRender: true,
           loadDestinationTilesOnAnimation: true,
+          maxZoomPixelRatio: MAX_ZOOM_PIXEL_RATIO,
           minScrollDeltaTime: 0,
           zoomPerScroll: 1.12,
           constrainDuringPan: false,
