@@ -1036,7 +1036,7 @@ describe('SekerEaglePage', () => {
     });
   });
 
-  it('uses the same complete asset menu from thumbnails and the large-image viewer', async () => {
+  it('keeps the custom menu on thumbnails and delegates large-image right clicks to the browser', async () => {
     const saveOriginalFile = vi.fn().mockResolvedValue({ saved: true });
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
@@ -1054,7 +1054,7 @@ describe('SekerEaglePage', () => {
       '删除所选素材',
     ];
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
-    fireEvent.contextMenu(card, { clientX: 180, clientY: 120 });
+    expect(fireEvent.contextMenu(card, { clientX: 180, clientY: 120 })).toBe(false);
     const thumbnailMenu = screen.getByRole('menu', { name: '素材操作' });
     expect(
       within(thumbnailMenu)
@@ -1066,22 +1066,9 @@ describe('SekerEaglePage', () => {
 
     fireEvent.doubleClick(card);
     await screen.findByRole('dialog', { name: 'Owl Reference' });
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
-      clientX: 240,
-      clientY: 160,
-    });
-    const viewerMenu = screen.getByRole('menu', { name: '素材操作' });
-    expect(
-      within(viewerMenu)
-        .getAllByRole('menuitem')
-        .map((item) => item.getAttribute('aria-label') ?? item.textContent?.trim()),
-    ).toEqual(expectedActions);
-    fireEvent.click(within(viewerMenu).getByRole('menuitem', { name: '复制图片' }));
-    await waitFor(() =>
-      expect(copyImageToClipboardMock).toHaveBeenCalledWith(
-        '/api/eagle/assets/asset-1/renditions/rendition-1/content',
-      ),
-    );
+    expect(fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'))).toBe(true);
+    expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
+    expect(copyImageToClipboardMock).not.toHaveBeenCalled();
   });
 
   it('offers Save As from the browser asset menu without a desktop bridge', async () => {
@@ -1107,20 +1094,18 @@ describe('SekerEaglePage', () => {
     expect(copyStarted).toBe(true);
   });
 
-  it('keeps image copying as a one-step action on an insecure LAN origin', async () => {
+  it('does not disguise an unavailable HTTP clipboard action as a copy preview', async () => {
     canCopyImageToClipboardMock.mockReturnValue(false);
     renderPage();
 
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
-
-    await waitFor(() =>
-      expect(copyImageToClipboardMock).toHaveBeenCalledWith(
-      '/api/eagle/assets/asset-1/renditions/rendition-1/content',
-      ),
-    );
+    const menu = screen.getByRole('menu', { name: '素材操作' });
+    expect(within(menu).queryByRole('menuitem', { name: '复制图片' })).not.toBeInTheDocument();
+    expect(
+      within(menu).queryByRole('menuitem', { name: '打开可复制预览' }),
+    ).not.toBeInTheDocument();
+    expect(copyImageToClipboardMock).not.toHaveBeenCalled();
     expect(screen.queryByRole('dialog', { name: '复制 Owl Reference' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
   });
 
   it('keeps shared Save As failures visible and retryable', async () => {

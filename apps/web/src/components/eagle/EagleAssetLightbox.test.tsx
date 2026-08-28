@@ -59,21 +59,20 @@ describe('EagleAssetLightbox', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it('provides a real image with an unblocked browser context menu for native copying', () => {
+  it('renders an image in the standard asset preview', () => {
     const onClose = vi.fn();
-    render(<EagleAssetLightbox asset={imageAsset} purpose="native-copy" onClose={onClose} />);
+    render(<EagleAssetLightbox asset={imageAsset} onClose={onClose} />);
 
-    const dialog = screen.getByRole('dialog', { name: '复制 Reference image' });
+    const dialog = screen.getByRole('dialog', { name: '素材大图预览' });
     const image = screen.getByRole('img', { name: 'Reference image' });
     expect(image).toHaveAttribute('src', '/api/eagle/assets/image-1/renditions/preview-1');
-    expect(dialog).toHaveTextContent('在图片上右键，然后选择浏览器的“复制图片”');
-    expect(fireEvent.contextMenu(image)).toBe(true);
+    expect(dialog).toHaveTextContent('Esc 关闭');
 
     fireEvent.click(image);
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(image.parentElement!);
     fireEvent.keyDown(dialog, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: '关闭可复制预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭大图预览' }));
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 });

@@ -103,17 +103,15 @@ describe('EagleImageViewer', () => {
     handlers.clear();
   });
 
-  it('delegates the context menu to the shared asset action surface', async () => {
+  it('leaves the large-image context menu to the browser', async () => {
     const onOpenAssetMenu = vi.fn();
     render(<EagleImageViewer image={image} onClose={vi.fn()} onOpenAssetMenu={onOpenAssetMenu} />);
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
 
-    fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'), {
-      clientX: 240,
-      clientY: 160,
-    });
+    const browserMayOpenItsMenu = fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
 
-    expect(onOpenAssetMenu).toHaveBeenCalledWith({ x: 240, y: 160 });
+    expect(browserMayOpenItsMenu).toBe(true);
+    expect(onOpenAssetMenu).not.toHaveBeenCalled();
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
