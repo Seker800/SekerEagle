@@ -130,6 +130,7 @@ describe('EagleImageViewer', () => {
         imageLoaderLimit: 4,
         loadDestinationTilesOnAnimation: true,
         maxImageCacheCount: 64,
+        maxZoomPixelRatio: 8,
         minScrollDeltaTime: 0,
         showNavigator: true,
         tileSources: { type: 'image', url: image.src },
