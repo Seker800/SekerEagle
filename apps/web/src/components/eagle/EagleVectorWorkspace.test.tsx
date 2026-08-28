@@ -125,6 +125,119 @@ describe('EagleVectorWorkspace', () => {
     );
   });
 
+  it('presents review tags and suggestions as a similarity-first batch workflow', async () => {
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-low',
+        name: '少量标签',
+        color: null,
+        assetCount: 12,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-low',
+        lastGeneratedAt: null,
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 2,
+      },
+      {
+        id: 'tag-high',
+        name: '大量标签',
+        color: null,
+        assetCount: 60,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-high',
+        lastGeneratedAt: null,
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 18,
+      },
+    ]);
+    vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
+      items: [
+        {
+          id: 'suggestion-low',
+          score: 0.72,
+          distance: 0.28,
+          prototypeRank: 1,
+          createdAt: '2026-08-19T00:00:00Z',
+          suggestedTag: { id: 'tag-low', name: '少量标签', color: null },
+          asset: {
+            id: 'asset-low',
+            displayName: 'low-score.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+          representativeAssets: [
+            {
+              id: 'representative-1',
+              displayName: 'representative.jpg',
+              width: 320,
+              height: 240,
+              renditions: [{ id: 'thumb-representative', width: 256, height: 192 }],
+            },
+          ],
+        },
+        {
+          id: 'suggestion-high',
+          score: 0.96,
+          distance: 0.04,
+          prototypeRank: 0,
+          createdAt: '2026-08-19T00:00:01Z',
+          suggestedTag: { id: 'tag-high', name: '大量标签', color: null },
+          asset: {
+            id: 'asset-high',
+            displayName: 'high-score.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+          representativeAssets: [],
+        },
+      ],
+      nextCursor: 'cursor-2',
+    });
+
+    render(<EagleVectorWorkspace view="REVIEW" />);
+
+    const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
+    expect(within(filters).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(filters).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      '全部建议20',
+      '大量标签18',
+      '少量标签2',
+    ]);
+
+    const grid = screen.getByRole('grid', { name: '待确认的智能标签建议' });
+    const cards = within(grid).getAllByRole('button', { name: /^选择 / });
+    expect(cards[0]).toHaveAccessibleName(/high-score\.jpg/);
+    expect(cards[1]).toHaveAccessibleName(/low-score\.jpg/);
+    expect(screen.queryByText('high-score.jpg')).not.toBeInTheDocument();
+    expect(screen.queryByText('low-score.jpg')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('该中心代表图片')).not.toBeInTheDocument();
+    expect(screen.getByText('96.0%')).toHaveClass('similarity');
+    expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '本页全部确认' }));
+    await waitFor(() =>
+      expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(
+        ['suggestion-high', 'suggestion-low'],
+        'ACCEPT',
+      ),
+    );
+  });
+
+  it('moves review assets to trash from their context menu', async () => {
+    const trashAssets = vi.fn().mockResolvedValue(undefined);
+    render(<EagleVectorWorkspace view="REVIEW" onTrashAssets={trashAssets} />);
+
+    const card = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
+    fireEvent.contextMenu(card, { clientX: 120, clientY: 160 });
+    fireEvent.click(screen.getByRole('menuitem', { name: '删除（移到回收站）' }));
+
+    await waitFor(() => expect(trashAssets).toHaveBeenCalledWith(['asset-1']));
+  });
+
   it('matches the library single, command-toggle, shift-range, and background-clear selection gestures', async () => {
     vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
       items: [
