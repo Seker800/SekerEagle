@@ -110,9 +110,18 @@ vi.mock('../../lib/original-file-export', () => ({
 }));
 
 vi.mock('./EagleVectorWorkspace', () => ({
-  EagleVectorWorkspace: ({ view }: { view: string }) => (
+  EagleVectorWorkspace: ({
+    view,
+    onTrashAssets,
+  }: {
+    view: string;
+    onTrashAssets?: (assetIds: string[]) => Promise<void>;
+  }) => (
     <div data-testid="eagle-vector-workspace" data-view={view}>
       智能标签工作区
+      <button type="button" onClick={() => void onTrashAssets?.(['asset-1'])}>
+        测试智能标签删除
+      </button>
     </div>
   ),
 }));
@@ -1766,6 +1775,17 @@ describe('SekerEaglePage', () => {
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute(
       'data-view',
       'UNCLASSIFIED',
+    );
+  });
+
+  it('connects smart-tag context deletion to the shared trash mutation', async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: '智能标签确认 32' }));
+    fireEvent.click(screen.getByRole('button', { name: '测试智能标签删除' }));
+
+    await waitFor(() =>
+      expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1']),
     );
   });
 

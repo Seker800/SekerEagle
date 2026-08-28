@@ -191,11 +191,16 @@ describe('EagleVectorWorkspace', () => {
 
     const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
     expect(within(filters).queryByRole('combobox')).not.toBeInTheDocument();
-    expect(within(filters).getAllByRole('button').map((button) => button.textContent)).toEqual([
+    const filterButtons = within(filters).getAllByRole('button');
+    expect(filterButtons.map((button) => button.textContent)).toEqual([
       '全部建议20',
       '大量标签18',
       '少量标签2',
     ]);
+    fireEvent.click(filterButtons[1]!);
+    await waitFor(() =>
+      expect(api.listEagleVectorSuggestions).toHaveBeenLastCalledWith('tag-high'),
+    );
 
     const grid = screen.getByRole('grid', { name: '待确认的智能标签建议' });
     const cards = within(grid).getAllByRole('button', { name: /^选择 / });
