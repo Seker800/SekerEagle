@@ -110,6 +110,52 @@ test('requesting a tag rebuild remains opt-in and enqueues one owner-scoped buil
   assert.equal(result.tagId, 'tag-1');
 });
 
+test('suggestion review listing does not load representative assets that the review UI no longer uses', async () => {
+  let representativeQueryCount = 0;
+  const service = new EagleVectorService({
+    eagleVectorTagSuggestion: {
+      findMany: async () => [
+        {
+          id: 'suggestion-1',
+          snapshotId: 'snapshot-1',
+          prototypeRank: 0,
+          score: 0.95,
+          suggestedTag: { id: 'tag-1', name: '汽车', color: null },
+          asset: {
+            id: 'asset-1',
+            displayName: 'car.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+        },
+      ],
+    },
+    eagleTagPrototype: {
+      findMany: async () => {
+        representativeQueryCount += 1;
+        return [];
+      },
+    },
+    eagleAsset: {
+      findMany: async () => {
+        representativeQueryCount += 1;
+        return [];
+      },
+    },
+  } as never);
+
+  const result = await service.listSuggestions('owner-1', {
+    limit: 40,
+    sort: 'SCORE_DESC',
+  });
+
+  assert.equal(representativeQueryCount, 0);
+  const firstItem = result.items[0];
+  assert.ok(firstItem);
+  assert.equal('representativeAssets' in firstItem, false);
+});
+
 test('accepting a suggestion atomically creates an audited manual tag relation', async () => {
   const creates: unknown[] = [];
   const transaction = {
