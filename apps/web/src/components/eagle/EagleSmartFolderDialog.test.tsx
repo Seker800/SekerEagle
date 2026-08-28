@@ -88,8 +88,11 @@ describe('EagleSmartFolderDialog', () => {
     const group = screen.getByRole('region', { name: '条件组 1' });
     expect(within(group).getByRole('combobox', { name: '条件组 1 匹配方式' })).toHaveValue('ANY');
     expect(within(group).getByRole('combobox', { name: '条件组 1 结果方式' })).toHaveValue('MATCH');
-    expect(within(group).getByRole('combobox', { name: '规则 1 字段' })).toHaveValue('NAME');
-    expect(within(group).getByRole('combobox', { name: '规则 1 运算符' })).toHaveValue('CONTAINS');
+    expect(within(group).getByRole('combobox', { name: '规则 1 字段' })).toHaveValue(
+      'MANUAL_TAGS',
+    );
+    expect(within(group).getByRole('combobox', { name: '规则 1 运算符' })).toHaveValue('ALL_OF');
+    expect(within(group).getByText('选择标签…')).toBeVisible();
 
     await waitFor(() =>
       expect(screen.getByRole('status')).toHaveTextContent('找到 327 项符合规则的素材'),
@@ -115,7 +118,7 @@ describe('EagleSmartFolderDialog', () => {
         conditions: [
           expect.objectContaining({
             rules: [
-              expect.objectContaining({ field: 'NAME', operator: 'CONTAINS' }),
+              expect.objectContaining({ field: 'MANUAL_TAGS', operator: 'ALL_OF' }),
               expect.objectContaining({ field: 'FORMAT', operator: 'EQUALS', value: 'webp' }),
             ],
           }),
@@ -129,13 +132,36 @@ describe('EagleSmartFolderDialog', () => {
     fireEvent.change(screen.getByRole('combobox', { name: '条件组 1 结果方式' }), {
       target: { value: 'NOT_MATCH' },
     });
-    fireEvent.change(screen.getByRole('combobox', { name: '规则 1 字段' }), {
-      target: { value: 'MANUAL_TAGS' },
-    });
     fireEvent.click(screen.getByText('选择标签…'));
     fireEvent.click(screen.getByRole('checkbox', { name: /KIT/ }));
 
     expect(within(screen.getByLabelText('选择标签')).getByText('KIT')).toBeVisible();
     expect(screen.getByRole('combobox', { name: '条件组 1 结果方式' })).toHaveValue('NOT_MATCH');
+  });
+
+  it('preserves a meaningful initial name rule instead of replacing it with the tag default', () => {
+    renderDialog(vi.fn(), {
+      initialQuery: {
+        version: 2,
+        conditions: [
+          {
+            id: 'condition-existing',
+            match: 'ANY',
+            result: 'MATCH',
+            rules: [
+              {
+                id: 'rule-existing',
+                field: 'NAME',
+                operator: 'CONTAINS',
+                value: '海报',
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole('combobox', { name: '规则 1 字段' })).toHaveValue('NAME');
+    expect(screen.getByRole('textbox', { name: '名称值' })).toHaveValue('海报');
   });
 });
