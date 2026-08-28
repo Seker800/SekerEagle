@@ -458,56 +458,8 @@ export class EagleVectorService {
       },
     });
     const items = rows.slice(0, limit);
-    const prototypeKeys = [
-      ...new Map(
-        items.map((item) => [
-          `${item.snapshotId}:${item.prototypeRank}`,
-          { snapshotId: item.snapshotId, rank: item.prototypeRank },
-        ]),
-      ).values(),
-    ];
-    const prototypes = prototypeKeys.length
-      ? await this.prisma.eagleTagPrototype.findMany({
-          where: { ownerId, OR: prototypeKeys },
-          select: { snapshotId: true, rank: true, representativeAssetIds: true },
-        })
-      : [];
-    const representativeIds = [
-      ...new Set(prototypes.flatMap((prototype) => prototype.representativeAssetIds.slice(0, 4))),
-    ];
-    const representativeAssets = representativeIds.length
-      ? await this.prisma.eagleAsset.findMany({
-          where: { ownerId, id: { in: representativeIds }, deletedAt: null, ...visibleAsset },
-          select: {
-            id: true,
-            displayName: true,
-            width: true,
-            height: true,
-            renditions: {
-              where: { status: 'READY', kind: 'THUMBNAIL', variant: '256' },
-              orderBy: { revision: 'desc' },
-              take: 1,
-              select: { id: true, width: true, height: true },
-            },
-          },
-        })
-      : [];
-    const assetById = new Map(representativeAssets.map((asset) => [asset.id, asset]));
-    const representativeIdsByPrototype = new Map(
-      prototypes.map((prototype) => [
-        `${prototype.snapshotId}:${prototype.rank}`,
-        prototype.representativeAssetIds,
-      ]),
-    );
     return {
-      items: items.map((item) => ({
-        ...item,
-        representativeAssets: (
-          representativeIdsByPrototype.get(`${item.snapshotId}:${item.prototypeRank}`) ?? []
-        )
-          .map((assetId) => assetById.get(assetId))
-          .filter((asset) => asset !== undefined),
-      })),
+      items,
       nextCursor: rows.length > limit ? (items.at(-1)?.id ?? null) : null,
     };
   }

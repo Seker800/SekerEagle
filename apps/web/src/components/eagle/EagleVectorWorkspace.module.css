@@ -49,6 +49,46 @@
   display: grid;
   gap: 10px;
 }
+.tagFilters {
+  display: grid;
+  gap: 7px;
+}
+.tagFilters > span {
+  color: #9da2aa;
+  font-size: 10px;
+}
+.tagFilterOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tagFilterOptions button {
+  min-height: 31px;
+  padding: 0 9px 0 11px;
+  border: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #b7bbc1;
+  background: #101114;
+  cursor: pointer;
+}
+.tagFilterOptions button:hover,
+.tagFilterOptions .tagFilterActive {
+  border-color: rgb(214 155 72 / 52%);
+  color: #f0d1a3;
+  background: rgb(214 155 72 / 10%);
+}
+.tagFilterOptions strong {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  color: #d6d8dc;
+  background: rgb(255 255 255 / 8%);
+  font-size: 10px;
+  text-align: center;
+}
 .toolbar {
   display: flex;
   align-items: end;
@@ -145,6 +185,11 @@
 .cardActions button {
   padding: 0 10px;
   cursor: pointer;
+}
+.toolbar .primaryAction {
+  border-color: rgb(214 155 72 / 45%);
+  color: #f1d2a5;
+  background: rgb(214 155 72 / 11%);
 }
 .toolbar button:disabled,
 .tagCandidate button:disabled,
@@ -248,40 +293,21 @@
   background: #e4bc7e;
 }
 .assetInfo {
-  display: grid;
-  gap: 4px;
-  padding: 9px;
-}
-.assetInfo strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 8px;
 }
 .assetInfo span {
   color: #e4bc7e;
   font-size: 11px;
 }
-.assetInfo small {
-  color: #858b94;
-  font-size: 9px;
-}
-.assetInfo .evidence {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 2px;
-}
-.evidence span {
-  color: #858b94;
-  font-size: 9px;
-}
-.evidence img {
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgb(255 255 255 / 12%);
-  border-radius: 4px;
-  object-fit: cover;
+.assetInfo .similarity {
+  color: #f2c783;
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 .cardActions {
   display: flex;

@@ -94,7 +94,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [],
         },
       ],
       nextCursor: null,
@@ -168,15 +167,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [
-            {
-              id: 'representative-1',
-              displayName: 'representative.jpg',
-              width: 320,
-              height: 240,
-              renditions: [{ id: 'thumb-representative', width: 256, height: 192 }],
-            },
-          ],
         },
         {
           id: 'suggestion-high',
@@ -192,7 +182,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [],
         },
       ],
       nextCursor: 'cursor-2',
@@ -215,7 +204,7 @@ describe('EagleVectorWorkspace', () => {
     expect(screen.queryByText('high-score.jpg')).not.toBeInTheDocument();
     expect(screen.queryByText('low-score.jpg')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('该中心代表图片')).not.toBeInTheDocument();
-    expect(screen.getByText('96.0%')).toHaveClass('similarity');
+    expect(screen.getByText('96.0%').className).toMatch(/similarity/);
     expect(screen.queryByRole('button', { name: '加载更多' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '本页全部确认' }));
@@ -255,7 +244,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [],
         },
         {
           id: 'suggestion-2',
@@ -271,7 +259,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [],
         },
         {
           id: 'suggestion-3',
@@ -287,7 +274,6 @@ describe('EagleVectorWorkspace', () => {
             height: 600,
             renditions: [],
           },
-          representativeAssets: [],
         },
       ],
       nextCursor: null,

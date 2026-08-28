@@ -1022,6 +1022,9 @@ export function SekerEaglePage({
               onAssignManualTags={async (assetIds, tagIds) => {
                 await batchTagMutation.mutateAsync({ assetIds, addTagIds: tagIds });
               }}
+              onTrashAssets={async (assetIds) => {
+                await trashMutation.mutateAsync(assetIds);
+              }}
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage

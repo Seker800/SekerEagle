@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { IconCheck, IconTags } from '@tabler/icons-react';
+import { IconCheck, IconTags, IconTrash } from '@tabler/icons-react';
 import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
 import {
   getVectorThumbnailUrl,
@@ -30,6 +30,7 @@ interface EagleVectorWorkspaceProps {
   manualTags?: EagleManualTag[];
   onAssignManualTags?: (assetIds: string[], tagIds: string[]) => Promise<void>;
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
+  onTrashAssets?: (assetIds: string[]) => Promise<void>;
 }
 
 export function EagleVectorWorkspace({
@@ -37,12 +38,12 @@ export function EagleVectorWorkspace({
   manualTags: providedManualTags,
   onAssignManualTags,
   onCreateManualTag,
+  onTrashAssets,
 }: EagleVectorWorkspaceProps = {}) {
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
   const [unclassified, setUnclassified] = useState<EagleUnclassifiedAsset[]>([]);
   const [distances, setDistances] = useState<EagleTagDistanceAsset[]>([]);
-  const [suggestionCursor, setSuggestionCursor] = useState<string | null>(null);
   const [unclassifiedCursor, setUnclassifiedCursor] = useState<string | null>(null);
   const [distanceCursor, setDistanceCursor] = useState<string | null>(null);
   const [view, setView] = useState<View>(controlledView ?? 'REVIEW');
@@ -98,7 +99,6 @@ export function EagleVectorWorkspace({
       if (nextTags) setTags(nextTags);
       if (nextSuggestions) {
         setSuggestions(nextSuggestions.items);
-        setSuggestionCursor(nextSuggestions.nextCursor);
       }
       if (nextUnclassified) {
         setUnclassified(nextUnclassified.items);
@@ -157,6 +157,36 @@ export function EagleVectorWorkspace({
   }, [providedManualTags, view]);
 
   const manualTags = providedManualTags ?? loadedManualTags;
+
+  const reviewTags = useMemo(
+    () =>
+      tags
+        .filter((tag) => tag.recommendationEnabled && tag.currentSnapshotId)
+        .sort(
+          (left, right) =>
+            right.pendingSuggestionCount - left.pendingSuggestionCount ||
+            left.name.localeCompare(right.name, 'zh-CN'),
+        ),
+    [tags],
+  );
+  const reviewSuggestionCount = reviewTags.reduce(
+    (total, tag) => total + tag.pendingSuggestionCount,
+    0,
+  );
+  const orderedSuggestions = useMemo(
+    () =>
+      [...suggestions].sort(
+        (left, right) =>
+          right.score - left.score ||
+          right.createdAt.localeCompare(left.createdAt) ||
+          right.id.localeCompare(left.id),
+      ),
+    [suggestions],
+  );
+  const orderedSuggestionIds = useMemo(
+    () => orderedSuggestions.map((suggestion) => suggestion.id),
+    [orderedSuggestions],
+  );
 
   const availableTags = useMemo(() => {
     const enabledIds = new Set(tags.map((tag) => tag.id));
@@ -272,6 +302,19 @@ export function EagleVectorWorkspace({
     }
   };
 
+  const trashItems = async (itemIds: string[]) => {
+    if (!onTrashAssets) return;
+    const { assetIds } = getTagPickerTarget(itemIds);
+    const trashed = await act(
+      () => onTrashAssets(assetIds),
+      `已将 ${assetIds.length} 项素材移到回收站`,
+    );
+    if (trashed) {
+      setContextMenu(null);
+      clearSelection();
+    }
+  };
+
   const openContextMenu = (
     event: MouseEvent<HTMLButtonElement>,
     itemId: string,
@@ -339,27 +382,48 @@ export function EagleVectorWorkspace({
 
       {view === 'REVIEW' ? (
         <section className={styles.panel} aria-label="智能标签确认">
-          <div className={styles.toolbar}>
-            <label>
-              推荐标签
-              <select
-                value={tagFilter}
-                onChange={(event) => {
+          <div className={styles.tagFilters} role="group" aria-label="推荐标签筛选">
+            <span>推荐标签</span>
+            <div className={styles.tagFilterOptions}>
+              <button
+                type="button"
+                className={!tagFilter ? styles.tagFilterActive : undefined}
+                aria-pressed={!tagFilter}
+                onClick={() => {
                   clearSelection();
-                  setTagFilter(event.target.value);
+                  setTagFilter('');
                 }}
               >
-                <option value="">全部建议</option>
-                {tags
-                  .filter((tag) => tag.recommendationEnabled && tag.currentSnapshotId)
-                  .map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}（{tag.pendingSuggestionCount}）
-                    </option>
-                  ))}
-              </select>
-            </label>
+                <span>全部建议</span>
+                <strong>{reviewSuggestionCount}</strong>
+              </button>
+              {reviewTags.map((tag) => (
+                <button
+                  key={tag.id}
+                  type="button"
+                  className={tagFilter === tag.id ? styles.tagFilterActive : undefined}
+                  aria-pressed={tagFilter === tag.id}
+                  onClick={() => {
+                    clearSelection();
+                    setTagFilter(tag.id);
+                  }}
+                >
+                  <span>{tag.name}</span>
+                  <strong>{tag.pendingSuggestionCount}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className={styles.toolbar}>
             <span className={styles.selectionCount}>已选择 {selected.length} 项</span>
+            <button
+              className={styles.primaryAction}
+              type="button"
+              disabled={!orderedSuggestionIds.length || busy}
+              onClick={() => void review(orderedSuggestionIds, 'ACCEPT')}
+            >
+              本页全部确认
+            </button>
             <button
               type="button"
               disabled={!selected.length || busy}
@@ -383,7 +447,7 @@ export function EagleVectorWorkspace({
             </button>
           </div>
           <AssetGrid ariaLabel="待确认的智能标签建议" onClear={clearSelection}>
-            {suggestions.map((suggestion) => (
+            {orderedSuggestions.map((suggestion) => (
               <SuggestionCard
                 key={suggestion.id}
                 suggestion={suggestion}
@@ -392,7 +456,7 @@ export function EagleVectorWorkspace({
                 onSelect={(gesture) =>
                   selectItem(
                     suggestion.id,
-                    suggestions.map((item) => item.id),
+                    orderedSuggestionIds,
                     gesture,
                   )
                 }
@@ -401,7 +465,7 @@ export function EagleVectorWorkspace({
                   openContextMenu(
                     event,
                     suggestion.id,
-                    suggestions.map((item) => item.id),
+                    orderedSuggestionIds,
                   )
                 }
                 disabled={busy}
@@ -409,19 +473,6 @@ export function EagleVectorWorkspace({
             ))}
           </AssetGrid>
           {!suggestions.length ? <Empty text="当前没有待确认的人工标签建议。" /> : null}
-          {suggestionCursor ? (
-            <LoadMore
-              disabled={busy}
-              onClick={async () => {
-                const result = await listEagleVectorSuggestions(
-                  tagFilter || undefined,
-                  suggestionCursor,
-                );
-                setSuggestions((current) => [...current, ...result.items]);
-                setSuggestionCursor(result.nextCursor);
-              }}
-            />
-          ) : null}
         </section>
       ) : null}
 
@@ -663,22 +714,35 @@ export function EagleVectorWorkspace({
         </section>
       ) : null}
 
-      {contextMenu && onAssignManualTags ? (
+      {contextMenu && (onAssignManualTags || onTrashAssets) ? (
         <div
           className={styles.contextMenu}
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            role="menuitem"
-            aria-label={view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
-            onClick={() => openTagPicker(contextMenu.itemIds)}
-          >
-            <IconTags size={15} />
-            {view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
-          </button>
+          {onAssignManualTags ? (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
+              onClick={() => openTagPicker(contextMenu.itemIds)}
+            >
+              <IconTags size={15} />
+              {view === 'REVIEW' ? '指定其他标签' : '添加人工标签'}
+            </button>
+          ) : null}
+          {onTrashAssets ? (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label="删除（移到回收站）"
+              onClick={() => void trashItems(contextMenu.itemIds)}
+            >
+              <IconTrash size={15} />
+              删除（移到回收站）
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -778,22 +842,8 @@ function SuggestionCard({
         <Preview asset={suggestion.asset} />
         {batchSelection ? <SelectionMark selected={selected} /> : null}
         <div className={styles.assetInfo}>
-          <strong>{suggestion.asset.displayName}</strong>
           <span>建议：{suggestion.suggestedTag.name}</span>
-          <small>
-            相似度 {(suggestion.score * 100).toFixed(1)}% · 中心 {suggestion.prototypeRank + 1}
-          </small>
-          {suggestion.representativeAssets.length ? (
-            <div className={styles.evidence} aria-label="该中心代表图片">
-              <span>代表图</span>
-              {suggestion.representativeAssets.map((asset) => {
-                const src = getVectorThumbnailUrl(asset);
-                return src ? (
-                  <img key={asset.id} src={src} alt={asset.displayName} loading="lazy" />
-                ) : null;
-              })}
-            </div>
-          ) : null}
+          <strong className={styles.similarity}>{(suggestion.score * 100).toFixed(1)}%</strong>
         </div>
       </button>
       <div className={styles.cardActions}>

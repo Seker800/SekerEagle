@@ -70,7 +70,6 @@ export interface EagleVectorSuggestion {
   createdAt: string;
   suggestedTag: { id: string; name: string; color: string | null };
   asset: EagleVectorAssetPreview;
-  representativeAssets: EagleVectorAssetPreview[];
 }
 
 export interface EagleUnclassifiedAsset extends EagleVectorAssetPreview {
