@@ -5,6 +5,7 @@ import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { EagleImageViewer } from './EagleImageViewer';
 
 const {
+  addOverlayMock,
   applyConstraintsMock,
   destroyMock,
   forceRedrawMock,
@@ -21,6 +22,7 @@ const {
   zoomToMock,
 } = vi.hoisted(() => {
   const hoistedHandlers = new Map<string, (event?: unknown) => void>();
+  const hoistedAddOverlayMock = vi.fn();
   const hoistedDestroyMock = vi.fn();
   const hoistedForceRedrawMock = vi.fn();
   const hoistedGetBoundsMock = vi.fn(() => ({
@@ -41,6 +43,7 @@ const {
     addHandler: vi.fn((name: string, handler: (event?: unknown) => void) =>
       hoistedHandlers.set(name, handler),
     ),
+    addOverlay: hoistedAddOverlayMock,
     destroy: hoistedDestroyMock,
     forceRedraw: hoistedForceRedrawMock,
     open: hoistedOpenMock,
@@ -61,6 +64,7 @@ const {
     zoomPerScroll: 1.12,
   };
   return {
+    addOverlayMock: hoistedAddOverlayMock,
     applyConstraintsMock: hoistedApplyConstraintsMock,
     destroyMock: hoistedDestroyMock,
     forceRedrawMock: hoistedForceRedrawMock,
@@ -103,12 +107,25 @@ describe('EagleImageViewer', () => {
     handlers.clear();
   });
 
-  it('leaves the large-image context menu to the browser', async () => {
+  it('gives the browser a real image target for the large-image context menu', async () => {
     render(<EagleImageViewer image={image} onClose={vi.fn()} />);
-    await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
 
-    const browserMayOpenItsMenu = fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'));
+    expect(addOverlayMock).toHaveBeenCalledOnce();
+    const overlay = addOverlayMock.mock.calls[0]?.[0] as {
+      checkResize: boolean;
+      element: HTMLImageElement;
+      location: unknown;
+    };
+    expect(overlay.element).toBeInstanceOf(HTMLImageElement);
+    expect(overlay.element.src).toContain(image.src);
+    expect(overlay.element.draggable).toBe(false);
+    expect(overlay.element).toHaveAttribute('aria-hidden', 'true');
+    expect(overlay.checkResize).toBe(false);
+    expect(overlay.location).toEqual(getBoundsMock.mock.results[0]?.value);
 
+    const browserMayOpenItsMenu = fireEvent.contextMenu(overlay.element);
     expect(browserMayOpenItsMenu).toBe(true);
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
