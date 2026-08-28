@@ -43,11 +43,17 @@ describe('ThumbnailLoadService', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(reopened.url).toBe('blob:thumbnail');
     reopened.release();
+    reopened.release();
+    expect(revoke).not.toHaveBeenCalled();
   });
 
   it('evicts only the least recently used released thumbnail after the generous entry limit', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
-      new Response(new Blob([String(url)]), { headers: { 'content-type': 'image/webp' } }),
+    let responseIndex = 0;
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(new Blob([String(++responseIndex)]), {
+          headers: { 'content-type': 'image/webp' },
+        }),
     );
     const revoke = vi.fn();
     let objectUrlIndex = 0;
@@ -97,6 +103,59 @@ describe('ThumbnailLoadService', () => {
 
     expect(revoke).toHaveBeenCalledWith('blob:thumbnail-1');
     second.release();
+  });
+
+  it('expires only idle thumbnails after their retention window', async () => {
+    let now = 1_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+    );
+    const revoke = vi.fn();
+    let objectUrlIndex = 0;
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => `blob:thumbnail-${++objectUrlIndex}`),
+      revokeObjectURL: revoke,
+    });
+    const service = new ThumbnailLoadService({ maxIdleMs: 30 * 60_000 });
+
+    const first = await service.load('asset', '/asset', new AbortController().signal);
+    first.release();
+    now += 30 * 60_000 - 1;
+    const warm = await service.load('asset', '/asset', new AbortController().signal);
+    warm.release();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    now += 30 * 60_000;
+    const expired = await service.load('asset', '/asset', new AbortController().signal);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(revoke).toHaveBeenCalledWith('blob:thumbnail-1');
+    expired.release();
+  });
+
+  it('allows active thumbnails to exceed a limit temporarily and clears warm entries on dispose', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+    );
+    const revoke = vi.fn();
+    let objectUrlIndex = 0;
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => `blob:thumbnail-${++objectUrlIndex}`),
+      revokeObjectURL: revoke,
+    });
+    const service = new ThumbnailLoadService({ maxEntries: 1 });
+
+    const first = await service.load('first', '/first', new AbortController().signal);
+    const second = await service.load('second', '/second', new AbortController().signal);
+    expect(revoke).not.toHaveBeenCalled();
+
+    first.release();
+    expect(revoke).toHaveBeenCalledWith('blob:thumbnail-1');
+    second.release();
+    service.dispose();
+    expect(revoke).toHaveBeenCalledWith('blob:thumbnail-2');
   });
 
   it('classifies 429 without replacing it with a generic image failure', async () => {

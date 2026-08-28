@@ -117,6 +117,8 @@ function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceVie
   return null;
 }
 const EAGLE_PAGE_SIZE = 40;
+const ASSET_LIST_STALE_TIME_MS = 5 * 60_000;
+const ASSET_LIST_GC_TIME_MS = 30 * 60_000;
 const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
 function readThumbnailSize(): number {
@@ -256,7 +258,8 @@ export function SekerEaglePage({
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: isAssetView,
-    gcTime: 60_000,
+    staleTime: ASSET_LIST_STALE_TIME_MS,
+    gcTime: ASSET_LIST_GC_TIME_MS,
   });
   const {
     ratingMutation,
