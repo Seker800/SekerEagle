@@ -181,6 +181,29 @@ describe('EagleImageViewer', () => {
     expect(applyConstraintsMock).toHaveBeenCalledWith(false);
   });
 
+  it('treats pen input as direct while leaving touch gestures to OpenSeadragon', async () => {
+    render(<EagleImageViewer image={image} onClose={vi.fn()} />);
+    await waitFor(() => expect(handlers.has('canvas-drag')).toBe(true));
+
+    const penEvent = {
+      delta: { negate: vi.fn(() => ({ x: -4, y: 6 })) },
+      pointerType: 'pen',
+      preventDefaultAction: false,
+    };
+    act(() => handlers.get('canvas-drag')?.(penEvent));
+    expect(penEvent.preventDefaultAction).toBe(true);
+    expect(panByMock).toHaveBeenCalledWith({ x: -4, y: 6 }, true);
+
+    const touchEvent = {
+      delta: { negate: vi.fn() },
+      pointerType: 'touch',
+      preventDefaultAction: false,
+    };
+    act(() => handlers.get('canvas-drag')?.(touchEvent));
+    expect(touchEvent.preventDefaultAction).toBe(false);
+    expect(touchEvent.delta.negate).not.toHaveBeenCalled();
+  });
+
   it('closes on a quick click outside the displayed image but stays open for image clicks', async () => {
     const onClose = vi.fn();
     render(<EagleImageViewer image={image} onClose={onClose} />);
