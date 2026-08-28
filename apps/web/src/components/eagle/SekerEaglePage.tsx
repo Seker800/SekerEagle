@@ -50,7 +50,7 @@ import {
   type EagleSmartFolder,
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
-import { copyImageToClipboard } from '../../lib/image-clipboard';
+import { canCopyImageToClipboard, copyImageToClipboard } from '../../lib/image-clipboard';
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
@@ -184,6 +184,7 @@ export function SekerEaglePage({
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
+  const [lightboxPurpose, setLightboxPurpose] = useState<'preview' | 'native-copy'>('preview');
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
@@ -336,6 +337,7 @@ export function SekerEaglePage({
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   const contextMenuAsset =
     selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
+  const imageClipboardAvailable = canCopyImageToClipboard();
   const selectedAssetQuery = useQuery({
     queryKey: [...queryKeys.assetDetail(selectedAssetId), libraryView],
     queryFn: ({ signal }) =>
@@ -690,6 +692,13 @@ export function SekerEaglePage({
     if (!contextMenuAsset?.mimeType.startsWith('image/') || !previewUrl || assetActionPending) {
       return;
     }
+    if (!imageClipboardAvailable) {
+      setLightboxPurpose('native-copy');
+      setPreviewAssetId(contextMenuAsset.id);
+      setAssetActionError(null);
+      setAssetContextMenu(null);
+      return;
+    }
     setAssetActionPending('copy');
     setAssetActionError(null);
     void copyImageToClipboard(previewUrl).then(
@@ -738,6 +747,7 @@ export function SekerEaglePage({
 
   const openAssetPreview = (asset: EagleAssetListItem) => {
     if (asset.mimeType.startsWith('video/')) {
+      setLightboxPurpose('preview');
       setPreviewAssetId(asset.id);
       return;
     }
@@ -1687,12 +1697,16 @@ export function SekerEaglePage({
               <button
                 type="button"
                 role="menuitem"
-                aria-label="复制图片"
+                aria-label={imageClipboardAvailable ? '复制图片' : '打开可复制预览'}
                 disabled={assetActionPending !== null}
                 onClick={copySelectedImage}
               >
                 <IconCopy size={15} />
-                {assetActionPending === 'copy' ? '正在复制…' : '复制图片'}
+                {assetActionPending === 'copy'
+                  ? '正在复制…'
+                  : imageClipboardAvailable
+                    ? '复制图片'
+                    : '打开可复制预览'}
               </button>
             ) : null}
             {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
@@ -1837,7 +1851,11 @@ export function SekerEaglePage({
         </div>
       )}
       {previewAsset && (
-        <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
+        <EagleAssetLightbox
+          asset={previewAsset}
+          purpose={lightboxPurpose}
+          onClose={() => setPreviewAssetId(null)}
+        />
       )}
       {imagePreview.previewImage ? (
         <EagleImageViewer

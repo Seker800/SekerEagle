@@ -61,10 +61,7 @@ describe('EagleAssetLightbox', () => {
 
     const dialog = screen.getByRole('dialog', { name: '复制 Reference image' });
     const image = screen.getByRole('img', { name: 'Reference image' });
-    expect(image).toHaveAttribute(
-      'src',
-      '/api/eagle/assets/image-1/renditions/preview-1/content',
-    );
+    expect(image).toHaveAttribute('src', '/api/eagle/assets/image-1/renditions/preview-1');
     expect(dialog).toHaveTextContent('在图片上右键，然后选择浏览器的“复制图片”');
     expect(fireEvent.contextMenu(image)).toBe(true);
   });

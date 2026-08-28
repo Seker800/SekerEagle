@@ -7,15 +7,21 @@ import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
   asset: EagleAssetListItem;
   onClose: () => void;
+  purpose?: 'preview' | 'native-copy';
 }
 
-export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) {
+export function EagleAssetLightbox({
+  asset,
+  onClose,
+  purpose = 'preview',
+}: EagleAssetLightboxProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
   const previewUrl = getEaglePreviewContentUrl(asset);
+  const isNativeCopy = purpose === 'native-copy';
 
   return (
     <div
@@ -23,7 +29,7 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
       className={styles.backdrop}
       role="dialog"
       aria-modal="true"
-      aria-label="素材大图预览"
+      aria-label={isNativeCopy ? `复制 ${asset.displayName}` : '素材大图预览'}
       tabIndex={-1}
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose();
@@ -38,7 +44,11 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
               : asset.format.toUpperCase()}
           </span>
         </div>
-        <button type="button" aria-label="关闭大图预览" onClick={onClose}>
+        <button
+          type="button"
+          aria-label={isNativeCopy ? '关闭可复制预览' : '关闭大图预览'}
+          onClick={onClose}
+        >
           <IconX size={22} />
         </button>
       </header>
@@ -63,7 +73,11 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
           <p>预览图尚未生成</p>
         )}
       </div>
-      <footer>Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览</footer>
+      <footer>
+        {isNativeCopy
+          ? '在图片上右键，然后选择浏览器的“复制图片” · Esc 关闭'
+          : 'Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览'}
+      </footer>
     </div>
   );
 }

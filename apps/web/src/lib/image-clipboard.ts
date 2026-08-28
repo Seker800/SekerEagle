@@ -9,6 +9,15 @@ interface ImageClipboardDependencies {
   write?: (items: ClipboardItem[]) => Promise<void>;
 }
 
+export function canCopyImageToClipboard(): boolean {
+  if (getDesktopClipboardBridge()) return true;
+  return Boolean(
+    globalThis.isSecureContext !== false &&
+    typeof globalThis.ClipboardItem === 'function' &&
+    globalThis.navigator?.clipboard?.write,
+  );
+}
+
 export async function copyImageToClipboard(
   sourceUrl: string,
   dependencies: ImageClipboardDependencies = {},
@@ -28,6 +37,7 @@ export async function copyImageToClipboard(
     dependencies.write ??
     globalThis.navigator?.clipboard?.write?.bind(globalThis.navigator.clipboard);
   if (
+    globalThis.isSecureContext === false ||
     !writeClipboard ||
     (!dependencies.createClipboardItem && typeof globalThis.ClipboardItem !== 'function')
   ) {
