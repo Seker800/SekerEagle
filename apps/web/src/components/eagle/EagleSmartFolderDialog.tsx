@@ -55,9 +55,11 @@ export function EagleSmartFolderDialog({
   const [query, setQuery] = useState(() => createEditableQuery(initialQuery));
   const deferredQuery = useDebouncedValue(query, 250);
   const activeConditionCount = countActiveEagleFilterRules(query);
+  const hasActiveDeferredCondition = countActiveEagleFilterRules(deferredQuery) > 0;
   const countQuery = useQuery({
     queryKey: ['eagle', 'smart-folder-preview', deferredQuery],
     queryFn: () => countEagleAssets(accessToken, deferredQuery),
+    enabled: hasActiveDeferredCondition,
     staleTime: 10_000,
   });
 
