@@ -106,12 +106,10 @@ export function EagleImageViewer({
   image,
   descriptor,
   onClose,
-  onOpenAssetMenu,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
   onClose: () => void;
-  onOpenAssetMenu?: (position: { x: number; y: number }) => void;
 }) {
   const source = useMemo(
     () =>
@@ -297,14 +295,7 @@ export function EagleImageViewer({
         aria-label={image.alt}
         onClick={(event) => event.stopPropagation()}
       >
-        <div
-          className={styles.stage}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onOpenAssetMenu?.({ x: event.clientX, y: event.clientY });
-          }}
-        >
+        <div className={styles.stage}>
           <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
           {status !== 'ready' ? (
             <div className={styles.loadState} role={status === 'error' ? 'alert' : 'status'}>
@@ -331,7 +322,9 @@ export function EagleImageViewer({
         <footer>
           <strong>{image.alt}</strong>
           <span>
-            滚轮缩放 · 拖拽移动 · 右键操作 · {descriptor ? '按需加载高清切片' : '优化预览'}
+            {`滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · ${
+              descriptor ? '按需加载高清切片' : '优化预览'
+            }`}
           </span>
           <button type="button" onClick={onClose}>
             关闭
