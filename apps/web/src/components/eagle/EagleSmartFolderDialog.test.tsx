@@ -88,9 +88,7 @@ describe('EagleSmartFolderDialog', () => {
     const group = screen.getByRole('region', { name: '条件组 1' });
     expect(within(group).getByRole('combobox', { name: '条件组 1 匹配方式' })).toHaveValue('ANY');
     expect(within(group).getByRole('combobox', { name: '条件组 1 结果方式' })).toHaveValue('MATCH');
-    expect(within(group).getByRole('combobox', { name: '规则 1 字段' })).toHaveValue(
-      'MANUAL_TAGS',
-    );
+    expect(within(group).getByRole('combobox', { name: '规则 1 字段' })).toHaveValue('MANUAL_TAGS');
     expect(within(group).getByRole('combobox', { name: '规则 1 运算符' })).toHaveValue('ALL_OF');
     expect(within(group).getByText('选择标签…')).toBeVisible();
 
