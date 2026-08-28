@@ -453,20 +453,10 @@ export function EagleVectorWorkspace({
                 suggestion={suggestion}
                 selected={selected.includes(suggestion.id)}
                 batchSelection={isBatchSelection}
-                onSelect={(gesture) =>
-                  selectItem(
-                    suggestion.id,
-                    orderedSuggestionIds,
-                    gesture,
-                  )
-                }
+                onSelect={(gesture) => selectItem(suggestion.id, orderedSuggestionIds, gesture)}
                 onReview={(action) => void review([suggestion.id], action)}
                 onContextMenu={(event) =>
-                  openContextMenu(
-                    event,
-                    suggestion.id,
-                    orderedSuggestionIds,
-                  )
+                  openContextMenu(event, suggestion.id, orderedSuggestionIds)
                 }
                 disabled={busy}
               />

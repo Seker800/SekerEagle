@@ -122,6 +122,11 @@ describe('EagleVectorWorkspace', () => {
     await waitFor(() =>
       expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),
     );
+    await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
+    await waitFor(() =>
+      expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'REJECT'),
+    );
   });
 
   it('presents review tags and suggestions as a similarity-first batch workflow', async () => {
@@ -201,6 +206,8 @@ describe('EagleVectorWorkspace', () => {
     await waitFor(() =>
       expect(api.listEagleVectorSuggestions).toHaveBeenLastCalledWith('tag-high'),
     );
+    fireEvent.click(filterButtons[0]!);
+    await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenLastCalledWith(undefined));
 
     const grid = screen.getByRole('grid', { name: '待确认的智能标签建议' });
     const cards = within(grid).getAllByRole('button', { name: /^选择 / });
@@ -311,6 +318,10 @@ describe('EagleVectorWorkspace', () => {
     fireEvent.click(grid);
     expect(second).toHaveAttribute('aria-pressed', 'false');
     expect(third).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(first);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(first).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('reuses the full tag picker search so owners can browse and find tags by pinyin', async () => {
