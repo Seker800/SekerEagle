@@ -7,7 +7,7 @@ afterEach(() => {
 });
 
 describe('ThumbnailLoadService', () => {
-  it('deduplicates active requests and revokes the shared object URL after its last release', async () => {
+  it('keeps a released thumbnail warm so reopening a folder does not fetch or decode it again', async () => {
     const fetchMock = vi
       .spyOn(globalThis, 'fetch')
       .mockResolvedValue(
@@ -33,7 +33,70 @@ describe('ThumbnailLoadService', () => {
     first.release();
     expect(revoke).not.toHaveBeenCalled();
     second.release();
-    expect(revoke).toHaveBeenCalledWith('blob:thumbnail');
+    expect(revoke).not.toHaveBeenCalled();
+
+    const reopened = await service.load(
+      'asset:revision:rendition',
+      '/media/thumbnail',
+      new AbortController().signal,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(reopened.url).toBe('blob:thumbnail');
+    reopened.release();
+  });
+
+  it('evicts only the least recently used released thumbnail after the generous entry limit', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url) =>
+      new Response(new Blob([String(url)]), { headers: { 'content-type': 'image/webp' } }),
+    );
+    const revoke = vi.fn();
+    let objectUrlIndex = 0;
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => `blob:thumbnail-${++objectUrlIndex}`),
+      revokeObjectURL: revoke,
+    });
+    const service = new ThumbnailLoadService({
+      maxEntries: 2,
+      maxBytes: Number.POSITIVE_INFINITY,
+      maxIdleMs: Number.POSITIVE_INFINITY,
+    });
+
+    const first = await service.load('first', '/first', new AbortController().signal);
+    first.release();
+    const second = await service.load('second', '/second', new AbortController().signal);
+    second.release();
+    const firstAgain = await service.load('first', '/first', new AbortController().signal);
+    firstAgain.release();
+    const third = await service.load('third', '/third', new AbortController().signal);
+
+    expect(revoke).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledWith('blob:thumbnail-2');
+    third.release();
+  });
+
+  it('also bounds released thumbnails by encoded byte size', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(new Blob(['1234']), { headers: { 'content-type': 'image/webp' } }),
+    );
+    const revoke = vi.fn();
+    let objectUrlIndex = 0;
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => `blob:thumbnail-${++objectUrlIndex}`),
+      revokeObjectURL: revoke,
+    });
+    const service = new ThumbnailLoadService({
+      maxEntries: 10,
+      maxBytes: 5,
+      maxIdleMs: Number.POSITIVE_INFINITY,
+    });
+
+    const first = await service.load('first', '/first', new AbortController().signal);
+    first.release();
+    const second = await service.load('second', '/second', new AbortController().signal);
+
+    expect(revoke).toHaveBeenCalledWith('blob:thumbnail-1');
+    second.release();
   });
 
   it('classifies 429 without replacing it with a generic image failure', async () => {

@@ -1908,6 +1908,32 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it('reuses recently visited folder listings instead of refetching on every switch', async () => {
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'folder-1',
+        name: '常用素材',
+        color: null,
+        parentId: null,
+        queryVersion: 1,
+        queryJson: { version: 1, filters: {} },
+        position: 0,
+        rowVersion: 1,
+      },
+    ]);
+    renderPage();
+
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    expect(listEagleAssetsMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(await screen.findByRole('button', { name: '常用素材' }));
+    await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: /全部素材/ }));
+    fireEvent.click(screen.getByRole('button', { name: '常用素材' }));
+
+    await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(2));
+  });
+
   it('moves smart folders optimistically without waiting for asset or folder refetches', async () => {
     const folders = [
       {
