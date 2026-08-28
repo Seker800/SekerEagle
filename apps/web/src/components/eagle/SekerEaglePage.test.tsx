@@ -1107,20 +1107,19 @@ describe('SekerEaglePage', () => {
     expect(copyStarted).toBe(true);
   });
 
-  it('opens a native-copy image instead of failing on an insecure LAN origin', async () => {
+  it('keeps image copying as a one-step action on an insecure LAN origin', async () => {
     canCopyImageToClipboardMock.mockReturnValue(false);
     renderPage();
 
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
-    fireEvent.click(screen.getByRole('menuitem', { name: '打开可复制预览' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '复制图片' }));
 
-    const dialog = screen.getByRole('dialog', { name: '复制 Owl Reference' });
-    expect(within(dialog).getByRole('img', { name: 'Owl Reference' })).toHaveAttribute(
-      'src',
+    await waitFor(() =>
+      expect(copyImageToClipboardMock).toHaveBeenCalledWith(
       '/api/eagle/assets/asset-1/renditions/rendition-1/content',
+      ),
     );
-    expect(dialog).toHaveTextContent('在图片上右键，然后选择浏览器的“复制图片”');
-    expect(copyImageToClipboardMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: '复制 Owl Reference' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
   });
 
