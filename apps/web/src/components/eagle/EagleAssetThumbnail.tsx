@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { IconPhoto } from '@tabler/icons-react';
+import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
 import {
   getEagleAssetContentUrl,
   getEagleRenditionContentUrl,
@@ -338,6 +338,12 @@ export function EagleAssetThumbnail({
           preload="metadata"
           aria-hidden="true"
         />
+      )}
+      {isVideo && (
+        <span className={styles.videoBadge} aria-label="视频素材">
+          <IconPlayerPlayFilled size={10} aria-hidden="true" />
+          视频
+        </span>
       )}
     </span>
   );

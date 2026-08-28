@@ -442,6 +442,25 @@
   inset: 0;
   z-index: 1;
 }
+.videoBadge {
+  position: absolute;
+  bottom: 7px;
+  left: 7px;
+  z-index: 2;
+  min-height: 20px;
+  padding: 3px 6px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: #f4f5f6;
+  background: rgb(8 9 10 / 78%);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
 .thumbnailError {
   max-width: 150px;
   display: grid;
