@@ -49,20 +49,31 @@ const imageAsset: EagleAssetListItem = {
 
 describe('EagleAssetLightbox', () => {
   it('renders video in a stage-constrained player', () => {
-    render(<EagleAssetLightbox asset={videoAsset} onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<EagleAssetLightbox asset={videoAsset} onClose={onClose} />);
 
     const video = screen.getByLabelText('播放 Portrait video');
     expect(video).toHaveAttribute('src', '/api/eagle/assets/video-1/original');
     expect(video.className).toContain('videoPlayer');
+    fireEvent.click(video);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('provides a real image with an unblocked browser context menu for native copying', () => {
-    render(<EagleAssetLightbox asset={imageAsset} purpose="native-copy" onClose={vi.fn()} />);
+    const onClose = vi.fn();
+    render(<EagleAssetLightbox asset={imageAsset} purpose="native-copy" onClose={onClose} />);
 
     const dialog = screen.getByRole('dialog', { name: '复制 Reference image' });
     const image = screen.getByRole('img', { name: 'Reference image' });
     expect(image).toHaveAttribute('src', '/api/eagle/assets/image-1/renditions/preview-1');
     expect(dialog).toHaveTextContent('在图片上右键，然后选择浏览器的“复制图片”');
     expect(fireEvent.contextMenu(image)).toBe(true);
+
+    fireEvent.click(image);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(image.parentElement!);
+    fireEvent.keyDown(dialog, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: '关闭可复制预览' }));
+    expect(onClose).toHaveBeenCalledTimes(3);
   });
 });

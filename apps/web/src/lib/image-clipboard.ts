@@ -11,10 +11,11 @@ interface ImageClipboardDependencies {
 
 export function canCopyImageToClipboard(): boolean {
   if (getDesktopClipboardBridge()) return true;
+  const clipboard = globalThis.navigator?.clipboard;
   return Boolean(
     globalThis.isSecureContext !== false &&
     typeof globalThis.ClipboardItem === 'function' &&
-    globalThis.navigator?.clipboard?.write,
+    typeof clipboard?.write === 'function',
   );
 }
 
