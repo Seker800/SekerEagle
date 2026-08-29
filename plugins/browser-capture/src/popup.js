@@ -37,7 +37,7 @@ async function render() {
     ...response.jobs.slice(0, 8).map((job) => {
       const item = document.createElement('li');
       const title = document.createElement('strong');
-      title.textContent = job.metadata?.displayName || '未命名图片';
+      title.textContent = job.metadata?.displayName || '未命名素材';
       const detail = document.createElement('span');
       const timestamp = jobTimestamp(job);
       const details = [

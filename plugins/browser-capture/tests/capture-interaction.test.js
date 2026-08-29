@@ -229,3 +229,27 @@ test('collects repeated, layered, masked and pseudo-element CSS images', () => {
     },
   );
 });
+
+test('prefers an observed X MP4 over the video poster and temporary blob URL', () => {
+  const video = {
+    tagName: 'VIDEO',
+    currentSrc: 'blob:https://x.com/player',
+    poster: 'https://pbs.twimg.com/ext_tw_video_thumb/123456789/pu/img/poster.jpg',
+    getAttribute: () => null,
+    querySelectorAll: () => [],
+  };
+
+  const target = resolveCaptureTarget({
+    path: [video],
+    baseUrl: 'https://x.com/account/status/123',
+    observedMediaUrls: [
+      'https://video.twimg.com/ext_tw_video/123456789/pu/vid/1280x720/movie.mp4?tag=12',
+    ],
+  });
+
+  assert.equal(target.mediaType, 'video');
+  assert.equal(
+    target.sourceUrl,
+    'https://video.twimg.com/ext_tw_video/123456789/pu/vid/1280x720/movie.mp4?tag=12',
+  );
+});

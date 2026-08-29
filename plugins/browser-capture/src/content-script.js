@@ -8,6 +8,7 @@ const BROWSER_COPY_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+  'video/mp4',
 ]);
 let feedbackAudioContext = null;
 
@@ -19,12 +20,20 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 void import(chrome.runtime.getURL('src/capture-interaction.js'))
-  .then(({ createAltRightClickTracker, resolveCaptureTarget }) => {
-    installCaptureInteraction({ createAltRightClickTracker, resolveCaptureTarget });
+  .then(({ createAltRightClickTracker, resolveCaptureTarget, resolveCaptureTargetAsync }) => {
+    installCaptureInteraction({
+      createAltRightClickTracker,
+      resolveCaptureTarget,
+      resolveCaptureTargetAsync,
+    });
   })
   .catch(() => showToast('SekerEagle 插件加载失败，请重新加载扩展', true));
 
-function installCaptureInteraction({ createAltRightClickTracker, resolveCaptureTarget }) {
+function installCaptureInteraction({
+  createAltRightClickTracker,
+  resolveCaptureTarget,
+  resolveCaptureTargetAsync,
+}) {
   const tracker = createAltRightClickTracker();
   let lastHandled = null;
 
@@ -51,24 +60,38 @@ function installCaptureInteraction({ createAltRightClickTracker, resolveCaptureT
       baseUrl: location.href,
       getStyle: (element, pseudo) => window.getComputedStyle(element, pseudo),
       matchesMedia: (query) => window.matchMedia(query).matches,
+      observedMediaUrls: readObservedMediaUrls(),
+      observedXMediaRecords: readObservedXMediaRecords(),
     });
     const captureElement = selectCaptureElement(path, elementsAtPoint);
     const captureRect = captureRectangle(captureElement, point);
-    showToast(target ? '正在读取图片并加入队列…' : '正在截取可见内容并加入队列…');
-    void enqueueCapture(target, captureRect).catch(() =>
-      showToast('图片读取失败，请重新加载扩展后再试', true),
+    showToast(
+      target?.mediaType === 'video'
+        ? '正在读取视频并加入队列…'
+        : target
+          ? '正在读取图片并加入队列…'
+          : '正在截取可见内容并加入队列…',
+    );
+    void enqueueCapture(target, captureRect, captureElement, resolveCaptureTargetAsync).catch(() =>
+      showToast('媒体读取失败，请重新加载扩展后再试', true),
     );
   }
 }
 
-async function enqueueCapture(target, captureRect) {
-  const browserCopy = await prepareBrowserCopy(target);
+async function enqueueCapture(target, captureRect, captureElement, resolveCaptureTargetAsync) {
+  const resolvedTarget = await resolveCaptureTargetAsync({
+    element: captureElement,
+    baseUrl: location.href,
+    target,
+    fetchImpl: window.fetch.bind(window),
+  });
+  const browserCopy = await prepareBrowserCopy(resolvedTarget);
   document.getElementById(TOAST_ID)?.remove();
   chrome.runtime.sendMessage(
     {
       type: 'capture:enqueue',
       payload: {
-        ...(target || { sourceUrl: null, sourceCandidates: [], altText: '' }),
+        ...(resolvedTarget || { sourceUrl: null, sourceCandidates: [], altText: '' }),
         browserCopy,
         captureRect,
         viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -84,7 +107,7 @@ async function enqueueCapture(target, captureRect) {
       showToast(
         response?.ok
           ? `已加入 SekerEagle 队列 · ${response.pendingCount}`
-          : response?.error || '图片加入队列失败',
+          : response?.error || '素材加入队列失败',
         !response?.ok,
       );
     },
@@ -135,7 +158,7 @@ function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error || new Error('无法读取图片内容。'));
+    reader.onerror = () => reject(reader.error || new Error('无法读取媒体内容。'));
     reader.readAsDataURL(blob);
   });
 }
@@ -143,10 +166,21 @@ function blobToDataUrl(blob) {
 function selectCaptureElement(path, elementsAtPoint) {
   const elements = [...new Set([...path, ...elementsAtPoint])];
   return (
-    elements.find((element) => ['CANVAS', 'IMG', 'SVG', 'VIDEO'].includes(element?.tagName)) ||
+    elements.find((element) => element?.tagName === 'VIDEO') ||
+    elements.find((element) => ['CANVAS', 'IMG', 'SVG'].includes(element?.tagName)) ||
     elements.find((element) => typeof element?.getBoundingClientRect === 'function') ||
     null
   );
+}
+
+function readObservedMediaUrls() {
+  const values = window.__sekereagleObservedMediaUrls;
+  return Array.isArray(values) ? values.slice(-200) : [];
+}
+
+function readObservedXMediaRecords() {
+  const values = window.__sekereagleObservedXMediaRecords;
+  return Array.isArray(values) ? values.slice(-100) : [];
 }
 
 function captureRectangle(element, point) {

@@ -7,6 +7,7 @@ const MIME_EXTENSIONS = new Map([
   ['image/gif', '.gif'],
   ['image/heic', '.heic'],
   ['image/heif', '.heif'],
+  ['video/mp4', '.mp4'],
 ]);
 
 export function deriveDisplayName({ altText, imageUrl, pageTitle }) {
@@ -14,7 +15,7 @@ export function deriveDisplayName({ altText, imageUrl, pageTitle }) {
   if (alt) return alt;
   const fileName = meaningfulFileName(imageUrl);
   if (fileName) return fileName;
-  return cleanText(pageTitle, 255) || '未命名图片';
+  return cleanText(pageTitle, 255) || '未命名素材';
 }
 
 export function buildCaptureMetadata({ pageUrl, pageTitle, imageUrl, altText }) {
@@ -43,7 +44,7 @@ export function sanitizeImageSourceUrl(value) {
 
 export function buildOriginalName({ imageUrl, displayName, mimeType }) {
   const extension = MIME_EXTENSIONS.get(mimeType);
-  if (!extension) throw new Error(`不支持的图片类型：${mimeType || '未知'}`);
+  if (!extension) throw new Error(`不支持的媒体类型：${mimeType || '未知'}`);
   const sourceName = fileNameFromUrl(imageUrl);
   if (sourceName && sourceName.toLocaleLowerCase('en-US').endsWith(extension)) {
     return safeFileName(sourceName, extension);
@@ -110,7 +111,7 @@ function safeStem(value) {
   const clean = replaceUnsafeFileNameCharacters(cleanText(value, 200))
     .replace(/[. ]+$/g, '')
     .trim();
-  return clean || '未命名图片';
+  return clean || '未命名素材';
 }
 
 function replaceUnsafeFileNameCharacters(value) {

@@ -1,12 +1,12 @@
 # SekerEagle 灵感采集
 
-这是一个独立的 Manifest V3 Chrome 扩展。用户在网页图片上按住 `Alt` 并点击右键，扩展会把原图、网页来源和 Eagle 风格元数据加入本地可靠队列，再上传到 SekerEagle。
+这是一个独立的 Manifest V3 Chrome 扩展。用户在网页图片或视频上按住 `Alt` 并点击右键，扩展会把原始媒体、网页来源和 Eagle 风格元数据加入本地可靠队列，再上传到 SekerEagle。
 
-当前扩展版本：`0.2.0`。
+当前扩展版本：`0.3.0`。
 
 ## 给 Agent 的一句话说明
 
-这不是“调用浏览器下载”的小脚本，而是 SekerEagle 的浏览器采集适配器：内容脚本负责识别图片，Service Worker 负责持久化队列和上传，服务端负责认证、分片上传、SHA-256 去重、来源留存和媒体处理。
+这不是“调用浏览器下载”的小脚本，而是 SekerEagle 的浏览器采集适配器：内容脚本负责识别图片和视频，Service Worker 负责持久化队列和上传，服务端负责认证、分片上传、SHA-256 去重、来源留存和媒体处理。
 
 ```text
 网页 Alt+右键
@@ -75,12 +75,19 @@ Chrome 内置页、新标签页和 Chrome 应用商店不允许普通扩展注�
 - 开放 Shadow DOM 内的图片。
 - CSS 多层 `background-image`、mask、`::before` 和 `::after` 伪元素图片。
 - `<video poster>` 与 SVG `<image href>` 引用。
+- 普通 `<video src>` 与 `<video><source type="video/mp4">` 的 MP4 原文件。
+- X / Twitter 页面接口返回的 `video.twimg.com` MP4 码率列表；按推文 ID 和媒体位置关联点击的视频，优先选择最高码率候选，并以播放器已加载的地址作为降级路径。
+- 小红书笔记详情中的视频流列表；优先选择浏览器可处理的高清流，并以页面 `VideoObject` 结构化数据作为降级路径。视频地址仅接受 `xhscdn.com` 官方 CDN。
 - `http:`、`https:`、`data:` 和网页临时 `blob:` 图片地址。
 - Canvas、内联 SVG、WebGL 和无法下载的受限图片会使用点击元素的可见截图兜底。
 
-当前不支持视频帧提取；`<video>` 只采集海报图。支持 AVIF、JPG/JPEG、PNG、WebP、GIF、HEIC 和 HEIF，单图最大 100MB。
+支持的视频格式为浏览器兼容的 H.264 MP4；图片支持 AVIF、JPG/JPEG、PNG、WebP、GIF、HEIC 和 HEIF，单个媒体最大 100MB。视频原文件不可用时任务会明确失败，不会悄悄退化成封面或截图；只有确实没有可用视频来源时，旧有的 `<video poster>` 图片采集行为才会保留。
 
-同源登录图片与 `blob:` 图片优先在网页上下文读取，单次浏览器侧副本最大 16MB。PAT 始终只保存在扩展后台，不会发送到网页；超过该限制或读取失败时仍会尝试后台原图下载，并保留可见截图作为最终兜底。
+X 使用临时 `blob:` 播放地址。扩展只观察 X 页面自身已经发起的接口响应，从中提取视频地址和码率，不内置 X 的登录 Cookie、CSRF 值或 Eagle 的站点授权串，也不会把推文文本传给扩展后台。若站点响应结构变化，仍会尝试匹配播放器已经加载的 MP4。
+
+小红书会在采集时用当前页面登录状态重新读取对应笔记详情，从 `noteDetailMap` 中选择视频流；不会保存或传出站点 Cookie。签名过期后重新打开或刷新笔记再采集即可。
+
+同源登录媒体与普通 `blob:` 媒体优先在网页上下文读取，单次浏览器侧副本最大 16MB。PAT 始终只保存在扩展后台，不会发送到网页；超过该限制或读取失败时仍会尝试后台原文件下载。图片保留可见截图作为最终兜底，视频不会截图冒充原文件。
 
 高清识别不会只押注一个猜测地址。内容脚本最多生成 12 个去重候选，并始终为浏览器当前显示的 `currentSrc`/`src` 保留兜底位置；后台依次下载，遇到失效地址、非图片响应或暂不支持的格式会自动尝试下一项。普通详情页链接不会作为图片候选，服务器明确声明为 HTML 的内容也不会因 URL 带图片扩展名而被上传。
 
@@ -99,7 +106,7 @@ Alt 状态会在右键按下阶段记录，因为部分页面触发 `contextmenu
 扩展会生成接近 Eagle 的采集信息：
 
 - 显示名称：优先使用 alt 文本，其次使用有意义的文件名，最后使用页面标题。
-- 原始图片 URL。
+- 原始媒体 URL（数据库兼容字段仍名为 `imageUrl`）。
 - 页面 URL 与页面标题。
 - alt 文本。
 - 捕获时间。
@@ -167,6 +174,9 @@ DELETE /api/eagle/browser-captures/:clientCaptureId
 | `src/content-script.js`        | 网页事件入口、消息发送与可见提示                           |
 | `src/capture-interaction.js`   | Alt+右键手势、坐标命中、Shadow DOM 与背景图识别            |
 | `src/image-source-resolver.js` | 响应式原图候选、直链与高清属性解析、质量排序和兜底         |
+| `src/video-source-resolver.js` | 通用 MP4、X 媒体元数据和小红书笔记视频流解析               |
+| `src/x-media-page-observer.js` | 从 X 页面自身的接口响应提取推文视频码率列表                |
+| `src/site-media-observer.js`   | 校验并缓存 X 视频元数据，记录实际请求 MP4 作为降级路径     |
 | `src/capture-source.js`        | 入队前对不可信候选 URL 去重、协议过滤和数量限制            |
 | `src/capture-metadata.js`      | 名称、来源和图片元数据规范化                               |
 | `src/service-worker.js`        | 入队、alarm、消息处理、恢复和 badge 更新                   |
@@ -229,8 +239,8 @@ Node 测试不能替代真实 Chrome 测试。至少验证一次：
 
 1. 确认 ChatGPT Chrome 控制扩展已经连接。它与 SekerEagle 灵感采集扩展是两个不同扩展。
 2. 在 `chrome://extensions` 确认 SekerEagle 版本并重新加载。
-3. 刷新一个普通网页图片页，让新版内容脚本重新注入。
-4. 对真实图片执行 `Alt+右键`。
+3. 刷新一个普通网页媒体页，让新版内容脚本重新注入。
+4. 对真实图片或视频执行 `Alt+右键`。
 5. 确认网页出现 `已加入 SekerEagle 队列`。
 6. 检查 gateway 日志是否依次出现创建捕获、分片签名和完成请求，状态为 201。
 7. 只读检查最新 `EagleBrowserCapture` 是否使用当前扩展版本，并且上传会话为 `COMPLETED`、存在 assetId。

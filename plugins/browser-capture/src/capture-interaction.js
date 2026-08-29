@@ -1,4 +1,8 @@
 import { resolveCaptureUrl, resolveImageSourceTarget } from './image-source-resolver.js';
+import {
+  resolveVideoSourceTarget,
+  resolveVideoSourceTargetAsync,
+} from './video-source-resolver.js';
 
 const RIGHT_BUTTON = 2;
 
@@ -34,15 +38,29 @@ export function resolveCaptureTarget({
   baseUrl,
   getStyle,
   matchesMedia = () => true,
+  observedMediaUrls = [],
+  observedXMediaRecords = [],
 }) {
   const candidates = [...new Set([...path, ...elementsAtPoint])];
   for (const element of candidates) {
+    const video = resolveVideoSourceTarget(
+      element,
+      baseUrl,
+      observedMediaUrls,
+      observedXMediaRecords,
+    );
+    if (video) return video;
     const image = resolveImageSourceTarget(element, baseUrl, matchesMedia);
     if (image) return image;
     const background = backgroundImageTarget(element, baseUrl, getStyle);
     if (background) return background;
   }
   return null;
+}
+
+export function resolveCaptureTargetAsync({ element, baseUrl, target, fetchImpl }) {
+  if (String(element?.tagName || '').toUpperCase() !== 'VIDEO') return Promise.resolve(target);
+  return resolveVideoSourceTargetAsync(element, baseUrl, target, fetchImpl);
 }
 
 function backgroundImageTarget(element, baseUrl, getStyle) {

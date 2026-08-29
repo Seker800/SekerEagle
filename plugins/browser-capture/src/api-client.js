@@ -70,7 +70,7 @@ export class CaptureApiClient {
     } catch (cause) {
       throw new CaptureApiError(messageFrom(cause, '对象存储连接失败。'));
     }
-    if (!response.ok) throw responseError(response.status, '图片分片上传失败。');
+    if (!response.ok) throw responseError(response.status, '媒体分片上传失败。');
     const etag = response.headers.get('etag');
     if (!etag) throw new CaptureApiError('对象存储没有返回 ETag。');
     return { etag };

@@ -554,3 +554,71 @@ test('uses the visible PNG fallback when every original source is unavailable', 
   assert.equal(job.originalName, 'Protected artwork.png');
   assert.equal(job.fallbackBlob, null);
 });
+
+test('downloads a signed MP4 source and declares it as a video upload', async () => {
+  Object.defineProperty(globalThis, 'chrome', {
+    configurable: true,
+    value: { runtime: { getManifest: () => ({ version: '0.3.0' }) } },
+  });
+  const sourceUrl = 'https://sns-video-v3.xhscdn.com/stream/movie.mp4?sign=secret&t=123';
+  const job = {
+    id: '2d7ad0ae-884b-4d47-ae76-adc552af0742',
+    status: 'PENDING',
+    mediaType: 'video',
+    sourceUrl,
+    sourceCandidates: [sourceUrl, 'blob:https://www.xiaohongshu.com/player'],
+    metadata: {
+      displayName: '纽北不养闲人',
+      pageTitle: '纽北不养闲人 - 小红书',
+      pageUrl: 'https://www.xiaohongshu.com/explore/note-id',
+      imageUrl: 'https://sns-video-v3.xhscdn.com/stream/movie.mp4',
+      altText: '纽北不养闲人',
+    },
+    capturedAt: '2026-08-29T00:00:00.000Z',
+    createdAt: 1,
+    attempts: 0,
+    nextAttemptAt: 0,
+    blob: null,
+    fallbackBlob: null,
+  };
+  const store = {
+    list: async () => [job],
+    update: async (_id, changes) => Object.assign(job, changes),
+  };
+  let declaration;
+  const runner = createQueueRunner({
+    store,
+    getConfig: async () => ({
+      serverUrl: 'https://eagle.example.com',
+      pat: 'sea_pat_test',
+      concurrency: 1,
+    }),
+    fetchImpl: async (url, init = {}) => {
+      if (String(url) === sourceUrl) {
+        return new Response('mp4-data', { headers: { 'content-type': 'video/mp4' } });
+      }
+      declaration = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify({
+          clientCaptureId: job.id,
+          uploadSessionId: 'upload-video',
+          status: 'COMPLETED',
+          assetId: 'asset-video',
+          partSize: 5_242_880,
+          replayed: false,
+        }),
+        { headers: { 'content-type': 'application/json' } },
+      );
+    },
+  });
+
+  await runner.drain();
+
+  assert.equal(job.status, 'COMPLETED');
+  assert.equal(job.mimeType, 'video/mp4');
+  assert.equal(job.originalName, 'movie.mp4');
+  assert.equal(job.metadata.imageUrl, 'https://sns-video-v3.xhscdn.com/stream/movie.mp4');
+  assert.equal(declaration.mimeType, 'video/mp4');
+  assert.equal(declaration.originalName, 'movie.mp4');
+  assert.equal(declaration.extensionVersion, '0.3.0');
+});

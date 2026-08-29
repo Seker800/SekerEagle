@@ -39,7 +39,7 @@ export function failureStageLabel(stage) {
     {
       SOURCE_DOWNLOAD: '源图下载失败',
       SERVER_CONNECT: '服务器连接失败',
-      UPLOAD: '图片上传失败',
+      UPLOAD: '媒体上传失败',
       COMMIT: '上传提交失败',
       CONFIG: '配置检查失败',
     }[stage] || ''

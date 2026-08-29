@@ -100,9 +100,11 @@ async function enqueue(payload, sender) {
   }
   const sourceCandidates = normalizeCaptureSourceCandidates(payload);
   const sourceUrl = sourceCandidates[0] || null;
+  const mediaType = payload?.mediaType === 'video' ? 'video' : 'image';
   const browserCopy = await decodeBrowserCopy(payload?.browserCopy, sourceCandidates);
-  const screenshot = browserCopy ? null : await captureVisibleFallback(payload, sender);
-  if (!sourceUrl && !screenshot) throw new Error('这里没有可采集的图片或可见内容。');
+  const screenshot =
+    browserCopy || mediaType === 'video' ? null : await captureVisibleFallback(payload, sender);
+  if (!sourceUrl && !screenshot) throw new Error('这里没有可采集的媒体或可见内容。');
   const id = crypto.randomUUID();
   const now = Date.now();
   const metadata = buildCaptureMetadata({
@@ -115,6 +117,7 @@ async function enqueue(payload, sender) {
   const initialMimeType = browserCopy?.mimeType ?? (!sourceUrl && screenshot ? 'image/png' : null);
   await store.put({
     id,
+    mediaType,
     status: 'PENDING',
     sourceUrl,
     sourceCandidates,
@@ -135,7 +138,7 @@ async function enqueue(payload, sender) {
           mimeType: initialMimeType,
         })
       : null,
-    fallbackBlob: sourceUrl ? screenshot : null,
+    fallbackBlob: sourceUrl && mediaType === 'image' ? screenshot : null,
     server: null,
     originTabId: sender.tab.id,
     originFrameId: sender.frameId ?? 0,
@@ -304,7 +307,7 @@ function withoutSensitiveQueueFields(job) {
 
 async function notifyCaptureResult(result) {
   const succeeded = result.status === 'COMPLETED';
-  const displayName = String(result.metadata?.displayName || '图片').slice(0, 80);
+  const displayName = String(result.metadata?.displayName || '素材').slice(0, 80);
   const message = succeeded
     ? result.duplicate
       ? `“${displayName}”已存在，采集记录已保存。`

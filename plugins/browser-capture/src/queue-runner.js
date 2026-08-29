@@ -210,13 +210,13 @@ async function safelyReportTerminalState(report, job, result) {
 
 async function downloadFirstSupportedCandidate(job, fetchImpl) {
   const candidates = normalizeCaptureSourceCandidates(job);
-  let lastError = typedError('没有可下载的图片地址。', 'PERMANENT');
+  let lastError = typedError('没有可下载的媒体地址。', 'PERMANENT');
   for (const sourceUrl of candidates) {
     try {
-      const blob = await fetchImage(sourceUrl, job.metadata.pageUrl, fetchImpl);
+      const blob = await fetchMedia(sourceUrl, job.metadata.pageUrl, fetchImpl);
       const mimeType = resolveSupportedMimeType(blob.type, sourceUrl);
       if (!mimeType) {
-        lastError = typedError('该候选图片格式暂不受 SekerEagle 支持。', 'PERMANENT');
+        lastError = typedError('该候选媒体格式暂不受 SekerEagle 支持。', 'PERMANENT');
         continue;
       }
       return { blob, mimeType, sourceUrl };
@@ -265,11 +265,11 @@ function markCompleted(store, jobId, completed) {
   });
 }
 
-async function fetchImage(sourceUrl, pageUrl, fetchImpl) {
+async function fetchMedia(sourceUrl, pageUrl, fetchImpl) {
   const protocol = new URL(sourceUrl).protocol;
-  if (protocol === 'blob:') throw typedError('暂不支持网页临时 Blob 图片。', 'PERMANENT');
+  if (protocol === 'blob:') throw typedError('暂不支持后台读取网页临时 Blob 媒体。', 'PERMANENT');
   if (!['http:', 'https:', 'data:'].includes(protocol)) {
-    throw typedError('不支持该图片地址。', 'PERMANENT');
+    throw typedError('不支持该媒体地址。', 'PERMANENT');
   }
   let response;
   try {
@@ -280,17 +280,17 @@ async function fetchImage(sourceUrl, pageUrl, fetchImpl) {
       referrerPolicy: 'strict-origin-when-cross-origin',
     });
   } catch (cause) {
-    throw new CaptureApiError(cause instanceof Error ? cause.message : '图片下载失败。');
+    throw new CaptureApiError(cause instanceof Error ? cause.message : '媒体下载失败。');
   }
   if (!response.ok) {
     const kind = response.status === 404 || response.status === 410 ? 'PERMANENT' : 'TRANSIENT';
-    throw typedError(`图片下载失败（${response.status}）。`, kind);
+    throw typedError(`媒体下载失败（${response.status}）。`, kind);
   }
   const declaredSize = Number(response.headers.get('content-length') || 0);
-  if (declaredSize > MAX_BYTES) throw typedError('图片大小不能超过 100MB。', 'PERMANENT');
+  if (declaredSize > MAX_BYTES) throw typedError('媒体大小不能超过 100MB。', 'PERMANENT');
   const blob = await response.blob();
-  if (!blob.size) throw typedError('下载到的图片为空。', 'PERMANENT');
-  if (blob.size > MAX_BYTES) throw typedError('图片大小不能超过 100MB。', 'PERMANENT');
+  if (!blob.size) throw typedError('下载到的媒体为空。', 'PERMANENT');
+  if (blob.size > MAX_BYTES) throw typedError('媒体大小不能超过 100MB。', 'PERMANENT');
   return blob;
 }
 

@@ -57,4 +57,9 @@ test('does not trust an image-looking extension when the server declares HTML co
     resolveSupportedMimeType('application/octet-stream', 'https://example.com/photo.jpg'),
     'image/jpeg',
   );
+  assert.equal(resolveSupportedMimeType('video/mp4', 'https://cdn.example.com/movie'), 'video/mp4');
+  assert.equal(
+    resolveSupportedMimeType('application/octet-stream', 'https://cdn.example.com/movie.mp4'),
+    'video/mp4',
+  );
 });
