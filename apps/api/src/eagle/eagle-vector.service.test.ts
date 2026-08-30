@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
+import { ListTagDistanceAssetsDto } from './eagle-vector.dto';
 import { EagleVectorService } from './eagle-vector.service';
 
 test('tag semantics defaults to enabled tags and search is bounded to disabled candidates', async () => {
@@ -156,8 +157,80 @@ test('suggestion review listing does not load representative assets that the rev
   assert.equal('representativeAssets' in firstItem, false);
 });
 
+test('distance inspection loads an owner-visible thumbnail for visual classification', async () => {
+  let distanceQuery: Record<string, unknown> | undefined;
+  const service = new EagleVectorService({
+    eagleManualTag: {
+      findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
+    },
+    eagleTagMemberDistance: {
+      findMany: async (input: Record<string, unknown>) => {
+        distanceQuery = input;
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listTagDistanceAssets('owner-1', 'tag-1', { limit: 40, direction: 'DESC' }, false);
+
+  assert.deepEqual(distanceQuery?.where, {
+    ownerId: 'owner-1',
+    tagId: 'tag-1',
+    snapshotId: 'snapshot-1',
+    asset: { deletedAt: null, isPrivate: false },
+  });
+  assert.deepEqual(distanceQuery?.include, {
+    asset: {
+      select: {
+        id: true,
+        displayName: true,
+        width: true,
+        height: true,
+        renditions: {
+          where: { status: 'READY', kind: 'THUMBNAIL', variant: '512' },
+          orderBy: { revision: 'desc' },
+          take: 1,
+          select: { id: true, width: true, height: true },
+        },
+      },
+    },
+  });
+  assert.deepEqual(distanceQuery?.orderBy, [{ distance: 'desc' }, { assetId: 'desc' }]);
+});
+
+test('distance inspection defaults to lowest similarity first across cursor pages', async () => {
+  const queries: Array<Record<string, unknown>> = [];
+  const service = new EagleVectorService({
+    eagleManualTag: {
+      findFirst: async () => ({ semanticConfig: { currentSnapshotId: 'snapshot-1' } }),
+    },
+    eagleTagMemberDistance: {
+      findMany: async (input: Record<string, unknown>) => {
+        queries.push(input);
+        return [];
+      },
+    },
+  } as never);
+
+  const cursor = Buffer.from(JSON.stringify({ distance: 0.42, assetId: 'asset-2' })).toString(
+    'base64url',
+  );
+  const query = Object.assign(new ListTagDistanceAssetsDto(), { cursor });
+  await service.listTagDistanceAssets('owner-1', 'tag-1', query, false);
+
+  assert.deepEqual(queries[0]?.orderBy, [{ distance: 'desc' }, { assetId: 'desc' }]);
+  assert.deepEqual(queries[0]?.where, {
+    ownerId: 'owner-1',
+    tagId: 'tag-1',
+    snapshotId: 'snapshot-1',
+    asset: { deletedAt: null, isPrivate: false },
+    OR: [{ distance: { lt: 0.42 } }, { distance: 0.42, assetId: { lt: 'asset-2' } }],
+  });
+});
+
 test('accepting a suggestion atomically creates an audited manual tag relation', async () => {
   const creates: unknown[] = [];
+  const recentTagWrites: unknown[] = [];
   const transaction = {
     $executeRaw: async () => 1,
     eagleVectorTagSuggestion: {
@@ -178,6 +251,12 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
       upsert: async (input: unknown) => {
         creates.push(input);
         return {};
+      },
+    },
+    eagleManualTag: {
+      updateMany: async (input: unknown) => {
+        recentTagWrites.push(input);
+        return { count: 1 };
       },
     },
   };
@@ -207,6 +286,14 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
       acceptedSuggestionId: 'suggestion-1',
     },
   });
+  assert.equal(recentTagWrites.length, 1);
+  assert.deepEqual((recentTagWrites[0] as { where: unknown }).where, {
+    ownerId: 'owner-1',
+    id: 'tag-1',
+  });
+  assert.ok(
+    (recentTagWrites[0] as { data: { lastUsedAt: unknown } }).data.lastUsedAt instanceof Date,
+  );
 });
 
 test('cross-owner suggestion review returns 404 without writes', async () => {

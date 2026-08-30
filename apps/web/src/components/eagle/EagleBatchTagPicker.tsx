@@ -43,6 +43,16 @@ export function EagleBatchTagPicker({
     () => searchAndSortEagleTags(allTags, query, selectedTagIds),
     [allTags, query, selectedTagIds],
   );
+  const recentTags = useMemo(
+    () =>
+      visibleTags
+        .filter(({ tag }) => tag.lastUsedAt !== null)
+        .sort(
+          (left, right) =>
+            Date.parse(right.tag.lastUsedAt ?? '') - Date.parse(left.tag.lastUsedAt ?? ''),
+        ),
+    [visibleTags],
+  );
   const trimmedQuery = query.trim();
   const normalizedQuery = trimmedQuery.toLocaleLowerCase('zh-CN');
   const canCreate = Boolean(
@@ -97,7 +107,7 @@ export function EagleBatchTagPicker({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <form
-        className={styles.dialog}
+        className={`${styles.dialog} ${isRemoving ? '' : styles.dialogWide}`}
         role="dialog"
         aria-modal="true"
         aria-label={dialogTitle}
@@ -137,44 +147,66 @@ export function EagleBatchTagPicker({
               创建“{trimmedQuery}”
             </button>
           )}
-          {visibleTags.length > 0 ? (
-            <EagleVirtualList
-              ariaLabel={isRemoving ? '可删除标签' : '可添加标签'}
-              className={styles.virtualTagList}
-              items={visibleTags}
-              itemKey={({ tag }) => tag.id}
-              rowHeight={37}
-              viewportHeight={420}
-              renderItem={({ tag }) => (
-                <label key={tag.id} className={styles.tagOption}>
-                  <input
-                    type="checkbox"
-                    aria-label={tag.name}
-                    checked={selectedTagIds.includes(tag.id)}
-                    onChange={() => toggleTag(tag.id)}
-                  />
-                  <span
-                    className={styles.color}
-                    style={tag.color ? { background: tag.color } : undefined}
-                  />
-                  {isRemoving ? (
-                    <span>
-                      {tag.name} · {selectedAssetCountByTagId[tag.id] ?? 0}/{assetCount}
-                    </span>
-                  ) : (
-                    <>
-                      <span>{tag.name}</span>
-                      <small>{tag.assetCount}</small>
-                    </>
+          <div className={`${styles.tagColumns} ${isRemoving ? styles.tagColumnsSingle : ''}`}>
+            <section
+              className={styles.tagColumn}
+              aria-label={isRemoving ? '可删除标签' : '所有标签'}
+            >
+              <h3>{isRemoving ? '可删除标签' : '所有标签'}</h3>
+              {visibleTags.length > 0 ? (
+                <EagleVirtualList
+                  ariaLabel={isRemoving ? '可删除标签列表' : '所有标签列表'}
+                  className={styles.virtualTagList}
+                  items={visibleTags}
+                  itemKey={({ tag }) => tag.id}
+                  rowHeight={37}
+                  viewportHeight={390}
+                  renderItem={({ tag }) => (
+                    <BatchTagOption
+                      tag={tag}
+                      selected={selectedTagIds.includes(tag.id)}
+                      selectedAssetCount={selectedAssetCountByTagId[tag.id]}
+                      assetCount={assetCount}
+                      isRemoving={isRemoving}
+                      onToggle={toggleTag}
+                    />
                   )}
-                </label>
+                />
+              ) : (
+                <div className={styles.empty}>
+                  {isRemoving && !query ? '所选素材没有人工标签' : '没有匹配的标签'}
+                </div>
               )}
-            />
-          ) : (
-            <div className={styles.empty} aria-label={isRemoving ? '可删除标签' : '可添加标签'}>
-              {isRemoving && !query ? '所选素材没有人工标签' : '没有匹配的标签'}
-            </div>
-          )}
+            </section>
+            {!isRemoving && (
+              <section className={styles.tagColumn} aria-label="最近使用">
+                <h3>最近使用</h3>
+                {recentTags.length > 0 ? (
+                  <EagleVirtualList
+                    ariaLabel="最近使用标签列表"
+                    className={styles.virtualTagList}
+                    items={recentTags}
+                    itemKey={({ tag }) => tag.id}
+                    rowHeight={37}
+                    viewportHeight={390}
+                    renderItem={({ tag }) => (
+                      <BatchTagOption
+                        tag={tag}
+                        selected={selectedTagIds.includes(tag.id)}
+                        assetCount={assetCount}
+                        recent
+                        onToggle={toggleTag}
+                      />
+                    )}
+                  />
+                ) : (
+                  <div className={styles.empty}>
+                    {query ? '没有匹配的最近标签' : '还没有最近使用的标签'}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
         </div>
         {error && (
           <p className={styles.error} role="alert">
@@ -205,5 +237,45 @@ export function EagleBatchTagPicker({
         </footer>
       </form>
     </div>
+  );
+}
+
+function BatchTagOption({
+  tag,
+  selected,
+  selectedAssetCount,
+  assetCount,
+  isRemoving = false,
+  recent = false,
+  onToggle,
+}: {
+  tag: EagleManualTag;
+  selected: boolean;
+  selectedAssetCount?: number;
+  assetCount: number;
+  isRemoving?: boolean;
+  recent?: boolean;
+  onToggle: (tagId: string) => void;
+}) {
+  return (
+    <label className={styles.tagOption}>
+      <input
+        type="checkbox"
+        aria-label={recent ? `${tag.name}（最近使用）` : tag.name}
+        checked={selected}
+        onChange={() => onToggle(tag.id)}
+      />
+      <span className={styles.color} style={tag.color ? { background: tag.color } : undefined} />
+      {isRemoving ? (
+        <span>
+          {tag.name} · {selectedAssetCount ?? 0}/{assetCount}
+        </span>
+      ) : (
+        <>
+          <span>{tag.name}</span>
+          <small>{tag.assetCount}</small>
+        </>
+      )}
+    </label>
   );
 }

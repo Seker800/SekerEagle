@@ -127,11 +127,13 @@ export function EagleSmartFolderDialog({
         </div>
         <footer>
           <span className={styles.conditionSummary} role="status" aria-live="polite">
-            {countQuery.isLoading
-              ? '正在计算符合规则的素材…'
-              : countQuery.isError
-                ? `已启用 ${activeConditionCount} 条规则`
-                : `找到 ${countQuery.data?.count ?? 0} 项符合规则的素材`}
+            {activeConditionCount === 0
+              ? '找到 0 项符合规则的素材'
+              : countQuery.isLoading
+                ? '正在计算符合规则的素材…'
+                : countQuery.isError
+                  ? `已启用 ${activeConditionCount} 条规则`
+                  : `找到 ${countQuery.data?.count ?? 0} 项符合规则的素材`}
           </span>
           <div className={styles.footerActions}>
             <button type="button" onClick={onClose}>

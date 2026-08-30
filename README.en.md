@@ -122,15 +122,17 @@ telemetry enabled by default.
 - Retry, schedule, and pause processing jobs while keeping interactive previews ahead of historical
   backfills.
 
-### Optional local vector features
+### Optional local AI features
 
 - Run a pinned Qwen3-VL-Embedding-2B MLX sidecar on Apple Silicon.
 - Generate local 1024-dimensional image embeddings and suggest tags based on labels the user has
   already confirmed.
 - Keep every tag opted out by default; suggestions start only after the user explicitly enables a
   tag and builds its prototype center.
-- Require manual acceptance or rejection of every suggestion. Normal uploads and library browsing
-  do not depend on the vector service.
+- Use Qwen3-VL 8B Instruct through a local Ollama runtime to generate concrete noun tags and expand
+  searches by exact match and semantic similarity.
+- Keep vector suggestions and automatic tagging stopped by default. Normal uploads and library
+  browsing do not depend on either local model.
 
 ### Multi-user privacy and security
 
@@ -157,17 +159,18 @@ photo management project instead.
 
 ## Support matrix
 
-| Capability                |        Status        | Notes                                                                     |
-| ------------------------- | :------------------: | ------------------------------------------------------------------------- |
-| macOS + Apple Silicon     |  ✅ Supported path   | Current development, deployment, and performance test environment         |
-| Docker Desktop deployment |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
-| macOS desktop app         | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
-| Web asset library         |          ✅          | Desktop browsers first                                                    |
-| Chrome browser capture    |          ✅          | Unpacked Manifest V3 extension                                            |
-| Eagle snapshot migration  |          ✅          | Local CLI plus Eagle export plugin                                        |
-| Local MLX vectors         |       Optional       | Requires Apple Silicon, `uv`, and a model download                        |
-| Linux / x64               |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
-| Native mobile app         |          ❌          | Not currently available                                                   |
+| Capability                 |        Status        | Notes                                                                     |
+| -------------------------- | :------------------: | ------------------------------------------------------------------------- |
+| macOS + Apple Silicon      |  ✅ Supported path   | Current development, deployment, and performance test environment         |
+| Docker Desktop deployment  |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
+| macOS desktop app          | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
+| Web asset library          |          ✅          | Desktop browsers first                                                    |
+| Chrome browser capture     |          ✅          | Unpacked Manifest V3 extension                                            |
+| Eagle snapshot migration   |          ✅          | Local CLI plus Eagle export plugin                                        |
+| Local MLX vectors          |       Optional       | Requires Apple Silicon, `uv`, and a model download                        |
+| Ollama automatic noun tags |       Optional       | Requires local Ollama and `qwen3-vl:8b-instruct`                          |
+| Linux / x64                |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
+| Native mobile app          |          ❌          | Not currently available                                                   |
 
 Allocate at least 16 GiB of memory and 8 CPUs to Docker Desktop. The PostgreSQL metadata path has
 been independently benchmarked with 100,000 assets. That result does not mean object-storage
@@ -182,6 +185,7 @@ capacity, backups, or disk redundancy are handled automatically. See the
 - Node.js 22 and npm 10
 - Docker Desktop
 - Optional: `uv` for the local vector sidecar
+- Optional: Ollama with `qwen3-vl:8b-instruct` for automatic noun tagging
 
 ### Start the services
 
@@ -197,8 +201,9 @@ npm run compose:config
 docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build
 ```
 
-If you do not need vector tag suggestions, skip the MLX setup and service installation steps. Then
-create the first administrator:
+If you do not need vector tag suggestions, skip the MLX setup and service installation steps.
+Automatic noun tagging additionally requires Ollama and `qwen3-vl:8b-instruct`; both AI features
+remain stopped by default. Then create the first administrator:
 
 ```sh
 docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \

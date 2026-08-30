@@ -82,8 +82,7 @@ describe('ThumbnailLoadService', () => {
 
   it('also bounds released thumbnails by encoded byte size', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async () =>
-        new Response(new Blob(['1234']), { headers: { 'content-type': 'image/webp' } }),
+      async () => new Response(new Blob(['1234']), { headers: { 'content-type': 'image/webp' } }),
     );
     const revoke = vi.fn();
     let objectUrlIndex = 0;
@@ -108,10 +107,12 @@ describe('ThumbnailLoadService', () => {
   it('expires only idle thumbnails after their retention window', async () => {
     let now = 1_000;
     vi.spyOn(Date, 'now').mockImplementation(() => now);
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async () =>
-        new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
-    );
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(
+        async () =>
+          new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+      );
     const revoke = vi.fn();
     let objectUrlIndex = 0;
     vi.stubGlobal('URL', {
@@ -136,8 +137,7 @@ describe('ThumbnailLoadService', () => {
 
   it('allows active thumbnails to exceed a limit temporarily and clears warm entries on dispose', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(
-      async () =>
-        new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+      async () => new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
     );
     const revoke = vi.fn();
     let objectUrlIndex = 0;

@@ -109,12 +109,14 @@ SekerEagle 不是单一的网页应用，而是一套围绕自托管素材库协
 - 后台提取代表色，为 Lab 色彩距离筛选提供索引。
 - 处理任务可重试、可调度、可暂停；交互式预览优先于历史回填。
 
-### 可选的本地向量能力
+### 可选的本地 AI 能力
 
 - Apple Silicon 上可运行固定 revision 的 Qwen3-VL-Embedding-2B MLX sidecar。
 - 为图片生成 1024 维本地向量，并根据用户已经确认的人工标签给出候选建议。
 - 标签默认不参与建议；只有用户显式启用并生成标签中心后才开始工作。
-- 建议必须人工接受或拒绝，普通上传和图库浏览不依赖向量服务。
+- 可通过本机 Ollama 的 Qwen3-VL 8B Instruct 为图片生成具体名词标签，并按完全匹配和
+  语义相似度扩展搜索。
+- 向量建议和自动标签默认均不运行；普通上传和图库浏览不依赖本地模型。
 
 ### 多用户与隐私
 
@@ -147,6 +149,7 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 | Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                              |
 | Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                              |
 | 本地 MLX 向量         |    可选     | 需要 Apple Silicon、`uv` 和模型下载                    |
+| Ollama 自动名词标签   |    可选     | 需要本机 Ollama 与 `qwen3-vl:8b-instruct`              |
 | Linux / x64           |   实验性    | 非向量 TypeScript 组件可能可运行，尚未形成完整支持路径 |
 | 移动端原生应用        |     ❌      | 当前未提供                                             |
 
@@ -162,6 +165,7 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 - Node.js 22、npm 10
 - Docker Desktop
 - 可选：`uv`，用于本地向量 sidecar
+- 可选：Ollama 与 `qwen3-vl:8b-instruct`，用于自动名词标签
 
 ### 启动服务
 
@@ -177,7 +181,8 @@ npm run compose:config
 docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build
 ```
 
-不使用向量标签建议时，可以跳过 MLX setup 与 service 安装步骤。随后创建首个管理员：
+不使用向量标签建议时，可以跳过 MLX setup 与 service 安装步骤。自动名词标签还需要另行
+安装 Ollama 并拉取 `qwen3-vl:8b-instruct`；两类 AI 功能都默认关闭。随后创建首个管理员：
 
 ```sh
 docker compose --env-file .env -f deploy/mac/docker-compose.yml exec \

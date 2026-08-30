@@ -98,6 +98,7 @@ export interface EagleManualTag extends EagleManualTagRef {
   groupId: string | null;
   groupIds: string[];
   isStarred: boolean;
+  lastUsedAt: string | null;
   rowVersion: number;
   assetCount: number;
   pinyin: string;
@@ -167,6 +168,12 @@ export interface EagleAssetPage {
     percentage: number;
     processorVersion: string;
   } | null;
+  searchExpansion?: Array<{
+    id: string;
+    name: string;
+    match: 'EXACT' | 'SEMANTIC';
+    similarity: number;
+  }>;
 }
 export type EagleSmartFolderFilters = Omit<
   EagleAssetFilters,
@@ -278,6 +285,7 @@ function normalizeTag(
     groupId: tag.groupId ?? null,
     groupIds: tag.groupIds ?? (tag.groupId ? [tag.groupId] : []),
     isStarred: tag.isStarred ?? false,
+    lastUsedAt: tag.lastUsedAt ?? null,
     rowVersion: tag.rowVersion ?? 1,
     assetCount: tag.assetCount ?? tag._count?.assetLinks ?? 0,
     pinyin: tag.pinyin ?? tag.name,

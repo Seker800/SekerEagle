@@ -21,8 +21,18 @@ import {
   type EagleAssetProcessingJob,
   type EagleTagSemanticBuild,
 } from '@prisma/client';
-import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
-import { canClaimBackgroundJobs, taskBlocksAssetReady } from './processing-policy';
+import {
+  EAGLE_AI_TAG_DEFAULT_MODEL,
+  EAGLE_AI_TAG_PROCESSOR_VERSION,
+  EAGLE_AI_TAG_PROMPT_VERSION,
+  assertSafeRuntimeTarget,
+  describeRuntimeTarget,
+} from '@sekereagle/config';
+import {
+  canClaimAiTagJobs,
+  canClaimBackgroundJobs,
+  taskBlocksAssetReady,
+} from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
@@ -34,6 +44,7 @@ import {
   PermanentMediaValidationError,
 } from './media-validation-error';
 import { EmbeddingClient } from './embedding-client';
+import { OllamaVisionClient, renderAiTagInput } from './ai-tagging';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
 
 const execFileAsync = promisify(execFile);
@@ -60,6 +71,7 @@ const storage = new S3Client({
 });
 let pollTimer: NodeJS.Timeout | undefined;
 let heartbeatTimer: NodeJS.Timeout | undefined;
+let aiTagReconcileTimer: NodeJS.Timeout | undefined;
 let stopping = false;
 let activeJobCount = 0;
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
@@ -84,6 +96,12 @@ const embeddingClient = new EmbeddingClient({
     1,
     50 * 1024 * 1024,
   ),
+});
+const ollamaModel = process.env.OLLAMA_VISION_MODEL ?? EAGLE_AI_TAG_DEFAULT_MODEL;
+const ollamaClient = new OllamaVisionClient({
+  baseUrl: process.env.OLLAMA_URL ?? 'http://host.docker.internal:11434',
+  model: ollamaModel,
+  timeoutMs: boundedInteger(process.env.OLLAMA_TIMEOUT_MS, 120_000, 1_000, 600_000),
 });
 
 async function heartbeat(): Promise<void> {
@@ -124,8 +142,19 @@ async function claimTagBuild(): Promise<EagleTagSemanticBuild | null> {
   });
 }
 
-async function canClaimBackgroundForOwner(ownerId: string): Promise<boolean> {
+async function canClaimBackgroundForOwner(
+  ownerId: string,
+  kind: EagleAssetProcessingJob['kind'],
+): Promise<boolean> {
   const settings = await prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
+  if (kind === 'GENERATE_AI_TAGS') {
+    return canClaimAiTagJobs(
+      settings?.aiTagManualEnabled ?? false,
+      settings?.aiTagScheduleEnabled ?? false,
+      settings?.aiTagScheduleStart ?? '23:00',
+      settings?.aiTagScheduleEnd ?? '06:00',
+    );
+  }
   const configuredMode = settings?.mode;
   const mode =
     configuredMode === 'ALWAYS' || configuredMode === 'MANUAL' || configuredMode === 'NIGHT'
@@ -136,6 +165,63 @@ async function canClaimBackgroundForOwner(ownerId: string): Promise<boolean> {
     settings?.nightStart ?? '23:00',
     settings?.nightEnd ?? '06:00',
   );
+}
+
+async function reconcileEnabledAiTagJobs(): Promise<void> {
+  const settings = await prisma.eagleProcessingSetting.findMany({
+    where: { OR: [{ aiTagManualEnabled: true }, { aiTagScheduleEnabled: true }] },
+    select: {
+      ownerId: true,
+      aiTagManualEnabled: true,
+      aiTagScheduleEnabled: true,
+      aiTagScheduleStart: true,
+      aiTagScheduleEnd: true,
+    },
+  });
+  for (const setting of settings) {
+    if (
+      !canClaimAiTagJobs(
+        setting.aiTagManualEnabled,
+        setting.aiTagScheduleEnabled,
+        setting.aiTagScheduleStart,
+        setting.aiTagScheduleEnd,
+      )
+    ) {
+      continue;
+    }
+    await prisma.$executeRaw(Prisma.sql`
+      INSERT INTO "EagleMediaJob" (
+        id, "ownerId", "assetId", kind, status, lane, "assetRevision", "processorVersion",
+        attempts, "leaseVersion", "availableAt", "createdAt", "updatedAt"
+      )
+      SELECT gen_random_uuid(), asset."ownerId", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
+        'PENDING'::"EagleMediaJobStatus", 'BACKGROUND'::"EagleProcessingLane",
+        asset."mediaRevision", ${EAGLE_AI_TAG_PROCESSOR_VERSION}, 0, 0, now(), now(), now()
+      FROM "EagleAsset" AS asset
+      WHERE asset."ownerId" = ${setting.ownerId}
+        AND asset."deletedAt" IS NULL
+        AND asset."isPrivate" = false
+        AND asset."mimeType" LIKE 'image/%'
+        AND EXISTS (
+          SELECT 1 FROM "EagleAssetRendition" AS preview
+          WHERE preview."ownerId" = asset."ownerId"
+            AND preview."assetId" = asset.id
+            AND preview.revision = asset."mediaRevision"
+            AND preview.kind = 'PREVIEW'
+            AND preview.status = 'READY'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "EagleMediaJob" AS existing
+          WHERE existing."assetId" = asset.id
+            AND existing."assetRevision" = asset."mediaRevision"
+            AND existing.kind = 'GENERATE_AI_TAGS'
+            AND existing."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
+        )
+      ORDER BY asset."libraryAddedAt", asset.id
+      LIMIT 1000
+      ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
+    `);
+  }
 }
 
 async function processJob(job: EagleAssetProcessingJob): Promise<void> {
@@ -222,6 +308,16 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         asset,
         sourceDetails.mimeType,
         object.Body as AsyncIterable<Uint8Array>,
+      );
+      return;
+    }
+    if (job.kind === 'GENERATE_AI_TAGS') {
+      await processAiTaggingJob(
+        job,
+        asset,
+        object.Body as AsyncIterable<Uint8Array>,
+        sourceDetails.mimeType,
+        sourceDetails.storageKey,
       );
       return;
     }
@@ -602,6 +698,141 @@ async function processEmbeddingJob(
     );
     await createTopSuggestion(transaction, asset.ownerId, asset.id, record.id);
   });
+}
+
+async function processAiTaggingJob(
+  job: EagleAssetProcessingJob,
+  asset: { id: string; ownerId: string },
+  source: AsyncIterable<Uint8Array>,
+  mimeType: string,
+  storageKey: string,
+): Promise<void> {
+  if (job.processorVersion !== EAGLE_AI_TAG_PROCESSOR_VERSION)
+    throw new Error('AI_TAG_VERSION_DRIFT');
+  if (!process.env.MLX_EMBEDDING_TOKEN?.trim()) throw new Error('MLX_EMBEDDING_TOKEN_REQUIRED');
+  const run = await prisma.eagleAiAnalysisRun.create({
+    data: {
+      ownerId: asset.ownerId,
+      assetId: asset.id,
+      assetRevision: job.assetRevision,
+      provider: 'OLLAMA',
+      model: ollamaModel,
+      promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
+      status: 'RUNNING',
+      startedAt: new Date(),
+    },
+    select: { id: true },
+  });
+  const { result: bytes } = await withProcessableImage(
+    source,
+    mimeType,
+    storageKey,
+    renderAiTagInput,
+  );
+  const names = await ollamaClient.tagImage(bytes);
+  const normalizedNames = names.map(normalizeAiTagName);
+  const embeddedRows = normalizedNames.length
+    ? await prisma.$queryRaw<Array<{ normalizedName: string }>>(Prisma.sql`
+        SELECT "normalizedName"
+        FROM "EagleAiTag"
+        WHERE "ownerId" = ${asset.ownerId}
+          AND "normalizedName" IN (${Prisma.join(normalizedNames)})
+          AND "embeddingSpaceId" = ${embeddingSpaceId}
+          AND embedding IS NOT NULL
+      `)
+    : [];
+  const embedded = new Set(embeddedRows.map((row) => row.normalizedName));
+  const vectors = new Map<string, number[]>();
+  for (let index = 0; index < names.length; index += 1) {
+    const normalizedName = normalizedNames[index]!;
+    if (embedded.has(normalizedName)) continue;
+    const result = await embeddingClient.embedText(
+      `图片中的具体物体、场所或内容类型：${names[index]}`,
+    );
+    vectors.set(normalizedName, result.embedding);
+  }
+  await ensureEmbeddingSpace();
+  await prisma.$transaction(async (transaction) => {
+    const completed = await transaction.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+    });
+    if (completed.count !== 1) return;
+    await transaction.eagleAiAnalysisRun.updateMany({
+      where: {
+        ownerId: asset.ownerId,
+        assetId: asset.id,
+        provider: 'OLLAMA',
+        promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
+        status: 'SUCCEEDED',
+        id: { not: run.id },
+      },
+      data: { status: 'SUPERSEDED' },
+    });
+    await transaction.eagleAssetAiTag.updateMany({
+      where: { ownerId: asset.ownerId, assetId: asset.id, status: 'ACTIVE' },
+      data: { status: 'HIDDEN' },
+    });
+    for (let index = 0; index < names.length; index += 1) {
+      const name = names[index]!;
+      const normalizedName = normalizedNames[index]!;
+      const tag = await transaction.eagleAiTag.upsert({
+        where: { ownerId_normalizedName: { ownerId: asset.ownerId, normalizedName } },
+        create: { ownerId: asset.ownerId, name, normalizedName, embeddingSpaceId },
+        update: { name, embeddingSpaceId },
+        select: { id: true },
+      });
+      const vector = vectors.get(normalizedName);
+      if (vector) {
+        const serialized = `[${vector.join(',')}]`;
+        await transaction.$executeRaw(Prisma.sql`
+          UPDATE "EagleAiTag"
+          SET embedding = ${serialized}::vector, "embeddingSpaceId" = ${embeddingSpaceId}
+          WHERE "ownerId" = ${asset.ownerId} AND id = ${tag.id}
+        `);
+      }
+      await transaction.eagleAssetAiTag.create({
+        data: {
+          ownerId: asset.ownerId,
+          assetId: asset.id,
+          aiTagId: tag.id,
+          analysisRunId: run.id,
+          confidence: 1,
+          status: 'ACTIVE',
+        },
+      });
+    }
+    await transaction.eagleAiAnalysisRun.update({
+      where: { id: run.id },
+      data: { status: 'SUCCEEDED', completedAt: new Date(), errorCode: null },
+    });
+  });
+}
+
+async function ensureEmbeddingSpace(): Promise<void> {
+  await prisma.eagleEmbeddingSpace.upsert({
+    where: { id: embeddingSpaceId },
+    create: {
+      id: embeddingSpaceId,
+      model: embeddingModel,
+      revision: embeddingRevision,
+      dimensions: embeddingDimensions,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+      isCurrent: true,
+    },
+    update: {
+      model: embeddingModel,
+      revision: embeddingRevision,
+      dimensions: embeddingDimensions,
+      normalized: true,
+    },
+  });
+}
+
+function normalizeAiTagName(value: string): string {
+  return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
 }
 
 async function createTopSuggestion(
@@ -1150,6 +1381,23 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
           spaceId: embeddingSpaceId,
         },
         data: {
+          status: 'FAILED',
+          errorCode: message.slice(0, 100),
+          completedAt: new Date(),
+        },
+      });
+    }
+    if (job.kind === 'GENERATE_AI_TAGS') {
+      await transaction.eagleAiAnalysisRun.updateMany({
+        where: {
+          ownerId: job.ownerId,
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          provider: 'OLLAMA',
+          promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
+          status: 'RUNNING',
+        },
+        data: {
           status: terminal ? 'FAILED' : 'PENDING',
           errorCode: message.slice(0, 100),
           completedAt: terminal ? new Date() : null,
@@ -1280,6 +1528,7 @@ async function stop(signal: string): Promise<void> {
   stopping = true;
   if (pollTimer) clearInterval(pollTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
+  if (aiTagReconcileTimer) clearInterval(aiTagReconcileTimer);
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
   while (activeJobCount > 0) await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
@@ -1293,6 +1542,12 @@ async function main(): Promise<void> {
   process.stdout.write(`SekerEagle worker ready: ${workerId}\n`);
   pollTimer = setInterval(() => void poll().catch(reportLoopError), 1_000);
   heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
+  aiTagReconcileTimer = setInterval(
+    () => void reconcileEnabledAiTagJobs().catch(reportLoopError),
+    10_000,
+  );
+  aiTagReconcileTimer.unref();
+  await reconcileEnabledAiTagJobs();
   await poll();
 }
 

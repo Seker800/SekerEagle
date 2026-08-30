@@ -69,3 +69,39 @@ test('EmbeddingClient fails closed on oversized payloads and model drift', async
     },
   );
 });
+
+test('EmbeddingClient embeds a contextualized AI tag as text', async () => {
+  let requestedUrl = '';
+  let requestedBody = '';
+  const client = new EmbeddingClient({
+    baseUrl: 'http://host.docker.internal:11435',
+    token: 'test-token',
+    modelId: 'Qwen/Qwen3-VL-Embedding-2B',
+    modelRevision: 'test-revision',
+    dimensions: 2,
+    timeoutMs: 1_000,
+    maxPayloadBytes: 1024,
+    fetch: async (input, init) => {
+      requestedUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      const requestBody = init?.body;
+      assert.equal(typeof requestBody, 'string');
+      requestedBody = requestBody as string;
+      return new Response(
+        JSON.stringify({
+          embedding: [0.6, 0.8],
+          model: 'Qwen/Qwen3-VL-Embedding-2B',
+          revision: 'test-revision',
+          dimensions: 2,
+          normalized: true,
+        }),
+      );
+    },
+  });
+
+  const result = await client.embedText('图片中的具体物体或场景：汽车');
+
+  assert.equal(requestedUrl.endsWith('/v1/embeddings/text'), true);
+  assert.deepEqual(JSON.parse(requestedBody), { text: '图片中的具体物体或场景：汽车' });
+  assert.deepEqual(result.embedding, [0.6, 0.8]);
+});

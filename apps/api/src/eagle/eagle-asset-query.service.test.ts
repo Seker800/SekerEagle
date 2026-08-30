@@ -26,6 +26,74 @@ test('a parent smart folder evaluates itself and its direct children as a union'
   assert.equal(folderUnion.length, 2);
 });
 
+test('an empty smart folder matches no assets', async () => {
+  const queries: Array<{ where: Record<string, unknown> }> = [];
+  const service = new EagleService({
+    eagleSmartFolder: {
+      findFirst: async () => ({
+        queryJson: {
+          version: 2,
+          conditions: [
+            {
+              id: 'condition-1',
+              match: 'ANY',
+              result: 'MATCH',
+              rules: [
+                {
+                  id: 'rule-1',
+                  field: 'MANUAL_TAGS',
+                  operator: 'ALL_OF',
+                  value: [],
+                },
+              ],
+            },
+          ],
+        },
+        children: [],
+      }),
+    },
+    eagleAsset: {
+      findMany: async (query: { where: Record<string, unknown> }) => {
+        queries.push(query);
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
+
+  const folderWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[1];
+  assert.deepEqual(folderWhere, { ownerId: 'owner-1', id: { in: [] } });
+});
+
+test('an empty parent contributes no assets and only aggregates its active children', async () => {
+  const queries: Array<{ where: Record<string, unknown> }> = [];
+  const service = new EagleService({
+    eagleSmartFolder: {
+      findFirst: async () => ({
+        queryJson: { version: 1, filters: { tagMatch: 'ANY' } },
+        children: [{ queryJson: { version: 1, filters: { formats: ['png'] } } }],
+      }),
+    },
+    eagleAsset: {
+      findMany: async (query: { where: Record<string, unknown> }) => {
+        queries.push(query);
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
+
+  const folderWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[1];
+  assert.deepEqual(folderWhere, {
+    ownerId: 'owner-1',
+    deletedAt: null,
+    isPrivate: false,
+    AND: [{ format: { in: ['png'] } }],
+  });
+});
+
 test('ANY tag matching combines every selected manual and AI tag into one union', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
   const service = new EagleService({
@@ -112,6 +180,70 @@ test('asset listing only loads relations required by gallery cards', async () =>
   assert.deepEqual(Object.keys(include ?? {}).sort(), ['manualTagLinks', 'renditions']);
 });
 
+test('expanded search keeps exact manual-tag assets ahead of AI-only matches', async () => {
+  let rankingQuery = '';
+  const assets = new Map(
+    ['manual-asset', 'ai-asset'].map((id) => [
+      id,
+      {
+        id,
+        originalName: `${id}.png`,
+        displayName: id,
+        mimeType: 'image/png',
+        format: 'png',
+        byteSize: 1n,
+        width: 1,
+        height: 1,
+        durationMs: null,
+        lifecycleStatus: 'READY',
+        mediaErrorCode: null,
+        mediaRevision: 1,
+        rowVersion: 1,
+        rating: null,
+        isPrivate: false,
+        libraryAddedAt: new Date('2026-01-01T00:00:00.000Z'),
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+        deletedAt: null,
+        originalObjectKey: `owner-1/${id}`,
+        renditions: [],
+        manualTagLinks: [],
+      },
+    ]),
+  );
+  const service = new EagleService(
+    {
+      $queryRaw: async (query: unknown) => {
+        rankingQuery = JSON.stringify(query);
+        return [{ assetId: 'manual-asset' }, { assetId: 'ai-asset' }];
+      },
+      eagleAsset: {
+        findMany: async (query: { where: { AND: Array<{ id?: { in?: string[] } }> } }) =>
+          (query.where.AND.at(-1)?.id?.in ?? []).flatMap((id) => {
+            const asset = assets.get(id);
+            return asset ? [asset] : [];
+          }),
+      },
+    } as never,
+    {
+      resolveSearchTags: async () => [
+        { id: 'ai-ui', name: '用户界面', match: 'SEMANTIC' as const, similarity: 0.91 },
+      ],
+    } as never,
+  );
+
+  const result = await service.listAssets('owner-1', { limit: 40, search: 'ui' });
+
+  assert.deepEqual(
+    result.items.map(({ id }) => id),
+    ['manual-asset', 'ai-asset'],
+  );
+  assert.match(rankingQuery, /EagleAssetManualTag/);
+  assert.match(rankingQuery, /EagleAssetAiTag/);
+  assert.match(rankingQuery, /::text/);
+  assert.doesNotMatch(rankingQuery, /::uuid/);
+});
+
 test('private assets are excluded by default and only enter queries during a visibility window', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
   const service = new EagleService({
@@ -149,6 +281,7 @@ test('tag counts exclude private assets while visibility is locked', async () =>
   await service.listManualTags('owner-1');
 
   assert.match(JSON.stringify(query), /"isPrivate":false/);
+  assert.match(JSON.stringify(query), /"lastUsedAt":true/);
 });
 
 test('smart folder creation rejects a missing owner-scoped tag before writing', async () => {

@@ -1668,6 +1668,64 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/ai-tags/summary": {
+      "get": {
+        "operationId": "EagleAiTagController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleAiTag"]
+      }
+    },
+    "/api/eagle/ai-tags/scan-missing": {
+      "post": {
+        "operationId": "EagleAiTagController_scanMissing",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleAiTag"]
+      }
+    },
+    "/api/eagle/ai-tags/retry-failed": {
+      "post": {
+        "operationId": "EagleAiTagController_retryFailed",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleAiTag"]
+      }
+    },
+    "/api/eagle/ai-tags/settings": {
+      "patch": {
+        "operationId": "EagleAiTagController_updateSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEagleAiTagSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleAiTag"]
+      }
+    },
     "/api/eagle/browser-captures": {
       "post": {
         "operationId": "EagleBrowserCaptureController_initiate",
@@ -3201,6 +3259,30 @@
           }
         },
         "required": ["rowVersion", "position"]
+      },
+      "UpdateEagleAiTagSettingsDto": {
+        "type": "object",
+        "properties": {
+          "manualEnabled": {
+            "type": "boolean",
+            "example": false
+          },
+          "scheduleEnabled": {
+            "type": "boolean",
+            "example": false
+          },
+          "scheduleStart": {
+            "type": "string",
+            "example": "23:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "scheduleEnd": {
+            "type": "string",
+            "example": "06:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          }
+        },
+        "required": ["manualEnabled", "scheduleEnabled", "scheduleStart", "scheduleEnd"]
       },
       "InitiateEagleBrowserCaptureDto": {
         "type": "object",

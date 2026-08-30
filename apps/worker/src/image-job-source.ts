@@ -14,7 +14,7 @@ interface ImageSourceAsset {
 }
 
 export function selectImageJobSource(asset: ImageSourceAsset, kind: EagleMediaJobKind) {
-  if (kind === 'GENERATE_EMBEDDING') {
+  if (kind === 'GENERATE_EMBEDDING' || kind === 'GENERATE_AI_TAGS') {
     const preview = asset.renditions.find(
       (rendition) =>
         rendition.kind === 'PREVIEW' &&

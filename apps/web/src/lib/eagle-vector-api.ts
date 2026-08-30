@@ -80,7 +80,7 @@ export interface EagleTagDistanceAsset {
   assetId: string;
   distance: number;
   prototypeRank: number;
-  asset: Omit<EagleVectorAssetPreview, 'renditions'>;
+  asset: EagleVectorAssetPreview;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

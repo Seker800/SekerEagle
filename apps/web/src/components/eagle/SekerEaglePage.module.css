@@ -246,6 +246,25 @@
   background: transparent;
   cursor: pointer;
 }
+.searchExpansion {
+  min-height: 30px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--eagle-muted);
+  font-size: 12px;
+}
+.searchExpansion span {
+  padding: 3px 7px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 999px;
+  background: #15171b;
+}
+.searchExpansion span[data-exact='true'] {
+  border-color: rgb(214 155 72 / 55%);
+  color: #e8b66f;
+}
 .toolbarActions {
   display: flex;
   align-items: center;

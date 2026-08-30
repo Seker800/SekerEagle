@@ -113,7 +113,7 @@ test('skips disallowed background work and falls through to maintenance', async 
   });
 
   assert.equal(claimed?.id, 'maintenance');
-  assert.deepEqual(queriedLanes, ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE']);
+  assert.deepEqual(queriedLanes, ['INTERACTIVE', 'BACKGROUND', 'BACKGROUND', 'MAINTENANCE']);
 });
 
 test('only queries jobs whose dependency completed successfully', async () => {
@@ -146,4 +146,57 @@ test('only queries jobs whose dependency completed successfully', async () => {
       },
     ],
   });
+});
+
+test('passes the background job kind into the independent scheduling decision', async () => {
+  const background = job('ai-tag', 'BACKGROUND', { kind: 'GENERATE_AI_TAGS' });
+  const checked: Array<{ ownerId: string; kind: string }> = [];
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async ({ where }: { where: { lane: string } }) =>
+        where.lane === 'BACKGROUND' ? [background] : [],
+      updateMany: async () => ({ count: 1 }),
+      findUniqueOrThrow: async () => ({
+        ...background,
+        leaseVersion: 1,
+        status: 'PROCESSING' as const,
+      }),
+    },
+  };
+
+  await claimNextMediaJob(client, {
+    canClaimBackground: async (ownerId, kind) => {
+      checked.push({ ownerId, kind });
+      return true;
+    },
+  });
+
+  assert.deepEqual(checked, [{ ownerId: 'owner-1', kind: 'GENERATE_AI_TAGS' }]);
+});
+
+test('a paused AI backlog cannot hide ordinary background work', async () => {
+  const ordinary = job('embedding', 'BACKGROUND', { kind: 'GENERATE_EMBEDDING' });
+  const aiTag = job('ai-tag', 'BACKGROUND', { kind: 'GENERATE_AI_TAGS' });
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async ({ where }: { where: { lane: string; kind?: unknown } }) => {
+        if (where.lane !== 'BACKGROUND') return [];
+        return typeof where.kind === 'object' && where.kind && 'not' in where.kind
+          ? [ordinary]
+          : [aiTag];
+      },
+      updateMany: async () => ({ count: 1 }),
+      findUniqueOrThrow: async () => ({
+        ...ordinary,
+        leaseVersion: 1,
+        status: 'PROCESSING' as const,
+      }),
+    },
+  };
+
+  const claimed = await claimNextMediaJob(client, {
+    canClaimBackground: async (_ownerId, kind) => kind !== 'GENERATE_AI_TAGS',
+  });
+
+  assert.equal(claimed?.id, 'embedding');
 });

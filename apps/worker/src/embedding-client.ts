@@ -45,23 +45,49 @@ export class EmbeddingClient {
         `Embedding payload exceeds ${this.options.maxPayloadBytes} bytes.`,
       );
     }
+    return this.requestEmbedding(
+      `${stripTrailingSlash(this.options.baseUrl)}/v1/embeddings/image`,
+      {
+        'content-type': mimeType,
+      },
+      bytes,
+    );
+  }
+
+  async embedText(text: string): Promise<{ embedding: number[] }> {
+    const body = JSON.stringify({ text });
+    if (Buffer.byteLength(body) > this.options.maxPayloadBytes) {
+      throw new EmbeddingClientError(
+        'PAYLOAD_TOO_LARGE',
+        `Embedding payload exceeds ${this.options.maxPayloadBytes} bytes.`,
+      );
+    }
+    return this.requestEmbedding(
+      `${stripTrailingSlash(this.options.baseUrl)}/v1/embeddings/text`,
+      { 'content-type': 'application/json' },
+      body,
+    );
+  }
+
+  private async requestEmbedding(
+    url: string,
+    headers: Record<string, string>,
+    body: Buffer | string,
+  ): Promise<{ embedding: number[] }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
     let response: Response;
     try {
-      response = await this.request(
-        `${stripTrailingSlash(this.options.baseUrl)}/v1/embeddings/image`,
-        {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${this.options.token}`,
-            'content-type': mimeType,
-            'x-embedding-dimensions': String(this.options.dimensions),
-          },
-          body: bytes,
-          signal: controller.signal,
+      response = await this.request(url, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.options.token}`,
+          ...headers,
+          'x-embedding-dimensions': String(this.options.dimensions),
         },
-      );
+        body,
+        signal: controller.signal,
+      });
     } catch (error) {
       throw new EmbeddingClientError('HOST_UNAVAILABLE', 'Embedding host is unavailable.', {
         cause: error,

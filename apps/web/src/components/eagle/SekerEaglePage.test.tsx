@@ -1762,6 +1762,15 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
   });
 
+  it('places AI automatic tagging directly below manual classification', async () => {
+    renderPage();
+
+    const unclassified = await screen.findByRole('button', { name: '待手动分类 6' });
+    const aiTags = screen.getByRole('button', { name: 'AI 自动标签' });
+
+    expect(unclassified.compareDocumentPosition(aiTags)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it('exposes the three smart-tag workflows directly below the tag entries with live counts', async () => {
     renderPage();
 

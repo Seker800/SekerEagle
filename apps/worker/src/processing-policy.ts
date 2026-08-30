@@ -7,6 +7,7 @@ export type EagleMediaJobKind =
   | 'EXTRACT_COLOR_PALETTE'
   | 'GENERATE_IMAGE_PYRAMID'
   | 'GENERATE_EMBEDDING'
+  | 'GENERATE_AI_TAGS'
   | 'PURGE_ASSET';
 export type EagleProcessingLane = 'INTERACTIVE' | 'BACKGROUND' | 'MAINTENANCE';
 
@@ -30,6 +31,7 @@ const LANE_BY_KIND: Record<EagleMediaJobKind, EagleProcessingLane> = {
   EXTRACT_COLOR_PALETTE: 'BACKGROUND',
   GENERATE_IMAGE_PYRAMID: 'BACKGROUND',
   GENERATE_EMBEDDING: 'BACKGROUND',
+  GENERATE_AI_TAGS: 'BACKGROUND',
   PURGE_ASSET: 'MAINTENANCE',
 };
 
@@ -80,4 +82,16 @@ export function canClaimBackgroundJobs(
   const end = minuteOfDay(windowEnd);
   if (start === end) return true;
   return start < end ? current >= start && current < end : current >= start || current < end;
+}
+
+export function canClaimAiTagJobs(
+  manualEnabled: boolean,
+  scheduleEnabled: boolean,
+  windowStart: string,
+  windowEnd: string,
+  now = new Date(),
+): boolean {
+  if (manualEnabled) return true;
+  if (!scheduleEnabled) return false;
+  return canClaimBackgroundJobs('NIGHT', windowStart, windowEnd, now);
 }

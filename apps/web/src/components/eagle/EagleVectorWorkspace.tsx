@@ -19,16 +19,21 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
-import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleVectorWorkspace.module.css';
 
 export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
 type View = EagleVectorWorkspaceView | 'DISTANCE';
+type SimilaritySort = 'LOW_FIRST' | 'HIGH_FIRST';
 
 interface EagleVectorWorkspaceProps {
   view?: EagleVectorWorkspaceView;
   manualTags?: EagleManualTag[];
   onAssignManualTags?: (assetIds: string[], tagIds: string[]) => Promise<void>;
+  onChangeManualTags?: (input: {
+    assetIds: string[];
+    addTagIds: string[];
+    removeTagIds: string[];
+  }) => Promise<void>;
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
   onTrashAssets?: (assetIds: string[]) => Promise<void>;
 }
@@ -37,6 +42,7 @@ export function EagleVectorWorkspace({
   view: controlledView,
   manualTags: providedManualTags,
   onAssignManualTags,
+  onChangeManualTags,
   onCreateManualTag,
   onTrashAssets,
 }: EagleVectorWorkspaceProps = {}) {
@@ -49,17 +55,20 @@ export function EagleVectorWorkspace({
   const [view, setView] = useState<View>(controlledView ?? 'REVIEW');
   const [tagFilter, setTagFilter] = useState('');
   const [distanceTag, setDistanceTag] = useState<EagleVectorTag | null>(null);
-  const [distanceDirection, setDistanceDirection] = useState<'ASC' | 'DESC'>('DESC');
+  const [similaritySort, setSimilaritySort] = useState<SimilaritySort>('LOW_FIRST');
   const [selected, setSelected] = useState<string[]>([]);
   const [activeSelectionId, setActiveSelectionId] = useState<string | null>(null);
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const selectionAnchorIdRef = useRef<string | null>(null);
+  const distanceRequestIdRef = useRef(0);
   const [search, setSearch] = useState('');
+  const [managedTagSearch, setManagedTagSearch] = useState('');
   const [loadedManualTags, setLoadedManualTags] = useState<EagleManualTag[]>([]);
   const [loadingManualTags, setLoadingManualTags] = useState(false);
   const [tagPickerTarget, setTagPickerTarget] = useState<{
     assetIds: string[];
     suggestionIds: string[];
+    removeTagIds: string[];
   } | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -138,7 +147,7 @@ export function EagleVectorWorkspace({
   }, [reload]);
 
   useEffect(() => {
-    if (view !== 'TAGS' || providedManualTags) return;
+    if ((view !== 'TAGS' && view !== 'DISTANCE') || providedManualTags) return;
     let cancelled = false;
     setLoadingManualTags(true);
     void listEagleManualTags('')
@@ -157,6 +166,15 @@ export function EagleVectorWorkspace({
   }, [providedManualTags, view]);
 
   const manualTags = providedManualTags ?? loadedManualTags;
+  const changeManualTags = useMemo(
+    () =>
+      onChangeManualTags ??
+      (onAssignManualTags
+        ? (input: { assetIds: string[]; addTagIds: string[] }) =>
+            onAssignManualTags(input.assetIds, input.addTagIds)
+        : null),
+    [onAssignManualTags, onChangeManualTags],
+  );
 
   const reviewTags = useMemo(
     () =>
@@ -195,6 +213,14 @@ export function EagleVectorWorkspace({
       search,
     );
   }, [manualTags, search, tags]);
+  const visibleManagedTags = useMemo(() => {
+    const query = managedTagSearch.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
+    if (!query) return tags;
+    return tags.filter((tag) =>
+      tag.name.normalize('NFKC').toLocaleLowerCase('zh-CN').includes(query),
+    );
+  }, [managedTagSearch, tags]);
+  const distanceAssetIds = useMemo(() => distances.map((item) => item.assetId), [distances]);
 
   const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {
     setBusy(true);
@@ -223,14 +249,22 @@ export function EagleVectorWorkspace({
     }
   };
 
+  const replaceDistanceResults = async (tagId: string, sort: SimilaritySort) => {
+    const requestId = ++distanceRequestIdRef.current;
+    const result = await listEagleTagDistanceAssets(tagId, toDistanceDirection(sort));
+    if (requestId !== distanceRequestIdRef.current) return false;
+    setDistances(sortDistanceItems(result.items, sort));
+    setDistanceCursor(result.nextCursor);
+    return true;
+  };
+
   const openDistance = async (tag: EagleVectorTag) => {
     setBusy(true);
     setError('');
     try {
-      const result = await listEagleTagDistanceAssets(tag.id, distanceDirection);
+      const loaded = await replaceDistanceResults(tag.id, similaritySort);
+      if (!loaded) return;
       setDistanceTag(tag);
-      setDistances(result.items);
-      setDistanceCursor(result.nextCursor);
       setView('DISTANCE');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '读取标签距离失败');
@@ -275,14 +309,79 @@ export function EagleVectorWorkspace({
     return { suggestionIds: [], assetIds: itemIds };
   };
 
-  const openTagPicker = (itemIds: string[]) => {
-    if (!onAssignManualTags || itemIds.length === 0) return;
+  const openTagPicker = (itemIds: string[], removeTagIds: string[] = []) => {
+    if (!changeManualTags || itemIds.length === 0) return;
     setContextMenu(null);
-    setTagPickerTarget(getTagPickerTarget(itemIds));
+    setTagPickerTarget({ ...getTagPickerTarget(itemIds), removeTagIds });
+  };
+
+  const refreshDistance = async () => {
+    if (!distanceTag) return;
+    await replaceDistanceResults(distanceTag.id, similaritySort);
+  };
+
+  const changeSimilaritySort = async (nextSort: SimilaritySort) => {
+    if (!distanceTag) return;
+    setSimilaritySort(nextSort);
+    clearSelection();
+    setBusy(true);
+    setError('');
+    try {
+      await replaceDistanceResults(distanceTag.id, nextSort);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '读取标签相似度失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeDistanceTags = async (input: {
+    assetIds: string[];
+    addTagIds: string[];
+    removeTagIds: string[];
+  }) => {
+    if (!changeManualTags) return false;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await changeManualTags(input);
+      const enabledTagIds = new Set(
+        tags.filter((tag) => tag.recommendationEnabled).map((tag) => tag.id),
+      );
+      const rebuildTagIds = [...new Set([...input.removeTagIds, ...input.addTagIds])].filter(
+        (tagId) => enabledTagIds.has(tagId),
+      );
+      const rebuildResults = await Promise.allSettled(
+        rebuildTagIds.map((tagId) => rebuildEagleVectorTag(tagId)),
+      );
+      const rebuiltCount = rebuildResults.filter((result) => result.status === 'fulfilled').length;
+      const centerNotice = !rebuildTagIds.length
+        ? ''
+        : rebuiltCount
+          ? `，已提交 ${rebuiltCount} 个标签中心刷新`
+          : '；标签中心暂未刷新，请保留基础图片后手动生成';
+      setNotice(
+        input.removeTagIds.length && input.addTagIds.length
+          ? `已移动 ${input.assetIds.length} 项素材${centerNotice}`
+          : input.removeTagIds.length
+            ? `已从“${distanceTag?.name ?? '当前标签'}”移除 ${input.assetIds.length} 项素材${centerNotice}`
+            : `已为 ${input.assetIds.length} 项素材添加人工标签${centerNotice}`,
+      );
+      setTagPickerTarget(null);
+      clearSelection();
+      await Promise.all([reload(), refreshDistance()]);
+      return true;
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '修改人工标签失败');
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
 
   const assignManualTags = async (tagIds: string[]) => {
-    if (!tagPickerTarget || !onAssignManualTags) return;
+    if (!tagPickerTarget || !changeManualTags) return;
     setBusy(true);
     setError('');
     setNotice('');
@@ -290,7 +389,19 @@ export function EagleVectorWorkspace({
       if (tagPickerTarget.suggestionIds.length) {
         await reviewEagleVectorSuggestions(tagPickerTarget.suggestionIds, 'REJECT');
       }
-      await onAssignManualTags(tagPickerTarget.assetIds, tagIds);
+      if (view === 'DISTANCE') {
+        await changeDistanceTags({
+          assetIds: tagPickerTarget.assetIds,
+          addTagIds: tagIds,
+          removeTagIds: tagPickerTarget.removeTagIds,
+        });
+        return;
+      }
+      await changeManualTags({
+        assetIds: tagPickerTarget.assetIds,
+        addTagIds: tagIds,
+        removeTagIds: tagPickerTarget.removeTagIds,
+      });
       setNotice(`已为 ${tagPickerTarget.assetIds.length} 项素材添加人工标签`);
       setTagPickerTarget(null);
       clearSelection();
@@ -335,7 +446,7 @@ export function EagleVectorWorkspace({
     view === 'TAGS' || view === 'DISTANCE'
       ? {
           eyebrow: '推荐语义',
-          title: view === 'DISTANCE' ? `距离检查 · ${distanceTag?.name ?? ''}` : '标签推荐设置',
+          title: view === 'DISTANCE' ? `相似度检查 · ${distanceTag?.name ?? ''}` : '标签推荐设置',
           description: '选择哪些人工标签参与推荐，并管理每个标签的向量中心。',
         }
       : view === 'UNCLASSIFIED'
@@ -440,7 +551,7 @@ export function EagleVectorWorkspace({
             </button>
             <button
               type="button"
-              disabled={!selected.length || busy || !onAssignManualTags}
+              disabled={!selected.length || busy || !changeManualTags}
               onClick={() => openTagPicker(selected)}
             >
               指定其他标签
@@ -487,92 +598,77 @@ export function EagleVectorWorkspace({
                 </span>
               ) : null}
               {!loadingManualTags && availableTags.length ? (
-                <EagleVirtualList
-                  ariaLabel="可添加的标签列表"
-                  className={styles.virtualTagResults}
-                  items={availableTags}
-                  itemKey={({ tag }) => tag.id}
-                  rowHeight={47}
-                  viewportHeight={260}
-                  renderItem={({ tag }) => (
-                    <article className={styles.tagCandidate}>
-                      <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
-                      <div>
-                        <strong>{tag.name}</strong>
-                        <small>{tag.assetCount} 张基础图片</small>
+                <div
+                  className={styles.tagCandidateGrid}
+                  role="list"
+                  aria-label="可添加的推荐标签卡片"
+                >
+                  {availableTags.map(({ tag }) => (
+                    <article className={styles.tagCandidate} role="listitem" key={tag.id}>
+                      <div className={styles.tagCandidateIdentity}>
+                        <span
+                          className={styles.tagDot}
+                          style={{ background: tag.color ?? '#777' }}
+                        />
+                        <h3>{tag.name}</h3>
                       </div>
+                      <p>{tag.assetCount} 张图片</p>
                       <button
                         type="button"
-                        aria-label={`添加${tag.name}到标签推荐`}
+                        aria-label={`添加${tag.name}到推荐`}
                         disabled={busy}
                         onClick={() => void addRecommendationTag(tag)}
                       >
                         添加
                       </button>
                     </article>
-                  )}
-                />
+                  ))}
+                </div>
               ) : null}
             </div>
           </div>
 
           <div className={styles.sectionHeading}>
             <strong>参与推荐</strong>
-            <span>{tags.length} 个标签</span>
+            <span>
+              {visibleManagedTags.length} / {tags.length} 个标签
+            </span>
+          </div>
+          <div className={styles.managedTagToolbar}>
+            <input
+              type="search"
+              aria-label="搜索参与推荐的标签"
+              placeholder="搜索已参与推荐的标签"
+              value={managedTagSearch}
+              onChange={(event) => setManagedTagSearch(event.target.value)}
+            />
           </div>
           {tags.length ? (
-            <div className={styles.tagList}>
-              {tags.map((tag) => (
-                <article className={styles.tagRow} key={tag.id}>
-                  <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
-                  <div>
-                    <strong>{tag.name}</strong>
-                    <small>
-                      {tag.assetCount} 张基础图片
-                      {tag.currentSnapshot
-                        ? ` · v${tag.currentSnapshot.version} · ${tag.currentSnapshot.centerCount} 个中心`
-                        : ' · 尚无中心'}
-                    </small>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={
-                      busy ||
-                      !tag.recommendationEnabled ||
-                      tag.assetCount === 0 ||
-                      Boolean(tag.activeBuild)
-                    }
-                    onClick={() =>
+            <>
+              <div className={styles.tagGrid} role="list" aria-label="参与推荐的标签卡片">
+                {visibleManagedTags.map((tag) => (
+                  <RecommendationTagCard
+                    key={tag.id}
+                    tag={tag}
+                    busy={busy}
+                    onRebuild={() =>
                       void act(
                         () => rebuildEagleVectorTag(tag.id),
                         `“${tag.name}”中心已进入后台构建`,
                       )
                     }
-                  >
-                    {tag.activeBuild ? '构建中…' : tag.currentSnapshot ? '刷新中心' : '生成中心'}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy || !tag.currentSnapshot}
-                    onClick={() => void openDistance(tag)}
-                  >
-                    距离检查
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
+                    onInspect={() => void openDistance(tag)}
+                    onDisable={() =>
                       void act(
                         () => setEagleVectorTagEnabled(tag.id, false),
                         `已将“${tag.name}”移出推荐`,
                       )
                     }
-                  >
-                    移出推荐
-                  </button>
-                </article>
-              ))}
-            </div>
+                  />
+                ))}
+              </div>
+              {!visibleManagedTags.length ? <Empty text="没有匹配的推荐标签。" /> : null}
+            </>
           ) : (
             <Empty text="还没有参与推荐的标签，请从上方搜索并添加。" />
           )}
@@ -598,7 +694,7 @@ export function EagleVectorWorkspace({
             </button>
             <button
               type="button"
-              disabled={!selected.length || busy || !onAssignManualTags}
+              disabled={!selected.length || busy || !changeManualTags}
               onClick={() => openTagPicker(selected)}
             >
               添加人工标签
@@ -646,7 +742,7 @@ export function EagleVectorWorkspace({
       ) : null}
 
       {view === 'DISTANCE' && distanceTag ? (
-        <section className={styles.panel} aria-label="标签向量距离检查">
+        <section className={styles.panel} aria-label="标签图片相似度检查">
           <div className={styles.toolbar}>
             <button
               type="button"
@@ -658,34 +754,59 @@ export function EagleVectorWorkspace({
               返回标签推荐设置
             </button>
             <strong>{distanceTag.name}</strong>
+            <span className={styles.selectionCount}>已选择 {selected.length} 项</span>
+            <button
+              type="button"
+              disabled={!selected.length || busy || !changeManualTags}
+              onClick={() =>
+                void changeDistanceTags({
+                  assetIds: selected,
+                  addTagIds: [],
+                  removeTagIds: [distanceTag.id],
+                })
+              }
+            >
+              从“{distanceTag.name}”移除
+            </button>
+            <button
+              type="button"
+              disabled={!selected.length || busy || !changeManualTags}
+              onClick={() => openTagPicker(selected, [distanceTag.id])}
+            >
+              移动到其他标签
+            </button>
+            <button
+              type="button"
+              disabled={!selected.length || busy || !changeManualTags}
+              onClick={() => openTagPicker(selected)}
+            >
+              添加其他标签
+            </button>
             <label>
               排序
               <select
-                value={distanceDirection}
+                value={similaritySort}
                 onChange={(event) => {
-                  const direction = event.target.value as 'ASC' | 'DESC';
-                  setDistanceDirection(direction);
-                  void listEagleTagDistanceAssets(distanceTag.id, direction).then((result) => {
-                    setDistances(result.items);
-                    setDistanceCursor(result.nextCursor);
-                  });
+                  const nextSort = event.target.value as SimilaritySort;
+                  void changeSimilaritySort(nextSort);
                 }}
               >
-                <option value="DESC">由远到近</option>
-                <option value="ASC">由近到远</option>
+                <option value="LOW_FIRST">相似度从低到高</option>
+                <option value="HIGH_FIRST">相似度从高到低</option>
               </select>
             </label>
           </div>
-          <div className={styles.distanceList}>
+          <AssetGrid ariaLabel={`${distanceTag.name}标签的成员相似度图片`} onClear={clearSelection}>
             {distances.map((item) => (
-              <div key={item.assetId}>
-                <strong>{item.asset.displayName}</strong>
-                <span>
-                  距离 {item.distance.toFixed(4)} · 中心 {item.prototypeRank + 1}
-                </span>
-              </div>
+              <DistanceCard
+                key={item.assetId}
+                item={item}
+                selected={selected.includes(item.assetId)}
+                batchSelection={isBatchSelection}
+                onSelect={(gesture) => selectItem(item.assetId, distanceAssetIds, gesture)}
+              />
             ))}
-          </div>
+          </AssetGrid>
           {!distances.length ? <Empty text="该标签暂时没有可用的成员距离。" /> : null}
           {distanceCursor ? (
             <LoadMore
@@ -693,10 +814,12 @@ export function EagleVectorWorkspace({
               onClick={async () => {
                 const result = await listEagleTagDistanceAssets(
                   distanceTag.id,
-                  distanceDirection,
+                  toDistanceDirection(similaritySort),
                   distanceCursor,
                 );
-                setDistances((current) => [...current, ...result.items]);
+                setDistances((current) =>
+                  sortDistanceItems([...current, ...result.items], similaritySort),
+                );
                 setDistanceCursor(result.nextCursor);
               }}
             />
@@ -704,14 +827,14 @@ export function EagleVectorWorkspace({
         </section>
       ) : null}
 
-      {contextMenu && (onAssignManualTags || onTrashAssets) ? (
+      {contextMenu && (changeManualTags || onTrashAssets) ? (
         <div
           className={styles.contextMenu}
           role="menu"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(event) => event.stopPropagation()}
         >
-          {onAssignManualTags ? (
+          {changeManualTags ? (
             <button
               type="button"
               role="menuitem"
@@ -739,7 +862,11 @@ export function EagleVectorWorkspace({
       {tagPickerTarget ? (
         <EagleBatchTagPicker
           assetCount={tagPickerTarget.assetIds.length}
-          tags={manualTags}
+          tags={
+            view === 'DISTANCE' && distanceTag
+              ? manualTags.filter((tag) => tag.id !== distanceTag.id)
+              : manualTags
+          }
           pending={busy}
           error={error || undefined}
           onCreate={onCreateManualTag}
@@ -749,6 +876,167 @@ export function EagleVectorWorkspace({
       ) : null}
     </section>
   );
+}
+
+function RecommendationTagCard({
+  tag,
+  busy,
+  onRebuild,
+  onInspect,
+  onDisable,
+}: {
+  tag: EagleVectorTag;
+  busy: boolean;
+  onRebuild: () => void;
+  onInspect: () => void;
+  onDisable: () => void;
+}) {
+  const status = tag.activeBuild
+    ? '正在构建中心'
+    : tag.currentSnapshot
+      ? '推荐正常'
+      : tag.assetCount
+        ? '需要生成中心'
+        : '需要基础图片';
+  const canRebuild = !busy && tag.recommendationEnabled && tag.assetCount > 0 && !tag.activeBuild;
+  return (
+    <article className={styles.tagCard} role="listitem" aria-label={`${tag.name}推荐标签`}>
+      <div className={styles.tagCardHeader}>
+        <div className={styles.tagIdentity}>
+          <span className={styles.tagDot} style={{ background: tag.color ?? '#777' }} />
+          <div>
+            <h3>{tag.name}</h3>
+            <span
+              className={
+                tag.currentSnapshot && !tag.activeBuild ? styles.tagReady : styles.tagPending
+              }
+            >
+              {status}
+            </span>
+          </div>
+        </div>
+        <span className={styles.tagVersion}>
+          {tag.currentSnapshot ? `中心版本 v${tag.currentSnapshot.version}` : '尚未建立中心'}
+        </span>
+      </div>
+      <div className={styles.tagMetrics}>
+        <div className={styles.tagPrimaryMetric} aria-label="基础图片数量">
+          <strong>{tag.assetCount}</strong>
+          <span>基础图片</span>
+        </div>
+        <div className={styles.tagSecondaryMetrics}>
+          <div aria-label="向量中心数量">
+            <strong>{tag.currentSnapshot?.centerCount ?? 0}</strong>
+            <span>向量中心</span>
+          </div>
+          <div aria-label="待确认建议数量">
+            <strong>{tag.pendingSuggestionCount}</strong>
+            <span>待确认</span>
+          </div>
+        </div>
+      </div>
+      <div className={styles.tagCardActions}>
+        {tag.currentSnapshot ? (
+          <button
+            className={styles.tagPrimaryAction}
+            type="button"
+            aria-label={`检查${tag.name}的图片距离`}
+            disabled={busy}
+            onClick={onInspect}
+          >
+            检查图片距离
+          </button>
+        ) : (
+          <button
+            className={styles.tagPrimaryAction}
+            type="button"
+            aria-label={tag.activeBuild ? `${tag.name}推荐中心正在构建` : `生成${tag.name}推荐中心`}
+            disabled={!canRebuild}
+            onClick={onRebuild}
+          >
+            {tag.activeBuild ? '正在构建中心…' : '生成推荐中心'}
+          </button>
+        )}
+        {tag.currentSnapshot ? (
+          <button
+            className={styles.tagSecondaryAction}
+            type="button"
+            aria-label={`刷新${tag.name}推荐中心`}
+            disabled={!canRebuild}
+            onClick={onRebuild}
+          >
+            {tag.activeBuild ? '构建中…' : '刷新中心'}
+          </button>
+        ) : null}
+        <button
+          className={styles.tagRemoveAction}
+          type="button"
+          aria-label={`将${tag.name}移出推荐`}
+          disabled={busy}
+          onClick={onDisable}
+        >
+          移出推荐
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function DistanceCard({
+  item,
+  selected,
+  batchSelection,
+  onSelect,
+}: {
+  item: EagleTagDistanceAsset;
+  selected: boolean;
+  batchSelection: boolean;
+  onSelect: (gesture: EagleSelectionGesture) => void;
+}) {
+  const similarity = formatSimilarity(item.distance);
+  return (
+    <article className={`${styles.assetCard} ${selected ? styles.assetCardSelected : ''}`}>
+      <button
+        className={styles.assetSelectionTarget}
+        type="button"
+        aria-label={`选择 ${item.asset.displayName}，相似度 ${similarity}`}
+        aria-pressed={selected}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect(getSelectionGesture(event));
+        }}
+      >
+        <Preview asset={item.asset} />
+        {batchSelection ? <SelectionMark selected={selected} /> : null}
+        <div className={styles.similarityInfo}>
+          <span>与“{item.prototypeRank + 1} 号中心”</span>
+          <strong>相似度 {similarity}</strong>
+        </div>
+        <span className={styles.assetFileName} title={item.asset.displayName}>
+          {item.asset.displayName}
+        </span>
+      </button>
+    </article>
+  );
+}
+
+function toDistanceDirection(sort: SimilaritySort): 'ASC' | 'DESC' {
+  return sort === 'LOW_FIRST' ? 'DESC' : 'ASC';
+}
+
+function sortDistanceItems(items: EagleTagDistanceAsset[], sort: SimilaritySort) {
+  return [...items].sort((left, right) => {
+    const distanceOrder =
+      sort === 'LOW_FIRST' ? right.distance - left.distance : left.distance - right.distance;
+    if (distanceOrder) return distanceOrder;
+    return sort === 'LOW_FIRST'
+      ? right.assetId.localeCompare(left.assetId)
+      : left.assetId.localeCompare(right.assetId);
+  });
+}
+
+function formatSimilarity(distance: number) {
+  return `${((1 - distance) * 100).toFixed(1)}%`;
 }
 
 function AssetGrid({
