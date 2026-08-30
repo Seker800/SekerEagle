@@ -593,6 +593,10 @@ export class EagleVectorService {
           acceptedSuggestionId: suggestion.id,
         },
       });
+      await transaction.eagleManualTag.updateMany({
+        where: { ownerId, id: suggestion.suggestedTagId },
+        data: { lastUsedAt: new Date() },
+      });
       await upsertAcceptedSuggestionMemberDistance(transaction, {
         ownerId,
         tagId: suggestion.suggestedTagId,
@@ -668,7 +672,22 @@ export class EagleVectorService {
         { assetId: direction === 'DESC' ? 'desc' : 'asc' },
       ],
       take: limit + 1,
-      include: { asset: { select: { id: true, displayName: true, width: true, height: true } } },
+      include: {
+        asset: {
+          select: {
+            id: true,
+            displayName: true,
+            width: true,
+            height: true,
+            renditions: {
+              where: { status: 'READY', kind: 'THUMBNAIL', variant: '512' },
+              orderBy: { revision: 'desc' },
+              take: 1,
+              select: { id: true, width: true, height: true },
+            },
+          },
+        },
+      },
     });
     const items = rows.slice(0, limit);
     const last = items.at(-1);

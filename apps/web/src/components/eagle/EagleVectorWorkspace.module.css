@@ -106,7 +106,8 @@
 .toolbar button,
 .tagSearch input,
 .tagCandidate button,
-.tagRow button,
+.managedTagToolbar input,
+.tagCardActions button,
 .cardActions button {
   min-height: 31px;
   border: 1px solid rgb(255 255 255 / 10%);
@@ -120,8 +121,11 @@
 }
 .tagSearch {
   display: grid;
-  width: min(100%, 620px);
-  gap: 6px;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 12px;
+  background: rgb(255 255 255 / 2%);
 }
 .tagSearch > label,
 .sectionHeading strong {
@@ -139,38 +143,67 @@
   font-size: 10px;
 }
 .tagSearchResults {
-  padding: 5px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 8px;
-  background: #101114;
+  min-height: 58px;
 }
-.virtualTagResults {
-  height: 260px;
+.tagCandidateGrid {
+  max-height: 316px;
   overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 8px;
+  padding: 2px 4px 2px 2px;
 }
 .searchHint {
   padding: 10px;
 }
 .tagCandidate {
-  height: 43px;
-  margin-bottom: 4px;
+  min-width: 0;
+  min-height: 94px;
   display: grid;
-  grid-template-columns: 12px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  padding: 7px 8px;
-  border-radius: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  gap: 8px 10px;
+  padding: 11px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: #101114;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 94px;
 }
 .tagCandidate:hover {
-  background: rgb(255 255 255 / 4%);
+  border-color: rgb(214 155 72 / 28%);
+  background: rgb(214 155 72 / 4%);
 }
-.tagCandidate > div {
-  display: grid;
-  gap: 2px;
+.tagCandidateIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
-.tagCandidate small {
+.tagCandidateIdentity h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #e2e3e6;
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tagCandidate p {
+  grid-column: 1;
+  align-self: end;
+  margin: 0 0 2px 16px;
   color: #858b94;
   font-size: 10px;
+}
+.tagCandidate button {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
+  border-color: rgb(214 155 72 / 38%);
+  color: #f0c98e;
+  background: rgb(214 155 72 / 8%);
 }
 .sectionHeading {
   display: flex;
@@ -181,7 +214,7 @@
 }
 .toolbar button,
 .tagCandidate button,
-.tagRow button,
+.tagCardActions button,
 .cardActions button {
   padding: 0 10px;
   cursor: pointer;
@@ -193,33 +226,152 @@
 }
 .toolbar button:disabled,
 .tagCandidate button:disabled,
-.tagRow button:disabled,
+.tagCardActions button:disabled,
 .cardActions button:disabled {
   cursor: default;
   opacity: 0.45;
 }
-.tagList,
-.distanceList {
-  display: grid;
-  gap: 5px;
+.managedTagToolbar {
+  display: flex;
 }
-.tagRow {
+.managedTagToolbar input {
+  width: min(100%, 360px);
+  padding: 0 10px;
+}
+.tagGrid {
   display: grid;
-  grid-template-columns: 12px minmax(180px, 1fr) auto auto auto;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 12px;
+}
+.tagCard {
+  min-width: 0;
+  min-height: 210px;
+  display: grid;
+  align-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgb(255 255 255 / 3%), rgb(255 255 255 / 1%));
+  content-visibility: auto;
+  contain-intrinsic-size: auto 210px;
+}
+.tagCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.tagIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+.tagIdentity > .tagDot {
+  margin-top: 5px;
+}
+.tagIdentity > div {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.tagIdentity h3 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #f0f1f2;
+  font-size: 15px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tagIdentity span {
+  justify-self: start;
+  padding: 3px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+}
+.tagVersion {
+  flex: none;
+  padding-top: 2px;
+  color: #717780;
+  font-size: 9px;
+}
+.tagReady {
+  color: #9cdbb3;
+  background: rgb(73 182 117 / 12%);
+}
+.tagPending {
+  color: #e4bc7e;
+  background: rgb(214 155 72 / 11%);
+}
+.tagMetrics {
+  display: flex;
+  align-items: stretch;
+  gap: 18px;
+}
+.tagPrimaryMetric {
+  min-width: 92px;
+  display: grid;
+  align-content: center;
+  padding-right: 18px;
+  border-right: 1px solid rgb(255 255 255 / 8%);
+}
+.tagPrimaryMetric strong {
+  color: #f1c685;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.tagPrimaryMetric span,
+.tagSecondaryMetrics span {
+  color: #7f858e;
+  font-size: 9px;
+}
+.tagSecondaryMetrics {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: center;
   gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 8px;
-  background: rgb(255 255 255 / 2%);
 }
-.tagRow > div {
+.tagSecondaryMetrics > div {
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
-.tagRow small {
-  color: #858b94;
-  font-size: 10px;
+.tagSecondaryMetrics strong {
+  color: #d7d9dd;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.tagCardActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+}
+.tagCardActions button {
+  flex: none;
+  padding: 0 10px;
+}
+.tagCardActions .tagPrimaryAction {
+  border-color: rgb(214 155 72 / 42%);
+  color: #f1cf9c;
+  background: rgb(214 155 72 / 11%);
+}
+.tagCardActions .tagRemoveAction {
+  margin-left: auto;
+  padding-inline: 4px;
+  border-color: transparent;
+  color: #777d86;
+  background: transparent;
+}
+.tagCardActions .tagRemoveAction:hover {
+  color: #d49a9d;
 }
 .tagDot {
   width: 8px;
@@ -309,6 +461,30 @@
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
+.similarityInfo {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 10px 3px;
+}
+.similarityInfo strong {
+  color: #f2c783;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.similarityInfo span,
+.assetFileName {
+  color: #858b94;
+  font-size: 10px;
+}
+.assetFileName {
+  display: block;
+  overflow: hidden;
+  padding: 0 10px 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .cardActions {
   display: flex;
   gap: 5px;
@@ -361,17 +537,6 @@
   opacity: 0.45;
   cursor: default;
 }
-.distanceList > div {
-  display: flex;
-  justify-content: space-between;
-  padding: 9px 11px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 7px;
-  font-size: 11px;
-}
-.distanceList span {
-  color: #9da2aa;
-}
 .empty {
   padding: 28px;
   border: 1px dashed rgb(255 255 255 / 10%);
@@ -395,10 +560,8 @@
   background: rgb(73 182 117 / 12%);
 }
 @media (max-width: 800px) {
-  .tagRow {
-    grid-template-columns: 12px 1fr;
-  }
-  .tagRow > :not(.tagDot):not(div) {
-    grid-column: 2;
+  .tagCandidateGrid,
+  .tagGrid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

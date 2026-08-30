@@ -143,7 +143,14 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
   const tagIds = Array.from({ length: 100 }, (_, index) => `tag-${index}`);
   const insertedRows: number[] = [];
   let distanceSyncs = 0;
+  const recentTagWrites: Array<{ where: unknown; data: { lastUsedAt: unknown } }> = [];
   const transaction = {
+    eagleManualTag: {
+      updateMany: async (input: { where: unknown; data: { lastUsedAt: unknown } }) => {
+        recentTagWrites.push(input);
+        return { count: tagIds.length };
+      },
+    },
     eagleAssetManualTag: {
       updateMany: async () => ({ count: 0 }),
       createMany: async ({ data }: { data: unknown[] }) => {
@@ -171,6 +178,12 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
 
   assert.deepEqual(insertedRows, [10_000, 10_000, 100]);
   assert.equal(distanceSyncs, 3);
+  assert.equal(recentTagWrites.length, 1);
+  assert.deepEqual(recentTagWrites[0]?.where, {
+    ownerId: 'owner-a',
+    id: { in: tagIds },
+  });
+  assert.ok(recentTagWrites[0]?.data.lastUsedAt instanceof Date);
 });
 
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {

@@ -4,6 +4,24 @@
   min-width: 0;
 }
 
+.addFirstCondition {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed #49505a;
+  border-radius: 10px;
+  color: #cbd1d8;
+  background: #171a1e;
+}
+
+.addFirstCondition:hover {
+  border-color: #66717d;
+  color: #f0f3f6;
+  background: #20242a;
+}
+
 .condition {
   border: 1px solid #333940;
   border-radius: 10px;

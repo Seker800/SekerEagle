@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertSafeRuntimeTarget, describeRuntimeTarget } from './index';
+import {
+  EAGLE_AI_TAG_DEFAULT_MODEL,
+  EAGLE_AI_TAG_PROCESSOR_VERSION,
+  EAGLE_AI_TAG_PROMPT_VERSION,
+  assertSafeRuntimeTarget,
+  describeRuntimeTarget,
+} from './index';
 
 const safeTarget = {
   databaseUrl: 'postgresql://sekereagle:secret@postgres:5432/sekereagle?schema=public',
@@ -36,4 +42,10 @@ void test('rejects unknown buckets and hosts', () => {
   assert.throws(() =>
     assertSafeRuntimeTarget({ ...safeTarget, s3Endpoint: 'http://example.com:9000' }),
   );
+});
+
+void test('publishes one current AI tag pipeline identity for API and worker consumers', () => {
+  assert.equal(EAGLE_AI_TAG_DEFAULT_MODEL, 'qwen3-vl:8b-instruct');
+  assert.equal(EAGLE_AI_TAG_PROCESSOR_VERSION, 'ollama-concrete-nouns-8b-instruct-v2');
+  assert.equal(EAGLE_AI_TAG_PROMPT_VERSION, 'concrete-nouns-zh-v2');
 });

@@ -4,6 +4,10 @@ export interface RuntimeTarget {
   s3Bucket: string;
 }
 
+export const EAGLE_AI_TAG_DEFAULT_MODEL = 'qwen3-vl:8b-instruct';
+export const EAGLE_AI_TAG_PROCESSOR_VERSION = 'ollama-concrete-nouns-8b-instruct-v2';
+export const EAGLE_AI_TAG_PROMPT_VERSION = 'concrete-nouns-zh-v2';
+
 const allowedDatabaseNames = new Set(['sekereagle', 'sekereagle_test']);
 const allowedDatabaseHosts = new Set(['127.0.0.1', 'localhost', 'postgres', 'postgres-test']);
 const allowedS3Hosts = new Set(['127.0.0.1', 'localhost', 'minio', 'minio-test']);

@@ -62,6 +62,7 @@ describe('EagleVectorWorkspace', () => {
         isStarred: false,
         rowVersion: 1,
         assetCount: 18,
+        lastUsedAt: null,
         pinyin: 'ye jian fen wei',
         pinyinInitials: 'yjfw',
       },
@@ -74,6 +75,7 @@ describe('EagleVectorWorkspace', () => {
         isStarred: false,
         rowVersion: 1,
         assetCount: 42,
+        lastUsedAt: null,
         pinyin: 'jia shi',
         pinyinInitials: 'js',
       },
@@ -110,6 +112,8 @@ describe('EagleVectorWorkspace', () => {
       scanned: 12,
       matched: 3,
     });
+    vi.mocked(api.rebuildEagleVectorTag).mockResolvedValue({});
+    vi.mocked(api.listEagleTagDistanceAssets).mockResolvedValue({ items: [], nextCursor: null });
   });
 
   it('states the manual-tag boundary and confirms vector suggestions into manual tags', async () => {
@@ -324,14 +328,15 @@ describe('EagleVectorWorkspace', () => {
     expect(first).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('reuses the full tag picker search so owners can browse and find tags by pinyin', async () => {
+  it('shows available recommendation tags as a searchable card palette instead of a dropdown list', async () => {
     render(<EagleVectorWorkspace view="TAGS" />);
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByText('还没有参与推荐的标签，请从上方搜索并添加。')).toBeInTheDocument();
-    expect(await screen.findByText('驾驶')).toBeInTheDocument();
-    expect(
-      within(screen.getByLabelText('可添加的标签列表')).getAllByRole('button')[0],
-    ).toHaveAccessibleName('添加驾驶到标签推荐');
+    const palette = await screen.findByRole('list', { name: '可添加的推荐标签卡片' });
+    expect(within(palette).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(palette).getByRole('heading', { name: '驾驶', level: 3 })).toBeInTheDocument();
+    expect(within(palette).getByText('42 张图片')).toBeInTheDocument();
+    expect(screen.queryByLabelText('可添加的标签列表')).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole('textbox', { name: '搜索可添加的人工标签' }), {
       target: { value: 'js' },
     });
@@ -345,9 +350,270 @@ describe('EagleVectorWorkspace', () => {
     });
     expect(screen.getByText('驾驶')).toBeInTheDocument();
     expect(screen.queryByText('夜间氛围')).not.toBeInTheDocument();
-    const addButton = screen.getByRole('button', { name: '添加驾驶到标签推荐' });
+    const addButton = screen.getByRole('button', { name: '添加驾驶到推荐' });
     fireEvent.click(addButton);
     await waitFor(() => expect(api.setEagleVectorTagEnabled).toHaveBeenCalledWith('driver', true));
+  });
+
+  it('gives managed recommendation cards a clear status, metric, and action hierarchy', async () => {
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-car',
+        name: '汽车',
+        color: '#d97757',
+        assetCount: 80,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-car',
+        lastGeneratedAt: '2026-08-20T00:00:00Z',
+        activeBuild: null,
+        currentSnapshot: {
+          id: 'snapshot-car',
+          version: 2,
+          sourceAssetCount: 80,
+          addedMemberCount: 0,
+          removedMemberCount: 0,
+          activatedAt: '2026-08-20T00:00:00Z',
+          centerCount: 3,
+        },
+        pendingSuggestionCount: 4,
+      },
+      {
+        id: 'tag-night',
+        name: '夜景',
+        color: '#47627a',
+        assetCount: 42,
+        recommendationEnabled: true,
+        currentSnapshotId: null,
+        lastGeneratedAt: null,
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 0,
+      },
+    ]);
+
+    render(<EagleVectorWorkspace view="TAGS" />);
+
+    const grid = await screen.findByRole('list', { name: '参与推荐的标签卡片' });
+    expect(within(grid).getAllByRole('listitem')).toHaveLength(2);
+    const readyCard = within(grid).getByRole('listitem', { name: '汽车推荐标签' });
+    expect(within(readyCard).getByRole('heading', { name: '汽车', level: 3 })).toBeInTheDocument();
+    expect(within(readyCard).getByText('推荐正常')).toBeInTheDocument();
+    expect(within(readyCard).getByLabelText('基础图片数量')).toHaveTextContent('80');
+    expect(within(readyCard).getByLabelText('向量中心数量')).toHaveTextContent('3');
+    expect(within(readyCard).getByLabelText('待确认建议数量')).toHaveTextContent('4');
+    expect(within(readyCard).getByRole('button', { name: '检查汽车的图片距离' })).toBeEnabled();
+    expect(within(readyCard).getByRole('button', { name: '刷新汽车推荐中心' })).toBeEnabled();
+
+    const pendingCard = within(grid).getByRole('listitem', { name: '夜景推荐标签' });
+    expect(within(pendingCard).getByText('需要生成中心')).toBeInTheDocument();
+    expect(within(pendingCard).getByRole('button', { name: '生成夜景推荐中心' })).toBeEnabled();
+    expect(within(pendingCard).queryByRole('button', { name: /图片距离/ })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索参与推荐的标签' }), {
+      target: { value: '汽车' },
+    });
+    expect(within(grid).getByText('汽车')).toBeInTheDocument();
+    expect(within(grid).queryByText('夜景')).not.toBeInTheDocument();
+  });
+
+  it('shows distance members as selectable images and moves them to another tag', async () => {
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-car',
+        name: '汽车',
+        color: '#d97757',
+        assetCount: 80,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-car',
+        lastGeneratedAt: '2026-08-20T00:00:00Z',
+        activeBuild: null,
+        currentSnapshot: {
+          id: 'snapshot-car',
+          version: 2,
+          sourceAssetCount: 80,
+          addedMemberCount: 0,
+          removedMemberCount: 0,
+          activatedAt: '2026-08-20T00:00:00Z',
+          centerCount: 3,
+        },
+        pendingSuggestionCount: 4,
+      },
+      {
+        id: 'tag-road',
+        name: '道路',
+        color: '#687786',
+        assetCount: 32,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-road',
+        lastGeneratedAt: '2026-08-20T00:00:00Z',
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 0,
+      },
+    ]);
+    vi.mocked(api.listEagleTagDistanceAssets).mockResolvedValue({
+      items: [
+        {
+          assetId: 'asset-wrong',
+          distance: 0.42,
+          prototypeRank: 1,
+          asset: {
+            id: 'asset-wrong',
+            displayName: 'wrong-road.jpg',
+            width: 1200,
+            height: 800,
+            renditions: [{ id: 'rendition-1', width: 512, height: 341 }],
+          },
+        },
+        {
+          assetId: 'asset-close',
+          distance: 0.08,
+          prototypeRank: 0,
+          asset: {
+            id: 'asset-close',
+            displayName: 'clear-car.jpg',
+            width: 1200,
+            height: 800,
+            renditions: [],
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    const changeManualTags = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <EagleVectorWorkspace
+        view="TAGS"
+        manualTags={[
+          {
+            id: 'tag-car',
+            name: '汽车',
+            color: '#d97757',
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 80,
+            lastUsedAt: null,
+            pinyin: 'qi che',
+            pinyinInitials: 'qc',
+          },
+          {
+            id: 'tag-road',
+            name: '道路',
+            color: '#687786',
+            groupId: null,
+            groupIds: [],
+            isStarred: false,
+            rowVersion: 1,
+            assetCount: 32,
+            lastUsedAt: null,
+            pinyin: 'dao lu',
+            pinyinInitials: 'dl',
+          },
+        ]}
+        onChangeManualTags={changeManualTags}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: '检查汽车的图片距离' }));
+    const grid = await screen.findByRole('grid', { name: '汽车标签的成员相似度图片' });
+    expect(api.listEagleTagDistanceAssets).toHaveBeenCalledWith('tag-car', 'DESC');
+    expect(screen.getByRole('combobox', { name: '排序' })).toHaveValue('LOW_FIRST');
+    const similarityCards = within(grid).getAllByRole('button', { name: /^选择 / });
+    expect(similarityCards[0]).toHaveAccessibleName(/相似度 58\.0%/);
+    expect(similarityCards[1]).toHaveAccessibleName(/相似度 92\.0%/);
+    expect(
+      within(grid)
+        .getByRole('button', { name: /选择 wrong-road\.jpg/ })
+        .querySelector('img'),
+    ).toHaveAttribute('src', '/thumbnail');
+    expect(screen.getByText('相似度 58.0%')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: '排序' }), {
+      target: { value: 'HIGH_FIRST' },
+    });
+    await waitFor(() =>
+      expect(api.listEagleTagDistanceAssets).toHaveBeenLastCalledWith('tag-car', 'ASC'),
+    );
+    await waitFor(() =>
+      expect(within(grid).getAllByRole('button', { name: /^选择 / })[0]).toHaveAccessibleName(
+        /clear-car\.jpg.*相似度 92\.0%/,
+      ),
+    );
+
+    fireEvent.click(within(grid).getByRole('button', { name: /选择 wrong-road\.jpg/ }));
+    fireEvent.click(screen.getByRole('button', { name: '移动到其他标签' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '道路' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
+
+    await waitFor(() =>
+      expect(changeManualTags).toHaveBeenCalledWith({
+        assetIds: ['asset-wrong'],
+        addTagIds: ['tag-road'],
+        removeTagIds: ['tag-car'],
+      }),
+    );
+    expect(api.rebuildEagleVectorTag).toHaveBeenCalledWith('tag-car');
+    expect(api.rebuildEagleVectorTag).toHaveBeenCalledWith('tag-road');
+  });
+
+  it('removes selected distance members from the inspected tag', async () => {
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-car',
+        name: '汽车',
+        color: null,
+        assetCount: 1,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-car',
+        lastGeneratedAt: null,
+        activeBuild: null,
+        currentSnapshot: {
+          id: 'snapshot-car',
+          version: 1,
+          sourceAssetCount: 1,
+          addedMemberCount: 0,
+          removedMemberCount: 0,
+          activatedAt: '2026-08-20T00:00:00Z',
+          centerCount: 1,
+        },
+        pendingSuggestionCount: 0,
+      },
+    ]);
+    vi.mocked(api.listEagleTagDistanceAssets).mockResolvedValue({
+      items: [
+        {
+          assetId: 'asset-wrong',
+          distance: 0.42,
+          prototypeRank: 0,
+          asset: {
+            id: 'asset-wrong',
+            displayName: 'wrong.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+    const changeManualTags = vi.fn().mockResolvedValue(undefined);
+
+    render(<EagleVectorWorkspace view="TAGS" onChangeManualTags={changeManualTags} />);
+    fireEvent.click(await screen.findByRole('button', { name: '检查汽车的图片距离' }));
+    fireEvent.click(await screen.findByRole('button', { name: /选择 wrong\.jpg/ }));
+    fireEvent.click(screen.getByRole('button', { name: '从“汽车”移除' }));
+
+    await waitFor(() =>
+      expect(changeManualTags).toHaveBeenCalledWith({
+        assetIds: ['asset-wrong'],
+        addTagIds: [],
+        removeTagIds: ['tag-car'],
+      }),
+    );
+    expect(api.rebuildEagleVectorTag).toHaveBeenCalledWith('tag-car');
   });
 
   it('renders one focused workflow without nesting the three peer entries again', async () => {
@@ -388,6 +654,7 @@ describe('EagleVectorWorkspace', () => {
             isStarred: false,
             rowVersion: 1,
             assetCount: 42,
+            lastUsedAt: null,
             pinyin: 'jia shi',
             pinyinInitials: 'js',
           },
@@ -435,6 +702,7 @@ describe('EagleVectorWorkspace', () => {
             isStarred: false,
             rowVersion: 1,
             assetCount: 18,
+            lastUsedAt: null,
             pinyin: 'ye jian fen wei',
             pinyinInitials: 'yjfw',
           },

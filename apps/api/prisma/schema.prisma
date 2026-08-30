@@ -65,6 +65,7 @@ enum EagleMediaJobKind {
   EXTRACT_COLOR_PALETTE
   GENERATE_IMAGE_PYRAMID
   GENERATE_EMBEDDING
+  GENERATE_AI_TAGS
   PURGE_ASSET
 }
 
@@ -639,6 +640,7 @@ model EagleManualTag {
   color              String?
   groupId            String?
   isStarred          Boolean                               @default(false)
+  lastUsedAt         DateTime?
   rowVersion         Int                                   @default(1)
   createdAt          DateTime                              @default(now())
   updatedAt          DateTime                              @updatedAt
@@ -659,6 +661,7 @@ model EagleManualTag {
   @@index([ownerId, name])
   @@index([ownerId, groupId, name])
   @@index([ownerId, isStarred, name])
+  @@index([ownerId, lastUsedAt(sort: Desc), id])
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleManualTag_normalizedName_trgm_idx")
 }
 
@@ -720,6 +723,7 @@ model EagleEmbeddingSpace {
   isCurrent            Boolean                     @default(false)
   createdAt            DateTime                    @default(now())
   embeddings           EagleAssetEmbedding[]
+  aiTags               EagleAiTag[]
   prototypeSnapshots   EagleTagPrototypeSnapshot[]
 
   @@unique([model, revision, dimensions, instructionVersion, preprocessingVersion])
@@ -926,15 +930,19 @@ model EagleAiTag {
   ownerId         String
   name            String
   normalizedName  String
+  embeddingSpaceId String?
+  embedding        Unsupported("vector(1024)")?
   createdAt       DateTime                          @default(now())
   updatedAt       DateTime                          @updatedAt
   owner           User                              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   assetLinks      EagleAssetAiTag[]
   smartFolderDeps EagleSmartFolderAiTagDependency[]
+  embeddingSpace  EagleEmbeddingSpace?              @relation(fields: [embeddingSpaceId], references: [id], onDelete: Restrict)
 
   @@unique([ownerId, normalizedName])
   @@unique([ownerId, id])
   @@index([ownerId, name])
+  @@index([ownerId, embeddingSpaceId])
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAiTag_normalizedName_trgm_idx")
 }
 
@@ -1096,14 +1104,18 @@ model EagleProcessingWorkerHeartbeat {
 }
 
 model EagleProcessingSetting {
-  ownerId    String   @id
-  mode       String   @default("NIGHT")
-  nightStart String   @default("23:00")
-  nightEnd   String   @default("06:00")
-  timeZone   String   @default("Asia/Shanghai")
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId              String   @id
+  mode                 String   @default("NIGHT")
+  nightStart           String   @default("23:00")
+  nightEnd             String   @default("06:00")
+  aiTagManualEnabled   Boolean  @default(false)
+  aiTagScheduleEnabled Boolean  @default(false)
+  aiTagScheduleStart   String   @default("23:00")
+  aiTagScheduleEnd     String   @default("06:00")
+  timeZone             String   @default("Asia/Shanghai")
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  owner                User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 }
 
 model AppDeploymentIdentity {

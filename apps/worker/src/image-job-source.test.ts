@@ -61,6 +61,29 @@ test('embedding reads the current ready preview instead of the original', () => 
   });
 });
 
+test('AI noun tagging reads the bounded preview instead of the original', () => {
+  const sourceAsset = {
+    originalObjectKey: 'users/owner/assets/asset/original.heic',
+    mimeType: 'image/heic',
+    mediaRevision: 3,
+    renditions: [
+      {
+        kind: 'PREVIEW',
+        revision: 3,
+        status: 'READY',
+        storageKey: 'users/owner/assets/asset/renditions/3/preview-default.webp',
+        mimeType: 'image/webp',
+      },
+    ],
+  };
+
+  assert.deepEqual(selectImageJobSource(sourceAsset, 'GENERATE_AI_TAGS'), {
+    storageKey: sourceAsset.renditions[0]!.storageKey,
+    mimeType: 'image/webp',
+    verifiesOriginalHash: false,
+  });
+});
+
 test('palette extraction fails closed when its dependent thumbnail is unavailable', () => {
   assert.throws(
     () => selectImageJobSource({ ...asset, renditions: [] }, 'EXTRACT_COLOR_PALETTE'),

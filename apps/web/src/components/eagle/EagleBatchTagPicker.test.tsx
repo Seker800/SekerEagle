@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 import type { EagleManualTag } from '../../lib/eagle-api';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 
-function tag(id: string, name: string, pinyin = name, pinyinInitials = name): EagleManualTag {
+function tag(
+  id: string,
+  name: string,
+  pinyin = name,
+  pinyinInitials = name,
+  lastUsedAt: string | null = null,
+): EagleManualTag {
   return {
     id,
     name,
@@ -13,12 +19,50 @@ function tag(id: string, name: string, pinyin = name, pinyinInitials = name): Ea
     isStarred: false,
     rowVersion: 1,
     assetCount: 0,
+    lastUsedAt,
     pinyin,
     pinyinInitials,
   };
 }
 
 describe('EagleBatchTagPicker', () => {
+  it('keeps all tags in the existing list and adds a recent-use column ordered by recency', () => {
+    render(
+      <EagleBatchTagPicker
+        assetCount={1}
+        tags={[
+          { ...tag('popular', '高频标签'), assetCount: 100 },
+          {
+            ...tag('older', '较早使用', 'jiao zao shi yong', 'jzsy', '2026-08-20T10:00:00Z'),
+            assetCount: 5,
+          },
+          {
+            ...tag('newer', '最近使用', 'zui jin shi yong', 'zjsy', '2026-08-28T10:00:00Z'),
+            assetCount: 10,
+          },
+        ]}
+        onApply={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const allTags = screen.getByRole('region', { name: '所有标签' });
+    const recentTags = screen.getByRole('region', { name: '最近使用' });
+    expect(
+      within(allTags)
+        .getAllByRole('checkbox')
+        .map((checkbox) => checkbox.ariaLabel),
+    ).toEqual(['高频标签', '最近使用', '较早使用']);
+    expect(
+      within(recentTags)
+        .getAllByRole('checkbox')
+        .map((checkbox) => checkbox.ariaLabel),
+    ).toEqual(['最近使用（最近使用）', '较早使用（最近使用）']);
+
+    fireEvent.click(within(recentTags).getByRole('checkbox', { name: '最近使用（最近使用）' }));
+    expect(within(allTags).getByRole('checkbox', { name: '最近使用' })).toBeChecked();
+  });
+
   it('searches a large tag collection by pinyin initials and applies multiple tags once', () => {
     const onApply = vi.fn();
     const tags = [

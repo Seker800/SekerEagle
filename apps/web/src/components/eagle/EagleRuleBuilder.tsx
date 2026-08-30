@@ -42,14 +42,35 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
 
   const removeCondition = (conditionId: string) => {
     const conditions = value.conditions.filter((condition) => condition.id !== conditionId);
+    onChange({ ...value, conditions });
+  };
+
+  const addFirstCondition = () => {
+    const condition = createEagleFilterCondition();
     onChange({
       ...value,
-      conditions: conditions.length ? conditions : [createEagleFilterCondition()],
+      conditions: [
+        {
+          ...condition,
+          rules: [createEagleFilterRule('MANUAL_TAGS')],
+        },
+      ],
     });
   };
 
   return (
     <div className={styles.builder} aria-label="筛选规则编辑器">
+      {value.conditions.length === 0 ? (
+        <button
+          className={styles.addFirstCondition}
+          type="button"
+          aria-label="添加筛选条件"
+          onClick={addFirstCondition}
+        >
+          <IconPlus size={17} />
+          添加筛选条件
+        </button>
+      ) : null}
       {value.conditions.map((condition, conditionIndex) => (
         <section
           className={styles.condition}
@@ -129,11 +150,9 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
                   replaceCondition(condition.id, { ...condition, rules });
                 }}
                 onRemove={() => {
-                  if (condition.rules.length === 1) return;
-                  replaceCondition(condition.id, {
-                    ...condition,
-                    rules: condition.rules.filter((candidate) => candidate.id !== rule.id),
-                  });
+                  const rules = condition.rules.filter((candidate) => candidate.id !== rule.id);
+                  if (rules.length) replaceCondition(condition.id, { ...condition, rules });
+                  else removeCondition(condition.id);
                 }}
               />
             ))}
@@ -203,12 +222,7 @@ function RuleRow({
         )}
       </div>
       <div className={styles.ruleActions}>
-        <button
-          type="button"
-          aria-label={`删除规则 ${ruleIndex + 1}`}
-          disabled={condition.rules.length === 1}
-          onClick={onRemove}
-        >
+        <button type="button" aria-label={`删除规则 ${ruleIndex + 1}`} onClick={onRemove}>
           <IconMinus size={17} />
         </button>
         <button
