@@ -14,7 +14,7 @@
     "test:coverage": "vitest run --coverage",
     "start": "npm run build && electron .",
     "package:mac": "npm run build && electron-builder --mac --arm64 --x64",
-    "package:win": "npm run build && electron-builder --win nsis --x64"
+    "package:win": "npm run build && electron-builder --win portable --x64"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
@@ -61,25 +61,18 @@
     },
     "win": {
       "icon": "build/icon.png",
+      "artifactName": "${productName}-${version}-windows-${arch}-portable.${ext}",
       "target": [
         {
-          "target": "nsis",
+          "target": "portable",
           "arch": [
             "x64"
           ]
         }
       ]
     },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "SekerEagle",
-      "uninstallDisplayName": "SekerEagle",
-      "deleteAppDataOnUninstall": false,
-      "runAfterFinish": true
+    "portable": {
+      "requestExecutionLevel": "user"
     }
   }
 }

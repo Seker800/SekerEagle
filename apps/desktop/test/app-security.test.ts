@@ -4,6 +4,14 @@ import { DEFAULT_DESKTOP_SERVER_URL, normalizeDesktopServerUrl } from '../src/ma
 import { isAllowedAppNavigation } from '../src/main/navigation-policy';
 
 describe('desktop server and navigation security', () => {
+  it('redirects portable profile data before acquiring the single-instance lock', async () => {
+    const main = await readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8');
+    expect(main.indexOf("app.setPath('userData'")).toBeGreaterThan(-1);
+    expect(main.indexOf("app.setPath('userData'")).toBeLessThan(
+      main.indexOf('app.requestSingleInstanceLock()'),
+    );
+  });
+
   it('uses the canonical local browser origin by default', () => {
     expect(DEFAULT_DESKTOP_SERVER_URL).toBe('http://localhost:8180');
   });

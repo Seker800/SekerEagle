@@ -145,7 +145,7 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 | macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                           |
 | Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway         |
 | macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存   |
-| Windows x64 桌面应用  |  内测可用   | 原生 NSIS 安装包；公开发布仍需签名与干净机器验收       |
+| Windows x64 桌面应用  |  内测可用   | 单文件便携版，程序旁保存配置和可重建媒体缓存           |
 | Web 素材库            |     ✅      | 桌面浏览器优先                                         |
 | Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                              |
 | Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                              |

@@ -3,7 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DesktopSettingsStore } from '../src/main/desktop-settings';
-import { DEFAULT_CACHE_LIMIT_BYTES, GIBIBYTE } from '../src/utility/cache/cache-policy';
+import {
+  DEFAULT_CACHE_LIMIT_BYTES,
+  GIBIBYTE,
+  PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
+} from '../src/utility/cache/cache-policy';
 
 describe('DesktopSettingsStore', () => {
   let directory: string;
@@ -30,5 +34,14 @@ describe('DesktopSettingsStore', () => {
     await expect(settings.setCacheLimitGiB(0)).rejects.toThrow(/1.*100/);
     await expect(settings.setCacheLimitGiB(101)).rejects.toThrow(/1.*100/);
     await expect(settings.setCacheLimitGiB(1.5)).rejects.toThrow(/整数/);
+  });
+
+  it('uses the smaller portable default until the user saves a capacity', async () => {
+    const settings = new DesktopSettingsStore(directory, PORTABLE_DEFAULT_CACHE_LIMIT_BYTES);
+    await expect(settings.load()).resolves.toEqual({
+      cacheLimitBytes: PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
+    });
+    await settings.setCacheLimitGiB(5);
+    await expect(settings.load()).resolves.toEqual({ cacheLimitBytes: 5 * GIBIBYTE });
   });
 });
