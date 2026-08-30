@@ -17,6 +17,15 @@ pinned revision and is licensed under Apache-2.0. Model weights are not stored i
 this repository. Operators remain responsible for reviewing the model card and
 license before redistributing downloaded weights.
 
+## Ollama vision tagging
+
+Optional automatic noun tagging uses the external Ollama runtime with the
+`qwen3-vl:8b-instruct` model by default. The corresponding
+`Qwen/Qwen3-VL-8B-Instruct` model is licensed under Apache-2.0. Neither Ollama nor
+the model weights are bundled with the source release; operators download and run
+them separately and remain responsible for reviewing their exact runtime versions
+and licenses before redistribution.
+
 ## Image processing
 
 The Node.js dependency tree includes Sharp distributions that bundle libvips.

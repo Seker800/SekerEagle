@@ -19,6 +19,12 @@
 
 8. 打开 `http://localhost:8180` 登录。
 
+自动名词标签是独立的可选能力。需要时先安装 Ollama，执行
+`ollama pull qwen3-vl:8b-instruct`，并确保容器可通过 `.env` 中的 `OLLAMA_URL` 访问它。
+Ollama API 没有应用层认证：不得把 11434 暴露到公网；如果 Docker Desktop 要求它监听
+非 loopback 地址，必须使用主机防火墙将访问限制在本机 Docker 后端。自动标签的手动和
+定时开关默认均关闭。
+
 也可以先运行 `npm run bootstrap-credentials:create` 生成本机私有的 `.local/bootstrap.env`。首次登录并修改密码后应删除该文件。
 
 ## 局域网 HTTP

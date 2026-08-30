@@ -8,7 +8,8 @@
 SekerEagle 是独立、自托管、多用户隔离的个人素材库。PostgreSQL 保存业务事实，MinIO
 保存对象，NestJS API 承载业务规则，可重试 worker 生成缩略图、预览、颜色和切片等派生
 资源。React Web、Eagle 导入器和浏览器采集插件只通过同源 gateway 访问 API。Apple
-Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量和人工标签建议。
+Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量和人工标签建议；也可以
+通过本机 Ollama 的 Qwen3-VL 8B Instruct 生成具体名词标签。两类 AI 能力默认都不运行。
 
 当前项目处于 `0.1.x` 早期公开阶段。macOS + Apple Silicon 是完整验证路径；Linux/x64
 尚不在完整支持矩阵内。API 和数据模型在次版本中仍可能变化，生产升级前必须备份。
@@ -30,7 +31,9 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 - 数据库名包含 `sekerchat`、目标包含 `192.168.31.89` 或 bucket 不符合 `sekereagle-` 前缀时必须 fail closed。
 - migration、seed、测试和导入前必须经过安全目标检查。
 - 不提交 `.env`、真实凭据、用户素材、数据库 dump、模型权重或运行日志。
-- 不直接暴露 PostgreSQL、MinIO、API 或 MLX sidecar；宿主机入口只能经过 gateway。
+- 不直接暴露 PostgreSQL、MinIO、API、MLX sidecar 或 Ollama；宿主机入口只能经过
+  gateway。若 Docker Desktop 访问 Ollama 需要非 loopback 监听，必须由主机防火墙阻止
+  局域网和公网访问其端口。
 
 改动认证、上传、对象存储或 API 时，必须补充对应的安全测试。遇到“先临时绕过安全检查”
 的方案应停止实现，重新设计边界。
@@ -148,7 +151,7 @@ GPLv3 依赖而按 GPL-3.0-only 单独发布。依赖、模型与二进制边界
 ## 已知限制
 
 - 当前完整支持路径是 macOS + Apple Silicon；Linux/x64 尚未完成产品级验证。
-- MLX 向量能力依赖宿主服务、固定模型 revision 和本机 Metal，不是所有部署的必选能力。
+- MLX 向量与 Ollama 自动标签依赖宿主服务、本机模型和 Metal，不是所有部署的必选能力。
 - 项目仍处于 `0.1.x`，API 和数据模型可能在次版本变化。
 - 公开互联网部署、托管 SaaS、多节点高可用和跨地域恢复不属于当前验证范围。
 - 发布负责人仍需对实际发布 artifact、模型权重和商店插件包分别做许可证与隐私检查。
