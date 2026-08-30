@@ -92,8 +92,10 @@ describe('OriginalDragExporter', () => {
     ]);
     expect(new Uint8Array(await readFile(prepared.files[0]))).toEqual(payloads.get(firstAssetId));
     expect(new Uint8Array(await readFile(prepared.files[1]!))).toEqual(payloads.get(secondAssetId));
-    expect((await stat(prepared.directory)).mode & 0o777).toBe(0o700);
-    expect((await stat(prepared.files[0])).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') {
+      expect((await stat(prepared.directory)).mode & 0o777).toBe(0o700);
+      expect((await stat(prepared.files[0])).mode & 0o777).toBe(0o600);
+    }
   });
 
   it('sanitizes server filenames without allowing path traversal or Windows-reserved names', async () => {

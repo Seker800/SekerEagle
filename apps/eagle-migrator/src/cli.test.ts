@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { assertSecureStateDirectory, inventoryOf, requirePat, resolveStateDirectory } from './cli';
 import type { MigrationSnapshot } from './snapshot';
@@ -13,11 +13,15 @@ test('requires PAT from the environment and never from command arguments', () =>
 });
 
 test('uses a migration-specific local state directory', () => {
-  assert.match(
-    resolveStateDirectory(undefined, 'migration-1'),
-    /sekereagle\/migrations\/migration-1$/,
+  assert.ok(
+    resolveStateDirectory(undefined, 'migration-1').endsWith(
+      join('SekerEagle', 'migrations', 'migration-1'),
+    ),
   );
-  assert.equal(resolveStateDirectory('/tmp/custom-state', 'migration-1'), '/tmp/custom-state');
+  assert.equal(
+    resolveStateDirectory('/tmp/custom-state', 'migration-1'),
+    resolve('/tmp/custom-state'),
+  );
 });
 
 test('reports immutable snapshot inventory without exposing item paths', () => {
@@ -55,6 +59,7 @@ test('requires the whole SQLite state directory to be private', async () => {
   await mkdir(privateDirectory, { mode: 0o700 });
   await mkdir(sharedDirectory, { mode: 0o755 });
   await assertSecureStateDirectory(privateDirectory);
+  if (process.platform === 'win32') return;
   await assert.rejects(assertSecureStateDirectory(sharedDirectory), /0700/);
   await chmod(sharedDirectory, 0o700);
   await assertSecureStateDirectory(sharedDirectory);

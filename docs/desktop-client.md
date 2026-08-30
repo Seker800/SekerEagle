@@ -1,6 +1,6 @@
 # SekerEagle desktop client
 
-The desktop client is a macOS-first wrapper around the same UI served by SekerEagle. It requires a reachable, authenticated SekerEagle server and accelerates repeated derived-image reads with a local, rebuildable cache.
+The desktop client is a macOS and Windows wrapper around the same UI served by SekerEagle. It requires a reachable, authenticated SekerEagle server and accelerates repeated derived-image reads with a local, rebuildable cache. macOS remains the complete deployment-validation path; Windows x64 has a native internal NSIS package and desktop-specific automated coverage.
 
 By default it connects to `http://localhost:8180`, matching the local deployment's canonical browser origin. The home-page connection pill opens an offline-capable manager with Local, LAN, and Public slots. Automatic mode keeps a healthy current connection to avoid login and cache churn; after failure it probes configured slots concurrently and chooses Local, then LAN, then Public. A manual mode never falls back silently.
 
@@ -17,6 +17,7 @@ The API must list every desktop-reachable web origin in `BROWSER_TRUSTED_ORIGINS
 - Cache entries are isolated by deployment and account. Signing out locks old entries; clearing the current account does not delete server media.
 - Physical quota includes media allocation, SQLite/WAL files, and active partial files. Writes preserve 5% free space, bounded to a 1–5 GiB reserve so a large volume does not disable caching unnecessarily; cache eviction runs before a write is rejected.
 - macOS data lives in `~/Library/Caches/SekerEagle/MediaCache/v2`, is excluded from Spotlight and Time Machine, and may be removed by the OS or user at any time.
+- Windows data lives in `%LOCALAPPDATA%\SekerEagle\MediaCache\v2` and inherits the current Windows user's profile ACL. POSIX mode-bit assertions do not apply on NTFS.
 
 ## Failure and recovery
 
@@ -67,5 +68,7 @@ checks used by native dragging apply to batch downloads.
 ## Packaging
 
 Run `npm run package:mac --workspace @sekereagle/desktop` for arm64 and x64 development DMG/ZIP artifacts. Run `npm run package:win --workspace @sekereagle/desktop` on a native Windows x64 runner for the internal unsigned NSIS artifact. The repository workflow exposes both targets manually.
+
+The Windows installer is per-user, lets the user choose the installation directory, creates Start Menu and desktop shortcuts, and preserves settings and cache data on uninstall. Public Windows distribution still requires Authenticode signing and clean-machine Windows 10/11 install, login, drag-out, upgrade, rollback, and uninstall rehearsal. Unsigned internal builds may trigger Microsoft Defender SmartScreen.
 
 Unsigned macOS builds are only for local/internal validation. Public distribution requires Developer ID signing, notarization, stapling, checksums, and a clean-machine install/login/cache/clear/upgrade/rollback rehearsal.

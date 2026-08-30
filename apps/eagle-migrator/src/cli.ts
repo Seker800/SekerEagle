@@ -1,6 +1,6 @@
 import { access, mkdir, stat, statfs } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseCliOptions } from './cli-options';
 import { MigrationJournal } from './journal';
 import { isSekerEaglePat } from './pat';
@@ -93,15 +93,32 @@ export async function executeCli(arguments_: string[], runtime: CliRuntime = {})
 export async function assertSecureStateDirectory(directory: string): Promise<void> {
   const directoryStat = await stat(directory);
   if (!directoryStat.isDirectory()) throw new Error('迁移 state 路径不是目录。');
+  if (process.platform === 'win32') {
+    const profileRoots = [process.env.LOCALAPPDATA, process.env.APPDATA, process.env.USERPROFILE]
+      .filter((value): value is string => Boolean(value && isAbsolute(value)))
+      .map((value) => resolve(value));
+    if (!profileRoots.some((root) => isPathInside(root, directory))) {
+      throw new Error('Windows 迁移 state 目录必须位于当前用户配置目录内，以继承用户 ACL。');
+    }
+    return;
+  }
   if ((directoryStat.mode & 0o077) !== 0) {
     throw new Error('迁移 state 目录权限必须是 0700，避免 SQLite 恢复日志泄露。');
   }
 }
 
 export function resolveStateDirectory(value: string | undefined, migrationId: string): string {
-  return resolve(
-    value ?? join(homedir(), '.local', 'share', 'sekereagle', 'migrations', migrationId),
-  );
+  if (value) return resolve(value);
+  const base =
+    process.platform === 'win32'
+      ? (process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'))
+      : join(homedir(), '.local', 'share');
+  return resolve(base, 'SekerEagle', 'migrations', migrationId);
+}
+
+function isPathInside(root: string, candidate: string): boolean {
+  const pathFromRoot = relative(root, resolve(candidate));
+  return pathFromRoot === '' || (!pathFromRoot.startsWith(`..${sep}`) && pathFromRoot !== '..');
 }
 
 export function requirePat(environment: NodeJS.ProcessEnv): string {

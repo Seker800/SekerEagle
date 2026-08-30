@@ -85,10 +85,13 @@ test('fails closed when a checksummed manifest is modified', async () => {
 
 test('rejects source paths outside the frozen library and symlink escapes', async () => {
   const value = await fixture();
-  const outside = join(value.root, 'outside.jpg');
+  const outsideDirectory = join(value.root, 'outside');
+  await mkdir(outsideDirectory);
+  const outside = join(outsideDirectory, 'outside.jpg');
   await writeFile(outside, 'outside');
-  const link = join(value.library, 'images', 'escape.jpg');
-  await symlink(outside, link);
+  const linkDirectory = join(value.library, 'images', 'escape');
+  await symlink(outsideDirectory, linkDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+  const link = join(linkDirectory, 'outside.jpg');
   const itemPath = join(value.snapshot, 'items.ndjson');
   const item = JSON.parse((await readFile(itemPath, 'utf8')).trim());
 
@@ -101,6 +104,6 @@ test('rejects source paths outside the frozen library and symlink escapes', asyn
   await writeFile(itemPath, `${JSON.stringify({ ...item, sourcePath: link })}\n`);
   await assert.rejects(
     openMigrationSnapshot(value.snapshot, { repairMissingChecksums: true }),
-    /symlink/i,
+    /outside|symlink/i,
   );
 });

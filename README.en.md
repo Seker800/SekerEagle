@@ -164,6 +164,7 @@ photo management project instead.
 | macOS + Apple Silicon      |  ✅ Supported path   | Current development, deployment, and performance test environment         |
 | Docker Desktop deployment  |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
 | macOS desktop app          | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
+| Windows x64 desktop app    | Internal-test ready  | Native NSIS package; signing and clean-machine release QA remain          |
 | Web asset library          |          ✅          | Desktop browsers first                                                    |
 | Chrome browser capture     |          ✅          | Unpacked Manifest V3 extension                                            |
 | Eagle snapshot migration   |          ✅          | Local CLI plus Eagle export plugin                                        |

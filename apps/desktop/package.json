@@ -72,7 +72,14 @@
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SekerEagle",
+      "uninstallDisplayName": "SekerEagle",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true
     }
   }
 }

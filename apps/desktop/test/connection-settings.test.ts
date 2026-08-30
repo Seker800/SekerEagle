@@ -83,7 +83,7 @@ describe('desktop connection settings', () => {
     });
     expect(await store.load()).toEqual(saved);
     const settingsPath = path.join(directory, 'connection-settings.json');
-    expect((await stat(settingsPath)).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect((await stat(settingsPath)).mode & 0o777).toBe(0o600);
     expect(JSON.parse(await readFile(settingsPath, 'utf8'))).not.toHaveProperty('password');
 
     await chmod(settingsPath, 0o600);

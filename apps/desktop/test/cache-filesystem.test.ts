@@ -29,6 +29,6 @@ describe('desktop cache filesystem', () => {
 
     const details = await stat(missingCacheRoot);
     expect(details.isDirectory()).toBe(true);
-    expect(details.mode & 0o777).toBe(0o700);
+    if (process.platform !== 'win32') expect(details.mode & 0o777).toBe(0o700);
   });
 });
