@@ -1,14 +1,16 @@
+import { t } from '../../i18n';
 import { IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import styles from './EagleImageViewer.module.css';
-
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
-type ViewerPoint = { x: number; y: number };
-
+type ViewerPoint = {
+  x: number;
+  y: number;
+};
 interface ViewerRect {
   containsPoint(point: ViewerPoint): boolean;
   height: number;
@@ -16,30 +18,27 @@ interface ViewerRect {
   x: number;
   y: number;
 }
-
 interface ViewerDragEvent {
-  delta: { negate(): ViewerPoint };
+  delta: {
+    negate(): ViewerPoint;
+  };
   pointerType: string;
   preventDefaultAction: boolean;
 }
-
 interface ViewerDragEndEvent {
   pointerType: string;
   preventDefaultAction: boolean;
 }
-
 interface ViewerScrollEvent {
   pointerType: string;
   position: ViewerPoint;
   preventDefaultAction: boolean;
   scroll: number;
 }
-
 interface ViewerClickEvent {
   position: ViewerPoint;
   quick: boolean;
 }
-
 interface ViewerViewport {
   applyConstraints(immediately?: boolean): void;
   deltaPointsFromPixels(point: ViewerPoint): ViewerPoint;
@@ -51,11 +50,9 @@ interface ViewerViewport {
   zoomBy(factor: number, refPoint?: ViewerPoint, immediately?: boolean): void;
   zoomTo(zoom: number, refPoint?: ViewerPoint, immediately?: boolean): void;
 }
-
 interface ViewerWorldItem {
   getBounds(): ViewerRect;
 }
-
 interface ViewerHandle {
   addHandler(name: 'open' | 'open-failed', handler: () => void): void;
   addHandler(name: 'canvas-click', handler: (event: ViewerClickEvent) => void): void;
@@ -71,36 +68,31 @@ interface ViewerHandle {
   forceRedraw(): void;
   open(source: ViewerSource): void;
   viewport: ViewerViewport;
-  world: { getItemAt(index: number): ViewerWorldItem | undefined };
+  world: {
+    getItemAt(index: number): ViewerWorldItem | undefined;
+  };
   zoomPerScroll: number;
 }
-
 interface PendingSource {
   imageKey: string;
   preserveViewport: boolean;
   source: ViewerSource;
   sourceKey: string;
 }
-
 interface ViewportSnapshot {
   center: ViewerPoint;
   zoom: number;
 }
-
 const DIRECT_INTERACTION_ANIMATION_SECONDS = 0.08;
 const PYRAMID_UPGRADE_IDLE_MS = 120;
 const MAX_ZOOM_PIXEL_RATIO = 8;
-
 function isDirectPointer(pointerType: string): boolean {
   return pointerType === 'mouse' || pointerType === 'pen';
 }
-
 async function importOpenSeadragon() {
   return import('openseadragon');
 }
-
 let openSeadragonModulePromise: ReturnType<typeof importOpenSeadragon> | undefined;
-
 function loadOpenSeadragon() {
   if (!openSeadragonModulePromise) {
     openSeadragonModulePromise = importOpenSeadragon().catch((error: unknown) => {
@@ -110,11 +102,9 @@ function loadOpenSeadragon() {
   }
   return openSeadragonModulePromise;
 }
-
 export function preloadEagleImageViewer(): void {
   void loadOpenSeadragon().catch(() => undefined);
 }
-
 export function EagleImageViewer({
   image,
   descriptor,
@@ -150,12 +140,10 @@ export function EagleImageViewer({
   desiredSourceKeyRef.current = sourceKey;
   imageRef.current = image;
   onCloseRef.current = onClose;
-
   const openPendingSource = () => {
     const viewer = viewerRef.current;
     const pending = pendingSourceRef.current;
     if (!viewer || !pending) return;
-
     pendingSourceRef.current = null;
     sourceOpenTimerRef.current = undefined;
     pendingViewportRef.current = pending.preserveViewport
@@ -170,23 +158,19 @@ export function EagleImageViewer({
     setStatus('loading');
     viewer.open(pending.source);
   };
-
   const schedulePendingSourceOpen = () => {
     if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
     const delay = Math.max(0, lastInteractionAtRef.current + PYRAMID_UPGRADE_IDLE_MS - Date.now());
     sourceOpenTimerRef.current = setTimeout(openPendingSource, delay);
   };
   schedulePendingSourceOpenRef.current = schedulePendingSourceOpen;
-
   const markDirectInteraction = () => {
     lastInteractionAtRef.current = Date.now();
     if (pendingSourceRef.current) schedulePendingSourceOpenRef.current();
   };
-
   useEffect(() => {
     const element = viewerElementRef.current;
     if (!element) return undefined;
-
     let cancelled = false;
     void loadOpenSeadragon()
       .then(({ default: OpenSeadragon }) => {
@@ -279,7 +263,6 @@ export function EagleImageViewer({
       .catch(() => {
         if (!cancelled) setStatus('error');
       });
-
     return () => {
       cancelled = true;
       if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
@@ -287,7 +270,6 @@ export function EagleImageViewer({
       viewerRef.current = undefined;
     };
   }, [initializationAttempt]);
-
   useEffect(() => {
     const viewer = viewerRef.current;
     if (!viewer || sourceKeyRef.current === sourceKey) return;
@@ -306,7 +288,6 @@ export function EagleImageViewer({
     if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
     openPendingSource();
   }, [image.assetId, image.src, source, sourceKey]);
-
   const retry = () => {
     const viewer = viewerRef.current;
     if (!viewer) {
@@ -317,7 +298,6 @@ export function EagleImageViewer({
     setStatus('loading');
     viewer.open(sourceRef.current);
   };
-
   return (
     <div className={styles.backdrop} role="presentation" onClick={onClose}>
       <section
@@ -336,15 +316,15 @@ export function EagleImageViewer({
                   <div className={styles.progress} aria-hidden="true">
                     <span />
                   </div>
-                  <strong>正在加载大图…</strong>
+                  <strong>{t('正在加载大图…')}</strong>
                 </>
               ) : (
                 <>
-                  <strong>图片加载失败</strong>
-                  <span>请检查网络后重试</span>
+                  <strong>{t('图片加载失败')}</strong>
+                  <span>{t('请检查网络后重试')}</span>
                   <button type="button" onClick={retry}>
                     <IconRefresh size={16} />
-                    重新加载
+                    {' ' + t('重新加载') + ' '}
                   </button>
                 </>
               )}
@@ -354,12 +334,12 @@ export function EagleImageViewer({
         <footer>
           <strong>{image.alt}</strong>
           <span>
-            {`滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · ${
-              descriptor ? '按需加载高清切片' : '优化预览'
-            }`}
+            {t('滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · {{value1}}', {
+              value1: descriptor ? t('按需加载高清切片') : t('优化预览'),
+            })}
           </span>
           <button type="button" onClick={onClose}>
-            关闭
+            {' ' + t('关闭') + ' '}
           </button>
         </footer>
       </section>

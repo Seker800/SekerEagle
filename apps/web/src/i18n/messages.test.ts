@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { enUS } from './messages/en-US';
 import { zhCN } from './messages/zh-CN';
 
-const placeholders = (message: string) => [...message.matchAll(/{{\s*([^},]+).*?}}/g)].map((m) => m[1]);
+const placeholders = (message: string) =>
+  [...message.matchAll(/{{\s*([^},]+).*?}}/g)].map((m) => m[1]);
 
 describe('translation catalogs', () => {
   it('keeps Chinese and English message identifiers in exact parity', () => {

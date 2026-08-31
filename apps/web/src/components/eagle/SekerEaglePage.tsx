@@ -1,3 +1,4 @@
+import { getLocale, t } from '../../i18n';
 import {
   useCallback,
   useEffect,
@@ -89,7 +90,6 @@ import {
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
-
 interface SekerEaglePageProps {
   accessToken?: string;
   ownerId: string;
@@ -97,9 +97,14 @@ interface SekerEaglePageProps {
   accountView?: ReactNode;
   privacyVisibility?: PrivacyVisibilityState;
 }
-
-type EagleAssetContextMenu = { x: number; y: number };
-type EagleTagPickerState = { mode: 'add' | 'remove'; assetIds: string[] };
+type EagleAssetContextMenu = {
+  x: number;
+  y: number;
+};
+type EagleTagPickerState = {
+  mode: 'add' | 'remove';
+  assetIds: string[];
+};
 type EagleLibraryView =
   | 'ACTIVE'
   | 'PRIVATE'
@@ -118,8 +123,8 @@ function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceVie
   return null;
 }
 const EAGLE_PAGE_SIZE = 40;
-const ASSET_LIST_STALE_TIME_MS = 5 * 60_000;
-const ASSET_LIST_GC_TIME_MS = 30 * 60_000;
+const ASSET_LIST_STALE_TIME_MS = 5 * 60000;
+const ASSET_LIST_GC_TIME_MS = 30 * 60000;
 const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
 function readThumbnailSize(): number {
@@ -138,17 +143,14 @@ function readThumbnailSize(): number {
     return DEFAULT_THUMBNAIL_SIZE;
   }
 }
-
 function formatBytes(value: number): string {
   if (value < 1024) return `${value} B`;
   if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
   return `${(value / 1024 ** 2).toFixed(1)} MB`;
 }
-
 function isFileDrag(event: DragEvent<HTMLElement>): boolean {
   return event.dataTransfer?.types?.includes('Files') === true;
 }
-
 export function SekerEaglePage({
   accessToken: providedAccessToken,
   ownerId,
@@ -207,22 +209,19 @@ export function SekerEaglePage({
   const [editorSourceUrl, setEditorSourceUrl] = useState('');
   const imagePreview = useImagePreviewState();
   const { importFiles, uploadStatus } = useEagleUploadController(accessToken, queryKeys.assets);
-
   useEffect(() => {
     window.localStorage.setItem(EAGLE_PREFERENCES_KEY, JSON.stringify({ thumbnailSize }));
   }, [thumbnailSize]);
-
   useEffect(() => {
     setOriginalFileError(null);
   }, [ownerId]);
-
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys);
   const vectorSummaryQuery = useQuery({
     queryKey: ['eagle', ownerId, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
-    staleTime: 10_000,
-    refetchInterval: 10_000,
+    staleTime: 10000,
+    refetchInterval: 10000,
   });
   const vectorSummary = vectorSummaryQuery.data;
   const unavailableSuggestionCount = Math.max(
@@ -306,7 +305,6 @@ export function SekerEaglePage({
       setQuickFilters(createEmptyEagleQuickFilterState());
     },
   });
-
   const assets = useMemo(() => {
     const uniqueAssets = new Map<string, EagleAssetListItem>();
     assetsQuery.data?.pages.forEach((page) => {
@@ -314,7 +312,6 @@ export function SekerEaglePage({
     });
     return [...uniqueAssets.values()];
   }, [assetStore, assetStoreRevision, assetsQuery.data]);
-
   useEffect(() => {
     const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}`;
     if (privacyStateRef.current === nextPrivacyState) return;
@@ -368,7 +365,10 @@ export function SekerEaglePage({
   const selectedManualTagSummaries = useMemo(() => {
     const tagsById = new Map<
       string,
-      { tag: EagleAsset['manualTags'][number]; assetCount: number }
+      {
+        tag: EagleAsset['manualTags'][number];
+        assetCount: number;
+      }
     >();
     for (const assetId of selectedAssetIds) {
       const tags =
@@ -422,7 +422,7 @@ export function SekerEaglePage({
       selectVisibleMasonryItemsFromIndex(masonryViewportIndex, {
         scrollTop,
         viewportHeight,
-        overscan: Math.max(1_200, viewportHeight * 2),
+        overscan: Math.max(1200, viewportHeight * 2),
       }),
     [masonryViewportIndex, scrollTop, viewportHeight],
   );
@@ -486,7 +486,6 @@ export function SekerEaglePage({
     selectedAsset?.updatedAt,
     selectedAssetQuery.dataUpdatedAt,
   ]);
-
   const saveEditedMetadata = () => {
     if (
       !selectedAsset ||
@@ -512,7 +511,6 @@ export function SekerEaglePage({
       input,
     });
   };
-
   useEffect(
     () => () => {
       thumbnailScheduler.clear({ abortActive: true });
@@ -520,7 +518,6 @@ export function SekerEaglePage({
     },
     [thumbnailLoadService, thumbnailScheduler],
   );
-
   useEffect(() => {
     const sentinel = pageSentinelRef.current;
     if (!sentinel || typeof IntersectionObserver === 'undefined') return undefined;
@@ -535,11 +532,9 @@ export function SekerEaglePage({
     observer.observe(sentinel);
     return () => observer.disconnect();
   }, [assetsQuery.fetchNextPage, assetsQuery.hasNextPage, assetsQuery.isFetchingNextPage]);
-
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
   };
-
   const changeLibraryView = (view: EagleLibraryView) => {
     setLibraryView(view);
     setActiveSmartFolderId(null);
@@ -550,7 +545,6 @@ export function SekerEaglePage({
     selectionAnchorIdRef.current = null;
     resetFilters();
   };
-
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setLibraryView('ACTIVE');
     setActiveSmartFolderId(folder.id);
@@ -561,7 +555,6 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
   };
-
   const selectAsset = (assetId: string, gesture: EagleSelectionGesture) => {
     const nextSelection = applyEagleSelection({
       orderedIds: assets.map((asset) => asset.id),
@@ -576,7 +569,6 @@ export function SekerEaglePage({
     setIsBatchSelection(nextSelection.isBatchSelection);
     selectionAnchorIdRef.current = nextSelection.anchorId;
   };
-
   const clearAssetSelection = useCallback(() => {
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
@@ -584,7 +576,6 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
   }, []);
-
   useEffect(() => {
     if (tagPicker) return undefined;
     if (!isBatchSelection && !assetContextMenu) return undefined;
@@ -597,7 +588,6 @@ export function SekerEaglePage({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [assetContextMenu, clearAssetSelection, isBatchSelection, tagPicker]);
-
   const handleAssetClick = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     setAssetContextMenu(null);
     const gesture: EagleSelectionGesture = event.shiftKey
@@ -607,14 +597,12 @@ export function SekerEaglePage({
         : 'single';
     selectAsset(assetId, gesture);
   };
-
   const handleAssetContextMenu = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
     event.stopPropagation();
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
     openAssetContextMenu(event.clientX, event.clientY);
   };
-
   const openAssetContextMenu = (x: number, y: number) => {
     setAssetActionError(null);
     setAssetContextMenu({
@@ -622,13 +610,12 @@ export function SekerEaglePage({
       y: Math.max(8, Math.min(y, window.innerHeight - 280)),
     });
   };
-
   const desktopAssetDragBridge = getDesktopAssetDragBridge();
   const assetDragSession = useMemo(
     () =>
       desktopAssetDragBridge
         ? new DesktopAssetDragSession(desktopAssetDragBridge, (error) =>
-            setOriginalFileError(error instanceof Error ? error.message : '原文件拖出失败。'),
+            setOriginalFileError(error instanceof Error ? error.message : t('原文件拖出失败。')),
           )
         : null,
     [desktopAssetDragBridge, ownerId],
@@ -648,7 +635,6 @@ export function SekerEaglePage({
     window.addEventListener('pointerup', endPendingGesture, true);
     return () => window.removeEventListener('pointerup', endPendingGesture, true);
   }, [assetDragSession]);
-
   const getDragAssetIds = (assetId: string) =>
     getAssetDragIds({
       orderedIds: assets.map((asset) => asset.id),
@@ -686,8 +672,12 @@ export function SekerEaglePage({
       },
       (error: unknown) => {
         setAssetActionPending(null);
-        const detail = error instanceof Error ? `：${error.message}` : '，请重试。';
-        setAssetActionError(`另存原文件失败${detail}`);
+        const detail = error instanceof Error ? `：${error.message}` : t('，请重试。');
+        setAssetActionError(
+          t('另存原文件失败{{value1}}', {
+            value1: detail,
+          }),
+        );
       },
     );
   };
@@ -705,8 +695,12 @@ export function SekerEaglePage({
       },
       (error: unknown) => {
         setAssetActionPending(null);
-        const detail = error instanceof Error ? `：${error.message}` : '，请重试。';
-        setAssetActionError(`复制图片失败${detail}`);
+        const detail = error instanceof Error ? `：${error.message}` : t('，请重试。');
+        setAssetActionError(
+          t('复制图片失败{{value1}}', {
+            value1: detail,
+          }),
+        );
       },
     );
   };
@@ -721,7 +715,6 @@ export function SekerEaglePage({
     setOriginalFileError(null);
     assetDragSession.begin(assetIds);
   };
-
   const batchDownloadSelectedOriginals = () => {
     if (isBatchDownloading) return;
     const selected = new Set(selectedAssetIds);
@@ -737,11 +730,10 @@ export function SekerEaglePage({
       (error: unknown) => {
         setAssetContextMenu(null);
         setIsBatchDownloading(false);
-        setOriginalFileError(error instanceof Error ? error.message : '批量下载原文件失败。');
+        setOriginalFileError(error instanceof Error ? error.message : t('批量下载原文件失败。'));
       },
     );
   };
-
   const openAssetPreview = (asset: EagleAssetListItem) => {
     if (asset.mimeType.startsWith('video/')) {
       setPreviewAssetId(asset.id);
@@ -753,33 +745,26 @@ export function SekerEaglePage({
       imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
     }
   };
-
   useEffect(() => {
     const currentPreview = imagePreview.previewImage;
     if (!currentPreview) return undefined;
-
     const imageAssets = assets.filter((asset) => asset.mimeType.startsWith('image/'));
     const currentIndex = imageAssets.findIndex((asset) => asset.id === currentPreview.assetId);
     if (currentIndex === -1) return undefined;
-
     const handlePreviewNavigation = (event: KeyboardEvent) => {
       const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
       if (!direction) return;
-
       const nextAsset = imageAssets[currentIndex + direction];
       if (!nextAsset) return;
-
       event.preventDefault();
       const src = getEaglePreviewContentUrl(nextAsset);
       if (src) {
         imagePreview.setPreviewImage({ src, alt: nextAsset.displayName, assetId: nextAsset.id });
       }
     };
-
     window.addEventListener('keydown', handlePreviewNavigation);
     return () => window.removeEventListener('keydown', handlePreviewNavigation);
   }, [assets, imagePreview.previewImage, imagePreview.setPreviewImage]);
-
   const showAssetsForTag = (kind: 'MANUAL' | 'AI', tagId: string) => {
     changeLibraryView('ACTIVE');
     setQuickFilters({
@@ -787,7 +772,6 @@ export function SekerEaglePage({
       ...(kind === 'MANUAL' ? { manualTagIds: [tagId] } : { aiTagIds: [tagId] }),
     });
   };
-
   const handleDragEnter = (event: DragEvent<HTMLElement>) => {
     if (libraryView === 'PROCESSING' || libraryView === 'ACCOUNT') return;
     if (assetDragSession?.isOutboundDrag()) return;
@@ -823,7 +807,6 @@ export function SekerEaglePage({
     setIsDragging(false);
     void importFiles([...event.dataTransfer.files]);
   };
-
   return (
     <main
       className={styles.page}
@@ -837,7 +820,7 @@ export function SekerEaglePage({
       onDrop={handleDrop}
     >
       <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
-        <nav className={styles.sidebar} aria-label="素材库导航">
+        <nav className={styles.sidebar} aria-label={t('素材库导航')}>
           <div className={styles.sidebarHeader}>
             <div className={styles.brand}>
               <span className={styles.mark} aria-hidden="true">
@@ -854,7 +837,7 @@ export function SekerEaglePage({
             onClick={() => changeLibraryView('ACTIVE')}
           >
             <IconPhoto size={17} />
-            全部素材
+            {' ' + t('全部素材') + ' '}
             {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{assets.length}</span>}
           </button>
           {privateVisible && (
@@ -862,19 +845,19 @@ export function SekerEaglePage({
               className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
               type="button"
               onClick={() => changeLibraryView('PRIVATE')}
-              aria-label="隐私素材"
+              aria-label={t('隐私素材')}
             >
               <IconLock size={17} />
-              隐私素材
+              {' ' + t('隐私素材') + ' '}
               {libraryView === 'PRIVATE' && <span>{assets.length}</span>}
             </button>
           )}
           <div className={styles.navSection}>
             <div className={styles.sectionLabel}>
-              智能文件夹
+              {' ' + t('智能文件夹') + ' '}
               <button
                 type="button"
-                aria-label="新建智能文件夹"
+                aria-label={t('新建智能文件夹')}
                 onClick={() => {
                   setEditingSmartFolder(null);
                   setIsSmartFolderDialogOpen(true);
@@ -904,56 +887,67 @@ export function SekerEaglePage({
                 onClick={() => void smartFoldersQuery.refetch()}
               >
                 <IconRefresh size={15} />
-                加载失败，重试
+                {' ' + t('加载失败，重试') + ' '}
               </button>
             )}
             {!smartFoldersQuery.isLoading &&
               !smartFoldersQuery.isError &&
-              smartFolders.length === 0 && <span className={styles.navEmpty}>尚未创建</span>}
+              smartFolders.length === 0 && <span className={styles.navEmpty}>{t('尚未创建')}</span>}
           </div>
           <div className={styles.navSection}>
-            <div className={styles.sectionLabel}>标签</div>
+            <div className={styles.sectionLabel}>{t('标签')}</div>
             <button
               type="button"
               className={libraryView === 'MANUAL_TAGS' ? styles.navActive : undefined}
-              aria-label="人工标签"
+              aria-label={t('人工标签')}
               onClick={() => changeLibraryView('MANUAL_TAGS')}
             >
               <IconTags size={17} />
-              人工标签<span>{manualTags.length}</span>
+              {' ' + t('人工标签')}
+              <span>{manualTags.length}</span>
             </button>
             <button
               type="button"
               className={`${styles.navSubItem} ${libraryView === 'VECTOR_REVIEW' ? styles.navActive : ''}`}
-              aria-label={`智能标签确认 ${vectorSummary?.suggestions.pending ?? 0}`}
+              aria-label={t('智能标签确认 {{value1}}', {
+                value1: vectorSummary?.suggestions.pending ?? 0,
+              })}
               onClick={() => changeLibraryView('VECTOR_REVIEW')}
             >
-              智能标签确认<span>{vectorSummary?.suggestions.pending ?? 0}</span>
+              {' ' + t('智能标签确认')}
+              <span>{vectorSummary?.suggestions.pending ?? 0}</span>
             </button>
             <button
               type="button"
               className={`${styles.navSubItem} ${libraryView === 'VECTOR_TAGS' ? styles.navActive : ''}`}
-              aria-label={`标签推荐设置 ${vectorSummary?.tags.enabled ?? 0}`}
+              aria-label={t('标签推荐设置 {{value1}}', {
+                value1: vectorSummary?.tags.enabled ?? 0,
+              })}
               onClick={() => changeLibraryView('VECTOR_TAGS')}
             >
-              标签推荐设置<span>{vectorSummary?.tags.enabled ?? 0}</span>
+              {' ' + t('标签推荐设置')}
+              <span>{vectorSummary?.tags.enabled ?? 0}</span>
             </button>
             <button
               type="button"
               className={`${styles.navSubItem} ${libraryView === 'VECTOR_UNCLASSIFIED' ? styles.navActive : ''}`}
-              aria-label={`待手动分类 ${unavailableSuggestionCount}`}
+              aria-label={t('待手动分类 {{value1}}', {
+                value1: unavailableSuggestionCount,
+              })}
               onClick={() => changeLibraryView('VECTOR_UNCLASSIFIED')}
             >
-              待手动分类<span>{unavailableSuggestionCount}</span>
+              {' ' + t('待手动分类')}
+              <span>{unavailableSuggestionCount}</span>
             </button>
             <button
               type="button"
               className={`${styles.navSubItem} ${libraryView === 'AI_TAGS' ? styles.navActive : ''}`}
-              aria-label="AI 自动标签"
+              aria-label={t('AI 自动标签')}
               onClick={() => changeLibraryView('AI_TAGS')}
             >
               <IconSparkles size={17} />
-              AI 自动标签<span>{aiTags.length}</span>
+              {' ' + t('AI 自动标签')}
+              <span>{aiTags.length}</span>
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
@@ -963,33 +957,33 @@ export function SekerEaglePage({
                 className={libraryView === 'ACCOUNT' ? styles.navActive : undefined}
                 type="button"
                 onClick={() => changeLibraryView('ACCOUNT')}
-                aria-label="个人账号"
+                aria-label={t('个人账号')}
               >
                 <IconUserCircle size={17} />
-                个人账号
+                {' ' + t('个人账号') + ' '}
               </button>
             </div>
           )}
           <div className={styles.navSection}>
-            <div className={styles.sectionLabel}>工具</div>
+            <div className={styles.sectionLabel}>{t('工具')}</div>
             <button
               className={libraryView === 'PROCESSING' ? styles.navActive : undefined}
               type="button"
-              aria-label="素材处理"
+              aria-label={t('素材处理')}
               onClick={() => changeLibraryView('PROCESSING')}
             >
               <IconSettings size={17} />
-              素材处理
+              {' ' + t('素材处理') + ' '}
             </button>
           </div>
           <button
             className={libraryView === 'TRASH' ? styles.navActive : undefined}
             type="button"
-            aria-label="回收站"
+            aria-label={t('回收站')}
             onClick={() => changeLibraryView('TRASH')}
           >
             <IconTrash size={17} />
-            回收站
+            {' ' + t('回收站') + ' '}
           </button>
         </nav>
 
@@ -997,11 +991,11 @@ export function SekerEaglePage({
           className={styles.library}
           aria-label={
             libraryView === 'PROCESSING'
-              ? '素材处理'
+              ? t('素材处理')
               : libraryView === 'ACCOUNT'
-                ? '个人账号'
+                ? t('个人账号')
                 : getVectorWorkspaceView(libraryView)
-                  ? '智能标签'
+                  ? t('智能标签')
                   : undefined
           }
           aria-labelledby={
@@ -1079,15 +1073,19 @@ export function SekerEaglePage({
                 <div className={styles.titleBlock}>
                   <h1 id="eagle-library-title">
                     {libraryView === 'TRASH'
-                      ? '回收站'
+                      ? t('回收站')
                       : libraryView === 'PRIVATE'
-                        ? '隐私素材'
-                        : (activeSmartFolder?.name ?? '全部素材')}
+                        ? t('隐私素材')
+                        : (activeSmartFolder?.name ?? t('全部素材'))}
                   </h1>
-                  <span>{assets.length} 项</span>
+                  <span>
+                    {assets.length}
+                    {' ' + t('项')}
+                  </span>
                   {privateVisible && privacyVisibility?.expiresAt ? (
                     <span className={styles.privacyStatus}>
-                      <IconLock size={12} /> 隐私内容已显示
+                      <IconLock size={12} />
+                      {' ' + t('隐私内容已显示') + ' '}
                     </span>
                   ) : null}
                 </div>
@@ -1095,13 +1093,13 @@ export function SekerEaglePage({
                   <IconSearch size={17} aria-hidden="true" />
                   <input
                     type="search"
-                    aria-label="搜索素材"
-                    placeholder="搜索名称或标签"
+                    aria-label={t('搜索素材')}
+                    placeholder={t('搜索名称或标签')}
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
                   />
                   {search && (
-                    <button type="button" aria-label="清除搜索" onClick={() => setSearch('')}>
+                    <button type="button" aria-label={t('清除搜索')} onClick={() => setSearch('')}>
                       <IconX size={14} />
                     </button>
                   )}
@@ -1110,42 +1108,46 @@ export function SekerEaglePage({
                   {libraryView === 'TRASH' && (
                     <button
                       type="button"
-                      aria-label="恢复当前素材"
+                      aria-label={t('恢复当前素材')}
                       disabled={!selectedAssetId || restoreMutation.isPending}
                       onClick={() => {
                         if (selectedAssetId) restoreMutation.mutate([selectedAssetId]);
                       }}
                     >
                       <IconRefresh size={18} />
-                      恢复
+                      {' ' + t('恢复') + ' '}
                     </button>
                   )}
                   {libraryView === 'TRASH' && (
                     <button
                       className={styles.dangerAction}
                       type="button"
-                      aria-label="清空回收站"
+                      aria-label={t('清空回收站')}
                       disabled={assets.length === 0 || emptyTrashMutation.isPending}
                       onClick={() => {
                         if (
-                          window.confirm('确认清空回收站？其中的全部素材将被永久删除，且无法恢复。')
+                          window.confirm(
+                            t('确认清空回收站？其中的全部素材将被永久删除，且无法恢复。'),
+                          )
                         ) {
                           emptyTrashMutation.mutate();
                         }
                       }}
                     >
                       <IconTrash size={18} />
-                      清空
+                      {' ' + t('清空') + ' '}
                     </button>
                   )}
                   <label
                     className={styles.thumbnailControl}
-                    title={`缩略图大小：${thumbnailSize}px`}
+                    title={t('缩略图大小：{{value1}}px', {
+                      value1: thumbnailSize,
+                    })}
                   >
                     <IconLayoutGrid size={17} aria-hidden="true" />
                     <input
                       type="range"
-                      aria-label="缩略图大小"
+                      aria-label={t('缩略图大小')}
                       min="140"
                       max="320"
                       step="10"
@@ -1156,12 +1158,12 @@ export function SekerEaglePage({
                   <button
                     type="button"
                     className={isInspectorOpen ? styles.filterActive : undefined}
-                    aria-label={isInspectorOpen ? '隐藏素材详情' : '显示素材详情'}
+                    aria-label={isInspectorOpen ? t('隐藏素材详情') : t('显示素材详情')}
                     aria-pressed={isInspectorOpen}
                     onClick={() => setIsInspectorVisible((value) => !value)}
                   >
                     <IconLayoutSidebarRight size={18} />
-                    详情
+                    {' ' + t('详情') + ' '}
                   </button>
                 </div>
               </div>
@@ -1177,13 +1179,13 @@ export function SekerEaglePage({
 
               {deferredSearch && assetsQuery.data?.pages[0]?.searchExpansion?.length ? (
                 <div className={styles.searchExpansion} role="status">
-                  <strong>标签匹配</strong>
+                  <strong>{t('标签匹配')}</strong>
                   {assetsQuery.data.pages[0].searchExpansion.map((match) => (
                     <span key={match.id} data-exact={match.match === 'EXACT'}>
                       {match.name}
                       {match.match === 'SEMANTIC'
                         ? ` ${Math.round(match.similarity * 100)}%`
-                        : ' 完全匹配'}
+                        : t('完全匹配')}
                     </span>
                   ))}
                 </div>
@@ -1201,7 +1203,9 @@ export function SekerEaglePage({
               )}
               {color && colorCoverage && colorCoverage.percentage < 100 ? (
                 <div className={styles.statusBar} role="status">
-                  颜色结果仍在补全：{colorCoverage.completed}/{colorCoverage.eligible} 已分析（
+                  {' ' + t('颜色结果仍在补全：')}
+                  {colorCoverage.completed}/{colorCoverage.eligible}
+                  {' ' + t('已分析（') + ' '}
                   {colorCoverage.percentage}%）
                 </div>
               ) : null}
@@ -1226,18 +1230,19 @@ export function SekerEaglePage({
                 ref={assetViewport.containerRef}
                 className={styles.assetViewport}
                 role="region"
-                aria-label="素材瀑布流"
+                aria-label={t('素材瀑布流')}
                 onClick={clearAssetSelection}
                 onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
               >
                 {assetsQuery.isLoading && (
-                  <div className={styles.emptyState}>正在加载个人素材库…</div>
+                  <div className={styles.emptyState}>{t('正在加载个人素材库…')}</div>
                 )}
                 {assetsQuery.isError && (
                   <div className={styles.emptyState}>
-                    加载失败：{assetsQuery.error.message}
+                    {' ' + t('加载失败：')}
+                    {assetsQuery.error.message}
                     <button type="button" onClick={() => void assetsQuery.refetch()}>
-                      重试
+                      {' ' + t('重试') + ' '}
                     </button>
                   </div>
                 )}
@@ -1248,21 +1253,21 @@ export function SekerEaglePage({
                     </span>
                     <strong>
                       {search
-                        ? '没有匹配的素材'
+                        ? t('没有匹配的素材')
                         : libraryView === 'TRASH'
-                          ? '回收站是空的'
+                          ? t('回收站是空的')
                           : libraryView === 'PRIVATE'
-                            ? '暂无隐私素材'
-                            : '把第一份灵感放进来'}
+                            ? t('暂无隐私素材')
+                            : t('把第一份灵感放进来')}
                     </strong>
                     <p>
                       {search
-                        ? '尝试其他名称或标签。'
+                        ? t('尝试其他名称或标签。')
                         : libraryView === 'TRASH'
-                          ? '移除的素材会暂时保留在这里。'
+                          ? t('移除的素材会暂时保留在这里。')
                           : libraryView === 'PRIVATE'
-                            ? '通过素材右键菜单设为隐私。'
-                            : '将图片或 MP4 拖入此处。'}
+                            ? t('通过素材右键菜单设为隐私。')
+                            : t('将图片或 MP4 拖入此处。')}
                     </p>
                   </div>
                 )}
@@ -1339,11 +1344,11 @@ export function SekerEaglePage({
                           />
                           {asset.lifecycleStatus !== 'READY' && (
                             <span className={styles.processing}>
-                              {asset.lifecycleStatus === 'FAILED' ? '处理失败' : '处理中'}
+                              {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
                             </span>
                           )}
                           {asset.isPrivate && (
-                            <span className={styles.privateMark} title="隐私素材">
+                            <span className={styles.privateMark} title={t('隐私素材')}>
                               <IconLock size={12} />
                             </span>
                           )}
@@ -1354,7 +1359,7 @@ export function SekerEaglePage({
                 </div>
                 <div ref={pageSentinelRef} className={styles.pageSentinel} aria-hidden="true" />
                 {assetsQuery.isFetchingNextPage && (
-                  <div className={styles.pageLoading}>正在加载更多素材…</div>
+                  <div className={styles.pageLoading}>{t('正在加载更多素材…')}</div>
                 )}
               </div>
             </>
@@ -1362,15 +1367,21 @@ export function SekerEaglePage({
         </section>
 
         {isInspectorOpen && (
-          <aside className={styles.inspector} aria-label="素材详情">
+          <aside className={styles.inspector} aria-label={t('素材详情')}>
             <div className={styles.inspectorHeader}>
               <div>
-                <strong>素材详情</strong>
-                {selectedAssetIds.length > 1 && <span>已选择 {selectedAssetIds.length} 项</span>}
+                <strong>{t('素材详情')}</strong>
+                {selectedAssetIds.length > 1 && (
+                  <span>
+                    {t('已选择') + ' '}
+                    {selectedAssetIds.length}
+                    {' ' + t('项')}
+                  </span>
+                )}
               </div>
               <button
                 type="button"
-                aria-label="关闭素材详情"
+                aria-label={t('关闭素材详情')}
                 onClick={() => setIsInspectorVisible(false)}
               >
                 <IconX size={17} />
@@ -1379,32 +1390,35 @@ export function SekerEaglePage({
             {selectedAssetId === null ? (
               <div className={styles.inspectorEmpty}>
                 <IconPhoto size={28} />
-                <span>选择一项素材查看详情</span>
+                <span>{t('选择一项素材查看详情')}</span>
               </div>
             ) : selectedAssetQuery.isPending ? (
               <div className={styles.inspectorEmpty} role="status">
                 <IconPhoto size={28} />
-                <span>正在加载素材详情…</span>
+                <span>{t('正在加载素材详情…')}</span>
               </div>
             ) : selectedAssetQuery.isError ? (
               <div className={styles.inspectorEmpty} role="alert">
                 <IconPhoto size={28} />
-                <span>加载失败：{selectedAssetQuery.error.message}</span>
+                <span>
+                  {t('加载失败：')}
+                  {selectedAssetQuery.error.message}
+                </span>
                 <button type="button" onClick={() => void selectedAssetQuery.refetch()}>
-                  重试加载素材详情
+                  {' ' + t('重试加载素材详情') + ' '}
                 </button>
               </div>
             ) : selectedAsset ? (
               <>
                 {isSelectedAssetReadOnly && (
-                  <p className={styles.saveFeedback}>回收站中的素材信息为只读。</p>
+                  <p className={styles.saveFeedback}>{t('回收站中的素材信息为只读。')}</p>
                 )}
                 <section className={styles.detailSection}>
                   <div className={styles.annotationForm}>
                     <label>
-                      标题
+                      {' ' + t('标题') + ' '}
                       <input
-                        aria-label="素材标题"
+                        aria-label={t('素材标题')}
                         maxLength={255}
                         disabled={isSelectedAssetReadOnly}
                         value={editorTitle}
@@ -1420,10 +1434,12 @@ export function SekerEaglePage({
                   </div>
                 </section>
                 <section className={styles.detailSection}>
-                  <h3>{selectedAssetIds.length > 1 ? '批量编辑人工标签' : '人工标签'}</h3>
+                  <h3>{selectedAssetIds.length > 1 ? t('批量编辑人工标签') : t('人工标签')}</h3>
                   {selectedAssetIds.length > 1 && (
                     <p className={styles.batchTagSummary}>
-                      标签后的数字表示拥有该标签的素材数；移除操作会作用于全部所选素材。
+                      {' ' +
+                        t('标签后的数字表示拥有该标签的素材数；移除操作会作用于全部所选素材。') +
+                        ' '}
                     </p>
                   )}
                   <div className={styles.tagEditor}>
@@ -1434,8 +1450,14 @@ export function SekerEaglePage({
                         className={styles.tagAssigned}
                         aria-label={
                           selectedAssetIds.length > 1
-                            ? `移除人工标签 ${tag.name}，应用于 ${assetCount}/${selectedAssetIds.length} 项素材`
-                            : `移除人工标签 ${tag.name}`
+                            ? t('移除人工标签 {{value1}}，应用于 {{value2}}/{{value3}} 项素材', {
+                                value1: tag.name,
+                                value2: assetCount,
+                                value3: selectedAssetIds.length,
+                              })
+                            : t('移除人工标签 {{value1}}', {
+                                value1: tag.name,
+                              })
                         }
                         disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
                         onClick={() =>
@@ -1454,7 +1476,7 @@ export function SekerEaglePage({
                     <button
                       type="button"
                       className={styles.tagAdd}
-                      aria-label="添加人工标签"
+                      aria-label={t('添加人工标签')}
                       disabled={isSelectedAssetReadOnly}
                       onClick={() => {
                         batchTagMutation.reset();
@@ -1463,17 +1485,23 @@ export function SekerEaglePage({
                       }}
                     >
                       <IconPlus size={14} />
-                      添加标签…
+                      {' ' + t('添加标签…') + ' '}
                     </button>
                     {selectedAssetIds.length > 1 && selectedManualTagSummaries.length > 0 && (
                       <button
                         type="button"
                         className={styles.tagClearAll}
-                        aria-label="清空所有人工标签"
+                        aria-label={t('清空所有人工标签')}
                         disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
                         onClick={() => {
                           const confirmed = window.confirm(
-                            `将清除 ${selectedAssetIds.length} 项素材上的全部人工标签，共涉及 ${selectedManualTagSummaries.length} 个不同标签。AI 自动标签不受影响。确认继续？`,
+                            t(
+                              '将清除 {{value1}} 项素材上的全部人工标签，共涉及 {{value2}} 个不同标签。AI 自动标签不受影响。确认继续？',
+                              {
+                                value1: selectedAssetIds.length,
+                                value2: selectedManualTagSummaries.length,
+                              },
+                            ),
                           );
                           if (!confirmed) return;
                           batchTagMutation.mutate({
@@ -1483,7 +1511,7 @@ export function SekerEaglePage({
                         }}
                       >
                         <IconTrash size={14} />
-                        清空所有人工标签
+                        {' ' + t('清空所有人工标签') + ' '}
                       </button>
                     )}
                   </div>
@@ -1494,13 +1522,13 @@ export function SekerEaglePage({
                 <section className={styles.detailSection}>
                   <h3>
                     <IconSparkles size={15} />
-                    AI 自动标签
+                    {' ' + t('AI 自动标签') + ' '}
                   </h3>
                   <div className={styles.tagList}>
                     {selectedAsset.aiTags.length ? (
                       selectedAsset.aiTags.map((tag) => <span key={tag.id}>{tag.name}</span>)
                     ) : (
-                      <em>AI 分析尚未启用</em>
+                      <em>{t('AI 分析尚未启用')}</em>
                     )}
                   </div>
                 </section>
@@ -1510,9 +1538,9 @@ export function SekerEaglePage({
                   className={`${styles.detailSection} ${styles.annotationForm}`}
                 >
                   <label>
-                    描述
+                    {' ' + t('描述') + ' '}
                     <textarea
-                      aria-label="素材描述"
+                      aria-label={t('素材描述')}
                       maxLength={4000}
                       disabled={isSelectedAssetReadOnly}
                       rows={4}
@@ -1527,9 +1555,9 @@ export function SekerEaglePage({
                     />
                   </label>
                   <label>
-                    来源
+                    {' ' + t('来源') + ' '}
                     <input
-                      aria-label="素材来源链接"
+                      aria-label={t('素材来源链接')}
                       maxLength={2048}
                       disabled={isSelectedAssetReadOnly}
                       placeholder="https://"
@@ -1549,32 +1577,35 @@ export function SekerEaglePage({
                 </form>
                 {metadataMutation.isPending && (
                   <p className={styles.saveFeedback} role="status">
-                    正在自动保存…
+                    {' ' + t('正在自动保存…') + ' '}
                   </p>
                 )}
                 {metadataMutation.isSuccess && !editorDirtyRef.current && (
                   <p className={styles.saveFeedback} role="status">
-                    已自动保存
+                    {' ' + t('已自动保存') + ' '}
                   </p>
                 )}
                 {metadataMutation.isError && (
                   <div className={styles.saveFeedback}>
                     <p className={styles.inlineError} role="alert">
-                      自动保存失败：{metadataMutation.error.message}
+                      {' ' + t('自动保存失败：')}
+                      {metadataMutation.error.message}
                     </p>
                     <button type="button" onClick={saveEditedMetadata}>
-                      重试
+                      {' ' + t('重试') + ' '}
                     </button>
                   </div>
                 )}
                 <section className={styles.detailSection}>
-                  <h3>星级</h3>
-                  <div className={styles.rating} aria-label="星级评分">
+                  <h3>{t('星级')}</h3>
+                  <div className={styles.rating} aria-label={t('星级评分')}>
                     {[1, 2, 3, 4, 5].map((rating) => (
                       <button
                         key={rating}
                         type="button"
-                        aria-label={`${rating} 星`}
+                        aria-label={t('{{value1}} 星', {
+                          value1: rating,
+                        })}
                         disabled={isSelectedAssetReadOnly || ratingMutation.isPending}
                         onClick={() =>
                           ratingMutation.mutate({
@@ -1594,7 +1625,7 @@ export function SekerEaglePage({
                 </section>
                 <section className={styles.detailSection}>
                   <div className={styles.annotationForm}>
-                    <h3>颜色</h3>
+                    <h3>{t('颜色')}</h3>
                     <EagleColorPalette
                       analysis={selectedAsset.colorAnalysis}
                       onSelectColor={(nextColor) => {
@@ -1608,14 +1639,14 @@ export function SekerEaglePage({
                   </div>
                 </section>
                 <section className={styles.detailSection}>
-                  <h3>完整属性</h3>
+                  <h3>{t('完整属性')}</h3>
                   <dl>
                     <div>
-                      <dt>原始文件名</dt>
+                      <dt>{t('原始文件名')}</dt>
                       <dd>{selectedAsset.originalName}</dd>
                     </div>
                     <div>
-                      <dt>格式</dt>
+                      <dt>{t('格式')}</dt>
                       <dd>{selectedAsset.format.toUpperCase()}</dd>
                     </div>
                     <div>
@@ -1623,7 +1654,7 @@ export function SekerEaglePage({
                       <dd>{selectedAsset.mimeType}</dd>
                     </div>
                     <div>
-                      <dt>尺寸</dt>
+                      <dt>{t('尺寸')}</dt>
                       <dd>
                         {selectedAsset.width && selectedAsset.height
                           ? `${selectedAsset.width} × ${selectedAsset.height}`
@@ -1631,37 +1662,39 @@ export function SekerEaglePage({
                       </dd>
                     </div>
                     <div>
-                      <dt>时长</dt>
+                      <dt>{t('时长')}</dt>
                       <dd>
                         {selectedAsset.durationMs
-                          ? `${(selectedAsset.durationMs / 1000).toFixed(1)} 秒`
+                          ? t('{{value1}} 秒', {
+                              value1: (selectedAsset.durationMs / 1000).toFixed(1),
+                            })
                           : '—'}
                       </dd>
                     </div>
                     <div>
-                      <dt>大小</dt>
+                      <dt>{t('大小')}</dt>
                       <dd>{formatBytes(selectedAsset.byteSize)}</dd>
                     </div>
                     <div>
-                      <dt>处理状态</dt>
+                      <dt>{t('处理状态')}</dt>
                       <dd>
                         {selectedAsset.lifecycleStatus === 'READY'
-                          ? '可用'
+                          ? t('可用')
                           : selectedAsset.lifecycleStatus === 'FAILED'
-                            ? '失败'
-                            : '处理中'}
+                            ? t('失败')
+                            : t('处理中')}
                       </dd>
                     </div>
                     <div>
-                      <dt>添加时间</dt>
-                      <dd>{new Date(selectedAsset.createdAt).toLocaleDateString('zh-CN')}</dd>
+                      <dt>{t('添加时间')}</dt>
+                      <dd>{new Date(selectedAsset.createdAt).toLocaleDateString(getLocale())}</dd>
                     </div>
                     <div>
-                      <dt>更新时间</dt>
-                      <dd>{new Date(selectedAsset.updatedAt).toLocaleString('zh-CN')}</dd>
+                      <dt>{t('更新时间')}</dt>
+                      <dd>{new Date(selectedAsset.updatedAt).toLocaleString(getLocale())}</dd>
                     </div>
                     <div>
-                      <dt>素材 ID</dt>
+                      <dt>{t('素材 ID')}</dt>
                       <dd>{selectedAsset.id}</dd>
                     </div>
                   </dl>
@@ -1670,7 +1703,7 @@ export function SekerEaglePage({
             ) : (
               <div className={styles.inspectorEmpty}>
                 <IconPhoto size={28} />
-                <span>选择一项素材查看详情</span>
+                <span>{t('选择一项素材查看详情')}</span>
               </div>
             )}
           </aside>
@@ -1682,7 +1715,7 @@ export function SekerEaglePage({
           <button
             className={styles.contextMenuDismiss}
             type="button"
-            aria-label="关闭素材操作菜单"
+            aria-label={t('关闭素材操作菜单')}
             onClick={() => setAssetContextMenu(null)}
             onContextMenu={(event) => {
               event.preventDefault();
@@ -1692,20 +1725,24 @@ export function SekerEaglePage({
           <div
             className={styles.contextMenu}
             role="menu"
-            aria-label="素材操作"
+            aria-label={t('素材操作')}
             style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
           >
-            <div className={styles.contextMenuTitle}>已选择 {selectedAssetIds.length} 项</div>
+            <div className={styles.contextMenuTitle}>
+              {t('已选择') + ' '}
+              {selectedAssetIds.length}
+              {' ' + t('项')}
+            </div>
             {contextMenuAsset && libraryView !== 'TRASH' ? (
               <button
                 type="button"
                 role="menuitem"
-                aria-label="另存为…"
+                aria-label={t('另存为…')}
                 disabled={assetActionPending !== null}
                 onClick={saveSelectedOriginal}
               >
                 <IconDownload size={15} />
-                {assetActionPending === 'save' ? '正在准备…' : '另存为…'}
+                {assetActionPending === 'save' ? t('正在准备…') : t('另存为…')}
               </button>
             ) : null}
             {imageClipboardAvailable &&
@@ -1714,33 +1751,39 @@ export function SekerEaglePage({
               <button
                 type="button"
                 role="menuitem"
-                aria-label="复制图片"
+                aria-label={t('复制图片')}
                 disabled={assetActionPending !== null}
                 onClick={copySelectedImage}
               >
                 <IconCopy size={15} />
-                {assetActionPending === 'copy' ? '正在复制…' : '复制图片'}
+                {assetActionPending === 'copy' ? t('正在复制…') : t('复制图片')}
               </button>
             ) : null}
             {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
               <button
                 type="button"
                 role="menuitem"
-                aria-label={`批量下载（${selectedAssetIds.length}）…`}
+                aria-label={t('批量下载（{{value1}}）…', {
+                  value1: selectedAssetIds.length,
+                })}
                 disabled={isBatchDownloading}
                 onClick={batchDownloadSelectedOriginals}
               >
                 <IconDownload size={15} />
                 {isBatchDownloading
-                  ? `正在下载 ${selectedAssetIds.length} 项…`
-                  : `批量下载（${selectedAssetIds.length}）…`}
+                  ? t('正在下载 {{value1}} 项…', {
+                      value1: selectedAssetIds.length,
+                    })
+                  : t('批量下载（{{value1}}）…', {
+                      value1: selectedAssetIds.length,
+                    })}
               </button>
             ) : null}
             {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
               <button
                 type="button"
                 role="menuitem"
-                aria-label="添加标签"
+                aria-label={t('添加标签')}
                 disabled={batchTagMutation.isPending}
                 onClick={() => {
                   setAssetContextMenu(null);
@@ -1750,14 +1793,14 @@ export function SekerEaglePage({
                 }}
               >
                 <IconTags size={15} />
-                添加标签…
+                {' ' + t('添加标签…') + ' '}
               </button>
             )}
             {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
               <button
                 type="button"
                 role="menuitem"
-                aria-label="删除人工标签"
+                aria-label={t('删除人工标签')}
                 disabled={batchTagMutation.isPending || selectedManualTagSummaries.length === 0}
                 onClick={() => {
                   setAssetContextMenu(null);
@@ -1766,7 +1809,7 @@ export function SekerEaglePage({
                 }}
               >
                 <IconTagsOff size={15} />
-                删除人工标签…
+                {' ' + t('删除人工标签…') + ' '}
               </button>
             )}
             {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
@@ -1775,8 +1818,8 @@ export function SekerEaglePage({
                 role="menuitem"
                 aria-label={
                   selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
-                    ? '移出隐私'
-                    : '设为隐私'
+                    ? t('移出隐私')
+                    : t('设为隐私')
                 }
                 disabled={privacyMutation.isPending}
                 onClick={() => {
@@ -1788,8 +1831,8 @@ export function SekerEaglePage({
               >
                 <IconLock size={15} />
                 {selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
-                  ? '移出隐私'
-                  : '设为隐私'}
+                  ? t('移出隐私')
+                  : t('设为隐私')}
               </button>
             )}
             {libraryView === 'ACTIVE' || libraryView === 'PRIVATE' ? (
@@ -1797,23 +1840,23 @@ export function SekerEaglePage({
                 className={styles.contextMenuDanger}
                 type="button"
                 role="menuitem"
-                aria-label="删除所选素材"
+                aria-label={t('删除所选素材')}
                 disabled={trashMutation.isPending}
                 onClick={() => trashMutation.mutate(selectedAssetIds)}
               >
                 <IconTrash size={15} />
-                删除（移到回收站）
+                {' ' + t('删除（移到回收站）') + ' '}
               </button>
             ) : (
               <button
                 type="button"
                 role="menuitem"
-                aria-label="恢复所选素材"
+                aria-label={t('恢复所选素材')}
                 disabled={restoreMutation.isPending}
                 onClick={() => restoreMutation.mutate(selectedAssetIds)}
               >
                 <IconRefresh size={15} />
-                恢复
+                {' ' + t('恢复') + ' '}
               </button>
             )}
             {assetActionError ? (
@@ -1859,8 +1902,8 @@ export function SekerEaglePage({
       {isDragging && (
         <div className={styles.dropOverlay}>
           <IconPlus size={32} />
-          <strong>松手导入素材</strong>
-          <span>支持批量图片和 MP4</span>
+          <strong>{t('松手导入素材')}</strong>
+          <span>{t('支持批量图片和 MP4')}</span>
         </div>
       )}
       {previewAsset && (

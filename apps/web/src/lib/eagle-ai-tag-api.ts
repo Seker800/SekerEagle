@@ -1,5 +1,5 @@
 import { fetchWithBrowserSession } from './api-client';
-
+import { errorFromResponse } from './api-error';
 export interface EagleAiTagSummary {
   eligible: number;
   analyzed: number;
@@ -7,10 +7,12 @@ export interface EagleAiTagSummary {
   running: number;
   failed: number;
   tags: number;
-  ollama: { status: 'ONLINE' | 'OFFLINE' | 'MODEL_MISSING'; model: string };
+  ollama: {
+    status: 'ONLINE' | 'OFFLINE' | 'MODEL_MISSING';
+    model: string;
+  };
   settings: EagleAiTagSettings;
 }
-
 export interface EagleAiTagSettings {
   manualEnabled: boolean;
   scheduleEnabled: boolean;
@@ -18,28 +20,26 @@ export interface EagleAiTagSettings {
   scheduleEnd: string;
   timeZone: 'Asia/Shanghai';
 }
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithBrowserSession(`/api/eagle/ai-tags${path}`, init);
   if (!response.ok) {
-    const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(payload?.message ?? `请求失败（${response.status}）`);
+    throw await errorFromResponse(response, '请求失败（{{value1}}）');
   }
   return response.json() as Promise<T>;
 }
-
 export function fetchEagleAiTagSummary() {
   return request<EagleAiTagSummary>('/summary');
 }
-
 export function scanMissingEagleAiTags() {
-  return request<{ created: number }>('/scan-missing', { method: 'POST' });
+  return request<{
+    created: number;
+  }>('/scan-missing', { method: 'POST' });
 }
-
 export function retryFailedEagleAiTags() {
-  return request<{ retried: number }>('/retry-failed', { method: 'POST' });
+  return request<{
+    retried: number;
+  }>('/retry-failed', { method: 'POST' });
 }
-
 export function updateEagleAiTagSettings(settings: Omit<EagleAiTagSettings, 'timeZone'>) {
   return request<EagleAiTagSettings>('/settings', {
     method: 'PATCH',

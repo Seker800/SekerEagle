@@ -24,6 +24,7 @@ Prisma repositories / MinIO adapters
 - worker 崩溃不改变已经提交的素材业务事实。
 - 浏览器使用 HttpOnly Cookie；插件使用有限 scope 的 PAT。
 - 不依赖或访问 SekerChat 运行时和数据面。
+- locale 只影响 Web 与桌面展示适配层；业务规则、用户数据和 API 领域对象保持语言无关。
 
 ## Media memory boundary
 

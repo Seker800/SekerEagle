@@ -81,7 +81,8 @@ describe('desktop server and navigation security', () => {
     expect(main).toMatch(
       /desktop:reset-deployment-binding'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
     );
-    expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager')");
+    expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager', locale)");
+    expect(main).toContain('normalizeDesktopLocale(requestedLocale ?? desktopLocale)');
     expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
     expect(preload).not.toContain('shell.openExternal');
   });

@@ -113,7 +113,7 @@ describe('offline-capable desktop connection page', () => {
       'utf8',
     );
     expect(html).toContain('data-i18n="desktopSettings"');
-    expect(script).toContain("new URLSearchParams(window.location.search).get('lang')");
+    expect(script).toContain("new window.URLSearchParams(window.location.search).get('lang')");
     expect(script).toContain("'en-US'");
     expect(script).toContain('Desktop Settings');
     expect(script).toContain('document.documentElement.lang = locale');

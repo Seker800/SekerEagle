@@ -1,25 +1,23 @@
+import { t } from '../../i18n';
 import { useEffect, useState } from 'react';
 import { normalizeColorInput } from './eagle-color-input';
 import styles from './EagleColorFilter.module.css';
-
 const PRESETS = [
-  ['红色', '#e5484d'],
-  ['橙色', '#f28c28'],
-  ['黄色', '#e5c247'],
-  ['绿色', '#45a66b'],
-  ['青色', '#2e86ab'],
-  ['蓝色', '#4c6ef5'],
-  ['紫色', '#8b5cf6'],
-  ['粉色', '#db61a2'],
-  ['白色', '#f2f2f2'],
-  ['灰色', '#808080'],
-  ['黑色', '#202124'],
+  [t('红色'), '#e5484d'],
+  [t('橙色'), '#f28c28'],
+  [t('黄色'), '#e5c247'],
+  [t('绿色'), '#45a66b'],
+  [t('青色'), '#2e86ab'],
+  [t('蓝色'), '#4c6ef5'],
+  [t('紫色'), '#8b5cf6'],
+  [t('粉色'), '#db61a2'],
+  [t('白色'), '#f2f2f2'],
+  [t('灰色'), '#808080'],
+  [t('黑色'), '#202124'],
 ] as const;
-
 function hueColor(hue: number): string {
   return normalizeColorInput(`hsl(${hue}, 70%, 50%)`);
 }
-
 export function EagleColorFilter({
   value,
   onChange,
@@ -29,9 +27,7 @@ export function EagleColorFilter({
 }) {
   const [draft, setDraft] = useState(value ?? '');
   const [error, setError] = useState('');
-
   useEffect(() => setDraft(value ?? ''), [value]);
-
   const apply = () => {
     try {
       const normalized = normalizeColorInput(draft);
@@ -39,23 +35,21 @@ export function EagleColorFilter({
       setError('');
       onChange(normalized);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '颜色格式无效');
+      setError(cause instanceof Error ? cause.message : t('颜色格式无效'));
     }
   };
-
   const choose = (color: string) => {
     setDraft(color);
     setError('');
     onChange(color);
   };
-
   return (
     <div className={styles.root}>
       <div className={styles.pickerRow}>
         <input
           className={styles.nativePicker}
           type="color"
-          aria-label="打开颜色选择器"
+          aria-label={t('打开颜色选择器')}
           value={value ?? '#2e86ab'}
           onChange={(event) => choose(event.target.value)}
         />
@@ -65,7 +59,7 @@ export function EagleColorFilter({
           min="0"
           max="359"
           defaultValue="197"
-          aria-label="选择色相"
+          aria-label={t('选择色相')}
           onChange={(event) => choose(hueColor(Number(event.target.value)))}
         />
       </div>
@@ -74,7 +68,9 @@ export function EagleColorFilter({
           <button
             key={color}
             type="button"
-            aria-label={`选择${label}`}
+            aria-label={t('选择{{value1}}', {
+              value1: label,
+            })}
             aria-pressed={value === color}
             style={{ backgroundColor: color }}
             onClick={() => choose(color)}
@@ -87,7 +83,7 @@ export function EagleColorFilter({
           style={{ backgroundColor: (value ?? draft) || 'transparent' }}
         />
         <input
-          aria-label="颜色值"
+          aria-label={t('颜色值')}
           placeholder="#2e86ab / RGB / HSL"
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -98,12 +94,12 @@ export function EagleColorFilter({
             }
           }}
         />
-        <button type="button" aria-label="应用颜色" onClick={apply}>
-          应用
+        <button type="button" aria-label={t('应用颜色')} onClick={apply}>
+          {' ' + t('应用') + ' '}
         </button>
         {value ? (
-          <button type="button" aria-label="清除颜色筛选" onClick={() => onChange(undefined)}>
-            清除
+          <button type="button" aria-label={t('清除颜色筛选')} onClick={() => onChange(undefined)}>
+            {' ' + t('清除') + ' '}
           </button>
         ) : null}
       </div>

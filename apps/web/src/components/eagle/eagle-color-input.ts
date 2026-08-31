@@ -1,16 +1,14 @@
-const COLOR_INPUT_ERROR = '请输入 HEX、RGB 或 HSL 颜色';
-
+import { t } from '../../i18n';
+const COLOR_INPUT_ERROR = t('请输入 HEX、RGB 或 HSL 颜色');
 function channelToHex(value: number): string {
   return Math.round(value).toString(16).padStart(2, '0');
 }
-
 function rgbToHex(red: number, green: number, blue: number): string {
   if (![red, green, blue].every((value) => Number.isFinite(value) && value >= 0 && value <= 255)) {
     throw new Error(COLOR_INPUT_ERROR);
   }
   return `#${channelToHex(red)}${channelToHex(green)}${channelToHex(blue)}`;
 }
-
 function hslToRgb(hue: number, saturation: number, lightness: number): [number, number, number] {
   if (
     ![hue, saturation, lightness].every(Number.isFinite) ||
@@ -38,7 +36,6 @@ function hslToRgb(hue: number, saturation: number, lightness: number): [number, 
   };
   return [component(1 / 3) * 255, component(0) * 255, component(-1 / 3) * 255];
 }
-
 export function normalizeColorInput(input: string): string {
   const value = input.normalize('NFKC').trim().toLowerCase();
   if (/^#[0-9a-f]{6}$/.test(value)) return value;

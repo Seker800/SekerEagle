@@ -52,8 +52,8 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   resetDeploymentBinding() {
     return ipcRenderer.invoke('desktop:reset-deployment-binding');
   },
-  openConnectionManager() {
-    return ipcRenderer.invoke('desktop:open-connection-manager');
+  openConnectionManager(locale?: 'zh-CN' | 'en-US') {
+    return ipcRenderer.invoke('desktop:open-connection-manager', locale);
   },
   cancelConnectionManager() {
     return ipcRenderer.invoke('desktop:cancel-connection-manager');

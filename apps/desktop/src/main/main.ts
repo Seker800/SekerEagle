@@ -40,6 +40,7 @@ import { DesktopBrowserSession } from './browser-session';
 import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem';
 import { parseClipboardImageInput } from './clipboard-image';
 import { copyPreparedFilesToDirectory } from './original-file-destination';
+import { connectionPageUrl, normalizeDesktopLocale, type DesktopLocale } from './desktop-locale';
 import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
@@ -72,7 +73,7 @@ protocol.registerSchemesAsPrivileged([
 const initialServerUrl = normalizeDesktopServerUrl(
   process.env.SEKEREAGLE_SERVER_URL ?? DEFAULT_DESKTOP_SERVER_URL,
 );
-const CONNECTION_PAGE_URL = 'sekereagle-app://connection/';
+let desktopLocale: DesktopLocale = 'zh-CN';
 let serverUrl = initialServerUrl;
 let mainWindow: BrowserWindow | null = null;
 let cacheProcess: UtilityProcess | null = null;
@@ -98,6 +99,7 @@ app.on('second-instance', () => {
 
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
+    desktopLocale = normalizeDesktopLocale(app.getLocale());
     const settings = new DesktopSettingsStore(app.getPath('userData'));
     const connectionSettings = new DesktopConnectionSettingsStore(
       app.getPath('userData'),
@@ -171,12 +173,12 @@ if (hasSingleInstanceLock)
       handleMediaRequest(request.url, request.signal),
     );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
-    createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner);
+    createWindow(initialConnection.active ? serverUrl : connectionPageUrl(desktopLocale), owner);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         const active = connectionService?.current()?.active;
-        createWindow(active ? active.url : CONNECTION_PAGE_URL, owner);
+        createWindow(active ? active.url : connectionPageUrl(desktopLocale), owner);
       }
     });
   });
@@ -399,9 +401,10 @@ function registerConnectionIpc(owner: AuthenticatedOwner): void {
     }
     return snapshot;
   });
-  ipcMain.handle('desktop:open-connection-manager', async (event) => {
+  ipcMain.handle('desktop:open-connection-manager', async (event, requestedLocale: unknown) => {
     assertTrustedConnectionSender(event);
-    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+    desktopLocale = normalizeDesktopLocale(requestedLocale ?? desktopLocale);
+    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
   });
   ipcMain.handle('desktop:cancel-connection-manager', async (event) => {
     assertConnectionPageSender(event);
@@ -774,7 +777,7 @@ async function applyConnection(
   owner: AuthenticatedOwner,
 ): Promise<void> {
   if (!snapshot.active) {
-    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
     return;
   }
   const changed = serverUrl !== snapshot.active.url;

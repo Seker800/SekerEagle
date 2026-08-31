@@ -1,10 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import {
-  LOCALE_STORAGE_KEY,
-  normalizeLocale,
-  resolveLocale,
-  setLocalePreference,
-} from './locale';
+import { LOCALE_STORAGE_KEY, normalizeLocale, resolveLocale, setLocalePreference } from './locale';
 
 describe('locale policy', () => {
   afterEach(() => window.localStorage.clear());
@@ -19,9 +14,10 @@ describe('locale policy', () => {
 
   it('prefers a persisted choice over URL and browser languages', () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, 'zh-CN');
-    expect(
-      resolveLocale({ search: '?lang=en-US', browserLanguages: ['en-US'] }),
-    ).toEqual({ locale: 'zh-CN', source: 'preference' });
+    expect(resolveLocale({ search: '?lang=en-US', browserLanguages: ['en-US'] })).toEqual({
+      locale: 'zh-CN',
+      source: 'preference',
+    });
   });
 
   it('uses a URL override without persisting it', () => {

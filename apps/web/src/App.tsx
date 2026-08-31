@@ -1,3 +1,4 @@
+import { t } from './i18n';
 import { useEffect, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
@@ -10,13 +11,11 @@ import {
   getPrivacyVisibility,
   type PrivacyVisibilityState,
 } from './lib/privacy-visibility-api';
-
 export interface User {
   id: string;
   email: string;
   role: 'USER' | 'ADMIN';
 }
-
 export function App() {
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
@@ -27,14 +26,14 @@ export function App() {
   const [privacyVisibility, setPrivacyVisibility] = useState<PrivacyVisibilityState>(
     DEFAULT_PRIVACY_VISIBILITY,
   );
-
   useEffect(() => {
-    request<{ user: User }>('/api/auth/me')
+    request<{
+      user: User;
+    }>('/api/auth/me')
       .then(({ user: current }) => setUser(current))
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, []);
-
   useEffect(() => {
     if (!user) {
       setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
@@ -44,7 +43,6 @@ export function App() {
       .then(setPrivacyVisibility)
       .catch(() => setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY));
   }, [user]);
-
   useEffect(() => {
     if (!privacyVisibility.enabled || !privacyVisibility.expiresAt) return;
     const delay = new Date(privacyVisibility.expiresAt).getTime() - Date.now();
@@ -58,23 +56,23 @@ export function App() {
     );
     return () => window.clearTimeout(timer);
   }, [privacyVisibility.enabled, privacyVisibility.expiresAt]);
-
   async function login(event: FormEvent) {
     event.preventDefault();
     setError('');
     setNotice('');
     try {
-      const result = await request<{ user: User }>('/api/auth/login', {
+      const result = await request<{
+        user: User;
+      }>('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });
       setUser(result.user);
       setPassword('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '登录失败');
+      setError(cause instanceof Error ? cause.message : t('登录失败'));
     }
   }
-
   async function logout(noticeAfterLogout = '') {
     try {
       await request('/api/auth/logout', { method: 'POST', body: '{}' });
@@ -84,24 +82,21 @@ export function App() {
       setNotice(noticeAfterLogout);
     }
   }
-
   const connectionButton = <DesktopConnectionButton />;
-
   if (loading) {
     return (
       <main className="auth-loading">
         {connectionButton}
         <img src={sekerEagleLogo} alt="" />
-        <span>正在连接 SekerEagle…</span>
+        <span>{t('正在连接 SekerEagle…')}</span>
       </main>
     );
   }
-
   if (!user) {
     return (
       <main className="auth-shell">
         {connectionButton}
-        <section className="auth-intro" aria-label="SekerEagle 介绍">
+        <section className="auth-intro" aria-label={t('SekerEagle 介绍')}>
           <div className="auth-brand">
             <span className="auth-brand-mark">
               <img src={sekerEagleLogo} alt="" />
@@ -110,18 +105,18 @@ export function App() {
           </div>
           <div>
             <p className="auth-eyebrow">PERSONAL ASSET LIBRARY</p>
-            <h1>让灵感，各归其位。</h1>
-            <p>独立、安全的个人素材库。收集、整理并快速找回每一份视觉灵感。</p>
+            <h1>{t('让灵感，各归其位。')}</h1>
+            <p>{t('独立、安全的个人素材库。收集、整理并快速找回每一份视觉灵感。')}</p>
           </div>
         </section>
         <form className="auth-card" onSubmit={(event) => void login(event)}>
           <header>
-            <p className="auth-eyebrow">欢迎回来</p>
-            <h2>登录素材库</h2>
-            <p>使用你的 SekerEagle 独立账号继续。</p>
+            <p className="auth-eyebrow">{t('欢迎回来')}</p>
+            <h2>{t('登录素材库')}</h2>
+            <p>{t('使用你的 SekerEagle 独立账号继续。')}</p>
           </header>
           <label>
-            邮箱
+            {' ' + t('邮箱') + ' '}
             <input
               type="email"
               value={email}
@@ -133,27 +128,26 @@ export function App() {
             />
           </label>
           <label>
-            密码
+            {' ' + t('密码') + ' '}
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
-              placeholder="输入密码"
+              placeholder={t('输入密码')}
               required
             />
           </label>
           {notice ? <p className="auth-success">{notice}</p> : null}
           {error ? <p className="auth-error">{error}</p> : null}
           <button className="primary-button" type="submit">
-            登录
+            {' ' + t('登录') + ' '}
             <IconArrowRight size={17} />
           </button>
         </form>
       </main>
     );
   }
-
   return (
     <div className="standalone-eagle-shell">
       {connectionButton}
@@ -164,7 +158,7 @@ export function App() {
         accountView={
           <AccountHome
             user={user}
-            onPasswordChanged={() => logout('密码已修改，请使用新密码重新登录。')}
+            onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
             onLogout={() => void logout()}
             privacyVisibility={privacyVisibility}
             onPrivacyVisibilityChange={setPrivacyVisibility}

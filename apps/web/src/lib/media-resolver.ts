@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 const UUID_V4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const TILE_PATH = new RegExp(
   `^/api/eagle/assets/(${UUID_V4})/pyramids/(${UUID_V4})/tiles/(0|[1-9]\\d*)/(0|[1-9]\\d*)/(0|[1-9]\\d*)$`,
@@ -7,7 +8,6 @@ const DESKTOP_CLIPBOARD_RENDITION_URL = new RegExp(
   `^sekereagle-media://rendition/(?:thumbnail|preview)/(${UUID_V4})/(${UUID_V4})$`,
   'i',
 );
-
 export type DesktopMediaRequest =
   | {
       kind: 'RENDITION';
@@ -23,30 +23,39 @@ export type DesktopMediaRequest =
       x: number;
       y: number;
     };
-
 export interface SekerDesktopBridge {
   readonly version: 1;
   createMediaUrl(media: DesktopMediaRequest): string;
   getCacheStatus?(): Promise<DesktopCacheStatus>;
   setCacheLimitGiB?(limitGiB: number): Promise<void>;
-  clearCache?(): Promise<{ deleted: number; deferred: number }>;
-  invalidateAsset?(assetId: string): Promise<{ deleted: number; deferred: number }>;
+  clearCache?(): Promise<{
+    deleted: number;
+    deferred: number;
+  }>;
+  invalidateAsset?(assetId: string): Promise<{
+    deleted: number;
+    deferred: number;
+  }>;
   writeClipboardImage?(pngBytes: Uint8Array): Promise<void>;
   getConnectionStatus?(): Promise<DesktopConnectionStatus>;
-  openConnectionManager?(): Promise<void>;
-  prepareAssetDrag?(assetIds: string[]): Promise<{ token: string }>;
+  openConnectionManager?(locale?: 'zh-CN' | 'en-US'): Promise<void>;
+  prepareAssetDrag?(assetIds: string[]): Promise<{
+    token: string;
+  }>;
   startPreparedAssetDrag?(token: string): void;
-  saveOriginalFile?(assetId: string): Promise<{ saved: boolean }>;
-  downloadOriginalFiles?(assetIds: string[]): Promise<{ downloaded: number }>;
+  saveOriginalFile?(assetId: string): Promise<{
+    saved: boolean;
+  }>;
+  downloadOriginalFiles?(assetIds: string[]): Promise<{
+    downloaded: number;
+  }>;
 }
-
 export interface DesktopConnectionStatus {
   mode: 'AUTO' | 'LOCAL' | 'LAN' | 'PUBLIC';
   activeSlot: 'LOCAL' | 'LAN' | 'PUBLIC' | null;
   activeUrl: string | null;
   latencyMs: number | null;
 }
-
 export interface DesktopCacheStatus {
   limitBytes: number;
   globalAllocatedBytes: number;
@@ -58,40 +67,32 @@ export interface DesktopCacheStatus {
   missCount: number;
   savedBytes: number;
 }
-
 export type DesktopCacheBridge = Required<
   Pick<SekerDesktopBridge, 'getCacheStatus' | 'setCacheLimitGiB' | 'clearCache' | 'invalidateAsset'>
 >;
-
 export type DesktopClipboardBridge = Required<Pick<SekerDesktopBridge, 'writeClipboardImage'>>;
-
 export type DesktopOriginalFileBridge = Required<Pick<SekerDesktopBridge, 'saveOriginalFile'>>;
-
 export type DesktopOriginalFileDownloadBridge = Required<
   Pick<SekerDesktopBridge, 'downloadOriginalFiles'>
 >;
-
 export function getDesktopClipboardBridge(): DesktopClipboardBridge | null {
   const bridge = desktopBridge();
   return bridge && typeof bridge.writeClipboardImage === 'function'
     ? (bridge as SekerDesktopBridge & DesktopClipboardBridge)
     : null;
 }
-
 export function getDesktopOriginalFileBridge(): DesktopOriginalFileBridge | null {
   const bridge = desktopBridge();
   return bridge && typeof bridge.saveOriginalFile === 'function'
     ? (bridge as SekerDesktopBridge & DesktopOriginalFileBridge)
     : null;
 }
-
 export function getDesktopOriginalFileDownloadBridge(): DesktopOriginalFileDownloadBridge | null {
   const bridge = desktopBridge();
   return bridge && typeof bridge.downloadOriginalFiles === 'function'
     ? (bridge as SekerDesktopBridge & DesktopOriginalFileDownloadBridge)
     : null;
 }
-
 export function getDesktopCacheBridge(): DesktopCacheBridge | null {
   const bridge = desktopBridge();
   return bridge &&
@@ -102,7 +103,6 @@ export function getDesktopCacheBridge(): DesktopCacheBridge | null {
     ? (bridge as SekerDesktopBridge & DesktopCacheBridge)
     : null;
 }
-
 export function getDesktopConnectionBridge(): Pick<
   Required<SekerDesktopBridge>,
   'getConnectionStatus' | 'openConnectionManager'
@@ -114,7 +114,6 @@ export function getDesktopConnectionBridge(): Pick<
     ? (bridge as Required<SekerDesktopBridge>)
     : null;
 }
-
 export function resolveEagleRenditionUrl(
   assetId: string,
   renditionId: string,
@@ -123,7 +122,6 @@ export function resolveEagleRenditionUrl(
   const fallback = `/api/eagle/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(renditionId)}`;
   return resolveMediaRequest({ kind: 'RENDITION', renditionKind, assetId, renditionId }, fallback);
 }
-
 export function resolveEagleMediaPath(path: string): string {
   const tile = TILE_PATH.exec(path);
   if (tile) {
@@ -141,29 +139,29 @@ export function resolveEagleMediaPath(path: string): string {
   }
   return path;
 }
-
 export function resolveClipboardImageUrl(url: string): string {
   if (!url.startsWith('sekereagle-media:')) return url;
   const rendition = DESKTOP_CLIPBOARD_RENDITION_URL.exec(url);
-  if (!rendition) throw new Error('图片复制来源未通过能力校验。');
+  if (!rendition) throw new Error(t('图片复制来源未通过能力校验。'));
   return `/api/eagle/assets/${rendition[1]}/renditions/${rendition[2]}`;
 }
-
 function resolveMediaRequest(media: DesktopMediaRequest, fallback: string): string {
   const bridge = desktopBridge();
   if (!bridge) return fallback;
   const resolved = bridge.createMediaUrl(media);
-  if (resolved !== canonicalDesktopUrl(media)) throw new Error('桌面媒体地址未通过能力校验。');
+  if (resolved !== canonicalDesktopUrl(media)) throw new Error(t('桌面媒体地址未通过能力校验。'));
   return resolved;
 }
-
 function desktopBridge(): SekerDesktopBridge | null {
-  const candidate = (globalThis as { sekerDesktop?: Partial<SekerDesktopBridge> }).sekerDesktop;
+  const candidate = (
+    globalThis as {
+      sekerDesktop?: Partial<SekerDesktopBridge>;
+    }
+  ).sekerDesktop;
   return candidate?.version === 1 && typeof candidate.createMediaUrl === 'function'
     ? (candidate as SekerDesktopBridge)
     : null;
 }
-
 function canonicalDesktopUrl(media: DesktopMediaRequest): string {
   return media.kind === 'RENDITION'
     ? `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`

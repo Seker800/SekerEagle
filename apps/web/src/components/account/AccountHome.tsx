@@ -1,3 +1,4 @@
+import { getLocale, t } from '../../i18n';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   IconCheck,
@@ -20,7 +21,6 @@ import {
   type PrivacyVisibilityState,
 } from '../../lib/privacy-visibility-api';
 import { getDesktopConnectionBridge } from '../../lib/media-resolver';
-
 interface PersonalAccessToken {
   id: string;
   name: string;
@@ -30,45 +30,43 @@ interface PersonalAccessToken {
   createdAt: string;
   lastUsedAt: string | null;
 }
-
 interface CreatedToken extends Omit<PersonalAccessToken, 'revokedAt' | 'lastUsedAt'> {
   token: string;
 }
-
 function formatDate(value: string | null): string {
-  if (!value) return '从未使用';
-  return new Intl.DateTimeFormat('zh-CN', {
+  if (!value) return t('从未使用');
+  return new Intl.DateTimeFormat(getLocale(), {
     year: 'numeric',
     month: 'short',
     day: 'numeric',
   }).format(new Date(value));
 }
-
 function getTokenStatus(token: PersonalAccessToken): 'active' | 'expired' | 'revoked' {
   if (token.revokedAt) return 'revoked';
   return token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now()
     ? 'expired'
     : 'active';
 }
-
 function formatTokenExpiry(expiresAt: string | null): string {
-  return expiresAt ? formatDate(expiresAt) : '永久有效';
+  return expiresAt ? formatDate(expiresAt) : t('永久有效');
 }
-
-const statusLabels = { active: '有效', expired: '已过期', revoked: '已撤销' } as const;
+const statusLabels = {
+  active: t('有效'),
+  expired: t('已过期'),
+  revoked: t('已撤销'),
+} as const;
 const tokenPurposes = {
   capture: {
-    label: 'SekerEagle 灵感采集',
-    defaultName: 'SekerEagle 灵感采集',
+    label: t('SekerEagle 灵感采集'),
+    defaultName: t('SekerEagle 灵感采集'),
     scopes: ['capture:write'],
   },
   importer: {
-    label: 'Eagle 图库导入',
-    defaultName: 'Eagle 导入器',
+    label: t('Eagle 图库导入'),
+    defaultName: t('Eagle 导入器'),
     scopes: ['import:read', 'import:write', 'asset:write'],
   },
 } as const;
-
 export function AccountHome({
   user,
   onPasswordChanged,
@@ -103,46 +101,41 @@ export function AccountHome({
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
   const desktopConnection = getDesktopConnectionBridge();
-
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
     setTokenError('');
     try {
       setTokens(await request<PersonalAccessToken[]>('/api/tokens'));
     } catch (cause) {
-      setTokenError(cause instanceof Error ? cause.message : '加载令牌失败');
+      setTokenError(cause instanceof Error ? cause.message : t('加载令牌失败'));
     } finally {
       setTokensLoading(false);
     }
   }, []);
-
   useEffect(() => {
     void loadTokens();
   }, [loadTokens]);
-
   useEffect(() => {
     if (providedPrivacyVisibility !== undefined) return;
     setPrivacyLoading(true);
     void getPrivacyVisibility()
       .then(setLocalPrivacyVisibility)
       .catch((cause) =>
-        setPrivacyError(cause instanceof Error ? cause.message : '加载隐私设置失败'),
+        setPrivacyError(cause instanceof Error ? cause.message : t('加载隐私设置失败')),
       )
       .finally(() => setPrivacyLoading(false));
   }, [providedPrivacyVisibility]);
-
   async function changePrivacyVisibility(enabled: boolean, durationHours: number) {
     setPrivacyLoading(true);
     setPrivacyError('');
     try {
       setPrivacyVisibility(await updatePrivacyVisibility(enabled, durationHours));
     } catch (cause) {
-      setPrivacyError(cause instanceof Error ? cause.message : '更新隐私设置失败');
+      setPrivacyError(cause instanceof Error ? cause.message : t('更新隐私设置失败'));
     } finally {
       setPrivacyLoading(false);
     }
   }
-
   async function createConnectionToken(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -159,26 +152,31 @@ export function AccountHome({
       setCreatedToken(result);
       setTokens((current) => [{ ...result, revokedAt: null, lastUsedAt: null }, ...current]);
     } catch (cause) {
-      setTokenError(cause instanceof Error ? cause.message : '创建连接令牌失败');
+      setTokenError(cause instanceof Error ? cause.message : t('创建连接令牌失败'));
     } finally {
       setCreating(false);
     }
   }
-
   async function copyCreatedToken() {
     if (!createdToken) return;
     try {
       await navigator.clipboard.writeText(createdToken.token);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 2_000);
+      window.setTimeout(() => setCopied(false), 2000);
     } catch {
       createdTokenInputRef.current?.focus();
-      setTokenError('无法自动复制，已选中完整令牌，请手动复制。');
+      setTokenError(t('无法自动复制，已选中完整令牌，请手动复制。'));
     }
   }
-
   async function revokeToken(token: PersonalAccessToken) {
-    if (!window.confirm(`确定撤销“${token.name}”吗？撤销后无法恢复。`)) return;
+    if (
+      !window.confirm(
+        t('确定撤销“{{value1}}”吗？撤销后无法恢复。', {
+          value1: token.name,
+        }),
+      )
+    )
+      return;
     setRevokingId(token.id);
     setTokenError('');
     try {
@@ -190,21 +188,20 @@ export function AccountHome({
       );
       if (createdToken?.id === token.id) setCreatedToken(null);
     } catch (cause) {
-      setTokenError(cause instanceof Error ? cause.message : '撤销令牌失败');
+      setTokenError(cause instanceof Error ? cause.message : t('撤销令牌失败'));
     } finally {
       setRevokingId(null);
     }
   }
-
   async function changePassword(event: FormEvent) {
     event.preventDefault();
     setPasswordError('');
     if (newPassword !== confirmPassword) {
-      setPasswordError('两次输入的新密码不一致。');
+      setPasswordError(t('两次输入的新密码不一致。'));
       return;
     }
     if (newPassword === currentPassword) {
-      setPasswordError('新密码不能与当前密码相同。');
+      setPasswordError(t('新密码不能与当前密码相同。'));
       return;
     }
     setChangingPassword(true);
@@ -218,23 +215,23 @@ export function AccountHome({
       setConfirmPassword('');
       await onPasswordChanged();
     } catch (cause) {
-      setPasswordError(cause instanceof Error ? cause.message : '修改密码失败');
+      setPasswordError(cause instanceof Error ? cause.message : t('修改密码失败'));
     } finally {
       setChangingPassword(false);
     }
   }
-
   return (
     <section className="account-page" data-testid="account-page">
       <header className="account-page-header">
         <div>
-          <h1>个人账号</h1>
+          <h1>{t('个人账号')}</h1>
           <p>
-            {user.email} · {user.role === 'ADMIN' ? '管理员' : '成员'}
+            {user.email} · {user.role === 'ADMIN' ? t('管理员') : t('成员')}
           </p>
         </div>
         <button className="quiet-button" type="button" onClick={onLogout}>
-          <IconLogout size={17} /> 退出登录
+          <IconLogout size={17} />
+          {' ' + t('退出登录') + ' '}
         </button>
       </header>
 
@@ -243,44 +240,47 @@ export function AccountHome({
           <section className="account-panel desktop-cache-panel" id="desktop-cache">
             <div className="panel-heading">
               <div>
-                <p className="account-kicker">桌面客户端</p>
-                <h2>本地媒体缓存</h2>
-                <p>容量、占用、命中率、磁盘空间与清理操作统一放在桌面设置中。</p>
+                <p className="account-kicker">{t('桌面客户端')}</p>
+                <h2>{t('本地媒体缓存')}</h2>
+                <p>{t('容量、占用、命中率、磁盘空间与清理操作统一放在桌面设置中。')}</p>
               </div>
               <IconDatabase size={22} />
             </div>
             <button
               className="primary-button"
               type="button"
-              onClick={() => void desktopConnection.openConnectionManager()}
+              onClick={() => void desktopConnection.openConnectionManager(getLocale())}
             >
-              <IconSettings size={16} /> 打开桌面设置
+              <IconSettings size={16} />
+              {' ' + t('打开桌面设置') + ' '}
             </button>
           </section>
         ) : null}
         <section className="account-panel privacy-panel" id="privacy">
           <div className="panel-heading">
             <div>
-              <p className="account-kicker">内容隐私</p>
-              <h2>隐私内容</h2>
-              <p>关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。</p>
+              <p className="account-kicker">{t('内容隐私')}</p>
+              <h2>{t('隐私内容')}</h2>
+              <p>{t('关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
             </div>
             <IconEye size={22} />
           </div>
           <div className="privacy-controls">
             <label className="privacy-switch-row">
               <span>
-                <strong>显示隐私内容</strong>
+                <strong>{t('显示隐私内容')}</strong>
                 <small>
                   {privacyVisibility.enabled && privacyVisibility.expiresAt
-                    ? `将于 ${new Date(privacyVisibility.expiresAt).toLocaleString('zh-CN')} 自动关闭`
-                    : '当前浏览器中保持隐藏'}
+                    ? t('将于 {{value1}} 自动关闭', {
+                        value1: new Date(privacyVisibility.expiresAt).toLocaleString(getLocale()),
+                      })
+                    : t('当前浏览器中保持隐藏')}
                 </small>
               </span>
               <input
                 type="checkbox"
                 role="switch"
-                aria-label="显示隐私内容"
+                aria-label={t('显示隐私内容')}
                 checked={privacyVisibility.enabled}
                 disabled={privacyLoading}
                 onChange={(event) =>
@@ -292,9 +292,9 @@ export function AccountHome({
               />
             </label>
             <label className="privacy-duration-field">
-              自动关闭时间
+              {' ' + t('自动关闭时间') + ' '}
               <select
-                aria-label="自动关闭时间"
+                aria-label={t('自动关闭时间')}
                 value={privacyVisibility.durationHours}
                 disabled={privacyLoading}
                 onChange={(event) =>
@@ -306,7 +306,8 @@ export function AccountHome({
               >
                 {[1, 3, 6, 12, 24].map((hours) => (
                   <option key={hours} value={hours}>
-                    {hours} 小时
+                    {hours}
+                    {' ' + t('小时') + ' '}
                   </option>
                 ))}
               </select>
@@ -318,9 +319,9 @@ export function AccountHome({
         <section className="account-panel" id="connections">
           <div className="panel-heading">
             <div>
-              <p className="account-kicker">连接管理</p>
-              <h2>外部连接令牌</h2>
-              <p>为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。</p>
+              <p className="account-kicker">{t('连接管理')}</p>
+              <h2>{t('外部连接令牌')}</h2>
+              <p>{t('为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。')}</p>
             </div>
             <IconKey size={22} />
           </div>
@@ -330,7 +331,7 @@ export function AccountHome({
             onSubmit={(event) => void createConnectionToken(event)}
           >
             <label>
-              令牌用途
+              {' ' + t('令牌用途') + ' '}
               <select
                 value={tokenPurpose}
                 onChange={(event) => {
@@ -347,34 +348,34 @@ export function AccountHome({
               </select>
             </label>
             <label>
-              令牌名称
+              {' ' + t('令牌名称') + ' '}
               <input
                 value={tokenName}
                 onChange={(event) => setTokenName(event.target.value)}
                 maxLength={80}
-                placeholder="例如：工作室 Mac"
+                placeholder={t('例如：工作室 Mac')}
                 required
               />
             </label>
             <p className="account-field-note">
-              有效期
-              <strong>永久有效</strong>
+              {' ' + t('有效期') + ' '}
+              <strong>{t('永久有效')}</strong>
             </p>
             <button className="primary-button" type="submit" disabled={creating}>
-              {creating ? '正在创建…' : '创建令牌'}
+              {creating ? t('正在创建…') : t('创建令牌')}
             </button>
           </form>
 
           {createdToken ? (
             <div className="token-reveal">
               <div>
-                <strong>请立即保存，令牌只显示这一次</strong>
-                <p>关闭或离开此页面后，将无法再次查看完整令牌。</p>
+                <strong>{t('请立即保存，令牌只显示这一次')}</strong>
+                <p>{t('关闭或离开此页面后，将无法再次查看完整令牌。')}</p>
               </div>
               <div className="token-value">
                 <input
                   ref={createdTokenInputRef}
-                  aria-label="新创建的令牌"
+                  aria-label={t('新创建的令牌')}
                   readOnly
                   spellCheck={false}
                   value={createdToken.token}
@@ -382,7 +383,7 @@ export function AccountHome({
                 />
                 <button type="button" onClick={() => void copyCreatedToken()}>
                   {copied ? <IconCheck size={17} /> : <IconCopy size={17} />}
-                  {copied ? '已复制' : '复制'}
+                  {copied ? t('已复制') : t('复制')}
                 </button>
               </div>
             </div>
@@ -391,20 +392,20 @@ export function AccountHome({
           {tokenError ? <p className="auth-error">{tokenError}</p> : null}
 
           <div className="token-list-heading">
-            <h3>已创建的令牌</h3>
+            <h3>{t('已创建的令牌')}</h3>
             <button
               className="icon-button"
               type="button"
               onClick={() => void loadTokens()}
-              aria-label="刷新令牌列表"
+              aria-label={t('刷新令牌列表')}
             >
               <IconRefresh size={16} />
             </button>
           </div>
           {tokensLoading ? (
-            <p className="account-empty">正在加载令牌…</p>
+            <p className="account-empty">{t('正在加载令牌…')}</p>
           ) : tokens.length === 0 ? (
-            <p className="account-empty">尚未创建外部连接令牌。</p>
+            <p className="account-empty">{t('尚未创建外部连接令牌。')}</p>
           ) : (
             <div className="token-list">
               {tokens.map((item) => {
@@ -422,10 +423,14 @@ export function AccountHome({
                         </span>
                       </div>
                       <p>
-                        创建于 {formatDate(item.createdAt)} · 有效期{' '}
-                        {formatTokenExpiry(item.expiresAt)}
+                        {' ' + t('创建于') + ' '}
+                        {formatDate(item.createdAt)}
+                        {' ' + t('· 有效期')} {formatTokenExpiry(item.expiresAt)}
                       </p>
-                      <p>最近使用：{formatDate(item.lastUsedAt)}</p>
+                      <p>
+                        {t('最近使用：')}
+                        {formatDate(item.lastUsedAt)}
+                      </p>
                     </div>
                     {status === 'active' ? (
                       <button
@@ -433,7 +438,9 @@ export function AccountHome({
                         type="button"
                         onClick={() => void revokeToken(item)}
                         disabled={revokingId === item.id}
-                        aria-label={`撤销令牌 ${item.name}`}
+                        aria-label={t('撤销令牌 {{value1}}', {
+                          value1: item.name,
+                        })}
                       >
                         <IconTrash size={16} />
                       </button>
@@ -448,15 +455,15 @@ export function AccountHome({
         <section className="account-panel" id="security">
           <div className="panel-heading">
             <div>
-              <p className="account-kicker">登录安全</p>
-              <h2>修改密码</h2>
-              <p>修改成功后会退出所有登录设备，并撤销现有外部连接令牌。</p>
+              <p className="account-kicker">{t('登录安全')}</p>
+              <h2>{t('修改密码')}</h2>
+              <p>{t('修改成功后会退出所有登录设备，并撤销现有外部连接令牌。')}</p>
             </div>
             <IconLock size={22} />
           </div>
           <form className="password-form" onSubmit={(event) => void changePassword(event)}>
             <label>
-              当前密码
+              {' ' + t('当前密码') + ' '}
               <input
                 type="password"
                 value={currentPassword}
@@ -469,7 +476,7 @@ export function AccountHome({
             </label>
             <div className="password-grid">
               <label>
-                新密码
+                {' ' + t('新密码') + ' '}
                 <input
                   type="password"
                   value={newPassword}
@@ -481,7 +488,7 @@ export function AccountHome({
                 />
               </label>
               <label>
-                确认新密码
+                {' ' + t('确认新密码') + ' '}
                 <input
                   type="password"
                   value={confirmPassword}
@@ -499,7 +506,7 @@ export function AccountHome({
               type="submit"
               disabled={changingPassword}
             >
-              {changingPassword ? '正在修改…' : '更新密码'}
+              {changingPassword ? t('正在修改…') : t('更新密码')}
             </button>
           </form>
         </section>

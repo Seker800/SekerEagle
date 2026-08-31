@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
 import {
@@ -12,23 +13,20 @@ import {
   type ThumbnailLoadService,
 } from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
-
 const RENDITION_PRIORITY = ['THUMBNAIL', 'POSTER', 'PREVIEW'];
 const RETRY_BASE_DELAY_MS = 500;
-const RETRY_MAX_DELAY_MS = 4_000;
+const RETRY_MAX_DELAY_MS = 4000;
 const ATTEMPTS_PER_RENDITION = 2;
-const THUMBNAIL_LOAD_TIMEOUT_MS = 12_000;
+const THUMBNAIL_LOAD_TIMEOUT_MS = 12000;
 const VIDEO_HOVER_DELAY_MS = 500;
-
 function retryDelayMs(assetId: string, attempt: number): number {
   let hash = attempt;
   for (const character of assetId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  const jitter = 0.8 + (hash % 401) / 1_000;
+  const jitter = 0.8 + (hash % 401) / 1000;
   return Math.round(
     Math.min(RETRY_MAX_DELAY_MS, RETRY_BASE_DELAY_MS * 2 ** Math.max(0, attempt - 1)) * jitter,
   );
 }
-
 export function getEagleAssetThumbnailUrls(
   asset: EagleAssetListItem,
   targetPixelWidth: number,
@@ -46,7 +44,6 @@ export function getEagleAssetThumbnailUrls(
     return selected ? [getEagleRenditionContentUrl(asset.id, selected.id, selected.kind)] : [];
   });
 }
-
 export function EagleAssetThumbnail({
   asset,
   scheduler,
@@ -85,30 +82,25 @@ export function EagleAssetThumbnail({
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
   const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
   const taskId = `eagle-thumbnail:${asset.id}`;
-
   const clearRetryTimer = () => {
     if (retryTimerRef.current === null) return;
     window.clearTimeout(retryTimerRef.current);
     retryTimerRef.current = null;
   };
-
   const clearLoadTimeout = useCallback(() => {
     if (loadTimeoutRef.current === null) return;
     window.clearTimeout(loadTimeoutRef.current);
     loadTimeoutRef.current = null;
   }, []);
-
   const clearVideoHoverTimer = () => {
     if (videoHoverTimerRef.current === null) return;
     window.clearTimeout(videoHoverTimerRef.current);
     videoHoverTimerRef.current = null;
   };
-
   const releaseLoadedThumbnail = useCallback(() => {
     loadedThumbnailRef.current?.release();
     loadedThumbnailRef.current = null;
   }, []);
-
   useEffect(() => {
     clearLoadTimeout();
     clearRetryTimer();
@@ -121,7 +113,6 @@ export function EagleAssetThumbnail({
     transientRetriesRef.current = 0;
     setIsVideoPreviewActive(false);
   }, [clearLoadTimeout, releaseLoadedThumbnail, sourceKey]);
-
   const handleFailure = useCallback(
     (failedSource: string, skipRemainingAttempts = false) => {
       clearLoadTimeout();
@@ -146,7 +137,6 @@ export function EagleAssetThumbnail({
     },
     [asset.id, attempt, clearLoadTimeout, maxAttempts, releaseLoadedThumbnail],
   );
-
   const handleRequestFailure = useCallback(
     (failedSource: string, error: unknown) => {
       if (
@@ -177,11 +167,9 @@ export function EagleAssetThumbnail({
     },
     [handleFailure, scheduler],
   );
-
   useEffect(() => {
     scheduler.reprioritize(taskId, { priority: 'visible', order });
   }, [order, scheduler, taskId]);
-
   useEffect(() => {
     if (!source || failed) return undefined;
     return scheduler.enqueue({
@@ -225,7 +213,6 @@ export function EagleAssetThumbnail({
             releaseLoadedThumbnail();
             settle();
           };
-
           if (signal.aborted) {
             settle();
             return;
@@ -255,7 +242,6 @@ export function EagleAssetThumbnail({
     source,
     taskId,
   ]);
-
   useEffect(
     () => () => {
       clearLoadTimeout();
@@ -267,16 +253,13 @@ export function EagleAssetThumbnail({
     },
     [clearLoadTimeout, releaseLoadedThumbnail],
   );
-
   const handleLoad = () => {
     clearLoadTimeout();
     settleRef.current?.();
   };
-
   const handleError = () => {
     if (activeSource) handleFailure(activeSource);
   };
-
   const retry = () => {
     clearRetryTimer();
     clearLoadTimeout();
@@ -287,17 +270,16 @@ export function EagleAssetThumbnail({
     setFailed(false);
     setAttempt(0);
   };
-
   let thumbnailContent;
   if (failed) {
     thumbnailContent = (
       <span className={styles.thumbnailError} onClick={retry}>
         <IconPhoto size={30} />
-        <span>缩略图加载失败，点击素材重试</span>
+        <span>{t('缩略图加载失败，点击素材重试')}</span>
       </span>
     );
   } else if (!activeSource) {
-    thumbnailContent = <IconPhoto size={30} aria-label="正在加载缩略图" />;
+    thumbnailContent = <IconPhoto size={30} aria-label={t('正在加载缩略图')} />;
   } else {
     thumbnailContent = (
       <img
@@ -309,7 +291,6 @@ export function EagleAssetThumbnail({
       />
     );
   }
-
   const isVideo = asset.mimeType.startsWith('video/');
   return (
     <span
@@ -340,9 +321,9 @@ export function EagleAssetThumbnail({
         />
       )}
       {isVideo && (
-        <span className={styles.videoBadge} aria-label="视频素材">
+        <span className={styles.videoBadge} aria-label={t('视频素材')}>
           <IconPlayerPlayFilled size={10} aria-hidden="true" />
-          视频
+          {' ' + t('视频') + ' '}
         </span>
       )}
     </span>

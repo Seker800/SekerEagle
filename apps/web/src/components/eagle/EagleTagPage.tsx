@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import {
   useEffect,
   useMemo,
@@ -30,18 +31,15 @@ import {
   eagleTagMatchesQuery,
 } from './eagle-tag-index';
 import styles from './EagleTagPage.module.css';
-
 type TagScope = 'ALL' | 'UNCATEGORIZED' | 'STARRED' | 'USED' | 'UNUSED' | `GROUP:${string}`;
 type SortMode = 'NAME_ASC' | 'COUNT_DESC' | 'COUNT_ASC';
 type LayoutMode = 'GRID' | 'LIST';
-
 export interface EagleManualTagChanges {
   name?: string;
   color?: string | null;
   groupId?: string | null;
   isStarred?: boolean;
 }
-
 interface EagleTagPageProps {
   kind: 'MANUAL' | 'AI';
   manualTags: EagleManualTag[];
@@ -56,12 +54,14 @@ interface EagleTagPageProps {
   onDeleteManualTags: (tags: EagleManualTag[]) => void;
   onUpdateManualTagGroup: (
     group: EagleManualTagGroup,
-    changes: { name?: string; color?: string | null },
+    changes: {
+      name?: string;
+      color?: string | null;
+    },
   ) => void;
   onDeleteManualTagGroup: (group: EagleManualTagGroup) => void;
   onSelectTag: (tagId: string) => void;
 }
-
 export function EagleTagPage({
   kind,
   manualTags,
@@ -92,23 +92,19 @@ export function EagleTagPage({
   const [editingGroup, setEditingGroup] = useState<EagleManualTagGroup | null>(null);
   const [editName, setEditName] = useState('');
   const anchorIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     setScope('ALL');
     setSelectedIds([]);
     anchorIdRef.current = null;
   }, [kind]);
-
   useEffect(() => {
     const validIds = new Set(allTags.map((tag) => tag.id));
     setSelectedIds((current) => current.filter((id) => validIds.has(id)));
   }, [allTags]);
-
   const tagIndexes = useMemo(
     () => new Map(allTags.map((tag) => [tag.id, createEagleTagIndex(tag)])),
     [allTags],
   );
-
   const visibleTags = useMemo(() => {
     const filtered = allTags.filter((tag) => {
       const index = tagIndexes.get(tag.id);
@@ -134,30 +130,26 @@ export function EagleTagPage({
       return compareEagleTagIndexes(leftIndex, rightIndex);
     });
   }, [allTags, isManual, query, scope, sort, tagIndexes]);
-
   const sections = useMemo(() => {
-    if (sort !== 'NAME_ASC') return [['标签', visibleTags]] as const;
+    if (sort !== 'NAME_ASC') return [[t('标签'), visibleTags]] as const;
     const grouped = new Map<string, typeof visibleTags>();
     visibleTags.forEach((tag) => {
-      const key = tagIndexes.get(tag.id)?.section ?? '其他';
+      const key = tagIndexes.get(tag.id)?.section ?? t('其他');
       grouped.set(key, [...(grouped.get(key) ?? []), tag]);
     });
     return [...grouped.entries()].sort(([left], [right]) => compareEagleTagSections(left, right));
   }, [sort, tagIndexes, visibleTags]);
-
   const selectedManualTags = isManual
     ? manualTags.filter((tag) => selectedIds.includes(tag.id))
     : [];
   const activeGroup = scope.startsWith('GROUP:')
     ? (manualTagGroups.find((group) => group.id === scope.slice(6)) ?? null)
     : null;
-
   const changeScope = (nextScope: TagScope) => {
     setScope(nextScope);
     setSelectedIds([]);
     anchorIdRef.current = null;
   };
-
   const handleTagClick = (event: MouseEvent<HTMLButtonElement>, tagId: string) => {
     const visibleIds = visibleTags.map((tag) => tag.id);
     if (event.shiftKey && anchorIdRef.current) {
@@ -177,7 +169,6 @@ export function EagleTagPage({
     }
     anchorIdRef.current = tagId;
   };
-
   const submitTag = (event: FormEvent) => {
     event.preventDefault();
     const name = newTagName.normalize('NFKC').trim();
@@ -185,7 +176,6 @@ export function EagleTagPage({
     onCreateManualTag(name);
     setNewTagName('');
   };
-
   const submitGroup = (event: FormEvent) => {
     event.preventDefault();
     const name = newGroupName.normalize('NFKC').trim();
@@ -194,7 +184,6 @@ export function EagleTagPage({
     setNewGroupName('');
     setShowGroupCreator(false);
   };
-
   const startTagEdit = () => {
     const tag = selectedManualTags[0];
     if (!tag) return;
@@ -202,14 +191,12 @@ export function EagleTagPage({
     setEditingGroup(null);
     setEditName(tag.name);
   };
-
   const startGroupEdit = () => {
     if (!activeGroup) return;
     setEditingGroup(activeGroup);
     setEditingTag(null);
     setEditName(activeGroup.name);
   };
-
   const submitEdit = (event: FormEvent) => {
     event.preventDefault();
     const name = editName.normalize('NFKC').trim();
@@ -219,40 +206,51 @@ export function EagleTagPage({
     setEditingTag(null);
     setEditingGroup(null);
   };
-
   const deleteTags = () => {
     if (selectedManualTags.length === 0) return;
     const label =
       selectedManualTags.length === 1
         ? `“${selectedManualTags[0].name}”`
-        : `${selectedManualTags.length} 个标签`;
-    if (window.confirm(`删除${label}？素材本身不会被删除。`))
+        : t('{{value1}} 个标签', {
+            value1: selectedManualTags.length,
+          });
+    if (
+      window.confirm(
+        t('删除{{value1}}？素材本身不会被删除。', {
+          value1: label,
+        }),
+      )
+    )
       onDeleteManualTags(selectedManualTags);
   };
-
   const deleteGroup = () => {
     if (!activeGroup) return;
-    if (window.confirm(`删除标签组“${activeGroup.name}”？组内标签会移到未分类。`)) {
+    if (
+      window.confirm(
+        t('删除标签组“{{value1}}”？组内标签会移到未分类。', {
+          value1: activeGroup.name,
+        }),
+      )
+    ) {
       onDeleteManualTagGroup(activeGroup);
       changeScope('UNCATEGORIZED');
     }
   };
-
   return (
-    <section className={styles.page} aria-label={isManual ? '人工标签管理' : 'AI 标签管理'}>
+    <section className={styles.page} aria-label={isManual ? t('人工标签管理') : t('AI 标签管理')}>
       <aside className={styles.scopePanel}>
         <div className={styles.scopeHeader}>
           <span>{isManual ? <IconTags size={16} /> : <IconSparkles size={16} />}</span>
-          <strong>{isManual ? '人工标签' : 'AI 自动标签'}</strong>
+          <strong>{isManual ? t('人工标签') : t('AI 自动标签')}</strong>
         </div>
-        <nav aria-label={isManual ? '人工标签导航' : 'AI 标签导航'}>
+        <nav aria-label={isManual ? t('人工标签导航') : t('AI 标签导航')}>
           <button
             type="button"
             className={scope === 'ALL' ? styles.scopeActive : undefined}
             onClick={() => changeScope('ALL')}
           >
             <IconBookmark size={15} />
-            <span>全部标签</span>
+            <span>{t('全部标签')}</span>
             <small>{allTags.length}</small>
           </button>
           {isManual ? (
@@ -263,7 +261,7 @@ export function EagleTagPage({
                 onClick={() => changeScope('UNCATEGORIZED')}
               >
                 <IconTags size={15} />
-                <span>未分类</span>
+                <span>{t('未分类')}</span>
                 <small>{manualTags.filter((tag) => tag.groupId === null).length}</small>
               </button>
               <button
@@ -272,7 +270,7 @@ export function EagleTagPage({
                 onClick={() => changeScope('STARRED')}
               >
                 <IconStar size={15} />
-                <span>常用标签</span>
+                <span>{t('常用标签')}</span>
                 <small>{manualTags.filter((tag) => tag.isStarred).length}</small>
               </button>
             </>
@@ -284,7 +282,7 @@ export function EagleTagPage({
                 onClick={() => changeScope('USED')}
               >
                 <IconCheck size={15} />
-                <span>已使用</span>
+                <span>{t('已使用')}</span>
                 <small>{aiTags.filter((tag) => tag.assetCount > 0).length}</small>
               </button>
               <button
@@ -293,7 +291,7 @@ export function EagleTagPage({
                 onClick={() => changeScope('UNUSED')}
               >
                 <IconSparkles size={15} />
-                <span>未使用</span>
+                <span>{t('未使用')}</span>
                 <small>{aiTags.filter((tag) => tag.assetCount === 0).length}</small>
               </button>
             </>
@@ -303,10 +301,10 @@ export function EagleTagPage({
         {isManual && (
           <div className={styles.groupSection}>
             <div className={styles.sectionLabel}>
-              <span>标签组</span>
+              <span>{t('标签组')}</span>
               <button
                 type="button"
-                aria-label="新建标签组"
+                aria-label={t('新建标签组')}
                 onClick={() => setShowGroupCreator((value) => !value)}
               >
                 <IconPlus size={14} />
@@ -316,9 +314,9 @@ export function EagleTagPage({
               <form className={styles.groupForm} onSubmit={submitGroup}>
                 <input
                   autoFocus
-                  aria-label="标签组名称"
+                  aria-label={t('标签组名称')}
                   maxLength={64}
-                  placeholder="新标签组"
+                  placeholder={t('新标签组')}
                   value={newGroupName}
                   onChange={(event) => setNewGroupName(event.target.value)}
                 />
@@ -343,17 +341,17 @@ export function EagleTagPage({
                   <small>{group.tagCount}</small>
                 </button>
               ))}
-              {manualTagGroups.length === 0 && <p>还没有标签组</p>}
+              {manualTagGroups.length === 0 && <p>{t('还没有标签组')}</p>}
             </div>
             {activeGroup && (
               <div className={styles.groupActions}>
                 <button type="button" onClick={startGroupEdit}>
                   <IconEdit size={13} />
-                  重命名
+                  {' ' + t('重命名') + ' '}
                 </button>
                 <button type="button" onClick={deleteGroup}>
                   <IconTrash size={13} />
-                  删除
+                  {' ' + t('删除') + ' '}
                 </button>
               </div>
             )}
@@ -363,50 +361,58 @@ export function EagleTagPage({
 
       <div className={styles.directory}>
         <h1 id="eagle-library-title" className={styles.visuallyHidden}>
-          {isManual ? '人工标签' : 'AI 自动标签'}
+          {isManual ? t('人工标签') : t('AI 自动标签')}
         </h1>
         <header className={styles.toolbar}>
           <div className={styles.toolbarPrimary}>
             <strong>
               {scope === 'ALL'
-                ? '全部标签'
+                ? t('全部标签')
                 : (activeGroup?.name ??
                   (
                     {
-                      UNCATEGORIZED: '未分类',
-                      STARRED: '常用标签',
-                      USED: '已使用',
-                      UNUSED: '未使用',
+                      UNCATEGORIZED: t('未分类'),
+                      STARRED: t('常用标签'),
+                      USED: t('已使用'),
+                      UNUSED: t('未使用'),
                     } as Record<string, string>
                   )[scope])}
             </strong>
             <span>{visibleTags.length}</span>
-            {selectedIds.length > 0 && <em>已选择 {selectedIds.length} 个</em>}
+            {selectedIds.length > 0 && (
+              <em>
+                {t('已选择') + ' '}
+                {selectedIds.length}
+                {' ' + t('个')}
+              </em>
+            )}
           </div>
           <div className={styles.toolbarControls}>
             <label className={styles.searchBox}>
               <IconSearch size={15} />
               <input
                 type="search"
-                aria-label={`搜索${isManual ? '人工标签' : 'AI标签'}`}
-                placeholder="搜索标签"
+                aria-label={t('搜索{{value1}}', {
+                  value1: isManual ? t('人工标签') : t('AI标签'),
+                })}
+                placeholder={t('搜索标签')}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </label>
             <select
-              aria-label="标签排序"
+              aria-label={t('标签排序')}
               value={sort}
               onChange={(event) => setSort(event.target.value as SortMode)}
             >
-              <option value="NAME_ASC">按名称</option>
-              <option value="COUNT_DESC">使用数：高到低</option>
-              <option value="COUNT_ASC">使用数：低到高</option>
+              <option value="NAME_ASC">{t('按名称')}</option>
+              <option value="COUNT_DESC">{t('使用数：高到低')}</option>
+              <option value="COUNT_ASC">{t('使用数：低到高')}</option>
             </select>
             <div className={styles.layoutSwitch}>
               <button
                 type="button"
-                aria-label="网格视图"
+                aria-label={t('网格视图')}
                 aria-pressed={layout === 'GRID'}
                 onClick={() => setLayout('GRID')}
               >
@@ -414,7 +420,7 @@ export function EagleTagPage({
               </button>
               <button
                 type="button"
-                aria-label="列表视图"
+                aria-label={t('列表视图')}
                 aria-pressed={layout === 'LIST'}
                 onClick={() => setLayout('LIST')}
               >
@@ -429,14 +435,14 @@ export function EagleTagPage({
             <form className={styles.createForm} onSubmit={submitTag}>
               <IconPlus size={15} />
               <input
-                aria-label="新建人工标签"
+                aria-label={t('新建人工标签')}
                 maxLength={64}
-                placeholder="新建标签"
+                placeholder={t('新建标签')}
                 value={newTagName}
                 onChange={(event) => setNewTagName(event.target.value)}
               />
               <button type="submit" disabled={!newTagName.trim() || creating || busy}>
-                创建
+                {' ' + t('创建') + ' '}
               </button>
             </form>
             {selectedManualTags.length > 0 && (
@@ -444,7 +450,7 @@ export function EagleTagPage({
                 <button
                   type="button"
                   aria-label={
-                    selectedManualTags.every((tag) => tag.isStarred) ? '取消常用' : '设为常用'
+                    selectedManualTags.every((tag) => tag.isStarred) ? t('取消常用') : t('设为常用')
                   }
                   onClick={() =>
                     onUpdateManualTags(selectedManualTags, {
@@ -457,10 +463,10 @@ export function EagleTagPage({
                   ) : (
                     <IconStar size={14} />
                   )}
-                  {selectedManualTags.every((tag) => tag.isStarred) ? '取消常用' : '设为常用'}
+                  {selectedManualTags.every((tag) => tag.isStarred) ? t('取消常用') : t('设为常用')}
                 </button>
                 <select
-                  aria-label="移动到标签组"
+                  aria-label={t('移动到标签组')}
                   defaultValue=""
                   onChange={(event) => {
                     onUpdateManualTags(selectedManualTags, {
@@ -469,8 +475,8 @@ export function EagleTagPage({
                     event.target.value = '';
                   }}
                 >
-                  <option value="">移动到标签组…</option>
-                  <option value="__uncategorized">未分类</option>
+                  <option value="">{t('移动到标签组…')}</option>
+                  <option value="__uncategorized">{t('未分类')}</option>
                   {manualTagGroups.map((group) => (
                     <option key={group.id} value={group.id}>
                       {group.name}
@@ -480,12 +486,12 @@ export function EagleTagPage({
                 {selectedManualTags.length === 1 && (
                   <button type="button" onClick={startTagEdit}>
                     <IconEdit size={14} />
-                    重命名
+                    {' ' + t('重命名') + ' '}
                   </button>
                 )}
                 <button type="button" className={styles.danger} onClick={deleteTags}>
                   <IconTrash size={14} />
-                  删除
+                  {' ' + t('删除') + ' '}
                 </button>
               </div>
             )}
@@ -495,7 +501,7 @@ export function EagleTagPage({
         {(editingTag || editingGroup) && (
           <form className={styles.editBar} onSubmit={submitEdit}>
             <label>
-              {editingTag ? '重命名标签' : '重命名标签组'}
+              {editingTag ? t('重命名标签') : t('重命名标签组')}
               <input
                 autoFocus
                 maxLength={64}
@@ -504,7 +510,7 @@ export function EagleTagPage({
               />
             </label>
             <button type="submit" disabled={!editName.trim() || busy}>
-              保存
+              {' ' + t('保存') + ' '}
             </button>
             <button
               type="button"
@@ -513,7 +519,7 @@ export function EagleTagPage({
                 setEditingGroup(null);
               }}
             >
-              取消
+              {' ' + t('取消') + ' '}
             </button>
           </form>
         )}
@@ -522,7 +528,9 @@ export function EagleTagPage({
         <div className={styles.catalog}>
           <ul
             className={styles.tagList}
-            aria-label={`${isManual ? '人工标签' : 'AI标签'}目录`}
+            aria-label={t('{{value1}}目录', {
+              value1: isManual ? t('人工标签') : t('AI标签'),
+            })}
             data-layout={layout.toLowerCase()}
           >
             {sections.map(([sectionName, tags]) => (
@@ -539,7 +547,11 @@ export function EagleTagPage({
                       <li key={tag.id}>
                         <button
                           type="button"
-                          aria-label={`${isManual ? '人工标签' : 'AI标签'} ${tag.name}，${tag.assetCount} 项素材，双击查看`}
+                          aria-label={t('{{value1}} {{value2}}，{{value3}} 项素材，双击查看', {
+                            value1: isManual ? t('人工标签') : t('AI标签'),
+                            value2: tag.name,
+                            value3: tag.assetCount,
+                          })}
                           aria-pressed={selected}
                           className={selected ? styles.tagSelected : undefined}
                           onClick={(event) => handleTagClick(event, tag.id)}
@@ -574,7 +586,11 @@ export function EagleTagPage({
           </ul>
           {visibleTags.length === 0 && (
             <div className={styles.empty}>
-              {query ? '没有匹配的标签' : isManual ? '这里还没有标签' : 'AI 分析尚未生成标签'}
+              {query
+                ? t('没有匹配的标签')
+                : isManual
+                  ? t('这里还没有标签')
+                  : t('AI 分析尚未生成标签')}
             </div>
           )}
         </div>

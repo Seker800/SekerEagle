@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import {
   createEagleFilterCondition,
   createEagleFilterRule,
@@ -5,24 +6,20 @@ import {
   type EagleFilterQuery,
   type EagleFilterRule,
 } from '@sekereagle/eagle-filter-core';
-
 export type EagleQuickFilterField = EagleFilterField;
 export type EagleQuickTagMatch = 'ANY' | 'ALL';
 export type EagleQuickRangeField = 'WIDTH' | 'HEIGHT' | 'FILE_SIZE' | 'DURATION';
 export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT';
 export type EagleQuickTextField = 'NAME' | 'DESCRIPTION' | 'SOURCE_URL';
-
 export interface EagleQuickNumberRange {
   min: string;
   max: string;
   unit?: NonNullable<EagleFilterRule['unit']>;
 }
-
 export interface EagleQuickDateRange {
   from: string;
   to: string;
 }
-
 export interface EagleQuickFilterState {
   color?: string;
   manualTagIds: string[];
@@ -36,7 +33,6 @@ export interface EagleQuickFilterState {
   dates: Partial<Record<EagleQuickDateField, EagleQuickDateRange>>;
   text: Partial<Record<EagleQuickTextField, string>>;
 }
-
 export const DEFAULT_EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   'COLOR',
   'MANUAL_TAGS',
@@ -44,25 +40,23 @@ export const DEFAULT_EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[]
   'RATING',
   'FORMAT',
 ];
-
 export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, string> = {
-  COLOR: '颜色',
-  MANUAL_TAGS: '标签',
-  AI_TAGS: 'AI 标签',
-  SHAPE: '形状',
-  RATING: '评分',
-  FORMAT: '格式',
-  WIDTH: '宽度',
-  HEIGHT: '高度',
-  FILE_SIZE: '大小',
-  DURATION: '时长',
-  NAME: '名称',
-  DESCRIPTION: '注释',
-  SOURCE_URL: '链接',
-  ADDED_AT: '添加日期',
-  MODIFIED_AT: '修改日期',
+  COLOR: t('颜色'),
+  MANUAL_TAGS: t('标签'),
+  AI_TAGS: t('AI 标签'),
+  SHAPE: t('形状'),
+  RATING: t('评分'),
+  FORMAT: t('格式'),
+  WIDTH: t('宽度'),
+  HEIGHT: t('高度'),
+  FILE_SIZE: t('大小'),
+  DURATION: t('时长'),
+  NAME: t('名称'),
+  DESCRIPTION: t('注释'),
+  SOURCE_URL: t('链接'),
+  ADDED_AT: t('添加日期'),
+  MODIFIED_AT: t('修改日期'),
 };
-
 export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   ...DEFAULT_EAGLE_QUICK_FILTER_FIELDS,
   'AI_TAGS',
@@ -76,7 +70,6 @@ export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   'ADDED_AT',
   'MODIFIED_AT',
 ];
-
 export function createEmptyEagleQuickFilterState(): EagleQuickFilterState {
   return {
     manualTagIds: [],
@@ -90,11 +83,9 @@ export function createEmptyEagleQuickFilterState(): EagleQuickFilterState {
     text: {},
   };
 }
-
 export function countActiveEagleQuickFilters(state: EagleQuickFilterState): number {
   return EAGLE_QUICK_FILTER_FIELDS.filter((field) => isEagleQuickFilterActive(state, field)).length;
 }
-
 export function isEagleQuickFilterActive(
   state: EagleQuickFilterState,
   field: EagleQuickFilterField,
@@ -130,7 +121,6 @@ export function isEagleQuickFilterActive(
       return Boolean(state.text[field]?.trim());
   }
 }
-
 export function summarizeEagleQuickFilter(
   state: EagleQuickFilterState,
   field: EagleQuickFilterField,
@@ -174,7 +164,6 @@ export function summarizeEagleQuickFilter(
       return state.text[field]?.trim() || undefined;
   }
 }
-
 export function clearEagleQuickFilter(
   state: EagleQuickFilterState,
   field: EagleQuickFilterField,
@@ -215,7 +204,6 @@ export function clearEagleQuickFilter(
     }
   }
 }
-
 export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleFilterQuery {
   const conditions: EagleFilterQuery['conditions'] = [];
   const addCondition = (rules: EagleFilterRule[], match: 'ALL' | 'ANY' = 'ALL') => {
@@ -233,7 +221,6 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
   ) => {
     addCondition([{ ...createEagleFilterRule(field), operator, value, ...(unit ? { unit } : {}) }]);
   };
-
   if (state.color) addRule('COLOR', 'SIMILAR', state.color);
   if (state.manualTagIds.length) {
     addRule(
@@ -248,7 +235,6 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
   addChoiceRules(conditions, 'FORMAT', state.formats);
   addChoiceRules(conditions, 'SHAPE', state.shapes);
   if (state.ratingAtLeast !== undefined) addRule('RATING', 'GTE', String(state.ratingAtLeast));
-
   for (const field of ['WIDTH', 'HEIGHT', 'FILE_SIZE', 'DURATION'] as const) {
     const range = state.ranges[field];
     if (!range) continue;
@@ -258,7 +244,6 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     else if (min !== undefined) addRule(field, 'GTE', min, range.unit);
     else if (max !== undefined) addRule(field, 'LTE', max, range.unit);
   }
-
   for (const field of ['ADDED_AT', 'MODIFIED_AT'] as const) {
     const range = state.dates[field];
     if (!range) continue;
@@ -266,15 +251,12 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     else if (range.from) addRule(field, 'AFTER', range.from);
     else if (range.to) addRule(field, 'BEFORE', range.to);
   }
-
   for (const field of ['NAME', 'DESCRIPTION', 'SOURCE_URL'] as const) {
     const value = state.text[field]?.trim();
     if (value) addRule(field, 'CONTAINS', value);
   }
-
   return { version: 2, conditions };
 }
-
 function addChoiceRules(
   conditions: EagleFilterQuery['conditions'],
   field: 'FORMAT' | 'SHAPE',
@@ -290,7 +272,6 @@ function addChoiceRules(
   }));
   conditions.push(condition);
 }
-
 function parseNonNegativeNumber(value: string): number | undefined {
   if (!value.trim()) return undefined;
   const number = Number(value);

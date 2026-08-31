@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconFolderBolt, IconX } from '@tabler/icons-react';
@@ -12,7 +13,6 @@ import { countEagleAssets } from '../../lib/eagle-api';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { EagleRuleBuilder } from './EagleRuleBuilder';
 import styles from './EagleSmartFolderDialog.module.css';
-
 interface EagleSmartFolderDialogProps {
   accessToken?: string;
   initialQuery: EagleFilterQuery;
@@ -25,10 +25,8 @@ interface EagleSmartFolderDialogProps {
   onClose: () => void;
   onSave: (input: { name: string; query: EagleFilterQuery }) => void;
 }
-
 function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
   if (countActiveEagleFilterRules(query) > 0) return query;
-
   const emptyQuery = createEmptyEagleFilterQuery();
   return {
     ...emptyQuery,
@@ -38,7 +36,6 @@ function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
     })),
   };
 }
-
 export function EagleSmartFolderDialog({
   accessToken = '',
   initialQuery,
@@ -60,16 +57,14 @@ export function EagleSmartFolderDialog({
     queryKey: ['eagle', 'smart-folder-preview', deferredQuery],
     queryFn: () => countEagleAssets(accessToken, deferredQuery),
     enabled: hasActiveDeferredCondition,
-    staleTime: 10_000,
+    staleTime: 10000,
   });
-
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const normalized = name.normalize('NFKC').trim();
     if (!normalized) return;
     onSave({ name: normalized, query });
   };
-
   return (
     <div
       className={styles.backdrop}
@@ -90,14 +85,16 @@ export function EagleSmartFolderDialog({
               <IconFolderBolt size={19} />
             </span>
             <div className={styles.headerCopy}>
-              <h2 id="smart-folder-title">{mode === 'edit' ? '修改规则' : '新建智能文件夹'}</h2>
-              <p id="smart-folder-description">符合规则的素材会自动出现在这个智能文件夹中</p>
+              <h2 id="smart-folder-title">
+                {mode === 'edit' ? t('修改规则') : t('新建智能文件夹')}
+              </h2>
+              <p id="smart-folder-description">{t('符合规则的素材会自动出现在这个智能文件夹中')}</p>
             </div>
           </div>
           <button
             className={styles.closeButton}
             type="button"
-            aria-label="关闭智能文件夹窗口"
+            aria-label={t('关闭智能文件夹窗口')}
             onClick={onClose}
           >
             <IconX size={19} />
@@ -105,17 +102,17 @@ export function EagleSmartFolderDialog({
         </header>
         <div className={styles.body}>
           <label className={styles.nameField}>
-            <span>智能文件夹名称</span>
+            <span>{t('智能文件夹名称')}</span>
             <input
               autoFocus
-              aria-label="智能文件夹名称"
+              aria-label={t('智能文件夹名称')}
               maxLength={64}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </label>
           <p className={styles.explainer}>
-            智能文件夹会依据筛选条件，自动把符合条件的素材显示在一起。
+            {' ' + t('智能文件夹会依据筛选条件，自动把符合条件的素材显示在一起。') + ' '}
           </p>
           <EagleRuleBuilder
             value={query}
@@ -128,24 +125,28 @@ export function EagleSmartFolderDialog({
         <footer>
           <span className={styles.conditionSummary} role="status" aria-live="polite">
             {activeConditionCount === 0
-              ? '找到 0 项符合规则的素材'
+              ? t('找到 0 项符合规则的素材')
               : countQuery.isLoading
-                ? '正在计算符合规则的素材…'
+                ? t('正在计算符合规则的素材…')
                 : countQuery.isError
-                  ? `已启用 ${activeConditionCount} 条规则`
-                  : `找到 ${countQuery.data?.count ?? 0} 项符合规则的素材`}
+                  ? t('已启用 {{value1}} 条规则', {
+                      value1: activeConditionCount,
+                    })
+                  : t('找到 {{value1}} 项符合规则的素材', {
+                      value1: countQuery.data?.count ?? 0,
+                    })}
           </span>
           <div className={styles.footerActions}>
             <button type="button" onClick={onClose}>
-              取消
+              {' ' + t('取消') + ' '}
             </button>
             <button
               className={styles.primary}
               type="submit"
-              aria-label="保存智能文件夹"
+              aria-label={t('保存智能文件夹')}
               disabled={!name.trim() || pending}
             >
-              保存设置
+              {' ' + t('保存设置') + ' '}
             </button>
           </div>
         </footer>
