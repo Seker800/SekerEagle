@@ -15,11 +15,11 @@ describe('locale policy', () => {
     expect(normalizeLocale('fr-FR')).toBeNull();
   });
 
-  it('prefers a persisted choice over URL and browser languages', () => {
+  it('lets the explicit URL temporarily override a persisted choice', () => {
     window.localStorage.setItem(LOCALE_STORAGE_KEY, 'zh-CN');
     expect(resolveLocale({ search: '?lang=en-US', browserLanguages: ['en-US'] })).toEqual({
-      locale: 'zh-CN',
-      source: 'preference',
+      locale: 'en-US',
+      source: 'url',
     });
   });
 
