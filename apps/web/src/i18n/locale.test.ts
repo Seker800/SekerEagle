@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LOCALE_STORAGE_KEY, normalizeLocale, resolveLocale, setLocalePreference } from './locale';
 
 describe('locale policy', () => {
-  afterEach(() => window.localStorage.clear());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    window.localStorage.clear();
+  });
 
   it('normalizes supported Chinese and English locale variants', () => {
     expect(normalizeLocale('zh')).toBe('zh-CN');
@@ -44,5 +47,21 @@ describe('locale policy', () => {
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe('en-US');
     setLocalePreference(null);
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBeNull();
+  });
+
+  it('continues resolving and switching when browser storage is unavailable', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Storage is disabled', 'SecurityError');
+    });
+
+    expect(resolveLocale({ search: '?lang=en-US', browserLanguages: ['zh-CN'] })).toEqual({
+      locale: 'en-US',
+      source: 'url',
+    });
+
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage is disabled', 'SecurityError');
+    });
+    expect(() => setLocalePreference('en-US')).not.toThrow();
   });
 });
