@@ -26,7 +26,7 @@ export function resolveLocale({
   search?: string;
   browserLanguages?: readonly string[];
 } = {}): ResolvedLocale {
-  const preference = normalizeLocale(window.localStorage.getItem(LOCALE_STORAGE_KEY));
+  const preference = normalizeLocale(readLocalePreference());
   if (preference) return { locale: preference, source: 'preference' };
 
   const override = normalizeLocale(new URLSearchParams(search).get('lang'));
@@ -40,6 +40,18 @@ export function resolveLocale({
 }
 
 export function setLocalePreference(locale: SupportedLocale | null): void {
-  if (locale) window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
-  else window.localStorage.removeItem(LOCALE_STORAGE_KEY);
+  try {
+    if (locale) window.localStorage.setItem(LOCALE_STORAGE_KEY, locale);
+    else window.localStorage.removeItem(LOCALE_STORAGE_KEY);
+  } catch {
+    // Language switching still works for the current URL when site storage is unavailable.
+  }
+}
+
+function readLocalePreference(): string | null {
+  try {
+    return window.localStorage.getItem(LOCALE_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
