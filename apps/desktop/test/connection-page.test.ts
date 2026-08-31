@@ -117,5 +117,13 @@ describe('offline-capable desktop connection page', () => {
     expect(script).toContain("'en-US'");
     expect(script).toContain('Desktop Settings');
     expect(script).toContain('document.documentElement.lang = locale');
+
+    const englishCatalog = /'en-US': \{(?<catalog>[\s\S]*?)\n  \},\n\};/u.exec(script)?.groups
+      ?.catalog;
+    expect(englishCatalog).toBeTruthy();
+    expect(englishCatalog).not.toMatch(/\p{Script=Han}/u);
+    for (const [, key] of html.matchAll(/data-i18n="([^"]+)"/gu)) {
+      expect(englishCatalog).toContain(`${key}:`);
+    }
   });
 });

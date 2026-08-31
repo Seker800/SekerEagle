@@ -18,7 +18,7 @@ describe('original file export', () => {
       triggerBrowserDownload,
     });
 
-    expect(saveOriginalFileBridge).toHaveBeenCalledWith('asset-1');
+    expect(saveOriginalFileBridge).toHaveBeenCalledWith('asset-1', 'zh-CN');
     expect(triggerBrowserDownload).not.toHaveBeenCalled();
   });
 
@@ -46,5 +46,15 @@ describe('original file export', () => {
       ['/api/eagle/assets/asset-1/original', 'first image.png'],
       ['/api/eagle/assets/asset-2/original', 'second.jpg'],
     ]);
+  });
+
+  it('passes the active locale to desktop batch downloads', async () => {
+    const downloadOriginalFilesBridge = vi.fn().mockResolvedValue({ downloaded: 2 });
+
+    await downloadOriginalFiles([first, second], {
+      desktopBridge: { downloadOriginalFiles: downloadOriginalFilesBridge },
+    });
+
+    expect(downloadOriginalFilesBridge).toHaveBeenCalledWith(['asset-1', 'asset-2'], 'zh-CN');
   });
 });
