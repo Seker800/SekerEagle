@@ -7,8 +7,8 @@ SekerEagle 当前支持 `zh-CN` 和 `en-US`。国际化属于展示适配层：�
 
 Web 启动时按以下顺序解析语言：
 
-1. `localStorage` 中的显式偏好 `sekereagle.locale.v1`；
-2. URL 的临时覆盖参数 `?lang=en-US` 或 `?lang=zh-CN`；
+1. URL 的临时覆盖参数 `?lang=en-US` 或 `?lang=zh-CN`；
+2. `localStorage` 中的显式偏好 `sekereagle.locale.v1`；
 3. `navigator.languages`；
 4. 回退到 `zh-CN`。
 

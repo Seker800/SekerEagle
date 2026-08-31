@@ -26,11 +26,11 @@ export function resolveLocale({
   search?: string;
   browserLanguages?: readonly string[];
 } = {}): ResolvedLocale {
-  const preference = normalizeLocale(readLocalePreference());
-  if (preference) return { locale: preference, source: 'preference' };
-
   const override = normalizeLocale(new URLSearchParams(search).get('lang'));
   if (override) return { locale: override, source: 'url' };
+
+  const preference = normalizeLocale(readLocalePreference());
+  if (preference) return { locale: preference, source: 'preference' };
 
   for (const language of browserLanguages) {
     const locale = normalizeLocale(language);
