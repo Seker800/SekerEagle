@@ -161,7 +161,7 @@ describe('desktop server and navigation security', () => {
       readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
-    expect(main).toContain("ipcMain.handle('desktop:download-original-files'");
+    expect(main).toMatch(/ipcMain\.handle\(\s*'desktop:download-original-files'/u);
     expect(main).toMatch(
       /desktop:download-original-files'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
     );

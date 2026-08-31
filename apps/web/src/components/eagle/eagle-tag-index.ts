@@ -21,14 +21,14 @@ const latinCollator = new Intl.Collator('en', { numeric: true, sensitivity: 'bas
 const HAN_CHARACTER = /^\p{Script=Han}$/u;
 const LATIN_INITIAL = /^[a-z]$/i;
 const DIGIT_INITIAL = /^\d$/;
-function normalizeSearchText(value: string): string {
+export function normalizeEagleTagSearchText(value: string): string {
   return value.normalize('NFKC').trim().toLocaleLowerCase();
 }
 export function createEagleTagIndex(source: EagleTagIndexSource): EagleTagIndex {
-  const normalizedName = normalizeSearchText(source.name);
+  const normalizedName = normalizeEagleTagSearchText(source.name);
   const compactName = normalizedName.replace(/\s+/g, '');
-  const fullPinyin = normalizeSearchText(source.pinyin).replace(/\s+/g, '');
-  const pinyinInitials = normalizeSearchText(source.pinyinInitials).replace(/\s+/g, '');
+  const fullPinyin = normalizeEagleTagSearchText(source.pinyin).replace(/\s+/g, '');
+  const pinyinInitials = normalizeEagleTagSearchText(source.pinyinInitials).replace(/\s+/g, '');
   const firstCharacter = Array.from(normalizedName)[0] ?? '';
   let section = t('其他');
   if (LATIN_INITIAL.test(firstCharacter)) section = firstCharacter.toUpperCase();
@@ -50,7 +50,7 @@ export function eagleTagMatchesQuery(index: EagleTagIndex, query: string): boole
   return getEagleTagMatchRank(index, query) !== null;
 }
 function getEagleTagMatchRank(index: EagleTagIndex, query: string): number | null {
-  const normalizedQuery = normalizeSearchText(query).replace(/\s+/g, '');
+  const normalizedQuery = normalizeEagleTagSearchText(query).replace(/\s+/g, '');
   if (!normalizedQuery) return 0;
   if (index.compactName === normalizedQuery) return 0;
   if (index.compactName.startsWith(normalizedQuery)) return 1;

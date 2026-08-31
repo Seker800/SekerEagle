@@ -18,7 +18,7 @@ import {
   type EagleVectorTag,
 } from '../../lib/eagle-vector-api';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
-import { searchAndSortEagleTags } from './eagle-tag-index';
+import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import styles from './EagleVectorWorkspace.module.css';
 export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
@@ -202,11 +202,9 @@ export function EagleVectorWorkspace({
     );
   }, [manualTags, search, tags]);
   const visibleManagedTags = useMemo(() => {
-    const query = managedTagSearch.normalize('NFKC').trim().toLocaleLowerCase(getLocale());
+    const query = normalizeEagleTagSearchText(managedTagSearch);
     if (!query) return tags;
-    return tags.filter((tag) =>
-      tag.name.normalize('NFKC').toLocaleLowerCase(getLocale()).includes(query),
-    );
+    return tags.filter((tag) => normalizeEagleTagSearchText(tag.name).includes(query));
   }, [managedTagSearch, tags]);
   const distanceAssetIds = useMemo(() => distances.map((item) => item.assetId), [distances]);
   const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {

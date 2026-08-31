@@ -1,8 +1,8 @@
-import { getLocale, t } from '../../i18n';
+import { t } from '../../i18n';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { IconPlus, IconSearch, IconTags, IconX } from '@tabler/icons-react';
 import type { EagleManualTag } from '../../lib/eagle-api';
-import { searchAndSortEagleTags } from './eagle-tag-index';
+import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleBatchTagPicker.module.css';
 interface EagleBatchTagPickerProps {
@@ -53,14 +53,14 @@ export function EagleBatchTagPicker({
     [visibleTags],
   );
   const trimmedQuery = query.trim();
-  const normalizedQuery = trimmedQuery.toLocaleLowerCase(getLocale());
+  const normalizedQuery = normalizeEagleTagSearchText(trimmedQuery);
   const canCreate = Boolean(
     !isRemoving &&
     onCreate &&
     trimmedQuery &&
     visibleTags.length === 0 &&
     trimmedQuery.length <= 64 &&
-    !allTags.some((tag) => tag.name.trim().toLocaleLowerCase(getLocale()) === normalizedQuery),
+    !allTags.some((tag) => normalizeEagleTagSearchText(tag.name) === normalizedQuery),
   );
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {

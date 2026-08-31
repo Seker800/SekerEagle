@@ -43,10 +43,16 @@ export interface SekerDesktopBridge {
     token: string;
   }>;
   startPreparedAssetDrag?(token: string): void;
-  saveOriginalFile?(assetId: string): Promise<{
+  saveOriginalFile?(
+    assetId: string,
+    locale?: 'zh-CN' | 'en-US',
+  ): Promise<{
     saved: boolean;
   }>;
-  downloadOriginalFiles?(assetIds: string[]): Promise<{
+  downloadOriginalFiles?(
+    assetIds: string[],
+    locale?: 'zh-CN' | 'en-US',
+  ): Promise<{
     downloaded: number;
   }>;
 }

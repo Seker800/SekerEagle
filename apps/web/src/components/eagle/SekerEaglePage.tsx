@@ -670,12 +670,11 @@ export function SekerEaglePage({
         setAssetActionPending(null);
         setAssetContextMenu(null);
       },
-      (error: unknown) => {
+      () => {
         setAssetActionPending(null);
-        const detail = error instanceof Error ? `：${error.message}` : t('，请重试。');
         setAssetActionError(
           t('另存原文件失败{{value1}}', {
-            value1: detail,
+            value1: t('，请重试。'),
           }),
         );
       },
@@ -727,10 +726,10 @@ export function SekerEaglePage({
         setAssetContextMenu(null);
         setIsBatchDownloading(false);
       },
-      (error: unknown) => {
+      () => {
         setAssetContextMenu(null);
         setIsBatchDownloading(false);
-        setOriginalFileError(error instanceof Error ? error.message : t('批量下载原文件失败。'));
+        setOriginalFileError(t('批量下载原文件失败。'));
       },
     );
   };

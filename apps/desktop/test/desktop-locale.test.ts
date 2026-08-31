@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  connectionPageUrl,
-  desktopText,
-  normalizeDesktopLocale,
-} from '../src/main/desktop-locale';
+import { connectionPageUrl, desktopText, normalizeDesktopLocale } from '../src/main/desktop-locale';
 
 describe('desktop locale policy', () => {
   it('normalizes English and Chinese locale variants with a Chinese fallback', () => {

@@ -118,7 +118,7 @@ describe('offline-capable desktop connection page', () => {
     expect(script).toContain('Desktop Settings');
     expect(script).toContain('document.documentElement.lang = locale');
 
-    const englishCatalog = /'en-US': \{(?<catalog>[\s\S]*?)\n  \},\n\};/u.exec(script)?.groups
+    const englishCatalog = /'en-US': \{(?<catalog>[\s\S]*?)\n\s{2}\},\n\};/u.exec(script)?.groups
       ?.catalog;
     expect(englishCatalog).toBeTruthy();
     expect(englishCatalog).not.toMatch(/\p{Script=Han}/u);

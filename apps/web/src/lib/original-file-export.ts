@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { getLocale, t } from '../i18n';
 import { getEagleAssetContentUrl } from './eagle-api';
 import {
   getDesktopOriginalFileBridge,
@@ -29,7 +29,7 @@ export function saveOriginalFile(
     dependencies.desktopBridge === undefined
       ? getDesktopOriginalFileBridge()
       : dependencies.desktopBridge;
-  if (desktopBridge) return desktopBridge.saveOriginalFile(target.id);
+  if (desktopBridge) return desktopBridge.saveOriginalFile(target.id, getLocale());
   (dependencies.triggerBrowserDownload ?? triggerBrowserDownload)(
     getEagleAssetContentUrl(target.id),
     target.originalName,
@@ -47,7 +47,11 @@ export function downloadOriginalFiles(
     dependencies.desktopBridge === undefined
       ? getDesktopOriginalFileDownloadBridge()
       : dependencies.desktopBridge;
-  if (desktopBridge) return desktopBridge.downloadOriginalFiles(targets.map(({ id }) => id));
+  if (desktopBridge)
+    return desktopBridge.downloadOriginalFiles(
+      targets.map(({ id }) => id),
+      getLocale(),
+    );
   const download = dependencies.triggerBrowserDownload ?? triggerBrowserDownload;
   targets.forEach((target) => download(getEagleAssetContentUrl(target.id), target.originalName));
   return Promise.resolve({ downloaded: targets.length });
