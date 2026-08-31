@@ -102,4 +102,20 @@ describe('offline-capable desktop connection page', () => {
     expect(script).toContain('section.hidden = section.id !== sectionId');
     expect(script).toContain("navigation.setAttribute('aria-current', 'page')");
   });
+
+  it('localizes the isolated settings page from its locale query without inline scripts', async () => {
+    const html = await readFile(
+      new URL('../src/connection-page/index.html', import.meta.url),
+      'utf8',
+    );
+    const script = await readFile(
+      new URL('../src/connection-page/connection.js', import.meta.url),
+      'utf8',
+    );
+    expect(html).toContain('data-i18n="desktopSettings"');
+    expect(script).toContain("new URLSearchParams(window.location.search).get('lang')");
+    expect(script).toContain("'en-US'");
+    expect(script).toContain('Desktop Settings');
+    expect(script).toContain('document.documentElement.lang = locale');
+  });
 });
