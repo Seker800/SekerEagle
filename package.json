@@ -50,7 +50,7 @@
     "@types/node": "^22.10.2",
     "deepmerge-ts": "^8.0.2",
     "eslint": "^10.9.0",
-    "js-yaml": "4.3.1",
+    "js-yaml": "5.3.0",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3"
