@@ -14,7 +14,7 @@
     "test:coverage": "node --require ts-node/register --experimental-test-coverage --test src/**/*.test.ts"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^26.4.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
