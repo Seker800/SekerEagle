@@ -44,6 +44,12 @@ import { availableBytesForPath, ensureCacheDirectory } from './cache-filesystem'
 import { parseClipboardImageInput } from './clipboard-image';
 import { copyPreparedFilesToDirectory } from './original-file-destination';
 import {
+  connectionPageUrl,
+  desktopText,
+  normalizeDesktopLocale,
+  type DesktopLocale,
+} from './desktop-locale';
+import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
   parseAssetDragInput,
@@ -98,7 +104,7 @@ try {
 const initialServerUrl = normalizeDesktopServerUrl(
   process.env.SEKEREAGLE_SERVER_URL ?? DEFAULT_DESKTOP_SERVER_URL,
 );
-const CONNECTION_PAGE_URL = 'sekereagle-app://connection/';
+let desktopLocale: DesktopLocale = 'zh-CN';
 let serverUrl = initialServerUrl;
 let mainWindow: BrowserWindow | null = null;
 let cacheProcess: UtilityProcess | null = null;
@@ -124,6 +130,7 @@ app.on('second-instance', () => {
 
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
+    desktopLocale = normalizeDesktopLocale(app.getLocale());
     const settings = new DesktopSettingsStore(
       app.getPath('userData'),
       portableDataRoot ? PORTABLE_DEFAULT_CACHE_LIMIT_BYTES : DEFAULT_CACHE_LIMIT_BYTES,
@@ -200,12 +207,12 @@ if (hasSingleInstanceLock)
       handleMediaRequest(request.url, request.signal),
     );
     protocol.handle('sekereagle-app', (request) => handleAppRequest(request.url));
-    createWindow(initialConnection.active ? serverUrl : CONNECTION_PAGE_URL, owner);
+    createWindow(initialConnection.active ? serverUrl : connectionPageUrl(desktopLocale), owner);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) {
         const active = connectionService?.current()?.active;
-        createWindow(active ? active.url : CONNECTION_PAGE_URL, owner);
+        createWindow(active ? active.url : connectionPageUrl(desktopLocale), owner);
       }
     });
   });
@@ -429,9 +436,10 @@ function registerConnectionIpc(owner: AuthenticatedOwner): void {
     }
     return snapshot;
   });
-  ipcMain.handle('desktop:open-connection-manager', async (event) => {
+  ipcMain.handle('desktop:open-connection-manager', async (event, requestedLocale: unknown) => {
     assertTrustedConnectionSender(event);
-    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+    desktopLocale = normalizeDesktopLocale(requestedLocale ?? desktopLocale);
+    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
   });
   ipcMain.handle('desktop:cancel-connection-manager', async (event) => {
     assertConnectionPageSender(event);
@@ -553,8 +561,9 @@ function registerOriginalFileExportIpc(
   exporter: OriginalDragExporter,
 ): void {
   let exportInFlight = false;
-  ipcMain.handle('desktop:save-original-file', async (event, input: unknown) => {
+  ipcMain.handle('desktop:save-original-file', async (event, input: unknown, locale: unknown) => {
     assertTrustedIpcSender(event);
+    const requestedLocale = normalizeDesktopLocale(locale ?? desktopLocale);
     if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
     exportInFlight = true;
     const saveServerUrl = serverUrl;
@@ -571,8 +580,8 @@ function registerOriginalFileExportIpc(
       const window = BrowserWindow.fromWebContents(event.sender);
       if (!window) throw new Error('桌面窗口不可用。');
       const result = await dialog.showSaveDialog(window, {
-        title: '另存原文件',
-        buttonLabel: '保存',
+        title: desktopText(requestedLocale, 'saveOriginalTitle'),
+        buttonLabel: desktopText(requestedLocale, 'save'),
         defaultPath: path.join(app.getPath('downloads'), path.basename(prepared.files[0])),
       });
       if (result.canceled || !result.filePath) return { saved: false };
@@ -585,39 +594,43 @@ function registerOriginalFileExportIpc(
     }
   });
 
-  ipcMain.handle('desktop:download-original-files', async (event, input: unknown) => {
-    assertTrustedIpcSender(event);
-    if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
-    const assetIds = parseAssetDragInput(input);
-    if (assetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
-    exportInFlight = true;
-    const downloadServerUrl = serverUrl;
-    let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
-    try {
-      const identity = await owner.get();
-      if (!identity) throw new Error('需要重新登录。');
-      const window = BrowserWindow.fromWebContents(event.sender);
-      if (!window) throw new Error('桌面窗口不可用。');
-      const result = await dialog.showOpenDialog(window, {
-        title: '选择批量下载文件夹',
-        buttonLabel: '下载到此处',
-        properties: ['openDirectory', 'createDirectory'],
-      });
-      if (result.canceled || result.filePaths.length !== 1) return { downloaded: 0 };
-      const destinationDirectory = result.filePaths[0]!;
-      await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
-      prepared = await exporter.prepare(
-        buildNamespaceId(downloadServerUrl, identity.ownerId, identity.deploymentId),
-        assetIds,
-      );
-      await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
-      const copied = await copyPreparedFilesToDirectory(prepared.files, destinationDirectory);
-      return { downloaded: copied.length };
-    } finally {
-      if (prepared) await exporter.remove(prepared).catch(() => undefined);
-      exportInFlight = false;
-    }
-  });
+  ipcMain.handle(
+    'desktop:download-original-files',
+    async (event, input: unknown, locale: unknown) => {
+      assertTrustedIpcSender(event);
+      const requestedLocale = normalizeDesktopLocale(locale ?? desktopLocale);
+      if (exportInFlight) throw new Error('已有原文件正在导出，请稍候。');
+      const assetIds = parseAssetDragInput(input);
+      if (assetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
+      exportInFlight = true;
+      const downloadServerUrl = serverUrl;
+      let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
+      try {
+        const identity = await owner.get();
+        if (!identity) throw new Error('需要重新登录。');
+        const window = BrowserWindow.fromWebContents(event.sender);
+        if (!window) throw new Error('桌面窗口不可用。');
+        const result = await dialog.showOpenDialog(window, {
+          title: desktopText(requestedLocale, 'downloadFolderTitle'),
+          buttonLabel: desktopText(requestedLocale, 'downloadHere'),
+          properties: ['openDirectory', 'createDirectory'],
+        });
+        if (result.canceled || result.filePaths.length !== 1) return { downloaded: 0 };
+        const destinationDirectory = result.filePaths[0]!;
+        await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
+        prepared = await exporter.prepare(
+          buildNamespaceId(downloadServerUrl, identity.ownerId, identity.deploymentId),
+          assetIds,
+        );
+        await assertOriginalAccessStillCurrent(event, owner, downloadServerUrl, identity);
+        const copied = await copyPreparedFilesToDirectory(prepared.files, destinationDirectory);
+        return { downloaded: copied.length };
+      } finally {
+        if (prepared) await exporter.remove(prepared).catch(() => undefined);
+        exportInFlight = false;
+      }
+    },
+  );
 }
 
 async function assertOriginalAccessStillCurrent(
@@ -804,7 +817,7 @@ async function applyConnection(
   owner: AuthenticatedOwner,
 ): Promise<void> {
   if (!snapshot.active) {
-    await mainWindow?.loadURL(CONNECTION_PAGE_URL);
+    await mainWindow?.loadURL(connectionPageUrl(desktopLocale));
     return;
   }
   const changed = serverUrl !== snapshot.active.url;

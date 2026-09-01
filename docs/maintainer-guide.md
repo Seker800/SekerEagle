@@ -21,6 +21,7 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 3. [`operations-runbook.md`](operations-runbook.md)：启动、诊断和停止方式。
 4. [`environment-model.md`](environment-model.md)：环境变量与安全目标。
 5. [`../AGENTS.md`](../AGENTS.md)：本仓库的强制开发规则。
+6. [`internationalization.md`](internationalization.md)：中英文词典、隐藏切换方式和错误本地化边界。
 
 ## 不能破坏的边界
 

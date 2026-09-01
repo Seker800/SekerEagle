@@ -1499,7 +1499,8 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(secondCard);
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('目标文件夹不可写');
+    expect(await screen.findByRole('alert')).toHaveTextContent('批量下载原文件失败。');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('目标文件夹不可写');
   });
 
   it('primes selected originals and starts them on the first drag gesture', async () => {

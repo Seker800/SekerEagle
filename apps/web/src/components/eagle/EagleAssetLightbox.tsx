@@ -1,29 +1,26 @@
+import { t } from '../../i18n';
 import { useEffect, useRef } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { getEagleAssetContentUrl, type EagleAssetListItem } from '../../lib/eagle-api';
 import { getEaglePreviewContentUrl } from './eagle-media-sources';
 import styles from './EagleAssetLightbox.module.css';
-
 interface EagleAssetLightboxProps {
   asset: EagleAssetListItem;
   onClose: () => void;
 }
-
 export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     dialogRef.current?.focus();
   }, []);
   const previewUrl = getEaglePreviewContentUrl(asset);
-
   return (
     <div
       ref={dialogRef}
       className={styles.backdrop}
       role="dialog"
       aria-modal="true"
-      aria-label="素材大图预览"
+      aria-label={t('素材大图预览')}
       tabIndex={-1}
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose();
@@ -38,7 +35,7 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
               : asset.format.toUpperCase()}
           </span>
         </div>
-        <button type="button" aria-label="关闭大图预览" onClick={onClose}>
+        <button type="button" aria-label={t('关闭大图预览')} onClick={onClose}>
           <IconX size={22} />
         </button>
       </header>
@@ -47,7 +44,9 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
           <video
             className={styles.videoPlayer}
             src={getEagleAssetContentUrl(asset.id)}
-            aria-label={`播放 ${asset.displayName}`}
+            aria-label={t('播放 {{value1}}', {
+              value1: asset.displayName,
+            })}
             controls
             autoPlay
             playsInline
@@ -60,10 +59,10 @@ export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) 
             onClick={(event) => event.stopPropagation()}
           />
         ) : (
-          <p>预览图尚未生成</p>
+          <p>{t('预览图尚未生成')}</p>
         )}
       </div>
-      <footer>Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览</footer>
+      <footer>{t('Esc 关闭 · 双击素材或按 Enter 进入详情 · Space 快速预览')}</footer>
     </div>
   );
 }

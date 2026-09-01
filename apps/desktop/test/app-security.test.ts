@@ -89,7 +89,8 @@ describe('desktop server and navigation security', () => {
     expect(main).toMatch(
       /desktop:reset-deployment-binding'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
     );
-    expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager')");
+    expect(preload).toContain("ipcRenderer.invoke('desktop:open-connection-manager', locale)");
+    expect(main).toContain('normalizeDesktopLocale(requestedLocale ?? desktopLocale)');
     expect(preload).toContain("ipcRenderer.invoke('desktop:test-connections'");
     expect(preload).not.toContain('shell.openExternal');
   });
@@ -168,7 +169,7 @@ describe('desktop server and navigation security', () => {
       readFile(new URL('../src/main/main.ts', import.meta.url), 'utf8'),
       readFile(new URL('../src/preload/preload.ts', import.meta.url), 'utf8'),
     ]);
-    expect(main).toContain("ipcMain.handle('desktop:download-original-files'");
+    expect(main).toMatch(/ipcMain\.handle\(\s*'desktop:download-original-files'/u);
     expect(main).toMatch(
       /desktop:download-original-files'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
     );

@@ -52,8 +52,8 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   resetDeploymentBinding() {
     return ipcRenderer.invoke('desktop:reset-deployment-binding');
   },
-  openConnectionManager() {
-    return ipcRenderer.invoke('desktop:open-connection-manager');
+  openConnectionManager(locale?: 'zh-CN' | 'en-US') {
+    return ipcRenderer.invoke('desktop:open-connection-manager', locale);
   },
   cancelConnectionManager() {
     return ipcRenderer.invoke('desktop:cancel-connection-manager');
@@ -71,11 +71,15 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   startPreparedAssetDrag(token: unknown) {
     ipcRenderer.send('desktop:start-prepared-asset-drag', parsePreparedDragToken(token));
   },
-  async saveOriginalFile(assetId: unknown): Promise<{ saved: boolean }> {
+  async saveOriginalFile(
+    assetId: unknown,
+    locale?: 'zh-CN' | 'en-US',
+  ): Promise<{ saved: boolean }> {
     const [validatedAssetId] = parseAssetDragInput([assetId]);
     const result: unknown = await ipcRenderer.invoke(
       'desktop:save-original-file',
       validatedAssetId,
+      locale,
     );
     if (
       !result ||
@@ -87,12 +91,16 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
     }
     return { saved: result.saved };
   },
-  async downloadOriginalFiles(assetIds: unknown): Promise<{ downloaded: number }> {
+  async downloadOriginalFiles(
+    assetIds: unknown,
+    locale?: 'zh-CN' | 'en-US',
+  ): Promise<{ downloaded: number }> {
     const validatedAssetIds = parseAssetDragInput(assetIds);
     if (validatedAssetIds.length < 2) throw new Error('批量下载至少需要选择 2 项素材。');
     const result: unknown = await ipcRenderer.invoke(
       'desktop:download-original-files',
       validatedAssetIds,
+      locale,
     );
     const downloaded =
       result && typeof result === 'object' && 'downloaded' in result ? result.downloaded : null;

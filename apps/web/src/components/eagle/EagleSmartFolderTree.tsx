@@ -1,24 +1,22 @@
+import { t } from '../../i18n';
 import { useMemo, useState, type CSSProperties, type DragEvent, type MouseEvent } from 'react';
 import { IconFolderBolt, IconPalette, IconSettings } from '@tabler/icons-react';
 import type { EagleSmartFolder } from '../../lib/eagle-api';
 import styles from './EagleSmartFolderTree.module.css';
-
 const SMART_FOLDER_COLORS = [
-  { name: '无色', value: null },
-  { name: '红色', value: '#e35d6a' },
-  { name: '橙色', value: '#e09a4f' },
-  { name: '黄色', value: '#d6bd52' },
-  { name: '绿色', value: '#65ad78' },
-  { name: '蓝色', value: '#5f91d8' },
-  { name: '紫色', value: '#9674cf' },
+  { name: t('无色'), value: null },
+  { name: t('红色'), value: '#e35d6a' },
+  { name: t('橙色'), value: '#e09a4f' },
+  { name: t('黄色'), value: '#d6bd52' },
+  { name: t('绿色'), value: '#65ad78' },
+  { name: t('蓝色'), value: '#5f91d8' },
+  { name: t('紫色'), value: '#9674cf' },
 ] as const;
-
 export interface MoveEagleSmartFolderInput {
   parentId: string | null;
   position: number;
   rowVersion: number;
 }
-
 interface EagleSmartFolderTreeProps {
   folders: EagleSmartFolder[];
   activeFolderId: string | null;
@@ -28,13 +26,14 @@ interface EagleSmartFolderTreeProps {
   onChangeColor: (folder: EagleSmartFolder, color: string | null) => void;
   onEdit: (folder: EagleSmartFolder) => void;
 }
-
-type FolderContextMenu = { folder: EagleSmartFolder; x: number; y: number };
-
+type FolderContextMenu = {
+  folder: EagleSmartFolder;
+  x: number;
+  y: number;
+};
 function compareFolders(left: EagleSmartFolder, right: EagleSmartFolder) {
   return left.position - right.position || left.id.localeCompare(right.id);
 }
-
 export function EagleSmartFolderTree({
   folders,
   activeFolderId,
@@ -66,19 +65,16 @@ export function EagleSmartFolderTree({
     result.forEach((children) => children.sort(compareFolders));
     return result;
   }, [folders]);
-
   const beginDrag = (event: DragEvent<HTMLDivElement>, folder: EagleSmartFolder) => {
     setDraggedFolderId(folder.id);
     setContextMenu(null);
     event.dataTransfer?.setData('text/plain', folder.id);
     if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
   };
-
   const finishDrag = () => {
     setDraggedFolderId(null);
     setDropTarget(null);
   };
-
   const moveRelativeTo = (
     event: DragEvent<HTMLElement>,
     target: EagleSmartFolder,
@@ -100,7 +96,6 @@ export function EagleSmartFolderTree({
     });
     finishDrag();
   };
-
   const moveInside = (event: DragEvent<HTMLDivElement>, parent: EagleSmartFolder) => {
     event.preventDefault();
     event.stopPropagation();
@@ -121,12 +116,10 @@ export function EagleSmartFolderTree({
     });
     finishDrag();
   };
-
   const openContextMenu = (event: MouseEvent, folder: EagleSmartFolder) => {
     event.preventDefault();
     setContextMenu({ folder, x: event.clientX, y: event.clientY });
   };
-
   const renderDropZone = (folder: EagleSmartFolder, placement: 'before' | 'after') => {
     const key = `${placement}-${folder.id}`;
     return (
@@ -139,7 +132,6 @@ export function EagleSmartFolderTree({
       />
     );
   };
-
   const renderFolder = (folder: EagleSmartFolder, level: 1 | 2) => (
     <div
       key={folder.id}
@@ -172,10 +164,9 @@ export function EagleSmartFolderTree({
       </button>
     </div>
   );
-
   return (
     <>
-      <div className={styles.tree} role="tree" aria-label="智能文件夹">
+      <div className={styles.tree} role="tree" aria-label={t('智能文件夹')}>
         {roots.map((root) => {
           const children = childrenByParent.get(root.id) ?? [];
           return (
@@ -199,7 +190,7 @@ export function EagleSmartFolderTree({
           <button
             className={styles.menuDismiss}
             type="button"
-            aria-label="关闭智能文件夹操作菜单"
+            aria-label={t('关闭智能文件夹操作菜单')}
             onClick={() => setContextMenu(null)}
             onContextMenu={(event) => {
               event.preventDefault();
@@ -209,14 +200,14 @@ export function EagleSmartFolderTree({
           <div
             className={styles.menu}
             role="menu"
-            aria-label="智能文件夹操作"
+            aria-label={t('智能文件夹操作')}
             style={{ left: contextMenu.x, top: contextMenu.y }}
           >
             <button
               className={styles.editAction}
               type="button"
               role="menuitem"
-              aria-label="修改文件夹参数"
+              aria-label={t('修改文件夹参数')}
               disabled={busy}
               onClick={() => {
                 onEdit(contextMenu.folder);
@@ -224,11 +215,11 @@ export function EagleSmartFolderTree({
               }}
             >
               <IconSettings size={14} />
-              修改文件夹参数…
+              {' ' + t('修改文件夹参数…') + ' '}
             </button>
             <div className={styles.menuTitle}>
               <IconPalette size={14} />
-              修改文件夹颜色
+              {' ' + t('修改文件夹颜色') + ' '}
             </div>
             <div className={styles.palette}>
               {SMART_FOLDER_COLORS.map((color) => (
@@ -236,7 +227,9 @@ export function EagleSmartFolderTree({
                   key={color.name}
                   type="button"
                   role="menuitemradio"
-                  aria-label={`设为${color.name}`}
+                  aria-label={t('设为{{value1}}', {
+                    value1: color.name,
+                  })}
                   aria-checked={contextMenu.folder.color === color.value}
                   disabled={busy}
                   style={{ '--palette-color': color.value ?? '#4b5058' } as CSSProperties}

@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { IconMinus, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import {
@@ -16,14 +17,12 @@ import {
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import styles from './EagleRuleBuilder.module.css';
-
 interface EagleRuleBuilderProps {
   value: EagleFilterQuery;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
   onChange: (value: EagleFilterQuery) => void;
 }
-
 export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleRuleBuilderProps) {
   const replaceCondition = (conditionId: string, next: EagleFilterCondition) =>
     onChange({
@@ -32,19 +31,16 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
         condition.id === conditionId ? next : condition,
       ),
     });
-
   const insertCondition = (index: number) => {
     if (value.conditions.length >= EAGLE_FILTER_MAX_CONDITIONS) return;
     const conditions = [...value.conditions];
     conditions.splice(index + 1, 0, createEagleFilterCondition());
     onChange({ ...value, conditions });
   };
-
   const removeCondition = (conditionId: string) => {
     const conditions = value.conditions.filter((condition) => condition.id !== conditionId);
     onChange({ ...value, conditions });
   };
-
   const addFirstCondition = () => {
     const condition = createEagleFilterCondition();
     onChange({
@@ -57,31 +53,34 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
       ],
     });
   };
-
   return (
-    <div className={styles.builder} aria-label="筛选规则编辑器">
+    <div className={styles.builder} aria-label={t('筛选规则编辑器')}>
       {value.conditions.length === 0 ? (
         <button
           className={styles.addFirstCondition}
           type="button"
-          aria-label="添加筛选条件"
+          aria-label={t('添加筛选条件')}
           onClick={addFirstCondition}
         >
           <IconPlus size={17} />
-          添加筛选条件
+          {' ' + t('添加筛选条件') + ' '}
         </button>
       ) : null}
       {value.conditions.map((condition, conditionIndex) => (
         <section
           className={styles.condition}
           key={condition.id}
-          aria-label={`条件组 ${conditionIndex + 1}`}
+          aria-label={t('条件组 {{value1}}', {
+            value1: conditionIndex + 1,
+          })}
         >
           <header className={styles.conditionHeader}>
             <div className={styles.conditionSentence}>
-              {conditionIndex > 0 ? <span>并且</span> : null}
+              {conditionIndex > 0 ? <span>{t('并且')}</span> : null}
               <select
-                aria-label={`条件组 ${conditionIndex + 1} 匹配方式`}
+                aria-label={t('条件组 {{value1}} 匹配方式', {
+                  value1: conditionIndex + 1,
+                })}
                 value={condition.match}
                 onChange={(event) =>
                   replaceCondition(condition.id, {
@@ -90,12 +89,14 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
                   })
                 }
               >
-                <option value="ANY">任一项</option>
-                <option value="ALL">全部</option>
+                <option value="ANY">{t('任一项')}</option>
+                <option value="ALL">{t('全部')}</option>
               </select>
-              <span>条件</span>
+              <span>{t('条件')}</span>
               <select
-                aria-label={`条件组 ${conditionIndex + 1} 结果方式`}
+                aria-label={t('条件组 {{value1}} 结果方式', {
+                  value1: conditionIndex + 1,
+                })}
                 value={condition.result}
                 onChange={(event) =>
                   replaceCondition(condition.id, {
@@ -104,21 +105,25 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
                   })
                 }
               >
-                <option value="MATCH">满足</option>
-                <option value="NOT_MATCH">不满足</option>
+                <option value="MATCH">{t('满足')}</option>
+                <option value="NOT_MATCH">{t('不满足')}</option>
               </select>
             </div>
             <div className={styles.conditionActions}>
               <button
                 type="button"
-                aria-label={`删除条件组 ${conditionIndex + 1}`}
+                aria-label={t('删除条件组 {{value1}}', {
+                  value1: conditionIndex + 1,
+                })}
                 onClick={() => removeCondition(condition.id)}
               >
                 <IconMinus size={17} />
               </button>
               <button
                 type="button"
-                aria-label={`在条件组 ${conditionIndex + 1} 后添加条件组`}
+                aria-label={t('在条件组 {{value1}} 后添加条件组', {
+                  value1: conditionIndex + 1,
+                })}
                 disabled={value.conditions.length >= EAGLE_FILTER_MAX_CONDITIONS}
                 onClick={() => insertCondition(conditionIndex)}
               >
@@ -162,7 +167,6 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
     </div>
   );
 }
-
 interface RuleRowProps {
   condition: EagleFilterCondition;
   rule: EagleFilterRule;
@@ -173,7 +177,6 @@ interface RuleRowProps {
   onAdd: () => void;
   onRemove: () => void;
 }
-
 function RuleRow({
   condition,
   rule,
@@ -187,12 +190,18 @@ function RuleRow({
   const definition = getEagleFilterFieldDefinition(rule.field);
   const hideValue = rule.operator === 'EMPTY' || rule.operator === 'NOT_EMPTY';
   const changeField = (field: EagleFilterField) => onChange(createEagleFilterRule(field, rule.id));
-
   return (
-    <div className={styles.rule} aria-label={`规则 ${ruleIndex + 1}`}>
+    <div
+      className={styles.rule}
+      aria-label={t('规则 {{value1}}', {
+        value1: ruleIndex + 1,
+      })}
+    >
       <select
         className={styles.fieldSelect}
-        aria-label={`规则 ${ruleIndex + 1} 字段`}
+        aria-label={t('规则 {{value1}} 字段', {
+          value1: ruleIndex + 1,
+        })}
         value={rule.field}
         onChange={(event) => changeField(event.target.value as EagleFilterField)}
       >
@@ -204,7 +213,9 @@ function RuleRow({
       </select>
       <select
         className={styles.operatorSelect}
-        aria-label={`规则 ${ruleIndex + 1} 运算符`}
+        aria-label={t('规则 {{value1}} 运算符', {
+          value1: ruleIndex + 1,
+        })}
         value={rule.operator}
         onChange={(event) =>
           onChange(changeRuleOperator(rule, event.target.value as EagleFilterRule['operator']))
@@ -222,12 +233,20 @@ function RuleRow({
         )}
       </div>
       <div className={styles.ruleActions}>
-        <button type="button" aria-label={`删除规则 ${ruleIndex + 1}`} onClick={onRemove}>
+        <button
+          type="button"
+          aria-label={t('删除规则 {{value1}}', {
+            value1: ruleIndex + 1,
+          })}
+          onClick={onRemove}
+        >
           <IconMinus size={17} />
         </button>
         <button
           type="button"
-          aria-label={`在规则 ${ruleIndex + 1} 后添加规则`}
+          aria-label={t('在规则 {{value1}} 后添加规则', {
+            value1: ruleIndex + 1,
+          })}
           disabled={condition.rules.length >= EAGLE_FILTER_MAX_RULES_PER_CONDITION}
           onClick={onAdd}
         >
@@ -237,7 +256,6 @@ function RuleRow({
     </div>
   );
 }
-
 function changeRuleOperator(
   rule: EagleFilterRule,
   operator: EagleFilterRule['operator'],
@@ -257,7 +275,6 @@ function changeRuleOperator(
   }
   return { ...rule, operator };
 }
-
 function RuleValue({
   rule,
   manualTags,
@@ -283,7 +300,9 @@ function RuleValue({
   if (definition.kind === 'SELECT') {
     return (
       <select
-        aria-label={`${definition.label}值`}
+        aria-label={t('{{value1}}值', {
+          value1: definition.label,
+        })}
         value={String(rule.value ?? definition.options?.[0]?.value ?? '')}
         onChange={(event) => onChange({ ...rule, value: event.target.value })}
       >
@@ -301,13 +320,13 @@ function RuleValue({
       <label className={styles.colorValue}>
         <input
           type="color"
-          aria-label="筛选颜色"
+          aria-label={t('筛选颜色')}
           value={value}
           onChange={(event) => onChange({ ...rule, value: event.target.value })}
         />
         <input
           type="text"
-          aria-label="筛选颜色值"
+          aria-label={t('筛选颜色值')}
           maxLength={7}
           value={value}
           onChange={(event) => onChange({ ...rule, value: event.target.value })}
@@ -330,7 +349,9 @@ function RuleValue({
       <div className={styles.betweenValue}>
         <input
           type="date"
-          aria-label={`${definition.label}起始值`}
+          aria-label={t('{{value1}}起始值', {
+            value1: definition.label,
+          })}
           value={String(values[0] ?? '').slice(0, 10)}
           onChange={(event) =>
             onChange({
@@ -347,7 +368,9 @@ function RuleValue({
             <span>—</span>
             <input
               type="date"
-              aria-label={`${definition.label}结束值`}
+              aria-label={t('{{value1}}结束值', {
+                value1: definition.label,
+              })}
               value={String(values[1] ?? '').slice(0, 10)}
               onChange={(event) =>
                 onChange({ ...rule, value: [String(values[0] ?? ''), event.target.value] })
@@ -361,13 +384,14 @@ function RuleValue({
   return (
     <input
       type="text"
-      aria-label={`${definition.label}值`}
+      aria-label={t('{{value1}}值', {
+        value1: definition.label,
+      })}
       value={typeof rule.value === 'string' ? rule.value : ''}
       onChange={(event) => onChange({ ...rule, value: event.target.value })}
     />
   );
 }
-
 function NumberRuleValue({
   rule,
   showUnit,
@@ -390,7 +414,9 @@ function NumberRuleValue({
       <input
         type="number"
         min="0"
-        aria-label={`${definition.label}数值`}
+        aria-label={t('{{value1}}数值', {
+          value1: definition.label,
+        })}
         value={Number(values[0] ?? 0)}
         onChange={(event) => update(0, event.target.value)}
       />
@@ -400,7 +426,9 @@ function NumberRuleValue({
           <input
             type="number"
             min="0"
-            aria-label={`${definition.label}结束数值`}
+            aria-label={t('{{value1}}结束数值', {
+              value1: definition.label,
+            })}
             value={Number(values[1] ?? 0)}
             onChange={(event) => update(1, event.target.value)}
           />
@@ -408,7 +436,9 @@ function NumberRuleValue({
       )}
       {showUnit && (
         <select
-          aria-label={`${definition.label}单位`}
+          aria-label={t('{{value1}}单位', {
+            value1: definition.label,
+          })}
           value={rule.unit ?? definition.units?.[0]?.value}
           onChange={(event) =>
             onChange({ ...rule, unit: event.target.value as NonNullable<EagleFilterRule['unit']> })
@@ -424,9 +454,7 @@ function NumberRuleValue({
     </div>
   );
 }
-
 type RuleTag = EagleManualTag | EagleAiTag;
-
 function RuleTagPicker({
   label,
   tags,
@@ -449,19 +477,25 @@ function RuleTagPicker({
   );
   const toggle = (id: string) =>
     onChange(value.includes(id) ? value.filter((candidate) => candidate !== id) : [...value, id]);
-
   return (
     <details className={styles.tagPicker}>
-      <summary aria-label={`选择${label}`}>
+      <summary
+        aria-label={t('选择{{value1}}', {
+          value1: label,
+        })}
+      >
         {value.length ? (
           <span className={styles.tagTokens}>
             {value.slice(0, 3).map((id) => (
-              <span key={id}>{tagsById.get(id)?.name ?? '未知标签'}</span>
+              <span key={id}>{tagsById.get(id)?.name ?? t('未知标签')}</span>
             ))}
             {value.length > 3 && <span>+{value.length - 3}</span>}
           </span>
         ) : (
-          <span className={styles.tagPlaceholder}>选择{label}…</span>
+          <span className={styles.tagPlaceholder}>
+            {t('选择')}
+            {label}…
+          </span>
         )}
       </summary>
       <div className={styles.tagMenu}>
@@ -469,13 +503,21 @@ function RuleTagPicker({
           <IconSearch size={14} />
           <input
             type="search"
-            aria-label={`搜索${label}`}
-            placeholder="搜索…"
+            aria-label={t('搜索{{value1}}', {
+              value1: label,
+            })}
+            placeholder={t('搜索…')}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           {search && (
-            <button type="button" aria-label={`清除${label}搜索`} onClick={() => setSearch('')}>
+            <button
+              type="button"
+              aria-label={t('清除{{value1}}搜索', {
+                value1: label,
+              })}
+              onClick={() => setSearch('')}
+            >
               <IconX size={13} />
             </button>
           )}
@@ -492,7 +534,7 @@ function RuleTagPicker({
               <small>{tag.assetCount}</small>
             </label>
           ))}
-          {!visibleTags.length && <p>没有匹配标签</p>}
+          {!visibleTags.length && <p>{t('没有匹配标签')}</p>}
         </div>
       </div>
     </details>

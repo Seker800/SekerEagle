@@ -1,10 +1,10 @@
+import { t } from '../../i18n';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { IconPlus, IconSearch, IconTags, IconX } from '@tabler/icons-react';
 import type { EagleManualTag } from '../../lib/eagle-api';
-import { searchAndSortEagleTags } from './eagle-tag-index';
+import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { EagleVirtualList } from './EagleVirtualList';
 import styles from './EagleBatchTagPicker.module.css';
-
 interface EagleBatchTagPickerProps {
   mode?: 'add' | 'remove';
   assetCount: number;
@@ -16,7 +16,6 @@ interface EagleBatchTagPickerProps {
   onCreate?: (name: string) => Promise<EagleManualTag>;
   onClose: () => void;
 }
-
 export function EagleBatchTagPicker({
   mode = 'add',
   assetCount,
@@ -29,7 +28,7 @@ export function EagleBatchTagPicker({
   onClose,
 }: EagleBatchTagPickerProps) {
   const isRemoving = mode === 'remove';
-  const dialogTitle = isRemoving ? '删除人工标签' : '添加标签';
+  const dialogTitle = isRemoving ? t('删除人工标签') : t('添加标签');
   const [query, setQuery] = useState('');
   const [createdTags, setCreatedTags] = useState<EagleManualTag[]>([]);
   const [isCreating, setIsCreating] = useState(false);
@@ -54,16 +53,15 @@ export function EagleBatchTagPicker({
     [visibleTags],
   );
   const trimmedQuery = query.trim();
-  const normalizedQuery = trimmedQuery.toLocaleLowerCase('zh-CN');
+  const normalizedQuery = normalizeEagleTagSearchText(trimmedQuery);
   const canCreate = Boolean(
     !isRemoving &&
     onCreate &&
     trimmedQuery &&
     visibleTags.length === 0 &&
     trimmedQuery.length <= 64 &&
-    !allTags.some((tag) => tag.name.trim().toLocaleLowerCase('zh-CN') === normalizedQuery),
+    !allTags.some((tag) => normalizeEagleTagSearchText(tag.name) === normalizedQuery),
   );
-
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -73,18 +71,15 @@ export function EagleBatchTagPicker({
     window.addEventListener('keydown', closeOnEscape);
     return () => window.removeEventListener('keydown', closeOnEscape);
   }, [onClose]);
-
   const toggleTag = (tagId: string) => {
     setSelectedTagIds((current) =>
       current.includes(tagId) ? current.filter((id) => id !== tagId) : [...current, tagId],
     );
   };
-
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (selectedTagIds.length > 0) onApply(selectedTagIds);
   };
-
   const createTag = async () => {
     if (!onCreate || !canCreate) return;
     setIsCreating(true);
@@ -99,7 +94,6 @@ export function EagleBatchTagPicker({
       setIsCreating(false);
     }
   };
-
   return (
     <div
       className={styles.backdrop}
@@ -117,9 +111,12 @@ export function EagleBatchTagPicker({
           <div>
             <IconTags size={19} />
             <h2>{dialogTitle}</h2>
-            <span>{assetCount} 项素材</span>
+            <span>
+              {assetCount}
+              {' ' + t('项素材')}
+            </span>
           </div>
-          <button type="button" aria-label="关闭标签选择" onClick={onClose}>
+          <button type="button" aria-label={t('关闭标签选择')} onClick={onClose}>
             <IconX size={18} />
           </button>
         </header>
@@ -128,8 +125,8 @@ export function EagleBatchTagPicker({
           <input
             autoFocus
             type="search"
-            aria-label={isRemoving ? '搜索可删除标签' : '搜索可添加标签'}
-            placeholder="搜索名称、拼音或首字母"
+            aria-label={isRemoving ? t('搜索可删除标签') : t('搜索可添加标签')}
+            placeholder={t('搜索名称、拼音或首字母')}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
@@ -139,23 +136,26 @@ export function EagleBatchTagPicker({
             <button
               className={styles.createTag}
               type="button"
-              aria-label={`创建标签 ${trimmedQuery}`}
+              aria-label={t('创建标签 {{value1}}', {
+                value1: trimmedQuery,
+              })}
               disabled={isCreating || pending}
               onClick={() => void createTag()}
             >
               <IconPlus size={15} />
-              创建“{trimmedQuery}”
+              {' ' + t('创建“')}
+              {trimmedQuery}”
             </button>
           )}
           <div className={`${styles.tagColumns} ${isRemoving ? styles.tagColumnsSingle : ''}`}>
             <section
               className={styles.tagColumn}
-              aria-label={isRemoving ? '可删除标签' : '所有标签'}
+              aria-label={isRemoving ? t('可删除标签') : t('所有标签')}
             >
-              <h3>{isRemoving ? '可删除标签' : '所有标签'}</h3>
+              <h3>{isRemoving ? t('可删除标签') : t('所有标签')}</h3>
               {visibleTags.length > 0 ? (
                 <EagleVirtualList
-                  ariaLabel={isRemoving ? '可删除标签列表' : '所有标签列表'}
+                  ariaLabel={isRemoving ? t('可删除标签列表') : t('所有标签列表')}
                   className={styles.virtualTagList}
                   items={visibleTags}
                   itemKey={({ tag }) => tag.id}
@@ -174,16 +174,16 @@ export function EagleBatchTagPicker({
                 />
               ) : (
                 <div className={styles.empty}>
-                  {isRemoving && !query ? '所选素材没有人工标签' : '没有匹配的标签'}
+                  {isRemoving && !query ? t('所选素材没有人工标签') : t('没有匹配的标签')}
                 </div>
               )}
             </section>
             {!isRemoving && (
-              <section className={styles.tagColumn} aria-label="最近使用">
-                <h3>最近使用</h3>
+              <section className={styles.tagColumn} aria-label={t('最近使用')}>
+                <h3>{t('最近使用')}</h3>
                 {recentTags.length > 0 ? (
                   <EagleVirtualList
-                    ariaLabel="最近使用标签列表"
+                    ariaLabel={t('最近使用标签列表')}
                     className={styles.virtualTagList}
                     items={recentTags}
                     itemKey={({ tag }) => tag.id}
@@ -201,7 +201,7 @@ export function EagleBatchTagPicker({
                   />
                 ) : (
                   <div className={styles.empty}>
-                    {query ? '没有匹配的最近标签' : '还没有最近使用的标签'}
+                    {query ? t('没有匹配的最近标签') : t('还没有最近使用的标签')}
                   </div>
                 )}
               </section>
@@ -216,30 +216,37 @@ export function EagleBatchTagPicker({
         <footer>
           <span>
             {selectedTagIds.length > 0
-              ? `已选择 ${selectedTagIds.length} 个标签`
-              : '选择一个或多个标签'}
+              ? t('已选择 {{value1}} 个标签', {
+                  value1: selectedTagIds.length,
+                })
+              : t('选择一个或多个标签')}
           </span>
           <button type="button" onClick={onClose}>
-            取消
+            {' ' + t('取消') + ' '}
           </button>
           <button
             className={styles.primary}
             type="submit"
             aria-label={
               isRemoving
-                ? `从 ${assetCount} 项素材删除 ${selectedTagIds.length} 个标签`
-                : `添加 ${selectedTagIds.length} 个标签到 ${assetCount} 项素材`
+                ? t('从 {{value1}} 项素材删除 {{value2}} 个标签', {
+                    value1: assetCount,
+                    value2: selectedTagIds.length,
+                  })
+                : t('添加 {{value1}} 个标签到 {{value2}} 项素材', {
+                    value1: selectedTagIds.length,
+                    value2: assetCount,
+                  })
             }
             disabled={selectedTagIds.length === 0 || pending || isCreating}
           >
-            {isRemoving ? '删除' : '添加'}
+            {isRemoving ? t('删除') : t('添加')}
           </button>
         </footer>
       </form>
     </div>
   );
 }
-
 function BatchTagOption({
   tag,
   selected,
@@ -261,7 +268,13 @@ function BatchTagOption({
     <label className={styles.tagOption}>
       <input
         type="checkbox"
-        aria-label={recent ? `${tag.name}（最近使用）` : tag.name}
+        aria-label={
+          recent
+            ? t('{{value1}}（最近使用）', {
+                value1: tag.name,
+              })
+            : tag.name
+        }
         checked={selected}
         onChange={() => onToggle(tag.id)}
       />

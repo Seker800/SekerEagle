@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>A place for every spark of inspiration.</strong><br />
-  A self-hosted image and video library with web capture, Eagle migration, desktop, and web apps.
+  A self-hosted image and video library that finds images from fuzzy descriptions and learns from your manual tags.
 </p>
 
 <p align="center">
@@ -23,6 +23,7 @@
 
 <p align="center">
   <a href="#product-components">Components</a> ·
+  <a href="#two-signature-experiences">Core experiences</a> ·
   <a href="#features">Features</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#migrating-from-eagle">Eagle migration</a> ·
@@ -30,6 +31,29 @@
   <a href="#architecture-and-data-boundaries">Architecture</a> ·
   <a href="#documentation">Documentation</a>
 </p>
+
+## Two signature experiences
+
+### 🔎 Fuzzy search: find an image without remembering its exact name or tag
+
+Search with an approximate concept. If AI tagged assets as “sedan” or “sports car,” a search for
+“car” can still find them. SekerEagle combines filenames, manual tags, automatically generated AI
+tags, and semantic similarity between tag embeddings. Exact matches rank first, followed by
+semantically related results. Ollama generates tags locally, while the MLX service computes text
+and tag embeddings; your assets do not need to leave your machine.
+
+### 🗂️ Automatic image classification: make manual tags smarter over time
+
+Manually label a small set of representative images. SekerEagle groups their visual embeddings
+into one or more prototype centers for each tag, then proposes a category for new images according
+to their distance from those centers. Review, adjust, reject, or batch-confirm suggestions by
+similarity, and handle uncertain images directly. Manual tags remain the source of truth while the
+model removes repetitive sorting work. The complete workflow—from embeddings and prototype builds
+to distance inspection and batch review—is available today.
+
+> Both are optional local-AI features and remain disabled by default, so regular uploads and
+> browsing do not depend on them. See the
+> [vector and manual-tag workflow](docs/operations-runbook.md#图片向量与人工标签建议) (Chinese).
 
 ## Product components
 
@@ -106,7 +130,9 @@ telemetry enabled by default.
 
 - Browse with a responsive masonry layout, adjustable thumbnail sizes, and a bounded DOM designed
   for large libraries.
-- Search by name or tag and combine filters for color, tag, shape, rating, format, and AI tags.
+- Use fuzzy search across filenames, manual tags, AI-generated tags, and semantically related tags,
+  with exact results ranked first.
+- Combine filters for color, tag, shape, rating, format, and AI tags.
 - Organize manual tags with colors, groups, favorites, Pinyin indexing, search, and batch assignment.
 - Build smart folders with combined rules, live result counts, and a folder tree; matching assets
   appear automatically.
@@ -125,8 +151,8 @@ telemetry enabled by default.
 ### Optional local AI features
 
 - Run a pinned Qwen3-VL-Embedding-2B MLX sidecar on Apple Silicon.
-- Generate local 1024-dimensional image embeddings and suggest tags based on labels the user has
-  already confirmed.
+- Generate local 1024-dimensional image embeddings, aggregate manually classified examples into
+  tag prototype centers, and propose reviewable classifications by distance.
 - Keep every tag opted out by default; suggestions start only after the user explicitly enables a
   tag and builds its prototype center.
 - Use Qwen3-VL 8B Instruct through a local Ollama runtime to generate concrete noun tags and expand
@@ -168,8 +194,8 @@ photo management project instead.
 | Web asset library          |          ✅          | Desktop browsers first                                                    |
 | Chrome browser capture     |          ✅          | Unpacked Manifest V3 extension                                            |
 | Eagle snapshot migration   |          ✅          | Local CLI plus Eagle export plugin                                        |
-| Local MLX vectors          |       Optional       | Requires Apple Silicon, `uv`, and a model download                        |
-| Ollama automatic noun tags |       Optional       | Requires local Ollama and `qwen3-vl:8b-instruct`                          |
+| Local MLX classification   |  ✅ Optional, ready  | Available; requires Apple Silicon, `uv`, and a model download             |
+| AI tags and fuzzy search   |  ✅ Optional, ready  | Available; requires local Ollama and `qwen3-vl:8b-instruct`               |
 | Linux / x64                |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
 | Native mobile app          |          ❌          | Not currently available                                                   |
 

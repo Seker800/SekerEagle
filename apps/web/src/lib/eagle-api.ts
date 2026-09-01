@@ -1,8 +1,9 @@
+import { t } from '../i18n';
+import { errorFromResponse } from './api-error';
 import type { EagleFilterQuery, LegacyEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { fetchWithBrowserSession } from './api-client';
 import { resolveEagleRenditionUrl } from './media-resolver';
 import { resolveObjectUploadUrl } from './object-upload-url';
-
 export interface EagleRendition {
   id: string;
   kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
@@ -12,7 +13,6 @@ export interface EagleRendition {
   width: number | null;
   height: number | null;
 }
-
 export interface EagleManualTagRef {
   id: string;
   name: string;
@@ -63,7 +63,11 @@ export interface EagleAssetListItem {
   manualTags: EagleManualTagRef[];
 }
 export interface EagleAsset extends EagleAssetListItem {
-  annotation: { color: string | null; description: string | null; sourceUrl: string | null } | null;
+  annotation: {
+    color: string | null;
+    description: string | null;
+    sourceUrl: string | null;
+  } | null;
   aiTags: EagleAiTagRef[];
   colorAnalysis: EagleColorAnalysis | null;
 }
@@ -76,7 +80,12 @@ export interface EagleAssetUpdate {
 }
 export interface EagleMediaCapabilities {
   version: 1;
-  images: { mimeTypes: string[]; extensions: string[]; maxBytes: number; maxPixels: number };
+  images: {
+    mimeTypes: string[];
+    extensions: string[];
+    maxBytes: number;
+    maxPixels: number;
+  };
   videos: {
     mimeTypes: string[];
     extensions: string[];
@@ -182,23 +191,17 @@ export type EagleSmartFolderFilters = Omit<
   assetColor?: string;
   tagMatch?: 'ANY' | 'ALL';
 };
-
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithBrowserSession(`/api${path}`, {
     ...init,
     headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      message?: string | string[];
-    } | null;
-    const message = Array.isArray(body?.message) ? body.message.join('；') : body?.message;
-    throw new Error(message ?? `请求失败（${response.status}）`);
+    throw await errorFromResponse(response, '请求失败（{{value1}}）');
   }
   if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
-
 function assetQuery(filters: EagleAssetFilters): string {
   const query = new URLSearchParams({ limit: String(filters.limit ?? 100) });
   for (const key of [
@@ -221,7 +224,6 @@ function assetQuery(filters: EagleAssetFilters): string {
   if (filters.rules) query.set('rules', JSON.stringify(filters.rules));
   return query.toString();
 }
-
 function normalizeAsset<T extends EagleAssetListItem>(asset: T): T {
   return {
     ...asset,
@@ -230,7 +232,6 @@ function normalizeAsset<T extends EagleAssetListItem>(asset: T): T {
     colorAnalysis: 'colorAnalysis' in asset ? (asset.colorAnalysis ?? null) : null,
   };
 }
-
 export function getEagleMediaCapabilities(_accessToken: string) {
   return api<EagleMediaCapabilities>('/eagle/media-capabilities');
 }
@@ -276,9 +277,13 @@ export async function listEagleAssetUpdates(
     signal,
   });
 }
-
 function normalizeTag(
-  tag: Partial<EagleManualTag> & EagleManualTagRef & { _count?: { assetLinks: number } },
+  tag: Partial<EagleManualTag> &
+    EagleManualTagRef & {
+      _count?: {
+        assetLinks: number;
+      };
+    },
 ): EagleManualTag {
   return {
     ...tag,
@@ -297,7 +302,10 @@ export async function listEagleManualTags(_token: string) {
 }
 export async function createEagleManualTag(
   _token: string,
-  input: { name: string; color?: string | null },
+  input: {
+    name: string;
+    color?: string | null;
+  },
 ) {
   return normalizeTag(
     await api<Parameters<typeof normalizeTag>[0]>('/eagle/tags', {
@@ -329,7 +337,11 @@ export async function listEagleManualTagGroups(_token: string) {
 }
 export async function createEagleManualTagGroup(
   _token: string,
-  input: { name: string; color?: string | null; description?: string | null },
+  input: {
+    name: string;
+    color?: string | null;
+    description?: string | null;
+  },
 ) {
   return api<EagleManualTagGroup>('/eagle/tag-groups', {
     method: 'POST',
@@ -339,7 +351,12 @@ export async function createEagleManualTagGroup(
 export async function updateEagleManualTagGroup(
   _token: string,
   id: string,
-  input: { name?: string; color?: string | null; description?: string | null; rowVersion: number },
+  input: {
+    name?: string;
+    color?: string | null;
+    description?: string | null;
+    rowVersion: number;
+  },
 ) {
   return api<EagleManualTagGroup>(`/eagle/tag-groups/${id}`, {
     method: 'PATCH',
@@ -370,7 +387,10 @@ export async function listEagleSmartFolders(_token: string) {
 }
 export async function createEagleSmartFolder(
   _token: string,
-  input: { name: string; query: EagleFilterQuery },
+  input: {
+    name: string;
+    query: EagleFilterQuery;
+  },
 ) {
   return api<EagleSmartFolder>('/eagle/smart-folders', {
     method: 'POST',
@@ -392,9 +412,10 @@ export async function updateEagleSmartFolder(
     body: JSON.stringify(input),
   });
 }
-
 export async function countEagleAssets(_token: string, query: EagleFilterQuery) {
-  return api<{ count: number }>('/eagle/assets/filter-count', {
+  return api<{
+    count: number;
+  }>('/eagle/assets/filter-count', {
     method: 'POST',
     body: JSON.stringify({ query }),
   });
@@ -402,7 +423,11 @@ export async function countEagleAssets(_token: string, query: EagleFilterQuery) 
 export async function moveEagleSmartFolder(
   _token: string,
   id: string,
-  input: { parentId: string | null; position: number; rowVersion: number },
+  input: {
+    parentId: string | null;
+    position: number;
+    rowVersion: number;
+  },
 ) {
   return api<EagleSmartFolder>(`/eagle/smart-folders/${id}/move`, {
     method: 'POST',
@@ -422,30 +447,40 @@ export async function batchChangeEagleManualTags(
     clearAll?: boolean;
   },
 ) {
-  return api<{ affectedAssetCount: number }>('/eagle/assets/batch/manual-tags', {
+  return api<{
+    affectedAssetCount: number;
+  }>('/eagle/assets/batch/manual-tags', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 export async function batchTrashEagleAssets(_token: string, assetIds: string[]) {
-  return api<{ affectedAssetCount: number }>('/eagle/assets/batch/trash', {
+  return api<{
+    affectedAssetCount: number;
+  }>('/eagle/assets/batch/trash', {
     method: 'POST',
     body: JSON.stringify({ assetIds }),
   });
 }
 export async function batchRestoreEagleAssets(_token: string, assetIds: string[]) {
-  return api<{ affectedAssetCount: number }>('/eagle/assets/batch/restore', {
+  return api<{
+    affectedAssetCount: number;
+  }>('/eagle/assets/batch/restore', {
     method: 'POST',
     body: JSON.stringify({ assetIds }),
   });
 }
 export async function emptyEagleTrash(_token: string) {
-  return api<{ affectedAssetCount: number }>('/eagle/trash/empty', { method: 'POST', body: '{}' });
+  return api<{
+    affectedAssetCount: number;
+  }>('/eagle/trash/empty', { method: 'POST', body: '{}' });
 }
 export async function updateEagleAsset(
   _token: string,
   id: string,
-  input: EagleAssetChanges & { rowVersion: number },
+  input: EagleAssetChanges & {
+    rowVersion: number;
+  },
 ) {
   return normalizeAsset(
     await api<EagleAsset>(`/eagle/assets/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
@@ -453,30 +488,39 @@ export async function updateEagleAsset(
 }
 export async function batchUpdateEagleAssets(
   _token: string,
-  input: EagleAssetChanges & { assets: EagleAssetVersion[] },
+  input: EagleAssetChanges & {
+    assets: EagleAssetVersion[];
+  },
 ) {
-  return api<{ affectedAssetCount: number; assets: EagleAssetVersion[] }>('/eagle/assets/batch', {
+  return api<{
+    affectedAssetCount: number;
+    assets: EagleAssetVersion[];
+  }>('/eagle/assets/batch', {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 }
-
 export async function batchSetEagleAssetPrivacy(
   _token: string,
-  input: { assets: EagleAssetVersion[]; isPrivate: boolean },
+  input: {
+    assets: EagleAssetVersion[];
+    isPrivate: boolean;
+  },
 ) {
-  return api<{ affectedAssetCount: number; assets: EagleAssetVersion[] }>(
-    '/eagle/assets/batch/privacy',
-    { method: 'PATCH', body: JSON.stringify(input) },
-  );
+  return api<{
+    affectedAssetCount: number;
+    assets: EagleAssetVersion[];
+  }>('/eagle/assets/batch/privacy', { method: 'PATCH', body: JSON.stringify(input) });
 }
-
 export async function uploadEagleAsset(
   _token: string,
   file: File,
   onProgress: (value: { percent: number }) => void,
 ) {
-  const session = await api<{ id: string; partSize: number }>('/eagle/uploads', {
+  const session = await api<{
+    id: string;
+    partSize: number;
+  }>('/eagle/uploads', {
     method: 'POST',
     body: JSON.stringify({
       originalName: file.name,
@@ -484,15 +528,17 @@ export async function uploadEagleAsset(
       size: file.size,
     }),
   });
-  const parts: Array<{ partNumber: number; etag: string }> = [];
+  const parts: Array<{
+    partNumber: number;
+    etag: string;
+  }> = [];
   try {
     const count = Math.ceil(file.size / session.partSize);
     for (let index = 0; index < count; index += 1) {
       const partNumber = index + 1;
-      const { uploadUrl } = await api<{ uploadUrl: string }>(
-        `/eagle/uploads/${session.id}/parts/${partNumber}`,
-        { method: 'POST', body: '{}' },
-      );
+      const { uploadUrl } = await api<{
+        uploadUrl: string;
+      }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, { method: 'POST', body: '{}' });
       const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
         method: 'PUT',
         body: file.slice(
@@ -501,16 +547,24 @@ export async function uploadEagleAsset(
         ),
         credentials: 'omit',
       });
-      if (!response.ok) throw new Error(`上传分片失败（${response.status}）`);
+      if (!response.ok)
+        throw new Error(
+          t('上传分片失败（{{value1}}）', {
+            value1: response.status,
+          }),
+        );
       const etag = response.headers.get('etag');
-      if (!etag) throw new Error('对象存储未返回分片校验值。');
+      if (!etag) throw new Error(t('对象存储未返回分片校验值。'));
       parts.push({ partNumber, etag });
       onProgress({ percent: Math.round((partNumber / count) * 100) });
     }
-    const completed = await api<{ assetId: string; duplicate: boolean }>(
-      `/eagle/uploads/${session.id}/complete`,
-      { method: 'POST', body: JSON.stringify({ parts }) },
-    );
+    const completed = await api<{
+      assetId: string;
+      duplicate: boolean;
+    }>(`/eagle/uploads/${session.id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ parts }),
+    });
     return { duplicate: completed.duplicate, asset: await getEagleAsset('', completed.assetId) };
   } catch (error) {
     await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}' }).catch(

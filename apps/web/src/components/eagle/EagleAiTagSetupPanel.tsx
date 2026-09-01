@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
 import {
   fetchEagleAiTagSummary,
@@ -7,9 +8,7 @@ import {
   type EagleAiTagSummary,
 } from '../../lib/eagle-ai-tag-api';
 import styles from './EagleAiTagSetupPanel.module.css';
-
 type SavingPhase = 'idle' | 'starting' | 'stopping' | 'schedule' | 'retrying';
-
 export function EagleAiTagSetupPanel() {
   const [summary, setSummary] = useState<EagleAiTagSummary | null>(null);
   const [phase, setPhase] = useState<SavingPhase>('idle');
@@ -19,14 +18,12 @@ export function EagleAiTagSetupPanel() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [scheduleStart, setScheduleStart] = useState('23:00');
   const [scheduleEnd, setScheduleEnd] = useState('06:00');
-
   const applySettings = useCallback((settings: EagleAiTagSettings) => {
     setManualEnabled(settings.manualEnabled);
     setScheduleEnabled(settings.scheduleEnabled);
     setScheduleStart(settings.scheduleStart);
     setScheduleEnd(settings.scheduleEnd);
   }, []);
-
   const reload = useCallback(async () => {
     try {
       const next = await fetchEagleAiTagSummary();
@@ -34,22 +31,19 @@ export function EagleAiTagSetupPanel() {
       applySettings(next.settings);
       setError('');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '读取 AI 标签状态失败');
+      setError(cause instanceof Error ? cause.message : t('读取 AI 标签状态失败'));
     }
   }, [applySettings]);
-
   useEffect(() => {
     void reload();
   }, [reload]);
-
   useEffect(() => {
     if (!manualEnabled && !scheduleEnabled) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void reload();
-    }, 5_000);
+    }, 5000);
     return () => window.clearInterval(timer);
   }, [manualEnabled, reload, scheduleEnabled]);
-
   const settingsInput = (
     overrides: Partial<Omit<EagleAiTagSettings, 'timeZone'>> = {},
   ): Omit<EagleAiTagSettings, 'timeZone'> => ({
@@ -59,7 +53,6 @@ export function EagleAiTagSetupPanel() {
     scheduleEnd,
     ...overrides,
   });
-
   const saveSettings = async (
     next: Omit<EagleAiTagSettings, 'timeZone'>,
     savingPhase: SavingPhase,
@@ -75,104 +68,110 @@ export function EagleAiTagSetupPanel() {
       setNotice(success);
     } catch (cause) {
       await reload();
-      setError(cause instanceof Error ? cause.message : '保存运行设置失败');
+      setError(cause instanceof Error ? cause.message : t('保存运行设置失败'));
     } finally {
       setPhase('idle');
     }
   };
-
   const toggleManual = () => {
     const enabled = !manualEnabled;
     setManualEnabled(enabled);
     void saveSettings(
       settingsInput({ manualEnabled: enabled }),
       enabled ? 'starting' : 'stopping',
-      enabled ? '已启动，后台会在 10 秒内开始补充任务。' : '已停止领取新任务。',
+      enabled ? t('已启动，后台会在 10 秒内开始补充任务。') : t('已停止领取新任务。'),
     );
   };
-
   const toggleSchedule = () => {
     const enabled = !scheduleEnabled;
     setScheduleEnabled(enabled);
     void saveSettings(
       settingsInput({ scheduleEnabled: enabled }),
       'schedule',
-      enabled ? '每日定时已开启。' : '每日定时已关闭。',
+      enabled ? t('每日定时已开启。') : t('每日定时已关闭。'),
     );
   };
-
   const retryFailed = async () => {
     setPhase('retrying');
     setNotice('');
     setError('');
     try {
       const { retried } = await retryFailedEagleAiTags();
-      setNotice(`已重新排队 ${retried} 个失败任务。`);
+      setNotice(
+        t('已重新排队 {{value1}} 个失败任务。', {
+          value1: retried,
+        }),
+      );
       void reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '重试失败');
+      setError(cause instanceof Error ? cause.message : t('重试失败'));
     } finally {
       setPhase('idle');
     }
   };
-
   const ollamaOnline = summary?.ollama.status === 'ONLINE';
   const ollamaLabel = ollamaOnline
-    ? `Ollama 已就绪 · ${summary.ollama.model}`
+    ? t('Ollama 已就绪 · {{value1}}', {
+        value1: summary.ollama.model,
+      })
     : summary?.ollama.status === 'MODEL_MISSING'
-      ? `缺少模型 ${summary.ollama.model}`
-      : 'Ollama 未运行';
+      ? t('缺少模型 {{value1}}', {
+          value1: summary.ollama.model,
+        })
+      : t('Ollama 未运行');
   const statusLabel = manualEnabled
-    ? '正在处理'
+    ? t('正在处理')
     : scheduleEnabled
-      ? `等待 ${scheduleStart}–${scheduleEnd}`
-      : '已停止';
+      ? t('等待 {{value1}}–{{value2}}', {
+          value1: scheduleStart,
+          value2: scheduleEnd,
+        })
+      : t('已停止');
   const manualButtonLabel =
     phase === 'starting'
-      ? '正在启动…'
+      ? t('正在启动…')
       : phase === 'stopping'
-        ? '正在停止…'
+        ? t('正在停止…')
         : manualEnabled
-          ? '停止处理'
-          : '开始处理';
-
+          ? t('停止处理')
+          : t('开始处理');
   return (
-    <section className={styles.panel} aria-label="AI 自动标签运行设置">
+    <section className={styles.panel} aria-label={t('AI 自动标签运行设置')}>
       <header className={styles.header}>
         <div>
-          <span className={styles.eyebrow}>搜索辅助</span>
-          <h2>具体名词标签</h2>
-          <p>每张图提取最多 10 个可见名词；精确标签优先，近义结果靠后。</p>
+          <span className={styles.eyebrow}>{t('搜索辅助')}</span>
+          <h2>{t('具体名词标签')}</h2>
+          <p>{t('每张图提取最多 10 个可见名词；精确标签优先，近义结果靠后。')}</p>
         </div>
         <span className={`${styles.status} ${manualEnabled ? styles.statusRunning : ''}`}>
           {statusLabel}
         </span>
       </header>
 
-      <div className={styles.metrics} aria-label="处理统计">
+      <div className={styles.metrics} aria-label={t('处理统计')}>
         <div>
           <strong>{summary?.analyzed ?? '—'}</strong>
-          <span>已分析</span>
+          <span>{t('已分析')}</span>
         </div>
         <div>
           <strong>{summary?.queued ?? '—'}</strong>
-          <span>待处理</span>
+          <span>{t('待处理')}</span>
         </div>
         <div>
           <strong>{summary?.running ?? '—'}</strong>
-          <span>运行中</span>
+          <span>{t('运行中')}</span>
         </div>
         <div>
           <strong>{summary?.tags ?? '—'}</strong>
-          <span>AI 标签</span>
+          <span>{t('AI 标签')}</span>
         </div>
       </div>
 
       <div className={styles.controls}>
         <div className={styles.primaryControl}>
           <div>
-            <strong>立即处理未分析图片</strong>
-            <small>启动后后台分批执行，可随时停止，不影响图库使用。</small>
+            <strong>{t('立即处理未分析图片')}</strong>
+            <small>{t('启动后后台分批执行，可随时停止，不影响图库使用。')}</small>
           </div>
           <button
             type="button"
@@ -187,13 +186,13 @@ export function EagleAiTagSetupPanel() {
         <div className={styles.scheduleControl}>
           <div className={styles.scheduleHeading}>
             <div>
-              <strong>每日定时</strong>
-              <small>北京时间，到点自动处理。</small>
+              <strong>{t('每日定时')}</strong>
+              <small>{t('北京时间，到点自动处理。')}</small>
             </div>
             <button
               type="button"
               role="switch"
-              aria-label="每日定时"
+              aria-label={t('每日定时')}
               aria-checked={scheduleEnabled}
               className={styles.switch}
               disabled={phase !== 'idle' || !ollamaOnline}
@@ -205,7 +204,7 @@ export function EagleAiTagSetupPanel() {
           {scheduleEnabled ? (
             <div className={styles.timeSettings}>
               <label>
-                开始时间
+                {' ' + t('开始时间') + ' '}
                 <input
                   type="time"
                   value={scheduleStart}
@@ -213,9 +212,9 @@ export function EagleAiTagSetupPanel() {
                   onChange={(event) => setScheduleStart(event.target.value)}
                 />
               </label>
-              <span>至</span>
+              <span>{t('至')}</span>
               <label>
-                结束时间
+                {' ' + t('结束时间') + ' '}
                 <input
                   type="time"
                   value={scheduleEnd}
@@ -226,9 +225,11 @@ export function EagleAiTagSetupPanel() {
               <button
                 type="button"
                 disabled={phase !== 'idle'}
-                onClick={() => void saveSettings(settingsInput(), 'schedule', '定时时段已保存。')}
+                onClick={() =>
+                  void saveSettings(settingsInput(), 'schedule', t('定时时段已保存。'))
+                }
               >
-                保存
+                {' ' + t('保存') + ' '}
               </button>
             </div>
           ) : null}
@@ -238,7 +239,12 @@ export function EagleAiTagSetupPanel() {
       <footer className={styles.footer}>
         <span className={ollamaOnline ? styles.online : styles.offline}>{ollamaLabel}</span>
         <span>
-          {summary ? `${summary.analyzed} / ${summary.eligible} 张已分析` : '正在读取状态…'}
+          {summary
+            ? t('{{value1}} / {{value2}} 张已分析', {
+                value1: summary.analyzed,
+                value2: summary.eligible,
+              })
+            : t('正在读取状态…')}
         </span>
         <button
           type="button"
@@ -246,8 +252,10 @@ export function EagleAiTagSetupPanel() {
           onClick={() => void retryFailed()}
         >
           {phase === 'retrying'
-            ? '正在重试…'
-            : `重试失败任务${summary?.failed ? `（${summary.failed}）` : ''}`}
+            ? t('正在重试…')
+            : t('重试失败任务{{value1}}', {
+                value1: summary?.failed ? `（${summary.failed}）` : '',
+              })}
         </button>
       </footer>
       {notice ? (

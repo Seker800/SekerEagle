@@ -1,3 +1,4 @@
+import { t } from '../../i18n';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   IconAspectRatio,
@@ -39,28 +40,25 @@ import {
   type EagleQuickTextField,
 } from './eagle-quick-filter-state';
 import styles from './EagleQuickFilterBar.module.css';
-
 export {
   buildEagleQuickFilterQuery,
   countActiveEagleQuickFilters,
   createEmptyEagleQuickFilterState,
 };
 export type { EagleQuickFilterState };
-
 interface EagleQuickFilterBarProps {
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
   onChange: (value: EagleQuickFilterState) => void;
 }
-
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
 const FORMAT_OPTIONS = ['png', 'jpeg', 'webp', 'gif', 'svg', 'pdf', 'mp4', 'mov', 'mp3', 'wav'];
 const SHAPE_OPTIONS = [
-  { value: 'LANDSCAPE', label: '横向' },
-  { value: 'PORTRAIT', label: '纵向' },
-  { value: 'SQUARE', label: '正方形' },
-  { value: 'PANORAMA', label: '全景' },
+  { value: 'LANDSCAPE', label: t('横向') },
+  { value: 'PORTRAIT', label: t('纵向') },
+  { value: 'SQUARE', label: t('正方形') },
+  { value: 'PANORAMA', label: t('全景') },
 ];
 const COLOR_OPTIONS = [
   '#2e86ab',
@@ -76,7 +74,6 @@ const COLOR_OPTIONS = [
   '#78716c',
   '#171717',
 ];
-
 const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   COLOR: IconPalette,
   MANUAL_TAGS: IconTags,
@@ -94,7 +91,6 @@ const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   ADDED_AT: IconCalendar,
   MODIFIED_AT: IconCalendar,
 };
-
 export function EagleQuickFilterBar({
   value,
   manualTags,
@@ -111,7 +107,6 @@ export function EagleQuickFilterBar({
       (field) => !pinnedFields.includes(field) && isEagleQuickFilterActive(value, field),
     ),
   ];
-
   useEffect(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!rootRef.current?.contains(event.target as Node)) setOpenField(null);
@@ -119,18 +114,16 @@ export function EagleQuickFilterBar({
     window.addEventListener('pointerdown', closeOnOutsidePointer);
     return () => window.removeEventListener('pointerdown', closeOnOutsidePointer);
   }, []);
-
   const updatePinnedFields = (fields: EagleQuickFilterField[]) => {
     setPinnedFields(fields);
     window.localStorage.setItem(QUICK_FILTER_FIELDS_KEY, JSON.stringify(fields));
   };
-
   return (
     <div
       ref={rootRef}
       className={styles.root}
       role="toolbar"
-      aria-label="快捷筛选"
+      aria-label={t('快捷筛选')}
       onKeyDown={(event) => {
         if (event.key === 'Escape') setOpenField(null);
       }}
@@ -146,7 +139,10 @@ export function EagleQuickFilterBar({
               <button
                 type="button"
                 className={active ? styles.activeField : undefined}
-                aria-label={`${label}筛选${summary ? `，${summary}` : ''}`}
+                aria-label={t('{{value1}}筛选{{value2}}', {
+                  value1: label,
+                  value2: summary ? `，${summary}` : '',
+                })}
                 aria-expanded={openField === field}
                 onClick={() => setOpenField((current) => (current === field ? null : field))}
               >
@@ -176,7 +172,7 @@ export function EagleQuickFilterBar({
           <button
             type="button"
             className={styles.addField}
-            aria-label="添加筛选器"
+            aria-label={t('添加筛选器')}
             aria-expanded={openField === 'MANAGER'}
             onClick={() => setOpenField((current) => (current === 'MANAGER' ? null : 'MANAGER'))}
           >
@@ -196,17 +192,18 @@ export function EagleQuickFilterBar({
         <button
           type="button"
           className={styles.clearAll}
-          aria-label={`清除全部快捷筛选，共 ${activeCount} 项`}
+          aria-label={t('清除全部快捷筛选，共 {{value1}} 项', {
+            value1: activeCount,
+          })}
           onClick={() => onChange(createEmptyEagleQuickFilterState())}
         >
           <IconX size={15} aria-hidden="true" />
-          清除
+          {' ' + t('清除') + ' '}
         </button>
       ) : null}
     </div>
   );
 }
-
 function FieldPopover({
   field,
   value,
@@ -225,16 +222,28 @@ function FieldPopover({
   const label = EAGLE_QUICK_FILTER_FIELD_LABELS[field];
   const active = isEagleQuickFilterActive(value, field);
   return (
-    <div className={styles.popover} role="dialog" aria-label={`${label}筛选`}>
+    <div
+      className={styles.popover}
+      role="dialog"
+      aria-label={t('{{value1}}筛选', {
+        value1: label,
+      })}
+    >
       <header>
         <strong>{label}</strong>
         <div>
           {active ? (
             <button type="button" onClick={() => onChange(clearEagleQuickFilter(value, field))}>
-              清除此项
+              {' ' + t('清除此项') + ' '}
             </button>
           ) : null}
-          <button type="button" aria-label={`关闭${label}筛选`} onClick={onClose}>
+          <button
+            type="button"
+            aria-label={t('关闭{{value1}}筛选', {
+              value1: label,
+            })}
+            onClick={onClose}
+          >
             <IconX size={15} />
           </button>
         </div>
@@ -245,7 +254,6 @@ function FieldPopover({
     </div>
   );
 }
-
 function renderFieldControl(
   field: EagleQuickFilterField,
   value: EagleQuickFilterState,
@@ -313,7 +321,6 @@ function renderFieldControl(
       return <TextControl field={field} value={value} onChange={onChange} />;
   }
 }
-
 function ColorControl({
   value,
   onChange,
@@ -328,7 +335,9 @@ function ColorControl({
           <button
             key={color}
             type="button"
-            aria-label={`颜色 ${color}`}
+            aria-label={t('颜色 {{value1}}', {
+              value1: color,
+            })}
             aria-pressed={value.color === color}
             style={{ background: color }}
             onClick={() => onChange({ ...value, color })}
@@ -336,10 +345,10 @@ function ColorControl({
         ))}
       </div>
       <label>
-        自定义颜色
+        {' ' + t('自定义颜色') + ' '}
         <input
           type="color"
-          aria-label="自定义颜色"
+          aria-label={t('自定义颜色')}
           value={value.color ?? '#2e86ab'}
           onChange={(event) => onChange({ ...value, color: event.target.value })}
         />
@@ -347,7 +356,6 @@ function ColorControl({
     </div>
   );
 }
-
 function TagControl({
   kind,
   tags,
@@ -369,7 +377,7 @@ function TagControl({
         .map(({ tag }) => tag),
     [search, selectedIds, tags],
   );
-  const searchLabel = kind === 'MANUAL' ? '搜索标签' : '搜索 AI 标签';
+  const searchLabel = kind === 'MANUAL' ? t('搜索标签') : t('搜索 AI 标签');
   return (
     <div className={styles.tagControl}>
       <div className={styles.matchModes}>
@@ -377,21 +385,21 @@ function TagControl({
           <input
             type="radio"
             name={`${kind}-tag-match`}
-            aria-label={kind === 'MANUAL' ? '匹配任一标签' : '匹配任一 AI 标签'}
+            aria-label={kind === 'MANUAL' ? t('匹配任一标签') : t('匹配任一 AI 标签')}
             checked={match === 'ANY'}
             onChange={() => onChange(selectedIds, 'ANY')}
           />
-          任一
+          {' ' + t('任一') + ' '}
         </label>
         <label>
           <input
             type="radio"
             name={`${kind}-tag-match`}
-            aria-label={kind === 'MANUAL' ? '匹配全部标签' : '匹配全部 AI 标签'}
+            aria-label={kind === 'MANUAL' ? t('匹配全部标签') : t('匹配全部 AI 标签')}
             checked={match === 'ALL'}
             onChange={() => onChange(selectedIds, 'ALL')}
           />
-          全部
+          {' ' + t('全部') + ' '}
         </label>
       </div>
       <label className={styles.popoverSearch}>
@@ -419,19 +427,21 @@ function TagControl({
             <small>{tag.assetCount}</small>
           </label>
         ))}
-        {!visibleTags.length ? <p>没有匹配的标签</p> : null}
+        {!visibleTags.length ? <p>{t('没有匹配的标签')}</p> : null}
       </div>
     </div>
   );
 }
-
 function ChoiceControl({
   options,
   selected,
   onChange,
   visual = false,
 }: {
-  options: Array<{ value: string; label: string }>;
+  options: Array<{
+    value: string;
+    label: string;
+  }>;
   selected: string[];
   onChange: (selected: string[]) => void;
   visual?: boolean;
@@ -452,7 +462,6 @@ function ChoiceControl({
     </div>
   );
 }
-
 function RatingControl({
   value,
   onChange,
@@ -462,12 +471,14 @@ function RatingControl({
 }) {
   return (
     <div className={styles.ratingControl}>
-      <span>至少</span>
+      <span>{t('至少')}</span>
       {[1, 2, 3, 4, 5].map((rating) => (
         <button
           key={rating}
           type="button"
-          aria-label={`至少 ${rating} 星`}
+          aria-label={t('至少 {{value1}} 星', {
+            value1: rating,
+          })}
           aria-pressed={value.ratingAtLeast === rating}
           onClick={() => onChange({ ...value, ratingAtLeast: rating })}
         >
@@ -484,7 +495,6 @@ function RatingControl({
     </div>
   );
 }
-
 function RangeControl({
   field,
   value,
@@ -505,29 +515,35 @@ function RangeControl({
   return (
     <div className={styles.rangeControl}>
       <label>
-        最小值
+        {' ' + t('最小值') + ' '}
         <input
           type="number"
           min="0"
-          aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}最小值`}
+          aria-label={t('{{value1}}最小值', {
+            value1: EAGLE_QUICK_FILTER_FIELD_LABELS[field],
+          })}
           value={range.min}
           onChange={(event) => update({ ...range, min: event.target.value })}
         />
       </label>
       <span>—</span>
       <label>
-        最大值
+        {' ' + t('最大值') + ' '}
         <input
           type="number"
           min="0"
-          aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}最大值`}
+          aria-label={t('{{value1}}最大值', {
+            value1: EAGLE_QUICK_FILTER_FIELD_LABELS[field],
+          })}
           value={range.max}
           onChange={(event) => update({ ...range, max: event.target.value })}
         />
       </label>
       {field === 'FILE_SIZE' || field === 'DURATION' ? (
         <select
-          aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}单位`}
+          aria-label={t('{{value1}}单位', {
+            value1: EAGLE_QUICK_FILTER_FIELD_LABELS[field],
+          })}
           value={range.unit}
           onChange={(event) =>
             update({ ...range, unit: event.target.value as NonNullable<typeof range.unit> })
@@ -540,9 +556,9 @@ function RangeControl({
                 ['GB', 'GB'],
               ]
             : [
-                ['SECONDS', '秒'],
-                ['MINUTES', '分钟'],
-                ['HOURS', '小时'],
+                ['SECONDS', t('秒')],
+                ['MINUTES', t('分钟')],
+                ['HOURS', t('小时')],
               ]
           ).map(([optionValue, label]) => (
             <option key={optionValue} value={optionValue}>
@@ -556,7 +572,6 @@ function RangeControl({
     </div>
   );
 }
-
 function DateControl({
   field,
   value,
@@ -572,19 +587,23 @@ function DateControl({
   return (
     <div className={styles.dateControl}>
       <label>
-        从
+        {' ' + t('从') + ' '}
         <input
           type="date"
-          aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}开始`}
+          aria-label={t('{{value1}}开始', {
+            value1: EAGLE_QUICK_FILTER_FIELD_LABELS[field],
+          })}
           value={range.from}
           onChange={(event) => update({ ...range, from: event.target.value })}
         />
       </label>
       <label>
-        到
+        {' ' + t('到') + ' '}
         <input
           type="date"
-          aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}结束`}
+          aria-label={t('{{value1}}结束', {
+            value1: EAGLE_QUICK_FILTER_FIELD_LABELS[field],
+          })}
           value={range.to}
           onChange={(event) => update({ ...range, to: event.target.value })}
         />
@@ -592,7 +611,6 @@ function DateControl({
     </div>
   );
 }
-
 function TextControl({
   field,
   value,
@@ -609,8 +627,12 @@ function TextControl({
       <input
         autoFocus
         type="search"
-        aria-label={`${label}包含`}
-        placeholder={`输入${label}关键词`}
+        aria-label={t('{{value1}}包含', {
+          value1: label,
+        })}
+        placeholder={t('输入{{value1}}关键词', {
+          value1: label,
+        })}
         value={value.text[field] ?? ''}
         onChange={(event) =>
           onChange({ ...value, text: { ...value.text, [field]: event.target.value } })
@@ -619,7 +641,6 @@ function TextControl({
     </label>
   );
 }
-
 function FilterManager({
   pinnedFields,
   onChange,
@@ -654,11 +675,11 @@ function FilterManager({
     <div
       className={`${styles.popover} ${styles.manager}`}
       role="dialog"
-      aria-label="管理快捷筛选器"
+      aria-label={t('管理快捷筛选器')}
     >
       <header>
-        <strong>快捷筛选器</strong>
-        <button type="button" aria-label="关闭筛选器管理" onClick={onClose}>
+        <strong>{t('快捷筛选器')}</strong>
+        <button type="button" aria-label={t('关闭筛选器管理')} onClick={onClose}>
           <IconX size={15} />
         </button>
       </header>
@@ -667,8 +688,8 @@ function FilterManager({
         <input
           autoFocus
           type="search"
-          aria-label="搜索筛选器"
-          placeholder="搜索…"
+          aria-label={t('搜索筛选器')}
+          placeholder={t('搜索…')}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -693,7 +714,7 @@ function FilterManager({
               <span>{EAGLE_QUICK_FILTER_FIELD_LABELS[field]}</span>
               <button
                 type="button"
-                aria-label={`${pinned ? '取消固定' : '固定'} ${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}`}
+                aria-label={`${pinned ? t('取消固定') : t('固定')} ${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}`}
                 aria-pressed={pinned}
                 onClick={() => togglePinned(field)}
               >
@@ -706,11 +727,9 @@ function FilterManager({
     </div>
   );
 }
-
 function toggleValue(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
-
 function readPinnedFields(): EagleQuickFilterField[] {
   try {
     const parsed: unknown = JSON.parse(

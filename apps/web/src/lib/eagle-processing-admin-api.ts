@@ -1,9 +1,8 @@
 import { fetchWithBrowserSession } from './api-client';
-
+import { errorFromResponse } from './api-error';
 export type EagleProcessingLane = 'INTERACTIVE' | 'BACKGROUND' | 'MAINTENANCE';
 export type EagleProcessingStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
 export type EagleProcessingMode = 'ALWAYS' | 'NIGHT' | 'MANUAL';
-
 export interface EagleProcessingSettings {
   mode: EagleProcessingMode;
   nightStart: string;
@@ -18,8 +17,18 @@ export interface EagleProcessingSummary {
     lastHeartbeatAt: string | null;
     version: string | null;
   };
-  counts: { running: number; queued: number; failed: number; completedLast24Hours: number };
-  queues: Array<{ lane: EagleProcessingLane; queued: number; running: number; failed: number }>;
+  counts: {
+    running: number;
+    queued: number;
+    failed: number;
+    completedLast24Hours: number;
+  };
+  queues: Array<{
+    lane: EagleProcessingLane;
+    queued: number;
+    running: number;
+    failed: number;
+  }>;
   colorCoverage: {
     processorVersion: string;
     eligible: number;
@@ -47,18 +56,13 @@ export interface EagleProcessingJob {
   createdAt: string;
   updatedAt: string;
 }
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetchWithBrowserSession(`/api/admin/eagle-processing/${path}`, {
     ...init,
     headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as {
-      message?: string | string[];
-    } | null;
-    const message = Array.isArray(body?.message) ? body.message.join('；') : body?.message;
-    throw new Error(message ?? `读取处理状态失败（${response.status}）`);
+    throw await errorFromResponse(response, '读取处理状态失败（{{value1}}）');
   }
   return response.json() as Promise<T>;
 }
@@ -67,31 +71,44 @@ export function fetchEagleProcessingSummary(_token: string) {
 }
 export function listEagleProcessingJobs(
   _token: string,
-  filters: { status?: string; lane?: string; kind?: string; cursor?: string; limit?: number } = {},
+  filters: {
+    status?: string;
+    lane?: string;
+    kind?: string;
+    cursor?: string;
+    limit?: number;
+  } = {},
 ) {
   const query = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value !== undefined) query.set(key, String(value));
   });
   const queryString = query.toString();
-  return request<{ items: EagleProcessingJob[]; nextCursor: string | null }>(
-    queryString ? `jobs?${queryString}` : 'jobs',
-  );
+  return request<{
+    items: EagleProcessingJob[];
+    nextCursor: string | null;
+  }>(queryString ? `jobs?${queryString}` : 'jobs');
 }
 export function retryEagleProcessingJob(_token: string, id: string) {
-  return request<{ retried: number }>(`jobs/${encodeURIComponent(id)}/retry`, {
+  return request<{
+    retried: number;
+  }>(`jobs/${encodeURIComponent(id)}/retry`, {
     method: 'POST',
     body: '{}',
   });
 }
 export function retryAllFailedEagleProcessingJobs(_token: string) {
-  return request<{ retried: number }>('retry-failed', { method: 'POST', body: '{}' });
+  return request<{
+    retried: number;
+  }>('retry-failed', { method: 'POST', body: '{}' });
 }
 export function reconcileEagleProcessingJobs(_token: string) {
-  return request<{ scanned: number; created: number; skipped: number; remaining: number }>(
-    'reconcile',
-    { method: 'POST', body: '{}' },
-  );
+  return request<{
+    scanned: number;
+    created: number;
+    skipped: number;
+    remaining: number;
+  }>('reconcile', { method: 'POST', body: '{}' });
 }
 export function updateEagleProcessingSettings(
   _token: string,
