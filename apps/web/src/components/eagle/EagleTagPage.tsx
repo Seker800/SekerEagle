@@ -34,6 +34,7 @@ import styles from './EagleTagPage.module.css';
 type TagScope = 'ALL' | 'UNCATEGORIZED' | 'STARRED' | 'USED' | 'UNUSED' | `GROUP:${string}`;
 type SortMode = 'NAME_ASC' | 'COUNT_DESC' | 'COUNT_ASC';
 type LayoutMode = 'GRID' | 'LIST';
+const AI_TAG_PAGE_SIZE = 120;
 export interface EagleManualTagChanges {
   name?: string;
   color?: string | null;
@@ -84,6 +85,7 @@ export function EagleTagPage({
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortMode>('NAME_ASC');
   const [layout, setLayout] = useState<LayoutMode>('GRID');
+  const [page, setPage] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState('');
   const [newGroupName, setNewGroupName] = useState('');
@@ -130,15 +132,29 @@ export function EagleTagPage({
       return compareEagleTagIndexes(leftIndex, rightIndex);
     });
   }, [allTags, isManual, query, scope, sort, tagIndexes]);
+  const pageCount = isManual ? 1 : Math.max(1, Math.ceil(visibleTags.length / AI_TAG_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageTags = useMemo(
+    () =>
+      isManual
+        ? visibleTags
+        : visibleTags.slice(currentPage * AI_TAG_PAGE_SIZE, (currentPage + 1) * AI_TAG_PAGE_SIZE),
+    [currentPage, isManual, visibleTags],
+  );
+  useEffect(() => {
+    setPage(0);
+  }, [kind, query, scope, sort]);
   const sections = useMemo(() => {
-    if (sort !== 'NAME_ASC') return [[t('标签'), visibleTags]] as const;
-    const grouped = new Map<string, typeof visibleTags>();
-    visibleTags.forEach((tag) => {
+    if (sort !== 'NAME_ASC') return [[t('标签'), pageTags]] as const;
+    const grouped = new Map<string, typeof pageTags>();
+    pageTags.forEach((tag) => {
       const key = tagIndexes.get(tag.id)?.section ?? t('其他');
-      grouped.set(key, [...(grouped.get(key) ?? []), tag]);
+      const group = grouped.get(key);
+      if (group) group.push(tag);
+      else grouped.set(key, [tag]);
     });
     return [...grouped.entries()].sort(([left], [right]) => compareEagleTagSections(left, right));
-  }, [sort, tagIndexes, visibleTags]);
+  }, [pageTags, sort, tagIndexes]);
   const selectedManualTags = isManual
     ? manualTags.filter((tag) => selectedIds.includes(tag.id))
     : [];
@@ -151,7 +167,7 @@ export function EagleTagPage({
     anchorIdRef.current = null;
   };
   const handleTagClick = (event: MouseEvent<HTMLButtonElement>, tagId: string) => {
-    const visibleIds = visibleTags.map((tag) => tag.id);
+    const visibleIds = pageTags.map((tag) => tag.id);
     if (event.shiftKey && anchorIdRef.current) {
       const start = visibleIds.indexOf(anchorIdRef.current);
       const end = visibleIds.indexOf(tagId);
@@ -584,6 +600,31 @@ export function EagleTagPage({
               </li>
             ))}
           </ul>
+          {!isManual && pageCount > 1 && (
+            <nav className={styles.pagination} aria-label={t('AI 标签分页')}>
+              <button
+                type="button"
+                disabled={currentPage === 0}
+                onClick={() => {
+                  setSelectedIds([]);
+                  setPage((value) => Math.max(0, value - 1));
+                }}
+              >
+                {t('上一页')}
+              </button>
+              <span>{`${currentPage + 1} / ${pageCount}`}</span>
+              <button
+                type="button"
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => {
+                  setSelectedIds([]);
+                  setPage((value) => Math.min(pageCount - 1, value + 1));
+                }}
+              >
+                {t('下一页')}
+              </button>
+            </nav>
+          )}
           {visibleTags.length === 0 && (
             <div className={styles.empty}>
               {query

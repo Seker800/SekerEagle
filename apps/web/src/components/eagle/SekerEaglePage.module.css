@@ -177,6 +177,40 @@
   background: #121316;
   container-type: inline-size;
 }
+.aiTagCatalogBar {
+  min-height: 42px;
+  margin: 10px 20px 0;
+  padding: 6px 8px 6px 11px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #17191e;
+}
+.aiTagCatalogBar > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.aiTagCatalogBar strong {
+  font-size: 12px;
+}
+.aiTagCatalogBar span {
+  color: var(--eagle-muted);
+  font-size: 10px;
+}
+.aiTagCatalogBar button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid #765d3a;
+  border-radius: 5px;
+  color: #e4bf87;
+  background: #241e17;
+  font-size: 11px;
+}
 .toolbar {
   min-height: 44px;
   padding: 4px 12px;

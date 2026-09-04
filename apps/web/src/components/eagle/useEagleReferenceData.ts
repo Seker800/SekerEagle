@@ -9,7 +9,11 @@ import type { createEagleQueryKeys } from './eagle-query-keys';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 
-export function useEagleReferenceData(accessToken: string, queryKeys: EagleQueryKeys) {
+export function useEagleReferenceData(
+  accessToken: string,
+  queryKeys: EagleQueryKeys,
+  options: { aiTagsEnabled: boolean },
+) {
   const manualTagsQuery = useQuery({
     queryKey: queryKeys.manualTags,
     queryFn: () => listEagleManualTags(accessToken),
@@ -21,6 +25,7 @@ export function useEagleReferenceData(accessToken: string, queryKeys: EagleQuery
   const aiTagsQuery = useQuery({
     queryKey: queryKeys.aiTags,
     queryFn: () => listEagleAiTags(accessToken),
+    enabled: options.aiTagsEnabled,
   });
   const smartFoldersQuery = useQuery({
     queryKey: queryKeys.smartFolders,

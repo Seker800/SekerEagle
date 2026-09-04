@@ -50,6 +50,7 @@ interface EagleQuickFilterBarProps {
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
+  onRequestAiTags?: () => void;
   onChange: (value: EagleQuickFilterState) => void;
 }
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
@@ -95,6 +96,7 @@ export function EagleQuickFilterBar({
   value,
   manualTags,
   aiTags,
+  onRequestAiTags,
   onChange,
 }: EagleQuickFilterBarProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -144,7 +146,10 @@ export function EagleQuickFilterBar({
                   value2: summary ? `，${summary}` : '',
                 })}
                 aria-expanded={openField === field}
-                onClick={() => setOpenField((current) => (current === field ? null : field))}
+                onClick={() => {
+                  if (field === 'AI_TAGS' && openField !== field) onRequestAiTags?.();
+                  setOpenField((current) => (current === field ? null : field));
+                }}
               >
                 {field === 'COLOR' && value.color ? (
                   <span className={styles.colorDot} style={{ background: value.color }} />

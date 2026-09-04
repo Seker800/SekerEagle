@@ -972,6 +972,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
+    fireEvent.click(screen.getByRole('button', { name: '浏览 AI 标签' }));
     fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
     const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
     fireEvent.click(aiFilterButton);
@@ -1767,9 +1768,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '浏览 AI 标签' }));
     await waitFor(() => expect(listEagleAiTagsMock).toHaveBeenCalledTimes(1));
-    expect(await screen.findByRole('region', { name: 'AI 标签管理' })).toHaveTextContent(
-      '猫头鹰',
-    );
+    expect(await screen.findByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
   });
 
   it('places AI automatic tagging directly below manual classification', async () => {

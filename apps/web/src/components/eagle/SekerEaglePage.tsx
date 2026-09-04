@@ -185,6 +185,8 @@ export function SekerEaglePage({
   const metadataFormRef = useRef<HTMLFormElement>(null);
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
+  const [isAiTagCatalogOpen, setIsAiTagCatalogOpen] = useState(false);
+  const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
   const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(null);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
@@ -214,9 +216,13 @@ export function SekerEaglePage({
   }, [thumbnailSize]);
   useEffect(() => {
     setOriginalFileError(null);
+    setIsAiTagCatalogOpen(false);
+    setAiTagReferenceRequested(false);
   }, [ownerId]);
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
-    useEagleReferenceData(accessToken, queryKeys);
+    useEagleReferenceData(accessToken, queryKeys, {
+      aiTagsEnabled: isAiTagCatalogOpen || aiTagReferenceRequested || isSmartFolderDialogOpen,
+    });
   const vectorSummaryQuery = useQuery({
     queryKey: ['eagle', ownerId, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
@@ -946,7 +952,7 @@ export function SekerEaglePage({
             >
               <IconSparkles size={17} />
               {' ' + t('AI 自动标签')}
-              <span>{aiTags.length}</span>
+              {aiTagsQuery.data ? <span>{aiTags.length}</span> : null}
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
@@ -1026,45 +1032,68 @@ export function SekerEaglePage({
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <>
-              {libraryView === 'AI_TAGS' ? <EagleAiTagSetupPanel /> : null}
-              <EagleTagPage
-                kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
-                manualTags={manualTags}
-                aiTags={aiTags}
-                manualTagGroups={manualTagGroups}
-                creating={createTagMutation.isPending}
-                busy={
-                  createTagGroupMutation.isPending ||
-                  updateTagsMutation.isPending ||
-                  deleteTagsMutation.isPending ||
-                  updateTagGroupMutation.isPending ||
-                  deleteTagGroupMutation.isPending
-                }
-                error={
-                  (
-                    createTagMutation.error ??
-                    createTagGroupMutation.error ??
-                    updateTagsMutation.error ??
-                    deleteTagsMutation.error ??
-                    updateTagGroupMutation.error ??
-                    deleteTagGroupMutation.error ??
-                    (libraryView === 'MANUAL_TAGS'
-                      ? (manualTagsQuery.error ?? manualTagGroupsQuery.error)
-                      : aiTagsQuery.error)
-                  )?.message
-                }
-                onCreateManualTag={(name) => createTagMutation.mutate(name)}
-                onCreateManualTagGroup={(name) => createTagGroupMutation.mutate(name)}
-                onUpdateManualTags={(tags, changes) => updateTagsMutation.mutate({ tags, changes })}
-                onDeleteManualTags={(tags) => deleteTagsMutation.mutate(tags)}
-                onUpdateManualTagGroup={(group, changes) =>
-                  updateTagGroupMutation.mutate({ group, changes })
-                }
-                onDeleteManualTagGroup={(group) => deleteTagGroupMutation.mutate(group)}
-                onSelectTag={(tagId) =>
-                  showAssetsForTag(libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI', tagId)
-                }
-              />
+              {libraryView === 'AI_TAGS' ? (
+                <>
+                  <EagleAiTagSetupPanel />
+                  <div className={styles.aiTagCatalogBar}>
+                    <div>
+                      <strong>{t('AI 标签目录')}</strong>
+                      <span>
+                        {isAiTagCatalogOpen
+                          ? aiTagsQuery.isLoading
+                            ? t('正在加载…')
+                            : t('共 {{value1}} 个标签', { value1: aiTags.length })
+                          : t('默认不加载')}
+                      </span>
+                    </div>
+                    <button type="button" onClick={() => setIsAiTagCatalogOpen((value) => !value)}>
+                      {isAiTagCatalogOpen ? t('收起 AI 标签') : t('浏览 AI 标签')}
+                    </button>
+                  </div>
+                </>
+              ) : null}
+              {(libraryView === 'MANUAL_TAGS' || isAiTagCatalogOpen) && (
+                <EagleTagPage
+                  kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
+                  manualTags={manualTags}
+                  aiTags={aiTags}
+                  manualTagGroups={manualTagGroups}
+                  creating={createTagMutation.isPending}
+                  busy={
+                    createTagGroupMutation.isPending ||
+                    updateTagsMutation.isPending ||
+                    deleteTagsMutation.isPending ||
+                    updateTagGroupMutation.isPending ||
+                    deleteTagGroupMutation.isPending
+                  }
+                  error={
+                    (
+                      createTagMutation.error ??
+                      createTagGroupMutation.error ??
+                      updateTagsMutation.error ??
+                      deleteTagsMutation.error ??
+                      updateTagGroupMutation.error ??
+                      deleteTagGroupMutation.error ??
+                      (libraryView === 'MANUAL_TAGS'
+                        ? (manualTagsQuery.error ?? manualTagGroupsQuery.error)
+                        : aiTagsQuery.error)
+                    )?.message
+                  }
+                  onCreateManualTag={(name) => createTagMutation.mutate(name)}
+                  onCreateManualTagGroup={(name) => createTagGroupMutation.mutate(name)}
+                  onUpdateManualTags={(tags, changes) =>
+                    updateTagsMutation.mutate({ tags, changes })
+                  }
+                  onDeleteManualTags={(tags) => deleteTagsMutation.mutate(tags)}
+                  onUpdateManualTagGroup={(group, changes) =>
+                    updateTagGroupMutation.mutate({ group, changes })
+                  }
+                  onDeleteManualTagGroup={(group) => deleteTagGroupMutation.mutate(group)}
+                  onSelectTag={(tagId) =>
+                    showAssetsForTag(libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI', tagId)
+                  }
+                />
+              )}
             </>
           ) : (
             <>
@@ -1172,6 +1201,7 @@ export function SekerEaglePage({
                   value={quickFilters}
                   manualTags={manualTags}
                   aiTags={aiTags}
+                  onRequestAiTags={() => setAiTagReferenceRequested(true)}
                   onChange={setQuickFilters}
                 />
               ) : null}
