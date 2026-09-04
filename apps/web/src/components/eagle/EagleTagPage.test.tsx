@@ -260,4 +260,37 @@ describe('EagleTagPage', () => {
     fireEvent.change(search, { target: { value: 'mty' } });
     expect(screen.getByRole('button', { name: /AI标签 猫头鹰/ })).toBeInTheDocument();
   });
+
+  it('keeps a large AI tag directory bounded to one dense page', () => {
+    const manyAiTags = Array.from({ length: 121 }, (_, index) => ({
+      id: `ai-${index}`,
+      name: `tag-${String(index).padStart(3, '0')}`,
+      assetCount: index,
+      pinyin: `tag${index}`,
+      pinyinInitials: `t${index}`,
+    }));
+    render(
+      <EagleTagPage
+        kind="AI"
+        manualTags={manualTags}
+        aiTags={manyAiTags}
+        manualTagGroups={groups}
+        onCreateManualTag={vi.fn()}
+        onCreateManualTagGroup={vi.fn()}
+        onUpdateManualTags={vi.fn()}
+        onDeleteManualTags={vi.fn()}
+        onUpdateManualTagGroup={vi.fn()}
+        onDeleteManualTagGroup={vi.fn()}
+        onSelectTag={vi.fn()}
+      />,
+    );
+
+    const directory = screen.getByRole('list', { name: 'AI标签目录' });
+    expect(within(directory).getAllByRole('button')).toHaveLength(120);
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    expect(within(directory).getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+  });
 });

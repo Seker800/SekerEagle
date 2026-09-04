@@ -1751,16 +1751,25 @@ describe('SekerEaglePage', () => {
     expect(within(inspector).getByRole('textbox', { name: '素材标题' })).toBeInTheDocument();
   });
 
-  it('opens separate manual and AI tag pages instead of expanding tags in the sidebar', async () => {
+  it('keeps the AI tag catalog unloaded until the user chooses to browse it', async () => {
     renderPage();
+
+    await screen.findByRole('heading', { name: '全部素材' });
+    expect(listEagleAiTagsMock).not.toHaveBeenCalled();
 
     fireEvent.click(await screen.findByRole('button', { name: '人工标签' }));
     expect(screen.getByRole('heading', { name: '人工标签' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '人工标签管理' })).toHaveTextContent('灵感');
 
     fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
-    expect(screen.getByRole('heading', { name: 'AI 自动标签' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
+    expect(screen.queryByRole('region', { name: 'AI 标签管理' })).not.toBeInTheDocument();
+    expect(listEagleAiTagsMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: '浏览 AI 标签' }));
+    await waitFor(() => expect(listEagleAiTagsMock).toHaveBeenCalledTimes(1));
+    expect(await screen.findByRole('region', { name: 'AI 标签管理' })).toHaveTextContent(
+      '猫头鹰',
+    );
   });
 
   it('places AI automatic tagging directly below manual classification', async () => {
