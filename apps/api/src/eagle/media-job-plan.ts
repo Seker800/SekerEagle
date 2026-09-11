@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
+import { EAGLE_AI_TAG_PROCESSOR_VERSION } from '@sekereagle/config';
 
 export const RENDITION_PROCESSOR_VERSION = 'rendition-v2';
 export const COLOR_THUMBNAIL_PROCESSOR_VERSION = 'color-v3-thumbnail';
@@ -100,6 +101,20 @@ export function buildMissingImageProcessingJobs(
       kind: 'GENERATE_EMBEDDING',
       lane: 'BACKGROUND',
       processorVersion: EMBEDDING_PROCESSOR_VERSION,
+      dependsOnJobId: renditionJobId,
+    });
+  }
+  const hasAiTags = existingJobs.some(
+    ({ kind, processorVersion }) =>
+      kind === 'GENERATE_AI_TAGS' && processorVersion === EAGLE_AI_TAG_PROCESSOR_VERSION,
+  );
+  if (!hasAiTags) {
+    jobs.push({
+      id: randomUUID(),
+      ...common,
+      kind: 'GENERATE_AI_TAGS',
+      lane: 'BACKGROUND',
+      processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
       dependsOnJobId: renditionJobId,
     });
   }
