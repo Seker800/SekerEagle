@@ -51,6 +51,15 @@ test('large images get dependent palette and pyramid jobs after renditions', () 
         processorVersion: 'qwen3-vl-embedding-2b-1024-v1',
         dependsOnJobId: 'rendition-job',
       },
+      {
+        ownerId: 'owner-1',
+        assetId: 'asset-1',
+        assetRevision: 2,
+        kind: 'GENERATE_AI_TAGS',
+        lane: 'BACKGROUND',
+        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
+        dependsOnJobId: 'rendition-job',
+      },
     ],
   );
 });
@@ -78,7 +87,31 @@ test('backfill reuses a current rendition job as the dependency for missing anal
     ['EXTRACT_COLOR_PALETTE', 'rendition-job'],
     ['GENERATE_IMAGE_PYRAMID', 'rendition-job'],
     ['GENERATE_EMBEDDING', 'rendition-job'],
+    ['GENERATE_AI_TAGS', 'rendition-job'],
   ]);
+});
+
+test('backfill does not duplicate a current AI tagging task', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    { ownerId: 'owner-1', assetId: 'asset-1', assetRevision: 2, width: 1_000, height: 800 },
+    [
+      {
+        id: 'rendition-job',
+        kind: 'GENERATE_RENDITIONS',
+        processorVersion: 'rendition-v2',
+      },
+      {
+        id: 'ai-tag-job',
+        kind: 'GENERATE_AI_TAGS',
+        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
+      },
+    ],
+  );
+
+  assert.equal(
+    jobs.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
+    false,
+  );
 });
 
 function expectJobKinds(

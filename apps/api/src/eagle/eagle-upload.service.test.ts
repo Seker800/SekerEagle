@@ -296,6 +296,7 @@ test('new browser captures commit provenance and initial metadata with the uploa
   const assetWrites: Array<Record<string, unknown>> = [];
   const annotationWrites: Array<Record<string, unknown>> = [];
   const captureWrites: Array<Record<string, unknown>> = [];
+  const jobs: Array<Array<Record<string, unknown>>> = [];
   const session = {
     id: sessionId,
     uploaderId: ownerId,
@@ -328,7 +329,9 @@ test('new browser captures commit provenance and initial metadata with the uploa
       }),
       update: async ({ data }: { data: Record<string, unknown> }) => captureWrites.push(data),
     },
-    eagleAssetProcessingJob: { createMany: async () => undefined },
+    eagleAssetProcessingJob: {
+      createMany: async ({ data }: { data: Array<Record<string, unknown>> }) => jobs.push(data),
+    },
     eagleUploadSessionState: { update: async () => undefined },
   };
   const service = new EagleUploadService(
@@ -365,4 +368,9 @@ test('new browser captures commit provenance and initial metadata with the uploa
   ]);
   assert.equal(captureWrites[0]?.assetId, result.assetId);
   assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
+  const aiTagJob = jobs[0]?.find(({ kind }) => kind === 'GENERATE_AI_TAGS');
+  assert.equal(aiTagJob?.ownerId, ownerId);
+  assert.equal(aiTagJob?.assetId, result.assetId);
+  assert.equal(aiTagJob?.lane, 'BACKGROUND');
+  assert.equal(typeof aiTagJob?.dependsOnJobId, 'string');
 });

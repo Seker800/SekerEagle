@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EagleProcessingService } from './eagle-processing.service';
 
-test('reconciler creates only missing current-version color jobs', async () => {
+test('reconciler creates every missing current-version image task', async () => {
   const created: unknown[] = [];
   const service = new EagleProcessingService({
     eagleAsset: {
@@ -44,7 +44,7 @@ test('reconciler creates only missing current-version color jobs', async () => {
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 2, created: 3, skipped: 0, remaining: 0 });
+  assert.deepEqual(result, { scanned: 2, created: 5, skipped: 0, remaining: 0 });
   const paletteJob = created.find(
     (job) => (job as { kind?: string }).kind === 'EXTRACT_COLOR_PALETTE',
   );
@@ -63,6 +63,10 @@ test('reconciler creates only missing current-version color jobs', async () => {
   });
   assert.equal(
     created.filter((job) => (job as { kind?: string }).kind === 'GENERATE_EMBEDDING').length,
+    2,
+  );
+  assert.equal(
+    created.filter((job) => (job as { kind?: string }).kind === 'GENERATE_AI_TAGS').length,
     2,
   );
 });
@@ -88,7 +92,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1003 });
+  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1504 });
   assert.equal(page, 2);
 });
 
