@@ -118,8 +118,8 @@ describe('offline-capable desktop connection page', () => {
     expect(script).toContain('Desktop Settings');
     expect(script).toContain('document.documentElement.lang = locale');
 
-    const englishCatalog = /'en-US': \{(?<catalog>[\s\S]*?)\n\s{2}\},\n\};/u.exec(script)?.groups
-      ?.catalog;
+    const englishCatalog = /'en-US': \{(?<catalog>[\s\S]*?)\r?\n\s{2}\},\r?\n\};/u.exec(script)
+      ?.groups?.catalog;
     expect(englishCatalog).toBeTruthy();
     expect(englishCatalog).not.toMatch(/\p{Script=Han}/u);
     for (const [, key] of html.matchAll(/data-i18n="([^"]+)"/gu)) {

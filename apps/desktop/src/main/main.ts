@@ -27,7 +27,10 @@ import { MediaCacheController, type MediaResolution } from './media-cache-contro
 import { MediaRequestLimiter } from './media-request-limiter';
 import { isAllowedAppNavigation } from './navigation-policy';
 import { CacheRpcClient, type CacheRpcEndpoint, type CacheRpcMessage } from '../shared/cache-rpc';
-import { DEFAULT_CACHE_LIMIT_BYTES } from '../utility/cache/cache-policy';
+import {
+  DEFAULT_CACHE_LIMIT_BYTES,
+  PORTABLE_DEFAULT_CACHE_LIMIT_BYTES,
+} from '../utility/cache/cache-policy';
 import { buildNamespaceId } from '../shared/media-identity';
 import { DesktopSettingsStore } from './desktop-settings';
 import { DesktopConnectionSettingsStore } from './connection-settings';
@@ -52,6 +55,12 @@ import {
   parseAssetDragInput,
   parsePreparedDragToken,
 } from './original-drag-export';
+import {
+  portableCacheRoot,
+  portableProfileRoot,
+  preparePortableDataRoot,
+  resolvePortableDataRoot,
+} from './portable-data';
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -75,6 +84,23 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+let portableDataRoot: string | null = null;
+let portableStartupFailed = false;
+try {
+  portableDataRoot = resolvePortableDataRoot(process.platform, process.env);
+  if (portableDataRoot) {
+    preparePortableDataRoot(portableDataRoot);
+    app.setPath('userData', portableProfileRoot(portableDataRoot));
+  }
+} catch (error) {
+  portableStartupFailed = true;
+  dialog.showErrorBox(
+    'SekerEagle 便携版无法启动',
+    `无法在程序旁边创建或写入 SekerEagleData。请把程序移动到可写目录后重试。\n\n${error instanceof Error ? error.message : '未知错误'}`,
+  );
+  app.exit(1);
+}
+
 const initialServerUrl = normalizeDesktopServerUrl(
   process.env.SEKEREAGLE_SERVER_URL ?? DEFAULT_DESKTOP_SERVER_URL,
 );
@@ -93,7 +119,7 @@ let connectionRecovery: Promise<void> | null = null;
 let browserSession: DesktopBrowserSession | null = null;
 let clearPreparedOriginalDrags: () => void = () => undefined;
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+const hasSingleInstanceLock = !portableStartupFailed && app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) app.quit();
 
 app.on('second-instance', () => {
@@ -105,7 +131,10 @@ app.on('second-instance', () => {
 if (hasSingleInstanceLock)
   void app.whenReady().then(async () => {
     desktopLocale = normalizeDesktopLocale(app.getLocale());
-    const settings = new DesktopSettingsStore(app.getPath('userData'));
+    const settings = new DesktopSettingsStore(
+      app.getPath('userData'),
+      portableDataRoot ? PORTABLE_DEFAULT_CACHE_LIMIT_BYTES : DEFAULT_CACHE_LIMIT_BYTES,
+    );
     const connectionSettings = new DesktopConnectionSettingsStore(
       app.getPath('userData'),
       connectionSettingsForServerUrl(initialServerUrl),
@@ -362,6 +391,7 @@ function registerCacheIpc(owner: AuthenticatedOwner, settings: DesktopSettingsSt
 }
 
 function currentDesktopCacheRoot(): string {
+  if (portableDataRoot) return portableCacheRoot(portableDataRoot);
   return desktopCacheRoot({
     platform: process.platform,
     home: app.getPath('home'),

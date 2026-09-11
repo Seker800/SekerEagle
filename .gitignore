@@ -11,6 +11,7 @@ release/
 .cache/
 .local/
 .runtime/
+SekerEagleData/
 .venv/
 __pycache__/
 *.pyc

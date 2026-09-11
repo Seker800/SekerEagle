@@ -13,7 +13,10 @@ export interface DesktopSettings {
 export class DesktopSettingsStore {
   private readonly filePath: string;
 
-  constructor(settingsDirectory: string) {
+  constructor(
+    settingsDirectory: string,
+    private readonly defaultCacheLimitBytes = DEFAULT_CACHE_LIMIT_BYTES,
+  ) {
     this.filePath = path.join(settingsDirectory, 'desktop-settings.json');
   }
 
@@ -24,7 +27,7 @@ export class DesktopSettingsStore {
       return { cacheLimitBytes: limitGiB * GIBIBYTE };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT' || error instanceof SyntaxError) {
-        return { cacheLimitBytes: DEFAULT_CACHE_LIMIT_BYTES };
+        return { cacheLimitBytes: this.defaultCacheLimitBytes };
       }
       throw error;
     }

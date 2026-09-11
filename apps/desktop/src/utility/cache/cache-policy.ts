@@ -1,5 +1,6 @@
 export const GIBIBYTE = 1024 ** 3;
 export const DEFAULT_CACHE_LIMIT_BYTES = 10 * GIBIBYTE;
+export const PORTABLE_DEFAULT_CACHE_LIMIT_BYTES = 2 * GIBIBYTE;
 
 export function normalizeCacheLimitGiB(value: number | undefined): number {
   const normalized = value ?? 10;
