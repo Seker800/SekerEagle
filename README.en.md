@@ -185,19 +185,19 @@ photo management project instead.
 
 ## Support matrix
 
-| Capability                 |        Status        | Notes                                                                     |
-| -------------------------- | :------------------: | ------------------------------------------------------------------------- |
-| macOS + Apple Silicon      |  ✅ Supported path   | Current development, deployment, and performance test environment         |
-| Docker Desktop deployment  |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
-| macOS desktop app          | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
-| Windows x64 desktop app    | Internal-test ready  | Single-file portable app with profile and cache stored beside the program |
-| Web asset library          |          ✅          | Desktop browsers first                                                    |
-| Chrome browser capture     |          ✅          | Unpacked Manifest V3 extension                                            |
-| Eagle snapshot migration   |          ✅          | Local CLI plus Eagle export plugin                                        |
-| Local MLX classification   |  ✅ Optional, ready  | Available; requires Apple Silicon, `uv`, and a model download             |
-| AI tags and fuzzy search   |  ✅ Optional, ready  | Available; requires local Ollama and `qwen3-vl:8b-instruct`               |
-| Linux / x64                |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
-| Native mobile app          |          ❌          | Not currently available                                                   |
+| Capability                |        Status        | Notes                                                                     |
+| ------------------------- | :------------------: | ------------------------------------------------------------------------- |
+| macOS + Apple Silicon     |  ✅ Supported path   | Current development, deployment, and performance test environment         |
+| Docker Desktop deployment |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                          |
+| macOS desktop app         | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache  |
+| Windows x64 desktop app   | Internal-test ready  | Single-file portable app with profile and cache stored beside the program |
+| Web asset library         |          ✅          | Desktop browsers first                                                    |
+| Chrome browser capture    |          ✅          | Unpacked Manifest V3 extension                                            |
+| Eagle snapshot migration  |          ✅          | Local CLI plus Eagle export plugin                                        |
+| Local MLX classification  |  ✅ Optional, ready  | Available; requires Apple Silicon, `uv`, and a model download             |
+| AI tags and fuzzy search  |  ✅ Optional, ready  | Available; requires local Ollama and `qwen3-vl:8b-instruct`               |
+| Linux / x64               |     Experimental     | Non-vector TypeScript components may work; no complete supported path yet |
+| Native mobile app         |          ❌          | Not currently available                                                   |
 
 Allocate at least 16 GiB of memory and 8 CPUs to Docker Desktop. The PostgreSQL metadata path has
 been independently benchmarked with 100,000 assets. That result does not mean object-storage
