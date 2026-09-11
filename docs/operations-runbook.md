@@ -46,14 +46,30 @@ docker compose --env-file .env \
 curl -fsS http://192.168.1.10:8180/api/health/ready
 ```
 
-LAN 叠加配置会把该精确地址加入浏览器来源白名单，因此网页登录和所有受 CSRF 来源保护的
-写操作都可通过内网 IP 使用；网页拖拽上传的预签名对象请求也会经由当前内网 gateway，而不会
+基础编排会从同一个 LAN 地址推导 API 的精确浏览器来源白名单，LAN 叠加配置只负责绑定端口；
+因此以后单独重建 API 也不会丢失该白名单。网页登录和所有受 CSRF 来源保护的写操作都可通过
+内网 IP 使用；网页拖拽上传的预签名对象请求也会经由当前内网 gateway，而不会
 访问客户端电脑自身的 `localhost`。其他来源仍会 fail closed。Chrome 采集扩展选择“仅使用内网”，
 内网地址填写 `http://192.168.1.10:8180`，并勾选
 “允许内网 HTTP”。不要使用 `0.0.0.0`；通过 macOS 防火墙只允许可信设备访问 8180。
 局域网 HTTP 会明文传输登录信息、PAT 和图片，不适合不可信 Wi-Fi；这种环境应使用 HTTPS。
 浏览器不会向局域网 HTTP 页面开放脚本图片剪贴板；此时网页端的“打开可复制预览”会展示真实
 PREVIEW 图片，可继续使用浏览器原生右键“复制图片”。HTTPS、localhost 和桌面端仍使用一键复制。
+
+## 公网来源
+
+公网入口应优先使用 HTTPS，并把精确 origin（包含非标准端口）写入
+`SEKEREAGLE_PUBLIC_ORIGIN`。只有在公网 HTTPS 暂时无法部署且明确接受登录信息、Cookie 与图片
+明文传输风险时，才能额外开启危险兼容开关：
+
+```dotenv
+SEKEREAGLE_PUBLIC_ORIGIN=http://yuntai.design:8180
+SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP=true
+```
+
+该开关只允许配置的精确 origin，不接受通配符、路径、URL 凭据或隐式来源推断；默认值为
+`false`。修改后必须重建 API。长期运行应在非标准端口上部署 HTTPS（证书可通过 DNS-01
+签发），随后把公网 origin 改为 `https://...:端口` 并关闭危险开关。
 
 从早期用户名版本升级时，数据库中唯一的旧管理员可以直接在新登录页输入希望绑定的邮箱和原密码。只有原密码验证成功后才会写入邮箱，并同时吊销旧 refresh token 与 PAT；普通用户和多个旧管理员不会自动绑定。
 

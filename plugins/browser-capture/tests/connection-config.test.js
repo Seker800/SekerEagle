@@ -107,15 +107,23 @@ test('LAN gateway overlay preserves loopback and requires an explicit bind addre
 
   assert.match(compose, /127\.0\.0\.1:8180:8080/);
   assert.match(
-    lanCompose,
-    /\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180:8080/,
+    compose,
+    /BROWSER_TRUSTED_ORIGINS: 'http:\/\/\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:-localhost\}:8180,\$\{SEKEREAGLE_PUBLIC_ORIGIN:-\}'/,
+  );
+  assert.match(
+    compose,
+    /ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS: '\$\{SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP:-false\}'/,
   );
   assert.match(
     lanCompose,
-    /BROWSER_TRUSTED_ORIGINS: 'http:\/\/\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180'/,
+    /\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:\?set a trusted LAN address\}:8180:8080/,
   );
   assert.match(exampleEnv, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
+  assert.match(exampleEnv, /^SEKEREAGLE_PUBLIC_ORIGIN=$/m);
+  assert.match(exampleEnv, /^SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP=false$/m);
   assert.match(envCreator, /^SEKEREAGLE_GATEWAY_LAN_ADDRESS=$/m);
+  assert.match(envCreator, /^SEKEREAGLE_PUBLIC_ORIGIN=$/m);
+  assert.match(envCreator, /^SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP=false$/m);
 });
 
 test('gateway preserves the loopback signing host behind a public reverse proxy', async () => {

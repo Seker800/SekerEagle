@@ -22,6 +22,7 @@ void test('accepts the local isolated runtime', () => {
   const result = validateEnvironment(safeEnv);
   assert.equal(result.CANONICAL_ORIGIN, 'http://localhost:8180');
   assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, ['http://localhost:8180']);
+  assert.equal(result.ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS, false);
   assert.equal(result.EAGLE_MEDIA_THROTTLE_V2_ENABLED, true);
   assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, 256);
   assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE, 6_000);
@@ -79,6 +80,19 @@ void test('accepts exact trusted LAN origins while preserving the canonical orig
   ]);
 });
 
+void test('accepts one exact public HTTP origin only after an explicit insecure opt-in', () => {
+  const result = validateEnvironment({
+    ...safeEnv,
+    BROWSER_TRUSTED_ORIGINS: 'http://yuntai.design:8180',
+    ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS: 'true',
+  });
+  assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, [
+    'http://localhost:8180',
+    'http://yuntai.design:8180',
+  ]);
+  assert.equal(result.ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS, true);
+});
+
 void test('rejects unsafe trusted browser origins', () => {
   for (const trustedOrigin of [
     'http://203.0.113.10:8180',
@@ -91,6 +105,22 @@ void test('rejects unsafe trusted browser origins', () => {
   ]) {
     assert.throws(() =>
       validateEnvironment({ ...safeEnv, BROWSER_TRUSTED_ORIGINS: trustedOrigin }),
+    );
+  }
+});
+
+void test('keeps malformed public HTTP origins closed even when insecure transport is enabled', () => {
+  for (const trustedOrigin of [
+    'http://*.yuntai.design:8180',
+    'http://yuntai.design:8180/path',
+    'http://user:password@yuntai.design:8180',
+  ]) {
+    assert.throws(() =>
+      validateEnvironment({
+        ...safeEnv,
+        BROWSER_TRUSTED_ORIGINS: trustedOrigin,
+        ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS: 'true',
+      }),
     );
   }
 });
