@@ -11,6 +11,8 @@ MINIO_ROOT_USER=sekereagle-${secret(8)}
 MINIO_ROOT_PASSWORD=${secret(32)}
 PORT=3000
 SEKEREAGLE_GATEWAY_LAN_ADDRESS=
+SEKEREAGLE_PUBLIC_ORIGIN=
+SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP=false
 CANONICAL_ORIGIN=http://localhost:8180
 DATABASE_URL=postgresql://sekereagle:compose-only@postgres:5432/sekereagle?schema=public
 JWT_ACCESS_SECRET=${secret(48)}

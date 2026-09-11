@@ -6,6 +6,7 @@ export interface RuntimeConfig {
   port: number;
   canonicalOrigin: string;
   browserTrustedOrigins: string[];
+  allowInsecurePublicHttpOrigins: boolean;
   databaseUrl: string;
   jwtAccessSecret: string;
   accessTokenTtlSeconds: number;
@@ -57,6 +58,7 @@ function optionalBoolean(env: Record<string, unknown>, key: string, fallback: bo
 function parseTrustedBrowserOrigins(
   env: Record<string, unknown>,
   canonicalOrigin: string,
+  allowInsecurePublicHttpOrigins: boolean,
 ): string[] {
   const configured =
     typeof env.BROWSER_TRUSTED_ORIGINS === 'string'
@@ -90,8 +92,14 @@ function parseTrustedBrowserOrigins(
     if (!['http:', 'https:'].includes(origin.protocol)) {
       throw new Error('BROWSER_TRUSTED_ORIGINS entries must use HTTP or HTTPS');
     }
-    if (origin.protocol === 'http:' && !isTrustedHttpHost(origin.hostname)) {
-      throw new Error('BROWSER_TRUSTED_ORIGINS HTTP entries must use loopback or a private IP');
+    if (
+      origin.protocol === 'http:' &&
+      !isTrustedHttpHost(origin.hostname) &&
+      !allowInsecurePublicHttpOrigins
+    ) {
+      throw new Error(
+        'BROWSER_TRUSTED_ORIGINS public HTTP entries require ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS=true',
+      );
     }
     if (!origins.includes(origin.origin)) origins.push(origin.origin);
   }
@@ -152,7 +160,16 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
   if (new URL(s3PublicEndpoint).origin !== origin.origin) {
     throw new Error('S3_PUBLIC_ENDPOINT must use CANONICAL_ORIGIN');
   }
-  const browserTrustedOrigins = parseTrustedBrowserOrigins(env, origin.origin);
+  const allowInsecurePublicHttpOrigins = optionalBoolean(
+    env,
+    'ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS',
+    false,
+  );
+  const browserTrustedOrigins = parseTrustedBrowserOrigins(
+    env,
+    origin.origin,
+    allowInsecurePublicHttpOrigins,
+  );
 
   return {
     ...env,
@@ -160,6 +177,7 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
     PORT: positiveInteger({ ...env, PORT: env.PORT ?? '3000' }, 'PORT'),
     CANONICAL_ORIGIN: origin.origin,
     BROWSER_TRUSTED_ORIGINS: browserTrustedOrigins,
+    ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS: allowInsecurePublicHttpOrigins,
     DATABASE_URL: databaseUrl,
     JWT_ACCESS_SECRET: jwtAccessSecret,
     ACCESS_TOKEN_TTL_SECONDS: positiveInteger(env, 'ACCESS_TOKEN_TTL_SECONDS'),
