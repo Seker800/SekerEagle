@@ -1,0 +1,57 @@
+name: Windows Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'Seker800/SekerEagle'
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace @sekereagle/config
+      - run: npm run db:guard
+        env:
+          DATABASE_URL: postgresql://sekereagle:change-me@postgres:5432/sekereagle?schema=public
+          S3_ENDPOINT: http://minio:9000
+          S3_BUCKET: sekereagle-assets
+      - run: npm run lint
+      - run: npm run typecheck --workspace @sekereagle/desktop
+      - run: npm run test:coverage --workspace @sekereagle/desktop
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $manifest = Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json
+          if ("v$($manifest.version)" -ne $env:GITHUB_REF_NAME) {
+            throw "Tag $env:GITHUB_REF_NAME does not match desktop version $($manifest.version)."
+          }
+      - run: npm run package:win --workspace @sekereagle/desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $artifact = Get-ChildItem apps/desktop/release/SekerEagle-*-windows-x64-portable.exe
+          if ($artifact.Count -ne 1) {
+            throw "Expected exactly one Windows portable artifact, found $($artifact.Count)."
+          }
+          gh release create $env:GITHUB_REF_NAME $artifact.FullName `
+            --title "SekerEagle $env:GITHUB_REF_NAME" `
+            --generate-notes `
+            --verify-tag

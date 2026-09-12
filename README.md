@@ -17,12 +17,13 @@
   <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
   <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-5c6ac4?style=flat-square" /></a>
   <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white" />
-  <img alt="Version 0.1.0" src="https://img.shields.io/badge/version-0.1.0-ea9d45?style=flat-square" />
-  <img alt="Apple Silicon" src="https://img.shields.io/badge/platform-Apple%20Silicon-111111?style=flat-square&logo=apple" />
+  <img alt="Version 0.1.4" src="https://img.shields.io/badge/version-0.1.4-ea9d45?style=flat-square" />
+  <img alt="Windows x64 and Apple Silicon" src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Apple%20Silicon-1674cf?style=flat-square" />
 </p>
 
 <p align="center">
   <a href="#产品组成">产品组成</a> ·
+  <a href="#windows-客户端下载">Windows 下载</a> ·
   <a href="#两项核心体验">核心体验</a> ·
   <a href="#功能一览">功能</a> ·
   <a href="#快速开始">快速开始</a> ·
@@ -31,6 +32,23 @@
   <a href="#架构与数据边界">架构</a> ·
   <a href="#文档导航">文档</a>
 </p>
+
+## Windows 客户端下载
+
+<p align="center">
+  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe"><strong>⬇️ 下载 SekerEagle 0.1.4 · Windows 11 x64 便携版</strong></a>
+  &nbsp;·&nbsp;
+  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.4">查看发布说明</a>
+</p>
+
+Windows 客户端是单个免安装 EXE，双击即可运行。首次启动会在程序旁创建
+`SekerEagleData`，用于保存登录状态、服务器连接设置和可重建的媒体缓存；升级时只需替换
+EXE 并保留该目录。客户端加载与网页端相同的完整素材管理界面，需要连接一套已经运行的
+SekerEagle 服务端。
+
+当前公开构建尚未进行 Authenticode 签名，Windows Defender SmartScreen 可能显示“未知
+发布者”。公网连接建议使用 HTTPS；只有在明确接受登录信息、Cookie 和图片明文传输风险
+时，才应在桌面连接设置中启用外网 HTTP。
 
 ## 两项核心体验
 
@@ -58,7 +76,7 @@ SekerEagle 不是单一的网页应用，而是一套围绕自托管素材库协
 | 组成         | 负责什么                                                                       | 形态                                               |
 | ------------ | ------------------------------------------------------------------------------ | -------------------------------------------------- |
 | **采集插件** | 从网页采集原图、来源与描述；从 Eagle 导出可校验的迁移快照                      | Chrome Manifest V3 扩展 + Eagle 导出插件           |
-| **桌面应用** | 连接本机、局域网或公网服务，在统一界面中管理素材，并用可重建的本机缓存加速浏览 | Electron 桌面客户端，当前以 macOS 为主             |
+| **桌面应用** | 连接本机、局域网或公网服务，在统一界面中管理素材，并用可重建的本机缓存加速浏览 | Electron 桌面客户端，支持 macOS 与 Windows x64     |
 | **服务端**   | 统一处理认证、用户隔离、上传、去重、媒体加工、检索与数据持久化                 | Gateway + NestJS API + Worker + PostgreSQL + MinIO |
 | **网页端**   | 提供瀑布流浏览、筛选、标签、智能文件夹、预览和管理界面                         | React / Vite Web 应用，可直接通过浏览器使用        |
 
@@ -162,19 +180,19 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 
 ## 支持矩阵
 
-| 能力                  |  当前状态   | 说明                                                   |
-| --------------------- | :---------: | ------------------------------------------------------ |
-| macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                           |
-| Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway         |
-| macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存   |
-| Windows x64 桌面应用  |  内测可用   | 单文件便携版，程序旁保存配置和可重建媒体缓存           |
-| Web 素材库            |     ✅      | 桌面浏览器优先                                         |
-| Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                              |
-| Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                              |
-| 本地 MLX 向量归类     | ✅ 可选启用 | 已可用；需要 Apple Silicon、`uv` 和模型下载            |
-| AI 自动标签与模糊搜索 | ✅ 可选启用 | 已可用；需要本机 Ollama 与 `qwen3-vl:8b-instruct`      |
-| Linux / x64           |   实验性    | 非向量 TypeScript 组件可能可运行，尚未形成完整支持路径 |
-| 移动端原生应用        |     ❌      | 当前未提供                                             |
+| 能力                  |  当前状态   | 说明                                                                                                                                                               |
+| --------------------- | :---------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                                                                                                                                       |
+| Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway                                                                                                                     |
+| macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存                                                                                                               |
+| Windows x64 桌面应用  |  ✅ 便携版  | [下载 0.1.4 单文件 EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe)，程序旁保存配置和可重建媒体缓存 |
+| Web 素材库            |     ✅      | 桌面浏览器优先                                                                                                                                                     |
+| Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                                                                                                                                          |
+| Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                                                                                                                                          |
+| 本地 MLX 向量归类     | ✅ 可选启用 | 已可用；需要 Apple Silicon、`uv` 和模型下载                                                                                                                        |
+| AI 自动标签与模糊搜索 | ✅ 可选启用 | 已可用；需要本机 Ollama 与 `qwen3-vl:8b-instruct`                                                                                                                  |
+| Linux / x64           |   实验性    | 非向量 TypeScript 组件可能可运行，尚未形成完整支持路径                                                                                                             |
+| 移动端原生应用        |     ❌      | 当前未提供                                                                                                                                                         |
 
 建议为 Docker Desktop 分配至少 16 GiB 内存和 8 CPU。十万条素材的 PostgreSQL
 元数据路径已经过独立基准验证；该结果不代表对象存储容量、备份或磁盘冗余已经自动解决，
