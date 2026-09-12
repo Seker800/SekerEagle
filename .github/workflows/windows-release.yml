@@ -29,6 +29,7 @@ jobs:
           DATABASE_URL: postgresql://sekereagle:change-me@postgres:5432/sekereagle?schema=public
           S3_ENDPOINT: http://minio:9000
           S3_BUCKET: sekereagle-assets
+      - run: npm run db:generate
       - run: npm run lint
       - run: npm run typecheck --workspace @sekereagle/desktop
       - run: npm run test:coverage --workspace @sekereagle/desktop
