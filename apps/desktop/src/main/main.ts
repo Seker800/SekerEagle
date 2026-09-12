@@ -84,6 +84,41 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+const WINDOWS_TITLE_BAR_CSS = `
+html,
+body {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+body {
+  box-sizing: border-box !important;
+  height: calc(100vh - 32px) !important;
+  margin-top: 32px !important;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0 138px auto 0;
+  height: 32px;
+  z-index: 2147483647;
+  background: #1b1c1f;
+  -webkit-app-region: drag;
+}
+body > .workspace,
+body > #root,
+.standalone-eagle-shell,
+.standalone-eagle-shell > main,
+.standalone-eagle-shell > main > div:first-child {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+.auth-loading,
+.auth-shell,
+.auth-intro {
+  min-height: 100% !important;
+}
+`;
+
 let portableDataRoot: string | null = null;
 let portableStartupFailed = false;
 try {
@@ -704,6 +739,17 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
     minHeight: 640,
     show: false,
     title: 'SekerEagle',
+    ...(process.platform === 'win32'
+      ? {
+          autoHideMenuBar: true,
+          titleBarStyle: 'hidden' as const,
+          titleBarOverlay: {
+            color: '#1b1c1f',
+            symbolColor: '#f5f5f5',
+            height: 32,
+          },
+        }
+      : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -715,6 +761,12 @@ function createWindow(initialUrl: string, owner: AuthenticatedOwner): void {
     },
   });
   mainWindow = window;
+  if (process.platform === 'win32') {
+    window.removeMenu();
+    window.webContents.on('dom-ready', () => {
+      void window.webContents.insertCSS(WINDOWS_TITLE_BAR_CSS);
+    });
+  }
   window.once('ready-to-show', () => window.show());
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 interface DesktopPackage {
+  version?: string;
   scripts?: Record<string, string>;
   build?: {
     win?: {
@@ -19,6 +20,7 @@ describe('Windows desktop packaging', () => {
       await readFile(path.join(import.meta.dirname, '..', 'package.json'), 'utf8'),
     ) as DesktopPackage;
 
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(manifest.build?.win).toMatchObject({
       artifactName: '${productName}-${version}-windows-${arch}-portable.${ext}',
       target: [{ target: 'portable', arch: ['x64'] }],
