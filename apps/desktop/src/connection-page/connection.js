@@ -24,6 +24,7 @@ const messages = {
     notTested: '未检测',
     notConfigured: '未配置',
     allowPrivateHttp: '允许私有 IP 使用 HTTP（仅可信局域网）',
+    allowPublicHttp: '允许外网使用 HTTP（危险：登录信息、Cookie 和图片将明文传输）',
     testAllConnections: '测试全部连接',
     saveAndConnect: '保存并连接',
     changeLibrary: '更换为另一套图库…',
@@ -86,6 +87,8 @@ const messages = {
     notTested: 'Not tested',
     notConfigured: 'Not configured',
     allowPrivateHttp: 'Allow HTTP for private IPs (trusted LANs only)',
+    allowPublicHttp:
+      'Allow HTTP on public networks (danger: credentials, cookies, and images are sent in cleartext)',
     testAllConnections: 'Test All Connections',
     saveAndConnect: 'Save and Connect',
     changeLibrary: 'Connect to Another Library…',
@@ -240,6 +243,7 @@ function formValue() {
     lanUrl: data.get('lanUrl'),
     publicUrl: data.get('publicUrl'),
     allowInsecureLan: data.get('allowInsecureLan') === 'on',
+    allowInsecurePublicHttp: data.get('allowInsecurePublicHttp') === 'on',
   };
 }
 
@@ -249,6 +253,7 @@ function fill(settings) {
   form.elements.lanUrl.value = settings.lanUrl;
   form.elements.publicUrl.value = settings.publicUrl;
   form.elements.allowInsecureLan.checked = settings.allowInsecureLan;
+  form.elements.allowInsecurePublicHttp.checked = settings.allowInsecurePublicHttp;
 }
 
 function render(state) {

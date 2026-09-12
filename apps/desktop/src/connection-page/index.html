@@ -119,6 +119,12 @@
                     ><span data-status="PUBLIC" data-i18n="notConfigured">未配置</span>
                   </div>
                   <input name="publicUrl" type="url" placeholder="https://eagle.example.com" />
+                  <label class="checkbox">
+                    <input name="allowInsecurePublicHttp" type="checkbox" />
+                    <span data-i18n="allowPublicHttp"
+                      >允许外网使用 HTTP（危险：登录信息、Cookie 和图片将明文传输）</span
+                    >
+                  </label>
                 </section>
 
                 <p id="message" role="status"></p>

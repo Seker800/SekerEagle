@@ -31,6 +31,7 @@ describe('desktop connection settings', () => {
       lanUrl: '',
       publicUrl: '',
       allowInsecureLan: false,
+      allowInsecurePublicHttp: false,
       deploymentId: null,
       activeSlot: null,
     });
@@ -44,6 +45,7 @@ describe('desktop connection settings', () => {
         lanUrl: 'http://192.168.31.139:8180',
         publicUrl: 'https://eagle.example.com/',
         allowInsecureLan: true,
+        allowInsecurePublicHttp: false,
       }),
     ).toMatchObject({
       localUrl: 'http://localhost:8180',
@@ -52,10 +54,56 @@ describe('desktop connection settings', () => {
     });
   });
 
-  it('rejects insecure public targets, unapproved LAN HTTP, paths, credentials and protected hosts', () => {
+  it('allows an exact public HTTP origin only after an explicit client-side risk opt-in', () => {
+    expect(
+      normalizeConnectionSettings({
+        mode: 'PUBLIC',
+        publicUrl: 'http://yuntai.design:8180/',
+        allowInsecurePublicHttp: true,
+      }),
+    ).toMatchObject({
+      publicUrl: 'http://yuntai.design:8180',
+      allowInsecurePublicHttp: true,
+    });
+
+    expect(
+      normalizeConnectionSettings({
+        mode: 'AUTO',
+        localUrl: 'http://localhost:8180',
+        lanUrl: '',
+        publicUrl: 'http://yuntai.design:8180/',
+        allowInsecureLan: false,
+        allowInsecurePublicHttp: true,
+      }),
+    ).toMatchObject({
+      localUrl: 'http://localhost:8180',
+      publicUrl: 'http://yuntai.design:8180',
+      allowInsecurePublicHttp: true,
+    });
+  });
+
+  it('identifies the invalid connection field and rejects pasted trailing punctuation', () => {
+    expect(() =>
+      normalizeConnectionSettings({
+        publicUrl: 'http://yuntai.design:8180/？',
+        allowInsecurePublicHttp: true,
+      }),
+    ).toThrow('外网地址不能包含子路径或末尾标点');
+    expect(() => normalizeConnectionSettings({ lanUrl: 'not a url' })).toThrow('局域网地址无效');
+  });
+
+  it('rejects unapproved public and LAN HTTP, paths, credentials and protected hosts', () => {
     const invalid = [
       { lanUrl: 'http://192.168.31.139:8180', allowInsecureLan: false },
       { publicUrl: 'http://example.com' },
+      {
+        publicUrl: 'http://user:password@example.com',
+        allowInsecurePublicHttp: true,
+      },
+      {
+        publicUrl: 'http://example.com/path',
+        allowInsecurePublicHttp: true,
+      },
       { publicUrl: 'https://example.com/path' },
       { publicUrl: 'https://user:password@example.com' },
       { lanUrl: 'http://192.168.31.89:8180', allowInsecureLan: true },
@@ -88,6 +136,13 @@ describe('desktop connection settings', () => {
 
     await chmod(settingsPath, 0o600);
     await writeFile(settingsPath, '{broken', 'utf8');
+    await expect(store.load()).resolves.toEqual(DEFAULT_CONNECTION_SETTINGS);
+
+    await writeFile(
+      settingsPath,
+      JSON.stringify({ mode: 'AUTO', publicUrl: 'http://example.com' }),
+      'utf8',
+    );
     await expect(store.load()).resolves.toEqual(DEFAULT_CONNECTION_SETTINGS);
 
     await writeFile(settingsPath, JSON.stringify({ mode: 'LAN', lanUrl: 42 }), 'utf8');

@@ -15,6 +15,7 @@ export interface DesktopConnectionSettings {
   lanUrl: string;
   publicUrl: string;
   allowInsecureLan: boolean;
+  allowInsecurePublicHttp: boolean;
   deploymentId: string | null;
   activeSlot: ConnectionSlot | null;
 }
@@ -25,6 +26,7 @@ export const DEFAULT_CONNECTION_SETTINGS: DesktopConnectionSettings = Object.fre
   lanUrl: '',
   publicUrl: '',
   allowInsecureLan: false,
+  allowInsecurePublicHttp: false,
   deploymentId: null,
   activeSlot: null,
 });
@@ -43,6 +45,7 @@ export function normalizeConnectionSettings(input: unknown): DesktopConnectionSe
   const value = isRecord(input) ? input : {};
   const mode = parseMode(value.mode);
   const allowInsecureLan = value.allowInsecureLan === true;
+  const allowInsecurePublicHttp = value.allowInsecurePublicHttp === true;
   const settings: DesktopConnectionSettings = {
     mode,
     localUrl: normalizeSlotUrl(
@@ -50,13 +53,19 @@ export function normalizeConnectionSettings(input: unknown): DesktopConnectionSe
       stringOrDefault(value.localUrl, DEFAULT_DESKTOP_SERVER_URL),
       {
         allowInsecureLan,
+        allowInsecurePublicHttp,
       },
     ),
-    lanUrl: normalizeSlotUrl('LAN', stringOrDefault(value.lanUrl, ''), { allowInsecureLan }),
+    lanUrl: normalizeSlotUrl('LAN', stringOrDefault(value.lanUrl, ''), {
+      allowInsecureLan,
+      allowInsecurePublicHttp,
+    }),
     publicUrl: normalizeSlotUrl('PUBLIC', stringOrDefault(value.publicUrl, ''), {
       allowInsecureLan,
+      allowInsecurePublicHttp,
     }),
     allowInsecureLan,
+    allowInsecurePublicHttp,
     deploymentId: parseDeploymentId(value.deploymentId),
     activeSlot: parseActiveSlot(value.activeSlot),
   };
@@ -83,26 +92,25 @@ export function connectionUrl(settings: DesktopConnectionSettings, slot: Connect
 function normalizeSlotUrl(
   slot: ConnectionSlot,
   input: string,
-  options: { allowInsecureLan: boolean },
+  options: { allowInsecureLan: boolean; allowInsecurePublicHttp: boolean },
 ): string {
   const trimmed = input.trim();
   if (!trimmed) return '';
-  if (trimmed.length > MAX_URL_LENGTH) throw new Error('服务器地址过长。');
+  const label = connectionSlotLabel(slot);
+  if (trimmed.length > MAX_URL_LENGTH) throw new Error(`${label}地址过长。`);
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    throw new Error('服务器地址无效。');
+    throw new Error(`${label}地址无效，请只填写完整的 HTTP(S) 地址。`);
   }
-  if (
-    !['http:', 'https:'].includes(url.protocol) ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    (url.pathname !== '/' && url.pathname !== '')
-  ) {
-    throw new Error('服务器地址必须是无凭据、查询和子路径的 HTTP(S) origin。');
+  if (!['http:', 'https:'].includes(url.protocol)) {
+    throw new Error(`${label}地址必须使用 HTTP 或 HTTPS。`);
+  }
+  if (url.username || url.password) throw new Error(`${label}地址不能包含用户名或密码。`);
+  if (url.search || url.hash) throw new Error(`${label}地址不能包含查询参数或锚点。`);
+  if (url.pathname !== '/' && url.pathname !== '') {
+    throw new Error(`${label}地址不能包含子路径或末尾标点。示例：http://yuntai.design:8180`);
   }
 
   const hostname = unbracket(url.hostname.toLowerCase());
@@ -118,8 +126,10 @@ function normalizeSlotUrl(
       throw new Error('局域网 HTTP 仅允许显式启用的私有 IP。');
     }
   } else {
-    if (url.protocol !== 'https:') throw new Error('外网地址必须使用 HTTPS。');
     if (loopback) throw new Error('外网地址不能使用 loopback 主机。');
+    if (url.protocol === 'http:' && !options.allowInsecurePublicHttp) {
+      throw new Error('外网 HTTP 仅允许在明确接受明文传输风险后启用。');
+    }
   }
   return url.origin;
 }
@@ -169,6 +179,12 @@ function isPrivateIp(hostname: string): boolean {
 
 function unbracket(hostname: string): string {
   return hostname.replace(/^\[|\]$/gu, '');
+}
+
+function connectionSlotLabel(slot: ConnectionSlot): string {
+  if (slot === 'LOCAL') return '本地';
+  if (slot === 'LAN') return '局域网';
+  return '外网';
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

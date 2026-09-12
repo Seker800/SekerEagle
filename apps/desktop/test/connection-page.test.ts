@@ -11,6 +11,7 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('name="lanUrl"');
     expect(html).toContain('name="publicUrl"');
     expect(html).toContain('name="allowInsecureLan"');
+    expect(html).toContain('name="allowInsecurePublicHttp"');
     expect(html).toContain('name="mode"');
     expect(html).toContain('src="/connection.js"');
     expect(html).not.toMatch(/<script(?![^>]+src=)/u);
