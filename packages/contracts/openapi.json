@@ -752,16 +752,31 @@
         "tags": ["eagle"]
       }
     },
-    "/api/eagle/assets/batch/privacy": {
-      "patch": {
-        "operationId": "EagleController_setAssetPrivacy",
+    "/api/eagle/privacy-settings": {
+      "get": {
+        "operationId": "EagleController_getPrivacySettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      },
+      "put": {
+        "operationId": "EagleController_updatePrivacySettings",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/BatchSetEagleAssetPrivacyDto"
+                "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
               }
             }
           }
@@ -3107,9 +3122,18 @@
         },
         "required": ["rowVersion"]
       },
-      "BatchSetEagleAssetPrivacyDto": {
+      "UpdateEaglePrivacySettingsDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "tagIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["tagIds"]
       },
       "CreateManualTagDto": {
         "type": "object",

@@ -26,6 +26,7 @@ Prisma repositories / MinIO adapters
 - 浏览器写请求只有在来源已显式配置，或来源与当前 loopback/私网 IP gateway 的协议、主机和端口完全同源时才可通过；任意私网来源和任意 Host 均不构成信任。
 - 不依赖或访问 SekerChat 运行时和数据面。
 - locale 只影响 Web 与桌面展示适配层；业务规则、用户数据和 API 领域对象保持语言无关。
+- 私密分类只由 owner 选择的人工标签规则决定；`EagleAsset.isPrivate` 是在标签写事务内同步的查询投影，不是第二套可编辑事实源。
 
 ## Media memory boundary
 

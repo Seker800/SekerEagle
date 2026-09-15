@@ -13,6 +13,7 @@ function tag(overrides: Record<string, unknown> = {}) {
     name: '自动标签',
     normalizedName: '自动标签',
     isStarred: false,
+    marksAssetsPrivate: false,
     groupId: null,
     semanticConfig: null,
     assetLinks: [
@@ -26,6 +27,7 @@ test('selects only small imported tags and counts active assets', () => {
   const selected = selectReclassificationCandidates([
     tag(),
     tag({ id: 'unused', assetLinks: [] }),
+    tag({ id: 'private-rule', marksAssetsPrivate: true }),
     tag({
       id: 'manual',
       assetLinks: [
@@ -62,6 +64,7 @@ test('selects only small imported tags and counts active assets', () => {
   assert.equal(selected.skipped.unused, 1);
   assert.equal(selected.skipped.userAssigned, 1);
   assert.equal(selected.skipped.aboveThreshold, 1);
+  assert.equal(selected.skipped.privacyRule, 1);
 });
 
 test('parses an explicit owner and keeps dry-run as the default', () => {

@@ -20,6 +20,7 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import styles from './EagleVectorWorkspace.module.css';
 export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
 type View = EagleVectorWorkspaceView | 'DISTANCE';
@@ -258,7 +259,13 @@ export function EagleVectorWorkspace({
   };
   const review = async (ids: string[], action: 'ACCEPT' | 'REJECT') => {
     const reviewed = await act(
-      () => reviewEagleVectorSuggestions(ids, action),
+      async () => {
+        const result = await reviewEagleVectorSuggestions(ids, action);
+        if (action === 'ACCEPT') {
+          await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
+        }
+        return result;
+      },
       action === 'ACCEPT'
         ? t('已确认 {{value1}} 条人工标签建议', {
             value1: ids.length,

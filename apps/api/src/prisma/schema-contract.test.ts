@@ -34,6 +34,13 @@ async function manualTagRecencyMigrationText(): Promise<string> {
   );
 }
 
+async function privateTagRulesMigrationText(): Promise<string> {
+  return readFile(
+    resolve(__dirname, '../../prisma/migrations/20260915233000_private_tag_rules/migration.sql'),
+    'utf8',
+  );
+}
+
 async function aiNounTagMigrationText(): Promise<string> {
   return readFile(
     resolve(
@@ -124,6 +131,17 @@ void test('manual tag recency is owner-scoped and backfilled only from user assi
   assert.match(migration, /WHERE "assignedByUser" = true/);
   assert.match(migration, /tag\."ownerId" = recent\."ownerId"/);
   assert.match(migration, /"lastUsedAt" DESC/);
+});
+
+void test('private tag rules are additive and do not migrate legacy asset privacy state', async () => {
+  const schema = await schemaText();
+  const manualTagModel = schema.match(/model EagleManualTag \{[\s\S]*?\n\}/)?.[0];
+  assert.match(manualTagModel ?? '', /marksAssetsPrivate\s+Boolean\s+@default\(false\)/);
+  assert.match(manualTagModel ?? '', /@@index\(\[ownerId, marksAssetsPrivate, id\]\)/);
+
+  const migration = await privateTagRulesMigrationText();
+  assert.match(migration, /ADD COLUMN "marksAssetsPrivate" BOOLEAN NOT NULL DEFAULT false/);
+  assert.doesNotMatch(migration, /UPDATE\s+"EagleAsset"/);
 });
 
 void test('AI tags share the versioned multimodal vector space and use cosine HNSW search', async () => {

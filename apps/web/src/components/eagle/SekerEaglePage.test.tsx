@@ -40,7 +40,6 @@ const batchRestoreEagleAssetsMock = vi.fn();
 const emptyEagleTrashMock = vi.fn();
 const updateEagleAssetMock = vi.fn();
 const batchUpdateEagleAssetsMock = vi.fn();
-const batchSetEagleAssetPrivacyMock = vi.fn();
 const uploadEagleAssetMock = vi.fn();
 const listEagleSmartFoldersMock = vi.fn();
 const createEagleSmartFolderMock = vi.fn();
@@ -83,7 +82,6 @@ vi.mock('../../lib/eagle-api', () => ({
   emptyEagleTrash: (...args: unknown[]) => emptyEagleTrashMock(...args),
   updateEagleAsset: (...args: unknown[]) => updateEagleAssetMock(...args),
   batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
-  batchSetEagleAssetPrivacy: (...args: unknown[]) => batchSetEagleAssetPrivacyMock(...args),
   uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
   listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
   createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
@@ -280,10 +278,6 @@ describe('SekerEaglePage', () => {
         { assetId: 'asset-1', rowVersion: 2 },
         { assetId: 'asset-2', rowVersion: 5 },
       ],
-    });
-    batchSetEagleAssetPrivacyMock.mockResolvedValue({
-      affectedAssetCount: 1,
-      assets: [{ assetId: 'asset-1', rowVersion: 2 }],
     });
     canCopyImageToClipboardMock.mockReturnValue(true);
     copyImageToClipboardMock.mockResolvedValue(undefined);
@@ -1055,14 +1049,7 @@ describe('SekerEaglePage', () => {
     };
     renderPage();
 
-    const expectedActions = [
-      '另存为…',
-      '复制图片',
-      '添加标签',
-      '删除人工标签',
-      '设为隐私',
-      '删除所选素材',
-    ];
+    const expectedActions = ['另存为…', '复制图片', '添加标签', '删除人工标签', '删除所选素材'];
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
     expect(fireEvent.contextMenu(card, { clientX: 180, clientY: 120 })).toBe(false);
     const thumbnailMenu = screen.getByRole('menu', { name: '素材操作' });
@@ -1212,7 +1199,7 @@ describe('SekerEaglePage', () => {
     );
   });
 
-  it('shows the temporary privacy view and marks selected assets private from the context menu', async () => {
+  it('shows the temporary privacy view without exposing a second per-asset privacy source', async () => {
     renderPage('owner-test', false, {
       enabled: true,
       durationHours: 3,
@@ -1223,14 +1210,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByText('隐私内容已显示')).toBeInTheDocument();
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
     fireEvent.contextMenu(card);
-    fireEvent.click(screen.getByRole('menuitem', { name: '设为隐私' }));
-
-    await waitFor(() =>
-      expect(batchSetEagleAssetPrivacyMock).toHaveBeenCalledWith('token', {
-        assets: [{ assetId: 'asset-1', rowVersion: 1 }],
-        isPrivate: true,
-      }),
-    );
+    expect(screen.queryByRole('menuitem', { name: '设为隐私' })).not.toBeInTheDocument();
   });
 
   it('creates a new manual tag from the asset context picker and applies it once', async () => {

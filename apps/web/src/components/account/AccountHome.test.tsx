@@ -65,6 +65,16 @@ describe('AccountHome', () => {
   });
 
   it('selects persistent private tags independently from the temporary visibility switch', async () => {
+    const clearCache = vi.fn().mockResolvedValue({ deleted: 2, deferred: 0 });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      getCacheStatus: vi.fn(),
+      setCacheLimitGiB: vi.fn(),
+      clearCache,
+      invalidateAsset: vi.fn(),
+    };
+    const onPrivacyRulesChange = vi.fn();
     const tags = [
       {
         id: '11111111-1111-4111-8111-111111111111',
@@ -112,7 +122,14 @@ describe('AccountHome', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
+    render(
+      <AccountHome
+        user={user}
+        onPasswordChanged={vi.fn()}
+        onLogout={vi.fn()}
+        onPrivacyRulesChange={onPrivacyRulesChange}
+      />,
+    );
 
     fireEvent.click(await screen.findByRole('button', { name: '管理私密标签' }));
     expect(await screen.findByRole('checkbox', { name: '私人' })).toBeChecked();
@@ -127,6 +144,8 @@ describe('AccountHome', () => {
     );
     expect(screen.getByText('已选择 2 个私密标签')).toBeInTheDocument();
     expect(screen.getByRole('switch', { name: '显示隐私内容' })).not.toBeChecked();
+    expect(clearCache).toHaveBeenCalledOnce();
+    expect(onPrivacyRulesChange).toHaveBeenCalledOnce();
   });
 
   it('loads, creates and revokes external connection tokens', async () => {

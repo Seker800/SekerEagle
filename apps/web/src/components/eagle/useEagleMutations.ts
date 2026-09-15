@@ -6,7 +6,6 @@ import {
   batchChangeEagleManualTags,
   batchUpdateEagleAssets,
   batchRestoreEagleAssets,
-  batchSetEagleAssetPrivacy,
   batchTrashEagleAssets,
   createEagleManualTag,
   createEagleManualTagGroup,
@@ -138,7 +137,10 @@ export function useEagleMutations(
   const replaceTagsMutation = useMutation({
     mutationFn: ({ assetId, tagIds }: { assetId: string; tagIds: string[] }) =>
       replaceEagleAssetManualTags(accessToken, assetId, tagIds),
-    onSuccess: () => invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags),
+    onSuccess: async (_result, { assetId }) => {
+      await invalidateDesktopAssets([assetId]);
+      await invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags);
+    },
   });
   const createTagMutation = useMutation({
     mutationFn: (name: string) => createEagleManualTag(accessToken, { name }),
@@ -223,7 +225,8 @@ export function useEagleMutations(
         removeTagIds,
         ...(clearAll ? { clearAll: true } : {}),
       }),
-    onSuccess: async () => {
+    onSuccess: async (_result, { assetIds }) => {
+      await invalidateDesktopAssets(assetIds);
       callbacks.onBatchTagsApplied();
       await invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags);
     },
@@ -234,24 +237,6 @@ export function useEagleMutations(
       await invalidateDesktopAssets(assetIds);
       callbacks.onSelectionMutationCompleted();
       await invalidate(queryKeys.assets);
-    },
-  });
-  const privacyMutation = useMutation({
-    mutationFn: ({ assets, isPrivate }: { assets: EagleAssetVersion[]; isPrivate: boolean }) =>
-      batchSetEagleAssetPrivacy(accessToken, {
-        assets: withLatestVersions(assets),
-        isPrivate,
-      }),
-    onSuccess: async ({ assets }) => {
-      rememberVersions(assets);
-      await invalidateDesktopAssets(assets.map(({ assetId }) => assetId));
-      callbacks.onSelectionMutationCompleted();
-      await invalidate(
-        queryKeys.assets,
-        queryKeys.assetDetails,
-        queryKeys.manualTags,
-        queryKeys.aiTags,
-      );
     },
   });
   const restoreMutation = useMutation({
@@ -330,7 +315,6 @@ export function useEagleMutations(
     deleteTagGroupMutation,
     batchTagMutation,
     trashMutation,
-    privacyMutation,
     restoreMutation,
     emptyTrashMutation,
     smartFolderMutation,

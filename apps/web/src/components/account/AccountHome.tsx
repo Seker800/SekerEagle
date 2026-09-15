@@ -10,6 +10,7 @@ import {
   IconLogout,
   IconRefresh,
   IconSettings,
+  IconTags,
   IconTrash,
 } from '@tabler/icons-react';
 import { request } from '../../lib/api-client';
@@ -20,7 +21,13 @@ import {
   updatePrivacyVisibility,
   type PrivacyVisibilityState,
 } from '../../lib/privacy-visibility-api';
-import { getDesktopConnectionBridge } from '../../lib/media-resolver';
+import {
+  getEaglePrivacySettings,
+  listEaglePrivacyTagOptions,
+  updateEaglePrivacySettings,
+  type EaglePrivacyTagOption,
+} from '../../lib/eagle-privacy-api';
+import { getDesktopCacheBridge, getDesktopConnectionBridge } from '../../lib/media-resolver';
 interface PersonalAccessToken {
   id: string;
   name: string;
@@ -73,12 +80,14 @@ export function AccountHome({
   onLogout,
   privacyVisibility: providedPrivacyVisibility,
   onPrivacyVisibilityChange,
+  onPrivacyRulesChange,
 }: {
   user: User;
   onPasswordChanged: () => Promise<void>;
   onLogout: () => void;
   privacyVisibility?: PrivacyVisibilityState;
   onPrivacyVisibilityChange?: (state: PrivacyVisibilityState) => void;
+  onPrivacyRulesChange?: () => void;
 }) {
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
@@ -98,9 +107,18 @@ export function AccountHome({
   const [localPrivacyVisibility, setLocalPrivacyVisibility] = useState(DEFAULT_PRIVACY_VISIBILITY);
   const [privacyLoading, setPrivacyLoading] = useState(providedPrivacyVisibility === undefined);
   const [privacyError, setPrivacyError] = useState('');
+  const [privacyTagEditorOpen, setPrivacyTagEditorOpen] = useState(false);
+  const [privacyTagOptions, setPrivacyTagOptions] = useState<EaglePrivacyTagOption[]>([]);
+  const [privateTagIds, setPrivateTagIds] = useState<string[]>([]);
+  const [draftPrivateTagIds, setDraftPrivateTagIds] = useState<string[]>([]);
+  const [privacyTagQuery, setPrivacyTagQuery] = useState('');
+  const [privacyTagsLoading, setPrivacyTagsLoading] = useState(false);
+  const [privacyTagsSaving, setPrivacyTagsSaving] = useState(false);
+  const [privacyTagsLoaded, setPrivacyTagsLoaded] = useState(false);
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
   const desktopConnection = getDesktopConnectionBridge();
+  const desktopCache = getDesktopCacheBridge();
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
     setTokenError('');
@@ -136,6 +154,57 @@ export function AccountHome({
       setPrivacyLoading(false);
     }
   }
+  async function openPrivacyTagEditor() {
+    if (privacyTagEditorOpen) {
+      setPrivacyTagEditorOpen(false);
+      return;
+    }
+    setPrivacyTagEditorOpen(true);
+    if (privacyTagsLoaded) return;
+    setPrivacyTagsLoading(true);
+    setPrivacyError('');
+    try {
+      const [settings, tags] = await Promise.all([
+        getEaglePrivacySettings(),
+        listEaglePrivacyTagOptions(),
+      ]);
+      setPrivateTagIds(settings.tagIds);
+      setDraftPrivateTagIds(settings.tagIds);
+      setPrivacyTagOptions(tags);
+      setPrivacyTagsLoaded(true);
+    } catch (cause) {
+      setPrivacyError(cause instanceof Error ? cause.message : t('加载私密标签失败'));
+    } finally {
+      setPrivacyTagsLoading(false);
+    }
+  }
+  async function savePrivacyTags(event: FormEvent) {
+    event.preventDefault();
+    setPrivacyTagsSaving(true);
+    setPrivacyError('');
+    try {
+      const settings = await updateEaglePrivacySettings(draftPrivateTagIds);
+      setPrivateTagIds(settings.tagIds);
+      setDraftPrivateTagIds(settings.tagIds);
+      onPrivacyRulesChange?.();
+      try {
+        await desktopCache?.clearCache();
+      } catch {
+        setPrivacyError(t('私密标签已保存，但桌面媒体缓存清理失败。'));
+      }
+    } catch (cause) {
+      setPrivacyError(cause instanceof Error ? cause.message : t('保存私密标签失败'));
+    } finally {
+      setPrivacyTagsSaving(false);
+    }
+  }
+  const normalizedPrivacyTagQuery = privacyTagQuery.normalize('NFKC').trim().toLocaleLowerCase();
+  const visiblePrivacyTags = privacyTagOptions.filter((tag) => {
+    if (!normalizedPrivacyTagQuery) return true;
+    return [tag.name, tag.pinyin, tag.pinyinInitials].some((value) =>
+      value.normalize('NFKC').toLocaleLowerCase().includes(normalizedPrivacyTagQuery),
+    );
+  });
   async function createConnectionToken(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -313,6 +382,76 @@ export function AccountHome({
               </select>
             </label>
           </div>
+          <div className="privacy-tag-settings">
+            <div>
+              <span className="privacy-tag-heading">
+                <IconTags size={16} />
+                <strong>{t('私密标签')}</strong>
+              </span>
+              <small>
+                {privacyTagsLoaded
+                  ? t('已选择 {{value1}} 个私密标签', { value1: privateTagIds.length })
+                  : t('拥有任一所选标签的素材会自动进入私密。')}
+              </small>
+            </div>
+            <button
+              className="quiet-button"
+              type="button"
+              onClick={() => void openPrivacyTagEditor()}
+            >
+              {privacyTagEditorOpen ? t('收起私密标签') : t('管理私密标签')}
+            </button>
+          </div>
+          {privacyTagEditorOpen ? (
+            <form className="privacy-tag-editor" onSubmit={(event) => void savePrivacyTags(event)}>
+              <input
+                type="search"
+                aria-label={t('搜索私密标签')}
+                placeholder={t('搜索名称、拼音或首字母')}
+                value={privacyTagQuery}
+                onChange={(event) => setPrivacyTagQuery(event.currentTarget.value)}
+              />
+              {privacyTagsLoading ? (
+                <p>{t('正在加载私密标签…')}</p>
+              ) : visiblePrivacyTags.length ? (
+                <div className="privacy-tag-list">
+                  {visiblePrivacyTags.map((tag) => (
+                    <label key={tag.id}>
+                      <input
+                        type="checkbox"
+                        aria-label={tag.name}
+                        checked={draftPrivateTagIds.includes(tag.id)}
+                        onChange={() =>
+                          setDraftPrivateTagIds((current) =>
+                            current.includes(tag.id)
+                              ? current.filter((id) => id !== tag.id)
+                              : [...current, tag.id],
+                          )
+                        }
+                      />
+                      <span
+                        className="privacy-tag-color"
+                        style={tag.color ? { backgroundColor: tag.color } : undefined}
+                      />
+                      <span>{tag.name}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p>{privacyTagOptions.length ? t('没有匹配的标签') : t('还没有人工标签')}</p>
+              )}
+              <div className="privacy-tag-actions">
+                <span>{t('匹配任意一个标签即可进入私密')}</span>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={privacyTagsLoading || privacyTagsSaving}
+                >
+                  {privacyTagsSaving ? t('正在保存…') : t('保存私密标签')}
+                </button>
+              </div>
+            </form>
+          ) : null}
           {privacyError ? <p className="auth-error">{privacyError}</p> : null}
         </section>
 

@@ -231,6 +231,7 @@ test('distance inspection defaults to lowest similarity first across cursor page
 test('accepting a suggestion atomically creates an audited manual tag relation', async () => {
   const creates: unknown[] = [];
   const recentTagWrites: unknown[] = [];
+  const privacyWrites: unknown[] = [];
   const transaction = {
     $executeRaw: async () => 1,
     eagleVectorTagSuggestion: {
@@ -256,6 +257,12 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
     eagleManualTag: {
       updateMany: async (input: unknown) => {
         recentTagWrites.push(input);
+        return { count: 1 };
+      },
+    },
+    eagleAsset: {
+      updateMany: async (input: unknown) => {
+        privacyWrites.push(input);
         return { count: 1 };
       },
     },
@@ -287,6 +294,8 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
     },
   });
   assert.equal(recentTagWrites.length, 1);
+  assert.equal(privacyWrites.length, 2);
+  assert.match(JSON.stringify(privacyWrites), /marksAssetsPrivate/);
   assert.deepEqual((recentTagWrites[0] as { where: unknown }).where, {
     ownerId: 'owner-1',
     id: 'tag-1',

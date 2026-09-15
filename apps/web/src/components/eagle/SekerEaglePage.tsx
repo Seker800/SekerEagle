@@ -96,6 +96,7 @@ interface SekerEaglePageProps {
   canManageProcessing?: boolean;
   accountView?: ReactNode;
   privacyVisibility?: PrivacyVisibilityState;
+  privacyRulesRevision?: number;
 }
 type EagleAssetContextMenu = {
   x: number;
@@ -157,6 +158,7 @@ export function SekerEaglePage({
   canManageProcessing = false,
   accountView,
   privacyVisibility,
+  privacyRulesRevision = 0,
 }: SekerEaglePageProps) {
   const accessToken = providedAccessToken ?? '';
   const queryClient = useQueryClient();
@@ -180,7 +182,7 @@ export function SekerEaglePage({
   const editorDirtyFieldsRef = useRef<Set<keyof EagleAssetChanges>>(new Set());
   const editorRevisionRef = useRef(0);
   const privacyStateRef = useRef(
-    `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}`,
+    `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
   const [search, setSearch] = useState('');
@@ -284,7 +286,6 @@ export function SekerEaglePage({
     smartFolderMutation,
     updateSmartFolderMutation,
     moveSmartFolderMutation,
-    privacyMutation,
   } = useEagleMutations(accessToken, queryKeys, {
     onMetadataSaved: (assetId, revision) => {
       if (editorAssetIdRef.current === assetId && editorRevisionRef.current === revision) {
@@ -319,7 +320,7 @@ export function SekerEaglePage({
     return [...uniqueAssets.values()];
   }, [assetStore, assetStoreRevision, assetsQuery.data]);
   useEffect(() => {
-    const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}`;
+    const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
     if (privacyStateRef.current === nextPrivacyState) return;
     privacyStateRef.current = nextPrivacyState;
     assetStore.clear();
@@ -337,6 +338,7 @@ export function SekerEaglePage({
     libraryView,
     privateVisible,
     privacyVisibility?.expiresAt,
+    privacyRulesRevision,
     queryClient,
     queryKeys.root,
   ]);
@@ -1295,7 +1297,7 @@ export function SekerEaglePage({
                         : libraryView === 'TRASH'
                           ? t('移除的素材会暂时保留在这里。')
                           : libraryView === 'PRIVATE'
-                            ? t('通过素材右键菜单设为隐私。')
+                            ? t('为素材添加已配置的私密标签。')
                             : t('将图片或 MP4 拖入此处。')}
                     </p>
                   </div>
@@ -1839,29 +1841,6 @@ export function SekerEaglePage({
               >
                 <IconTagsOff size={15} />
                 {' ' + t('删除人工标签…') + ' '}
-              </button>
-            )}
-            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={
-                  selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
-                    ? t('移出隐私')
-                    : t('设为隐私')
-                }
-                disabled={privacyMutation.isPending}
-                onClick={() => {
-                  const isPrivate = !selectedAssetIds.every(
-                    (assetId) => assetsById.get(assetId)?.isPrivate,
-                  );
-                  privacyMutation.mutate({ assets: selectedAssetVersions, isPrivate });
-                }}
-              >
-                <IconLock size={15} />
-                {selectedAssetIds.every((assetId) => assetsById.get(assetId)?.isPrivate)
-                  ? t('移出隐私')
-                  : t('设为隐私')}
               </button>
             )}
             {libraryView === 'ACTIVE' || libraryView === 'PRIVATE' ? (

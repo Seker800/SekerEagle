@@ -13,6 +13,7 @@ import type {
   EagleImportManifestChunkDto,
   ListEagleImportItemsDto,
 } from './eagle-import.dto';
+import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
 
 @Injectable()
 export class EagleImportService {
@@ -582,4 +583,5 @@ async function applyImportedMetadata(
     },
     update: { description: item.description, sourceUrl: validSourceUrl(item.sourceUrl) },
   });
+  await syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId]);
 }

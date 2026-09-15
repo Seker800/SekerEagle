@@ -16,21 +16,24 @@ test('privacy settings expose only the owner private-tag rules', async () => {
 });
 
 test('privacy settings fail closed when any selected tag belongs to another owner', async () => {
-  let transactions = 0;
-  const service = new EaglePrivacyService({
+  let writes = 0;
+  const transaction = {
     eagleManualTag: {
       count: async () => 1,
+      updateMany: async () => {
+        writes += 1;
+      },
     },
-    $transaction: async () => {
-      transactions += 1;
-    },
+  };
+  const service = new EaglePrivacyService({
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
   } as never);
 
   await assert.rejects(
     service.updateSettings('owner-a', { tagIds: ['tag-owned', 'tag-foreign'] }),
     NotFoundException,
   );
-  assert.equal(transactions, 0);
+  assert.equal(writes, 0);
 });
 
 test('privacy settings replace tag rules and recompute only assets whose derived state changes', async () => {
@@ -38,6 +41,7 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   const assetWrites: unknown[] = [];
   const transaction = {
     eagleManualTag: {
+      count: async () => 2,
       updateMany: async (input: unknown) => {
         tagWrites.push(input);
         return { count: 1 };
@@ -51,9 +55,6 @@ test('privacy settings replace tag rules and recompute only assets whose derived
     },
   };
   const service = new EaglePrivacyService({
-    eagleManualTag: {
-      count: async () => 2,
-    },
     $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
   } as never);
 

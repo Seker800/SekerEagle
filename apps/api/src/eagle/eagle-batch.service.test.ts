@@ -60,7 +60,14 @@ test('batch tag changes fail closed before writes when any asset belongs elsewhe
 test('batch clear removes every manual tag and distance for owned assets without enumerating tags', async () => {
   const deletes: Array<{ table: string; where: unknown }> = [];
   const suggestionRefreshes: unknown[] = [];
+  const privacyWrites: unknown[] = [];
   const transaction = {
+    eagleAsset: {
+      updateMany: async (input: unknown) => {
+        privacyWrites.push(input);
+        return { count: 1 };
+      },
+    },
     eagleAssetManualTag: {
       deleteMany: async ({ where }: { where: unknown }) => {
         deletes.push({ table: 'manual-tags', where });
@@ -108,11 +115,15 @@ test('batch clear removes every manual tag and distance for owned assets without
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-a/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-b/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /EagleAssetEmbedding/);
+  assert.equal(privacyWrites.length, 2);
+  assert.match(JSON.stringify(privacyWrites), /marksAssetsPrivate/);
+  assert.match(JSON.stringify(privacyWrites), /asset-a/);
 });
 
 test('batch tag removal refreshes only assets that end without any manual tag', async () => {
   const suggestionRefreshes: unknown[] = [];
   const transaction = {
+    eagleAsset: { updateMany: async () => ({ count: 1 }) },
     eagleAssetManualTag: { deleteMany: async () => ({ count: 1 }) },
     eagleTagMemberDistance: { deleteMany: async () => ({ count: 1 }) },
     $queryRaw: async (statement: unknown) => {
@@ -145,6 +156,7 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
   let distanceSyncs = 0;
   const recentTagWrites: Array<{ where: unknown; data: { lastUsedAt: unknown } }> = [];
   const transaction = {
+    eagleAsset: { updateMany: async () => ({ count: assetIds.length }) },
     eagleManualTag: {
       updateMany: async (input: { where: unknown; data: { lastUsedAt: unknown } }) => {
         recentTagWrites.push(input);
@@ -184,6 +196,40 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
     id: { in: tagIds },
   });
   assert.ok(recentTagWrites[0]?.data.lastUsedAt instanceof Date);
+});
+
+test('replacing tags can move a locked asset into privacy without returning its details', async () => {
+  let detailReads = 0;
+  const transaction = {
+    eagleAsset: {
+      findFirst: async () => ({ id: 'asset-a' }),
+      updateMany: async () => ({ count: 1 }),
+    },
+    eagleManualTag: {
+      count: async () => 1,
+      updateMany: async () => ({ count: 1 }),
+    },
+    eagleAssetManualTag: {
+      deleteMany: async () => ({ count: 0 }),
+      createMany: async () => ({ count: 1 }),
+    },
+    eagleTagMemberDistance: { deleteMany: async () => ({ count: 0 }) },
+    $executeRaw: async () => 0,
+  };
+  const service = new EagleService({
+    eagleAsset: {
+      findFirst: async () => {
+        detailReads += 1;
+        return null;
+      },
+    },
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  } as never);
+
+  assert.deepEqual(await service.replaceAssetTags('owner-a', 'asset-a', ['tag-private']), {
+    affectedAssetCount: 1,
+  });
+  assert.equal(detailReads, 0);
 });
 
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {

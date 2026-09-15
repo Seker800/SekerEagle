@@ -13,6 +13,7 @@ type CandidateSource = {
   name: string;
   normalizedName: string;
   isStarred: boolean;
+  marksAssetsPrivate: boolean;
   groupId: string | null;
   semanticConfig: { tagId: string } | null;
   assetLinks: Array<{
@@ -36,6 +37,7 @@ type SkipCounts = {
   userAssigned: number;
   manuallyOrganized: number;
   semanticConfigured: number;
+  privacyRule: number;
 };
 
 export function selectReclassificationCandidates(
@@ -48,6 +50,7 @@ export function selectReclassificationCandidates(
     userAssigned: 0,
     manuallyOrganized: 0,
     semanticConfigured: 0,
+    privacyRule: 0,
   };
   const candidates: ReclassificationCandidate[] = [];
 
@@ -71,6 +74,10 @@ export function selectReclassificationCandidates(
     }
     if (tag.semanticConfig) {
       skipped.semanticConfigured += 1;
+      continue;
+    }
+    if (tag.marksAssetsPrivate) {
+      skipped.privacyRule += 1;
       continue;
     }
     candidates.push({
@@ -138,6 +145,7 @@ async function loadCandidateSources(
       name: true,
       normalizedName: true,
       isStarred: true,
+      marksAssetsPrivate: true,
       groupId: true,
       semanticConfig: { select: { tagId: true } },
     },

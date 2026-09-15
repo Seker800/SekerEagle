@@ -53,6 +53,17 @@ test('body-based filter counts require a same-origin browser request', () => {
   assert.deepEqual(guards, [BrowserOriginGuard]);
 });
 
+test('private-tag settings stay browser-only and require same-origin writes', () => {
+  assert.equal(
+    Reflect.getMetadata(GUARDS_METADATA, controllerMethod('getPrivacySettings')),
+    undefined,
+  );
+  assert.deepEqual(
+    Reflect.getMetadata(GUARDS_METADATA, controllerMethod('updatePrivacySettings')),
+    [BrowserOriginGuard],
+  );
+});
+
 test('revision-addressed renditions use immutable private caching', async () => {
   const headers = new Map<string, string>();
   const response = {
@@ -77,6 +88,7 @@ test('revision-addressed renditions use immutable private caching', async () => 
         stream: Readable.from(Buffer.from('webp')),
       }),
     } as never,
+    {} as never,
   );
 
   await controller.getRenditionContent(
@@ -114,6 +126,7 @@ test('private derived media remains no-store even for a principal with a private
         stream: Readable.from(Buffer.from('webp')),
       }),
     } as never,
+    {} as never,
   );
 
   await controller.getRenditionContent(

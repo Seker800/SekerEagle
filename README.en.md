@@ -185,6 +185,8 @@ telemetry enabled by default.
   and migration tools.
 - Derive every `ownerId` from the authenticated principal; request DTOs never accept an `ownerId`.
 - Return `404` for cross-owner access without revealing whether a resource exists.
+- Select one or more manual tags as private rules. Assets matching any selected tag automatically
+  enter a dedicated private view and never mix into the regular library.
 - Reveal private assets only during a time-limited visibility window. The default deployment stays
   local and includes no telemetry.
 

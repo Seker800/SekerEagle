@@ -32,7 +32,6 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import {
   CreateManualTagDto,
   BatchChangeEagleManualTagsDto,
-  BatchSetEagleAssetPrivacyDto,
   BatchUpdateEagleAssetsDto,
   CountEagleAssetsDto,
   CreateManualTagGroupDto,
@@ -45,9 +44,11 @@ import {
   UpdateEagleAssetDto,
   UpdateManualTagDto,
   UpdateManualTagGroupDto,
+  UpdateEaglePrivacySettingsDto,
   UpdateSmartFolderDto,
 } from './eagle.dto';
 import { EagleService } from './eagle.service';
+import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleDerivedMediaReadThrottle } from './eagle-media-throttle';
@@ -61,6 +62,7 @@ export class EagleController {
     private readonly mediaCapabilities: EagleMediaCapabilityService,
     private readonly eagle: EagleService,
     private readonly media: EagleMediaService,
+    private readonly privacy: EaglePrivacyService,
   ) {}
 
   @Get('media-capabilities')
@@ -298,13 +300,18 @@ export class EagleController {
     return this.eagle.updateAsset(principal.sub, assetId, input, principal.canViewPrivate);
   }
 
-  @Patch('assets/batch/privacy')
+  @Get('privacy-settings')
+  getPrivacySettings(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.privacy.getSettings(principal.sub);
+  }
+
+  @Put('privacy-settings')
   @UseGuards(BrowserOriginGuard)
-  setAssetPrivacy(
+  updatePrivacySettings(
     @CurrentPrincipal() principal: AuthPrincipal,
-    @Body() input: BatchSetEagleAssetPrivacyDto,
+    @Body() input: UpdateEaglePrivacySettingsDto,
   ) {
-    return this.eagle.batchSetPrivacy(principal.sub, input, principal.canViewPrivate);
+    return this.privacy.updateSettings(principal.sub, input);
   }
 
   @Post('assets/trash')

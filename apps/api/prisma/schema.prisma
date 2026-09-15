@@ -640,6 +640,7 @@ model EagleManualTag {
   color              String?
   groupId            String?
   isStarred          Boolean                               @default(false)
+  marksAssetsPrivate Boolean                               @default(false)
   lastUsedAt         DateTime?
   rowVersion         Int                                   @default(1)
   createdAt          DateTime                              @default(now())
@@ -661,6 +662,7 @@ model EagleManualTag {
   @@index([ownerId, name])
   @@index([ownerId, groupId, name])
   @@index([ownerId, isStarred, name])
+  @@index([ownerId, marksAssetsPrivate, id])
   @@index([ownerId, lastUsedAt(sort: Desc), id])
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleManualTag_normalizedName_trgm_idx")
 }

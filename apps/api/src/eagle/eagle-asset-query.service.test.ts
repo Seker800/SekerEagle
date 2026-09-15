@@ -244,7 +244,7 @@ test('expanded search keeps exact manual-tag assets ahead of AI-only matches', a
   assert.doesNotMatch(rankingQuery, /::uuid/);
 });
 
-test('private assets are excluded by default and only enter queries during a visibility window', async () => {
+test('private assets stay out of the regular gallery and use a dedicated unlocked view', async () => {
   const queries: Array<{ where: Record<string, unknown> }> = [];
   const service = new EagleService({
     eagleAsset: {
@@ -263,7 +263,7 @@ test('private assets are excluded by default and only enter queries during a vis
   const unlockedBase = (queries[1]?.where.AND as Array<Record<string, unknown>>)[0];
   const privateOnlyBase = (queries[2]?.where.AND as Array<Record<string, unknown>>)[0];
   assert.equal(lockedBase?.isPrivate, false);
-  assert.equal(unlockedBase?.isPrivate, undefined);
+  assert.equal(unlockedBase?.isPrivate, false);
   assert.equal(privateOnlyBase?.isPrivate, true);
 });
 

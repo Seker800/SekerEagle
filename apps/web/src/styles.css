@@ -449,6 +449,119 @@ select:focus-visible {
   background: #1d1f23;
 }
 
+.privacy-tag-settings {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #131417;
+}
+
+.privacy-tag-settings > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.privacy-tag-settings small,
+.privacy-tag-editor p,
+.privacy-tag-actions span {
+  margin: 0;
+  color: var(--account-muted);
+  font-size: 11px;
+}
+
+.privacy-tag-heading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #e5e7ea;
+  font-size: 13px;
+}
+
+.privacy-tag-heading svg {
+  color: #d69b48;
+}
+
+.privacy-tag-editor {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid rgb(214 155 72 / 22%);
+  border-radius: 9px;
+  display: grid;
+  gap: 10px;
+  background: #101114;
+}
+
+.privacy-tag-editor > input {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 7px;
+  outline: none;
+  color: #e0e2e5;
+  background: #1d1f23;
+}
+
+.privacy-tag-editor > input:focus {
+  border-color: rgb(214 155 72 / 55%);
+}
+
+.privacy-tag-list {
+  max-height: 220px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  overflow-y: auto;
+}
+
+.privacy-tag-list label {
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #b9bdc3;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.privacy-tag-list label:hover {
+  background: rgb(255 255 255 / 5%);
+}
+
+.privacy-tag-list label:has(input:checked) {
+  border-color: rgb(214 155 72 / 35%);
+  color: #efc78e;
+  background: rgb(214 155 72 / 10%);
+}
+
+.privacy-tag-list input {
+  accent-color: #d69b48;
+}
+
+.privacy-tag-color {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: #555a62;
+}
+
+.privacy-tag-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .token-create-form {
   margin-top: 16px;
   padding: 12px;

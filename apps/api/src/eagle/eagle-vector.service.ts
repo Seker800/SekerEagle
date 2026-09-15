@@ -17,6 +17,7 @@ import {
   upsertAcceptedSuggestionMemberDistance,
 } from './eagle-vector.persistence';
 import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
+import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
 
 @Injectable()
 export class EagleVectorService {
@@ -604,6 +605,7 @@ export class EagleVectorService {
         snapshotId: suggestion.snapshotId,
         embeddingId: suggestion.embeddingId,
       });
+      await syncAssetPrivacyFromManualTags(transaction, ownerId, [suggestion.assetId]);
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
         where: {
           ownerId,

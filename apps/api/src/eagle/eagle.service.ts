@@ -11,7 +11,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EagleAiTagService, type EagleAiTagSearchMatch } from './eagle-ai-tag.service';
 import type {
   BatchChangeEagleManualTagsDto,
-  BatchSetEagleAssetPrivacyDto,
   BatchUpdateEagleAssetsDto,
   CreateManualTagDto,
   CreateManualTagGroupDto,
@@ -35,6 +34,7 @@ import {
   readEagleFilterQuery,
   readEagleFilterTagDependencies,
 } from './eagle-filter-query';
+import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
 
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   renditions: {
@@ -526,45 +526,6 @@ export class EagleService {
     return { affectedAssetCount: updatedAssets.length, assets: updatedAssets };
   }
 
-  async batchSetPrivacy(
-    ownerId: string,
-    input: BatchSetEagleAssetPrivacyDto,
-    includePrivate = false,
-  ) {
-    const current = await this.prisma.eagleAsset.findMany({
-      where: {
-        ownerId,
-        id: { in: input.assets.map(({ assetId }) => assetId) },
-        deletedAt: null,
-        ...privateVisibilityWhere(includePrivate),
-      },
-      select: { id: true, rowVersion: true },
-    });
-    if (current.length !== input.assets.length) {
-      throw new NotFoundException('一个或多个素材不存在。');
-    }
-    const versions = new Map(current.map(({ id, rowVersion }) => [id, rowVersion]));
-    if (input.assets.some(({ assetId, rowVersion }) => versions.get(assetId) !== rowVersion)) {
-      throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
-    }
-    const updated = await this.prisma.eagleAsset.updateMany({
-      where: {
-        ownerId,
-        deletedAt: null,
-        OR: input.assets.map(({ assetId, rowVersion }) => ({ id: assetId, rowVersion })),
-        ...privateVisibilityWhere(includePrivate),
-      },
-      data: { isPrivate: input.isPrivate, rowVersion: { increment: 1 } },
-    });
-    if (updated.count !== input.assets.length) {
-      throw new ConflictException('一个或多个素材已被其他操作更新，请刷新后重试。');
-    }
-    return {
-      affectedAssetCount: updated.count,
-      assets: current.map(({ id, rowVersion }) => ({ assetId: id, rowVersion: rowVersion + 1 })),
-    };
-  }
-
   async batchChangeManualTags(
     ownerId: string,
     input: BatchChangeEagleManualTagsDto,
@@ -633,6 +594,7 @@ export class EagleService {
           includePrivate,
         });
       }
+      await syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds);
     });
     return { affectedAssetCount: input.assetIds.length };
   }
@@ -832,6 +794,7 @@ export class EagleService {
       await this.prisma.$transaction(async (transaction) => {
         await transaction.eagleAssetManualTag.deleteMany({ where: { ownerId, tagId } });
         await transaction.eagleManualTag.delete({ where: { id: tagId } });
+        await syncAssetPrivacyFromManualTags(transaction, ownerId);
       });
       return { deletedId: tagId };
     } catch (error) {
@@ -983,8 +946,9 @@ export class EagleService {
           includePrivate,
         });
       }
+      await syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId]);
     });
-    return this.getAsset(ownerId, assetId, { includePrivate });
+    return { affectedAssetCount: 1 };
   }
 
   listSmartFolders(ownerId: string) {
@@ -1471,9 +1435,11 @@ function buildAssetWhere(
     ownerId,
     deletedAt: trash ? { not: null } : null,
     ...(trash ? { purgeAfter: null } : {}),
-    ...(filters.privacy === 'PRIVATE' && includePrivate
-      ? { isPrivate: true }
-      : privateVisibilityWhere(includePrivate)),
+    ...(trash
+      ? privateVisibilityWhere(includePrivate)
+      : filters.privacy === 'PRIVATE' && includePrivate
+        ? { isPrivate: true }
+        : { isPrivate: false }),
     ...(conditions.length ? { AND: conditions } : {}),
   };
 }

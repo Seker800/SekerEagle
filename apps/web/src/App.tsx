@@ -26,6 +26,7 @@ export function App() {
   const [privacyVisibility, setPrivacyVisibility] = useState<PrivacyVisibilityState>(
     DEFAULT_PRIVACY_VISIBILITY,
   );
+  const [privacyRulesRevision, setPrivacyRulesRevision] = useState(0);
   useEffect(() => {
     request<{
       user: User;
@@ -155,6 +156,7 @@ export function App() {
         ownerId={user.id}
         canManageProcessing={user.role === 'ADMIN'}
         privacyVisibility={privacyVisibility}
+        privacyRulesRevision={privacyRulesRevision}
         accountView={
           <AccountHome
             user={user}
@@ -162,6 +164,7 @@ export function App() {
             onLogout={() => void logout()}
             privacyVisibility={privacyVisibility}
             onPrivacyVisibilityChange={setPrivacyVisibility}
+            onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
           />
         }
       />

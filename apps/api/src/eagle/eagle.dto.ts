@@ -197,17 +197,13 @@ export class BatchUpdateEagleAssetsDto {
   sourceUrl?: string | null;
 }
 
-export class BatchSetEagleAssetPrivacyDto {
+export class UpdateEaglePrivacySettingsDto {
+  @ApiProperty({ type: [String], maxItems: 100 })
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(100)
-  @ArrayUnique((asset: EagleAssetVersionDto) => asset.assetId)
-  @ValidateNested({ each: true })
-  @Type(() => EagleAssetVersionDto)
-  assets!: EagleAssetVersionDto[];
-
-  @IsBoolean()
-  isPrivate!: boolean;
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  tagIds!: string[];
 }
 
 export class BatchChangeEagleManualTagsDto {

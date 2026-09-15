@@ -18,6 +18,7 @@ import { EagleProcessingService } from './eagle-processing.service';
 import { EagleVectorController } from './eagle-vector.controller';
 import { EagleVectorService } from './eagle-vector.service';
 import { EagleService } from './eagle.service';
+import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleUploadController } from './eagle-upload.controller';
 import { EagleUploadService } from './eagle-upload.service';
 import { EagleUploadRecoveryService } from './eagle-upload-recovery.service';
@@ -41,6 +42,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
   ],
   providers: [
     EagleService,
+    EaglePrivacyService,
     EagleAiTagService,
     EagleEmbeddingClient,
     EagleBrowserCaptureService,

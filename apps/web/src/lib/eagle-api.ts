@@ -500,18 +500,6 @@ export async function batchUpdateEagleAssets(
     body: JSON.stringify(input),
   });
 }
-export async function batchSetEagleAssetPrivacy(
-  _token: string,
-  input: {
-    assets: EagleAssetVersion[];
-    isPrivate: boolean;
-  },
-) {
-  return api<{
-    affectedAssetCount: number;
-    assets: EagleAssetVersion[];
-  }>('/eagle/assets/batch/privacy', { method: 'PATCH', body: JSON.stringify(input) });
-}
 export async function uploadEagleAsset(
   _token: string,
   file: File,

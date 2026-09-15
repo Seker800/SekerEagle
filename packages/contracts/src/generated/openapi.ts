@@ -404,20 +404,20 @@ export interface paths {
     patch: operations['EagleController_batchUpdate'];
     trace?: never;
   };
-  '/api/eagle/assets/batch/privacy': {
+  '/api/eagle/privacy-settings': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get?: never;
-    put?: never;
+    get: operations['EagleController_getPrivacySettings'];
+    put: operations['EagleController_updatePrivacySettings'];
     post?: never;
     delete?: never;
     options?: never;
     head?: never;
-    patch: operations['EagleController_setAssetPrivacy'];
+    patch?: never;
     trace?: never;
   };
   '/api/eagle/assets/trash': {
@@ -1557,7 +1557,9 @@ export interface components {
       description?: Record<string, never> | null;
       sourceUrl?: Record<string, never> | null;
     };
-    BatchSetEagleAssetPrivacyDto: Record<string, never>;
+    UpdateEaglePrivacySettingsDto: {
+      tagIds: string[];
+    };
     CreateManualTagDto: {
       name: string;
       color?: Record<string, never> | null;
@@ -2232,7 +2234,24 @@ export interface operations {
       };
     };
   };
-  EagleController_setAssetPrivacy: {
+  EagleController_getPrivacySettings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_updatePrivacySettings: {
     parameters: {
       query?: never;
       header?: never;
@@ -2241,7 +2260,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        'application/json': components['schemas']['BatchSetEagleAssetPrivacyDto'];
+        'application/json': components['schemas']['UpdateEaglePrivacySettingsDto'];
       };
     };
     responses: {
