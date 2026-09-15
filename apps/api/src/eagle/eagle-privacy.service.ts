@@ -11,7 +11,9 @@ export async function lockOwnerPrivacyProjection(
   ownerId: string,
 ): Promise<void> {
   await transaction.$queryRaw(Prisma.sql`
-    SELECT pg_advisory_xact_lock(hashtextextended(${`sekereagle:privacy:${ownerId}`}, 0))
+    SELECT pg_advisory_xact_lock(
+      hashtextextended(${`sekereagle:privacy:${ownerId}`}, 0)
+    )::text AS "lockResult"
   `);
 }
 

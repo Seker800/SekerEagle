@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
-import { EaglePrivacyService } from './eagle-privacy.service';
+import { EaglePrivacyService, lockOwnerPrivacyProjection } from './eagle-privacy.service';
+
+test('privacy advisory lock returns a Prisma-deserializable scalar', async () => {
+  const statements: unknown[] = [];
+  await lockOwnerPrivacyProjection(
+    {
+      $queryRaw: async (statement: unknown) => {
+        statements.push(statement);
+        return [];
+      },
+    } as never,
+    'owner-a',
+  );
+
+  assert.match(JSON.stringify(statements[0]), /::text/);
+});
 
 test('privacy settings expose only the owner private-tag rules', async () => {
   const service = new EaglePrivacyService({
