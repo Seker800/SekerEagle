@@ -15,7 +15,7 @@
     "@prisma/client": "6.19.3",
     "@sekereagle/config": "*",
     "@sekereagle/vector-core": "*",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
