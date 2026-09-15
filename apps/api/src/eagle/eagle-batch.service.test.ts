@@ -236,6 +236,32 @@ test('replacing tags can move a locked asset into privacy without returning its 
   assert.equal(detailReads, 0);
 });
 
+test('a tag used as a privacy rule cannot be deleted before the rule is removed explicitly', async () => {
+  let deleted = false;
+  const transaction = {
+    $queryRaw: async () => [],
+    eagleManualTag: {
+      findFirst: async () => ({ id: 'tag-private', marksAssetsPrivate: true }),
+      delete: async () => {
+        deleted = true;
+      },
+    },
+    eagleAssetManualTag: {
+      deleteMany: async () => {
+        deleted = true;
+      },
+    },
+    eagleAsset: { updateMany: async () => ({ count: 0 }) },
+  };
+  const service = new EagleService({
+    eagleManualTag: { findFirst: async () => ({ id: 'tag-private' }) },
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  } as never);
+
+  await assert.rejects(service.deleteManualTag('owner-a', 'tag-private'), ConflictException);
+  assert.equal(deleted, false);
+});
+
 test('batch trash rejects inside the transaction so partial updates roll back', async () => {
   let rejectionWasInsideTransaction = false;
   const service = new EagleService({
