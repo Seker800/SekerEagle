@@ -963,7 +963,7 @@ describe('SekerEaglePage', () => {
   it('keeps manual and AI tag filters separate in the server query', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '人工标签' }));
+    fireEvent.click(await screen.findByRole('button', { name: '标签' }));
     fireEvent.doubleClick(await screen.findByRole('button', { name: /人工标签 灵感/ }));
     const filterButton = screen.getByRole('button', { name: '标签筛选，1' });
     fireEvent.click(filterButton);
@@ -983,8 +983,12 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(filterPanel).getByRole('button', { name: '清除此项' }));
     expect(screen.getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
-    fireEvent.click(screen.getByRole('button', { name: '浏览 AI 标签' }));
+    fireEvent.click(screen.getByRole('button', { name: '标签' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '标签功能' })).getByRole('button', {
+        name: 'AI 标签',
+      }),
+    );
     fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
     const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
     fireEvent.click(aiFilterButton);
@@ -1816,9 +1820,7 @@ describe('SekerEaglePage', () => {
     expect(
       within(sidebar).queryByRole('button', { name: '标签推荐设置 15' }),
     ).not.toBeInTheDocument();
-    expect(
-      within(sidebar).queryByRole('button', { name: '待手动分类 6' }),
-    ).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole('button', { name: '待手动分类 6' })).not.toBeInTheDocument();
     expect(within(sidebar).queryByRole('button', { name: 'AI 自动标签' })).not.toBeInTheDocument();
     expect(within(sidebar).queryByRole('button', { name: '素材处理' })).not.toBeInTheDocument();
   });

@@ -116,15 +116,6 @@
 .navSection {
   margin-top: 10px;
 }
-.sidebar .navSubItem {
-  min-height: 25px;
-  padding-left: 33px;
-  color: #898f98;
-  font-size: 11px;
-}
-.sidebar .navSubItem span {
-  font-size: 11px;
-}
 .sectionLabel {
   height: 23px;
   padding: 0 8px;
@@ -154,19 +145,6 @@
 .sidebarSpacer {
   flex: 1;
 }
-.accountSection {
-  margin: 8px 0 4px;
-  padding: 7px 0 5px;
-  border-top: 1px solid var(--eagle-line);
-  border-bottom: 1px solid var(--eagle-line);
-}
-.sidebar .accountSection button {
-  color: #d4d6da;
-}
-.sidebar .accountSection button:hover {
-  color: #f1d2a5;
-  background: rgb(214 155 72 / 10%);
-}
 
 .library {
   min-width: 0;
@@ -177,39 +155,57 @@
   background: #121316;
   container-type: inline-size;
 }
-.aiTagCatalogBar {
-  min-height: 42px;
-  margin: 10px 20px 0;
-  padding: 6px 8px 6px 11px;
-  border: 1px solid var(--eagle-line);
-  border-radius: 7px;
+.workspaceNavigation {
+  min-height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--eagle-line);
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: #17191e;
+  gap: 24px;
+  flex: 0 0 auto;
+  background: #18191c;
 }
-.aiTagCatalogBar > div {
-  min-width: 0;
+.workspaceNavigation h1 {
+  min-width: 72px;
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.workspaceNavigation nav {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-self: stretch;
+  align-items: center;
+  gap: 4px;
 }
-.aiTagCatalogBar strong {
+.workspaceNavigation button {
+  min-height: 32px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #9297a0;
+  background: transparent;
   font-size: 12px;
+  cursor: pointer;
 }
-.aiTagCatalogBar span {
-  color: var(--eagle-muted);
+.workspaceNavigation button:hover {
+  color: var(--eagle-text);
+  background: rgb(255 255 255 / 4%);
+}
+.workspaceNavigation .workspaceNavigationActive {
+  color: #f0c98f;
+  background: rgb(214 155 72 / 13%);
+}
+.workspaceNavigation button span {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #b7bbc2;
+  background: rgb(255 255 255 / 7%);
   font-size: 10px;
-}
-.aiTagCatalogBar button {
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid #765d3a;
-  border-radius: 5px;
-  color: #e4bf87;
-  background: #241e17;
-  font-size: 11px;
+  text-align: center;
 }
 .toolbar {
   min-height: 44px;

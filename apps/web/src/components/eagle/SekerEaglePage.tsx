@@ -30,7 +30,6 @@ import {
   IconTagsOff,
   IconTags,
   IconTrash,
-  IconUserCircle,
   IconX,
 } from '@tabler/icons-react';
 import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
@@ -115,13 +114,68 @@ type EagleLibraryView =
   | 'VECTOR_REVIEW'
   | 'VECTOR_TAGS'
   | 'VECTOR_UNCLASSIFIED'
+  | 'AI_TAG_SETTINGS'
   | 'PROCESSING'
   | 'ACCOUNT';
+type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS';
+
+function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
+  if (view === 'MANUAL_TAGS' || view === 'AI_TAGS') return 'TAGS';
+  if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED' || view === 'PROCESSING') {
+    return 'PENDING';
+  }
+  if (view === 'VECTOR_TAGS' || view === 'AI_TAG_SETTINGS' || view === 'ACCOUNT') {
+    return 'SETTINGS';
+  }
+  return null;
+}
+
 function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceView | null {
   if (view === 'VECTOR_REVIEW') return 'REVIEW';
   if (view === 'VECTOR_TAGS') return 'TAGS';
   if (view === 'VECTOR_UNCLASSIFIED') return 'UNCLASSIFIED';
   return null;
+}
+
+interface EagleWorkspaceNavigationProps {
+  title: string;
+  ariaLabel: string;
+  activeView: EagleLibraryView;
+  items: Array<{ view: EagleLibraryView; label: string; count?: number }>;
+  onSelect: (view: EagleLibraryView) => void;
+}
+
+function EagleWorkspaceNavigation({
+  title,
+  ariaLabel,
+  activeView,
+  items,
+  onSelect,
+}: EagleWorkspaceNavigationProps) {
+  return (
+    <header className={styles.workspaceNavigation}>
+      <h1>{title}</h1>
+      <nav aria-label={ariaLabel}>
+        {items.map((item) => {
+          const accessibleLabel =
+            item.count === undefined ? item.label : `${item.label} ${item.count}`;
+          return (
+            <button
+              key={item.view}
+              type="button"
+              className={activeView === item.view ? styles.workspaceNavigationActive : undefined}
+              aria-label={accessibleLabel}
+              aria-current={activeView === item.view ? 'page' : undefined}
+              onClick={() => onSelect(item.view)}
+            >
+              {item.label}
+              {item.count === undefined ? null : <span>{item.count}</span>}
+            </button>
+          );
+        })}
+      </nav>
+    </header>
+  );
 }
 const EAGLE_PAGE_SIZE = 40;
 const ASSET_LIST_STALE_TIME_MS = 5 * 60000;
@@ -187,7 +241,6 @@ export function SekerEaglePage({
   const metadataFormRef = useRef<HTMLFormElement>(null);
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
-  const [isAiTagCatalogOpen, setIsAiTagCatalogOpen] = useState(false);
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
   const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(null);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
@@ -218,12 +271,12 @@ export function SekerEaglePage({
   }, [thumbnailSize]);
   useEffect(() => {
     setOriginalFileError(null);
-    setIsAiTagCatalogOpen(false);
     setAiTagReferenceRequested(false);
   }, [ownerId]);
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
-      aiTagsEnabled: isAiTagCatalogOpen || aiTagReferenceRequested || isSmartFolderDialogOpen,
+      aiTagsEnabled:
+        libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
     });
   const vectorSummaryQuery = useQuery({
     queryKey: ['eagle', ownerId, 'vector-summary'],
@@ -236,6 +289,8 @@ export function SekerEaglePage({
     0,
     (vectorSummary?.suggestions.unclassified ?? 0) - (vectorSummary?.suggestions.pending ?? 0),
   );
+  const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
+  const workspaceSection = getWorkspaceSection(libraryView);
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
@@ -913,87 +968,36 @@ export function SekerEaglePage({
               smartFolders.length === 0 && <span className={styles.navEmpty}>{t('尚未创建')}</span>}
           </div>
           <div className={styles.navSection}>
-            <div className={styles.sectionLabel}>{t('标签')}</div>
             <button
               type="button"
-              className={libraryView === 'MANUAL_TAGS' ? styles.navActive : undefined}
-              aria-label={t('人工标签')}
+              className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
+              aria-label={t('标签')}
               onClick={() => changeLibraryView('MANUAL_TAGS')}
             >
               <IconTags size={17} />
-              {' ' + t('人工标签')}
-              <span>{manualTags.length}</span>
+              {' ' + t('标签')}
             </button>
             <button
               type="button"
-              className={`${styles.navSubItem} ${libraryView === 'VECTOR_REVIEW' ? styles.navActive : ''}`}
-              aria-label={t('智能标签确认 {{value1}}', {
-                value1: vectorSummary?.suggestions.pending ?? 0,
-              })}
-              onClick={() => changeLibraryView('VECTOR_REVIEW')}
-            >
-              {' ' + t('智能标签确认')}
-              <span>{vectorSummary?.suggestions.pending ?? 0}</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.navSubItem} ${libraryView === 'VECTOR_TAGS' ? styles.navActive : ''}`}
-              aria-label={t('标签推荐设置 {{value1}}', {
-                value1: vectorSummary?.tags.enabled ?? 0,
-              })}
-              onClick={() => changeLibraryView('VECTOR_TAGS')}
-            >
-              {' ' + t('标签推荐设置')}
-              <span>{vectorSummary?.tags.enabled ?? 0}</span>
-            </button>
-            <button
-              type="button"
-              className={`${styles.navSubItem} ${libraryView === 'VECTOR_UNCLASSIFIED' ? styles.navActive : ''}`}
-              aria-label={t('待手动分类 {{value1}}', {
-                value1: unavailableSuggestionCount,
-              })}
+              className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
+              aria-label={`${t('待处理')} ${pendingWorkCount}`}
               onClick={() => changeLibraryView('VECTOR_UNCLASSIFIED')}
             >
-              {' ' + t('待手动分类')}
-              <span>{unavailableSuggestionCount}</span>
+              <IconCheck size={17} />
+              {' ' + t('待处理')}
+              <span>{pendingWorkCount}</span>
             </button>
             <button
               type="button"
-              className={`${styles.navSubItem} ${libraryView === 'AI_TAGS' ? styles.navActive : ''}`}
-              aria-label={t('AI 自动标签')}
-              onClick={() => changeLibraryView('AI_TAGS')}
+              className={workspaceSection === 'SETTINGS' ? styles.navActive : undefined}
+              aria-label={t('设置')}
+              onClick={() => changeLibraryView(accountView ? 'ACCOUNT' : 'VECTOR_TAGS')}
             >
-              <IconSparkles size={17} />
-              {' ' + t('AI 自动标签')}
-              {aiTagsQuery.data ? <span>{aiTags.length}</span> : null}
+              <IconSettings size={17} />
+              {' ' + t('设置')}
             </button>
           </div>
           <div className={styles.sidebarSpacer} />
-          {accountView && (
-            <div className={styles.accountSection}>
-              <button
-                className={libraryView === 'ACCOUNT' ? styles.navActive : undefined}
-                type="button"
-                onClick={() => changeLibraryView('ACCOUNT')}
-                aria-label={t('个人账号')}
-              >
-                <IconUserCircle size={17} />
-                {' ' + t('个人账号') + ' '}
-              </button>
-            </div>
-          )}
-          <div className={styles.navSection}>
-            <div className={styles.sectionLabel}>{t('工具')}</div>
-            <button
-              className={libraryView === 'PROCESSING' ? styles.navActive : undefined}
-              type="button"
-              aria-label={t('素材处理')}
-              onClick={() => changeLibraryView('PROCESSING')}
-            >
-              <IconSettings size={17} />
-              {' ' + t('素材处理') + ' '}
-            </button>
-          </div>
           <button
             className={libraryView === 'TRASH' ? styles.navActive : undefined}
             type="button"
@@ -1008,22 +1012,60 @@ export function SekerEaglePage({
         <section
           className={styles.library}
           aria-label={
-            libraryView === 'PROCESSING'
-              ? t('素材处理')
-              : libraryView === 'ACCOUNT'
-                ? t('个人账号')
-                : getVectorWorkspaceView(libraryView)
-                  ? t('智能标签')
+            workspaceSection === 'TAGS'
+              ? t('标签')
+              : workspaceSection === 'PENDING'
+                ? t('待处理')
+                : workspaceSection === 'SETTINGS'
+                  ? t('设置')
                   : undefined
           }
-          aria-labelledby={
-            libraryView === 'PROCESSING' ||
-            libraryView === 'ACCOUNT' ||
-            getVectorWorkspaceView(libraryView)
-              ? undefined
-              : 'eagle-library-title'
-          }
+          aria-labelledby={workspaceSection ? undefined : 'eagle-library-title'}
         >
+          {workspaceSection === 'TAGS' ? (
+            <EagleWorkspaceNavigation
+              title={t('标签')}
+              ariaLabel={t('标签功能')}
+              activeView={libraryView}
+              items={[
+                { view: 'MANUAL_TAGS', label: t('人工标签') },
+                { view: 'AI_TAGS', label: t('AI 标签') },
+              ]}
+              onSelect={changeLibraryView}
+            />
+          ) : workspaceSection === 'PENDING' ? (
+            <EagleWorkspaceNavigation
+              title={t('待处理')}
+              ariaLabel={t('待处理功能')}
+              activeView={libraryView}
+              items={[
+                {
+                  view: 'VECTOR_UNCLASSIFIED',
+                  label: t('待分类'),
+                  count: unavailableSuggestionCount,
+                },
+                {
+                  view: 'VECTOR_REVIEW',
+                  label: t('推荐审核'),
+                  count: vectorSummary?.suggestions.pending ?? 0,
+                },
+                { view: 'PROCESSING', label: t('处理任务') },
+              ]}
+              onSelect={changeLibraryView}
+            />
+          ) : workspaceSection === 'SETTINGS' ? (
+            <EagleWorkspaceNavigation
+              title={t('设置')}
+              ariaLabel={t('设置功能')}
+              activeView={libraryView}
+              items={[
+                ...(accountView ? [{ view: 'ACCOUNT' as const, label: t('账号') }] : []),
+                { view: 'VECTOR_TAGS', label: t('人工标签推荐') },
+                { view: 'AI_TAG_SETTINGS', label: t('AI 内容识别') },
+              ]}
+              onSelect={changeLibraryView}
+            />
+          ) : null}
           {libraryView === 'ACCOUNT' ? (
             accountView
           ) : libraryView === 'PROCESSING' ? (
@@ -1031,6 +1073,8 @@ export function SekerEaglePage({
               accessToken={accessToken}
               canManageProcessing={canManageProcessing}
             />
+          ) : libraryView === 'AI_TAG_SETTINGS' ? (
+            <EagleAiTagSetupPanel />
           ) : getVectorWorkspaceView(libraryView) ? (
             <EagleVectorWorkspace
               view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
@@ -1045,70 +1089,44 @@ export function SekerEaglePage({
               onAssetPrivacyChanged={resetAssetPrivacyState}
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
-            <>
-              {libraryView === 'AI_TAGS' ? (
-                <>
-                  <EagleAiTagSetupPanel />
-                  <div className={styles.aiTagCatalogBar}>
-                    <div>
-                      <strong>{t('AI 标签目录')}</strong>
-                      <span>
-                        {isAiTagCatalogOpen
-                          ? aiTagsQuery.isLoading
-                            ? t('正在加载…')
-                            : t('共 {{value1}} 个标签', { value1: aiTags.length })
-                          : t('默认不加载')}
-                      </span>
-                    </div>
-                    <button type="button" onClick={() => setIsAiTagCatalogOpen((value) => !value)}>
-                      {isAiTagCatalogOpen ? t('收起 AI 标签') : t('浏览 AI 标签')}
-                    </button>
-                  </div>
-                </>
-              ) : null}
-              {(libraryView === 'MANUAL_TAGS' || isAiTagCatalogOpen) && (
-                <EagleTagPage
-                  kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
-                  manualTags={manualTags}
-                  aiTags={aiTags}
-                  manualTagGroups={manualTagGroups}
-                  creating={createTagMutation.isPending}
-                  busy={
-                    createTagGroupMutation.isPending ||
-                    updateTagsMutation.isPending ||
-                    deleteTagsMutation.isPending ||
-                    updateTagGroupMutation.isPending ||
-                    deleteTagGroupMutation.isPending
-                  }
-                  error={
-                    (
-                      createTagMutation.error ??
-                      createTagGroupMutation.error ??
-                      updateTagsMutation.error ??
-                      deleteTagsMutation.error ??
-                      updateTagGroupMutation.error ??
-                      deleteTagGroupMutation.error ??
-                      (libraryView === 'MANUAL_TAGS'
-                        ? (manualTagsQuery.error ?? manualTagGroupsQuery.error)
-                        : aiTagsQuery.error)
-                    )?.message
-                  }
-                  onCreateManualTag={(name) => createTagMutation.mutate(name)}
-                  onCreateManualTagGroup={(name) => createTagGroupMutation.mutate(name)}
-                  onUpdateManualTags={(tags, changes) =>
-                    updateTagsMutation.mutate({ tags, changes })
-                  }
-                  onDeleteManualTags={(tags) => deleteTagsMutation.mutate(tags)}
-                  onUpdateManualTagGroup={(group, changes) =>
-                    updateTagGroupMutation.mutate({ group, changes })
-                  }
-                  onDeleteManualTagGroup={(group) => deleteTagGroupMutation.mutate(group)}
-                  onSelectTag={(tagId) =>
-                    showAssetsForTag(libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI', tagId)
-                  }
-                />
-              )}
-            </>
+            <EagleTagPage
+              kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
+              manualTags={manualTags}
+              aiTags={aiTags}
+              manualTagGroups={manualTagGroups}
+              creating={createTagMutation.isPending}
+              busy={
+                createTagGroupMutation.isPending ||
+                updateTagsMutation.isPending ||
+                deleteTagsMutation.isPending ||
+                updateTagGroupMutation.isPending ||
+                deleteTagGroupMutation.isPending
+              }
+              error={
+                (
+                  createTagMutation.error ??
+                  createTagGroupMutation.error ??
+                  updateTagsMutation.error ??
+                  deleteTagsMutation.error ??
+                  updateTagGroupMutation.error ??
+                  deleteTagGroupMutation.error ??
+                  (libraryView === 'MANUAL_TAGS'
+                    ? (manualTagsQuery.error ?? manualTagGroupsQuery.error)
+                    : aiTagsQuery.error)
+                )?.message
+              }
+              onCreateManualTag={(name) => createTagMutation.mutate(name)}
+              onCreateManualTagGroup={(name) => createTagGroupMutation.mutate(name)}
+              onUpdateManualTags={(tags, changes) => updateTagsMutation.mutate({ tags, changes })}
+              onDeleteManualTags={(tags) => deleteTagsMutation.mutate(tags)}
+              onUpdateManualTagGroup={(group, changes) =>
+                updateTagGroupMutation.mutate({ group, changes })
+              }
+              onDeleteManualTagGroup={(group) => deleteTagGroupMutation.mutate(group)}
+              onSelectTag={(tagId) =>
+                showAssetsForTag(libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI', tagId)
+              }
+            />
           ) : (
             <>
               <div className={styles.toolbar}>
