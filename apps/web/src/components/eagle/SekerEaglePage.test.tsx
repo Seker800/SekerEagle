@@ -399,7 +399,7 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('complementary', { name: '素材详情' })).not.toBeInTheDocument();
   });
 
-  it('opens the account view inside the library workspace without replacing the sidebar', async () => {
+  it('opens the account view from the settings workspace without replacing the sidebar', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
@@ -415,30 +415,45 @@ describe('SekerEaglePage', () => {
 
     await screen.findByRole('heading', { name: '全部素材' });
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
-    const accountButton = within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole(
-      'button',
-      { name: '个人账号' },
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole('button', {
+        name: '设置',
+      }),
     );
-    fireEvent.click(accountButton);
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '设置功能' })).getByRole('button', {
+        name: '账号',
+      }),
+    );
     expect(screen.getByRole('navigation', { name: '素材库导航' })).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '个人账号' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '设置' })).toBeInTheDocument();
     expect(screen.getByTestId('embedded-account-view')).toBeInTheDocument();
   });
 
-  it('opens asset processing from the SekerEagle navigation', async () => {
+  it('opens asset processing from the pending workspace', async () => {
     renderPage('owner-test', true);
 
-    fireEvent.click(await screen.findByRole('button', { name: '素材处理' }));
+    fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
+        name: '处理任务',
+      }),
+    );
 
     expect(screen.getByTestId('eagle-processing-page')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '素材处理' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '待处理' })).toBeInTheDocument();
   });
 
-  it('keeps the material-processing entry available for ordinary owners', async () => {
+  it('keeps processing tasks available for ordinary owners inside the pending workspace', async () => {
     renderPage();
 
     await screen.findByRole('heading', { name: '全部素材' });
-    expect(screen.getByRole('button', { name: '素材处理' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '待处理 38' }));
+    expect(
+      within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
+        name: '处理任务',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('changes and persists the thumbnail size', async () => {
@@ -1765,54 +1780,83 @@ describe('SekerEaglePage', () => {
     expect(within(inspector).getByRole('textbox', { name: '素材标题' })).toBeInTheDocument();
   });
 
-  it('keeps the AI tag catalog unloaded until the user chooses to browse it', async () => {
+  it('keeps the AI tag catalog unloaded until the user opens the AI tag tab', async () => {
     renderPage();
 
     await screen.findByRole('heading', { name: '全部素材' });
     expect(listEagleAiTagsMock).not.toHaveBeenCalled();
 
-    fireEvent.click(await screen.findByRole('button', { name: '人工标签' }));
+    fireEvent.click(await screen.findByRole('button', { name: '标签' }));
     expect(screen.getByRole('heading', { name: '人工标签' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '人工标签管理' })).toHaveTextContent('灵感');
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI 自动标签' }));
-    expect(screen.queryByRole('region', { name: 'AI 标签管理' })).not.toBeInTheDocument();
-    expect(listEagleAiTagsMock).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: '浏览 AI 标签' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '标签功能' })).getByRole('button', {
+        name: 'AI 标签',
+      }),
+    );
     await waitFor(() => expect(listEagleAiTagsMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByRole('region', { name: 'AI 标签管理' })).toHaveTextContent('猫头鹰');
+    expect(screen.queryByRole('region', { name: 'AI 自动标签运行设置' })).not.toBeInTheDocument();
   });
 
-  it('places AI automatic tagging directly below manual classification', async () => {
+  it('reduces the feature navigation to tags, pending work, and settings', async () => {
     renderPage();
 
-    const unclassified = await screen.findByRole('button', { name: '待手动分类 6' });
-    const aiTags = screen.getByRole('button', { name: 'AI 自动标签' });
+    await screen.findByRole('heading', { name: '全部素材' });
+    const sidebar = screen.getByRole('navigation', { name: '素材库导航' });
 
-    expect(unclassified.compareDocumentPosition(aiTags)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(within(sidebar).getByRole('button', { name: '标签' })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: '待处理 38' })).toBeInTheDocument();
+    expect(within(sidebar).getByRole('button', { name: '设置' })).toBeInTheDocument();
+    expect(within(sidebar).queryByRole('button', { name: '人工标签' })).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: '智能标签确认 32' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: '标签推荐设置 15' }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(sidebar).queryByRole('button', { name: '待手动分类 6' }),
+    ).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole('button', { name: 'AI 自动标签' })).not.toBeInTheDocument();
+    expect(within(sidebar).queryByRole('button', { name: '素材处理' })).not.toBeInTheDocument();
   });
 
-  it('exposes the three smart-tag workflows directly below the tag entries with live counts', async () => {
+  it('classifies the existing features inside the three workspaces', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '智能标签确认 32' }));
+    fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
+    const pendingNavigation = screen.getByRole('navigation', { name: '待处理功能' });
+    expect(within(pendingNavigation).getByRole('button', { name: '待分类 6' })).toBeInTheDocument();
+    fireEvent.click(within(pendingNavigation).getByRole('button', { name: '推荐审核 32' }));
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
 
-    fireEvent.click(screen.getByRole('button', { name: '标签推荐设置 15' }));
+    fireEvent.click(screen.getByRole('button', { name: '设置' }));
+    const settingsNavigation = screen.getByRole('navigation', { name: '设置功能' });
+    fireEvent.click(within(settingsNavigation).getByRole('button', { name: '人工标签推荐' }));
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
 
-    fireEvent.click(screen.getByRole('button', { name: '待手动分类 6' }));
-    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute(
-      'data-view',
-      'UNCLASSIFIED',
-    );
+    fireEvent.click(within(settingsNavigation).getByRole('button', { name: 'AI 内容识别' }));
+    expect(screen.getByRole('region', { name: 'AI 自动标签运行设置' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '标签' }));
+    expect(
+      within(screen.getByRole('navigation', { name: '标签功能' })).getByRole('button', {
+        name: '人工标签',
+      }),
+    ).toBeInTheDocument();
   });
 
-  it('connects smart-tag context deletion to the shared trash mutation', async () => {
+  it('connects recommendation review deletion to the shared trash mutation', async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole('button', { name: '智能标签确认 32' }));
+    fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
+        name: '推荐审核 32',
+      }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '测试智能标签删除' }));
 
     await waitFor(() =>
