@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SekerDesktopBridge } from './media-resolver';
-import { invalidateDesktopAssets } from './desktop-cache';
+import { invalidateDesktopAssets, invalidateDesktopAssetsAndRefresh } from './desktop-cache';
 
 describe('desktop cache invalidation', () => {
   afterEach(() => {
@@ -23,5 +23,21 @@ describe('desktop cache invalidation', () => {
     expect(invalidateAsset).toHaveBeenCalledTimes(2);
     expect(invalidateAsset).toHaveBeenCalledWith('asset-a');
     expect(invalidateAsset).toHaveBeenCalledWith('asset-b');
+  });
+
+  it('still refreshes private-sensitive UI when desktop invalidation fails', async () => {
+    const failure = new Error('cache unavailable');
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    (globalThis as { sekerDesktop?: SekerDesktopBridge }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(),
+      getCacheStatus: vi.fn(),
+      setCacheLimitGiB: vi.fn(),
+      clearCache: vi.fn(),
+      invalidateAsset: vi.fn().mockRejectedValue(failure),
+    };
+
+    await expect(invalidateDesktopAssetsAndRefresh(['asset-a'], refresh)).rejects.toBe(failure);
+    expect(refresh).toHaveBeenCalledOnce();
   });
 });

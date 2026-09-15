@@ -64,7 +64,7 @@ test('private-tag settings stay browser-only and require same-origin writes', ()
   );
 });
 
-test('revision-addressed renditions use immutable private caching', async () => {
+test('public derived media must revalidate because tag rules can make the asset private', async () => {
   const headers = new Map<string, string>();
   const response = {
     setHeader: (name: string, value: string) => headers.set(name, value),
@@ -99,9 +99,45 @@ test('revision-addressed renditions use immutable private caching', async () => 
     response as never,
   );
 
-  assert.equal(headers.get('Cache-Control'), 'private, max-age=31536000, immutable');
+  assert.equal(headers.get('Cache-Control'), 'private, no-cache');
   assert.equal(headers.get('Last-Modified'), 'Sun, 16 Aug 2026 00:00:00 GMT');
   assert.equal(headers.get('X-SekerEagle-Desktop-Cache'), 'public-derived-v1');
+});
+
+test('public originals must revalidate because tag rules can make the asset private', async () => {
+  const headers = new Map<string, string>();
+  const response = {
+    setHeader: (name: string, value: string) => headers.set(name, value),
+    vary: () => undefined,
+    status: () => undefined,
+    once: () => undefined,
+  };
+  const controller = new EagleController(
+    {} as never,
+    {} as never,
+    {
+      getOriginal: async () => ({
+        notModified: false,
+        fileName: 'original.jpg',
+        mimeType: 'image/jpeg',
+        contentLength: 3,
+        fullSize: 3n,
+        etag: 'etag-original',
+        stream: Readable.from(Buffer.from('jpg')),
+      }),
+    } as never,
+    {} as never,
+  );
+
+  await controller.getOriginal(
+    { sub: 'owner-a' } as never,
+    'asset-1',
+    undefined,
+    undefined,
+    response as never,
+  );
+
+  assert.equal(headers.get('Cache-Control'), 'private, no-cache');
 });
 
 test('private derived media remains no-store even for a principal with a private visibility window', async () => {

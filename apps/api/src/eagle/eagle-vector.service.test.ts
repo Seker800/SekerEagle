@@ -234,6 +234,7 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
   const privacyWrites: unknown[] = [];
   const transaction = {
     $executeRaw: async () => 1,
+    $queryRaw: async () => [],
     eagleVectorTagSuggestion: {
       findFirst: async () => ({
         id: 'suggestion-1',
@@ -263,7 +264,7 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
     eagleAsset: {
       updateMany: async (input: unknown) => {
         privacyWrites.push(input);
-        return { count: 1 };
+        return { count: privacyWrites.length === 1 ? 1 : 0 };
       },
     },
   };
@@ -274,7 +275,12 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
 
   const result = await service.reviewSuggestion('owner-1', 'suggestion-1', 'ACCEPT');
 
-  assert.deepEqual(result, { id: 'suggestion-1', status: 'ACCEPTED', assetId: 'asset-1' });
+  assert.deepEqual(result, {
+    id: 'suggestion-1',
+    status: 'ACCEPTED',
+    assetId: 'asset-1',
+    privacyChanged: true,
+  });
   assert.deepEqual(creates[0], {
     where: {
       ownerId_assetId_tagId: { ownerId: 'owner-1', assetId: 'asset-1', tagId: 'tag-1' },

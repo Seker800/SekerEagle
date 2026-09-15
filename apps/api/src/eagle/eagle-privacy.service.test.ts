@@ -36,6 +36,34 @@ test('privacy settings fail closed when any selected tag belongs to another owne
   assert.equal(writes, 0);
 });
 
+test('privacy settings fail closed if a selected tag disappears during the transaction', async () => {
+  let assetWrites = 0;
+  const transaction = {
+    $queryRaw: async () => [],
+    eagleManualTag: {
+      count: async () => 1,
+      updateMany: async (input: { data: { marksAssetsPrivate: boolean } }) => ({
+        count: input.data.marksAssetsPrivate ? 0 : 1,
+      }),
+    },
+    eagleAsset: {
+      updateMany: async () => {
+        assetWrites += 1;
+        return { count: 0 };
+      },
+    },
+  };
+  const service = new EaglePrivacyService({
+    $transaction: async (work: (tx: typeof transaction) => unknown) => work(transaction),
+  } as never);
+
+  await assert.rejects(
+    service.updateSettings('owner-a', { tagIds: ['tag-removed-concurrently'] }),
+    NotFoundException,
+  );
+  assert.equal(assetWrites, 0);
+});
+
 test('privacy settings replace tag rules and recompute only assets whose derived state changes', async () => {
   const tagWrites: unknown[] = [];
   const assetWrites: unknown[] = [];

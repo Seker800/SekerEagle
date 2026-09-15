@@ -117,7 +117,18 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('states the manual-tag boundary and confirms vector suggestions into manual tags', async () => {
-    render(<EagleVectorWorkspace />);
+    const onAssetPrivacyChanged = vi.fn();
+    vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
+      items: [
+        {
+          id: 'suggestion-1',
+          status: 'ACCEPTED',
+          assetId: 'asset-1',
+          privacyChanged: true,
+        },
+      ],
+    });
+    render(<EagleVectorWorkspace onAssetPrivacyChanged={onAssetPrivacyChanged} />);
     expect(
       await screen.findByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
     ).toBeInTheDocument();
@@ -126,6 +137,7 @@ describe('EagleVectorWorkspace', () => {
     await waitFor(() =>
       expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),
     );
+    expect(onAssetPrivacyChanged).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
     await waitFor(() =>

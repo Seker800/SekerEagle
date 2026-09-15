@@ -65,7 +65,7 @@ test('batch clear removes every manual tag and distance for owned assets without
     eagleAsset: {
       updateMany: async (input: unknown) => {
         privacyWrites.push(input);
-        return { count: 1 };
+        return { count: privacyWrites.length === 2 ? 1 : 0 };
       },
     },
     eagleAssetManualTag: {
@@ -81,7 +81,10 @@ test('batch clear removes every manual tag and distance for owned assets without
       },
     },
     $queryRaw: async (statement: unknown) => {
-      suggestionRefreshes.push(statement);
+      const target = JSON.stringify(statement).includes('pg_advisory_xact_lock')
+        ? privacyWrites
+        : suggestionRefreshes;
+      target.push(statement);
       return [{ scanned: 2, matched: 1 }];
     },
   };
@@ -99,7 +102,7 @@ test('batch clear removes every manual tag and distance for owned assets without
     clearAll: true,
   } as never);
 
-  assert.deepEqual(result, { affectedAssetCount: 2 });
+  assert.deepEqual(result, { affectedAssetCount: 2, privacyChangedAssetCount: 1 });
   assert.deepEqual(deletes, [
     {
       table: 'manual-tags',
@@ -115,7 +118,8 @@ test('batch clear removes every manual tag and distance for owned assets without
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-a/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-b/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /EagleAssetEmbedding/);
-  assert.equal(privacyWrites.length, 2);
+  assert.equal(privacyWrites.length, 3);
+  assert.match(JSON.stringify(privacyWrites[0]), /pg_advisory_xact_lock/);
   assert.match(JSON.stringify(privacyWrites), /marksAssetsPrivate/);
   assert.match(JSON.stringify(privacyWrites), /asset-a/);
 });
