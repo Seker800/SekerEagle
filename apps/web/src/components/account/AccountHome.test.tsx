@@ -64,6 +64,71 @@ describe('AccountHome', () => {
     await waitFor(() => expect(screen.getByLabelText('自动关闭时间')).toHaveValue('6'));
   });
 
+  it('selects persistent private tags independently from the temporary visibility switch', async () => {
+    const tags = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: '私人',
+        color: '#c05c5c',
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        lastUsedAt: null,
+        rowVersion: 1,
+        assetCount: 2,
+        pinyin: 'siren',
+        pinyinInitials: 'sr',
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: '证件',
+        color: null,
+        groupId: null,
+        groupIds: [],
+        isStarred: false,
+        lastUsedAt: null,
+        rowVersion: 1,
+        assetCount: 1,
+        pinyin: 'zhengjian',
+        pinyinInitials: 'zj',
+      },
+    ];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path =
+        typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+      if (path === '/api/auth/privacy-visibility') {
+        return jsonResponse({ enabled: false, durationHours: 3, expiresAt: null });
+      }
+      if (path === '/api/tokens') return jsonResponse([]);
+      if (path === '/api/eagle/tags') return jsonResponse(tags);
+      if (path === '/api/eagle/privacy-settings' && !init?.method) {
+        return jsonResponse({ tagIds: [tags[0].id] });
+      }
+      if (path === '/api/eagle/privacy-settings' && init?.method === 'PUT') {
+        expect(JSON.parse(init.body as string)).toEqual({ tagIds: [tags[0].id, tags[1].id] });
+        return jsonResponse({ tagIds: [tags[0].id, tags[1].id] });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: '管理私密标签' }));
+    expect(await screen.findByRole('checkbox', { name: '私人' })).toBeChecked();
+    fireEvent.click(screen.getByRole('checkbox', { name: '证件' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存私密标签' }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/eagle/privacy-settings',
+        expect.objectContaining({ method: 'PUT' }),
+      ),
+    );
+    expect(screen.getByText('已选择 2 个私密标签')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: '显示隐私内容' })).not.toBeChecked();
+  });
+
   it('loads, creates and revokes external connection tokens', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path =
