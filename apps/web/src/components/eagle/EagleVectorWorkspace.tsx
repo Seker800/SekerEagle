@@ -463,18 +463,18 @@ export function EagleVectorWorkspace({
               ? t('相似度检查 · {{value1}}', {
                   value1: distanceTag?.name ?? '',
                 })
-              : t('标签推荐设置'),
+              : t('人工标签推荐'),
           description: t('选择哪些人工标签参与推荐，并管理每个标签的向量中心。'),
         }
       : view === 'UNCLASSIFIED'
         ? {
             eyebrow: t('人工归类'),
-            title: t('待手动分类'),
+            title: t('待分类'),
             description: t('这些素材暂时没有可靠推荐，请直接添加一个或多个人工标签。'),
           }
         : {
             eyebrow: t('人工标签建议'),
-            title: t('智能标签确认'),
+            title: t('推荐审核'),
             description: t('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
           };
   return (
@@ -508,7 +508,7 @@ export function EagleVectorWorkspace({
       ) : null}
 
       {view === 'REVIEW' ? (
-        <section className={styles.panel} aria-label={t('智能标签确认')}>
+        <section className={styles.panel} aria-label={t('推荐审核')}>
           <div className={styles.tagFilters} role="group" aria-label={t('推荐标签筛选')}>
             <span>{t('推荐标签')}</span>
             <div className={styles.tagFilterOptions}>
@@ -708,7 +708,7 @@ export function EagleVectorWorkspace({
       ) : null}
 
       {view === 'UNCLASSIFIED' ? (
-        <section className={styles.panel} aria-label={t('待手动分类')}>
+        <section className={styles.panel} aria-label={t('待分类')}>
           <div className={styles.toolbar}>
             <span className={styles.selectionCount}>
               {t('已选择') + ' '}
@@ -744,7 +744,7 @@ export function EagleVectorWorkspace({
               ) +
               ' '}
           </p>
-          <AssetGrid ariaLabel={t('待手动分类的素材')} onClear={clearSelection}>
+          <AssetGrid ariaLabel={t('待分类的素材')} onClear={clearSelection}>
             {unclassified.map((asset) => (
               <UnclassifiedCard
                 key={asset.id}
@@ -792,7 +792,7 @@ export function EagleVectorWorkspace({
                 setDistanceTag(null);
               }}
             >
-              {' ' + t('返回标签推荐设置') + ' '}
+              {' ' + t('返回人工标签推荐') + ' '}
             </button>
             <strong>{distanceTag.name}</strong>
             <span className={styles.selectionCount}>

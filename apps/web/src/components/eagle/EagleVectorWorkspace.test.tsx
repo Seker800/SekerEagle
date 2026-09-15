@@ -631,10 +631,11 @@ describe('EagleVectorWorkspace', () => {
   it('renders one focused workflow without nesting the three peer entries again', async () => {
     render(<EagleVectorWorkspace view="REVIEW" />);
 
-    expect(await screen.findByRole('heading', { name: '智能标签确认' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '推荐审核' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: '向量处理视图' })).not.toBeInTheDocument();
     expect(screen.queryByText(/标签推荐设置/)).not.toBeInTheDocument();
     expect(screen.queryByText(/待手动分类/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/智能标签确认/)).not.toBeInTheDocument();
   });
 
   it('lets owners classify selected fallback assets from a visible action or the context menu', async () => {
@@ -675,6 +676,7 @@ describe('EagleVectorWorkspace', () => {
       />,
     );
 
+    expect(await screen.findByRole('heading', { name: '待分类' })).toBeInTheDocument();
     const card = await screen.findByRole('button', { name: '选择 unclassified.jpg' });
     fireEvent.click(card);
     fireEvent.click(screen.getByRole('button', { name: '添加人工标签' }));

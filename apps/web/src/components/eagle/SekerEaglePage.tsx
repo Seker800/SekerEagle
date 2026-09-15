@@ -925,7 +925,7 @@ export function SekerEaglePage({
               {libraryView === 'PRIVATE' && <span>{assets.length}</span>}
             </button>
           )}
-          <div className={styles.navSection}>
+          <div className={`${styles.navSection} ${styles.smartFolderSection}`}>
             <div className={styles.sectionLabel}>
               {' ' + t('智能文件夹') + ' '}
               <button
@@ -997,7 +997,6 @@ export function SekerEaglePage({
               {' ' + t('设置')}
             </button>
           </div>
-          <div className={styles.sidebarSpacer} />
           <button
             className={libraryView === 'TRASH' ? styles.navActive : undefined}
             type="button"
