@@ -314,6 +314,7 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
 test('cross-owner suggestion review returns 404 without writes', async () => {
   let wrote = false;
   const transaction = {
+    $queryRaw: async () => [],
     eagleVectorTagSuggestion: { findFirst: async () => null },
     eagleAssetManualTag: { upsert: async () => (wrote = true) },
   };

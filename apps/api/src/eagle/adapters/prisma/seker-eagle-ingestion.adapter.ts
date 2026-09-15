@@ -5,7 +5,10 @@ import type {
   SekerEagleIngestionPort,
   SekerEagleIngestionTag,
 } from '../../seker-eagle-ingestion.port';
-import { syncAssetPrivacyFromManualTags } from '../../eagle-privacy.service';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacyFromManualTags,
+} from '../../eagle-privacy.service';
 
 type ResolvedDefinition = { id: string; normalizedName: string };
 
@@ -15,6 +18,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     command: SekerEagleIngestionCommand,
     transaction: Prisma.TransactionClient,
   ): Promise<void> {
+    await lockOwnerPrivacyProjection(transaction, command.ownerId);
     const previousOrigins = await transaction.eagleAssetManualTagIngestion.findMany({
       where: {
         ownerId: command.ownerId,

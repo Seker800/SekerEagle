@@ -34,7 +34,10 @@ import {
   readEagleFilterQuery,
   readEagleFilterTagDependencies,
 } from './eagle-filter-query';
-import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacyFromManualTags,
+} from './eagle-privacy.service';
 
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   renditions: {
@@ -550,7 +553,8 @@ export class EagleService {
     if (assets.length !== input.assetIds.length || tags.length !== tagIds.length) {
       throw new NotFoundException('一个或多个素材或标签不存在。');
     }
-    await this.prisma.$transaction(async (transaction) => {
+    const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
+      await lockOwnerPrivacyProjection(transaction, ownerId);
       if (input.clearAll) {
         const where = { ownerId, assetId: { in: input.assetIds } };
         await transaction.eagleAssetManualTag.deleteMany({ where });
@@ -594,9 +598,9 @@ export class EagleService {
           includePrivate,
         });
       }
-      await syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds);
+      return syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds);
     });
-    return { affectedAssetCount: input.assetIds.length };
+    return { affectedAssetCount: input.assetIds.length, privacyChangedAssetCount };
   }
 
   async setTrash(ownerId: string, assetIds: string[], restore: boolean, includePrivate = false) {
@@ -785,13 +789,17 @@ export class EagleService {
   }
 
   async deleteManualTag(ownerId: string, tagId: string) {
-    const tag = await this.prisma.eagleManualTag.findFirst({
-      where: { ownerId, id: tagId },
-      select: { id: true },
-    });
-    if (!tag) throw new NotFoundException('标签不存在。');
     try {
       await this.prisma.$transaction(async (transaction) => {
+        await lockOwnerPrivacyProjection(transaction, ownerId);
+        const tag = await transaction.eagleManualTag.findFirst({
+          where: { ownerId, id: tagId },
+          select: { id: true, marksAssetsPrivate: true },
+        });
+        if (!tag) throw new NotFoundException('标签不存在。');
+        if (tag.marksAssetsPrivate) {
+          throw new ConflictException('请先在私密设置中移除该标签，再删除标签。');
+        }
         await transaction.eagleAssetManualTag.deleteMany({ where: { ownerId, tagId } });
         await transaction.eagleManualTag.delete({ where: { id: tagId } });
         await syncAssetPrivacyFromManualTags(transaction, ownerId);
@@ -914,7 +922,8 @@ export class EagleService {
   ) {
     const ids = [...new Set(tagIds)];
     if (ids.length !== tagIds.length) throw new BadRequestException('标签不能重复。');
-    await this.prisma.$transaction(async (transaction) => {
+    const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
+      await lockOwnerPrivacyProjection(transaction, ownerId);
       const [asset, tagCount] = await Promise.all([
         transaction.eagleAsset.findFirst({
           where: {
@@ -946,9 +955,9 @@ export class EagleService {
           includePrivate,
         });
       }
-      await syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId]);
+      return syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId]);
     });
-    return { affectedAssetCount: 1 };
+    return { affectedAssetCount: 1, privacyChangedAssetCount };
   }
 
   listSmartFolders(ownerId: string) {

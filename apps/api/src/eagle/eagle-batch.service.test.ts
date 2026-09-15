@@ -61,11 +61,12 @@ test('batch clear removes every manual tag and distance for owned assets without
   const deletes: Array<{ table: string; where: unknown }> = [];
   const suggestionRefreshes: unknown[] = [];
   const privacyWrites: unknown[] = [];
+  let privacyUpdateCount = 0;
   const transaction = {
     eagleAsset: {
       updateMany: async (input: unknown) => {
         privacyWrites.push(input);
-        return { count: privacyWrites.length === 2 ? 1 : 0 };
+        return { count: privacyUpdateCount++ === 0 ? 1 : 0 };
       },
     },
     eagleAssetManualTag: {
@@ -81,10 +82,15 @@ test('batch clear removes every manual tag and distance for owned assets without
       },
     },
     $queryRaw: async (statement: unknown) => {
-      const target = JSON.stringify(statement).includes('pg_advisory_xact_lock')
-        ? privacyWrites
-        : suggestionRefreshes;
-      target.push(statement);
+      const serialized = JSON.stringify(statement);
+      if (serialized.includes('sekereagle:privacy')) {
+        if (privacyWrites.length === 0) {
+          assert.equal(deletes.length, 0, 'privacy lock must precede manual-tag writes');
+        }
+        privacyWrites.push(statement);
+        return [];
+      }
+      suggestionRefreshes.push(statement);
       return [{ scanned: 2, matched: 1 }];
     },
   };
@@ -118,7 +124,7 @@ test('batch clear removes every manual tag and distance for owned assets without
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-a/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /asset-b/);
   assert.match(JSON.stringify(suggestionRefreshes[0]), /EagleAssetEmbedding/);
-  assert.equal(privacyWrites.length, 3);
+  assert.equal(privacyWrites.length, 4);
   assert.match(JSON.stringify(privacyWrites[0]), /pg_advisory_xact_lock/);
   assert.match(JSON.stringify(privacyWrites), /marksAssetsPrivate/);
   assert.match(JSON.stringify(privacyWrites), /asset-a/);
@@ -131,7 +137,9 @@ test('batch tag removal refreshes only assets that end without any manual tag', 
     eagleAssetManualTag: { deleteMany: async () => ({ count: 1 }) },
     eagleTagMemberDistance: { deleteMany: async () => ({ count: 1 }) },
     $queryRaw: async (statement: unknown) => {
-      suggestionRefreshes.push(statement);
+      if (!JSON.stringify(statement).includes('sekereagle:privacy')) {
+        suggestionRefreshes.push(statement);
+      }
       return [{ scanned: 1, matched: 1 }];
     },
   };
@@ -178,6 +186,7 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
       distanceSyncs += 1;
       return 0;
     },
+    $queryRaw: async () => [],
   };
   const prisma = {
     eagleAsset: { findMany: async () => assetIds.map((id) => ({ id })) },
@@ -204,10 +213,12 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
 
 test('replacing tags can move a locked asset into privacy without returning its details', async () => {
   let detailReads = 0;
+  let privacyWriteCount = 0;
   const transaction = {
+    $queryRaw: async () => [],
     eagleAsset: {
       findFirst: async () => ({ id: 'asset-a' }),
-      updateMany: async () => ({ count: 1 }),
+      updateMany: async () => ({ count: ++privacyWriteCount === 1 ? 1 : 0 }),
     },
     eagleManualTag: {
       count: async () => 1,
@@ -232,6 +243,7 @@ test('replacing tags can move a locked asset into privacy without returning its 
 
   assert.deepEqual(await service.replaceAssetTags('owner-a', 'asset-a', ['tag-private']), {
     affectedAssetCount: 1,
+    privacyChangedAssetCount: 1,
   });
   assert.equal(detailReads, 0);
 });

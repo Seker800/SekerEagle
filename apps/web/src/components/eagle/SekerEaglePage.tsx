@@ -269,6 +269,26 @@ export function SekerEaglePage({
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
+  const resetAssetPrivacyState = useCallback(() => {
+    thumbnailScheduler.clear({ abortActive: true });
+    thumbnailLoadService.dispose();
+    assetStore.clear();
+    setPreviewAssetId(null);
+    imagePreview.closePreview();
+    setSelectedAssetIds([]);
+    setSelectedAssetId(null);
+    setIsBatchSelection(false);
+    setAssetContextMenu(null);
+    selectionAnchorIdRef.current = null;
+    void queryClient.resetQueries({ queryKey: queryKeys.root });
+  }, [
+    assetStore,
+    imagePreview,
+    queryClient,
+    queryKeys.root,
+    thumbnailLoadService,
+    thumbnailScheduler,
+  ]);
   const {
     ratingMutation,
     metadataMutation,
@@ -294,6 +314,7 @@ export function SekerEaglePage({
       }
     },
     onBatchTagsApplied: () => setTagPicker(null),
+    onAssetPrivacyChanged: resetAssetPrivacyState,
     onSelectionMutationCompleted: () => {
       setPreviewAssetId(null);
       imagePreview.closePreview();
@@ -323,24 +344,14 @@ export function SekerEaglePage({
     const nextPrivacyState = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
     if (privacyStateRef.current === nextPrivacyState) return;
     privacyStateRef.current = nextPrivacyState;
-    assetStore.clear();
-    setPreviewAssetId(null);
-    imagePreview.closePreview();
-    setSelectedAssetIds([]);
-    setSelectedAssetId(null);
-    setIsBatchSelection(false);
-    setAssetContextMenu(null);
+    resetAssetPrivacyState();
     if (!privateVisible && libraryView === 'PRIVATE') setLibraryView('ACTIVE');
-    void queryClient.resetQueries({ queryKey: queryKeys.root });
   }, [
-    assetStore,
-    imagePreview,
     libraryView,
     privateVisible,
     privacyVisibility?.expiresAt,
     privacyRulesRevision,
-    queryClient,
-    queryKeys.root,
+    resetAssetPrivacyState,
   ]);
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   const contextMenuAsset =
@@ -1031,6 +1042,7 @@ export function SekerEaglePage({
               onTrashAssets={async (assetIds) => {
                 await trashMutation.mutateAsync(assetIds);
               }}
+              onAssetPrivacyChanged={resetAssetPrivacyState}
             />
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <>

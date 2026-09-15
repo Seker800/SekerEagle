@@ -435,8 +435,10 @@ export async function moveEagleSmartFolder(
   });
 }
 export async function replaceEagleAssetManualTags(_token: string, id: string, tagIds: string[]) {
-  await api(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) });
-  return { assetId: id, tagIds };
+  return api<{
+    affectedAssetCount: number;
+    privacyChangedAssetCount: number;
+  }>(`/eagle/assets/${id}/tags`, { method: 'PUT', body: JSON.stringify({ tagIds }) });
 }
 export async function batchChangeEagleManualTags(
   _token: string,
@@ -449,6 +451,7 @@ export async function batchChangeEagleManualTags(
 ) {
   return api<{
     affectedAssetCount: number;
+    privacyChangedAssetCount: number;
   }>('/eagle/assets/batch/manual-tags', {
     method: 'POST',
     body: JSON.stringify(input),

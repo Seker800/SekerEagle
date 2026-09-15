@@ -20,7 +20,7 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
-import { invalidateDesktopAssets } from '../../lib/desktop-cache';
+import { invalidateDesktopAssetsAndRefresh } from '../../lib/desktop-cache';
 import styles from './EagleVectorWorkspace.module.css';
 export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
 type View = EagleVectorWorkspaceView | 'DISTANCE';
@@ -36,6 +36,7 @@ interface EagleVectorWorkspaceProps {
   }) => Promise<void>;
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
   onTrashAssets?: (assetIds: string[]) => Promise<void>;
+  onAssetPrivacyChanged?: () => void;
 }
 export function EagleVectorWorkspace({
   view: controlledView,
@@ -44,6 +45,7 @@ export function EagleVectorWorkspace({
   onChangeManualTags,
   onCreateManualTag,
   onTrashAssets,
+  onAssetPrivacyChanged,
 }: EagleVectorWorkspaceProps = {}) {
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
@@ -262,7 +264,13 @@ export function EagleVectorWorkspace({
       async () => {
         const result = await reviewEagleVectorSuggestions(ids, action);
         if (action === 'ACCEPT') {
-          await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
+          if (result.items.some(({ privacyChanged }) => privacyChanged)) {
+            onAssetPrivacyChanged?.();
+          }
+          await invalidateDesktopAssetsAndRefresh(
+            result.items.map(({ assetId }) => assetId),
+            reload,
+          );
         }
         return result;
       },

@@ -21,6 +21,6 @@ The first release targets macOS 13+ and stores cache data under `~/Library/Cache
 
 ## Consequences
 
-The desktop application is intentionally not an offline authorization system. Every hit requires a current authenticated owner snapshot, leases expire within five minutes, and resume or network reconnection forces revalidation. Cache failure immediately bypasses to the authenticated upstream. The cache can be deleted without affecting server data.
+The desktop application is intentionally not an offline authorization system. Every hit requires a current authenticated owner snapshot, and every cached media access is revalidated with the server before local bytes are returned. Cache failure immediately bypasses to the authenticated upstream. The cache can be deleted without affecting server data.
 
 Public macOS distribution still requires external Developer ID signing, notarization, stapling, and release-channel credentials. Unsigned local artifacts are development candidates, not public releases.

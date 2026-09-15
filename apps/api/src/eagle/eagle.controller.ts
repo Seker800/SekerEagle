@@ -15,7 +15,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { Readable } from 'node:stream';
 import {
@@ -165,7 +165,7 @@ export class EagleController {
     applyMediaHeaders(
       response,
       media,
-      principal.canViewPrivate ? 'private, no-store' : 'private, max-age=3600',
+      principal.canViewPrivate ? 'private, no-store' : 'private, no-cache',
     );
     if (media.notModified) {
       response.status(304);
@@ -214,7 +214,7 @@ export class EagleController {
     applyMediaHeaders(
       response,
       media,
-      media.desktopCacheEligible ? 'private, max-age=31536000, immutable' : 'private, no-store',
+      media.desktopCacheEligible ? 'private, no-cache' : 'private, no-store',
     );
     if (media.notModified) {
       response.status(304);
@@ -271,7 +271,7 @@ export class EagleController {
     applyMediaHeaders(
       response,
       media,
-      media.desktopCacheEligible ? 'private, max-age=31536000, immutable' : 'private, no-store',
+      media.desktopCacheEligible ? 'private, no-cache' : 'private, no-store',
     );
     if (media.notModified) {
       response.status(304);
@@ -301,12 +301,14 @@ export class EagleController {
   }
 
   @Get('privacy-settings')
+  @ApiOkResponse({ type: UpdateEaglePrivacySettingsDto })
   getPrivacySettings(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.privacy.getSettings(principal.sub);
   }
 
   @Put('privacy-settings')
   @UseGuards(BrowserOriginGuard)
+  @ApiOkResponse({ type: UpdateEaglePrivacySettingsDto })
   updatePrivacySettings(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: UpdateEaglePrivacySettingsDto,

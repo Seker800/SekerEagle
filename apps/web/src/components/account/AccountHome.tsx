@@ -1,5 +1,5 @@
 import { getLocale, t } from '../../i18n';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import {
   IconCheck,
   IconCopy,
@@ -198,13 +198,16 @@ export function AccountHome({
       setPrivacyTagsSaving(false);
     }
   }
-  const normalizedPrivacyTagQuery = privacyTagQuery.normalize('NFKC').trim().toLocaleLowerCase();
-  const visiblePrivacyTags = privacyTagOptions.filter((tag) => {
-    if (!normalizedPrivacyTagQuery) return true;
-    return [tag.name, tag.pinyin, tag.pinyinInitials].some((value) =>
-      value.normalize('NFKC').toLocaleLowerCase().includes(normalizedPrivacyTagQuery),
-    );
-  });
+  const draftPrivateTagIdSet = useMemo(() => new Set(draftPrivateTagIds), [draftPrivateTagIds]);
+  const visiblePrivacyTags = useMemo(() => {
+    const query = privacyTagQuery.normalize('NFKC').trim().toLocaleLowerCase();
+    return privacyTagOptions.filter((tag) => {
+      if (!query) return true;
+      return [tag.name, tag.pinyin, tag.pinyinInitials].some((value) =>
+        value.normalize('NFKC').toLocaleLowerCase().includes(query),
+      );
+    });
+  }, [privacyTagOptions, privacyTagQuery]);
   async function createConnectionToken(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -420,7 +423,7 @@ export function AccountHome({
                       <input
                         type="checkbox"
                         aria-label={tag.name}
-                        checked={draftPrivateTagIds.includes(tag.id)}
+                        checked={draftPrivateTagIdSet.has(tag.id)}
                         onChange={() =>
                           setDraftPrivateTagIds((current) =>
                             current.includes(tag.id)

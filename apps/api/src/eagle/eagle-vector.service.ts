@@ -17,7 +17,10 @@ import {
   upsertAcceptedSuggestionMemberDistance,
 } from './eagle-vector.persistence';
 import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
-import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacyFromManualTags,
+} from './eagle-privacy.service';
 
 @Injectable()
 export class EagleVectorService {
@@ -543,8 +546,14 @@ export class EagleVectorService {
           data: { status: 'REJECTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
         });
         if (updated.count !== 1) throw new ConflictException('建议已被处理。');
-        return { id: suggestion.id, status: 'REJECTED' as const, assetId: suggestion.assetId };
+        return {
+          id: suggestion.id,
+          status: 'REJECTED' as const,
+          assetId: suggestion.assetId,
+          privacyChanged: false,
+        };
       }
+      await lockOwnerPrivacyProjection(transaction, ownerId);
       const manualTagCount = await transaction.eagleAssetManualTag.count({
         where: { ownerId, assetId: suggestion.assetId },
       });
@@ -605,7 +614,9 @@ export class EagleVectorService {
         snapshotId: suggestion.snapshotId,
         embeddingId: suggestion.embeddingId,
       });
-      await syncAssetPrivacyFromManualTags(transaction, ownerId, [suggestion.assetId]);
+      const privacyChangedAssetCount = await syncAssetPrivacyFromManualTags(transaction, ownerId, [
+        suggestion.assetId,
+      ]);
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
         where: {
           ownerId,
@@ -617,7 +628,12 @@ export class EagleVectorService {
         data: { status: 'ACCEPTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
       });
       if (updated.count !== 1) throw new ConflictException('建议已被处理。');
-      return { id: suggestion.id, status: 'ACCEPTED' as const, assetId: suggestion.assetId };
+      return {
+        id: suggestion.id,
+        status: 'ACCEPTED' as const,
+        assetId: suggestion.assetId,
+        privacyChanged: privacyChangedAssetCount > 0,
+      };
     });
     if ('invalid' in outcome) throw new ConflictException('图片或标签状态已变化，请刷新。');
     return outcome;

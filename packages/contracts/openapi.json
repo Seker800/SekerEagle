@@ -758,7 +758,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -783,7 +790,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                }
+              }
+            }
           }
         },
         "security": [

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Prisma, PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
+import { lockOwnerPrivacyProjection } from '../eagle/eagle-privacy.service';
 
 const DEFAULT_MAX_ASSET_COUNT = 5;
 const LEGACY_PROVIDER = 'sekereagle-one-time-maintenance';
@@ -261,6 +262,7 @@ async function run() {
 
     const result = await prisma.$transaction(
       async (transaction) => {
+        await lockOwnerPrivacyProjection(transaction, owner.id);
         const currentSelection = selectReclassificationCandidates(
           await loadCandidateSources(transaction, owner.id),
           options.maxAssetCount,

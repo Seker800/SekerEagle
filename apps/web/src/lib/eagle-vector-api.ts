@@ -146,6 +146,7 @@ export function reviewEagleVectorSuggestions(suggestionIds: string[], action: 'A
       id: string;
       status: string;
       assetId: string;
+      privacyChanged: boolean;
     }>;
   }>('suggestions/review-batch', {
     method: 'POST',

@@ -249,8 +249,8 @@ describe('SekerEaglePage', () => {
       },
     ]);
     replaceEagleAssetManualTagsMock.mockResolvedValue({
-      assetId: 'asset-1',
-      tagIds: ['11111111-1111-4111-8111-111111111111'],
+      affectedAssetCount: 1,
+      privacyChangedAssetCount: 0,
     });
     createEagleManualTagMock.mockResolvedValue({
       id: '33333333-3333-4333-8333-333333333333',
@@ -263,7 +263,10 @@ describe('SekerEaglePage', () => {
       pinyin: 'xinbiaoqian',
       pinyinInitials: 'xbq',
     });
-    batchChangeEagleManualTagsMock.mockResolvedValue({ affectedAssetCount: 1 });
+    batchChangeEagleManualTagsMock.mockResolvedValue({
+      affectedAssetCount: 1,
+      privacyChangedAssetCount: 0,
+    });
     listEagleTrashMock.mockResolvedValue({
       items: [{ ...asset, deletedAt: '2026-08-14T01:00:00.000Z' }],
       nextCursor: null,
@@ -1013,6 +1016,36 @@ describe('SekerEaglePage', () => {
         removeTagIds: [],
       }),
     );
+  });
+
+  it('clears selected private assets even when desktop cache invalidation fails', async () => {
+    const invalidateAsset = vi.fn().mockRejectedValue(new Error('cache unavailable'));
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      version: 1,
+      createMediaUrl: vi.fn(
+        (media: { renditionKind: string; assetId: string; renditionId: string }) =>
+          `sekereagle-media://rendition/${media.renditionKind.toLowerCase()}/${media.assetId}/${media.renditionId}`,
+      ),
+      getCacheStatus: vi.fn(),
+      setCacheLimitGiB: vi.fn(),
+      clearCache: vi.fn(),
+      invalidateAsset,
+    };
+    batchChangeEagleManualTagsMock.mockResolvedValueOnce({
+      affectedAssetCount: 1,
+      privacyChangedAssetCount: 1,
+    });
+    renderPage();
+    const inspector = await selectAssetAndOpenInspector();
+    fireEvent.click(within(inspector).getByRole('button', { name: '添加人工标签' }));
+
+    const picker = screen.getByRole('dialog', { name: '添加标签' });
+    fireEvent.click(within(picker).getByRole('checkbox', { name: '灵感' }));
+    fireEvent.click(within(picker).getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
+
+    await waitFor(() => expect(invalidateAsset).toHaveBeenCalledWith('asset-1'));
+    expect(screen.queryByRole('dialog', { name: '添加标签' })).not.toBeInTheDocument();
+    expect(within(inspector).getByText('选择一项素材查看详情')).toBeInTheDocument();
   });
 
   it('moves batch actions into the asset context menu', async () => {

@@ -9,7 +9,7 @@ import type { CacheKind, ReadyCacheEntry } from '../utility/cache/cache-index';
 import type { AuthenticatedIdentity } from './authenticated-owner';
 
 const CACHE_ELIGIBILITY = 'public-derived-v1';
-const AUTHORIZATION_LEASE_MS = 5 * 60_000;
+const AUTHORIZATION_LEASE_MS = 0;
 const MAX_RENDITION_BYTES = 64 * 1024 ** 2;
 const MAX_THUMBNAIL_BYTES = 8 * 1024 ** 2;
 const MAX_TILE_BYTES = 8 * 1024 ** 2;
@@ -123,7 +123,7 @@ export class MediaCacheController {
       };
     }
     try {
-      if (existing && existing.authorizationLeaseUntil >= now) return cacheResolution(existing);
+      if (existing && existing.authorizationLeaseUntil > now) return cacheResolution(existing);
       if (existing) {
         await this.cache.release(existing.leaseId);
         return await this.revalidate(media, keyHash, namespaceId, existing, signal);

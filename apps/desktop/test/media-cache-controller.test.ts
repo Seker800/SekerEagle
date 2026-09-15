@@ -49,6 +49,8 @@ describe('MediaCacheController', () => {
     expect(first.source).toBe('upstream');
     if (first.source !== 'upstream') throw new Error('expected stream-through response');
     expect(await first.response.text()).toBe('cached-image');
+    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(1));
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     const second = await controller.resolve(mediaUrl);
     expect(second.source).toBe('cache');

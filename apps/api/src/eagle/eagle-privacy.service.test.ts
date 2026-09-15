@@ -18,6 +18,7 @@ test('privacy settings expose only the owner private-tag rules', async () => {
 test('privacy settings fail closed when any selected tag belongs to another owner', async () => {
   let writes = 0;
   const transaction = {
+    $queryRaw: async () => [],
     eagleManualTag: {
       count: async () => 1,
       updateMany: async () => {
@@ -68,11 +69,12 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   const tagWrites: unknown[] = [];
   const assetWrites: unknown[] = [];
   const transaction = {
+    $queryRaw: async () => [],
     eagleManualTag: {
       count: async () => 2,
-      updateMany: async (input: unknown) => {
+      updateMany: async (input: { data: { marksAssetsPrivate: boolean } }) => {
         tagWrites.push(input);
-        return { count: 1 };
+        return { count: input.data.marksAssetsPrivate ? 2 : 1 };
       },
     },
     eagleAsset: {

@@ -1,18 +1,28 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface EaglePrivacySettings {
   tagIds: string[];
 }
 
+export async function lockOwnerPrivacyProjection(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+): Promise<void> {
+  await transaction.$queryRaw(Prisma.sql`
+    SELECT pg_advisory_xact_lock(hashtextextended(${`sekereagle:privacy:${ownerId}`}, 0))
+  `);
+}
+
 export async function syncAssetPrivacyFromManualTags(
   transaction: Prisma.TransactionClient,
   ownerId: string,
   assetIds?: string[],
-): Promise<void> {
+): Promise<number> {
+  await lockOwnerPrivacyProjection(transaction, ownerId);
   const assetScope = assetIds ? { id: { in: assetIds } } : {};
-  await transaction.eagleAsset.updateMany({
+  const madePublic = await transaction.eagleAsset.updateMany({
     where: {
       ownerId,
       ...assetScope,
@@ -21,7 +31,7 @@ export async function syncAssetPrivacyFromManualTags(
     },
     data: { isPrivate: false, rowVersion: { increment: 1 } },
   });
-  await transaction.eagleAsset.updateMany({
+  const madePrivate = await transaction.eagleAsset.updateMany({
     where: {
       ownerId,
       ...assetScope,
@@ -30,6 +40,7 @@ export async function syncAssetPrivacyFromManualTags(
     },
     data: { isPrivate: true, rowVersion: { increment: 1 } },
   });
+  return madePublic.count + madePrivate.count;
 }
 
 @Injectable()
@@ -51,6 +62,7 @@ export class EaglePrivacyService {
   ): Promise<EaglePrivacySettings> {
     const tagIds = [...new Set(input.tagIds)];
     await this.prisma.$transaction(async (transaction) => {
+      await lockOwnerPrivacyProjection(transaction, ownerId);
       const ownedTagCount = await transaction.eagleManualTag.count({
         where: { ownerId, id: { in: tagIds } },
       });
@@ -66,10 +78,13 @@ export class EaglePrivacyService {
         data: { marksAssetsPrivate: false },
       });
       if (tagIds.length) {
-        await transaction.eagleManualTag.updateMany({
+        const marked = await transaction.eagleManualTag.updateMany({
           where: { ownerId, id: { in: tagIds } },
           data: { marksAssetsPrivate: true },
         });
+        if (marked.count !== tagIds.length) {
+          throw new NotFoundException('一个或多个标签不存在。');
+        }
       }
       await syncAssetPrivacyFromManualTags(transaction, ownerId);
     });

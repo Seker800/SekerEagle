@@ -13,7 +13,10 @@ import type {
   EagleImportManifestChunkDto,
   ListEagleImportItemsDto,
 } from './eagle-import.dto';
-import { syncAssetPrivacyFromManualTags } from './eagle-privacy.service';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacyFromManualTags,
+} from './eagle-privacy.service';
 
 @Injectable()
 export class EagleImportService {
@@ -537,6 +540,7 @@ async function applyImportedMetadata(
   },
   sourceKey: string,
 ): Promise<void> {
+  await lockOwnerPrivacyProjection(transaction, ownerId);
   const previous = await transaction.eagleAssetManualTagIngestion.findMany({
     where: { ownerId, assetId, sourceKey },
     select: { tagId: true },

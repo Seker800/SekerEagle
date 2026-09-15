@@ -5,6 +5,7 @@ import { PrismaSekerEagleIngestionAdapter } from './seker-eagle-ingestion.adapte
 test('imported manual tags recompute the asset private projection in the metadata transaction', async () => {
   const assetWrites: unknown[] = [];
   const transaction = {
+    $queryRaw: async () => [],
     eagleAssetManualTagIngestion: {
       findMany: async () => [],
       createMany: async () => ({ count: 1 }),

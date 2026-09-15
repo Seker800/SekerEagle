@@ -29,7 +29,10 @@ import {
 import type { MoveEagleSmartFolderInput } from './EagleSmartFolderTree';
 import type { createEagleQueryKeys } from './eagle-query-keys';
 import { moveSmartFolderInTree } from './eagle-smart-folder-order';
-import { invalidateDesktopAssets } from '../../lib/desktop-cache';
+import {
+  invalidateDesktopAssets,
+  invalidateDesktopAssetsAndRefresh,
+} from '../../lib/desktop-cache';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 type EagleAssetMetadataInput = Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'>;
@@ -45,6 +48,7 @@ const EAGLE_ASSET_UPDATE_SCOPE = { id: 'eagle-asset-update' };
 interface EagleMutationCallbacks {
   onMetadataSaved: (assetId: string, revision: number) => void;
   onBatchTagsApplied: () => void;
+  onAssetPrivacyChanged: () => void;
   onSelectionMutationCompleted: () => void;
   onSmartFolderCreated: () => void;
   onSmartFolderUpdated: (folder: EagleSmartFolder, changes: SmartFolderChanges) => void;
@@ -137,9 +141,11 @@ export function useEagleMutations(
   const replaceTagsMutation = useMutation({
     mutationFn: ({ assetId, tagIds }: { assetId: string; tagIds: string[] }) =>
       replaceEagleAssetManualTags(accessToken, assetId, tagIds),
-    onSuccess: async (_result, { assetId }) => {
-      await invalidateDesktopAssets([assetId]);
-      await invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags);
+    onSuccess: async ({ privacyChangedAssetCount }, { assetId }) => {
+      if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
+      await invalidateDesktopAssetsAndRefresh([assetId], () =>
+        invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags),
+      );
     },
   });
   const createTagMutation = useMutation({
@@ -225,10 +231,12 @@ export function useEagleMutations(
         removeTagIds,
         ...(clearAll ? { clearAll: true } : {}),
       }),
-    onSuccess: async (_result, { assetIds }) => {
-      await invalidateDesktopAssets(assetIds);
+    onSuccess: async ({ privacyChangedAssetCount }, { assetIds }) => {
       callbacks.onBatchTagsApplied();
-      await invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags);
+      if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
+      await invalidateDesktopAssetsAndRefresh(assetIds, () =>
+        invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags),
+      );
     },
   });
   const trashMutation = useMutation({
