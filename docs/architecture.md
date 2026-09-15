@@ -23,6 +23,7 @@ Prisma repositories / MinIO adapters
 - 数据库与对象存储通过可恢复状态机收敛，不假装跨系统 ACID。
 - worker 崩溃不改变已经提交的素材业务事实。
 - 浏览器使用 HttpOnly Cookie；插件使用有限 scope 的 PAT。
+- 浏览器写请求只有在来源已显式配置，或来源与当前 loopback/私网 IP gateway 的协议、主机和端口完全同源时才可通过；任意私网来源和任意 Host 均不构成信任。
 - 不依赖或访问 SekerChat 运行时和数据面。
 - locale 只影响 Web 与桌面展示适配层；业务规则、用户数据和 API 领域对象保持语言无关。
 

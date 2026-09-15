@@ -8,7 +8,7 @@ Local accepts loopback only and normalizes HTTP aliases such as `127.0.0.1` and 
 
 Every candidate must answer `/api/desktop/bootstrap`. The desktop records the first 256-bit deployment identity and refuses to fail over to an endpoint representing another library until the user explicitly resets that binding. Connection settings are stored atomically with owner-only permissions. `SEKEREAGLE_SERVER_URL` remains a first-run compatibility seed; saved settings take precedence.
 
-The API must list every desktop-reachable web origin in `BROWSER_TRUSTED_ORIGINS` when it differs from `CANONICAL_ORIGIN`. The bundled Mac Compose configuration derives the LAN origin from `SEKEREAGLE_GATEWAY_LAN_ADDRESS` and adds an optional exact `SEKEREAGLE_PUBLIC_ORIGIN`. Public HTTP remains rejected unless the deployment explicitly enables `SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP`; HTTPS is the supported long-term boundary. A probe shown as “来源未受信任” means the network path works but this server-side allowlist is incomplete.
+The API dynamically accepts a loopback or private-IP browser request only when its source origin exactly matches the gateway protocol, host, and port. A LAN IP therefore does not need to be copied into `BROWSER_TRUSTED_ORIGINS`; unrelated private origins and arbitrary DNS hosts remain rejected. The bundled Mac Compose configuration reserves the explicit origin list for the optional `SEKEREAGLE_PUBLIC_ORIGIN`. Public HTTP remains rejected unless the deployment explicitly enables `SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP`; HTTPS is the supported long-term boundary. A probe shown as “来源未受信任” now indicates a real cross-origin mismatch or an incomplete public-origin configuration.
 
 ## Cache behavior
 

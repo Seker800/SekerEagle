@@ -108,7 +108,7 @@ test('LAN gateway overlay preserves loopback and requires an explicit bind addre
   assert.match(compose, /127\.0\.0\.1:8180:8080/);
   assert.match(
     compose,
-    /BROWSER_TRUSTED_ORIGINS: 'http:\/\/\$\{SEKEREAGLE_GATEWAY_LAN_ADDRESS:-localhost\}:8180,\$\{SEKEREAGLE_PUBLIC_ORIGIN:-\}'/,
+    /BROWSER_TRUSTED_ORIGINS: '\$\{SEKEREAGLE_PUBLIC_ORIGIN:-\}'/,
   );
   assert.match(
     compose,

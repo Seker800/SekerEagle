@@ -94,7 +94,7 @@ function parseTrustedBrowserOrigins(
     }
     if (
       origin.protocol === 'http:' &&
-      !isTrustedHttpHost(origin.hostname) &&
+      !isTrustedLocalNetworkHost(origin.hostname) &&
       !allowInsecurePublicHttpOrigins
     ) {
       throw new Error(
@@ -106,7 +106,7 @@ function parseTrustedBrowserOrigins(
   return origins;
 }
 
-function isTrustedHttpHost(hostname: string): boolean {
+export function isTrustedLocalNetworkHost(hostname: string): boolean {
   const host = hostname.replace(/^\[|\]$/g, '').toLowerCase();
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
   const version = isIP(host);

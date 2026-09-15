@@ -45,6 +45,12 @@ void test('accepts an unconfigured private-network address when the browser is s
     ),
     true,
   );
+  assert.equal(
+    guard.canActivate(
+      contextFor({ origin: 'http://[fd12::34]:8180', host: '[fd12::34]:8180' }),
+    ),
+    true,
+  );
 });
 
 void test('accepts an explicitly configured public origin', () => {
@@ -81,6 +87,11 @@ void test('does not treat a same-host public DNS name as trusted without explici
   assert.throws(() =>
     guard.canActivate(contextFor({ origin: 'http://evil.example', host: 'evil.example' })),
   );
+  assert.throws(() =>
+    guard.canActivate(
+      contextFor({ origin: 'http://203.0.113.5:8180', host: '203.0.113.5:8180' }),
+    ),
+  );
 });
 
 void test('rejects malformed source and target origins', () => {
@@ -91,6 +102,14 @@ void test('rejects malformed source and target origins', () => {
   );
   assert.throws(() =>
     guard.canActivate(contextFor({ origin: 'null', host: '192.168.31.169:8180' })),
+  );
+  assert.throws(() =>
+    guard.canActivate(
+      contextFor({
+        referer: 'http://user:password@192.168.31.169:8180/library',
+        host: '192.168.31.169:8180',
+      }),
+    ),
   );
   assert.throws(() =>
     guard.canActivate(contextFor({ origin: 'http://192.168.31.169:8180' })),
