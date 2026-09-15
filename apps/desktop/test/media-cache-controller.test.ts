@@ -30,8 +30,19 @@ describe('MediaCacheController', () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it('downloads an eligible miss once and serves subsequent requests from the local file', async () => {
-    const fetchUpstream = vi.fn(async () => eligibleResponse('cached-image'));
+  it('revalidates cached media authorization before every local-file hit', async () => {
+    const fetchUpstream = vi
+      .fn()
+      .mockResolvedValueOnce(eligibleResponse('cached-image', '"etag-1"'))
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 304,
+          headers: {
+            etag: '"etag-1"',
+            'x-sekereagle-desktop-cache': 'public-derived-v1',
+          },
+        }),
+      );
     const controller = createController(engine, fetchUpstream, () => now);
 
     const first = await controller.resolve(mediaUrl);
@@ -45,7 +56,11 @@ describe('MediaCacheController', () => {
       expect(await readFile(second.filePath, 'utf8')).toBe('cached-image');
       engine.release(second.leaseId);
     }
-    expect(fetchUpstream).toHaveBeenCalledTimes(1);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    expect(fetchUpstream).toHaveBeenLastCalledWith(
+      `/api/eagle/assets/${assetId}/renditions/${renditionId}`,
+      { ifNoneMatch: '"etag-1"' },
+    );
   });
 
   it('deduplicates concurrent cache misses for the same immutable media key', async () => {
