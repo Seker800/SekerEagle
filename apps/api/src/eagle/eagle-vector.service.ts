@@ -41,6 +41,12 @@ const vectorReviewRenditions = () => ({
   },
 });
 
+const reviewableSuggestionAssetWhere = (includePrivate: boolean) => ({
+  deletedAt: null,
+  manualTagLinks: { none: {} },
+  ...(includePrivate ? {} : { isPrivate: false }),
+});
+
 @Injectable()
 export class EagleVectorService {
   constructor(private readonly prisma: PrismaService) {}
@@ -94,7 +100,7 @@ export class EagleVectorService {
           status: 'PENDING',
           isActive: true,
           invalidatedAt: null,
-          asset: visibleAsset,
+          asset: reviewableSuggestionAssetWhere(includePrivate),
         },
       }),
       this.checkEmbeddingHost(),
@@ -341,7 +347,7 @@ export class EagleVectorService {
                 status: 'PENDING',
                 isActive: true,
                 invalidatedAt: null,
-                asset: { deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
+                asset: reviewableSuggestionAssetWhere(includePrivate),
               },
             },
           },
@@ -445,7 +451,6 @@ export class EagleVectorService {
   }
 
   async listSuggestions(ownerId: string, query: ListVectorSuggestionsDto, includePrivate = false) {
-    const visibleAsset = includePrivate ? {} : { isPrivate: false };
     const limit = query.limit ?? 40;
     const rows = await this.prisma.eagleVectorTagSuggestion.findMany({
       where: {
@@ -454,7 +459,7 @@ export class EagleVectorService {
         status: 'PENDING',
         isActive: true,
         invalidatedAt: null,
-        asset: { deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
+        asset: reviewableSuggestionAssetWhere(includePrivate),
       },
       orderBy:
         query.sort === 'NEWEST'
