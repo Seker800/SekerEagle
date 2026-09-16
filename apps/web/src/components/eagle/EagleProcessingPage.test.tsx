@@ -57,6 +57,8 @@ describe('EagleProcessingPage', () => {
     render(<EagleProcessingPage accessToken="token" />);
     expect(await screen.findByText('在线')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '处理任务' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '任务中心' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '当前队列' })).not.toBeInTheDocument();
     expect(screen.getByText('等待中')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByDisplayValue('23:00')).toBeInTheDocument();
@@ -113,11 +115,12 @@ describe('EagleProcessingPage', () => {
 
     fireEvent.click(within(navigation).getByRole('button', { name: /任务中心/ }));
     const taskCenter = screen.getByRole('region', { name: '任务中心' });
-    expect(screen.getByRole('heading', { name: '当前队列' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '当前队列' })).not.toBeInTheDocument();
 
     const taskTabs = within(taskCenter).getByRole('tablist', { name: '任务中心视图' });
     fireEvent.click(within(taskTabs).getByRole('tab', { name: '处理记录' }));
-    expect(screen.getByRole('heading', { name: '处理记录' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '处理记录' })).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: '任务状态' })).toBeVisible();
   });
 
   it('keeps API errors distinct from an empty queue', async () => {
