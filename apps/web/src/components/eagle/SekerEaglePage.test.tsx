@@ -438,10 +438,9 @@ describe('SekerEaglePage', () => {
     renderPage('owner-test', true);
 
     fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
-    expect(screen.getByRole('navigation', { name: '待处理功能' }).closest('header')).toHaveAttribute(
-      'data-layout',
-      'tabs',
-    );
+    expect(
+      screen.getByRole('navigation', { name: '待处理功能' }).closest('header'),
+    ).toHaveAttribute('data-layout', 'tabs');
     fireEvent.click(
       within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
         name: '处理任务',

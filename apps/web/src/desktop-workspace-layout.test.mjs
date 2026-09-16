@@ -17,10 +17,7 @@ test('settings use a native two-pane preference layout', () => {
     eagleStyles,
     /\.settingsLibrary\s*\{[^}]*grid-template-columns:\s*190px minmax\(0,\s*1fr\)/s,
   );
-  assert.match(
-    eagleStyles,
-    /\.settingsLibrary \.workspaceNavigation\s*\{[^}]*border-right:/s,
-  );
+  assert.match(eagleStyles, /\.settingsLibrary \.workspaceNavigation\s*\{[^}]*border-right:/s);
 });
 
 test('settings content is grouped by rhythm instead of nested cards', () => {
@@ -31,9 +28,6 @@ test('settings content is grouped by rhythm instead of nested cards', () => {
 });
 
 test('processing navigation is a compact toolbar instead of a card deck', () => {
-  assert.match(
-    processingStyles,
-    /\.navigationBar\s*\{[^}]*border-bottom:/s,
-  );
+  assert.match(processingStyles, /\.navigationBar\s*\{[^}]*border-bottom:/s);
   assert.doesNotMatch(processingStyles, /\.tabs\s*\{[^}]*border:\s*1px/s);
 });
