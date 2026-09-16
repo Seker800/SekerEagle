@@ -15,6 +15,8 @@ describe('DesktopAssetDragSession', () => {
     const bridge = {
       prepareAssetDrag: vi.fn(() => preparation.promise),
       startPreparedAssetDrag: vi.fn(),
+      cancelAssetDragPreparation: vi.fn(),
+      discardPreparedAssetDrag: vi.fn(),
     };
     const session = new DesktopAssetDragSession(bridge);
 
@@ -32,6 +34,8 @@ describe('DesktopAssetDragSession', () => {
     const bridge = {
       prepareAssetDrag: vi.fn(() => preparation.promise),
       startPreparedAssetDrag: vi.fn(),
+      cancelAssetDragPreparation: vi.fn(),
+      discardPreparedAssetDrag: vi.fn(),
     };
     const session = new DesktopAssetDragSession(bridge);
 
@@ -42,6 +46,8 @@ describe('DesktopAssetDragSession', () => {
 
     expect(bridge.startPreparedAssetDrag).not.toHaveBeenCalled();
     expect(session.isOutboundDrag()).toBe(false);
+    expect(bridge.cancelAssetDragPreparation).toHaveBeenCalledOnce();
+    expect(bridge.discardPreparedAssetDrag).toHaveBeenCalledWith('drag-token');
   });
 
   it('serializes preparation and keeps only the latest requested selection', async () => {
@@ -52,6 +58,8 @@ describe('DesktopAssetDragSession', () => {
         .mockImplementationOnce(() => first.promise)
         .mockResolvedValueOnce({ token: 'second-token' }),
       startPreparedAssetDrag: vi.fn(),
+      cancelAssetDragPreparation: vi.fn(),
+      discardPreparedAssetDrag: vi.fn(),
     };
     const session = new DesktopAssetDragSession(bridge);
 
