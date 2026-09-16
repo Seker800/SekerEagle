@@ -1277,17 +1277,8 @@ function SuggestionCard({
         <button disabled={disabled} type="button" onClick={() => onReview('REJECT')}>
           {' ' + t('拒绝') + ' '}
         </button>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPreview();
-          }}
-        >
-          <IconMaximize size={14} />
-          {' ' + t('查看大图') + ' '}
-        </button>
       </div>
+      <PreviewAction onPreview={onPreview} />
     </article>
   );
 }
@@ -1335,19 +1326,24 @@ function UnclassifiedCard({
           <span>{state}</span>
         </div>
       </button>
-      <div className={styles.cardActions}>
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onPreview();
-          }}
-        >
-          <IconMaximize size={14} />
-          {' ' + t('查看大图') + ' '}
-        </button>
-      </div>
+      <PreviewAction onPreview={onPreview} />
     </article>
+  );
+}
+function PreviewAction({ onPreview }: { onPreview: () => void }) {
+  return (
+    <button
+      className={styles.previewAction}
+      type="button"
+      aria-label={t('查看大图')}
+      title={t('查看大图')}
+      onClick={(event) => {
+        event.stopPropagation();
+        onPreview();
+      }}
+    >
+      <IconMaximize size={15} />
+    </button>
   );
 }
 function SelectionMark({ selected }: { selected: boolean }) {

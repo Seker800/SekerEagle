@@ -504,10 +504,34 @@
   padding: 0 9px 9px;
 }
 .cardActions button {
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 3px;
+}
+.previewAction {
+  position: absolute;
+  z-index: 2;
+  top: 7px;
+  right: 7px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 6px;
+  color: #f3f4f6;
+  background: rgb(15 16 18 / 76%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 24%);
+  opacity: 0.86;
+}
+.previewAction:hover,
+.previewAction:focus-visible {
+  border-color: rgb(228 188 126 / 70%);
+  color: #f2c783;
+  opacity: 1;
 }
 .selectionCount {
   align-self: center;
