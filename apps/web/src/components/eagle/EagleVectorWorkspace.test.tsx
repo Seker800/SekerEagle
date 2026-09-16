@@ -21,6 +21,18 @@ vi.mock('../../lib/eagle-vector-api', () => ({
   scanMissingEagleEmbeddings: vi.fn(),
   scanUnclassifiedEagleSuggestions: vi.fn(),
   getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
+  getVectorPreviewUrl: vi.fn(() => '/preview'),
+}));
+
+vi.mock('./EagleImageViewer', () => ({
+  preloadEagleImageViewer: vi.fn(),
+  EagleImageViewer: ({ image, onClose }: { image: { alt: string }; onClose: () => void }) => (
+    <div role="dialog" aria-label={image.alt}>
+      <button type="button" onClick={onClose}>
+        关闭
+      </button>
+    </div>
+  ),
 }));
 
 describe('EagleVectorWorkspace', () => {
@@ -466,6 +478,60 @@ describe('EagleVectorWorkspace', () => {
     expect(within(filters).queryByRole('button', { name: /道路/ })).not.toBeInTheDocument();
   });
 
+  it('plain-clicks multiple review cards into one batch and opens a large preview', async () => {
+    vi.mocked(api.listEagleVectorSuggestions).mockResolvedValue({
+      items: [
+        {
+          id: 'suggestion-1',
+          score: 0.91,
+          distance: 0.09,
+          prototypeRank: 0,
+          createdAt: '2026-08-19T00:00:00Z',
+          suggestedTag: { id: 'tag-1', name: '汽车', color: null },
+          asset: {
+            id: 'asset-1',
+            displayName: 'red-car.jpg',
+            width: 800,
+            height: 600,
+            renditions: [],
+          },
+        },
+        {
+          id: 'suggestion-2',
+          score: 0.82,
+          distance: 0.18,
+          prototypeRank: 0,
+          createdAt: '2026-08-18T00:00:00Z',
+          suggestedTag: { id: 'tag-2', name: '道路', color: null },
+          asset: {
+            id: 'asset-2',
+            displayName: 'road.jpg',
+            width: 1200,
+            height: 800,
+            renditions: [],
+          },
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(<EagleVectorWorkspace view="REVIEW" />);
+
+    const first = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
+    const second = screen.getByRole('button', { name: /选择 road\.jpg/ });
+    fireEvent.click(first);
+    fireEvent.click(second);
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('已选择 2 项')).toBeVisible();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '查看大图' })[0]);
+    expect(screen.getByRole('dialog', { name: 'red-car.jpg' })).toBeVisible();
+    expect(api.getVectorPreviewUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'asset-1' }),
+    );
+  });
+
   it('shows distance members as selectable images and moves them to another tag', async () => {
     vi.mocked(api.listEagleVectorTags).mockResolvedValue([
       {
@@ -726,6 +792,43 @@ describe('EagleVectorWorkspace', () => {
 
     fireEvent.contextMenu(card, { clientX: 120, clientY: 160 });
     expect(screen.getByRole('menuitem', { name: '添加人工标签' })).toBeInTheDocument();
+  });
+
+  it('plain-clicks multiple unclassified cards into one batch and opens a large preview', async () => {
+    vi.mocked(api.listEagleUnclassifiedAssets).mockResolvedValue({
+      items: [
+        {
+          id: 'asset-one',
+          displayName: 'one.jpg',
+          width: 800,
+          height: 600,
+          renditions: [],
+          embeddings: [],
+        },
+        {
+          id: 'asset-two',
+          displayName: 'two.jpg',
+          width: 1200,
+          height: 800,
+          renditions: [],
+          embeddings: [],
+        },
+      ],
+      nextCursor: null,
+    });
+
+    render(<EagleVectorWorkspace view="UNCLASSIFIED" />);
+
+    const first = await screen.findByRole('button', { name: '选择 one.jpg' });
+    const second = screen.getByRole('button', { name: '选择 two.jpg' });
+    fireEvent.click(first);
+    fireEvent.click(second);
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('已选择 2 项')).toBeVisible();
+
+    fireEvent.doubleClick(first);
+    expect(screen.getByRole('dialog', { name: 'one.jpg' })).toBeVisible();
   });
 
   it('lets owners rescan untagged assets for suggestions from the unclassified page', async () => {

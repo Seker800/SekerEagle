@@ -113,9 +113,12 @@ test('requesting a tag rebuild remains opt-in and enqueues one owner-scoped buil
 
 test('suggestion review listing does not load representative assets that the review UI no longer uses', async () => {
   let representativeQueryCount = 0;
+  let suggestionQuery: Record<string, unknown> | undefined;
   const service = new EagleVectorService({
     eagleVectorTagSuggestion: {
-      findMany: async () => [
+      findMany: async (input: Record<string, unknown>) => {
+        suggestionQuery = input;
+        return [
         {
           id: 'suggestion-1',
           snapshotId: 'snapshot-1',
@@ -130,7 +133,8 @@ test('suggestion review listing does not load representative assets that the rev
             renditions: [],
           },
         },
-      ],
+        ];
+      },
     },
     eagleTagPrototype: {
       findMany: async () => {
@@ -155,6 +159,59 @@ test('suggestion review listing does not load representative assets that the rev
   const firstItem = result.items[0];
   assert.ok(firstItem);
   assert.equal('representativeAssets' in firstItem, false);
+  assert.deepEqual(
+    (
+      suggestionQuery?.include as {
+        asset: { select: { renditions: unknown } };
+      }
+    ).asset.select.renditions,
+    {
+      where: {
+        status: 'READY',
+        OR: [
+          { kind: 'THUMBNAIL', variant: '512' },
+          { kind: 'PREVIEW', variant: 'default' },
+        ],
+      },
+      orderBy: { revision: 'desc' },
+      take: 4,
+      select: { id: true, kind: true, revision: true, width: true, height: true },
+    },
+  );
+});
+
+test('unclassified assets include previews for the same large-image experience', async () => {
+  let assetQuery: Record<string, unknown> | undefined;
+  const service = new EagleVectorService({
+    eagleAsset: {
+      findMany: async (input: Record<string, unknown>) => {
+        assetQuery = input;
+        return [];
+      },
+    },
+  } as never);
+
+  await service.listUnclassified('owner-1', { limit: 40 }, false);
+
+  assert.deepEqual(
+    (
+      assetQuery?.select as {
+        renditions: unknown;
+      }
+    ).renditions,
+    {
+      where: {
+        status: 'READY',
+        OR: [
+          { kind: 'THUMBNAIL', variant: '512' },
+          { kind: 'PREVIEW', variant: 'default' },
+        ],
+      },
+      orderBy: { revision: 'desc' },
+      take: 4,
+      select: { id: true, kind: true, revision: true, width: true, height: true },
+    },
+  );
 });
 
 test('distance inspection loads an owner-visible thumbnail for visual classification', async () => {
