@@ -530,6 +530,12 @@ describe('EagleVectorWorkspace', () => {
     expect(api.getVectorPreviewUrl).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'asset-1' }),
     );
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'red-car.jpg' })).not.toBeInTheDocument();
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('已选择 2 项')).toBeVisible();
   });
 
   it('shows distance members as selectable images and moves them to another tag', async () => {

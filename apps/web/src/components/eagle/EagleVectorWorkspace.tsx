@@ -125,11 +125,12 @@ export function EagleVectorWorkspace({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setContextMenu(null);
+      if (imagePreview.previewImage) return;
       clearSelection();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [clearSelection]);
+  }, [clearSelection, imagePreview.previewImage]);
   useEffect(() => {
     void reload();
   }, [reload]);
