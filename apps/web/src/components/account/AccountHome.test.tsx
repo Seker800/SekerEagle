@@ -286,30 +286,16 @@ describe('AccountHome', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('routes desktop cache management to the unified desktop settings page', async () => {
-    const getCacheStatus = vi.fn().mockResolvedValue({
-      limitBytes: 10 * 1024 ** 3,
-      allocatedBytes: 2 * 1024 ** 3,
-      globalAllocatedBytes: 3 * 1024 ** 3,
-      globalEntryCount: 12_000,
-      logicalBytes: 1_500_000_000,
-      entryCount: 12_345,
-      hitCount: 80,
-      missCount: 20,
-      savedBytes: 5 * 1024 ** 3,
-    });
-    const setCacheLimitGiB = vi.fn().mockResolvedValue(undefined);
-    const clearCache = vi.fn().mockResolvedValue({ deleted: 12_345, deferred: 0 });
-    const openConnectionManager = vi.fn().mockResolvedValue(undefined);
+  it('keeps desktop cache management out of account settings', async () => {
     (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
       version: 1,
       createMediaUrl: vi.fn(),
-      getCacheStatus,
-      setCacheLimitGiB,
-      clearCache,
+      getCacheStatus: vi.fn(),
+      setCacheLimitGiB: vi.fn(),
+      clearCache: vi.fn(),
       invalidateAsset: vi.fn(),
       getConnectionStatus: vi.fn(),
-      openConnectionManager,
+      openConnectionManager: vi.fn(),
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])));
 
@@ -322,11 +308,7 @@ describe('AccountHome', () => {
       />,
     );
 
-    expect(await screen.findByRole('heading', { name: '本地媒体缓存' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '打开桌面设置' }));
-    await waitFor(() => expect(openConnectionManager).toHaveBeenCalledOnce());
-    expect(getCacheStatus).not.toHaveBeenCalled();
-    expect(setCacheLimitGiB).not.toHaveBeenCalled();
-    expect(clearCache).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: '本地媒体缓存' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '打开桌面设置' })).not.toBeInTheDocument();
   });
 });
