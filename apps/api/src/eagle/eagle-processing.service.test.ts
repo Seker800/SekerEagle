@@ -131,3 +131,27 @@ test('retrying a required media task restores the current asset processing lifec
     data: { lifecycleStatus: 'PROCESSING', mediaErrorCode: null },
   });
 });
+
+test('retrying all failed media tasks uses one owner-scoped set operation', async () => {
+  const statements: unknown[] = [];
+  const transaction = {
+    $queryRaw: async (statement: unknown) => {
+      statements.push(statement);
+      return [{ retried: 1250n }];
+    },
+  };
+  const service = new EagleProcessingService({
+    $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
+      work(transaction),
+  } as never);
+
+  assert.deepEqual(await service.retryFailed('owner-1', false), { retried: 1250 });
+  assert.equal(statements.length, 1);
+  const statement = statements[0] as { strings?: readonly string[]; values?: readonly unknown[] };
+  const sql = statement.strings?.join('?') ?? '';
+  assert.match(sql, /UPDATE "EagleMediaJob"/u);
+  assert.match(sql, /UPDATE "EagleAsset"/u);
+  assert.match(sql, /"ownerId" =/u);
+  assert.match(sql, /"isPrivate" = false/u);
+  assert.ok(statement.values?.includes('owner-1'));
+});
