@@ -983,7 +983,7 @@ export function SekerEaglePage({
               type="button"
               className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
               aria-label={`${t('待处理')} ${pendingWorkCount}`}
-              onClick={() => changeLibraryView('VECTOR_UNCLASSIFIED')}
+              onClick={() => changeLibraryView('VECTOR_REVIEW')}
             >
               <IconCheck size={17} />
               {' ' + t('待处理')}
@@ -1041,14 +1041,14 @@ export function SekerEaglePage({
               activeView={libraryView}
               items={[
                 {
-                  view: 'VECTOR_UNCLASSIFIED',
-                  label: t('待分类'),
-                  count: unavailableSuggestionCount,
-                },
-                {
                   view: 'VECTOR_REVIEW',
                   label: t('推荐审核'),
                   count: vectorSummary?.suggestions.pending ?? 0,
+                },
+                {
+                  view: 'VECTOR_UNCLASSIFIED',
+                  label: t('待分类'),
+                  count: unavailableSuggestionCount,
                 },
                 { view: 'PROCESSING', label: t('处理任务') },
               ]}

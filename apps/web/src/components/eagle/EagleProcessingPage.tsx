@@ -36,17 +36,21 @@ const KIND_LABELS: Record<string, string> = {
   GENERATE_EMBEDDING: t('生成图片向量'),
   PURGE_ASSET: t('永久清理素材'),
 };
-type ProcessingPage = 'TASKS' | 'BROWSE' | 'COLOR' | 'VECTOR';
-type TaskCenterTab = 'QUEUE' | 'HISTORY';
+type ProcessingPage = 'QUEUE' | 'HISTORY' | 'BROWSE' | 'COLOR' | 'VECTOR';
 const PROCESSING_TABS: ReadonlyArray<{
   id: ProcessingPage;
   label: string;
   description: string;
 }> = [
   {
-    id: 'TASKS',
-    label: t('任务中心'),
-    description: t('队列、调度与处理记录'),
+    id: 'QUEUE',
+    label: t('当前任务'),
+    description: t('队列状态与后台处理时段'),
+  },
+  {
+    id: 'HISTORY',
+    label: t('处理记录'),
+    description: t('按状态、通道和类型查看任务'),
   },
   {
     id: 'BROWSE',
@@ -64,13 +68,6 @@ const PROCESSING_TABS: ReadonlyArray<{
     description: t('模型、覆盖率与运行状态'),
   },
 ];
-const TASK_CENTER_TABS: ReadonlyArray<{
-  id: TaskCenterTab;
-  label: string;
-}> = [
-  { id: 'QUEUE', label: t('当前任务') },
-  { id: 'HISTORY', label: t('处理记录') },
-];
 export function EagleProcessingPage({
   accessToken: providedAccessToken,
   canManageProcessing = true,
@@ -87,8 +84,7 @@ export function EagleProcessingPage({
   const [mode, setMode] = useState<EagleProcessingMode>('NIGHT');
   const [nightStart, setNightStart] = useState('23:00');
   const [nightEnd, setNightEnd] = useState('06:00');
-  const [activePage, setActivePage] = useState<ProcessingPage>('TASKS');
-  const [taskCenterTab, setTaskCenterTab] = useState<TaskCenterTab>('QUEUE');
+  const [activePage, setActivePage] = useState<ProcessingPage>('QUEUE');
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState('');
@@ -163,19 +159,6 @@ export function EagleProcessingPage({
     setActivePage(nextTab.id);
     document.getElementById(`processing-tab-${nextTab.id.toLowerCase()}`)?.focus();
   };
-  const handleTaskTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    let nextIndex: number | null = null;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % TASK_CENTER_TABS.length;
-    if (event.key === 'ArrowLeft')
-      nextIndex = (index - 1 + TASK_CENTER_TABS.length) % TASK_CENTER_TABS.length;
-    if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = TASK_CENTER_TABS.length - 1;
-    if (nextIndex === null) return;
-    event.preventDefault();
-    const nextTab = TASK_CENTER_TABS[nextIndex];
-    setTaskCenterTab(nextTab.id);
-    document.getElementById(`task-center-tab-${nextTab.id.toLowerCase()}`)?.focus();
-  };
   const coverage = summary?.colorCoverage;
   const colorState =
     mode === 'MANUAL'
@@ -241,7 +224,6 @@ export function EagleProcessingPage({
         <div className={styles.workerState} data-online={summary?.worker.status === 'ONLINE'}>
           <span aria-hidden="true" />
           {summary?.worker.status === 'ONLINE' ? t('在线') : t('离线')}
-          {summary?.worker.version ? <small>{summary.worker.version}</small> : null}
         </div>
       </header>
 
@@ -364,51 +346,28 @@ export function EagleProcessingPage({
           </div>
         </article>
         <p className={styles.featureHint}>
-          {t('缺失或失败的分析任务可在“任务中心”中扫描和重试。')}
+          {t('缺失或失败的分析任务可在“当前任务”中扫描和重试。')}
         </p>
       </section>
 
       <section
-        id="processing-panel-tasks"
-        className={`${styles.taskCenter} ${styles.tabPanel}`}
-        aria-label={t('任务中心')}
-        hidden={activePage !== 'TASKS'}
+        className={styles.taskCenter}
+        aria-label={t('处理任务详情')}
       >
-        <div className={styles.taskCenterHeading}>
-          <nav className={styles.taskTabs} role="tablist" aria-label={t('任务中心视图')}>
-            {TASK_CENTER_TABS.map((tab, index) => {
-              const isActive = taskCenterTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  id={`task-center-tab-${tab.id.toLowerCase()}`}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  aria-controls={`task-center-panel-${tab.id.toLowerCase()}`}
-                  tabIndex={isActive ? 0 : -1}
-                  data-active={isActive}
-                  onClick={() => setTaskCenterTab(tab.id)}
-                  onKeyDown={(event) => handleTaskTabKeyDown(event, index)}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
-          <span className={styles.refreshedAt}>
-            {' ' + t('最近刷新') + ' '}
-            {summary ? new Date(summary.refreshedAt).toLocaleTimeString(getLocale()) : '—'}
-          </span>
-        </div>
-
         <section
-          id="task-center-panel-queue"
-          className={styles.contentBlock}
-          role="tabpanel"
-          aria-labelledby="task-center-tab-queue"
-          hidden={taskCenterTab !== 'QUEUE'}
+          id="processing-panel-queue"
+          className={`${styles.contentBlock} ${styles.tabPanel}`}
+          role="region"
+          aria-labelledby="processing-tab-queue"
+          tabIndex={0}
+          hidden={activePage !== 'QUEUE'}
         >
+          <div className={styles.taskCenterHeading}>
+            <span className={styles.refreshedAt}>
+              {' ' + t('最近刷新') + ' '}
+              {summary ? new Date(summary.refreshedAt).toLocaleTimeString(getLocale()) : '—'}
+            </span>
+          </div>
           <div className={styles.metrics}>
             {(
               [
@@ -540,11 +499,12 @@ export function EagleProcessingPage({
         </section>
 
         <section
-          id="task-center-panel-history"
-          className={styles.contentBlock}
-          role="tabpanel"
-          aria-labelledby="task-center-tab-history"
-          hidden={taskCenterTab !== 'HISTORY'}
+          id="processing-panel-history"
+          className={`${styles.contentBlock} ${styles.tabPanel}`}
+          role="region"
+          aria-labelledby="processing-tab-history"
+          tabIndex={0}
+          hidden={activePage !== 'HISTORY'}
         >
           <div className={styles.filters}>
             <select

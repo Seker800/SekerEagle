@@ -127,6 +127,7 @@ export const enUS = {
   '当前没有遗漏的未分类图片。': 'No unclassified images pending manual classification.',
   当前密码: 'Current Password',
   当前任务: 'Current task',
+  处理任务详情: 'Processing task details',
   当前筛选条件下没有任务: 'No tasks found under current filters.',
   '当前网页地址不支持复制图片，请使用 localhost 或 HTTPS。':
     'Current webpage URL does not support image copy; use localhost or HTTPS.',
@@ -365,6 +366,8 @@ export const enUS = {
   '缺少模型 {{value1}}': 'Model {{value1}} Missing',
   '缺失或失败的分析任务可在“任务中心”中扫描和重试。':
     'Failed or missing analysis tasks can be scanned and retried in the Task Center.',
+  '缺失或失败的分析任务可在“当前任务”中扫描和重试。':
+    'Failed or missing analysis tasks can be scanned and retried in Current Tasks.',
   缺失任务扫描完成: 'Missing task scan complete.',
   '确定撤销“{{value1}}”吗？撤销后无法恢复。':
     "Confirm revoking '{{value1}}'? This action cannot be undone.",
@@ -787,6 +790,8 @@ export const enUS = {
   人工标签推荐: 'Manual Tag Recommendations',
   处理任务: 'Processing Tasks',
   '队列、调度与处理记录': 'Queue, schedule, and processing history',
+  队列状态与后台处理时段: 'Queue status and background schedule',
+  '按状态、通道和类型查看任务': 'Filter tasks by status, lane, and type',
   待分类: 'Unclassified',
   待分类的素材: 'Unclassified assets',
   待处理功能: 'Pending Work',

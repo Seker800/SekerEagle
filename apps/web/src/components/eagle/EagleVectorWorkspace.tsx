@@ -457,7 +457,6 @@ export function EagleVectorWorkspace({
   const pageCopy =
     view === 'TAGS' || view === 'DISTANCE'
       ? {
-          eyebrow: t('推荐语义'),
           title:
             view === 'DISTANCE'
               ? t('相似度检查 · {{value1}}', {
@@ -468,12 +467,10 @@ export function EagleVectorWorkspace({
         }
       : view === 'UNCLASSIFIED'
         ? {
-            eyebrow: t('人工归类'),
             title: t('待分类'),
             description: t('这些素材暂时没有可靠推荐，请直接添加一个或多个人工标签。'),
           }
         : {
-            eyebrow: t('人工标签建议'),
             title: t('推荐审核'),
             description: t('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
           };
@@ -484,17 +481,9 @@ export function EagleVectorWorkspace({
       onClick={() => setContextMenu(null)}
     >
       <header className={styles.pageHeader}>
-        <span className={styles.eyebrow}>{pageCopy.eyebrow}</span>
         <h2>{pageCopy.title}</h2>
         <p>{pageCopy.description}</p>
       </header>
-
-      {view === 'REVIEW' ? (
-        <div className={styles.boundary}>
-          <strong>{t('只写入人工标签')}</strong>
-          <span>{t('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。')}</span>
-        </div>
-      ) : null}
 
       {error ? (
         <div className={styles.error} role="alert">
@@ -737,13 +726,6 @@ export function EagleVectorWorkspace({
               {' ' + t('添加人工标签') + ' '}
             </button>
           </div>
-          <p className={styles.explainer}>
-            {' ' +
-              t(
-                '可能原因包括向量仍在处理、相似度不足，或当前没有可用的标签中心。选择素材后可直接完成归类。',
-              ) +
-              ' '}
-          </p>
           <AssetGrid ariaLabel={t('待分类的素材')} onClear={clearSelection}>
             {unclassified.map((asset) => (
               <UnclassifiedCard

@@ -80,9 +80,8 @@ const tokenPurposes = {
     scopes: ['import:read', 'import:write', 'asset:write'],
   },
 } as const;
-type AccountSection = 'OVERVIEW' | 'PRIVACY' | 'CONNECTIONS' | 'SECURITY';
+type AccountSection = 'PRIVACY' | 'CONNECTIONS' | 'SECURITY';
 const ACCOUNT_SECTIONS: ReadonlyArray<{ id: AccountSection; label: string }> = [
-  { id: 'OVERVIEW', label: t('概览') },
   { id: 'PRIVACY', label: t('隐私') },
   { id: 'CONNECTIONS', label: t('连接') },
   { id: 'SECURITY', label: t('安全') },
@@ -102,7 +101,7 @@ export function AccountHome({
   onPrivacyVisibilityChange?: (state: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
 }) {
-  const [activeSection, setActiveSection] = useState<AccountSection>('OVERVIEW');
+  const [activeSection, setActiveSection] = useState<AccountSection>('PRIVACY');
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokenError, setTokenError] = useState('');
@@ -360,23 +359,10 @@ export function AccountHome({
         role="tabpanel"
         aria-labelledby={`account-tab-${activeSection.toLowerCase()}`}
       >
-        {activeSection === 'OVERVIEW' ? (
-          <section className="account-panel account-summary" id="overview">
-            <div className="setting-row">
-              <span>{t('邮箱')}</span>
-              <strong>{user.email}</strong>
-            </div>
-            <div className="setting-row">
-              <span>{t('账号角色')}</span>
-              <strong>{user.role === 'ADMIN' ? t('管理员') : t('成员')}</strong>
-            </div>
-          </section>
-        ) : null}
         {activeSection === 'PRIVACY' ? (
           <section className="account-panel privacy-panel" id="privacy">
             <div className="panel-heading">
               <div>
-                <p className="account-kicker">{t('内容隐私')}</p>
                 <h2>{t('隐私内容')}</h2>
                 <p>{t('关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
               </div>
@@ -511,7 +497,6 @@ export function AccountHome({
           <section className="account-panel" id="connections">
             <div className="panel-heading">
               <div>
-                <p className="account-kicker">{t('连接管理')}</p>
                 <h2>{t('外部连接令牌')}</h2>
                 <p>{t('为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。')}</p>
               </div>
@@ -649,7 +634,6 @@ export function AccountHome({
           <section className="account-panel" id="security">
             <div className="panel-heading">
               <div>
-                <p className="account-kicker">{t('登录安全')}</p>
                 <h2>{t('修改密码')}</h2>
                 <p>{t('修改成功后会退出所有登录设备，并撤销现有外部连接令牌。')}</p>
               </div>
