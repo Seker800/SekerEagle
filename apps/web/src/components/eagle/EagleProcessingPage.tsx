@@ -36,14 +36,18 @@ const KIND_LABELS: Record<string, string> = {
   GENERATE_EMBEDDING: t('生成图片向量'),
   PURGE_ASSET: t('永久清理素材'),
 };
-type ProcessingTab = 'BROWSE' | 'COLOR' | 'VECTOR';
-type ProcessingPage = ProcessingTab | 'TASKS';
+type ProcessingPage = 'TASKS' | 'BROWSE' | 'COLOR' | 'VECTOR';
 type TaskCenterTab = 'QUEUE' | 'HISTORY';
 const PROCESSING_TABS: ReadonlyArray<{
-  id: ProcessingTab;
+  id: ProcessingPage;
   label: string;
   description: string;
 }> = [
+  {
+    id: 'TASKS',
+    label: t('任务中心'),
+    description: t('队列、调度与处理记录'),
+  },
   {
     id: 'BROWSE',
     label: t('浏览优化'),
@@ -83,7 +87,7 @@ export function EagleProcessingPage({
   const [mode, setMode] = useState<EagleProcessingMode>('NIGHT');
   const [nightStart, setNightStart] = useState('23:00');
   const [nightEnd, setNightEnd] = useState('06:00');
-  const [activePage, setActivePage] = useState<ProcessingPage>('BROWSE');
+  const [activePage, setActivePage] = useState<ProcessingPage>('TASKS');
   const [taskCenterTab, setTaskCenterTab] = useState<TaskCenterTab>('QUEUE');
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
@@ -192,7 +196,7 @@ export function EagleProcessingPage({
       <section className={styles.section}>
         <header className={styles.header}>
           <div>
-            <h1>{t('素材处理')}</h1>
+            <h1>{t('处理任务')}</h1>
             <p>{t('查看图片向量的自动处理状态；标签业务在左侧“标签”区域完成。')}</p>
           </div>
         </header>
@@ -202,14 +206,14 @@ export function EagleProcessingPage({
   if (isLoading && !summary)
     return (
       <section>
-        <h3>{t('素材处理')}</h3>
+        <h3>{t('处理任务')}</h3>
         <p className={styles.muted}>{t('正在读取处理状态…')}</p>
       </section>
     );
   if (error && !summary) {
     return (
       <section>
-        <h3>{t('素材处理')}</h3>
+        <h3>{t('处理任务')}</h3>
         <div className={styles.error} role="alert">
           {error}
         </div>
@@ -230,7 +234,7 @@ export function EagleProcessingPage({
     <section className={styles.section}>
       <header className={styles.header}>
         <div>
-          <h1>{t('素材处理')}</h1>
+          <h1>{t('处理任务')}</h1>
           <p>{t('按素材用途查看处理结果，运行与排障集中在任务中心。')}</p>
         </div>
         <div className={styles.workerState} data-online={summary?.worker.status === 'ONLINE'}>
@@ -272,22 +276,6 @@ export function EagleProcessingPage({
             );
           })}
         </nav>
-        <button
-          className={activePage === 'TASKS' ? styles.taskCenterActive : styles.taskCenterButton}
-          type="button"
-          aria-pressed={activePage === 'TASKS'}
-          aria-controls="processing-panel-tasks"
-          onClick={() => setActivePage('TASKS')}
-        >
-          <span>{t('任务中心')}</span>
-          <small>
-            {summary?.counts.failed
-              ? t('{{value1}} 项失败', {
-                  value1: summary.counts.failed,
-                })
-              : t('运行、调度与记录')}
-          </small>
-        </button>
       </div>
 
       <div

@@ -786,6 +786,7 @@ export const enUS = {
   'SekerEagle 灵感采集': 'SekerEagle Inspiration Collection',
   人工标签推荐: 'Manual Tag Recommendations',
   处理任务: 'Processing Tasks',
+  '队列、调度与处理记录': 'Queue, schedule, and processing history',
   待分类: 'Unclassified',
   待分类的素材: 'Unclassified assets',
   待处理功能: 'Pending Work',

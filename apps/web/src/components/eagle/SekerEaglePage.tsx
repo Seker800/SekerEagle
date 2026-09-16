@@ -140,6 +140,7 @@ function getVectorWorkspaceView(view: EagleLibraryView): EagleVectorWorkspaceVie
 interface EagleWorkspaceNavigationProps {
   title: string;
   ariaLabel: string;
+  layout?: 'tabs' | 'sidebar';
   activeView: EagleLibraryView;
   items: Array<{ view: EagleLibraryView; label: string; count?: number }>;
   onSelect: (view: EagleLibraryView) => void;
@@ -148,12 +149,13 @@ interface EagleWorkspaceNavigationProps {
 function EagleWorkspaceNavigation({
   title,
   ariaLabel,
+  layout = 'tabs',
   activeView,
   items,
   onSelect,
 }: EagleWorkspaceNavigationProps) {
   return (
-    <header className={styles.workspaceNavigation}>
+    <header className={styles.workspaceNavigation} data-layout={layout}>
       <h1>{title}</h1>
       <nav aria-label={ariaLabel}>
         {items.map((item) => {
@@ -1009,7 +1011,7 @@ export function SekerEaglePage({
         </nav>
 
         <section
-          className={styles.library}
+          className={`${styles.library} ${workspaceSection === 'SETTINGS' ? styles.settingsLibrary : ''}`}
           aria-label={
             workspaceSection === 'TAGS'
               ? t('标签')
@@ -1056,6 +1058,7 @@ export function SekerEaglePage({
             <EagleWorkspaceNavigation
               title={t('设置')}
               ariaLabel={t('设置功能')}
+              layout="sidebar"
               activeView={libraryView}
               items={[
                 ...(accountView ? [{ view: 'ACCOUNT' as const, label: t('账号') }] : []),

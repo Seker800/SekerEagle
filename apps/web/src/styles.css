@@ -264,7 +264,7 @@ select:focus-visible {
   min-width: 0;
   min-height: 0;
   flex: 1;
-  padding: 18px;
+  padding: 28px 34px 48px;
   display: grid;
   align-content: start;
   gap: 14px;
@@ -282,7 +282,8 @@ select:focus-visible {
 
 .account-page-header h1 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
+  letter-spacing: -0.025em;
 }
 
 .account-page-header p {
@@ -318,19 +319,24 @@ select:focus-visible {
 }
 
 .account-content {
+  width: min(100%, 860px);
   min-width: 0;
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 0;
 }
 
 .account-panel {
   min-width: 0;
-  padding: 18px 20px;
+  padding: 26px 0;
   scroll-margin-top: 58px;
-  border: 1px solid var(--account-line);
-  border-radius: 7px;
-  background: var(--account-panel);
+  border: 0;
+  border-top: 1px solid var(--account-line);
+  border-radius: 0;
+  background: transparent;
+}
+.account-panel:first-child {
+  border-top: 0;
 }
 
 .panel-heading {
@@ -341,14 +347,13 @@ select:focus-visible {
 }
 
 .panel-heading > svg {
-  flex: 0 0 auto;
-  color: #8b8f97;
+  display: none;
 }
 
 .panel-heading h2 {
-  margin: 4px 0;
-  font-size: 18px;
-  letter-spacing: -0.035em;
+  margin: 2px 0 4px;
+  font-size: 15px;
+  letter-spacing: -0.015em;
 }
 
 .panel-heading p:last-child {
@@ -361,14 +366,14 @@ select:focus-visible {
 
 .privacy-controls {
   margin-top: 16px;
-  padding: 12px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 160px;
   gap: 18px;
   align-items: center;
-  background: #131417;
+  background: transparent;
 }
 
 .privacy-switch-row {
@@ -564,14 +569,15 @@ select:focus-visible {
 
 .token-create-form {
   margin-top: 16px;
-  padding: 12px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 9px;
+  padding: 16px 0;
+  border: 0;
+  border-top: 1px solid rgb(255 255 255 / 7%);
+  border-radius: 0;
   display: grid;
   grid-template-columns: minmax(150px, 0.85fr) minmax(190px, 1.3fr) 96px auto;
   gap: 10px;
   align-items: end;
-  background: #131417;
+  background: transparent;
 }
 
 .account-field-note {

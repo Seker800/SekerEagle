@@ -3,8 +3,8 @@
   height: 100%;
   display: grid;
   align-content: start;
-  gap: 12px;
-  padding: 16px;
+  gap: 14px;
+  padding: 20px 24px 40px;
   overflow: auto;
   color: #d9dadd;
 }
@@ -13,8 +13,9 @@
   border-bottom: 1px solid rgb(255 255 255 / 8%);
 }
 .pageHeader h2 {
-  margin: 4px 0;
-  font-size: 18px;
+  margin: 0 0 5px;
+  font-size: 20px;
+  letter-spacing: -0.025em;
 }
 .pageHeader p {
   margin: 0;
@@ -27,10 +28,7 @@
   font-size: 12px;
 }
 .eyebrow {
-  color: #d69b48;
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  display: none;
 }
 .boundary {
   display: flex;
@@ -59,10 +57,13 @@
 }
 .tagFilterOptions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 3px;
 }
 .tagFilterOptions button {
+  flex: 0 0 auto;
   min-height: 31px;
   padding: 0 9px 0 11px;
   border: 1px solid rgb(255 255 255 / 9%);

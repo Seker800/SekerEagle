@@ -1,11 +1,12 @@
 .panel {
-  margin: 14px 20px 0;
-  padding: 16px;
-  border: 1px solid var(--eagle-line);
-  border-radius: 10px;
+  width: min(100%, 920px);
+  margin: 0;
+  padding: 28px 34px 48px;
+  border: 0;
+  border-radius: 0;
   display: grid;
   gap: 12px;
-  background: #111216;
+  background: transparent;
 }
 
 .header,
@@ -65,10 +66,11 @@
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  border: 1px solid var(--eagle-line);
-  border-radius: 8px;
+  border: 0;
+  border-block: 1px solid var(--eagle-line);
+  border-radius: 0;
   overflow: hidden;
-  background: #17191e;
+  background: transparent;
 }
 
 .metrics div {
@@ -96,17 +98,18 @@
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
-  gap: 10px;
+  grid-template-columns: 1fr;
+  gap: 0;
 }
 
 .primaryControl,
 .scheduleControl {
-  min-height: 72px;
-  padding: 12px;
-  border: 1px solid var(--eagle-line);
-  border-radius: 8px;
-  background: #17191e;
+  min-height: 68px;
+  padding: 14px 0;
+  border: 0;
+  border-bottom: 1px solid var(--eagle-line);
+  border-radius: 0;
+  background: transparent;
 }
 
 .primaryControl > div,
