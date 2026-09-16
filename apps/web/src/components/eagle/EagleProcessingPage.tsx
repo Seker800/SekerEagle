@@ -387,36 +387,32 @@ export function EagleProcessingPage({
         hidden={activePage !== 'TASKS'}
       >
         <div className={styles.taskCenterHeading}>
-          <div>
-            <h2>{t('任务中心')}</h2>
-            <p>{t('集中查看运行状态、处理时段和历史记录。')}</p>
-          </div>
+          <nav className={styles.taskTabs} role="tablist" aria-label={t('任务中心视图')}>
+            {TASK_CENTER_TABS.map((tab, index) => {
+              const isActive = taskCenterTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  id={`task-center-tab-${tab.id.toLowerCase()}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`task-center-panel-${tab.id.toLowerCase()}`}
+                  tabIndex={isActive ? 0 : -1}
+                  data-active={isActive}
+                  onClick={() => setTaskCenterTab(tab.id)}
+                  onKeyDown={(event) => handleTaskTabKeyDown(event, index)}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
           <span className={styles.refreshedAt}>
             {' ' + t('最近刷新') + ' '}
             {summary ? new Date(summary.refreshedAt).toLocaleTimeString(getLocale()) : '—'}
           </span>
         </div>
-        <nav className={styles.taskTabs} role="tablist" aria-label={t('任务中心视图')}>
-          {TASK_CENTER_TABS.map((tab, index) => {
-            const isActive = taskCenterTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                id={`task-center-tab-${tab.id.toLowerCase()}`}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                aria-controls={`task-center-panel-${tab.id.toLowerCase()}`}
-                tabIndex={isActive ? 0 : -1}
-                data-active={isActive}
-                onClick={() => setTaskCenterTab(tab.id)}
-                onKeyDown={(event) => handleTaskTabKeyDown(event, index)}
-              >
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
 
         <section
           id="task-center-panel-queue"
@@ -425,12 +421,6 @@ export function EagleProcessingPage({
           aria-labelledby="task-center-tab-queue"
           hidden={taskCenterTab !== 'QUEUE'}
         >
-          <div className={styles.sectionHeading}>
-            <div>
-              <h2 id="processing-queue-title">{t('当前队列')}</h2>
-              <p>{t('这里显示此刻等待、运行和失败的任务。')}</p>
-            </div>
-          </div>
           <div className={styles.metrics}>
             {(
               [
@@ -563,12 +553,6 @@ export function EagleProcessingPage({
           aria-labelledby="task-center-tab-history"
           hidden={taskCenterTab !== 'HISTORY'}
         >
-          <div className={styles.sectionHeading}>
-            <div>
-              <h2 id="processing-history-title">{t('处理记录')}</h2>
-              <p>{t('查看具体任务、耗时和失败原因。')}</p>
-            </div>
-          </div>
           <div className={styles.filters}>
             <select
               aria-label={t('任务状态')}
