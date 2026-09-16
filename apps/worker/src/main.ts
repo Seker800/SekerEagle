@@ -46,6 +46,12 @@ import {
 import { EmbeddingClient } from './embedding-client';
 import { OllamaVisionClient, renderAiTagInput } from './ai-tagging';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
+import {
+  JobWakeScheduler,
+  nextEligibleWakeAt,
+  PostgresWakeListener,
+  type ProcessingWakeSettings,
+} from './job-wakeup';
 
 const execFileAsync = promisify(execFile);
 
@@ -69,9 +75,10 @@ const storage = new S3Client({
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
   },
 });
-let pollTimer: NodeJS.Timeout | undefined;
 let heartbeatTimer: NodeJS.Timeout | undefined;
 let aiTagReconcileTimer: NodeJS.Timeout | undefined;
+let wakeScheduler: JobWakeScheduler | undefined;
+let wakeListener: PostgresWakeListener | undefined;
 let stopping = false;
 let activeJobCount = 0;
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
@@ -1454,6 +1461,95 @@ async function poll(): Promise<void> {
   }
 }
 
+interface PendingMediaWakeRow {
+  ownerId: string;
+  lane: EagleAssetProcessingJob['lane'];
+  kind: EagleAssetProcessingJob['kind'];
+  availableAt: Date;
+}
+
+async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
+  const [mediaCandidates, nextTagBuild, settings] = await Promise.all([
+    prisma.$queryRaw<PendingMediaWakeRow[]>(Prisma.sql`
+      SELECT candidate."ownerId", candidate.lane, candidate.kind,
+             MIN(candidate."availableAt") AS "availableAt"
+      FROM (
+        SELECT job."ownerId", job.lane::text AS lane, job.kind::text AS kind,
+               job."availableAt" AS "availableAt"
+        FROM "EagleMediaJob" AS job
+        LEFT JOIN "EagleMediaJob" AS dependency ON dependency.id = job."dependsOnJobId"
+        WHERE job.status = 'PENDING'
+          AND (job."dependsOnJobId" IS NULL OR dependency.status = 'COMPLETED')
+        UNION ALL
+        SELECT job."ownerId", job.lane::text AS lane, job.kind::text AS kind,
+               job."lockedAt" + INTERVAL '10 minutes' AS "availableAt"
+        FROM "EagleMediaJob" AS job
+        WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
+      ) AS candidate
+      GROUP BY candidate."ownerId", candidate.lane, candidate.kind
+    `),
+    prisma.eagleTagSemanticBuild.findFirst({
+      where: { status: 'PENDING' },
+      orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+      select: { availableAt: true },
+    }),
+    prisma.eagleProcessingSetting.findMany(),
+  ]);
+  const settingsByOwner = new Map(
+    settings.map((row) => [row.ownerId, normalizeWakeSettings(row)] as const),
+  );
+  let earliest = nextTagBuild?.availableAt ?? null;
+  for (const candidate of mediaCandidates) {
+    const wakeAt = nextEligibleWakeAt(
+      candidate,
+      settingsByOwner.get(candidate.ownerId) ?? defaultWakeSettings(),
+      now,
+    );
+    if (wakeAt && (!earliest || wakeAt < earliest)) earliest = wakeAt;
+  }
+  return earliest;
+}
+
+function normalizeWakeSettings(input: {
+  mode: string;
+  nightStart: string;
+  nightEnd: string;
+  aiTagManualEnabled: boolean;
+  aiTagScheduleEnabled: boolean;
+  aiTagScheduleStart: string;
+  aiTagScheduleEnd: string;
+}): ProcessingWakeSettings {
+  return {
+    mode: input.mode === 'ALWAYS' || input.mode === 'MANUAL' ? input.mode : 'NIGHT',
+    nightStart: input.nightStart,
+    nightEnd: input.nightEnd,
+    aiTagManualEnabled: input.aiTagManualEnabled,
+    aiTagScheduleEnabled: input.aiTagScheduleEnabled,
+    aiTagScheduleStart: input.aiTagScheduleStart,
+    aiTagScheduleEnd: input.aiTagScheduleEnd,
+  };
+}
+
+function defaultWakeSettings(): ProcessingWakeSettings {
+  return {
+    mode: 'NIGHT',
+    nightStart: '23:00',
+    nightEnd: '06:00',
+    aiTagManualEnabled: false,
+    aiTagScheduleEnabled: false,
+    aiTagScheduleStart: '23:00',
+    aiTagScheduleEnd: '06:00',
+  };
+}
+
+async function drainAndScheduleWork(): Promise<void> {
+  if (stopping) return;
+  await poll();
+  if (!stopping && activeJobCount === 0) {
+    wakeScheduler?.scheduleAt(await nextQueueWakeAt());
+  }
+}
+
 async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<void> {
   try {
     await processTagSemanticBuild(build);
@@ -1466,7 +1562,7 @@ async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<voi
     process.stderr.write(`failed tag semantic build ${build.id}: ${message}\n`);
   } finally {
     activeJobCount -= 1;
-    void poll().catch(reportLoopError);
+    wakeScheduler?.wakeNow();
   }
 }
 
@@ -1510,7 +1606,7 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
   } finally {
     clearInterval(renewal);
     activeJobCount -= 1;
-    void poll().catch(reportLoopError);
+    wakeScheduler?.wakeNow();
   }
 }
 
@@ -1526,9 +1622,10 @@ function assertExpectedHash(expected: string | null | undefined, actual: string)
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
-  if (pollTimer) clearInterval(pollTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (aiTagReconcileTimer) clearInterval(aiTagReconcileTimer);
+  wakeScheduler?.stop();
+  await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
   while (activeJobCount > 0) await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
@@ -1540,7 +1637,13 @@ async function stop(signal: string): Promise<void> {
 async function main(): Promise<void> {
   await heartbeat();
   process.stdout.write(`SekerEagle worker ready: ${workerId}\n`);
-  pollTimer = setInterval(() => void poll().catch(reportLoopError), 1_000);
+  wakeScheduler = new JobWakeScheduler(drainAndScheduleWork, reportLoopError);
+  wakeListener = new PostgresWakeListener(
+    databaseUrl,
+    () => wakeScheduler?.wakeNow(),
+    reportLoopError,
+  );
+  await wakeListener.start();
   heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
   aiTagReconcileTimer = setInterval(
     () => void reconcileEnabledAiTagJobs().catch(reportLoopError),
@@ -1548,7 +1651,7 @@ async function main(): Promise<void> {
   );
   aiTagReconcileTimer.unref();
   await reconcileEnabledAiTagJobs();
-  await poll();
+  wakeScheduler.wakeNow();
 }
 
 function reportLoopError(error: unknown): void {

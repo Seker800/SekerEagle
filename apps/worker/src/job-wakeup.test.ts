@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { nextEligibleWakeAt, type PendingWakeCandidate } from './job-wakeup';
+import { JobWakeScheduler, nextEligibleWakeAt, type PendingWakeCandidate } from './job-wakeup';
 
 const defaultSettings = {
   mode: 'NIGHT' as const,
@@ -23,7 +23,10 @@ function candidate(overrides: Partial<PendingWakeCandidate> = {}): PendingWakeCa
 
 test('interactive work wakes immediately when due and uses one timer when delayed', () => {
   const now = new Date('2026-09-16T05:00:00.000Z');
-  assert.equal(nextEligibleWakeAt(candidate(), defaultSettings, now)?.toISOString(), now.toISOString());
+  assert.equal(
+    nextEligibleWakeAt(candidate(), defaultSettings, now)?.toISOString(),
+    now.toISOString(),
+  );
   assert.equal(
     nextEligibleWakeAt(
       candidate({ availableAt: new Date('2026-09-16T05:05:00.000Z') }),
@@ -88,7 +91,57 @@ test('scheduled AI work wakes at its own window and manual AI work wakes immedia
     '2026-09-16T15:00:00.000Z',
   );
   assert.equal(
-    nextEligibleWakeAt(aiCandidate, { ...defaultSettings, aiTagManualEnabled: true }, now)?.toISOString(),
+    nextEligibleWakeAt(
+      aiCandidate,
+      { ...defaultSettings, aiTagManualEnabled: true },
+      now,
+    )?.toISOString(),
     now.toISOString(),
   );
+});
+
+test('scheduler coalesces wakeups received while work is running', async () => {
+  let finishRun: (() => void) | undefined;
+  let runs = 0;
+  const scheduler = new JobWakeScheduler(
+    () => {
+      runs += 1;
+      return new Promise<void>((resolve) => {
+        finishRun = resolve;
+      });
+    },
+    (error) => assert.fail(String(error)),
+  );
+
+  scheduler.wakeNow();
+  scheduler.wakeNow();
+  scheduler.wakeNow();
+  assert.equal(runs, 1);
+  finishRun?.();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runs, 2);
+  scheduler.stop();
+  finishRun?.();
+});
+
+test('scheduler reports a failed run and remains available for later work', async () => {
+  const errors: unknown[] = [];
+  let runs = 0;
+  const scheduler = new JobWakeScheduler(
+    async () => {
+      runs += 1;
+      if (runs === 1) throw new Error('temporary failure');
+    },
+    (error) => errors.push(error),
+  );
+
+  scheduler.wakeNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  scheduler.wakeNow();
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(runs, 2);
+  assert.equal(errors.length, 1);
+  assert.match(String(errors[0]), /temporary failure/);
+  scheduler.stop();
 });

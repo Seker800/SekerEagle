@@ -5,6 +5,11 @@ Apple Silicon. Docker workers send bounded preview bytes over authenticated HTTP
 the service never accepts an image URL. The model's 2048-dimensional MRL output is
 truncated to the configured 1024-dimensional prefix and L2-normalized.
 
+The HTTP service stays available continuously, but the model loads on the first
+embedding request and unloads after 15 idle minutes by default. Configure the
+timeout with `MLX_EMBEDDING_IDLE_UNLOAD_SECONDS`; health checks report the model
+as `idle` without loading it.
+
 ```bash
 ./scripts/mlx-embedding-host.sh setup
 ./scripts/mlx-embedding-host.sh run

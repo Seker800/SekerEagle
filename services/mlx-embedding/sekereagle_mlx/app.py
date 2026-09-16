@@ -3,7 +3,9 @@ from __future__ import annotations
 import hmac
 import io
 import os
+import gc
 import threading
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 
@@ -23,6 +25,7 @@ MODEL_REVISION = os.getenv(
 DIMENSIONS = int(os.getenv("MLX_EMBEDDING_DIMENSIONS", "1024"))
 MAX_BODY_BYTES = int(os.getenv("MLX_EMBEDDING_MAX_PAYLOAD_BYTES", str(20 * 1024 * 1024)))
 TOKEN = os.getenv("MLX_EMBEDDING_TOKEN", "")
+IDLE_UNLOAD_SECONDS = max(0, int(os.getenv("MLX_EMBEDDING_IDLE_UNLOAD_SECONDS", "900")))
 ALLOWED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
 
 
@@ -31,7 +34,9 @@ class Runtime:
     model: object | None = None
     processor: object | None = None
     model_path: str | None = None
-    lock: threading.Lock = field(default_factory=threading.Lock)
+    last_used_at: float | None = None
+    unload_timer: threading.Timer | None = None
+    lock: threading.RLock = field(default_factory=threading.RLock)
 
 
 runtime = Runtime()
@@ -45,10 +50,54 @@ def load_runtime() -> None:
     runtime.model_path = path
 
 
+def ensure_runtime_loaded() -> None:
+    with runtime.lock:
+        if runtime.model is None or runtime.processor is None:
+            load_runtime()
+        runtime.last_used_at = time.monotonic()
+
+
+def schedule_idle_unload(delay: float | None = None) -> None:
+    if IDLE_UNLOAD_SECONDS <= 0:
+        return
+    with runtime.lock:
+        if runtime.unload_timer is not None:
+            runtime.unload_timer.cancel()
+        timer = threading.Timer(
+            IDLE_UNLOAD_SECONDS if delay is None else max(0.1, delay),
+            unload_runtime_if_idle,
+        )
+        timer.daemon = True
+        runtime.unload_timer = timer
+        timer.start()
+
+
+def unload_runtime_if_idle() -> bool:
+    with runtime.lock:
+        runtime.unload_timer = None
+        if runtime.model is None or runtime.last_used_at is None:
+            return False
+        remaining = IDLE_UNLOAD_SECONDS - (time.monotonic() - runtime.last_used_at)
+        if remaining > 0:
+            schedule_idle_unload(remaining)
+            return False
+        runtime.model = None
+        runtime.processor = None
+        runtime.last_used_at = None
+    gc.collect()
+    mx.clear_cache()
+    return True
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    load_runtime()
-    yield
+    try:
+        yield
+    finally:
+        with runtime.lock:
+            if runtime.unload_timer is not None:
+                runtime.unload_timer.cancel()
+                runtime.unload_timer = None
 
 
 app = FastAPI(title="SekerEagle MLX Embedding Host", version="1", lifespan=lifespan)
@@ -75,7 +124,8 @@ def live(authorization: str | None = Header(default=None)) -> dict[str, str]:
 def healthz(authorization: str | None = Header(default=None)) -> dict[str, object]:
     require_token(authorization)
     return {
-        "status": "ready" if runtime.model is not None else "loading",
+        "status": "ready",
+        "modelState": "loaded" if runtime.model is not None else "idle",
         "model": MODEL_ID,
         "revision": MODEL_REVISION,
         "dimensions": DIMENSIONS,
@@ -119,12 +169,13 @@ async def embed_image(
             image = opened.convert("RGB")
     except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
         raise HTTPException(status_code=422, detail="invalid image payload") from error
-    if runtime.model is None or runtime.processor is None:
-        raise HTTPException(status_code=503, detail="model is not ready")
     with runtime.lock:
+        ensure_runtime_loaded()
         output = runtime.model.process([{"image": image}], processor=runtime.processor)
         mx.eval(output)
         vector = project_mrl(output[0].tolist(), DIMENSIONS)
+        runtime.last_used_at = time.monotonic()
+    schedule_idle_unload()
     return {
         "embedding": vector,
         "model": MODEL_ID,
@@ -143,12 +194,13 @@ async def embed_text(
     require_token(authorization)
     if x_embedding_dimensions != DIMENSIONS:
         raise HTTPException(status_code=409, detail="embedding dimension contract mismatch")
-    if runtime.model is None or runtime.processor is None:
-        raise HTTPException(status_code=503, detail="model is not ready")
     with runtime.lock:
+        ensure_runtime_loaded()
         output = runtime.model.process([{"text": input.text}], processor=runtime.processor)
         mx.eval(output)
         vector = project_mrl(output[0].tolist(), DIMENSIONS)
+        runtime.last_used_at = time.monotonic()
+    schedule_idle_unload()
     return {
         "embedding": vector,
         "model": MODEL_ID,

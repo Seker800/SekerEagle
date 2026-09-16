@@ -12,6 +12,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>MLX_EMBEDDING_TOKEN_FILE</key><string>__REPO_ROOT__/.env</string>
+    <key>MLX_EMBEDDING_IDLE_UNLOAD_SECONDS</key><string>900</string>
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
