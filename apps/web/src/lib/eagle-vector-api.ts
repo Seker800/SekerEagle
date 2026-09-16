@@ -70,6 +70,8 @@ export interface EagleVectorAssetPreview {
   height: number | null;
   renditions: Array<{
     id: string;
+    kind?: 'THUMBNAIL' | 'PREVIEW';
+    revision?: number;
     width: number | null;
     height: number | null;
   }>;
@@ -109,10 +111,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
-export const getVectorThumbnailUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) =>
-  asset.renditions[0]
-    ? getEagleRenditionContentUrl(asset.id, asset.renditions[0].id, 'THUMBNAIL')
+export const getVectorThumbnailUrl = (
+  asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>,
+) => {
+  const rendition =
+    asset.renditions.find(({ kind }) => kind === 'THUMBNAIL') ?? asset.renditions[0];
+  return rendition ? getEagleRenditionContentUrl(asset.id, rendition.id, 'THUMBNAIL') : null;
+};
+export const getVectorPreviewUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {
+  const rendition =
+    asset.renditions.find(({ kind }) => kind === 'PREVIEW') ??
+    asset.renditions.find(({ kind }) => kind === 'THUMBNAIL');
+  return rendition
+    ? getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind ?? 'THUMBNAIL')
     : null;
+};
 export function fetchEagleVectorSummary() {
   return request<EagleVectorSummary>('summary');
 }

@@ -22,6 +22,25 @@ import {
   syncAssetPrivacyFromManualTags,
 } from './eagle-privacy.service';
 
+const vectorReviewRenditions = () => ({
+  where: {
+    status: 'READY' as const,
+    OR: [
+      { kind: 'THUMBNAIL' as const, variant: '512' },
+      { kind: 'PREVIEW' as const, variant: 'default' },
+    ],
+  },
+  orderBy: { revision: 'desc' as const },
+  take: 4,
+  select: {
+    id: true,
+    kind: true,
+    revision: true,
+    width: true,
+    height: true,
+  },
+});
+
 @Injectable()
 export class EagleVectorService {
   constructor(private readonly prisma: PrismaService) {}
@@ -451,12 +470,7 @@ export class EagleVectorService {
             displayName: true,
             width: true,
             height: true,
-            renditions: {
-              where: { status: 'READY', kind: 'THUMBNAIL', variant: '512' },
-              orderBy: { revision: 'desc' },
-              take: 1,
-              select: { id: true, width: true, height: true },
-            },
+            renditions: vectorReviewRenditions(),
           },
         },
       },
@@ -497,12 +511,7 @@ export class EagleVectorService {
           take: 1,
           select: { status: true, errorCode: true },
         },
-        renditions: {
-          where: { status: 'READY', kind: 'THUMBNAIL', variant: '512' },
-          orderBy: { revision: 'desc' },
-          take: 1,
-          select: { id: true, width: true, height: true },
-        },
+        renditions: vectorReviewRenditions(),
       },
     });
     const items = rows.slice(0, limit);

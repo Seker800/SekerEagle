@@ -439,10 +439,12 @@
   border: 1px solid rgb(255 255 255 / 55%);
   color: #121316;
   background: rgb(0 0 0 / 58%);
+  opacity: 0.78;
 }
 .assetCardSelected .selectionMark {
   border-color: #e4bc7e;
   background: #e4bc7e;
+  opacity: 1;
 }
 .assetInfo {
   display: flex;
@@ -500,6 +502,12 @@
   display: flex;
   gap: 5px;
   padding: 0 9px 9px;
+}
+.cardActions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
 }
 .selectionCount {
   align-self: center;

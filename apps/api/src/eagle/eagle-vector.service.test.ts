@@ -119,20 +119,20 @@ test('suggestion review listing does not load representative assets that the rev
       findMany: async (input: Record<string, unknown>) => {
         suggestionQuery = input;
         return [
-        {
-          id: 'suggestion-1',
-          snapshotId: 'snapshot-1',
-          prototypeRank: 0,
-          score: 0.95,
-          suggestedTag: { id: 'tag-1', name: '汽车', color: null },
-          asset: {
-            id: 'asset-1',
-            displayName: 'car.jpg',
-            width: 800,
-            height: 600,
-            renditions: [],
+          {
+            id: 'suggestion-1',
+            snapshotId: 'snapshot-1',
+            prototypeRank: 0,
+            score: 0.95,
+            suggestedTag: { id: 'tag-1', name: '汽车', color: null },
+            asset: {
+              id: 'asset-1',
+              displayName: 'car.jpg',
+              width: 800,
+              height: 600,
+              renditions: [],
+            },
           },
-        },
         ];
       },
     },

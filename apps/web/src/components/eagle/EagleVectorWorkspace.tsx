@@ -1,9 +1,10 @@
 import { getLocale, t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { IconCheck, IconTags, IconTrash } from '@tabler/icons-react';
+import { IconCheck, IconMaximize, IconTags, IconTrash } from '@tabler/icons-react';
 import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
 import {
   getVectorThumbnailUrl,
+  getVectorPreviewUrl,
   listEagleTagDistanceAssets,
   listEagleUnclassifiedAssets,
   listEagleVectorSuggestions,
@@ -14,6 +15,7 @@ import {
   setEagleVectorTagEnabled,
   type EagleTagDistanceAsset,
   type EagleUnclassifiedAsset,
+  type EagleVectorAssetPreview,
   type EagleVectorSuggestion,
   type EagleVectorTag,
 } from '../../lib/eagle-vector-api';
@@ -21,6 +23,8 @@ import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { invalidateDesktopAssetsAndRefresh } from '../../lib/desktop-cache';
+import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
+import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import styles from './EagleVectorWorkspace.module.css';
 export type EagleVectorWorkspaceView = 'REVIEW' | 'TAGS' | 'UNCLASSIFIED';
 type View = EagleVectorWorkspaceView | 'DISTANCE';
@@ -79,6 +83,7 @@ export function EagleVectorWorkspace({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const imagePreview = useImagePreviewState();
   const clearSelection = useCallback(() => {
     setSelected([]);
     setActiveSelectionId(null);
@@ -89,8 +94,9 @@ export function EagleVectorWorkspace({
     if (!controlledView) return;
     setView(controlledView);
     setDistanceTag(null);
+    imagePreview.closePreview();
     clearSelection();
-  }, [clearSelection, controlledView]);
+  }, [clearSelection, controlledView, imagePreview.closePreview]);
   const reload = useCallback(async () => {
     setError('');
     try {
@@ -213,6 +219,40 @@ export function EagleVectorWorkspace({
     return tags.filter((tag) => normalizeEagleTagSearchText(tag.name).includes(query));
   }, [managedTagSearch, tags]);
   const distanceAssetIds = useMemo(() => distances.map((item) => item.assetId), [distances]);
+  const previewAssets = useMemo(
+    () =>
+      view === 'REVIEW'
+        ? orderedSuggestions.map(({ asset }) => asset)
+        : view === 'UNCLASSIFIED'
+          ? unclassified
+          : [],
+    [orderedSuggestions, unclassified, view],
+  );
+  const openPreview = useCallback(
+    (asset: EagleVectorAssetPreview) => {
+      const src = getVectorPreviewUrl(asset);
+      if (!src) return;
+      preloadEagleImageViewer();
+      imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
+    },
+    [imagePreview.setPreviewImage],
+  );
+  useEffect(() => {
+    const current = imagePreview.previewImage;
+    if (!current) return undefined;
+    const currentIndex = previewAssets.findIndex(({ id }) => id === current.assetId);
+    if (currentIndex < 0) return undefined;
+    const navigate = (event: KeyboardEvent) => {
+      const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
+      if (!direction) return;
+      const next = previewAssets[currentIndex + direction];
+      if (!next) return;
+      event.preventDefault();
+      openPreview(next);
+    };
+    window.addEventListener('keydown', navigate);
+    return () => window.removeEventListener('keydown', navigate);
+  }, [imagePreview.previewImage, openPreview, previewAssets]);
   const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {
     setBusy(true);
     setError('');
@@ -300,6 +340,17 @@ export function EagleVectorWorkspace({
     setActiveSelectionId(nextSelection.activeId);
     setIsBatchSelection(nextSelection.isBatchSelection);
     selectionAnchorIdRef.current = nextSelection.anchorId;
+  };
+  const toggleAll = (orderedIds: string[]) => {
+    const shouldClear = orderedIds.length > 0 && orderedIds.every((id) => selected.includes(id));
+    if (shouldClear) {
+      clearSelection();
+      return;
+    }
+    setSelected(orderedIds);
+    setActiveSelectionId(orderedIds.at(-1) ?? null);
+    setIsBatchSelection(orderedIds.length > 0);
+    selectionAnchorIdRef.current = orderedIds[0] ?? null;
   };
   const getTagPickerTarget = (itemIds: string[]) => {
     if (view === 'REVIEW') {
@@ -540,6 +591,15 @@ export function EagleVectorWorkspace({
               {' ' + t('项')}
             </span>
             <button
+              type="button"
+              disabled={!orderedSuggestionIds.length}
+              onClick={() => toggleAll(orderedSuggestionIds)}
+            >
+              {selected.length === orderedSuggestionIds.length && selected.length
+                ? t('取消全选')
+                : t('全选')}
+            </button>
+            <button
               className={styles.primaryAction}
               type="button"
               disabled={!orderedSuggestionIds.length || busy}
@@ -575,8 +635,8 @@ export function EagleVectorWorkspace({
                 key={suggestion.id}
                 suggestion={suggestion}
                 selected={selected.includes(suggestion.id)}
-                batchSelection={isBatchSelection}
                 onSelect={(gesture) => selectItem(suggestion.id, orderedSuggestionIds, gesture)}
+                onPreview={() => openPreview(suggestion.asset)}
                 onReview={(action) => void review([suggestion.id], action)}
                 onContextMenu={(event) =>
                   openContextMenu(event, suggestion.id, orderedSuggestionIds)
@@ -709,6 +769,15 @@ export function EagleVectorWorkspace({
             </span>
             <button
               type="button"
+              disabled={!unclassified.length}
+              onClick={() => toggleAll(unclassified.map(({ id }) => id))}
+            >
+              {selected.length === unclassified.length && selected.length
+                ? t('取消全选')
+                : t('全选')}
+            </button>
+            <button
+              type="button"
               disabled={busy}
               onClick={() =>
                 void act(scanUnclassifiedEagleSuggestions, ({ scanned, matched }) =>
@@ -735,7 +804,6 @@ export function EagleVectorWorkspace({
                 key={asset.id}
                 asset={asset}
                 selected={selected.includes(asset.id)}
-                batchSelection={isBatchSelection}
                 onSelect={(gesture) =>
                   selectItem(
                     asset.id,
@@ -743,6 +811,7 @@ export function EagleVectorWorkspace({
                     gesture,
                   )
                 }
+                onPreview={() => openPreview(asset)}
                 onContextMenu={(event) =>
                   openContextMenu(
                     event,
@@ -910,6 +979,9 @@ export function EagleVectorWorkspace({
           onClose={() => setTagPickerTarget(null)}
           onApply={(tagIds) => void assignManualTags(tagIds)}
         />
+      ) : null}
+      {imagePreview.previewImage ? (
+        <EagleImageViewer image={imagePreview.previewImage} onClose={imagePreview.closePreview} />
       ) : null}
     </section>
   );
@@ -1157,16 +1229,16 @@ function Preview({
 function SuggestionCard({
   suggestion,
   selected,
-  batchSelection,
   onSelect,
+  onPreview,
   onReview,
   onContextMenu,
   disabled,
 }: {
   suggestion: EagleVectorSuggestion;
   selected: boolean;
-  batchSelection: boolean;
   onSelect: (gesture: EagleSelectionGesture) => void;
+  onPreview: () => void;
   onReview: (action: 'ACCEPT' | 'REJECT') => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
   disabled: boolean;
@@ -1183,12 +1255,13 @@ function SuggestionCard({
         aria-pressed={selected}
         onClick={(event) => {
           event.stopPropagation();
-          onSelect(getSelectionGesture(event));
+          onSelect(getMultiSelectionGesture(event));
         }}
+        onDoubleClick={onPreview}
         onContextMenu={onContextMenu}
       >
         <Preview asset={suggestion.asset} />
-        {batchSelection ? <SelectionMark selected={selected} /> : null}
+        <SelectionMark selected={selected} />
         <div className={styles.assetInfo}>
           <span>
             {t('建议：')}
@@ -1204,6 +1277,16 @@ function SuggestionCard({
         <button disabled={disabled} type="button" onClick={() => onReview('REJECT')}>
           {' ' + t('拒绝') + ' '}
         </button>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPreview();
+          }}
+        >
+          <IconMaximize size={14} />
+          {' ' + t('查看大图') + ' '}
+        </button>
       </div>
     </article>
   );
@@ -1211,14 +1294,14 @@ function SuggestionCard({
 function UnclassifiedCard({
   asset,
   selected,
-  batchSelection,
   onSelect,
+  onPreview,
   onContextMenu,
 }: {
   asset: EagleUnclassifiedAsset;
   selected: boolean;
-  batchSelection: boolean;
   onSelect: (gesture: EagleSelectionGesture) => void;
+  onPreview: () => void;
   onContextMenu: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   const embedding = asset.embeddings[0];
@@ -1240,17 +1323,30 @@ function UnclassifiedCard({
         aria-pressed={selected}
         onClick={(event) => {
           event.stopPropagation();
-          onSelect(getSelectionGesture(event));
+          onSelect(getMultiSelectionGesture(event));
         }}
+        onDoubleClick={onPreview}
         onContextMenu={onContextMenu}
       >
         <Preview asset={asset} />
-        {batchSelection ? <SelectionMark selected={selected} /> : null}
+        <SelectionMark selected={selected} />
         <div className={styles.assetInfo}>
           <strong>{asset.displayName}</strong>
           <span>{state}</span>
         </div>
       </button>
+      <div className={styles.cardActions}>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onPreview();
+          }}
+        >
+          <IconMaximize size={14} />
+          {' ' + t('查看大图') + ' '}
+        </button>
+      </div>
     </article>
   );
 }
@@ -1265,4 +1361,7 @@ function getSelectionGesture(event: MouseEvent<HTMLButtonElement>): EagleSelecti
   if (event.shiftKey) return 'range';
   if (event.metaKey || event.ctrlKey) return 'toggle';
   return 'single';
+}
+function getMultiSelectionGesture(event: MouseEvent<HTMLButtonElement>): EagleSelectionGesture {
+  return event.shiftKey ? 'range' : 'toggle';
 }

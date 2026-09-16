@@ -812,4 +812,7 @@ export const enUS = {
   '上传文件完整性校验失败。': 'The uploaded file failed integrity verification.',
   '导入清单声明不一致。': 'The import manifest does not match its declaration.',
   '导入清单缺少文件夹定义。': 'The import manifest is missing a folder definition.',
+  全选: 'Select all',
+  取消全选: 'Clear selection',
+  查看大图: 'View large image',
 } as const;
