@@ -85,6 +85,66 @@ def test_health_model_and_text_endpoints_share_the_frozen_contract(monkeypatch):
     assert payload["embedding"][:2] == [0.6, 0.8]
 
 
+def test_idle_health_does_not_load_the_model(monkeypatch):
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    service.runtime.model = None
+    service.runtime.processor = None
+    loaded = []
+    monkeypatch.setattr(service, "load_runtime", lambda: loaded.append(True))
+    client = TestClient(service.app)
+
+    payload = client.get(
+        "/health/ready", headers={"authorization": "Bearer test-secret"}
+    ).json()
+
+    assert payload["status"] == "ready"
+    assert payload["modelState"] == "idle"
+    assert loaded == []
+
+
+def test_first_embedding_request_lazy_loads_once(monkeypatch):
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "DIMENSIONS", 1024)
+    service.runtime.model = None
+    service.runtime.processor = None
+    loads = []
+
+    def fake_load():
+        loads.append(True)
+        service.runtime.model = FakeModel()
+        service.runtime.processor = object()
+
+    monkeypatch.setattr(service, "load_runtime", fake_load)
+    monkeypatch.setattr(service, "schedule_idle_unload", lambda: None)
+    client = TestClient(service.app)
+    headers = {
+        "authorization": "Bearer test-secret",
+        "x-embedding-dimensions": "1024",
+    }
+
+    first = client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)
+    second = client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert len(loads) == 1
+
+
+def test_idle_model_can_be_unloaded_without_stopping_the_service(monkeypatch):
+    service.runtime.model = FakeModel()
+    service.runtime.processor = object()
+    service.runtime.last_used_at = 100.0
+    monkeypatch.setattr(service, "IDLE_UNLOAD_SECONDS", 900)
+    monkeypatch.setattr(service.time, "monotonic", lambda: 1000.0)
+    cleared = []
+    monkeypatch.setattr(service.mx, "clear_cache", lambda: cleared.append(True))
+
+    assert service.unload_runtime_if_idle() is True
+    assert service.runtime.model is None
+    assert service.runtime.processor is None
+    assert cleared == [True]
+
+
 def test_streaming_image_limit_fails_before_accepting_an_oversized_body(monkeypatch):
     monkeypatch.setattr(service, "TOKEN", "test-secret")
     monkeypatch.setattr(service, "MAX_BODY_BYTES", 4)
