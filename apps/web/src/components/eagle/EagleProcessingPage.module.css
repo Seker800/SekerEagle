@@ -10,10 +10,10 @@
   min-width: 0;
   min-height: 0;
   flex: 1;
-  padding: 20px 24px 40px;
+  padding: 24px 28px 40px;
   display: grid;
   align-content: start;
-  gap: 14px;
+  gap: 18px;
   overflow: auto;
   background: #121316;
 }
@@ -54,12 +54,16 @@
   color: var(--text-muted);
 }
 .navigationBar {
+  width: fit-content;
+  padding: 3px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 8px;
   display: block;
-  border-bottom: 1px solid var(--line-subtle);
+  background: #18191c;
 }
 .tabs {
   display: flex;
-  gap: 20px;
+  gap: 2px;
   padding: 0;
   overflow-x: auto;
   background: transparent;
@@ -67,42 +71,25 @@
 .tab,
 .tabActive {
   min-width: 0;
-  min-height: 46px;
-  padding: 0 2px;
+  min-height: 30px;
+  padding: 0 12px;
   border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  border-radius: 6px;
   display: flex;
   align-items: center;
-  gap: 7px;
   color: var(--text-dim);
   background: transparent;
   text-align: left;
   cursor: pointer;
 }
-.tab strong,
-.tabActive strong {
-  color: var(--text-soft);
-  font-size: 12px;
-}
-.tab span,
-.tabActive span {
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 .tab:hover {
   color: var(--text-soft);
-  background: transparent;
+  background: rgb(255 255 255 / 4%);
 }
 .tabActive {
-  border-bottom-color: var(--accent);
-  background: transparent;
-}
-.tabActive strong {
-  color: #f0c78c;
+  color: var(--text-strong);
+  background: #2a2c31;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 28%);
 }
 .tab:focus-visible,
 .tabActive:focus-visible,
@@ -139,21 +126,25 @@
 }
 .capabilityGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: 1fr;
+  gap: 0;
+  border-top: 1px solid var(--line-subtle);
 }
 .capability {
   min-width: 0;
-  min-height: 112px;
-  padding: 11px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 9px;
-  display: flex;
-  flex-direction: column;
-  background: rgb(255 255 255 / 2%);
+  min-height: 58px;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line-subtle);
+  border-radius: 0;
+  display: grid;
+  grid-template-columns: 100px 180px minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  background: transparent;
 }
 .capability h3 {
-  margin: 8px 0 4px;
+  margin: 0;
   color: var(--text-strong);
   font-size: 12px;
 }
@@ -164,8 +155,8 @@
   line-height: 1.45;
 }
 .capability small {
-  margin-top: auto;
-  padding-top: 8px;
+  margin: 0;
+  padding: 0;
   color: var(--text-muted);
   font-size: 10px;
 }
@@ -199,14 +190,15 @@
   background: rgb(255 255 255 / 6%);
 }
 .featureStatus {
-  padding: 16px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 10px;
+  padding: 16px 4px;
+  border: 0;
+  border-block: 1px solid var(--line-subtle);
+  border-radius: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 28px;
-  background: rgb(255 255 255 / 2%);
+  background: transparent;
 }
 .featureStatus h3 {
   margin: 9px 0 5px;
@@ -266,27 +258,26 @@
 }
 .taskTabs {
   width: fit-content;
-  padding: 0;
-  border: 0;
-  border-bottom: 1px solid var(--line-subtle);
-  border-radius: 0;
+  padding: 3px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 7px;
   display: flex;
   gap: 3px;
-  background: transparent;
+  background: #18191c;
 }
 .taskTabs button {
   min-height: 30px;
   padding: 0 12px;
   border: 0;
-  border-radius: 0;
+  border-radius: 5px;
   color: var(--text-muted);
   background: transparent;
   cursor: pointer;
 }
 .taskTabs button[data-active='true'] {
   color: var(--text-soft);
-  box-shadow: inset 0 -2px var(--accent);
-  background: transparent;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 28%);
+  background: #2a2c31;
 }
 .contentBlock[hidden] {
   display: none;
@@ -370,6 +361,17 @@
   border: 0;
   border-bottom: 1px solid var(--line-subtle);
   border-radius: 0;
+}
+.settings {
+  justify-content: space-between;
+  align-items: end;
+}
+.scheduleSettings,
+.queueActions {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .settings label {
   display: grid;
@@ -505,11 +507,6 @@
   color: var(--text-muted);
   font-size: 12px;
 }
-@media (max-width: 1100px) {
-  .capabilityGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
 @media (max-width: 900px) {
   .navigationBar {
     grid-template-columns: 1fr;
@@ -518,9 +515,14 @@
   .taskCenterActive {
     min-width: 0;
   }
-  .capabilityGrid,
   .metrics {
     grid-template-columns: repeat(2, minmax(110px, 1fr));
+  }
+  .capability {
+    grid-template-columns: 90px minmax(130px, 0.8fr) minmax(200px, 1fr);
+  }
+  .capability small {
+    grid-column: 2 / -1;
   }
   .queueGrid {
     grid-template-columns: 1fr;
@@ -533,9 +535,15 @@
   .section {
     padding: 12px;
   }
-  .capabilityGrid,
   .metrics {
     grid-template-columns: 1fr;
+  }
+  .capability {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .capability small {
+    grid-column: auto;
   }
   .tab,
   .tabActive {

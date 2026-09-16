@@ -56,8 +56,7 @@ describe('EagleProcessingPage', () => {
   it('shows worker, queue metrics and background schedule', async () => {
     render(<EagleProcessingPage accessToken="token" />);
     expect(await screen.findByText('在线')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: '处理任务' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '任务中心' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '任务中心' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: '当前队列' })).not.toBeInTheDocument();
     expect(screen.getByText('等待中')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();

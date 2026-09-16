@@ -7,7 +7,7 @@ import {
   type EagleVectorSummary,
 } from '../../lib/eagle-vector-api';
 import styles from './EagleVectorProcessingPanel.module.css';
-export function EagleVectorProcessingPanel() {
+export function EagleVectorProcessingPanel({ compact = false }: { compact?: boolean } = {}) {
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -53,13 +53,20 @@ export function EagleVectorProcessingPanel() {
   };
   const coverage = summary?.embeddingCoverage;
   return (
-    <section className={styles.panel} aria-label={t('图片向量处理状态')}>
+    <section
+      className={`${styles.panel} ${compact ? styles.compact : ''}`}
+      aria-label={t('图片向量处理状态')}
+    >
       <header className={styles.header}>
-        <div>
-          <span className={styles.eyebrow}>Qwen3-VL-Embedding</span>
-          <h2>{t('图片向量')}</h2>
-          <p>{t('这里只管理图片向量的生成与运行状态；标签配置、推荐审核和手动分类位于“标签”。')}</p>
-        </div>
+        {compact ? null : (
+          <div>
+            <span className={styles.eyebrow}>Qwen3-VL-Embedding</span>
+            <h2>{t('图片向量')}</h2>
+            <p>
+              {t('这里只管理图片向量的生成与运行状态；标签配置、推荐审核和手动分类位于“标签”。')}
+            </p>
+          </div>
+        )}
         <div className={styles.coverage}>
           <strong>{coverage?.percentage ?? 0}%</strong>
           <span>{t('向量覆盖率')}</span>

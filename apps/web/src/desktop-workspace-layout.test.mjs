@@ -28,6 +28,9 @@ test('settings content is grouped by rhythm instead of nested cards', () => {
 });
 
 test('processing navigation is a compact toolbar instead of a card deck', () => {
-  assert.match(processingStyles, /\.navigationBar\s*\{[^}]*border-bottom:/s);
+  assert.match(
+    processingStyles,
+    /\.navigationBar\s*\{[^}]*width:\s*fit-content;[^}]*border:\s*1px[^}]*border-radius:/s,
+  );
   assert.doesNotMatch(processingStyles, /\.tabs\s*\{[^}]*border:\s*1px/s);
 });

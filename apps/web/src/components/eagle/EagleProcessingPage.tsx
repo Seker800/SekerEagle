@@ -191,6 +191,7 @@ export function EagleProcessingPage({
           : coverage?.eligible === 0
             ? t('等待素材')
             : t('可用于筛选');
+  const activeTab = PROCESSING_TABS.find((tab) => tab.id === activePage) ?? PROCESSING_TABS[0];
   if (!canManageProcessing)
     return (
       <section className={styles.section}>
@@ -234,8 +235,8 @@ export function EagleProcessingPage({
     <section className={styles.section}>
       <header className={styles.header}>
         <div>
-          <h1>{t('处理任务')}</h1>
-          <p>{t('按素材用途查看处理结果，运行与排障集中在任务中心。')}</p>
+          <h1>{activeTab.label}</h1>
+          <p>{activeTab.description}</p>
         </div>
         <div className={styles.workerState} data-online={summary?.worker.status === 'ONLINE'}>
           <span aria-hidden="true" />
@@ -270,8 +271,7 @@ export function EagleProcessingPage({
                 onClick={() => setActivePage(tab.id)}
                 onKeyDown={(event) => handleTabKeyDown(event, index)}
               >
-                <strong>{tab.label}</strong>
-                <span>{tab.description}</span>
+                {tab.label}
               </button>
             );
           })}
@@ -286,7 +286,7 @@ export function EagleProcessingPage({
         tabIndex={0}
         hidden={activePage !== 'VECTOR'}
       >
-        <EagleVectorProcessingPanel />
+        <EagleVectorProcessingPanel compact />
       </div>
 
       <section
@@ -297,12 +297,6 @@ export function EagleProcessingPage({
         tabIndex={0}
         hidden={activePage !== 'BROWSE'}
       >
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2>{t('浏览优化')}</h2>
-            <p>{t('素材导入后自动准备列表、预览和大图浏览所需的文件。')}</p>
-          </div>
-        </div>
         <div className={styles.capabilityGrid}>
           <article
             className={styles.capability}
@@ -345,12 +339,6 @@ export function EagleProcessingPage({
         tabIndex={0}
         hidden={activePage !== 'COLOR'}
       >
-        <div className={styles.sectionHeading}>
-          <div>
-            <h2>{t('颜色筛选')}</h2>
-            <p>{t('从图片中提取代表色，用于图库的视觉相似颜色筛选。')}</p>
-          </div>
-        </div>
         <article
           className={styles.featureStatus}
           data-state={
@@ -471,78 +459,83 @@ export function EagleProcessingPage({
             ))}
           </div>
           <div className={styles.settings}>
-            <label>
-              {' ' + t('后台处理') + ' '}
-              <select
-                value={mode}
+            <div className={styles.scheduleSettings}>
+              <label>
+                {' ' + t('后台处理') + ' '}
+                <select
+                  value={mode}
+                  disabled={isActing}
+                  onChange={(event) => setMode(event.target.value as EagleProcessingMode)}
+                >
+                  <option value="ALWAYS">{t('全天')}</option>
+                  <option value="NIGHT">{t('夜间')}</option>
+                  <option value="MANUAL">{t('暂停')}</option>
+                </select>
+              </label>
+              {mode === 'NIGHT' ? (
+                <>
+                  <label>
+                    {' ' + t('开始') + ' '}
+                    <input
+                      type="time"
+                      value={nightStart}
+                      onChange={(event) => setNightStart(event.target.value)}
+                    />
+                  </label>
+                  <label>
+                    {' ' + t('结束') + ' '}
+                    <input
+                      type="time"
+                      value={nightEnd}
+                      onChange={(event) => setNightEnd(event.target.value)}
+                    />
+                  </label>
+                </>
+              ) : null}
+              <button
+                className={styles.primaryButton}
+                type="button"
                 disabled={isActing}
-                onChange={(event) => setMode(event.target.value as EagleProcessingMode)}
-              >
-                <option value="ALWAYS">{t('全天')}</option>
-                <option value="NIGHT">{t('夜间')}</option>
-                <option value="MANUAL">{t('暂停')}</option>
-              </select>
-            </label>
-            {mode === 'NIGHT' ? (
-              <>
-                <label>
-                  {' ' + t('开始') + ' '}
-                  <input
-                    type="time"
-                    value={nightStart}
-                    onChange={(event) => setNightStart(event.target.value)}
-                  />
-                </label>
-                <label>
-                  {' ' + t('结束') + ' '}
-                  <input
-                    type="time"
-                    value={nightEnd}
-                    onChange={(event) => setNightEnd(event.target.value)}
-                  />
-                </label>
-              </>
-            ) : null}
-            <button
-              className={styles.primaryButton}
-              type="button"
-              disabled={isActing}
-              onClick={() =>
-                void runAction(
-                  () => updateEagleProcessingSettings(accessToken, { mode, nightStart, nightEnd }),
-                  t('处理时段已保存'),
-                )
-              }
-            >
-              {' ' + t('保存设置') + ' '}
-            </button>
-            <button
-              className={styles.secondaryButton}
-              type="button"
-              disabled={isActing}
-              onClick={() =>
-                void runAction(
-                  () => reconcileEagleProcessingJobs(accessToken),
-                  t('缺失任务扫描完成'),
-                )
-              }
-            >
-              {' ' + t('扫描缺失任务') + ' '}
-            </button>
-            <button
-              className={styles.dangerButton}
-              type="button"
-              disabled={isActing || !summary?.counts.failed}
-              onClick={() => {
-                if (window.confirm(t('重新排队全部失败任务？')))
+                onClick={() =>
                   void runAction(
-                    () => retryAllFailedEagleProcessingJobs(accessToken),
-                    t('失败任务已重新排队'),
-                  );
-              }}
-            >
-              {' ' + t('重试全部失败') + ' '}
-            </button>
+                    () =>
+                      updateEagleProcessingSettings(accessToken, { mode, nightStart, nightEnd }),
+                    t('处理时段已保存'),
+                  )
+                }
+              >
+                {' ' + t('保存设置') + ' '}
+              </button>
+            </div>
+            <div className={styles.queueActions}>
+              <button
+                className={styles.secondaryButton}
+                type="button"
+                disabled={isActing}
+                onClick={() =>
+                  void runAction(
+                    () => reconcileEagleProcessingJobs(accessToken),
+                    t('缺失任务扫描完成'),
+                  )
+                }
+              >
+                {' ' + t('扫描缺失任务') + ' '}
+              </button>
+              <button
+                className={styles.dangerButton}
+                type="button"
+                disabled={isActing || !summary?.counts.failed}
+                onClick={() => {
+                  if (window.confirm(t('重新排队全部失败任务？')))
+                    void runAction(
+                      () => retryAllFailedEagleProcessingJobs(accessToken),
+                      t('失败任务已重新排队'),
+                    );
+                }}
+              >
+                {' ' + t('重试全部失败') + ' '}
+              </button>
+            </div>
           </div>
         </section>
 

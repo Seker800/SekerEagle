@@ -1,15 +1,21 @@
 import { getLocale, t } from '../../i18n';
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+} from 'react';
 import {
   IconCheck,
   IconCopy,
-  IconDatabase,
   IconKey,
   IconEye,
   IconLock,
   IconLogout,
   IconRefresh,
-  IconSettings,
   IconTags,
   IconTrash,
 } from '@tabler/icons-react';
@@ -27,7 +33,7 @@ import {
   updateEaglePrivacySettings,
   type EaglePrivacyTagOption,
 } from '../../lib/eagle-privacy-api';
-import { getDesktopCacheBridge, getDesktopConnectionBridge } from '../../lib/media-resolver';
+import { getDesktopCacheBridge } from '../../lib/media-resolver';
 interface PersonalAccessToken {
   id: string;
   name: string;
@@ -74,6 +80,13 @@ const tokenPurposes = {
     scopes: ['import:read', 'import:write', 'asset:write'],
   },
 } as const;
+type AccountSection = 'OVERVIEW' | 'PRIVACY' | 'CONNECTIONS' | 'SECURITY';
+const ACCOUNT_SECTIONS: ReadonlyArray<{ id: AccountSection; label: string }> = [
+  { id: 'OVERVIEW', label: t('概览') },
+  { id: 'PRIVACY', label: t('隐私') },
+  { id: 'CONNECTIONS', label: t('连接') },
+  { id: 'SECURITY', label: t('安全') },
+];
 export function AccountHome({
   user,
   onPasswordChanged,
@@ -89,6 +102,7 @@ export function AccountHome({
   onPrivacyVisibilityChange?: (state: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
 }) {
+  const [activeSection, setActiveSection] = useState<AccountSection>('OVERVIEW');
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokenError, setTokenError] = useState('');
@@ -117,8 +131,20 @@ export function AccountHome({
   const [privacyTagsLoaded, setPrivacyTagsLoaded] = useState(false);
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
-  const desktopConnection = getDesktopConnectionBridge();
   const desktopCache = getDesktopCacheBridge();
+  function handleSectionKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    let nextIndex: number | null = null;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % ACCOUNT_SECTIONS.length;
+    if (event.key === 'ArrowLeft')
+      nextIndex = (index - 1 + ACCOUNT_SECTIONS.length) % ACCOUNT_SECTIONS.length;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = ACCOUNT_SECTIONS.length - 1;
+    if (nextIndex === null) return;
+    event.preventDefault();
+    const section = ACCOUNT_SECTIONS[nextIndex];
+    setActiveSection(section.id);
+    document.getElementById(`account-tab-${section.id.toLowerCase()}`)?.focus();
+  }
   const loadTokens = useCallback(async () => {
     setTokensLoading(true);
     setTokenError('');
@@ -307,351 +333,378 @@ export function AccountHome({
         </button>
       </header>
 
-      <div className="account-content">
-        {desktopConnection ? (
-          <section className="account-panel desktop-cache-panel" id="desktop-cache">
-            <div className="panel-heading">
-              <div>
-                <p className="account-kicker">{t('桌面客户端')}</p>
-                <h2>{t('本地媒体缓存')}</h2>
-                <p>{t('容量、占用、命中率、磁盘空间与清理操作统一放在桌面设置中。')}</p>
-              </div>
-              <IconDatabase size={22} />
-            </div>
+      <nav className="account-section-tabs" role="tablist" aria-label={t('账号设置分类')}>
+        {ACCOUNT_SECTIONS.map((section, index) => {
+          const isActive = activeSection === section.id;
+          return (
             <button
-              className="primary-button"
+              key={section.id}
+              id={`account-tab-${section.id.toLowerCase()}`}
               type="button"
-              onClick={() => void desktopConnection.openConnectionManager(getLocale())}
+              role="tab"
+              aria-selected={isActive}
+              aria-controls="account-section-panel"
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => setActiveSection(section.id)}
+              onKeyDown={(event) => handleSectionKeyDown(event, index)}
             >
-              <IconSettings size={16} />
-              {' ' + t('打开桌面设置') + ' '}
+              {section.label}
             </button>
+          );
+        })}
+      </nav>
+
+      <div
+        id="account-section-panel"
+        className="account-content"
+        role="tabpanel"
+        aria-labelledby={`account-tab-${activeSection.toLowerCase()}`}
+      >
+        {activeSection === 'OVERVIEW' ? (
+          <section className="account-panel account-summary" id="overview">
+            <div className="setting-row">
+              <span>{t('邮箱')}</span>
+              <strong>{user.email}</strong>
+            </div>
+            <div className="setting-row">
+              <span>{t('账号角色')}</span>
+              <strong>{user.role === 'ADMIN' ? t('管理员') : t('成员')}</strong>
+            </div>
           </section>
         ) : null}
-        <section className="account-panel privacy-panel" id="privacy">
-          <div className="panel-heading">
-            <div>
-              <p className="account-kicker">{t('内容隐私')}</p>
-              <h2>{t('隐私内容')}</h2>
-              <p>{t('关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
-            </div>
-            <IconEye size={22} />
-          </div>
-          <div className="privacy-controls">
-            <label className="privacy-switch-row">
-              <span>
-                <strong>{t('显示隐私内容')}</strong>
-                <small>
-                  {privacyVisibility.enabled && privacyVisibility.expiresAt
-                    ? t('将于 {{value1}} 自动关闭', {
-                        value1: new Date(privacyVisibility.expiresAt).toLocaleString(getLocale()),
-                      })
-                    : t('当前浏览器中保持隐藏')}
-                </small>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label={t('显示隐私内容')}
-                checked={privacyVisibility.enabled}
-                disabled={privacyLoading}
-                onChange={(event) =>
-                  void changePrivacyVisibility(
-                    event.currentTarget.checked,
-                    privacyVisibility.durationHours,
-                  )
-                }
-              />
-            </label>
-            <label className="privacy-duration-field">
-              {' ' + t('自动关闭时间') + ' '}
-              <select
-                aria-label={t('自动关闭时间')}
-                value={privacyVisibility.durationHours}
-                disabled={privacyLoading}
-                onChange={(event) =>
-                  void changePrivacyVisibility(
-                    privacyVisibility.enabled,
-                    Number(event.currentTarget.value),
-                  )
-                }
-              >
-                {[1, 3, 6, 12, 24].map((hours) => (
-                  <option key={hours} value={hours}>
-                    {hours}
-                    {' ' + t('小时') + ' '}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="privacy-tag-settings">
-            <div>
-              <span className="privacy-tag-heading">
-                <IconTags size={16} />
-                <strong>{t('私密标签')}</strong>
-              </span>
-              <small>
-                {privacyTagsLoaded
-                  ? t('已选择 {{value1}} 个私密标签', { value1: privateTagIds.length })
-                  : t('拥有任一所选标签的素材会自动进入私密。')}
-              </small>
-            </div>
-            <button
-              className="quiet-button"
-              type="button"
-              onClick={() => void openPrivacyTagEditor()}
-            >
-              {privacyTagEditorOpen ? t('收起私密标签') : t('管理私密标签')}
-            </button>
-          </div>
-          {privacyTagEditorOpen ? (
-            <form className="privacy-tag-editor" onSubmit={(event) => void savePrivacyTags(event)}>
-              <input
-                type="search"
-                aria-label={t('搜索私密标签')}
-                placeholder={t('搜索名称、拼音或首字母')}
-                value={privacyTagQuery}
-                onChange={(event) => setPrivacyTagQuery(event.currentTarget.value)}
-              />
-              {privacyTagsLoading ? (
-                <p>{t('正在加载私密标签…')}</p>
-              ) : visiblePrivacyTags.length ? (
-                <div className="privacy-tag-list">
-                  {visiblePrivacyTags.map((tag) => (
-                    <label key={tag.id}>
-                      <input
-                        type="checkbox"
-                        aria-label={tag.name}
-                        checked={draftPrivateTagIdSet.has(tag.id)}
-                        onChange={() =>
-                          setDraftPrivateTagIds((current) =>
-                            current.includes(tag.id)
-                              ? current.filter((id) => id !== tag.id)
-                              : [...current, tag.id],
-                          )
-                        }
-                      />
-                      <span
-                        className="privacy-tag-color"
-                        style={tag.color ? { backgroundColor: tag.color } : undefined}
-                      />
-                      <span>{tag.name}</span>
-                    </label>
-                  ))}
-                </div>
-              ) : (
-                <p>{privacyTagOptions.length ? t('没有匹配的标签') : t('还没有人工标签')}</p>
-              )}
-              <div className="privacy-tag-actions">
-                <span>{t('匹配任意一个标签即可进入私密')}</span>
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={privacyTagsLoading || privacyTagsSaving}
-                >
-                  {privacyTagsSaving ? t('正在保存…') : t('保存私密标签')}
-                </button>
-              </div>
-            </form>
-          ) : null}
-          {privacyError ? <p className="auth-error">{privacyError}</p> : null}
-        </section>
-
-        <section className="account-panel" id="connections">
-          <div className="panel-heading">
-            <div>
-              <p className="account-kicker">{t('连接管理')}</p>
-              <h2>{t('外部连接令牌')}</h2>
-              <p>{t('为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。')}</p>
-            </div>
-            <IconKey size={22} />
-          </div>
-
-          <form
-            className="token-create-form"
-            onSubmit={(event) => void createConnectionToken(event)}
-          >
-            <label>
-              {' ' + t('令牌用途') + ' '}
-              <select
-                value={tokenPurpose}
-                onChange={(event) => {
-                  const purpose = event.target.value as keyof typeof tokenPurposes;
-                  setTokenPurpose(purpose);
-                  setTokenName(tokenPurposes[purpose].defaultName);
-                }}
-              >
-                {Object.entries(tokenPurposes).map(([value, purpose]) => (
-                  <option key={value} value={value}>
-                    {purpose.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {' ' + t('令牌名称') + ' '}
-              <input
-                value={tokenName}
-                onChange={(event) => setTokenName(event.target.value)}
-                maxLength={80}
-                placeholder={t('例如：工作室 Mac')}
-                required
-              />
-            </label>
-            <p className="account-field-note">
-              {' ' + t('有效期') + ' '}
-              <strong>{t('永久有效')}</strong>
-            </p>
-            <button className="primary-button" type="submit" disabled={creating}>
-              {creating ? t('正在创建…') : t('创建令牌')}
-            </button>
-          </form>
-
-          {createdToken ? (
-            <div className="token-reveal">
+        {activeSection === 'PRIVACY' ? (
+          <section className="account-panel privacy-panel" id="privacy">
+            <div className="panel-heading">
               <div>
-                <strong>{t('请立即保存，令牌只显示这一次')}</strong>
-                <p>{t('关闭或离开此页面后，将无法再次查看完整令牌。')}</p>
+                <p className="account-kicker">{t('内容隐私')}</p>
+                <h2>{t('隐私内容')}</h2>
+                <p>{t('关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
               </div>
-              <div className="token-value">
-                <input
-                  ref={createdTokenInputRef}
-                  aria-label={t('新创建的令牌')}
-                  readOnly
-                  spellCheck={false}
-                  value={createdToken.token}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-                <button type="button" onClick={() => void copyCreatedToken()}>
-                  {copied ? <IconCheck size={17} /> : <IconCopy size={17} />}
-                  {copied ? t('已复制') : t('复制')}
-                </button>
-              </div>
+              <IconEye size={22} />
             </div>
-          ) : null}
+            <div className="privacy-controls">
+              <label className="privacy-switch-row">
+                <span>
+                  <strong>{t('显示隐私内容')}</strong>
+                  <small>
+                    {privacyVisibility.enabled && privacyVisibility.expiresAt
+                      ? t('将于 {{value1}} 自动关闭', {
+                          value1: new Date(privacyVisibility.expiresAt).toLocaleString(getLocale()),
+                        })
+                      : t('当前浏览器中保持隐藏')}
+                  </small>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={t('显示隐私内容')}
+                  checked={privacyVisibility.enabled}
+                  disabled={privacyLoading}
+                  onChange={(event) =>
+                    void changePrivacyVisibility(
+                      event.currentTarget.checked,
+                      privacyVisibility.durationHours,
+                    )
+                  }
+                />
+              </label>
+              <label className="privacy-duration-field">
+                {' ' + t('自动关闭时间') + ' '}
+                <select
+                  aria-label={t('自动关闭时间')}
+                  value={privacyVisibility.durationHours}
+                  disabled={privacyLoading}
+                  onChange={(event) =>
+                    void changePrivacyVisibility(
+                      privacyVisibility.enabled,
+                      Number(event.currentTarget.value),
+                    )
+                  }
+                >
+                  {[1, 3, 6, 12, 24].map((hours) => (
+                    <option key={hours} value={hours}>
+                      {hours}
+                      {' ' + t('小时') + ' '}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="privacy-tag-settings">
+              <div>
+                <span className="privacy-tag-heading">
+                  <IconTags size={16} />
+                  <strong>{t('私密标签')}</strong>
+                </span>
+                <small>
+                  {privacyTagsLoaded
+                    ? t('已选择 {{value1}} 个私密标签', { value1: privateTagIds.length })
+                    : t('拥有任一所选标签的素材会自动进入私密。')}
+                </small>
+              </div>
+              <button
+                className="quiet-button"
+                type="button"
+                onClick={() => void openPrivacyTagEditor()}
+              >
+                {privacyTagEditorOpen ? t('收起私密标签') : t('管理私密标签')}
+              </button>
+            </div>
+            {privacyTagEditorOpen ? (
+              <form
+                className="privacy-tag-editor"
+                onSubmit={(event) => void savePrivacyTags(event)}
+              >
+                <input
+                  type="search"
+                  aria-label={t('搜索私密标签')}
+                  placeholder={t('搜索名称、拼音或首字母')}
+                  value={privacyTagQuery}
+                  onChange={(event) => setPrivacyTagQuery(event.currentTarget.value)}
+                />
+                {privacyTagsLoading ? (
+                  <p>{t('正在加载私密标签…')}</p>
+                ) : visiblePrivacyTags.length ? (
+                  <div className="privacy-tag-list">
+                    {visiblePrivacyTags.map((tag) => (
+                      <label key={tag.id}>
+                        <input
+                          type="checkbox"
+                          aria-label={tag.name}
+                          checked={draftPrivateTagIdSet.has(tag.id)}
+                          onChange={() =>
+                            setDraftPrivateTagIds((current) =>
+                              current.includes(tag.id)
+                                ? current.filter((id) => id !== tag.id)
+                                : [...current, tag.id],
+                            )
+                          }
+                        />
+                        <span
+                          className="privacy-tag-color"
+                          style={tag.color ? { backgroundColor: tag.color } : undefined}
+                        />
+                        <span>{tag.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p>{privacyTagOptions.length ? t('没有匹配的标签') : t('还没有人工标签')}</p>
+                )}
+                <div className="privacy-tag-actions">
+                  <span>{t('匹配任意一个标签即可进入私密')}</span>
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={privacyTagsLoading || privacyTagsSaving}
+                  >
+                    {privacyTagsSaving ? t('正在保存…') : t('保存私密标签')}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+            {privacyError ? <p className="auth-error">{privacyError}</p> : null}
+          </section>
+        ) : null}
 
-          {tokenError ? <p className="auth-error">{tokenError}</p> : null}
+        {activeSection === 'CONNECTIONS' ? (
+          <section className="account-panel" id="connections">
+            <div className="panel-heading">
+              <div>
+                <p className="account-kicker">{t('连接管理')}</p>
+                <h2>{t('外部连接令牌')}</h2>
+                <p>{t('为浏览器采集或 Eagle 导入器签发最小权限令牌，不授予账号管理权限。')}</p>
+              </div>
+              <IconKey size={22} />
+            </div>
 
-          <div className="token-list-heading">
-            <h3>{t('已创建的令牌')}</h3>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => void loadTokens()}
-              aria-label={t('刷新令牌列表')}
+            <form
+              className="token-create-form"
+              onSubmit={(event) => void createConnectionToken(event)}
             >
-              <IconRefresh size={16} />
-            </button>
-          </div>
-          {tokensLoading ? (
-            <p className="account-empty">{t('正在加载令牌…')}</p>
-          ) : tokens.length === 0 ? (
-            <p className="account-empty">{t('尚未创建外部连接令牌。')}</p>
-          ) : (
-            <div className="token-list">
-              {tokens.map((item) => {
-                const status = getTokenStatus(item);
-                return (
-                  <article className="token-item" key={item.id}>
-                    <span className="token-item-icon">
-                      <IconKey size={17} />
-                    </span>
-                    <div>
-                      <div className="token-title-row">
-                        <strong>{item.name}</strong>
-                        <span className={`token-status token-status-${status}`}>
-                          {statusLabels[status]}
-                        </span>
+              <label>
+                {' ' + t('令牌用途') + ' '}
+                <select
+                  value={tokenPurpose}
+                  onChange={(event) => {
+                    const purpose = event.target.value as keyof typeof tokenPurposes;
+                    setTokenPurpose(purpose);
+                    setTokenName(tokenPurposes[purpose].defaultName);
+                  }}
+                >
+                  {Object.entries(tokenPurposes).map(([value, purpose]) => (
+                    <option key={value} value={value}>
+                      {purpose.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {' ' + t('令牌名称') + ' '}
+                <input
+                  value={tokenName}
+                  onChange={(event) => setTokenName(event.target.value)}
+                  maxLength={80}
+                  placeholder={t('例如：工作室 Mac')}
+                  required
+                />
+              </label>
+              <p className="account-field-note">
+                {' ' + t('有效期') + ' '}
+                <strong>{t('永久有效')}</strong>
+              </p>
+              <button className="primary-button" type="submit" disabled={creating}>
+                {creating ? t('正在创建…') : t('创建令牌')}
+              </button>
+            </form>
+
+            {createdToken ? (
+              <div className="token-reveal">
+                <div>
+                  <strong>{t('请立即保存，令牌只显示这一次')}</strong>
+                  <p>{t('关闭或离开此页面后，将无法再次查看完整令牌。')}</p>
+                </div>
+                <div className="token-value">
+                  <input
+                    ref={createdTokenInputRef}
+                    aria-label={t('新创建的令牌')}
+                    readOnly
+                    spellCheck={false}
+                    value={createdToken.token}
+                    onFocus={(event) => event.currentTarget.select()}
+                  />
+                  <button type="button" onClick={() => void copyCreatedToken()}>
+                    {copied ? <IconCheck size={17} /> : <IconCopy size={17} />}
+                    {copied ? t('已复制') : t('复制')}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {tokenError ? <p className="auth-error">{tokenError}</p> : null}
+
+            <div className="token-list-heading">
+              <h3>{t('已创建的令牌')}</h3>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => void loadTokens()}
+                aria-label={t('刷新令牌列表')}
+              >
+                <IconRefresh size={16} />
+              </button>
+            </div>
+            {tokensLoading ? (
+              <p className="account-empty">{t('正在加载令牌…')}</p>
+            ) : tokens.length === 0 ? (
+              <p className="account-empty">{t('尚未创建外部连接令牌。')}</p>
+            ) : (
+              <div className="token-list">
+                {tokens.map((item) => {
+                  const status = getTokenStatus(item);
+                  return (
+                    <article className="token-item" key={item.id}>
+                      <span className="token-item-icon">
+                        <IconKey size={17} />
+                      </span>
+                      <div>
+                        <div className="token-title-row">
+                          <strong>{item.name}</strong>
+                          <span className={`token-status token-status-${status}`}>
+                            {statusLabels[status]}
+                          </span>
+                        </div>
+                        <p>
+                          {' ' + t('创建于') + ' '}
+                          {formatDate(item.createdAt)}
+                          {' ' + t('· 有效期')} {formatTokenExpiry(item.expiresAt)}
+                        </p>
+                        <p>
+                          {t('最近使用：')}
+                          {formatDate(item.lastUsedAt)}
+                        </p>
                       </div>
-                      <p>
-                        {' ' + t('创建于') + ' '}
-                        {formatDate(item.createdAt)}
-                        {' ' + t('· 有效期')} {formatTokenExpiry(item.expiresAt)}
-                      </p>
-                      <p>
-                        {t('最近使用：')}
-                        {formatDate(item.lastUsedAt)}
-                      </p>
-                    </div>
-                    {status === 'active' ? (
-                      <button
-                        className="danger-icon-button"
-                        type="button"
-                        onClick={() => void revokeToken(item)}
-                        disabled={revokingId === item.id}
-                        aria-label={t('撤销令牌 {{value1}}', {
-                          value1: item.name,
-                        })}
-                      >
-                        <IconTrash size={16} />
-                      </button>
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                      {status === 'active' ? (
+                        <button
+                          className="danger-icon-button"
+                          type="button"
+                          onClick={() => void revokeToken(item)}
+                          disabled={revokingId === item.id}
+                          aria-label={t('撤销令牌 {{value1}}', {
+                            value1: item.name,
+                          })}
+                        >
+                          <IconTrash size={16} />
+                        </button>
+                      ) : null}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        ) : null}
 
-        <section className="account-panel" id="security">
-          <div className="panel-heading">
-            <div>
-              <p className="account-kicker">{t('登录安全')}</p>
-              <h2>{t('修改密码')}</h2>
-              <p>{t('修改成功后会退出所有登录设备，并撤销现有外部连接令牌。')}</p>
+        {activeSection === 'SECURITY' ? (
+          <section className="account-panel" id="security">
+            <div className="panel-heading">
+              <div>
+                <p className="account-kicker">{t('登录安全')}</p>
+                <h2>{t('修改密码')}</h2>
+                <p>{t('修改成功后会退出所有登录设备，并撤销现有外部连接令牌。')}</p>
+              </div>
+              <IconLock size={22} />
             </div>
-            <IconLock size={22} />
-          </div>
-          <form className="password-form" onSubmit={(event) => void changePassword(event)}>
-            <label>
-              {' ' + t('当前密码') + ' '}
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                minLength={12}
-                maxLength={128}
-                autoComplete="current-password"
-                required
-              />
-            </label>
-            <div className="password-grid">
+            <form className="password-form" onSubmit={(event) => void changePassword(event)}>
               <label>
-                {' ' + t('新密码') + ' '}
+                {' ' + t('当前密码') + ' '}
                 <input
                   type="password"
-                  value={newPassword}
-                  onChange={(event) => setNewPassword(event.target.value)}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
                   minLength={12}
                   maxLength={128}
-                  autoComplete="new-password"
+                  autoComplete="current-password"
                   required
                 />
               </label>
-              <label>
-                {' ' + t('确认新密码') + ' '}
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                  minLength={12}
-                  maxLength={128}
-                  autoComplete="new-password"
-                  required
-                />
-              </label>
-            </div>
-            {passwordError ? <p className="auth-error">{passwordError}</p> : null}
-            <button
-              className="primary-button password-submit"
-              type="submit"
-              disabled={changingPassword}
-            >
-              {changingPassword ? t('正在修改…') : t('更新密码')}
-            </button>
-          </form>
-        </section>
+              <div className="password-grid">
+                <label>
+                  {' ' + t('新密码') + ' '}
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(event) => setNewPassword(event.target.value)}
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+                <label>
+                  {' ' + t('确认新密码') + ' '}
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    required
+                  />
+                </label>
+              </div>
+              {passwordError ? <p className="auth-error">{passwordError}</p> : null}
+              <button
+                className="primary-button password-submit"
+                type="submit"
+                disabled={changingPassword}
+              >
+                {changingPassword ? t('正在修改…') : t('更新密码')}
+              </button>
+            </form>
+          </section>
+        ) : null}
       </div>
     </section>
   );

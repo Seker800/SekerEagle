@@ -45,6 +45,20 @@
   color: #8f959e;
   font-size: 10px;
 }
+.compact .header {
+  justify-content: flex-start;
+  padding: 4px 0 12px;
+}
+.compact .coverage {
+  min-width: 0;
+  grid-template-columns: auto auto auto;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+}
+.compact .coverage strong {
+  font-size: 20px;
+}
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
