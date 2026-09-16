@@ -425,6 +425,10 @@ describe('SekerEaglePage', () => {
         name: '账号',
       }),
     );
+    expect(screen.getByRole('navigation', { name: '设置功能' }).closest('header')).toHaveAttribute(
+      'data-layout',
+      'sidebar',
+    );
     expect(screen.getByRole('navigation', { name: '素材库导航' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '设置' })).toBeInTheDocument();
     expect(screen.getByTestId('embedded-account-view')).toBeInTheDocument();
@@ -434,6 +438,10 @@ describe('SekerEaglePage', () => {
     renderPage('owner-test', true);
 
     fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
+    expect(screen.getByRole('navigation', { name: '待处理功能' }).closest('header')).toHaveAttribute(
+      'data-layout',
+      'tabs',
+    );
     fireEvent.click(
       within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
         name: '处理任务',

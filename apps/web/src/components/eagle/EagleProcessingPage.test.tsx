@@ -56,7 +56,7 @@ describe('EagleProcessingPage', () => {
   it('shows worker, queue metrics and background schedule', async () => {
     render(<EagleProcessingPage accessToken="token" />);
     expect(await screen.findByText('在线')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /任务中心/ }));
+    expect(screen.getByRole('heading', { name: '处理任务' })).toBeInTheDocument();
     expect(screen.getByText('等待中')).toBeInTheDocument();
     expect(screen.getByText('4')).toBeInTheDocument();
     expect(screen.getByDisplayValue('23:00')).toBeInTheDocument();
@@ -78,16 +78,16 @@ describe('EagleProcessingPage', () => {
 
     await screen.findByText('在线');
     const navigation = screen.getByRole('navigation', { name: '素材处理功能' });
-    expect(within(navigation).getAllByRole('button')).toHaveLength(3);
-    expect(within(navigation).getByRole('button', { name: /浏览优化/ })).toHaveAttribute(
+    expect(within(navigation).getAllByRole('button')).toHaveLength(4);
+    expect(within(navigation).getByRole('button', { name: /任务中心/ })).toHaveAttribute(
       'aria-current',
       'page',
     );
 
-    fireEvent.keyDown(within(navigation).getByRole('button', { name: /浏览优化/ }), {
+    fireEvent.keyDown(within(navigation).getByRole('button', { name: /任务中心/ }), {
       key: 'ArrowRight',
     });
-    expect(within(navigation).getByRole('button', { name: /颜色筛选/ })).toHaveAttribute(
+    expect(within(navigation).getByRole('button', { name: /浏览优化/ })).toHaveAttribute(
       'aria-current',
       'page',
     );
@@ -111,7 +111,7 @@ describe('EagleProcessingPage', () => {
     expect(screen.getByRole('region', { name: /图片向量/ })).toBeVisible();
     expect(screen.getByTestId('vector-processing-panel')).toBeVisible();
 
-    fireEvent.click(screen.getByRole('button', { name: /任务中心/ }));
+    fireEvent.click(within(navigation).getByRole('button', { name: /任务中心/ }));
     const taskCenter = screen.getByRole('region', { name: '任务中心' });
     expect(screen.getByRole('heading', { name: '当前队列' })).toBeVisible();
 
