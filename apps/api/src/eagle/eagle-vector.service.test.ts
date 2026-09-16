@@ -4,6 +4,34 @@ import { NotFoundException } from '@nestjs/common';
 import { ListTagDistanceAssetsDto } from './eagle-vector.dto';
 import { EagleVectorService } from './eagle-vector.service';
 
+test('summary counts only suggestions that can appear in recommendation review', async () => {
+  let pendingSuggestionQuery: Record<string, unknown> | undefined;
+  const service = new EagleVectorService({
+    eagleAsset: { count: async () => 0 },
+    eagleAssetEmbedding: { count: async () => 0 },
+    eagleManualTagSemanticConfig: { count: async () => 0 },
+    eagleVectorTagSuggestion: {
+      count: async (input: Record<string, unknown>) => {
+        pendingSuggestionQuery = input;
+        return 0;
+      },
+    },
+    eagleAssetProcessingJob: { groupBy: async () => [] },
+    eagleProcessingSetting: { findUnique: async () => null },
+    $queryRaw: async () => [{ count: 0 }],
+  } as never);
+
+  await service.summary('owner-1', false);
+
+  assert.deepEqual(pendingSuggestionQuery?.where, {
+    ownerId: 'owner-1',
+    status: 'PENDING',
+    isActive: true,
+    invalidatedAt: null,
+    asset: { deletedAt: null, manualTagLinks: { none: {} }, isPrivate: false },
+  });
+});
+
 test('tag semantics defaults to enabled tags and search is bounded to disabled candidates', async () => {
   const queries: Array<Record<string, unknown>> = [];
   const service = new EagleVectorService({
