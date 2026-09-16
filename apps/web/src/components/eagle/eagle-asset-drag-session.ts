@@ -37,13 +37,8 @@ export class DesktopAssetDragSession {
     const selection = createSelection(assetIds);
     if (this.prepared?.key === selection.key) return Promise.resolve();
     this.desired = selection;
-    if (!this.worker) {
-      const generation = this.generation;
-      this.worker = this.prepareLatest(generation).finally(() => {
-        this.worker = null;
-      });
-    }
-    return this.worker;
+    this.ensureWorker();
+    return this.worker!;
   }
 
   begin(assetIds: string[]): void {
@@ -56,6 +51,13 @@ export class DesktopAssetDragSession {
   }
 
   end(): void {
+    if (!this.nativeDragStarted) {
+      this.bridge.cancelAssetDragPreparation?.();
+      if (this.prepared) this.bridge.discardPreparedAssetDrag?.(this.prepared.token);
+      this.prepared = null;
+    }
+    this.generation += 1;
+    this.desired = null;
     this.gesture = null;
     this.outbound = false;
     this.nativeDragStarted = false;
@@ -88,7 +90,10 @@ export class DesktopAssetDragSession {
       this.desired = null;
       try {
         const { token } = await this.bridge.prepareAssetDrag(target.ids);
-        if (generation !== this.generation) return;
+        if (generation !== this.generation) {
+          this.bridge.discardPreparedAssetDrag?.(token);
+          return;
+        }
         this.prepared = { key: target.key, token };
         if (this.gesture?.key === target.key) this.startIfReady(target);
       } catch (error) {
@@ -101,10 +106,20 @@ export class DesktopAssetDragSession {
     }
   }
 
+  private ensureWorker(): void {
+    if (this.worker) return;
+    const generation = this.generation;
+    this.worker = this.prepareLatest(generation).finally(() => {
+      this.worker = null;
+      if (this.desired) this.ensureWorker();
+    });
+  }
+
   private startIfReady(selection: DragSelection): boolean {
     if (this.nativeDragStarted || this.prepared?.key !== selection.key) return false;
     try {
       this.bridge.startPreparedAssetDrag(this.prepared.token);
+      this.prepared = null;
       this.nativeDragStarted = true;
       return true;
     } catch (error) {

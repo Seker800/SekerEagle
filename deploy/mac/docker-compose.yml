@@ -65,6 +65,10 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # Hundreds of thousands of small pyramid tiles make the local usage scanner
+      # churn filesystem metadata. Asset lifecycle cleanup is application-owned, so
+      # slower usage-stat refresh is the safer desktop tradeoff.
+      MINIO_SCANNER_SPEED: ${MINIO_SCANNER_SPEED:-slowest}
     volumes:
       - sekereagle_minio:/data
     healthcheck:

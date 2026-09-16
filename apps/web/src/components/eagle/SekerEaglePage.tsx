@@ -76,7 +76,7 @@ import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { DesktopAssetDragSession } from './eagle-asset-drag-session';
-import { getEagleAssetEntityStore } from './eagle-asset-entity-store';
+import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
 import { useEagleReferenceData } from './useEagleReferenceData';
@@ -230,8 +230,6 @@ export function SekerEaglePage({
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
   const importDragActiveRef = useRef(false);
-  const hoveredDragAssetIdRef = useRef<string | null>(null);
-  const dragPrimeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selectionAnchorIdRef = useRef<string | null>(null);
   const editorAssetIdRef = useRef<string | null>(null);
   const editorDirtyRef = useRef(false);
@@ -280,11 +278,13 @@ export function SekerEaglePage({
       aiTagsEnabled:
         libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
     });
+  const workspaceSection = getWorkspaceSection(libraryView);
   const vectorSummaryQuery = useQuery({
     queryKey: ['eagle', ownerId, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
-    staleTime: 10000,
-    refetchInterval: 10000,
+    staleTime: 60_000,
+    refetchInterval:
+      workspaceSection === 'PENDING' ? 10_000 : workspaceSection === 'SETTINGS' ? 30_000 : false,
   });
   const vectorSummary = vectorSummaryQuery.data;
   const unavailableSuggestionCount = Math.max(
@@ -292,7 +292,6 @@ export function SekerEaglePage({
     (vectorSummary?.suggestions.unclassified ?? 0) - (vectorSummary?.suggestions.pending ?? 0),
   );
   const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
-  const workspaceSection = getWorkspaceSection(libraryView);
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
@@ -305,6 +304,7 @@ export function SekerEaglePage({
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
   const assetStore = useMemo(() => getEagleAssetEntityStore(ownerId), [ownerId]);
+  useEffect(() => retainEagleAssetEntityStore(ownerId, assetStore), [assetStore, ownerId]);
   const assetStoreRevision = useSyncExternalStore(
     assetStore.subscribe,
     assetStore.getSnapshot,
@@ -698,7 +698,6 @@ export function SekerEaglePage({
   );
   useEffect(
     () => () => {
-      if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
       assetDragSession?.reset();
     },
     [assetDragSession],
@@ -717,26 +716,6 @@ export function SekerEaglePage({
       selectedIds: selectedAssetIds,
       draggedId: assetId,
     });
-  const primeAssetDrag = (assetId: string) => {
-    if (!assetDragSession || libraryView === 'TRASH') return;
-    setOriginalFileError(null);
-    void assetDragSession.prime(getDragAssetIds(assetId));
-  };
-  const scheduleAssetDragPrime = (assetId: string) => {
-    hoveredDragAssetIdRef.current = assetId;
-    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
-    dragPrimeTimerRef.current = setTimeout(() => {
-      dragPrimeTimerRef.current = null;
-      if (hoveredDragAssetIdRef.current === assetId) primeAssetDrag(assetId);
-    }, 80);
-  };
-  useEffect(() => {
-    const hoveredAssetId = hoveredDragAssetIdRef.current;
-    if (!hoveredAssetId || !assetDragSession || libraryView === 'TRASH') return;
-    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
-    dragPrimeTimerRef.current = null;
-    primeAssetDrag(hoveredAssetId);
-  }, [assetDragSession, libraryView, selectedAssetIds]);
   const saveSelectedOriginal = () => {
     if (!contextMenuAsset || assetActionPending) return;
     setAssetActionPending('save');
@@ -782,8 +761,6 @@ export function SekerEaglePage({
   const handleAssetDragStart = (event: DragEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
     if (!assetDragSession || libraryView === 'TRASH') return;
-    if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
-    dragPrimeTimerRef.current = null;
     const assetIds = getDragAssetIds(assetId);
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
     setAssetContextMenu(null);
@@ -1365,15 +1342,6 @@ export function SekerEaglePage({
                           handleAssetClick(event, asset.id);
                         }}
                         onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
-                        onPointerEnter={() => scheduleAssetDragPrime(asset.id)}
-                        onPointerLeave={() => {
-                          if (hoveredDragAssetIdRef.current === asset.id) {
-                            hoveredDragAssetIdRef.current = null;
-                          }
-                          if (dragPrimeTimerRef.current) clearTimeout(dragPrimeTimerRef.current);
-                          dragPrimeTimerRef.current = null;
-                        }}
-                        onFocus={() => primeAssetDrag(asset.id)}
                         onDragStart={(event) => handleAssetDragStart(event, asset.id)}
                         onDragEnd={() => {
                           assetDragSession?.end();

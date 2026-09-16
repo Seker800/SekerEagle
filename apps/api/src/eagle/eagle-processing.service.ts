@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { EagleMediaJobStatus } from '@prisma/client';
+import { EagleMediaJobStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   ListEagleProcessingJobsDto,
@@ -163,32 +163,48 @@ export class EagleProcessingService {
   }
   async retryFailed(ownerId: string, includePrivate = false) {
     const retried = await this.prisma.$transaction(async (transaction) => {
-      const jobs = await transaction.eagleAssetProcessingJob.findMany({
-        where: {
-          ownerId,
-          status: 'FAILED',
-          asset: includePrivate ? {} : { isPrivate: false },
-        },
-        select: { id: true, assetId: true, assetRevision: true, kind: true },
-      });
-      if (!jobs.length) return 0;
-      const result = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { ownerId, id: { in: jobs.map(({ id }) => id) }, status: 'FAILED' },
-        data: retryJobData(),
-      });
-      for (const job of jobs) {
-        if (job.kind === 'EXTRACT_COLOR_PALETTE' || job.kind === 'PURGE_ASSET') continue;
-        await transaction.eagleAsset.updateMany({
-          where: {
-            ownerId,
-            id: job.assetId,
-            mediaRevision: job.assetRevision,
-            deletedAt: null,
-          },
-          data: { lifecycleStatus: 'PROCESSING', mediaErrorCode: null },
-        });
-      }
-      return result.count;
+      const rows = await transaction.$queryRaw<Array<{ retried: bigint }>>(Prisma.sql`
+        WITH retried AS (
+          UPDATE "EagleMediaJob" AS job
+          SET
+            "status" = 'PENDING'::"EagleMediaJobStatus",
+            "attempts" = 0,
+            "availableAt" = NOW(),
+            "lockedAt" = NULL,
+            "startedAt" = NULL,
+            "completedAt" = NULL,
+            "lastError" = NULL,
+            "updatedAt" = NOW()
+          FROM "EagleAsset" AS visible_asset
+          WHERE job."ownerId" = ${ownerId}
+            AND job."status" = 'FAILED'::"EagleMediaJobStatus"
+            AND visible_asset."ownerId" = job."ownerId"
+            AND visible_asset."id" = job."assetId"
+            AND (${includePrivate} OR visible_asset."isPrivate" = false)
+          RETURNING job."assetId", job."assetRevision", job."kind"
+        ), restored_assets AS (
+          UPDATE "EagleAsset" AS asset
+          SET
+            "lifecycleStatus" = 'PROCESSING'::"EagleAssetLifecycleStatus",
+            "mediaErrorCode" = NULL,
+            "updatedAt" = NOW()
+          FROM (
+            SELECT DISTINCT "assetId", "assetRevision"
+            FROM retried
+            WHERE "kind" NOT IN (
+              'EXTRACT_COLOR_PALETTE'::"EagleMediaJobKind",
+              'PURGE_ASSET'::"EagleMediaJobKind"
+            )
+          ) AS current_job
+          WHERE asset."ownerId" = ${ownerId}
+            AND asset."id" = current_job."assetId"
+            AND asset."mediaRevision" = current_job."assetRevision"
+            AND asset."deletedAt" IS NULL
+          RETURNING asset."id"
+        )
+        SELECT COUNT(*)::bigint AS retried FROM retried
+      `);
+      return Number(rows[0]?.retried ?? 0n);
     });
     return { retried };
   }

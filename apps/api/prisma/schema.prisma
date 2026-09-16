@@ -928,18 +928,18 @@ model EagleAiAnalysisRun {
 }
 
 model EagleAiTag {
-  id              String                            @id @default(uuid())
-  ownerId         String
-  name            String
-  normalizedName  String
+  id               String                            @id @default(uuid())
+  ownerId          String
+  name             String
+  normalizedName   String
   embeddingSpaceId String?
   embedding        Unsupported("vector(1024)")?
-  createdAt       DateTime                          @default(now())
-  updatedAt       DateTime                          @updatedAt
-  owner           User                              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  assetLinks      EagleAssetAiTag[]
-  smartFolderDeps EagleSmartFolderAiTagDependency[]
-  embeddingSpace  EagleEmbeddingSpace?              @relation(fields: [embeddingSpaceId], references: [id], onDelete: Restrict)
+  createdAt        DateTime                          @default(now())
+  updatedAt        DateTime                          @updatedAt
+  owner            User                              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  assetLinks       EagleAssetAiTag[]
+  smartFolderDeps  EagleSmartFolderAiTagDependency[]
+  embeddingSpace   EagleEmbeddingSpace?              @relation(fields: [embeddingSpaceId], references: [id], onDelete: Restrict)
 
   @@unique([ownerId, normalizedName])
   @@unique([ownerId, id])
@@ -1047,6 +1047,7 @@ model EagleAssetProcessingJob {
   @@index([status, lane, availableAt])
   @@index([status, lockedAt])
   @@index([ownerId, assetId])
+  @@index([ownerId, status, kind, processorVersion])
   @@index([dependsOnJobId, status])
   @@map("EagleMediaJob")
 }

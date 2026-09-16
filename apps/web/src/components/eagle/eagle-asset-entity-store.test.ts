@@ -1,41 +1,28 @@
-import { describe, expect, it, vi } from 'vitest';
-import type { EagleAssetListItem } from '../../lib/eagle-api';
-import { EagleAssetEntityStore } from './eagle-asset-entity-store';
+import { describe, expect, it } from 'vitest';
+import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
 
-function asset(id: string, displayName = id): EagleAssetListItem {
-  return { id, displayName } as EagleAssetListItem;
-}
+describe('owner-scoped Eagle asset entity stores', () => {
+  it('keeps a shared store until its last mounted consumer releases it', () => {
+    const ownerId = crypto.randomUUID();
+    const store = getEagleAssetEntityStore(ownerId);
+    const releaseFirst = retainEagleAssetEntityStore(ownerId, store);
+    const releaseSecond = retainEagleAssetEntityStore(ownerId, store);
 
-describe('EagleAssetEntityStore', () => {
-  it('stores one canonical entity when filtered pages repeat an asset', () => {
-    const store = new EagleAssetEntityStore();
-    store.upsertMany([asset('a', 'first'), asset('b')]);
-    store.upsertMany([asset('a', 'newest')]);
+    releaseFirst();
+    expect(getEagleAssetEntityStore(ownerId)).toBe(store);
 
-    expect(store.size).toBe(2);
-    expect(store.getMany(['a', 'b']).map(({ displayName }) => displayName)).toEqual([
-      'newest',
-      'b',
-    ]);
+    releaseSecond();
+    expect(getEagleAssetEntityStore(ownerId)).not.toBe(store);
   });
 
-  it('merges processing updates without replacing stable metadata', () => {
-    const listener = vi.fn();
-    const store = new EagleAssetEntityStore();
-    store.upsertMany([asset('a', 'kept')]);
-    store.subscribe(listener);
-    store.mergeProcessingUpdates([
-      {
-        id: 'a',
-        lifecycleStatus: 'READY',
-        mediaErrorCode: null,
-        updatedAt: '2026-08-17T00:00:00.000Z',
-        renditions: [],
-      },
-    ]);
+  it('makes release idempotent', () => {
+    const ownerId = crypto.randomUUID();
+    const store = getEagleAssetEntityStore(ownerId);
+    const release = retainEagleAssetEntityStore(ownerId, store);
 
-    expect(store.get('a')?.displayName).toBe('kept');
-    expect(store.get('a')?.lifecycleStatus).toBe('READY');
-    expect(listener).toHaveBeenCalledOnce();
+    release();
+    release();
+
+    expect(getEagleAssetEntityStore(ownerId)).not.toBe(store);
   });
 });

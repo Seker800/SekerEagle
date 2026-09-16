@@ -13,7 +13,7 @@ const DRAG_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 
 export const ORIGINAL_DRAG_EXPORT_TTL_MS = 60 * 60 * 1_000;
 
-type FetchOriginal = (assetId: string) => Promise<Response>;
+type FetchOriginal = (assetId: string, signal?: AbortSignal) => Promise<Response>;
 
 export interface PreparedOriginalDrag {
   directory: string;
@@ -75,7 +75,11 @@ export class OriginalDragExporter {
     this.minimumRequestIntervalMs = minimumRequestIntervalMs;
   }
 
-  async prepare(namespaceId: string, input: unknown): Promise<PreparedOriginalDrag> {
+  async prepare(
+    namespaceId: string,
+    input: unknown,
+    signal?: AbortSignal,
+  ): Promise<PreparedOriginalDrag> {
     if (!NAMESPACE_ID.test(namespaceId)) throw new Error('原文件临时目录命名空间无效。');
     const assetIds = parseAssetDragInput(input);
     const accountRoot = path.join(this.rootPath, namespaceId);
@@ -88,7 +92,8 @@ export class OriginalDragExporter {
     const usedNames = new Set<string>();
     try {
       for (const assetId of assetIds) {
-        const response = await this.fetchOriginalWithPacing(assetId);
+        signal?.throwIfAborted();
+        const response = await this.fetchOriginalWithPacing(assetId, signal);
         if (!response.ok || !response.body) {
           throw new Error(`原文件下载失败（${response.status}）。`);
         }
@@ -99,6 +104,7 @@ export class OriginalDragExporter {
         await pipeline(
           Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
           createWriteStream(partialPath, { flags: 'wx', mode: 0o600 }),
+          { signal },
         );
         await verifyContentLength(response.headers, partialPath);
         await rename(partialPath, filePath);
@@ -148,12 +154,13 @@ export class OriginalDragExporter {
     );
   }
 
-  private async fetchOriginalWithPacing(assetId: string): Promise<Response> {
+  private async fetchOriginalWithPacing(assetId: string, signal?: AbortSignal): Promise<Response> {
     const request = this.requestQueue.then(async () => {
       const delayMs = Math.max(0, this.nextRequestAt - this.now());
-      if (delayMs > 0) await delay(delayMs);
+      if (delayMs > 0) await delay(delayMs, signal);
+      signal?.throwIfAborted();
       this.nextRequestAt = this.now() + this.minimumRequestIntervalMs;
-      return this.fetchOriginal(assetId);
+      return this.fetchOriginal(assetId, signal);
     });
     this.requestQueue = request.then(
       () => undefined,
@@ -161,6 +168,24 @@ export class OriginalDragExporter {
     );
     return request;
   }
+}
+
+function delay(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const finish = () => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    };
+    const timer = setTimeout(finish, milliseconds);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(
+        signal?.reason instanceof Error ? signal.reason : new DOMException('Aborted', 'AbortError'),
+      );
+    };
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 async function ensurePrivateDirectory(directory: string): Promise<void> {
@@ -239,10 +264,6 @@ function truncateUtf8(value: string, maximumBytes: number): string {
     bytes += characterBytes;
   }
   return result.replace(/[ .]+$/u, '');
-}
-
-function delay(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 async function verifyContentLength(headers: Headers, filePath: string): Promise<void> {

@@ -44,10 +44,11 @@ part of the persistent derivative media cache. Partial batches are removed on fa
 batches expire after one hour, and stale batches are cleaned at the next desktop startup.
 
 The operating system requires every dragged file to exist locally before a native drag begins. The
-renderer therefore owns one outbound-drag session: hovering or focusing a drag target primes its
-current selection, rapid selection changes are serialized, and the first drag gesture starts as soon
-as that exact selection is ready. A gesture that ends before preparation finishes is never restarted
-after mouse-up. Outbound file drags are explicitly excluded from the page-level import state machine,
+renderer therefore owns one outbound-drag session and starts preparation only after an explicit drag
+gesture; hover, focus and ordinary selection never download originals. Rapid selection changes are
+serialized, and the native drag starts as soon as that exact selection is ready. Releasing the gesture
+aborts any active network transfer, and a prepared token that loses its gesture is discarded immediately
+instead of waiting for the one-hour safety expiry. Outbound file drags are explicitly excluded from the page-level import state machine,
 so returning across the app window cannot display the import overlay or upload an exported file.
 Successful preparation and duplicate imports do not add persistent status rows to the library; only
 actionable drag failures remain visible. Native drags use the operating system's normal-sized icon

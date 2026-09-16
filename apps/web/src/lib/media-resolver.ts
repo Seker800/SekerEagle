@@ -43,6 +43,8 @@ export interface SekerDesktopBridge {
     token: string;
   }>;
   startPreparedAssetDrag?(token: string): void;
+  cancelAssetDragPreparation?(): void;
+  discardPreparedAssetDrag?(token: string): void;
   saveOriginalFile?(
     assetId: string,
     locale?: 'zh-CN' | 'en-US',

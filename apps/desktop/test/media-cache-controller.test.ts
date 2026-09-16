@@ -46,11 +46,10 @@ describe('MediaCacheController', () => {
     const controller = createController(engine, fetchUpstream, () => now);
 
     const first = await controller.resolve(mediaUrl);
-    expect(first.source).toBe('upstream');
-    if (first.source !== 'upstream') throw new Error('expected stream-through response');
-    expect(await first.response.text()).toBe('cached-image');
-    await vi.waitFor(() => expect(engine.getStats().entryCount).toBe(1));
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(first.source).toBe('cache');
+    if (first.source !== 'cache') throw new Error('expected committed cache response');
+    expect(await readFile(first.filePath, 'utf8')).toBe('cached-image');
+    await engine.release(first.leaseId);
 
     const second = await controller.resolve(mediaUrl);
     expect(second.source).toBe('cache');
@@ -82,7 +81,7 @@ describe('MediaCacheController', () => {
     const results = await Promise.all([first, second]);
 
     expect(fetchUpstream).toHaveBeenCalledTimes(1);
-    expect(results.map(({ source }) => source).sort()).toEqual(['cache', 'upstream']);
+    expect(results.map(({ source }) => source).sort()).toEqual(['cache', 'cache']);
     for (const result of results) {
       if (result.source === 'upstream') expect(await result.response.text()).toBe('one-download');
       if (result.source === 'cache') engine.release(result.leaseId);
@@ -162,9 +161,7 @@ describe('MediaCacheController', () => {
       );
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
-    if (first.source === 'upstream') await first.response.text();
-    const populated = await controller.resolve(mediaUrl);
-    if (populated.source === 'cache') engine.release(populated.leaseId);
+    if (first.source === 'cache') await engine.release(first.leaseId);
     now += 5 * 60_000 + 1;
 
     const second = await controller.resolve(mediaUrl);
@@ -222,9 +219,7 @@ describe('MediaCacheController', () => {
       );
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
-    if (first.source === 'upstream') await first.response.text();
-    const populated = await controller.resolve(mediaUrl);
-    if (populated.source === 'cache') engine.release(populated.leaseId);
+    if (first.source === 'cache') await engine.release(first.leaseId);
     now += 5 * 60_000 + 1;
 
     const result = await controller.resolve(mediaUrl);
@@ -242,9 +237,7 @@ describe('MediaCacheController', () => {
         .mockResolvedValueOnce(new Response('try-later', { status }));
       const controller = createController(engine, fetchUpstream, () => now);
       const first = await controller.resolve(mediaUrl);
-      if (first.source === 'upstream') await first.response.text();
-      const populated = await controller.resolve(mediaUrl);
-      if (populated.source === 'cache') engine.release(populated.leaseId);
+      if (first.source === 'cache') await engine.release(first.leaseId);
       now += 5 * 60_000 + 1;
 
       const result = await controller.resolve(mediaUrl);
@@ -265,7 +258,7 @@ describe('MediaCacheController', () => {
     expect(result.source).toBe('upstream');
     if (result.source === 'upstream') expect(await result.response.text()).toBe('network-fallback');
     await vi.waitFor(() => expect(abortWrite).toHaveBeenCalledTimes(1));
-    expect(fetchUpstream).toHaveBeenCalledTimes(1);
+    expect(fetchUpstream).toHaveBeenCalledTimes(2);
     expect(engine.getStats().entryCount).toBe(0);
   });
 
@@ -273,12 +266,11 @@ describe('MediaCacheController', () => {
     const fetchUpstream = vi
       .fn()
       .mockResolvedValueOnce(eligibleResponse('cached-image'))
+      .mockResolvedValueOnce(eligibleResponse('new-image', '"etag-2"'))
       .mockResolvedValueOnce(eligibleResponse('new-image', '"etag-2"'));
     const controller = createController(engine, fetchUpstream, () => now);
     const first = await controller.resolve(mediaUrl);
-    if (first.source === 'upstream') await first.response.text();
-    const populated = await controller.resolve(mediaUrl);
-    if (populated.source === 'cache') engine.release(populated.leaseId);
+    if (first.source === 'cache') await engine.release(first.leaseId);
     now += 5 * 60_000 + 1;
     vi.spyOn(engine, 'append').mockRejectedValueOnce(new Error('disk full'));
     const abortWrite = vi.spyOn(engine, 'abort');
@@ -288,7 +280,7 @@ describe('MediaCacheController', () => {
     expect(result.source).toBe('upstream');
     if (result.source === 'upstream') expect(await result.response.text()).toBe('new-image');
     await vi.waitFor(() => expect(abortWrite).toHaveBeenCalledTimes(1));
-    expect(fetchUpstream).toHaveBeenCalledTimes(2);
+    expect(fetchUpstream).toHaveBeenCalledTimes(3);
   });
 
   it('refuses a thumbnail above the dedicated 8 MiB admission ceiling', async () => {

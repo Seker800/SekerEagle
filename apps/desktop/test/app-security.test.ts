@@ -147,6 +147,8 @@ describe('desktop server and navigation security', () => {
       /desktop:prepare-asset-drag'[\s\S]{0,240}assertTrustedIpcSender\(event\)/u,
     );
     expect(main).toContain("ipcMain.on('desktop:start-prepared-asset-drag'");
+    expect(main).toContain("ipcMain.on('desktop:cancel-asset-drag-preparation'");
+    expect(main).toContain("ipcMain.on('desktop:discard-prepared-asset-drag'");
     expect(main).toContain('parseAssetDragInput(input)');
     expect(main).toContain('webContents.startDrag');
     expect(main).toContain('dragServerUrl !== serverUrl');
@@ -157,6 +159,8 @@ describe('desktop server and navigation security', () => {
     expect(preload).toMatch(/ipcRenderer\.invoke\(\s*'desktop:prepare-asset-drag'/u);
     expect(preload).toContain('parsePreparedDragToken(result.token)');
     expect(preload).toContain("ipcRenderer.send('desktop:start-prepared-asset-drag'");
+    expect(preload).toContain("ipcRenderer.send('desktop:cancel-asset-drag-preparation'");
+    expect(preload).toContain("ipcRenderer.send('desktop:discard-prepared-asset-drag'");
     expect(preload).not.toContain('filePath');
   });
 

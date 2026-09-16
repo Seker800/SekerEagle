@@ -7,7 +7,11 @@ import { performance } from 'node:perf_hooks';
 import { CacheIndex } from '../../apps/desktop/src/utility/cache/cache-index.ts';
 
 const measureMode = process.argv[2] === '--measure';
-const count = Number(process.argv[measureMode ? 4 : 2] ?? 100_000);
+const verifyMode = process.argv.includes('--verify');
+const countArgument = process.argv
+  .slice(2)
+  .find((argument, index, values) => /^\d+$/u.test(argument) && values[index - 1] !== '--measure');
+const count = Number(measureMode ? (process.argv[4] ?? 100_000) : (countArgument ?? 100_000));
 if (!Number.isSafeInteger(count) || count < 1 || count > 500_000) {
   throw new Error('entry count must be an integer from 1 to 500000');
 }
@@ -81,15 +85,27 @@ if (measureMode) {
       throw new Error(measurement.stderr || `measurement process exited ${measurement.status}`);
     }
     const runtime = JSON.parse(measurement.stdout.trim()) as Record<string, number>;
-    process.stdout.write(
-      `${JSON.stringify({
-        count,
-        insertMs: Math.round(insertMs),
-        ...runtime,
-        runtime: process.version,
-        platform: `${process.platform}-${process.arch}`,
-      })}\n`,
-    );
+    const report = {
+      count,
+      insertMs: Math.round(insertMs),
+      ...runtime,
+      runtime: process.version,
+      platform: `${process.platform}-${process.arch}`,
+    };
+    const limits = {
+      insertMs: Math.max(30_000, count * 0.3),
+      reopenMs: 100,
+      queryP95Ms: 1,
+      queryP99Ms: 2,
+      accessFlushMs: 100,
+      incrementalRssMiB: 64,
+    };
+    const failures = Object.entries(limits).flatMap(([metric, maximum]) => {
+      const actual = Number(report[metric as keyof typeof report]);
+      return actual > maximum ? [`${metric} ${actual} exceeds ${maximum}`] : [];
+    });
+    process.stdout.write(`${JSON.stringify({ ...report, limits, failures })}\n`);
+    if (verifyMode && failures.length) process.exitCode = 1;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

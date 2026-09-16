@@ -71,6 +71,12 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   startPreparedAssetDrag(token: unknown) {
     ipcRenderer.send('desktop:start-prepared-asset-drag', parsePreparedDragToken(token));
   },
+  cancelAssetDragPreparation() {
+    ipcRenderer.send('desktop:cancel-asset-drag-preparation');
+  },
+  discardPreparedAssetDrag(token: unknown) {
+    ipcRenderer.send('desktop:discard-prepared-asset-drag', parsePreparedDragToken(token));
+  },
   async saveOriginalFile(
     assetId: unknown,
     locale?: 'zh-CN' | 'en-US',

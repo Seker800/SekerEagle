@@ -143,6 +143,33 @@ describe('OriginalDragExporter', () => {
     expect(namespaceEntries).toEqual([]);
   });
 
+  it('aborts the active original transfer and removes its partial directory', async () => {
+    const rootPath = await createRoot();
+    const controller = new AbortController();
+    const exporter = new OriginalDragExporter({
+      rootPath,
+      fetchOriginal: async (_assetId, signal) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener(
+            'abort',
+            () =>
+              reject(
+                signal.reason instanceof Error
+                  ? signal.reason
+                  : new DOMException('Aborted', 'AbortError'),
+              ),
+            { once: true },
+          );
+        }),
+    });
+
+    const preparation = exporter.prepare(namespaceId, [firstAssetId], controller.signal);
+    controller.abort(new DOMException('Aborted', 'AbortError'));
+
+    await expect(preparation).rejects.toThrow('原文件准备失败');
+    await expect(readdir(path.join(rootPath, namespaceId))).resolves.toEqual([]);
+  });
+
   it('deletes expired startup leftovers but preserves recent export directories', async () => {
     const now = Date.UTC(2026, 7, 26, 1, 0, 0);
     const rootPath = await createRoot();

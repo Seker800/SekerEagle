@@ -72,13 +72,37 @@ export class EagleAssetEntityStore {
   }
 }
 
-const ownerStores = new Map<string, EagleAssetEntityStore>();
+interface OwnerStoreEntry {
+  store: EagleAssetEntityStore;
+  references: number;
+}
+
+const ownerStores = new Map<string, OwnerStoreEntry>();
 
 export function getEagleAssetEntityStore(ownerId: string) {
-  let store = ownerStores.get(ownerId);
-  if (!store) {
-    store = new EagleAssetEntityStore();
-    ownerStores.set(ownerId, store);
+  let entry = ownerStores.get(ownerId);
+  if (!entry) {
+    entry = { store: new EagleAssetEntityStore(), references: 0 };
+    ownerStores.set(ownerId, entry);
   }
-  return store;
+  return entry.store;
+}
+
+export function retainEagleAssetEntityStore(ownerId: string, store: EagleAssetEntityStore) {
+  let entry = ownerStores.get(ownerId);
+  if (!entry) {
+    entry = { store, references: 0 };
+    ownerStores.set(ownerId, entry);
+  }
+  if (entry.store !== store) throw new Error('Asset entity store instance mismatch.');
+  entry.references += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    entry.references -= 1;
+    if (entry.references > 0 || ownerStores.get(ownerId) !== entry) return;
+    ownerStores.delete(ownerId);
+    entry.store.clear();
+  };
 }

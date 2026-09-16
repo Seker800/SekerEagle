@@ -213,9 +213,10 @@ if (hasSingleInstanceLock)
     registerClipboardIpc();
     const originalDragExporter = new OriginalDragExporter({
       rootPath: path.join(app.getPath('temp'), 'SekerEagle', 'OriginalDrag'),
-      fetchOriginal: (assetId) =>
+      fetchOriginal: (assetId, signal) =>
         currentBrowserSession().fetch(`/api/eagle/assets/${assetId}/original`, {
           credentials: 'include',
+          signal,
           headers: {
             accept: 'application/octet-stream',
             'accept-encoding': 'identity',
@@ -506,6 +507,7 @@ function registerOriginalDragIpc(
     }
   >();
   let dragInFlight = false;
+  let dragPreparationController: AbortController | null = null;
   const removePreparedDrag = (token: string) => {
     const entry = preparedDrags.get(token);
     if (!entry) return;
@@ -530,6 +532,8 @@ function registerOriginalDragIpc(
     assertTrustedIpcSender(event);
     if (dragInFlight) throw new Error('已有原文件正在准备，请稍候。');
     dragInFlight = true;
+    const preparationController = new AbortController();
+    dragPreparationController = preparationController;
     const dragServerUrl = serverUrl;
     let prepared: Awaited<ReturnType<OriginalDragExporter['prepare']>> | null = null;
     let preparedToken: string | null = null;
@@ -538,7 +542,7 @@ function registerOriginalDragIpc(
       const identity = await owner.get();
       if (!identity) throw new Error('需要重新登录。');
       const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
-      prepared = await exporter.prepare(namespaceId, assetIds);
+      prepared = await exporter.prepare(namespaceId, assetIds, preparationController.signal);
       const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
       const currentIdentity = await owner.get();
       if (
@@ -562,7 +566,26 @@ function registerOriginalDragIpc(
       else if (prepared) await exporter.remove(prepared);
       throw error;
     } finally {
+      if (dragPreparationController === preparationController) dragPreparationController = null;
       dragInFlight = false;
+    }
+  });
+
+  ipcMain.on('desktop:cancel-asset-drag-preparation', (event) => {
+    try {
+      assertTrustedIpcSender(event);
+      dragPreparationController?.abort(new Error('原文件拖拽已取消。'));
+    } catch {
+      return;
+    }
+  });
+
+  ipcMain.on('desktop:discard-prepared-asset-drag', (event, input: unknown) => {
+    try {
+      assertTrustedIpcSender(event);
+      removePreparedDrag(parsePreparedDragToken(input));
+    } catch {
+      return;
     }
   });
 
@@ -582,6 +605,7 @@ function registerOriginalDragIpc(
   });
 
   return () => {
+    dragPreparationController?.abort(new Error('原文件拖拽已取消。'));
     const entries = [...preparedDrags.values()];
     preparedDrags.clear();
     for (const entry of entries) {

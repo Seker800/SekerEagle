@@ -15,6 +15,33 @@ test('PostgreSQL has an explicit shared-memory budget for parallel image-library
   assert.match(compose, /postgres:[\s\S]*?shm_size:\s*512m/u);
 });
 
+test('desktop media paths stay single-stream and gesture-driven', async () => {
+  const [controller, page, scripts] = await Promise.all([
+    readFile(
+      new URL('../../apps/desktop/src/main/media-cache-controller.ts', import.meta.url),
+      'utf8',
+    ),
+    readFile(
+      new URL('../../apps/web/src/components/eagle/SekerEaglePage.tsx', import.meta.url),
+      'utf8',
+    ),
+    readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+  ]);
+  assert.doesNotMatch(controller, /\.tee\(\)/u);
+  assert.doesNotMatch(page, /onPointerEnter=.*AssetDrag|onFocus=.*AssetDrag/u);
+  assert.match(page, /onDragStart=.*handleAssetDragStart/u);
+  assert.match(scripts, /"performance:desktop-cache:100k"/u);
+  assert.match(scripts, /"performance:verify"/u);
+});
+
+test('local MinIO slows metadata scans for tile-heavy libraries', async () => {
+  const compose = await readFile(
+    new URL('../../deploy/mac/docker-compose.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(compose, /MINIO_SCANNER_SPEED:\s*\$\{MINIO_SCANNER_SPEED:-slowest\}/u);
+});
+
 test('media memory verification only accepts the dedicated test database', () => {
   assert.doesNotThrow(() =>
     assertMediaMemoryTarget(

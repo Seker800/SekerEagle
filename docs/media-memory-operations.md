@@ -13,7 +13,9 @@ PostgreSQL 容器显式分配 512 MiB `/dev/shm`，用于图库查询的排序�
 - 超过 4096px 或 1600 万像素的静态图片生成 512px Deep Zoom WebP 切片。
 - 代表色从 512px 以内的 THUMBNAIL 提取，不再次读取原图。
 - Sharp cache 为 64 MiB、concurrency 为 1；OpenSeadragon cache 为 64 tiles、loader limit 为 4。
-- React Query 的筛选页只保存 ID，同一 owner 的素材实体只保存一份，过期筛选查询 60 秒后回收。
+- React Query 的筛选页只保存 ID；同一 owner 的素材实体按挂载引用共享，最后一个消费者卸载时立即释放。
+- 桌面冷缓存只消费一条上游流：先有界分块落盘、校验并原子提交，再从本地文件服务；不使用 `Response.body.tee()`。
+- 本地 MinIO 的 namespace scanner 默认为 `slowest`，避免数十万小瓦片反复扫描形成高 CPU 和可回收 slab；代价是容量统计更新较慢。
 
 这些边界下，图库静置内存不应随 60 GiB 原图容量增长；它主要随已加载的素材元数据数量增长。单 worker 处理 5000 万像素图片时仍会出现短时峰值，因此生产默认保持 `EAGLE_INTERACTIVE_CONCURRENCY=1`，扩吞吐优先横向增加 worker，而不是提高单进程并发。
 
@@ -47,6 +49,14 @@ DATABASE_URL='postgresql://sekereagle:...@localhost:5432/sekereagle_test' \
 ```
 
 验收器会拒绝非 `sekereagle_test`、非 loopback/compose host、缺失场景、超 RSS 阈值以及任何预览/代表色/瓦片查看阶段的原图 GET。
+
+桌面缓存索引的十万条目门禁可独立执行：
+
+```bash
+npm run performance:desktop-cache:100k
+```
+
+发布前聚合入口为 `npm run performance:verify`；它要求十万图库、50MP 内存报告和桌面缓存索引三类证据同时通过。
 
 ## 回滚
 

@@ -1548,7 +1548,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('目标文件夹不可写');
   });
 
-  it('primes selected originals and starts them on the first drag gesture', async () => {
+  it('downloads selected originals only after an explicit drag gesture', async () => {
     const pendingDrag = createDeferred<void>();
     const prepareAssetDrag = vi.fn(() =>
       pendingDrag.promise.then(() => ({ token: '11111111-1111-4111-8111-111111111111' })),
@@ -1576,15 +1576,18 @@ describe('SekerEaglePage', () => {
     fireEvent.click(secondCard, { ctrlKey: true });
 
     fireEvent.pointerEnter(secondCard);
-    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(prepareAssetDrag).not.toHaveBeenCalled();
     expect(firstCard).toHaveAttribute('aria-pressed', 'true');
     expect(secondCard).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText('正在准备 2 个原文件…')).not.toBeInTheDocument();
 
-    pendingDrag.resolve();
-    await waitFor(() => expect(prepareAssetDrag).toHaveReturned());
     fireEvent.dragStart(secondCard);
-    expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111');
+    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
+    pendingDrag.resolve();
+    await waitFor(() =>
+      expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111'),
+    );
     expect(screen.queryByText(/原文件已准备好/u)).not.toBeInTheDocument();
   });
 
@@ -1602,8 +1605,10 @@ describe('SekerEaglePage', () => {
     const main = screen.getByRole('main');
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
     fireEvent.pointerEnter(card);
-    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1']));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(prepareAssetDrag).not.toHaveBeenCalled();
     fireEvent.dragStart(card);
+    await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1']));
     await waitFor(() => expect(startPreparedAssetDrag).toHaveBeenCalledWith('drag-token'));
 
     const outboundFile = new File(['outbound'], 'owl.png', { type: 'image/png' });
