@@ -130,4 +130,50 @@ describe('EagleProcessingPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试加载' }));
     await waitFor(() => expect(api.fetchEagleProcessingSummary).toHaveBeenCalledTimes(2));
   });
+
+  it('uses a user-facing label for AI tag jobs in processing history', async () => {
+    vi.mocked(api.listEagleProcessingJobs).mockResolvedValue({
+      items: [
+        {
+          id: 'job-ai-tags',
+          assetReference: 'asset-1',
+          kind: 'GENERATE_AI_TAGS',
+          lane: 'BACKGROUND',
+          status: 'COMPLETED',
+          attempts: 1,
+          createdAt: '2026-08-14T12:00:00.000Z',
+          durationMs: 1200,
+          lastError: null,
+        },
+      ],
+      nextCursor: null,
+    });
+    render(<EagleProcessingPage accessToken="token" />);
+
+    await screen.findByText('在线');
+    fireEvent.click(screen.getByRole('button', { name: '处理记录' }));
+    expect(screen.getByText('生成 AI 标签')).toBeVisible();
+    expect(screen.queryByText('GENERATE_AI_TAGS')).not.toBeInTheDocument();
+  });
+
+  it('clamps stale color coverage values to a valid completed state', async () => {
+    vi.mocked(api.fetchEagleProcessingSummary).mockResolvedValue({
+      ...summary,
+      colorCoverage: {
+        ...summary.colorCoverage,
+        eligible: 10,
+        completed: 11,
+        processing: 0,
+        percentage: 110,
+      },
+    });
+    render(<EagleProcessingPage accessToken="token" />);
+
+    await screen.findByText('在线');
+    fireEvent.click(screen.getByRole('button', { name: '颜色筛选' }));
+    const panel = screen.getByRole('region', { name: /颜色筛选/ });
+    expect(within(panel).getByText('100%')).toBeVisible();
+    expect(within(panel).getByText('10/10 已覆盖')).toBeVisible();
+    expect(within(panel).queryByText('110%')).not.toBeInTheDocument();
+  });
 });

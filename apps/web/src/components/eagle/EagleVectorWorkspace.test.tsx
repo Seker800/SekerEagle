@@ -428,6 +428,40 @@ describe('EagleVectorWorkspace', () => {
     expect(within(grid).queryByText('夜景')).not.toBeInTheDocument();
   });
 
+  it('only shows recommendation filters that have suggestions waiting for review', async () => {
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-car',
+        name: '汽车',
+        color: '#d97757',
+        assetCount: 80,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-car',
+        lastGeneratedAt: '2026-08-20T00:00:00Z',
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 4,
+      },
+      {
+        id: 'tag-road',
+        name: '道路',
+        color: '#687786',
+        assetCount: 32,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-road',
+        lastGeneratedAt: '2026-08-20T00:00:00Z',
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 0,
+      },
+    ]);
+
+    render(<EagleVectorWorkspace view="REVIEW" />);
+
+    expect(await screen.findByRole('button', { name: /汽车/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /道路/ })).not.toBeInTheDocument();
+  });
+
   it('shows distance members as selectable images and moves them to another tag', async () => {
     vi.mocked(api.listEagleVectorTags).mockResolvedValue([
       {
