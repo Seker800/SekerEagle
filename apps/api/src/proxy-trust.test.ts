@@ -18,3 +18,14 @@ void test('API trusts exactly one gateway hop and gateway replaces untrusted for
   assert.match(gateway, /location \/api\/[\s\S]*proxy_send_timeout 15s;/u);
   assert.match(gateway, /location \/api\/[\s\S]*proxy_buffering off;/u);
 });
+
+void test('gateway re-resolves replaceable compose services without a manual restart', () => {
+  const gateway = readFileSync(path.join(__dirname, '../../../deploy/gateway/nginx.conf'), 'utf8');
+
+  assert.match(gateway, /upstream api_backend \{[\s\S]*server api:3000 resolve;/u);
+  assert.match(gateway, /upstream web_backend \{[\s\S]*server web:8080 resolve;/u);
+  assert.match(gateway, /upstream minio_backend \{[\s\S]*server minio:9000 resolve;/u);
+  assert.match(gateway, /resolver 127\.0\.0\.11 valid=5s ipv6=off;/u);
+  assert.match(gateway, /location \/api\/ \{[^}]*proxy_pass http:\/\/api_backend;/u);
+  assert.match(gateway, /location \/ \{[^}]*proxy_pass http:\/\/web_backend;/u);
+});
