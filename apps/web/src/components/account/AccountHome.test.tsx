@@ -36,18 +36,15 @@ describe('AccountHome', () => {
     );
 
     const navigation = screen.getByRole('tablist', { name: '账号设置分类' });
-    expect(within(navigation).getAllByRole('tab')).toHaveLength(4);
-    expect(within(navigation).getByRole('tab', { name: '概览' })).toHaveAttribute(
+    expect(within(navigation).getAllByRole('tab')).toHaveLength(3);
+    expect(within(navigation).queryByRole('tab', { name: '概览' })).not.toBeInTheDocument();
+    expect(within(navigation).getByRole('tab', { name: '隐私' })).toHaveAttribute(
       'aria-selected',
       'true',
     );
-    expect(screen.queryByRole('heading', { name: '隐私内容' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '外部连接令牌' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: '修改密码' })).not.toBeInTheDocument();
-
-    fireEvent.click(within(navigation).getByRole('tab', { name: '隐私' }));
     expect(screen.getByRole('heading', { name: '隐私内容' })).toBeVisible();
     expect(screen.queryByRole('heading', { name: '外部连接令牌' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '修改密码' })).not.toBeInTheDocument();
 
     fireEvent.click(within(navigation).getByRole('tab', { name: '连接' }));
     expect(await screen.findByRole('heading', { name: '外部连接令牌' })).toBeVisible();
