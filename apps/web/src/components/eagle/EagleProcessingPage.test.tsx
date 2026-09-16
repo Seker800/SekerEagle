@@ -81,19 +81,23 @@ describe('EagleProcessingPage', () => {
     await screen.findByText('在线');
     const navigation = screen.getByRole('navigation', { name: '素材处理功能' });
     expect(within(navigation).getAllByRole('button')).toHaveLength(4);
-    expect(within(navigation).getByRole('button', { name: /任务中心/ })).toHaveAttribute(
+    expect(within(navigation).getByRole('button', { name: '任务中心' })).toHaveAttribute(
       'aria-current',
       'page',
     );
+    expect(screen.getByRole('heading', { name: '任务中心' })).toBeVisible();
+    expect(within(navigation).queryByText('队列、调度与处理记录')).not.toBeInTheDocument();
 
-    fireEvent.keyDown(within(navigation).getByRole('button', { name: /任务中心/ }), {
+    fireEvent.keyDown(within(navigation).getByRole('button', { name: '任务中心' }), {
       key: 'ArrowRight',
     });
-    expect(within(navigation).getByRole('button', { name: /浏览优化/ })).toHaveAttribute(
+    expect(within(navigation).getByRole('button', { name: '浏览优化' })).toHaveAttribute(
       'aria-current',
       'page',
     );
-    fireEvent.click(within(navigation).getByRole('button', { name: /浏览优化/ }));
+    expect(screen.getByRole('heading', { name: '浏览优化' })).toBeVisible();
+    expect(screen.getAllByRole('heading', { name: '浏览优化' })).toHaveLength(1);
+    fireEvent.click(within(navigation).getByRole('button', { name: '浏览优化' }));
 
     const capabilities = screen.getByRole('region', { name: /浏览优化/ });
     expect(
@@ -103,17 +107,17 @@ describe('EagleProcessingPage', () => {
     expect(within(capabilities).getByRole('heading', { name: '大图缩放切片' })).toBeInTheDocument();
     expect(within(capabilities).getAllByTestId('processing-capability')).toHaveLength(3);
 
-    fireEvent.click(within(navigation).getByRole('button', { name: /颜色筛选/ }));
+    fireEvent.click(within(navigation).getByRole('button', { name: '颜色筛选' }));
     const colorPanel = screen.getByRole('region', { name: /颜色筛选/ });
     expect(within(colorPanel).getByText('补算中 70%')).toBeVisible();
     expect(within(colorPanel).getByText('70%')).toBeVisible();
 
     expect(within(navigation).queryByRole('button', { name: /标签推荐/ })).not.toBeInTheDocument();
-    fireEvent.click(within(navigation).getByRole('button', { name: /图片向量/ }));
+    fireEvent.click(within(navigation).getByRole('button', { name: '图片向量' }));
     expect(screen.getByRole('region', { name: /图片向量/ })).toBeVisible();
     expect(screen.getByTestId('vector-processing-panel')).toBeVisible();
 
-    fireEvent.click(within(navigation).getByRole('button', { name: /任务中心/ }));
+    fireEvent.click(within(navigation).getByRole('button', { name: '任务中心' }));
     const taskCenter = screen.getByRole('region', { name: '任务中心' });
     expect(screen.queryByRole('heading', { name: '当前队列' })).not.toBeInTheDocument();
 

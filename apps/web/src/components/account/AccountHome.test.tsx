@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountHome } from './AccountHome';
 
@@ -21,6 +21,39 @@ describe('AccountHome', () => {
       vi.fn(() => true),
     );
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
+  });
+
+  it('separates account settings into focused software-style sections', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse([])));
+
+    render(
+      <AccountHome
+        user={user}
+        onPasswordChanged={vi.fn()}
+        onLogout={vi.fn()}
+        privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }}
+      />,
+    );
+
+    const navigation = screen.getByRole('tablist', { name: '账号设置分类' });
+    expect(within(navigation).getAllByRole('tab')).toHaveLength(4);
+    expect(within(navigation).getByRole('tab', { name: '概览' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    expect(screen.queryByRole('heading', { name: '隐私内容' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '外部连接令牌' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '修改密码' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(navigation).getByRole('tab', { name: '隐私' }));
+    expect(screen.getByRole('heading', { name: '隐私内容' })).toBeVisible();
+    expect(screen.queryByRole('heading', { name: '外部连接令牌' })).not.toBeInTheDocument();
+
+    fireEvent.click(within(navigation).getByRole('tab', { name: '连接' }));
+    expect(await screen.findByRole('heading', { name: '外部连接令牌' })).toBeVisible();
+
+    fireEvent.click(within(navigation).getByRole('tab', { name: '安全' }));
+    expect(screen.getByRole('heading', { name: '修改密码' })).toBeVisible();
   });
 
   it('toggles private visibility directly with a default three-hour duration and no dialog', async () => {
@@ -51,6 +84,7 @@ describe('AccountHome', () => {
 
     render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
 
+    fireEvent.click(screen.getByRole('tab', { name: '隐私' }));
     const toggle = await screen.findByRole('switch', { name: '显示隐私内容' });
     expect(toggle).not.toBeChecked();
     expect(screen.getByLabelText('自动关闭时间')).toHaveValue('3');
@@ -131,6 +165,7 @@ describe('AccountHome', () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: '隐私' }));
     fireEvent.click(await screen.findByRole('button', { name: '管理私密标签' }));
     expect(await screen.findByRole('checkbox', { name: '私人' })).toBeChecked();
     fireEvent.click(screen.getByRole('checkbox', { name: '证件' }));
@@ -194,6 +229,7 @@ describe('AccountHome', () => {
 
     render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
 
+    fireEvent.click(screen.getByRole('tab', { name: '连接' }));
     expect(await screen.findByText('工作室 Mac')).toBeInTheDocument();
     expect(screen.getByText('永久有效')).toBeInTheDocument();
     expect(screen.queryByLabelText('有效期')).not.toBeInTheDocument();
@@ -240,6 +276,7 @@ describe('AccountHome', () => {
     vi.stubGlobal('fetch', fetchMock);
     render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} />);
 
+    fireEvent.click(screen.getByRole('tab', { name: '安全' }));
     fireEvent.change(screen.getByLabelText('当前密码'), { target: { value: 'current-password' } });
     fireEvent.change(screen.getByLabelText('新密码'), { target: { value: 'new-password-123' } });
     fireEvent.change(screen.getByLabelText('确认新密码'), { target: { value: 'different-pass' } });
