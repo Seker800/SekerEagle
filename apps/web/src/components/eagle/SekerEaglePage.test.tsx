@@ -440,11 +440,11 @@ describe('SekerEaglePage', () => {
     fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
     const pendingNavigation = screen.getByRole('navigation', { name: '待处理功能' });
     expect(pendingNavigation.closest('header')).toHaveAttribute('data-layout', 'tabs');
-    expect(within(pendingNavigation).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      '推荐审核32',
-      '待分类6',
-      '处理任务',
-    ]);
+    expect(
+      within(pendingNavigation)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['推荐审核32', '待分类6', '处理任务']);
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
     fireEvent.click(
       within(pendingNavigation).getByRole('button', {
