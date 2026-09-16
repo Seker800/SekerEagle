@@ -171,7 +171,10 @@ export function EagleVectorWorkspace({
   const reviewTags = useMemo(
     () =>
       tags
-        .filter((tag) => tag.recommendationEnabled && tag.currentSnapshotId)
+        .filter(
+          (tag) =>
+            tag.recommendationEnabled && tag.currentSnapshotId && tag.pendingSuggestionCount > 0,
+        )
         .sort(
           (left, right) =>
             right.pendingSuggestionCount - left.pendingSuggestionCount ||
@@ -200,7 +203,7 @@ export function EagleVectorWorkspace({
   const availableTags = useMemo(() => {
     const enabledIds = new Set(tags.map((tag) => tag.id));
     return searchAndSortEagleTags(
-      manualTags.filter((tag) => !enabledIds.has(tag.id)),
+      manualTags.filter((tag) => tag.assetCount > 0 && !enabledIds.has(tag.id)),
       search,
     );
   }, [manualTags, search, tags]);

@@ -116,7 +116,7 @@ describe('EagleVectorWorkspace', () => {
     vi.mocked(api.listEagleTagDistanceAssets).mockResolvedValue({ items: [], nextCursor: null });
   });
 
-  it('states the manual-tag boundary and confirms vector suggestions into manual tags', async () => {
+  it('confirms vector suggestions into manual tags without repeating implementation details', async () => {
     const onAssetPrivacyChanged = vi.fn();
     vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
       items: [
@@ -130,8 +130,11 @@ describe('EagleVectorWorkspace', () => {
     });
     render(<EagleVectorWorkspace onAssetPrivacyChanged={onAssetPrivacyChanged} />);
     expect(
-      await screen.findByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
+      await screen.findByText('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
+    ).not.toBeInTheDocument();
     expect(screen.getByText('建议：汽车')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() =>
@@ -458,8 +461,9 @@ describe('EagleVectorWorkspace', () => {
 
     render(<EagleVectorWorkspace view="REVIEW" />);
 
-    expect(await screen.findByRole('button', { name: /汽车/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /道路/ })).not.toBeInTheDocument();
+    const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
+    expect(within(filters).getByRole('button', { name: /汽车/ })).toBeInTheDocument();
+    expect(within(filters).queryByRole('button', { name: /道路/ })).not.toBeInTheDocument();
   });
 
   it('shows distance members as selectable images and moves them to another tag', async () => {

@@ -426,6 +426,7 @@ export const enUS = {
   生成缩略图: 'Generate thumbnails',
   生成缩略图与预览图: 'Generate thumbnails and previews',
   生成图片向量: 'Generate image embeddings',
+  '生成 AI 标签': 'Generate AI tags',
   生成推荐中心: 'Generate recommendation centroid',
   生成预览图: 'Generate previews',
   失败: 'Failed',

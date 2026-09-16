@@ -52,6 +52,7 @@ export function EagleVectorProcessingPanel({ compact = false }: { compact?: bool
     }
   };
   const coverage = summary?.embeddingCoverage;
+  const coveragePercentage = Math.min(100, Math.max(0, coverage?.percentage ?? 0));
   return (
     <section
       className={`${styles.panel} ${compact ? styles.compact : ''}`}
@@ -68,7 +69,7 @@ export function EagleVectorProcessingPanel({ compact = false }: { compact?: bool
           </div>
         )}
         <div className={styles.coverage}>
-          <strong>{coverage?.percentage ?? 0}%</strong>
+          <strong>{coveragePercentage}%</strong>
           <span>{t('向量覆盖率')}</span>
           <small>
             {coverage?.ready ?? 0}/{coverage?.eligible ?? 0} · {summary?.dimensions ?? 1024}

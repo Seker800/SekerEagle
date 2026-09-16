@@ -140,8 +140,13 @@ describe('EagleProcessingPage', () => {
           kind: 'GENERATE_AI_TAGS',
           lane: 'BACKGROUND',
           status: 'COMPLETED',
+          processorVersion: 'ai-tags-v1',
           attempts: 1,
+          availableAt: '2026-08-14T12:00:00.000Z',
+          startedAt: '2026-08-14T12:00:00.000Z',
+          completedAt: '2026-08-14T12:00:01.200Z',
           createdAt: '2026-08-14T12:00:00.000Z',
+          updatedAt: '2026-08-14T12:00:01.200Z',
           durationMs: 1200,
           lastError: null,
         },
@@ -152,8 +157,9 @@ describe('EagleProcessingPage', () => {
 
     await screen.findByText('在线');
     fireEvent.click(screen.getByRole('button', { name: '处理记录' }));
-    expect(screen.getByText('生成 AI 标签')).toBeVisible();
-    expect(screen.queryByText('GENERATE_AI_TAGS')).not.toBeInTheDocument();
+    const historyTable = screen.getByRole('table');
+    expect(within(historyTable).getByText('生成 AI 标签')).toBeVisible();
+    expect(within(historyTable).queryByText('GENERATE_AI_TAGS')).not.toBeInTheDocument();
   });
 
   it('clamps stale color coverage values to a valid completed state', async () => {

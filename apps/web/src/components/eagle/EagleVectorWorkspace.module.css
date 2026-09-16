@@ -123,10 +123,10 @@
 .tagSearch {
   display: grid;
   gap: 8px;
-  padding: 14px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 2%);
+  padding: 0 0 14px;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  background: transparent;
 }
 .tagSearch > label,
 .sectionHeading strong {
@@ -147,32 +147,32 @@
   min-height: 58px;
 }
 .tagCandidateGrid {
-  max-height: 316px;
+  max-height: 236px;
   overflow-y: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  gap: 8px;
-  padding: 2px 4px 2px 2px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0 16px;
+  padding-right: 4px;
+  border-top: 1px solid rgb(255 255 255 / 7%);
 }
 .searchHint {
   padding: 10px;
 }
 .tagCandidate {
   min-width: 0;
-  min-height: 94px;
+  min-height: 48px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto 1fr;
-  gap: 8px 10px;
-  padding: 11px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 9px;
-  background: #101114;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 7px 4px;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  background: transparent;
   content-visibility: auto;
-  contain-intrinsic-size: auto 94px;
+  contain-intrinsic-size: auto 48px;
 }
 .tagCandidate:hover {
-  border-color: rgb(214 155 72 / 28%);
   background: rgb(214 155 72 / 4%);
 }
 .tagCandidateIdentity {
@@ -193,14 +193,12 @@
 }
 .tagCandidate p {
   grid-column: 1;
-  align-self: end;
-  margin: 0 0 2px 16px;
+  margin: 0 0 0 16px;
   color: #858b94;
   font-size: 10px;
 }
 .tagCandidate button {
   grid-column: 2;
-  grid-row: 1 / -1;
   align-self: center;
   border-color: rgb(214 155 72 / 38%);
   color: #f0c98e;
@@ -386,6 +384,7 @@
 }
 .assetCard {
   position: relative;
+  align-self: start;
   min-width: 0;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 8%);
@@ -452,9 +451,20 @@
   gap: 8px;
   padding: 10px 10px 8px;
 }
+.assetInfo strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .assetInfo span {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
   color: #e4bc7e;
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .assetInfo .similarity {
   color: #f2c783;

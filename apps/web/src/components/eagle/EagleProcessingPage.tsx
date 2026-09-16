@@ -34,6 +34,7 @@ const KIND_LABELS: Record<string, string> = {
   EXTRACT_COLOR_PALETTE: t('提取图片代表色'),
   GENERATE_IMAGE_PYRAMID: t('生成大图缩放切片'),
   GENERATE_EMBEDDING: t('生成图片向量'),
+  GENERATE_AI_TAGS: t('生成 AI 标签'),
   PURGE_ASSET: t('永久清理素材'),
 };
 type ProcessingPage = 'QUEUE' | 'HISTORY' | 'BROWSE' | 'COLOR' | 'VECTOR';
@@ -160,6 +161,8 @@ export function EagleProcessingPage({
     document.getElementById(`processing-tab-${nextTab.id.toLowerCase()}`)?.focus();
   };
   const coverage = summary?.colorCoverage;
+  const coveragePercentage = Math.min(100, Math.max(0, coverage?.percentage ?? 0));
+  const coverageCompleted = coverage ? Math.min(coverage.completed, coverage.eligible) : 0;
   const colorState =
     mode === 'MANUAL'
       ? t('已暂停')
@@ -169,7 +172,7 @@ export function EagleProcessingPage({
           })
         : coverage && coverage.eligible > 0 && coverage.completed < coverage.eligible
           ? t('补算中 {{value1}}%', {
-              value1: coverage.percentage,
+              value1: coveragePercentage,
             })
           : coverage?.eligible === 0
             ? t('等待素材')
@@ -324,7 +327,7 @@ export function EagleProcessingPage({
         <article
           className={styles.featureStatus}
           data-state={
-            coverage?.failed ? 'warning' : coverage?.percentage === 100 ? 'enabled' : 'ondemand'
+            coverage?.failed ? 'warning' : coveragePercentage === 100 ? 'enabled' : 'ondemand'
           }
         >
           <div>
@@ -333,11 +336,11 @@ export function EagleProcessingPage({
             <p>{t('分析会在缩略图就绪后后台执行，不会阻塞素材导入。')}</p>
           </div>
           <div className={styles.coverageMetric}>
-            <strong>{coverage?.percentage ?? 0}%</strong>
+            <strong>{coveragePercentage}%</strong>
             <span>
               {coverage
                 ? t('{{value1}}/{{value2}} 已覆盖', {
-                    value1: coverage.completed,
+                    value1: coverageCompleted,
                     value2: coverage.eligible,
                   })
                 : t('正在读取')}
@@ -350,10 +353,7 @@ export function EagleProcessingPage({
         </p>
       </section>
 
-      <section
-        className={styles.taskCenter}
-        aria-label={t('处理任务详情')}
-      >
+      <section className={styles.taskCenter} aria-label={t('处理任务详情')}>
         <section
           id="processing-panel-queue"
           className={`${styles.contentBlock} ${styles.tabPanel}`}
