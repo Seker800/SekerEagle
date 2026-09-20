@@ -17,7 +17,7 @@
   <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
   <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-5c6ac4?style=flat-square" /></a>
   <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white" />
-  <img alt="Version 0.1.4" src="https://img.shields.io/badge/version-0.1.4-ea9d45?style=flat-square" />
+  <img alt="Version 0.1.5" src="https://img.shields.io/badge/version-0.1.5-ea9d45?style=flat-square" />
   <img alt="Windows x64 and Apple Silicon" src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Apple%20Silicon-1674cf?style=flat-square" />
 </p>
 
@@ -36,9 +36,9 @@
 ## Windows desktop download
 
 <p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe"><strong>⬇️ Download SekerEagle 0.1.4 · Windows 11 x64 portable</strong></a>
+  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe"><strong>⬇️ Download SekerEagle 0.1.5 · Windows 11 x64 portable</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.4">Release notes</a>
+  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.5">Release notes and macOS downloads</a>
 </p>
 
 The Windows client is a single portable EXE with no installer. On first launch it creates
@@ -211,7 +211,7 @@ photo management project instead.
 | macOS + Apple Silicon     |  ✅ Supported path   | Current development, deployment, and performance test environment                                                                                                                          |
 | Docker Desktop deployment |          ✅          | PostgreSQL, MinIO, API, web, worker, and gateway                                                                                                                                           |
 | macOS desktop app         | ✅ Development-ready | Connects to local, LAN, or public servers with a rebuildable media cache                                                                                                                   |
-| Windows x64 desktop app   | ✅ Portable release  | [Download the 0.1.4 single-file EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe); profile and cache stay beside the program |
+| Windows x64 desktop app   | ✅ Portable release  | [Download the 0.1.5 single-file EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe); profile and cache stay beside the program |
 | Web asset library         |          ✅          | Desktop browsers first                                                                                                                                                                     |
 | Chrome browser capture    |          ✅          | Unpacked Manifest V3 extension                                                                                                                                                             |
 | Eagle snapshot migration  |          ✅          | Local CLI plus Eagle export plugin                                                                                                                                                         |

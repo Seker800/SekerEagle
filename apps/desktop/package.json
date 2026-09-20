@@ -1,6 +1,6 @@
 {
   "name": "@sekereagle/desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "SekerEagle online-first desktop media library with a secure local cache.",
   "author": "SekerEagle contributors",
   "license": "Apache-2.0",

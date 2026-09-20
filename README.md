@@ -17,7 +17,7 @@
   <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
   <a href="LICENSE"><img alt="Apache-2.0 license" src="https://img.shields.io/badge/license-Apache--2.0-5c6ac4?style=flat-square" /></a>
   <img alt="Node.js 22" src="https://img.shields.io/badge/Node.js-22-339933?style=flat-square&logo=nodedotjs&logoColor=white" />
-  <img alt="Version 0.1.4" src="https://img.shields.io/badge/version-0.1.4-ea9d45?style=flat-square" />
+  <img alt="Version 0.1.5" src="https://img.shields.io/badge/version-0.1.5-ea9d45?style=flat-square" />
   <img alt="Windows x64 and Apple Silicon" src="https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Apple%20Silicon-1674cf?style=flat-square" />
 </p>
 
@@ -36,9 +36,9 @@
 ## Windows 客户端下载
 
 <p align="center">
-  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe"><strong>⬇️ 下载 SekerEagle 0.1.4 · Windows 11 x64 便携版</strong></a>
+  <a href="https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe"><strong>⬇️ 下载 SekerEagle 0.1.5 · Windows 11 x64 便携版</strong></a>
   &nbsp;·&nbsp;
-  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.4">查看发布说明</a>
+  <a href="https://github.com/Seker800/SekerEagle/releases/tag/v0.1.5">查看发布说明与 macOS 下载</a>
 </p>
 
 Windows 客户端是单个免安装 EXE，双击即可运行。首次启动会在程序旁创建
@@ -187,7 +187,7 @@ SekerEagle 目前不是手机相册自动备份工具，也不提供公开分享
 | macOS + Apple Silicon | ✅ 完整路径 | 当前开发、部署和性能验证环境                                                                                                                                       |
 | Docker Desktop 部署   |     ✅      | PostgreSQL、MinIO、API、web、worker 与 gateway                                                                                                                     |
 | macOS 桌面应用        | ✅ 开发可用 | 连接本机、局域网或公网服务，提供可重建的本机媒体缓存                                                                                                               |
-| Windows x64 桌面应用  |  ✅ 便携版  | [下载 0.1.4 单文件 EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.4/SekerEagle-0.1.4-windows-x64-portable.exe)，程序旁保存配置和可重建媒体缓存 |
+| Windows x64 桌面应用  |  ✅ 便携版  | [下载 0.1.5 单文件 EXE](https://github.com/Seker800/SekerEagle/releases/download/v0.1.5/SekerEagle-0.1.5-windows-x64-portable.exe)，程序旁保存配置和可重建媒体缓存 |
 | Web 素材库            |     ✅      | 桌面浏览器优先                                                                                                                                                     |
 | Chrome 浏览器采集     |     ✅      | 未打包的 Manifest V3 扩展                                                                                                                                          |
 | Eagle 快照迁移        |     ✅      | 本机 CLI + Eagle 导出插件                                                                                                                                          |
