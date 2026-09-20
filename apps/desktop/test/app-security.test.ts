@@ -161,6 +161,11 @@ describe('desktop server and navigation security', () => {
     expect(preload).toContain("ipcRenderer.send('desktop:start-prepared-asset-drag'");
     expect(preload).toContain("ipcRenderer.send('desktop:cancel-asset-drag-preparation'");
     expect(preload).toContain("ipcRenderer.send('desktop:discard-prepared-asset-drag'");
+    expect(main).toContain("event.sender.send('desktop:asset-drag-preparation-progress'");
+    expect(preload).toContain("ipcRenderer.on('desktop:asset-drag-preparation-progress'");
+    expect(preload).toContain(
+      "ipcRenderer.removeListener('desktop:asset-drag-preparation-progress'",
+    );
     expect(preload).not.toContain('filePath');
   });
 

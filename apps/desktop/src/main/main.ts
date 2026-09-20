@@ -542,7 +542,16 @@ function registerOriginalDragIpc(
       const identity = await owner.get();
       if (!identity) throw new Error('需要重新登录。');
       const namespaceId = buildNamespaceId(dragServerUrl, identity.ownerId, identity.deploymentId);
-      prepared = await exporter.prepare(namespaceId, assetIds, preparationController.signal);
+      prepared = await exporter.prepare(
+        namespaceId,
+        assetIds,
+        preparationController.signal,
+        (progress) => {
+          if (dragPreparationController === preparationController && !event.sender.isDestroyed()) {
+            event.sender.send('desktop:asset-drag-preparation-progress', progress);
+          }
+        },
+      );
       const icon = await app.getFileIcon(prepared.files[0], { size: 'normal' });
       const currentIdentity = await owner.get();
       if (

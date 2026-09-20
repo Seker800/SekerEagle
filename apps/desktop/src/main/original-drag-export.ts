@@ -9,6 +9,7 @@ const NAMESPACE_ID = /^[0-9a-f]{64}$/u;
 const MAX_DRAG_ASSETS = 100;
 const MAX_FILE_NAME_BYTES = 240;
 const DEFAULT_REQUEST_INTERVAL_MS = 110;
+const DEFAULT_DOWNLOAD_CONCURRENCY = 3;
 const DRAG_TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export const ORIGINAL_DRAG_EXPORT_TTL_MS = 60 * 60 * 1_000;
@@ -25,6 +26,12 @@ interface OriginalDragExporterOptions {
   fetchOriginal: FetchOriginal;
   now?: () => number;
   minimumRequestIntervalMs?: number;
+  downloadConcurrency?: number;
+}
+
+export interface OriginalDragProgress {
+  completed: number;
+  total: number;
 }
 
 export function parseAssetDragInput(input: unknown): string[] {
@@ -56,6 +63,7 @@ export class OriginalDragExporter {
   private readonly fetchOriginal: FetchOriginal;
   private readonly now: () => number;
   private readonly minimumRequestIntervalMs: number;
+  private readonly downloadConcurrency: number;
   private nextRequestAt = 0;
   private requestQueue: Promise<void> = Promise.resolve();
 
@@ -64,21 +72,31 @@ export class OriginalDragExporter {
     fetchOriginal,
     now = Date.now,
     minimumRequestIntervalMs = DEFAULT_REQUEST_INTERVAL_MS,
+    downloadConcurrency = DEFAULT_DOWNLOAD_CONCURRENCY,
   }: OriginalDragExporterOptions) {
     if (!path.isAbsolute(rootPath)) throw new Error('原文件临时目录必须是绝对路径。');
     if (!Number.isFinite(minimumRequestIntervalMs) || minimumRequestIntervalMs < 0) {
       throw new Error('原文件请求间隔无效。');
     }
+    if (
+      !Number.isSafeInteger(downloadConcurrency) ||
+      downloadConcurrency < 1 ||
+      downloadConcurrency > 8
+    ) {
+      throw new Error('原文件下载并发数无效。');
+    }
     this.rootPath = rootPath;
     this.fetchOriginal = fetchOriginal;
     this.now = now;
     this.minimumRequestIntervalMs = minimumRequestIntervalMs;
+    this.downloadConcurrency = downloadConcurrency;
   }
 
   async prepare(
     namespaceId: string,
     input: unknown,
     signal?: AbortSignal,
+    onProgress?: (progress: OriginalDragProgress) => void,
   ): Promise<PreparedOriginalDrag> {
     if (!NAMESPACE_ID.test(namespaceId)) throw new Error('原文件临时目录命名空间无效。');
     const assetIds = parseAssetDragInput(input);
@@ -88,26 +106,60 @@ export class OriginalDragExporter {
     const directory = await mkdtemp(path.join(accountRoot, 'drag-'));
     await chmod(directory, 0o700);
 
-    const files: string[] = [];
-    const usedNames = new Set<string>();
+    const controller = new AbortController();
+    const abortFromCaller = () => controller.abort(signal?.reason);
+    if (signal?.aborted) abortFromCaller();
+    else signal?.addEventListener('abort', abortFromCaller, { once: true });
+    const downloads = new Array<{ partialPath: string; requestedName: string }>(assetIds.length);
+    let nextIndex = 0;
+    let completed = 0;
+    let firstError: unknown;
     try {
-      for (const assetId of assetIds) {
-        signal?.throwIfAborted();
-        const response = await this.fetchOriginalWithPacing(assetId, signal);
-        if (!response.ok || !response.body) {
-          throw new Error(`原文件下载失败（${response.status}）。`);
+      const downloadNext = async () => {
+        while (!controller.signal.aborted) {
+          const index = nextIndex;
+          nextIndex += 1;
+          if (index >= assetIds.length) return;
+          try {
+            const assetId = assetIds[index]!;
+            const response = await this.fetchOriginalWithPacing(assetId, controller.signal);
+            if (!response.ok || !response.body) {
+              throw new Error(`原文件下载失败（${response.status}）。`);
+            }
+            const requestedName = readResponseFileName(response.headers) ?? `${assetId}.bin`;
+            const partialPath = path.join(directory, `.asset-${index}.partial`);
+            await pipeline(
+              Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
+              createWriteStream(partialPath, { flags: 'wx', mode: 0o600 }),
+              { signal: controller.signal },
+            );
+            await verifyContentLength(response.headers, partialPath);
+            downloads[index] = { partialPath, requestedName };
+            completed += 1;
+            onProgress?.({ completed, total: assetIds.length });
+          } catch (error) {
+            firstError ??= error;
+            controller.abort(error);
+            throw error;
+          }
         }
-        const requestedName = readResponseFileName(response.headers) ?? `${assetId}.bin`;
-        const fileName = uniqueFileName(sanitizeFileName(requestedName), usedNames);
+      };
+      const workers = Array.from(
+        { length: Math.min(this.downloadConcurrency, assetIds.length) },
+        downloadNext,
+      );
+      const workerResults = await Promise.allSettled(workers);
+      const rejectedWorker = workerResults.find(
+        (result): result is PromiseRejectedResult => result.status === 'rejected',
+      );
+      if (rejectedWorker) throw firstError ?? rejectedWorker.reason;
+
+      const files: string[] = [];
+      const usedNames = new Set<string>();
+      for (const download of downloads) {
+        const fileName = uniqueFileName(sanitizeFileName(download.requestedName), usedNames);
         const filePath = path.join(directory, fileName);
-        const partialPath = `${filePath}.partial`;
-        await pipeline(
-          Readable.fromWeb(response.body as globalThis.ReadableStream<Uint8Array>),
-          createWriteStream(partialPath, { flags: 'wx', mode: 0o600 }),
-          { signal },
-        );
-        await verifyContentLength(response.headers, partialPath);
-        await rename(partialPath, filePath);
+        await rename(download.partialPath, filePath);
         files.push(filePath);
       }
       return { directory, files: files as [string, ...string[]] };
@@ -115,6 +167,8 @@ export class OriginalDragExporter {
       await rm(directory, { recursive: true, force: true });
       if (error instanceof Error && error.message.includes('原文件')) throw error;
       throw new Error('原文件准备失败。', { cause: error });
+    } finally {
+      signal?.removeEventListener('abort', abortFromCaller);
     }
   }
 
@@ -155,18 +209,18 @@ export class OriginalDragExporter {
   }
 
   private async fetchOriginalWithPacing(assetId: string, signal?: AbortSignal): Promise<Response> {
-    const request = this.requestQueue.then(async () => {
+    const launch = this.requestQueue.then(async () => {
       const delayMs = Math.max(0, this.nextRequestAt - this.now());
       if (delayMs > 0) await delay(delayMs, signal);
       signal?.throwIfAborted();
       this.nextRequestAt = this.now() + this.minimumRequestIntervalMs;
-      return this.fetchOriginal(assetId, signal);
     });
-    this.requestQueue = request.then(
+    this.requestQueue = launch.then(
       () => undefined,
       () => undefined,
     );
-    return request;
+    await launch;
+    return this.fetchOriginal(assetId, signal);
   }
 }
 

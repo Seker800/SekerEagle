@@ -815,4 +815,7 @@ export const enUS = {
   全选: 'Select all',
   取消全选: 'Clear selection',
   查看大图: 'View large image',
+  '正在准备原文件（{{value1}}/{{value2}}）…': 'Preparing original files ({{value1}}/{{value2}})…',
+  '原文件准备已取消，可重新拖动。': 'Original-file preparation was cancelled. Drag again to retry.',
+  '原文件准备超时，请重新拖动。': 'Original-file preparation timed out. Drag again to retry.',
 } as const;

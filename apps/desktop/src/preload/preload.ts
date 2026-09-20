@@ -68,6 +68,35 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
     }
     return { token: parsePreparedDragToken(result.token) };
   },
+  onAssetDragPreparationProgress(
+    listener: (progress: { completed: number; total: number }) => void,
+  ) {
+    if (typeof listener !== 'function') throw new Error('原文件拖拽进度监听器无效。');
+    const handleProgress = (
+      _event: Electron.IpcRendererEvent,
+      input: { completed?: unknown; total?: unknown },
+    ) => {
+      const completed = input?.completed;
+      const total = input?.total;
+      if (
+        typeof completed !== 'number' ||
+        !Number.isSafeInteger(completed) ||
+        typeof total !== 'number' ||
+        !Number.isSafeInteger(total) ||
+        total < 1 ||
+        total > 100 ||
+        completed < 0 ||
+        completed > total
+      ) {
+        return;
+      }
+      listener({ completed, total });
+    };
+    ipcRenderer.on('desktop:asset-drag-preparation-progress', handleProgress);
+    return () => {
+      ipcRenderer.removeListener('desktop:asset-drag-preparation-progress', handleProgress);
+    };
+  },
   startPreparedAssetDrag(token: unknown) {
     ipcRenderer.send('desktop:start-prepared-asset-drag', parsePreparedDragToken(token));
   },

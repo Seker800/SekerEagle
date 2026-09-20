@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, readFile, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   ORIGINAL_DRAG_EXPORT_TTL_MS,
   OriginalDragExporter,
@@ -11,6 +11,8 @@ import {
 
 const firstAssetId = '00000000-0000-4000-8000-000000000001';
 const secondAssetId = '00000000-0000-4000-8000-000000000002';
+const thirdAssetId = '00000000-0000-4000-8000-000000000003';
+const fourthAssetId = '00000000-0000-4000-8000-000000000004';
 const namespaceId = 'a'.repeat(64);
 const temporaryRoots: string[] = [];
 
@@ -73,6 +75,47 @@ describe('parsePreparedDragToken', () => {
 });
 
 describe('OriginalDragExporter', () => {
+  it('downloads with bounded concurrency and reports completed-file progress', async () => {
+    const rootPath = await createRoot();
+    const pending = new Map<string, (response: Response) => void>();
+    const progress: Array<{ completed: number; total: number }> = [];
+    const exporter = new OriginalDragExporter({
+      rootPath,
+      minimumRequestIntervalMs: 0,
+      downloadConcurrency: 2,
+      fetchOriginal: (assetId) =>
+        new Promise<Response>((resolve) => {
+          pending.set(assetId, resolve);
+        }),
+    });
+    const assetIds = [firstAssetId, secondAssetId, thirdAssetId, fourthAssetId];
+
+    const preparation = exporter.prepare(namespaceId, assetIds, undefined, (update) =>
+      progress.push(update),
+    );
+    await vi.waitFor(() => expect(pending.size).toBe(2));
+    pending.get(secondAssetId)!(originalResponse(new Uint8Array([2]), 'shared.png'));
+    await vi.waitFor(() => expect(pending.has(thirdAssetId)).toBe(true));
+    pending.get(firstAssetId)!(originalResponse(new Uint8Array([1]), 'shared.png'));
+    await vi.waitFor(() => expect(pending.has(fourthAssetId)).toBe(true));
+    pending.get(thirdAssetId)!(originalResponse(new Uint8Array([3]), 'third.png'));
+    pending.get(fourthAssetId)!(originalResponse(new Uint8Array([4]), 'fourth.png'));
+
+    const prepared = await preparation;
+    expect(prepared.files.map((file) => path.basename(file))).toEqual([
+      'shared.png',
+      'shared (2).png',
+      'third.png',
+      'fourth.png',
+    ]);
+    expect(progress).toEqual([
+      { completed: 1, total: 4 },
+      { completed: 2, total: 4 },
+      { completed: 3, total: 4 },
+      { completed: 4, total: 4 },
+    ]);
+  });
+
   it('streams exact original bytes into an isolated directory and resolves duplicate names', async () => {
     const rootPath = await createRoot();
     const payloads = new Map([

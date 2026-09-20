@@ -42,6 +42,9 @@ export interface SekerDesktopBridge {
   prepareAssetDrag?(assetIds: string[]): Promise<{
     token: string;
   }>;
+  onAssetDragPreparationProgress?(
+    listener: (progress: { completed: number; total: number }) => void,
+  ): () => void;
   startPreparedAssetDrag?(token: string): void;
   cancelAssetDragPreparation?(): void;
   discardPreparedAssetDrag?(token: string): void;

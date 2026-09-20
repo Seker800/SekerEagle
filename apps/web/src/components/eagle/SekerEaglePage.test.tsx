@@ -1584,6 +1584,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.dragStart(secondCard);
     await waitFor(() => expect(prepareAssetDrag).toHaveBeenCalledWith(['asset-1', 'asset-2']));
+    expect(screen.getByRole('status')).toHaveTextContent('正在准备原文件（0/2）…');
     pendingDrag.resolve();
     await waitFor(() =>
       expect(startPreparedAssetDrag).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111'),
@@ -1632,6 +1633,7 @@ describe('SekerEaglePage', () => {
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
     fireEvent.dragStart(card);
     fireEvent.pointerUp(window);
+    expect(screen.getByRole('status')).toHaveTextContent('原文件准备已取消，可重新拖动。');
     preparation.resolve({ token: 'drag-token' });
     await Promise.resolve();
     await Promise.resolve();

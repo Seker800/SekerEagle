@@ -75,7 +75,7 @@ import { EagleAiTagSetupPanel } from './EagleAiTagSetupPanel';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
-import { DesktopAssetDragSession } from './eagle-asset-drag-session';
+import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
 import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
@@ -256,6 +256,7 @@ export function SekerEaglePage({
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [originalFileError, setOriginalFileError] = useState<string | null>(null);
+  const [assetDragStatus, setAssetDragStatus] = useState<DesktopAssetDragStatus>(null);
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
@@ -271,6 +272,7 @@ export function SekerEaglePage({
   }, [thumbnailSize]);
   useEffect(() => {
     setOriginalFileError(null);
+    setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
   }, [ownerId]);
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
@@ -690,8 +692,13 @@ export function SekerEaglePage({
   const assetDragSession = useMemo(
     () =>
       desktopAssetDragBridge
-        ? new DesktopAssetDragSession(desktopAssetDragBridge, (error) =>
-            setOriginalFileError(error instanceof Error ? error.message : t('原文件拖出失败。')),
+        ? new DesktopAssetDragSession(
+            desktopAssetDragBridge,
+            (error) => {
+              setAssetDragStatus(null);
+              setOriginalFileError(error instanceof Error ? error.message : t('原文件拖出失败。'));
+            },
+            setAssetDragStatus,
           )
         : null,
     [desktopAssetDragBridge, ownerId],
@@ -705,10 +712,14 @@ export function SekerEaglePage({
   useEffect(() => {
     if (!assetDragSession) return undefined;
     const endPendingGesture = () => {
-      if (!assetDragSession.hasNativeDragStarted()) assetDragSession.end();
+      if (!assetDragSession.hasNativeDragStarted()) assetDragSession.end('cancelled');
     };
     window.addEventListener('pointerup', endPendingGesture, true);
-    return () => window.removeEventListener('pointerup', endPendingGesture, true);
+    window.addEventListener('pointercancel', endPendingGesture, true);
+    return () => {
+      window.removeEventListener('pointerup', endPendingGesture, true);
+      window.removeEventListener('pointercancel', endPendingGesture, true);
+    };
   }, [assetDragSession]);
   const getDragAssetIds = (assetId: string) =>
     getAssetDragIds({
@@ -1234,6 +1245,16 @@ export function SekerEaglePage({
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
                   {uploadStatus}
+                </div>
+              )}
+              {assetDragStatus && (
+                <div className={styles.statusBar} role="status">
+                  {assetDragStatus.phase === 'preparing'
+                    ? t('正在准备原文件（{{value1}}/{{value2}}）…', {
+                        value1: assetDragStatus.completed,
+                        value2: assetDragStatus.total,
+                      })
+                    : t('原文件准备已取消，可重新拖动。')}
                 </div>
               )}
               {originalFileError && (
