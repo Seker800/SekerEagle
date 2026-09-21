@@ -220,8 +220,8 @@ npm run db:generate
 npm run env:create
 ./scripts/mlx-embedding-host.sh setup
 npm run mlx:install-service
-npm run compose:config
-docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build
+npm run deploy:mac:check
+npm run deploy:mac
 ```
 
 不使用向量标签建议时，可以跳过 MLX setup 与 service 安装步骤。自动名词标签还需要另行

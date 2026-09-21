@@ -6,7 +6,7 @@
 2. 确认 Docker Desktop 至少分配 16 GiB 内存和 8 CPU。
 3. 运行 `npm run env:ensure-vector` 补齐独立的 MLX 本机 token，再运行 `npm run mlx:install-service`。`launchd` 会在登录后启动 Qwen3-VL Embedding 宿主服务并在崩溃后恢复。
 4. 用带认证的 `http://127.0.0.1:11435/health/ready` 检查固定模型 revision、1024 维和 `metal: true`。宿主服务虽为 Docker Desktop 绑定 `0.0.0.0`，但只接受独立随机 bearer token、受限字节和固定输入类型；不接受 URL 或文件路径。
-5. 运行 `npm run compose:config` 检查编排，再运行 `docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build`。
+5. 运行 `npm run deploy:mac:check` 检查实际部署配置，再运行 `npm run deploy:mac`。该入口会根据 `.env` 自动决定是否叠加 LAN Compose 文件，并在更新后验证 gateway 端口和健康状态。
 6. 默认只有 `127.0.0.1:8180` 暴露到宿主机。可信局域网访问可按下节绑定单个内网 IP；PostgreSQL、MinIO、API 和 web 不应有宿主端口。
 7. 用一次性环境变量在 API 容器内创建首个管理员：
 
@@ -36,15 +36,32 @@ gateway 绑定地址改为该内网 IP，例如：
 SEKEREAGLE_GATEWAY_LAN_ADDRESS=192.168.1.10
 ```
 
-重新创建 gateway 并验证：
+先确认预检识别为 `local + LAN`，再通过唯一部署入口更新并自动验证：
 
 ```sh
-docker compose --env-file .env \
-  -f deploy/mac/docker-compose.yml \
-  -f deploy/mac/docker-compose.lan.yml \
-  up -d --build --force-recreate api gateway
-curl -fsS http://192.168.1.10:8180/api/health/ready
+npm run deploy:mac:check
+npm run deploy:mac
 ```
+
+不要直接执行只带 `docker-compose.yml` 的 `docker compose up` 来更新这台 LAN 部署。基础文件有意只发布
+`127.0.0.1:8180`；漏掉叠加文件会造成“Mac 本机正常、其他电脑无法访问”。标准入口会在
+`SEKEREAGLE_GATEWAY_LAN_ADDRESS` 非空时自动加入 `docker-compose.lan.yml`，拒绝非私网地址或
+不属于当前 Mac 的旧地址，并在结束前同时检查 `127.0.0.1:8180`、LAN IP 端口和健康接口。
+
+### 日常代码更新与 Docker 发布
+
+代码推送到 Git 仓库不会自动更新本机容器。拉取或完成代码变更后，统一执行：
+
+```sh
+git status --short
+npm run deploy:mac:check
+npm run deploy:mac
+```
+
+成功标准是命令最后输出 `Deployment verified`，并且其中同时列出 loopback 与配置的 LAN 健康地址。
+若预检显示 `local only`，但这台服务应供局域网使用，应先修正 `.env`，不要继续发布。脚本不会输出
+`.env` 中的密码或令牌。发布失败时保留原始报错进行诊断，不要改 Clash、TUN、路由器或防火墙，
+除非已经证明 gateway 的两个绑定与本机/LAN 健康检查均正常。
 
 LAN 地址只控制 gateway 的宿主机绑定，不再同时充当 API 白名单。网页登录和所有受 CSRF
 来源保护的写操作会动态要求浏览器来源与当前私网 gateway 的协议、主机和端口完全一致；

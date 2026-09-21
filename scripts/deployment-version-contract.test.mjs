@@ -30,3 +30,10 @@ test('gateway and web runtime use the same nginx image version', async () => {
 
   assert.equal(webRuntimeVersion, gatewayVersion);
 });
+
+test('the root test suite includes the safe Mac deployment contract', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+  assert.match(manifest.scripts.test, /scripts\/deploy-mac\.test\.mjs/u);
+  assert.equal(manifest.scripts['deploy:mac'], 'node ./scripts/deploy-mac.mjs');
+});

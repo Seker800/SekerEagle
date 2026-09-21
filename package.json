@@ -22,7 +22,7 @@
   "scripts": {
     "build": "npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator && npm run build --workspace @sekereagle/desktop",
     "typecheck": "npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/eagle-filter-core && npm run typecheck --workspace @sekereagle/vector-core && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator && npm run typecheck --workspace @sekereagle/desktop",
-    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/eagle-filter-core && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm run test --workspace @sekereagle/desktop && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/deployment-version-contract.test.mjs scripts/workspace-test-dependencies.test.mjs scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
+    "test": "npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/eagle-filter-core && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm run test --workspace @sekereagle/desktop && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/deploy-mac.test.mjs scripts/deployment-version-contract.test.mjs scripts/workspace-test-dependencies.test.mjs scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "db:guard": "node ./scripts/assert-safe-target.mjs",
@@ -31,6 +31,8 @@
     "contracts:generate": "npm run openapi:generate --workspace @sekereagle/api && npm run generate --workspace @sekereagle/contracts && prettier --write packages/contracts/openapi.json packages/contracts/src/generated/openapi.ts",
     "contracts:check": "npm run contracts:generate && git diff --exit-code -- packages/contracts/openapi.json packages/contracts/src/generated/openapi.ts",
     "compose:config": "docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet",
+    "deploy:mac": "node ./scripts/deploy-mac.mjs",
+    "deploy:mac:check": "node ./scripts/deploy-mac.mjs --preflight",
     "env:create": "node ./scripts/create-local-env.mjs",
     "env:ensure-vector": "node ./scripts/ensure-local-vector-env.mjs",
     "mlx:install-service": "node ./scripts/install-mlx-launch-agent.mjs",

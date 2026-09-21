@@ -83,7 +83,9 @@ npm run mlx:test
 常见命令：
 
 ```sh
-npm run compose:config          # 检查 Compose 配置
+npm run compose:config          # 检查公开的基础 Compose 配置
+npm run deploy:mac:check        # 按本机 .env 检查实际部署模式（含 LAN 叠加）
+npm run deploy:mac              # 构建、更新并验证本机 Docker 部署
 npm run contracts:check         # 重新生成并检查 OpenAPI 契约
 npm run smoke:auth              # 认证 smoke
 npm run smoke:eagle             # 素材库 smoke

@@ -245,8 +245,8 @@ npm run db:generate
 npm run env:create
 ./scripts/mlx-embedding-host.sh setup
 npm run mlx:install-service
-npm run compose:config
-docker compose --env-file .env -f deploy/mac/docker-compose.yml up -d --build
+npm run deploy:mac:check
+npm run deploy:mac
 ```
 
 If you do not need vector tag suggestions, skip the MLX setup and service installation steps.
