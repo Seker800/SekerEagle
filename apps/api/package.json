@@ -24,7 +24,7 @@
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.1.29",
     "@nestjs/jwt": "^11.0.0",
-    "@nestjs/platform-express": "^11.1.29",
+    "@nestjs/platform-express": "^11.2.6",
     "@nestjs/swagger": "^11.4.7",
     "@nestjs/throttler": "^6.5.0",
     "@smithy/node-http-handler": "^4.11.3",
