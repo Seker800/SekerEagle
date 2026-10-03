@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EagleMediaJobStatus, Prisma } from '@prisma/client';
+import { EAGLE_AI_TAG_PROCESSOR_VERSION } from '@sekereagle/config';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   ListEagleProcessingJobsDto,
@@ -241,6 +242,18 @@ export class EagleProcessingService {
           processorVersion: true,
         },
       });
+      const completedAiTags = await this.prisma.eagleAiAnalysisRun.groupBy({
+        by: ['assetId', 'assetRevision'],
+        where: {
+          ownerId,
+          assetId: { in: assets.map(({ id }) => id) },
+          processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
+          status: { in: ['SUCCEEDED', 'SUPERSEDED'] },
+        },
+      });
+      const completedAiTagRevisions = new Set(
+        completedAiTags.map((run) => `${run.assetId}:${run.assetRevision}`),
+      );
       const existingByAssetRevision = new Map<string, typeof existing>();
       for (const job of existing) {
         const key = `${job.assetId}:${job.assetRevision}`;
@@ -256,6 +269,7 @@ export class EagleProcessingService {
             assetRevision: asset.mediaRevision,
             width: asset.width,
             height: asset.height,
+            completedAiTag: completedAiTagRevisions.has(`${asset.id}:${asset.mediaRevision}`),
           },
           existingByAssetRevision.get(`${asset.id}:${asset.mediaRevision}`) ?? [],
         );

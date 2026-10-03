@@ -114,6 +114,29 @@ test('backfill does not duplicate a current AI tagging task', () => {
   );
 });
 
+test('backfill does not recreate an AI job when the current revision has a completed analysis', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    {
+      ownerId: 'owner-1',
+      assetId: 'asset-1',
+      assetRevision: 2,
+      width: 1_000,
+      height: 800,
+      completedAiTag: true,
+    },
+    [],
+  );
+
+  assert.equal(
+    jobs.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
+    false,
+  );
+  assert.equal(
+    jobs.some(({ kind }) => kind === 'GENERATE_EMBEDDING'),
+    true,
+  );
+});
+
 function expectJobKinds(
   jobs: ReturnType<typeof buildMissingImageProcessingJobs>,
   expected: Array<[string, string | null | undefined]>,

@@ -39,6 +39,7 @@ export class EagleAiTagService {
             status: 'SUCCEEDED',
             provider: 'OLLAMA',
             promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
+            processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
             asset: { deletedAt: null, ...visibleAsset },
           },
         }),
@@ -126,6 +127,14 @@ export class EagleAiTagService {
             AND existing."assetRevision" = asset."mediaRevision"
             AND existing.kind = 'GENERATE_AI_TAGS'
             AND existing."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM "EagleAiAnalysisRun" AS run
+          WHERE run."ownerId" = asset."ownerId"
+            AND run."assetId" = asset.id
+            AND run."assetRevision" = asset."mediaRevision"
+            AND run."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
+            AND run.status IN ('SUCCEEDED', 'SUPERSEDED')
         )
       ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
     `);

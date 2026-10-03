@@ -913,6 +913,7 @@ model EagleAiAnalysisRun {
   model         String
   modelVersion  String?
   promptVersion String
+  processorVersion String?
   status        EagleAiAnalysisStatus @default(PENDING)
   errorCode     String?
   startedAt     DateTime?
@@ -924,6 +925,7 @@ model EagleAiAnalysisRun {
 
   @@unique([ownerId, id])
   @@index([ownerId, assetId, assetRevision, createdAt])
+  @@index([ownerId, assetId, assetRevision, processorVersion, status], map: "EagleAiAnalysisRun_completion_lookup_idx")
   @@index([status, createdAt])
 }
 

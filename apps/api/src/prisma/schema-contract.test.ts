@@ -68,6 +68,16 @@ async function aiTag8bMigrationText(): Promise<string> {
   );
 }
 
+async function aiTagCompletionMigrationText(): Promise<string> {
+  return readFile(
+    resolve(
+      __dirname,
+      '../../prisma/migrations/20261003060000_ai_tag_completion_evidence/migration.sql',
+    ),
+    'utf8',
+  );
+}
+
 void test('standalone schema excludes SekerChat domains', async () => {
   const schema = await schemaText();
   for (const forbidden of [
@@ -174,4 +184,16 @@ void test('8B AI tag migration upgrades queued work and supersedes stale retry r
   assert.match(migration, /UPDATE "EagleAiAnalysisRun"/);
   assert.match(migration, /"promptVersion" = 'concrete-nouns-zh-v1'/);
   assert.match(migration, /status = 'SUPERSEDED'/);
+});
+
+void test('AI completion migration versions historical results and drains only proven duplicate pending jobs', async () => {
+  const schema = await schemaText();
+  const analysisRun = schema.match(/model EagleAiAnalysisRun \{[\s\S]*?\n\}/)?.[0] ?? '';
+  assert.match(analysisRun, /processorVersion\s+String\?/);
+  const migration = await aiTagCompletionMigrationText();
+  assert.match(migration, /"promptVersion" = 'concrete-nouns-zh-v2'/);
+  assert.match(migration, /job\.status = 'PENDING'/);
+  assert.match(migration, /run\.status IN \('SUCCEEDED', 'SUPERSEDED'\)/);
+  assert.match(migration, /run\."assetRevision" = job\."assetRevision"/);
+  assert.doesNotMatch(migration, /DELETE FROM/);
 });

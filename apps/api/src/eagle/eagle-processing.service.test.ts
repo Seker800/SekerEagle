@@ -40,6 +40,7 @@ test('reconciler creates every missing current-version image task', async () => 
         return { count: data.length };
       },
     },
+    eagleAiAnalysisRun: { groupBy: async () => [] },
   } as never);
 
   const result = await service.reconcile('owner-1');
@@ -88,12 +89,57 @@ test('reconciler scans beyond the first page without exceeding its creation boun
       findMany: async () => [],
       createMany: async ({ data }: { data: unknown[] }) => ({ count: data.length }),
     },
+    eagleAiAnalysisRun: { groupBy: async () => [] },
   } as never);
 
   const result = await service.reconcile('owner-1');
 
   assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1504 });
   assert.equal(page, 2);
+});
+
+test('reconciler skips an AI job whose completed result survived job pruning', async () => {
+  const created: Array<{ kind: string }> = [];
+  const completionQueries: unknown[] = [];
+  const service = new EagleProcessingService({
+    eagleAsset: {
+      findMany: async () => [
+        { id: 'asset-1', ownerId: 'owner-1', mediaRevision: 2, width: 100, height: 100 },
+      ],
+    },
+    eagleAssetProcessingJob: {
+      findMany: async () => [],
+      createMany: async ({ data }: { data: Array<{ kind: string }> }) => {
+        created.push(...data);
+        return { count: data.length };
+      },
+    },
+    eagleAiAnalysisRun: {
+      groupBy: async (query: unknown) => {
+        completionQueries.push(query);
+        return [{ assetId: 'asset-1', assetRevision: 2 }];
+      },
+    },
+  } as never);
+
+  const result = await service.reconcile('owner-1');
+
+  assert.equal(result.created, 3);
+  assert.equal(
+    created.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
+    false,
+  );
+  assert.deepEqual(completionQueries, [
+    {
+      by: ['assetId', 'assetRevision'],
+      where: {
+        ownerId: 'owner-1',
+        assetId: { in: ['asset-1'] },
+        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
+        status: { in: ['SUCCEEDED', 'SUPERSEDED'] },
+      },
+    },
+  ]);
 });
 
 test('retrying a required media task restores the current asset processing lifecycle', async () => {

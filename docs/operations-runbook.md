@@ -98,6 +98,18 @@ SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP=true
 - 不要把本仓库 `.env` 指向 SekerChat 或群晖。
 - 本轮不包含旧数据清理或用户备份导入。
 
+## AI 标签任务清理与完成证据
+
+AI 标签是否已完成，以同一 owner、素材、素材版本和处理器版本的成功分析记录为准；
+`EagleMediaJob` 只是可清理的调度记录。`SUCCEEDED` 和由成功结果转来的
+`SUPERSEDED` 都表示该版本曾完成分析。模型或提示词改变且需要重新分析时，必须升级
+`EAGLE_AI_TAG_PROCESSOR_VERSION`，不能只替换模型环境变量。
+
+首次发布完成证据迁移时，先停止 worker，再按标准入口执行部署。迁移会给已有 v2 分析记录
+补处理器版本，并把有成功分析证据的待处理 AI 标签任务标为完成；正在处理的任务由新 worker
+在读取图片前检查并收敛。部署后确认 AI 标签 pending 数量下降，且后续维护清理已完成任务时
+没有重新产生同版本的待处理任务。不要按创建时间批量删除队列。
+
 ## 停止
 
 `docker compose --env-file .env -f deploy/mac/docker-compose.yml down` 只停止容器，不删除 volume。不要加 `-v`，除非明确决定删除新 SekerEagle 数据。

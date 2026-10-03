@@ -34,6 +34,7 @@ import {
   taskBlocksAssetReady,
 } from './processing-policy';
 import { extractRepresentativeColors } from './color-palette';
+import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
@@ -224,6 +225,14 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
             AND existing.kind = 'GENERATE_AI_TAGS'
             AND existing."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
         )
+        AND NOT EXISTS (
+          SELECT 1 FROM "EagleAiAnalysisRun" AS run
+          WHERE run."ownerId" = asset."ownerId"
+            AND run."assetId" = asset.id
+            AND run."assetRevision" = asset."mediaRevision"
+            AND run."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
+            AND run.status IN ('SUCCEEDED', 'SUPERSEDED')
+        )
       ORDER BY asset."libraryAddedAt", asset.id
       LIMIT 1000
       ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
@@ -266,6 +275,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
     });
     return;
+  }
+  if (job.kind === 'GENERATE_AI_TAGS') {
+    if (await finishAlreadyAnalyzedAiTagJob(prisma, job)) return;
   }
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
   if (job.kind === 'EXTRACT_COLOR_PALETTE') {
@@ -725,6 +737,7 @@ async function processAiTaggingJob(
       provider: 'OLLAMA',
       model: ollamaModel,
       promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
+      processorVersion: job.processorVersion,
       status: 'RUNNING',
       startedAt: new Date(),
     },

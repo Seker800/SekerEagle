@@ -38,6 +38,7 @@ test('AI tag summary counts only the current pipeline and reports its default mo
         status: 'SUCCEEDED',
         provider: 'OLLAMA',
         promptVersion: 'concrete-nouns-zh-v2',
+        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
         asset: { deletedAt: null, isPrivate: false },
       },
     ]);
@@ -75,6 +76,9 @@ test('AI tag scan is explicit and only queues current visible images with ready 
   assert.match(serialized, /GENERATE_AI_TAGS/);
   assert.match(serialized, /PREVIEW/);
   assert.match(serialized, /isPrivate/);
+  assert.match(serialized, /EagleAiAnalysisRun/);
+  assert.match(serialized, /SUPERSEDED/);
+  assert.match(serialized, /run\.\\"ownerId\\" = asset\.\\"ownerId\\"/);
 });
 
 test('AI tag search candidates keep exact tags first and semantic tags by descending similarity', async () => {

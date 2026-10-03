@@ -24,6 +24,7 @@ export function buildImageProcessingJobs(
     assetRevision: number;
     width: number | null;
     height: number | null;
+    completedAiTag?: boolean;
   },
   renditionJobId: string = randomUUID(),
 ): Prisma.EagleAssetProcessingJobCreateManyInput[] {
@@ -37,6 +38,7 @@ export function buildMissingImageProcessingJobs(
     assetRevision: number;
     width: number | null;
     height: number | null;
+    completedAiTag?: boolean;
   },
   existingJobs: ReadonlyArray<{ id: string; kind: string; processorVersion: string }>,
   newRenditionJobId: string = randomUUID(),
@@ -104,10 +106,12 @@ export function buildMissingImageProcessingJobs(
       dependsOnJobId: renditionJobId,
     });
   }
-  const hasAiTags = existingJobs.some(
-    ({ kind, processorVersion }) =>
-      kind === 'GENERATE_AI_TAGS' && processorVersion === EAGLE_AI_TAG_PROCESSOR_VERSION,
-  );
+  const hasAiTags =
+    input.completedAiTag === true ||
+    existingJobs.some(
+      ({ kind, processorVersion }) =>
+        kind === 'GENERATE_AI_TAGS' && processorVersion === EAGLE_AI_TAG_PROCESSOR_VERSION,
+    );
   if (!hasAiTags) {
     jobs.push({
       id: randomUUID(),
