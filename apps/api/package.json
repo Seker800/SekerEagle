@@ -39,7 +39,7 @@
     "pinyin-pro": "^3.29.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.21",
