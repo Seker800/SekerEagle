@@ -40,7 +40,7 @@ x-api-environment: &api-environment
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.6-pg16
+    image: pgvector/pgvector:0.8.7-pg16
     platform: linux/arm64
     restart: unless-stopped
     shm_size: 512m
