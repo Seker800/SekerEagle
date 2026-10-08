@@ -9,7 +9,7 @@ dependencies = [
   "mlx-embeddings==0.1.0",
   "pillow==12.3.0",
   "torch==2.13.0",
-  "torchvision==0.28.0",
+  "torchvision==0.29.0",
   "uvicorn[standard]==0.52.4",
 ]
 
