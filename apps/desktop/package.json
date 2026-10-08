@@ -23,7 +23,7 @@
     "electron-builder": "26.15.3",
     "esbuild": "^0.25.12",
     "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   },
   "build": {
     "appId": "com.sekereagle.desktop",
