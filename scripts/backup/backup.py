@@ -229,6 +229,12 @@ def inspect(name):
     return json.loads(text(["docker", "inspect", name]))[0]
 
 
+def required_remote_space(state):
+    # Plain staging needs a complete copy, unlike an incremental encrypted repository.
+    previous = state.get("integrity", {}).get("bytes", 0)
+    return int(previous * 1.25) + 20 * 1024**3
+
+
 def preflight():
     assert_ssh_target(text(["ssh", "-G", "SekerDesign"]))
     if ssh("hostname").strip() != "SEKER_DESIGN":
@@ -237,7 +243,10 @@ def preflight():
     if marker != "sekereagle-independent-backup-v1":
         raise ValueError("Remote backup ownership marker mismatch")
     available = int(ssh(f"df -Pk {REMOTE} | tail -1").split()[3]) * 1024
-    if available < 20 * 1024**3 or shutil.disk_usage(PRIVATE).free < 16 * 1024**3:
+    if (
+        available < required_remote_space(load_state())
+        or shutil.disk_usage(PRIVATE).free < 16 * 1024**3
+    ):
         raise ValueError("Insufficient backup workspace")
     upload_receiver()
     containers = {}
