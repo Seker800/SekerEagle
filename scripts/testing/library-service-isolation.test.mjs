@@ -483,3 +483,25 @@ test('privacy display duration is an independent per-library preference', async 
   assert.equal((await service.getStatus(f.ownerId, {}, 'MATERIAL')).durationHours, 1);
   assert.equal((await service.getStatus(f.ownerId, {}, 'PHOTO')).durationHours, 12);
 });
+
+test('photo stack projection respects shared rules and private members', async () => {
+  const f = await fixtures();
+  const {PhotoManagementService} = await import('../../apps/api/dist/photos/photo-management.service.js');
+  const photography = new PhotoManagementService(prisma);
+  const other = await prisma.eagleAsset.create({data:{
+    ownerId:f.ownerId,libraryMode:'PHOTO',originalName:'stack-second.jpg',displayName:'second',normalizedDisplayName:'second',format:'jpeg',mimeType:'image/jpeg',byteSize:1n,originalObjectKey:`test/${randomUUID()}`,lifecycleStatus:'READY',
+  }});
+  const group = await photography.createGroup(f.ownerId,[f.photo.id,other.id],false);
+  await photography.updateGroup(f.ownerId,group.id,{bestAssetId:other.id},false);
+  const page = await f.photos.listAssets(f.ownerId,{limit:1});
+  assert.equal(page.photoStacks.length,1);
+  assert.equal(page.photoStacks[0].cover.id,other.id);
+  assert.equal(page.photoStacks[0].assetIds.length,2);
+  const filtered = await f.photos.listAssets(f.ownerId,{limit:10,rules:JSON.stringify({version:2,conditions:[{id:'one',match:'ALL',result:'MATCH',rules:[{id:'name',field:'NAME',operator:'EQUALS',value:'second'}]}]})});
+  assert.equal(filtered.photoStacks.length,0);
+  await prisma.eagleAsset.update({where:{id:other.id},data:{isPrivate:true}});
+  const hidden = await f.photos.listAssets(f.ownerId,{limit:10});
+  assert.equal(hidden.photoStacks.length,0);
+  assert.equal(hidden.items.some(row=>row.id===other.id),false);
+  assert.equal((await f.materials.listAssets(f.ownerId,{limit:10})).photoStacks,undefined);
+});
