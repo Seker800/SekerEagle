@@ -37,6 +37,13 @@ class PlainNasTests(unittest.TestCase):
         )
         self.assertFalse((self.root / "repository-password").exists())
 
+    def test_plain_files_and_generation_have_explicit_private_permissions(self):
+        nas.receive(self.root, self.generation, self.fixture())
+        path = self.root / "generations" / self.generation
+        self.assertEqual((path / "deployment.env").stat().st_mode & 0o777, 0o600)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+
     def test_corrupt_or_truncated_archive_never_replaces_current(self):
         nas.receive(self.root, self.generation, self.fixture())
         nas.verify(self.root, self.generation)
