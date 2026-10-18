@@ -99,3 +99,12 @@ it('supports keyboard and touch navigation without closing a photo stack', () =>
   expect(onNext).toHaveBeenCalledTimes(2);
   expect(onClose).not.toHaveBeenCalled();
 });
+
+it('plays the current transcoded camera video instead of decoding the camera original', () => {
+  render(<EagleAssetLightbox asset={{...videoAsset,mimeType:'application/mxf',format:'mxf',renditions:[{id:'playback',kind:'PREVIEW',revision:1,mimeType:'video/mp4',byteSize:100,width:1920,height:1080}]}} onClose={vi.fn()} />);
+  expect(screen.getByLabelText('播放 Portrait video')).toHaveAttribute('src','/api/eagle/assets/video-1/renditions/playback');
+});
+it('does not fall back to a MOV original when its playback copy is not ready', () => {
+  render(<EagleAssetLightbox asset={{...videoAsset,mimeType:'video/quicktime',format:'mov',renditions:[]}} onClose={vi.fn()} />);
+  expect(screen.queryByLabelText('播放 Portrait video')).not.toBeInTheDocument();
+});
