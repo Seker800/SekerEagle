@@ -367,6 +367,15 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
+  it('reloads normalized asset pages after leaving and returning to a workspace', async () => {
+    const view = renderPage('returning-owner');
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    view.rerender(<></>);
+    view.rerender(view.renderForOwner('returning-owner'));
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+  });
+
   it('uses a fresh cache namespace when the owner changes', async () => {
     const view = renderPage('owner-a');
     await screen.findByRole('button', { name: /Owl Reference/ });
