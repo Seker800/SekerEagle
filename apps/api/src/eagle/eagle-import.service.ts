@@ -44,12 +44,19 @@ export class EagleImportService {
 
   async createRun(ownerId: string, input: CreateEagleImportRunDto) {
     const existing = await this.prisma.eagleImportRun.findUnique({
-      where: { ownerId_idempotencyKey: { ownerId, idempotencyKey: input.idempotencyKey } },
+      where: {
+        ownerId_libraryMode_idempotencyKey: {
+          libraryMode: 'MATERIAL',
+          ownerId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
     });
     if (existing) return serializeRun(existing);
     const library = await this.prisma.eagleExternalLibrary.upsert({
       where: {
-        ownerId_provider_externalLibraryId: {
+        ownerId_libraryMode_provider_externalLibraryId: {
+          libraryMode: 'MATERIAL',
           ownerId,
           provider: 'EAGLE_APP',
           externalLibraryId: input.externalLibraryId,
@@ -551,7 +558,13 @@ async function applyImportedMetadata(
   for (const tagName of item.tagNames) {
     const name = normalized(tagName, 100);
     const tag = await transaction.eagleManualTag.upsert({
-      where: { ownerId_normalizedName: { ownerId, normalizedName: normalizeKey(name) } },
+      where: {
+        ownerId_libraryMode_normalizedName: {
+          libraryMode: 'MATERIAL',
+          ownerId,
+          normalizedName: normalizeKey(name),
+        },
+      },
       create: { ownerId, name, normalizedName: normalizeKey(name) },
       update: {},
       select: { id: true },

@@ -114,7 +114,9 @@ export class EagleVectorService {
         },
         _count: true,
       }),
-      this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } }),
+      this.prisma.eagleProcessingSetting.findUnique({
+        where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+      }),
       this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
         SELECT COUNT(*)::integer AS count
         FROM "EagleAsset" AS asset

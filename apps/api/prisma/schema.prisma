@@ -7,6 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum LibraryMode {
+  MATERIAL
+  PHOTO
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -176,7 +181,7 @@ model User {
   eagleManualTagGroups     EagleManualTagGroup[]
   eagleAiTags              EagleAiTag[]
   eagleSmartFolders        EagleSmartFolder[]
-  eagleProcessingSetting   EagleProcessingSetting?
+  eagleProcessingSetting   EagleProcessingSetting[]
   eagleUploadSessionStates EagleUploadSessionState[]
   eagleExternalLibraries   EagleExternalLibrary[]
   eagleExternalAssets      EagleExternalAsset[]
@@ -220,6 +225,7 @@ model PersonalAccessToken {
 }
 
 model UploadSession {
+  libraryMode           LibraryMode              @default(MATERIAL)
   id                    String                   @id @default(uuid())
   kind                  UploadKind               @default(EAGLE_ASSET)
   status                UploadSessionStatus      @default(INITIATED)
@@ -242,14 +248,15 @@ model UploadSession {
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   uploader              User                     @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
-  eagleAsset            EagleAsset?              @relation(fields: [uploaderId, eagleAssetId], references: [ownerId, id], onDelete: Restrict)
+  eagleAsset            EagleAsset?              @relation(fields: [uploaderId, libraryMode, eagleAssetId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   eagleState            EagleUploadSessionState?
   finalizationMode      String?
   finalizationJob       UploadFinalizationJob?
   eagleBrowserCapture   EagleBrowserCapture?
 
   @@unique([uploaderId, id])
-  @@index([uploaderId, createdAt])
+  @@unique([uploaderId, libraryMode, id])
+  @@index([uploaderId, libraryMode, createdAt])
   @@index([status, createdAt])
   @@index([status, updatedAt])
   @@index([objectCleanupPending, updatedAt])
@@ -274,6 +281,7 @@ model UploadFinalizationJob {
 }
 
 model EagleUploadSessionState {
+  libraryMode           LibraryMode   @default(MATERIAL)
   uploadSessionId       String        @id
   ownerId               String
   duplicatePolicy       String        @default("SKIP")
@@ -284,18 +292,20 @@ model EagleUploadSessionState {
   supersededAt          DateTime?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
-  uploadSession         UploadSession @relation(fields: [ownerId, uploadSessionId], references: [uploaderId, id], onDelete: Cascade)
+  uploadSession         UploadSession @relation(fields: [ownerId, libraryMode, uploadSessionId], references: [uploaderId, libraryMode, id], onDelete: Cascade)
   owner                 User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  asset                 EagleAsset?   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Restrict)
-  replacementAsset      EagleAsset?   @relation("EagleReplacementUpload", fields: [ownerId, replacementAssetId], references: [ownerId, id], onDelete: Restrict)
+  asset                 EagleAsset?   @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Restrict)
+  replacementAsset      EagleAsset?   @relation("EagleReplacementUpload", fields: [ownerId, libraryMode, replacementAssetId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@unique([ownerId, uploadSessionId])
-  @@index([ownerId, createdAt])
+  @@unique([ownerId, libraryMode, uploadSessionId])
+  @@index([ownerId, libraryMode, createdAt])
   @@index([assetId])
-  @@index([ownerId, replacementAssetId])
+  @@index([ownerId, libraryMode, replacementAssetId])
 }
 
 model EagleAsset {
+  libraryMode                    LibraryMode                    @default(MATERIAL)
   id                             String                         @id @default(uuid())
   ownerId                        String
   originalName                   String
@@ -342,17 +352,19 @@ model EagleAsset {
   browserCaptures                EagleBrowserCapture[]
 
   @@unique([ownerId, id])
-  @@index([ownerId, deletedAt, libraryAddedAt, id])
-  @@index([ownerId, isPrivate, deletedAt, libraryAddedAt, id])
-  @@index([ownerId, deletedAt, rating])
-  @@index([ownerId, deletedAt, aspectRatio])
-  @@index([ownerId, normalizedDisplayName])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, deletedAt, libraryAddedAt, id])
+  @@index([ownerId, libraryMode, isPrivate, deletedAt, libraryAddedAt, id])
+  @@index([ownerId, libraryMode, deletedAt, rating])
+  @@index([ownerId, libraryMode, deletedAt, aspectRatio])
+  @@index([ownerId, libraryMode, normalizedDisplayName])
   @@index([normalizedDisplayName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_normalizedDisplayName_trgm_idx")
   @@index([originalName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAsset_originalName_trgm_idx")
-  @@index([ownerId, sha256])
+  @@index([ownerId, libraryMode, sha256])
 }
 
 model EagleBrowserCapture {
+  libraryMode      LibraryMode   @default(MATERIAL)
   id               String        @id @default(uuid())
   ownerId          String
   clientCaptureId  String
@@ -369,32 +381,38 @@ model EagleBrowserCapture {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   owner            User          @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  uploadSession    UploadSession @relation(fields: [ownerId, uploadSessionId], references: [uploaderId, id], onDelete: Cascade)
-  asset            EagleAsset?   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Restrict)
+  uploadSession    UploadSession @relation(fields: [ownerId, libraryMode, uploadSessionId], references: [uploaderId, libraryMode, id], onDelete: Cascade)
+  asset            EagleAsset?   @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@unique([ownerId, clientCaptureId])
   @@unique([ownerId, uploadSessionId])
   @@unique([ownerId, id])
-  @@index([ownerId, createdAt])
-  @@index([ownerId, assetId, capturedAt])
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, clientCaptureId])
+  @@unique([ownerId, libraryMode, uploadSessionId])
+  @@index([ownerId, libraryMode, createdAt])
+  @@index([ownerId, libraryMode, assetId, capturedAt])
 }
 
 model EagleAssetAnnotation {
+  libraryMode LibraryMode @default(MATERIAL)
   ownerId     String
   assetId     String
   color       String?
   description String?
   sourceUrl   String?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  owner       User       @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  asset       EagleAsset @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  asset       EagleAsset  @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([ownerId, assetId])
-  @@index([ownerId, updatedAt])
+  @@unique([ownerId, libraryMode, assetId])
+  @@index([ownerId, libraryMode, updatedAt])
 }
 
 model EagleExternalLibrary {
+  libraryMode       LibraryMode           @default(MATERIAL)
   id                String                @id @default(uuid())
   ownerId           String
   provider          EagleExternalProvider @default(EAGLE_APP)
@@ -407,12 +425,14 @@ model EagleExternalLibrary {
   assets            EagleExternalAsset[]
   importRuns        EagleImportRun[]
 
-  @@unique([ownerId, provider, externalLibraryId])
+  @@unique([ownerId, libraryMode, provider, externalLibraryId])
   @@unique([ownerId, id])
-  @@index([ownerId, updatedAt])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, updatedAt])
 }
 
 model EagleExternalAsset {
+  libraryMode          LibraryMode          @default(MATERIAL)
   id                   String               @id @default(uuid())
   ownerId              String
   externalLibraryId    String
@@ -430,18 +450,22 @@ model EagleExternalAsset {
   createdAt            DateTime             @default(now())
   updatedAt            DateTime             @updatedAt
   owner                User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  library              EagleExternalLibrary @relation(fields: [ownerId, externalLibraryId], references: [ownerId, id], onDelete: Restrict)
+  library              EagleExternalLibrary @relation(fields: [ownerId, libraryMode, externalLibraryId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   /// The migration uses PostgreSQL column-specific SET NULL so ownerId remains intact.
-  asset                EagleAsset?          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: SetNull)
+  asset                EagleAsset?          @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: SetNull)
   importRunItems       EagleImportRunItem[]
 
   @@unique([ownerId, externalLibraryId, externalItemId])
   @@unique([ownerId, assetId])
   @@unique([ownerId, id])
-  @@index([ownerId, externalItemId])
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, externalLibraryId, externalItemId])
+  @@unique([ownerId, libraryMode, assetId])
+  @@index([ownerId, libraryMode, externalItemId])
 }
 
 model EagleImportRun {
+  libraryMode       LibraryMode                     @default(MATERIAL)
   id                String                          @id @default(uuid())
   ownerId           String
   externalLibraryId String
@@ -462,21 +486,23 @@ model EagleImportRun {
   createdAt         DateTime                        @default(now())
   updatedAt         DateTime                        @updatedAt
   owner             User                            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  externalLibrary   EagleExternalLibrary            @relation(fields: [ownerId, externalLibraryId], references: [ownerId, id], onDelete: Restrict)
+  externalLibrary   EagleExternalLibrary            @relation(fields: [ownerId, libraryMode, externalLibraryId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   manifestChunks    EagleImportManifestChunk[]
   items             EagleImportRunItem[]
   folders           EagleImportFolderDefinition[]
   tags              EagleImportTagDefinition[]
   tagGroups         EagleImportTagGroupDefinition[]
 
-  @@unique([ownerId, idempotencyKey])
+  @@unique([ownerId, libraryMode, idempotencyKey])
   @@unique([ownerId, id])
-  @@index([ownerId, status, updatedAt])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, status, updatedAt])
   @@index([externalLibraryId, createdAt])
   @@index([status, completedAt])
 }
 
 model EagleImportManifestChunk {
+  libraryMode       LibraryMode    @default(MATERIAL)
   id                String         @id @default(uuid())
   ownerId           String
   runId             String
@@ -485,13 +511,14 @@ model EagleImportManifestChunk {
   acceptedItemCount Int
   skippedItemCount  Int
   createdAt         DateTime       @default(now())
-  run               EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+  run               EagleImportRun @relation(fields: [ownerId, libraryMode, runId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([runId, chunkKey])
-  @@index([ownerId, runId, createdAt])
+  @@index([ownerId, libraryMode, runId, createdAt])
 }
 
 model EagleImportRunItem {
+  libraryMode               LibraryMode            @default(MATERIAL)
   id                        String                 @id @default(uuid())
   ownerId                   String
   runId                     String
@@ -524,18 +551,20 @@ model EagleImportRunItem {
   completedAt               DateTime?
   createdAt                 DateTime               @default(now())
   updatedAt                 DateTime               @updatedAt
-  run                       EagleImportRun         @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
-  externalAsset             EagleExternalAsset     @relation(fields: [ownerId, externalAssetId], references: [ownerId, id], onDelete: Restrict)
+  run                       EagleImportRun         @relation(fields: [ownerId, libraryMode, runId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  externalAsset             EagleExternalAsset     @relation(fields: [ownerId, libraryMode, externalAssetId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   /// The migration uses PostgreSQL column-specific SET NULL so ownerId remains intact.
-  asset                     EagleAsset?            @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: SetNull)
+  asset                     EagleAsset?            @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: SetNull)
 
   @@unique([runId, externalAssetId])
   @@unique([runId, sourceItemId])
   @@unique([ownerId, id])
-  @@index([ownerId, runId, status, id])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, runId, status, id])
 }
 
 model EagleImportFolderDefinition {
+  libraryMode          LibraryMode    @default(MATERIAL)
   id                   String         @id @default(uuid())
   ownerId              String
   runId                String
@@ -544,13 +573,14 @@ model EagleImportFolderDefinition {
   parentSourceFolderId String?
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
-  run                  EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+  run                  EagleImportRun @relation(fields: [ownerId, libraryMode, runId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([runId, sourceFolderId])
-  @@index([ownerId, runId])
+  @@index([ownerId, libraryMode, runId])
 }
 
 model EagleImportTagDefinition {
+  libraryMode    LibraryMode    @default(MATERIAL)
   id             String         @id @default(uuid())
   ownerId        String
   runId          String
@@ -561,13 +591,14 @@ model EagleImportTagDefinition {
   groupSourceIds String[]       @default([])
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
-  run            EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+  run            EagleImportRun @relation(fields: [ownerId, libraryMode, runId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([runId, normalizedName])
-  @@index([ownerId, runId])
+  @@index([ownerId, libraryMode, runId])
 }
 
 model EagleImportTagGroupDefinition {
+  libraryMode    LibraryMode    @default(MATERIAL)
   id             String         @id @default(uuid())
   ownerId        String
   runId          String
@@ -578,34 +609,36 @@ model EagleImportTagGroupDefinition {
   description    String?
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
-  run            EagleImportRun @relation(fields: [ownerId, runId], references: [ownerId, id], onDelete: Cascade)
+  run            EagleImportRun @relation(fields: [ownerId, libraryMode, runId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([runId, sourceGroupId])
-  @@index([ownerId, runId])
+  @@index([ownerId, libraryMode, runId])
 }
 
 model EagleAssetRendition {
-  id         String               @id @default(uuid())
-  ownerId    String
-  assetId    String
-  kind       EagleRenditionKind
-  variant    String               @default("default")
-  revision   Int
-  storageKey String               @unique
-  mimeType   String
-  byteSize   BigInt
-  width      Int?
-  height     Int?
-  status     EagleRenditionStatus @default(PENDING)
-  createdAt  DateTime             @default(now())
-  updatedAt  DateTime             @updatedAt
-  asset      EagleAsset           @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  libraryMode LibraryMode          @default(MATERIAL)
+  id          String               @id @default(uuid())
+  ownerId     String
+  assetId     String
+  kind        EagleRenditionKind
+  variant     String               @default("default")
+  revision    Int
+  storageKey  String               @unique
+  mimeType    String
+  byteSize    BigInt
+  width       Int?
+  height      Int?
+  status      EagleRenditionStatus @default(PENDING)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
+  asset       EagleAsset           @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([assetId, kind, revision, variant])
-  @@index([ownerId, assetId])
+  @@index([ownerId, libraryMode, assetId])
 }
 
 model EagleImagePyramid {
+  libraryMode      LibraryMode             @default(MATERIAL)
   id               String                  @id @default(uuid())
   ownerId          String
   assetId          String
@@ -625,14 +658,15 @@ model EagleImagePyramid {
   completedAt      DateTime?
   createdAt        DateTime                @default(now())
   updatedAt        DateTime                @updatedAt
-  asset            EagleAsset              @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  asset            EagleAsset              @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@unique([assetId, revision, processorVersion])
   @@unique([storagePrefix])
-  @@index([ownerId, assetId, status])
+  @@index([ownerId, libraryMode, assetId, status])
 }
 
 model EagleManualTag {
+  libraryMode        LibraryMode                           @default(MATERIAL)
   id                 String                                @id @default(uuid())
   ownerId            String
   name               String
@@ -646,7 +680,7 @@ model EagleManualTag {
   createdAt          DateTime                              @default(now())
   updatedAt          DateTime                              @updatedAt
   owner              User                                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  group              EagleManualTagGroup?                  @relation("EagleManualTagPrimaryGroup", fields: [ownerId, groupId], references: [ownerId, id], onDelete: Restrict)
+  group              EagleManualTagGroup?                  @relation("EagleManualTagPrimaryGroup", fields: [ownerId, libraryMode, groupId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   groupMemberships   EagleManualTagGroupMembership[]
   assetLinks         EagleAssetManualTag[]
   promotedAiTagLinks EagleAssetAiTag[]                     @relation("PromotedManualTag")
@@ -657,17 +691,19 @@ model EagleManualTag {
   memberDistances    EagleTagMemberDistance[]
   semanticBuilds     EagleTagSemanticBuild[]
 
-  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, libraryMode, normalizedName])
   @@unique([ownerId, id])
-  @@index([ownerId, name])
-  @@index([ownerId, groupId, name])
-  @@index([ownerId, isStarred, name])
-  @@index([ownerId, marksAssetsPrivate, id])
-  @@index([ownerId, lastUsedAt(sort: Desc), id])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, name])
+  @@index([ownerId, libraryMode, groupId, name])
+  @@index([ownerId, libraryMode, isStarred, name])
+  @@index([ownerId, libraryMode, marksAssetsPrivate, id])
+  @@index([ownerId, libraryMode, lastUsedAt(sort: Desc), id])
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleManualTag_normalizedName_trgm_idx")
 }
 
 model EagleManualTagGroup {
+  libraryMode    LibraryMode                     @default(MATERIAL)
   id             String                          @id @default(uuid())
   ownerId        String
   name           String
@@ -681,24 +717,28 @@ model EagleManualTagGroup {
   tags           EagleManualTag[]                @relation("EagleManualTagPrimaryGroup")
   tagMemberships EagleManualTagGroupMembership[]
 
-  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, libraryMode, normalizedName])
   @@unique([ownerId, id])
-  @@index([ownerId, name])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, name])
 }
 
 model EagleManualTagGroupMembership {
-  ownerId   String
-  tagId     String
-  groupId   String
-  createdAt DateTime            @default(now())
-  tag       EagleManualTag      @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
-  group     EagleManualTagGroup @relation(fields: [ownerId, groupId], references: [ownerId, id], onDelete: Cascade)
+  libraryMode LibraryMode         @default(MATERIAL)
+  ownerId     String
+  tagId       String
+  groupId     String
+  createdAt   DateTime            @default(now())
+  tag         EagleManualTag      @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  group       EagleManualTagGroup @relation(fields: [ownerId, libraryMode, groupId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([ownerId, tagId, groupId])
-  @@index([ownerId, groupId, tagId])
+  @@unique([ownerId, libraryMode, tagId, groupId])
+  @@index([ownerId, libraryMode, groupId, tagId])
 }
 
 model EagleAssetManualTag {
+  libraryMode          LibraryMode                    @default(MATERIAL)
   ownerId              String
   assetId              String
   tagId                String
@@ -706,12 +746,13 @@ model EagleAssetManualTag {
   assignmentProvenance String                         @default("USER_ASSIGNED")
   acceptedSuggestionId String?
   createdAt            DateTime                       @default(now())
-  asset                EagleAsset                     @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  tag                  EagleManualTag                 @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  asset                EagleAsset                     @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  tag                  EagleManualTag                 @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   ingestionOrigins     EagleAssetManualTagIngestion[]
 
   @@id([ownerId, assetId, tagId])
-  @@index([ownerId, tagId, assetId])
+  @@unique([ownerId, libraryMode, assetId, tagId])
+  @@index([ownerId, libraryMode, tagId, assetId])
 }
 
 model EagleEmbeddingSpace {
@@ -733,6 +774,7 @@ model EagleEmbeddingSpace {
 }
 
 model EagleAssetEmbedding {
+  libraryMode   LibraryMode                  @default(MATERIAL)
   id            String                       @id @default(uuid())
   ownerId       String
   assetId       String
@@ -747,17 +789,19 @@ model EagleAssetEmbedding {
   completedAt   DateTime?
   createdAt     DateTime                     @default(now())
   updatedAt     DateTime                     @updatedAt
-  asset         EagleAsset                   @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  asset         EagleAsset                   @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   space         EagleEmbeddingSpace          @relation(fields: [spaceId], references: [id], onDelete: Restrict)
   suggestions   EagleVectorTagSuggestion[]
 
   @@unique([assetId, assetRevision, spaceId])
   @@unique([ownerId, id])
-  @@index([ownerId, spaceId, isCurrent, status])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, spaceId, isCurrent, status])
   @@index([status, updatedAt])
 }
 
 model EagleManualTagSemanticConfig {
+  libraryMode           LibraryMode    @default(MATERIAL)
   ownerId               String
   tagId                 String
   recommendationEnabled Boolean        @default(false)
@@ -765,13 +809,15 @@ model EagleManualTagSemanticConfig {
   lastGeneratedAt       DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
-  tag                   EagleManualTag @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  tag                   EagleManualTag @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([ownerId, tagId])
-  @@index([ownerId, recommendationEnabled, tagId])
+  @@unique([ownerId, libraryMode, tagId])
+  @@index([ownerId, libraryMode, recommendationEnabled, tagId])
 }
 
 model EagleTagPrototypeSnapshot {
+  libraryMode        LibraryMode                @default(MATERIAL)
   id                 String                     @id @default(uuid())
   ownerId            String
   tagId              String
@@ -791,7 +837,7 @@ model EagleTagPrototypeSnapshot {
   activatedAt        DateTime?
   createdAt          DateTime                   @default(now())
   updatedAt          DateTime                   @updatedAt
-  tag                EagleManualTag             @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
+  tag                EagleManualTag             @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   space              EagleEmbeddingSpace        @relation(fields: [spaceId], references: [id], onDelete: Restrict)
   prototypes         EagleTagPrototype[]
   memberDistances    EagleTagMemberDistance[]
@@ -800,11 +846,14 @@ model EagleTagPrototypeSnapshot {
 
   @@unique([ownerId, id])
   @@unique([ownerId, tagId, version])
-  @@index([ownerId, tagId, isCurrent, status])
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, tagId, version])
+  @@index([ownerId, libraryMode, tagId, isCurrent, status])
   @@index([generationId])
 }
 
 model EagleTagPrototype {
+  libraryMode            LibraryMode                 @default(MATERIAL)
   ownerId                String
   snapshotId             String
   rank                   Int
@@ -815,12 +864,14 @@ model EagleTagPrototype {
   p95Distance            Float
   representativeAssetIds String[]
   createdAt              DateTime                    @default(now())
-  snapshot               EagleTagPrototypeSnapshot   @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Cascade)
+  snapshot               EagleTagPrototypeSnapshot   @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([ownerId, snapshotId, rank])
+  @@unique([ownerId, libraryMode, snapshotId, rank])
 }
 
 model EagleTagMemberDistance {
+  libraryMode   LibraryMode               @default(MATERIAL)
   ownerId       String
   tagId         String
   assetId       String
@@ -828,15 +879,17 @@ model EagleTagMemberDistance {
   distance      Float
   prototypeRank Int
   createdAt     DateTime                  @default(now())
-  asset         EagleAsset                @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  tag           EagleManualTag            @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
-  snapshot      EagleTagPrototypeSnapshot @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Cascade)
+  asset         EagleAsset                @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  tag           EagleManualTag            @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  snapshot      EagleTagPrototypeSnapshot @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([ownerId, tagId, assetId, snapshotId])
-  @@index([ownerId, tagId, snapshotId, distance, assetId])
+  @@unique([ownerId, libraryMode, tagId, assetId, snapshotId])
+  @@index([ownerId, libraryMode, tagId, snapshotId, distance, assetId])
 }
 
 model EagleVectorTagSuggestion {
+  libraryMode      LibraryMode                 @default(MATERIAL)
   id               String                      @id @default(uuid())
   ownerId          String
   assetId          String
@@ -855,18 +908,20 @@ model EagleVectorTagSuggestion {
   reviewedByUserId String?
   createdAt        DateTime                    @default(now())
   updatedAt        DateTime                    @updatedAt
-  asset            EagleAsset                  @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  suggestedTag     EagleManualTag              @relation(fields: [ownerId, suggestedTagId], references: [ownerId, id], onDelete: Cascade)
-  embedding        EagleAssetEmbedding         @relation(fields: [ownerId, embeddingId], references: [ownerId, id], onDelete: Cascade)
-  snapshot         EagleTagPrototypeSnapshot   @relation(fields: [ownerId, snapshotId], references: [ownerId, id], onDelete: Restrict)
+  asset            EagleAsset                  @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  suggestedTag     EagleManualTag              @relation(fields: [ownerId, libraryMode, suggestedTagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  embedding        EagleAssetEmbedding         @relation(fields: [ownerId, libraryMode, embeddingId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  snapshot         EagleTagPrototypeSnapshot   @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@unique([ownerId, id])
-  @@index([ownerId, suggestedTagId, status, score, assetId])
-  @@index([ownerId, assetId, status])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, suggestedTagId, status, score, assetId])
+  @@index([ownerId, libraryMode, assetId, status])
   @@index([generationId])
 }
 
 model EagleTagSemanticBuild {
+  libraryMode         LibraryMode                 @default(MATERIAL)
   id                  String                      @id @default(uuid())
   ownerId             String
   tagId               String
@@ -882,54 +937,61 @@ model EagleTagSemanticBuild {
   lastError           String?
   createdAt           DateTime                    @default(now())
   updatedAt           DateTime                    @updatedAt
-  tag                 EagleManualTag              @relation(fields: [ownerId, tagId], references: [ownerId, id], onDelete: Cascade)
-  candidateSnapshot   EagleTagPrototypeSnapshot?  @relation(fields: [ownerId, candidateSnapshotId], references: [ownerId, id], onDelete: Restrict)
+  tag                 EagleManualTag              @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  candidateSnapshot   EagleTagPrototypeSnapshot?  @relation(fields: [ownerId, libraryMode, candidateSnapshotId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@unique([ownerId, id])
   @@unique([ownerId, candidateSnapshotId])
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, candidateSnapshotId])
   @@index([status, availableAt, createdAt])
-  @@index([ownerId, tagId, status])
+  @@index([ownerId, libraryMode, tagId, status])
 }
 
 model EagleAssetManualTagIngestion {
-  ownerId   String
-  assetId   String
-  tagId     String
-  sourceKey String
-  createdAt DateTime            @default(now())
-  asset     EagleAsset          @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  link      EagleAssetManualTag @relation(fields: [ownerId, assetId, tagId], references: [ownerId, assetId, tagId], onDelete: Cascade)
+  libraryMode LibraryMode         @default(MATERIAL)
+  ownerId     String
+  assetId     String
+  tagId       String
+  sourceKey   String
+  createdAt   DateTime            @default(now())
+  asset       EagleAsset          @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  link        EagleAssetManualTag @relation(fields: [ownerId, libraryMode, assetId, tagId], references: [ownerId, libraryMode, assetId, tagId], onDelete: Cascade)
 
   @@id([ownerId, assetId, tagId, sourceKey])
-  @@index([ownerId, assetId, sourceKey])
+  @@unique([ownerId, libraryMode, assetId, tagId, sourceKey])
+  @@index([ownerId, libraryMode, assetId, sourceKey])
 }
 
 model EagleAiAnalysisRun {
-  id            String                @id @default(uuid())
-  ownerId       String
-  assetId       String
-  assetRevision Int
-  provider      String
-  model         String
-  modelVersion  String?
-  promptVersion String
+  libraryMode      LibraryMode           @default(MATERIAL)
+  id               String                @id @default(uuid())
+  ownerId          String
+  assetId          String
+  assetRevision    Int
+  provider         String
+  model            String
+  modelVersion     String?
+  promptVersion    String
   processorVersion String?
-  status        EagleAiAnalysisStatus @default(PENDING)
-  errorCode     String?
-  startedAt     DateTime?
-  completedAt   DateTime?
-  createdAt     DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-  asset         EagleAsset            @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  tagLinks      EagleAssetAiTag[]
+  status           EagleAiAnalysisStatus @default(PENDING)
+  errorCode        String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  asset            EagleAsset            @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  tagLinks         EagleAssetAiTag[]
 
   @@unique([ownerId, id])
-  @@index([ownerId, assetId, assetRevision, createdAt])
-  @@index([ownerId, assetId, assetRevision, processorVersion, status], map: "EagleAiAnalysisRun_completion_lookup_idx")
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, assetId, assetRevision, createdAt])
+  @@index([ownerId, libraryMode, assetId, assetRevision, processorVersion, status], map: "EagleAiAnalysisRun_completion_lookup_idx")
   @@index([status, createdAt])
 }
 
 model EagleAiTag {
+  libraryMode      LibraryMode                       @default(MATERIAL)
   id               String                            @id @default(uuid())
   ownerId          String
   name             String
@@ -943,14 +1005,16 @@ model EagleAiTag {
   smartFolderDeps  EagleSmartFolderAiTagDependency[]
   embeddingSpace   EagleEmbeddingSpace?              @relation(fields: [embeddingSpaceId], references: [id], onDelete: Restrict)
 
-  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, libraryMode, normalizedName])
   @@unique([ownerId, id])
-  @@index([ownerId, name])
-  @@index([ownerId, embeddingSpaceId])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, name])
+  @@index([ownerId, libraryMode, embeddingSpaceId])
   @@index([normalizedName(ops: raw("gin_trgm_ops"))], type: Gin, map: "EagleAiTag_normalizedName_trgm_idx")
 }
 
 model EagleAssetAiTag {
+  libraryMode         LibraryMode        @default(MATERIAL)
   ownerId             String
   assetId             String
   aiTagId             String
@@ -960,17 +1024,19 @@ model EagleAssetAiTag {
   promotedManualTagId String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
-  asset               EagleAsset         @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  aiTag               EagleAiTag         @relation(fields: [ownerId, aiTagId], references: [ownerId, id], onDelete: Cascade)
-  analysisRun         EagleAiAnalysisRun @relation(fields: [ownerId, analysisRunId], references: [ownerId, id], onDelete: Cascade)
-  promotedManualTag   EagleManualTag?    @relation("PromotedManualTag", fields: [ownerId, promotedManualTagId], references: [ownerId, id], onDelete: Restrict)
+  asset               EagleAsset         @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  aiTag               EagleAiTag         @relation(fields: [ownerId, libraryMode, aiTagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  analysisRun         EagleAiAnalysisRun @relation(fields: [ownerId, libraryMode, analysisRunId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  promotedManualTag   EagleManualTag?    @relation("PromotedManualTag", fields: [ownerId, libraryMode, promotedManualTagId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@id([ownerId, assetId, aiTagId, analysisRunId])
-  @@index([ownerId, aiTagId, assetId])
-  @@index([ownerId, analysisRunId])
+  @@unique([ownerId, libraryMode, assetId, aiTagId, analysisRunId])
+  @@index([ownerId, libraryMode, aiTagId, assetId])
+  @@index([ownerId, libraryMode, analysisRunId])
 }
 
 model EagleSmartFolder {
+  libraryMode    LibraryMode                           @default(MATERIAL)
   id             String                                @id @default(uuid())
   ownerId        String
   parentId       String?
@@ -988,41 +1054,47 @@ model EagleSmartFolder {
   createdAt      DateTime                              @default(now())
   updatedAt      DateTime                              @updatedAt
   owner          User                                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  parent         EagleSmartFolder?                     @relation("EagleSmartFolderTree", fields: [ownerId, parentId], references: [ownerId, id], onDelete: Restrict)
+  parent         EagleSmartFolder?                     @relation("EagleSmartFolderTree", fields: [ownerId, libraryMode, parentId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   children       EagleSmartFolder[]                    @relation("EagleSmartFolderTree")
   manualTagDeps  EagleSmartFolderManualTagDependency[]
   aiTagDeps      EagleSmartFolderAiTagDependency[]
 
-  @@unique([ownerId, normalizedName])
+  @@unique([ownerId, libraryMode, normalizedName])
   @@unique([ownerId, id])
-  @@index([ownerId, parentId, position, id])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, parentId, position, id])
 }
 
 model EagleSmartFolderManualTagDependency {
+  libraryMode   LibraryMode      @default(MATERIAL)
   ownerId       String
   smartFolderId String
   manualTagId   String
   createdAt     DateTime         @default(now())
-  smartFolder   EagleSmartFolder @relation(fields: [ownerId, smartFolderId], references: [ownerId, id], onDelete: Cascade)
-  manualTag     EagleManualTag   @relation(fields: [ownerId, manualTagId], references: [ownerId, id], onDelete: Restrict)
+  smartFolder   EagleSmartFolder @relation(fields: [ownerId, libraryMode, smartFolderId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  manualTag     EagleManualTag   @relation(fields: [ownerId, libraryMode, manualTagId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@id([ownerId, smartFolderId, manualTagId])
-  @@index([ownerId, manualTagId, smartFolderId])
+  @@unique([ownerId, libraryMode, smartFolderId, manualTagId])
+  @@index([ownerId, libraryMode, manualTagId, smartFolderId])
 }
 
 model EagleSmartFolderAiTagDependency {
+  libraryMode   LibraryMode      @default(MATERIAL)
   ownerId       String
   smartFolderId String
   aiTagId       String
   createdAt     DateTime         @default(now())
-  smartFolder   EagleSmartFolder @relation(fields: [ownerId, smartFolderId], references: [ownerId, id], onDelete: Cascade)
-  aiTag         EagleAiTag       @relation(fields: [ownerId, aiTagId], references: [ownerId, id], onDelete: Restrict)
+  smartFolder   EagleSmartFolder @relation(fields: [ownerId, libraryMode, smartFolderId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  aiTag         EagleAiTag       @relation(fields: [ownerId, libraryMode, aiTagId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
   @@id([ownerId, smartFolderId, aiTagId])
-  @@index([ownerId, aiTagId, smartFolderId])
+  @@unique([ownerId, libraryMode, smartFolderId, aiTagId])
+  @@index([ownerId, libraryMode, aiTagId, smartFolderId])
 }
 
 model EagleAssetProcessingJob {
+  libraryMode      LibraryMode               @default(MATERIAL)
   id               String                    @id @default(uuid())
   ownerId          String
   assetId          String
@@ -1041,20 +1113,22 @@ model EagleAssetProcessingJob {
   dependsOnJobId   String?
   createdAt        DateTime                  @default(now())
   updatedAt        DateTime                  @updatedAt
-  asset            EagleAsset                @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
-  dependsOnJob     EagleAssetProcessingJob?  @relation("EagleMediaJobDependency", fields: [dependsOnJobId], references: [id], onDelete: SetNull)
+  asset            EagleAsset                @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  dependsOnJob     EagleAssetProcessingJob?  @relation("EagleMediaJobDependency", fields: [ownerId, libraryMode, dependsOnJobId], references: [ownerId, libraryMode, id], onDelete: SetNull)
   dependentJobs    EagleAssetProcessingJob[] @relation("EagleMediaJobDependency")
 
   @@unique([assetId, kind, assetRevision, processorVersion])
+  @@unique([ownerId, libraryMode, id])
   @@index([status, lane, availableAt])
   @@index([status, lockedAt])
-  @@index([ownerId, assetId])
-  @@index([ownerId, status, kind, processorVersion])
+  @@index([ownerId, libraryMode, assetId])
+  @@index([ownerId, libraryMode, status, kind, processorVersion])
   @@index([dependsOnJobId, status])
   @@map("EagleMediaJob")
 }
 
 model EagleAssetColorAnalysis {
+  libraryMode      LibraryMode              @default(MATERIAL)
   id               String                   @id @default(uuid())
   ownerId          String
   assetId          String
@@ -1067,33 +1141,35 @@ model EagleAssetColorAnalysis {
   completedAt      DateTime?
   createdAt        DateTime                 @default(now())
   updatedAt        DateTime                 @updatedAt
-  asset            EagleAsset               @relation(fields: [ownerId, assetId], references: [ownerId, id], onDelete: Cascade)
+  asset            EagleAsset               @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   swatches         EagleAssetColorSwatch[]
 
   @@unique([ownerId, id])
   @@unique([assetId, assetRevision, processorVersion])
-  @@index([ownerId, assetId, assetRevision])
-  @@index([ownerId, processorVersion, isCurrent, status])
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, assetId, assetRevision])
+  @@index([ownerId, libraryMode, processorVersion, isCurrent, status])
   @@index([status, updatedAt])
 }
 
 model EagleAssetColorSwatch {
-  ownerId    String
-  analysisId String
-  rank       Int
-  hex        String
-  weight     Float
-  labL       Float
-  labA       Float
-  labB       Float
-  createdAt  DateTime                @default(now())
-  analysis   EagleAssetColorAnalysis @relation(fields: [ownerId, analysisId], references: [ownerId, id], onDelete: Cascade)
+  libraryMode LibraryMode             @default(MATERIAL)
+  ownerId     String
+  analysisId  String
+  rank        Int
+  hex         String
+  weight      Float
+  labL        Float
+  labA        Float
+  labB        Float
+  createdAt   DateTime                @default(now())
+  analysis    EagleAssetColorAnalysis @relation(fields: [ownerId, libraryMode, analysisId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
   @@id([analysisId, rank])
-  @@index([ownerId, analysisId])
+  @@index([ownerId, libraryMode, analysisId])
   @@index([hex])
-  @@index([ownerId, labL])
-  @@index([ownerId, labL, labA, labB])
+  @@index([ownerId, libraryMode, labL])
+  @@index([ownerId, libraryMode, labL, labA, labB])
 }
 
 model EagleProcessingWorkerHeartbeat {
@@ -1109,18 +1185,21 @@ model EagleProcessingWorkerHeartbeat {
 }
 
 model EagleProcessingSetting {
-  ownerId              String   @id
-  mode                 String   @default("NIGHT")
-  nightStart           String   @default("23:00")
-  nightEnd             String   @default("06:00")
-  aiTagManualEnabled   Boolean  @default(false)
-  aiTagScheduleEnabled Boolean  @default(false)
-  aiTagScheduleStart   String   @default("23:00")
-  aiTagScheduleEnd     String   @default("06:00")
-  timeZone             String   @default("Asia/Shanghai")
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  owner                User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  libraryMode          LibraryMode @default(MATERIAL)
+  ownerId              String
+  mode                 String      @default("NIGHT")
+  nightStart           String      @default("23:00")
+  nightEnd             String      @default("06:00")
+  aiTagManualEnabled   Boolean     @default(false)
+  aiTagScheduleEnabled Boolean     @default(false)
+  aiTagScheduleStart   String      @default("23:00")
+  aiTagScheduleEnd     String      @default("06:00")
+  timeZone             String      @default("Asia/Shanghai")
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  owner                User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@id([ownerId, libraryMode])
 }
 
 model AppDeploymentIdentity {

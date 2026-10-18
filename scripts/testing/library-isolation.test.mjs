@@ -18,7 +18,9 @@ async function isolated(run) {
   try {
     await prisma.$transaction(async (tx) => {
       const ownerId = randomUUID();
-      await tx.user.create({ data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'test-only' } });
+      await tx.user.create({
+        data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'test-only' },
+      });
       await run(tx, ownerId);
       throw rollback;
     });
@@ -45,37 +47,123 @@ async function tag(tx, ownerId, mode) {
   return id;
 }
 
-test('same owner can keep identical content and tag names independently in two libraries', () => isolated(async (tx, ownerId) => {
-  const material = await asset(tx, ownerId, 'MATERIAL');
-  const photo = await asset(tx, ownerId, 'PHOTO');
-  assert.notEqual(material, photo);
-  await tag(tx, ownerId, 'MATERIAL');
-  await tag(tx, ownerId, 'PHOTO');
-  const rows = await tx.$queryRaw(Prisma.sql`SELECT DISTINCT "libraryMode" FROM "EagleManualTag" WHERE "ownerId" = ${ownerId}`);
-  assert.equal(rows.length, 2);
-}));
+test('same owner can keep identical content and tag names independently in two libraries', () =>
+  isolated(async (tx, ownerId) => {
+    const material = await asset(tx, ownerId, 'MATERIAL');
+    const photo = await asset(tx, ownerId, 'PHOTO');
+    assert.notEqual(material, photo);
+    await tag(tx, ownerId, 'MATERIAL');
+    await tag(tx, ownerId, 'PHOTO');
+    const rows = await tx.$queryRaw(
+      Prisma.sql`SELECT DISTINCT "libraryMode" FROM "EagleManualTag" WHERE "ownerId" = ${ownerId}`,
+    );
+    assert.equal(rows.length, 2);
+  }));
 
-test('database rejects a photo linked to a material tag for the same owner', () => isolated(async (tx, ownerId) => {
-  const photo = await asset(tx, ownerId, 'PHOTO');
-  const materialTag = await tag(tx, ownerId, 'MATERIAL');
-  await assert.rejects(() => tx.$executeRaw(Prisma.sql`
+test('database rejects a photo linked to a material tag for the same owner', () =>
+  isolated(async (tx, ownerId) => {
+    const photo = await asset(tx, ownerId, 'PHOTO');
+    const materialTag = await tag(tx, ownerId, 'MATERIAL');
+    await assert.rejects(
+      () =>
+        tx.$executeRaw(Prisma.sql`
     INSERT INTO "EagleAssetManualTag" ("ownerId", "libraryMode", "assetId", "tagId")
     VALUES (${ownerId}, 'PHOTO'::"LibraryMode", ${photo}, ${materialTag})
-  `), /foreign key/i);
-}));
+  `),
+      /foreign key/i,
+    );
+  }));
 
-test('database rejects changing the mode of an existing resource', () => isolated(async (tx, ownerId) => {
-  const photo = await asset(tx, ownerId, 'PHOTO');
-  await assert.rejects(() => tx.$executeRaw(Prisma.sql`
+test('database rejects changing the mode of an existing resource', () =>
+  isolated(async (tx, ownerId) => {
+    const photo = await asset(tx, ownerId, 'PHOTO');
+    await assert.rejects(
+      () =>
+        tx.$executeRaw(Prisma.sql`
     UPDATE "EagleAsset" SET "libraryMode" = 'MATERIAL' WHERE id = ${photo}
-  `), /immutable/i);
-}));
+  `),
+      /immutable/i,
+    );
+  }));
 
-test('legacy writes without a mode remain material', () => isolated(async (tx, ownerId) => {
-  const row = await tx.eagleAsset.create({ data: {
-    ownerId, originalName: 'old.jpg', displayName: 'old', normalizedDisplayName: 'old', mimeType: 'image/jpeg', format: 'jpeg', byteSize: 1,
-    originalObjectKey: `users/${ownerId}/assets/${randomUUID()}/old.jpg`,
-  } });
-  const [stored] = await tx.$queryRaw(Prisma.sql`SELECT "libraryMode" FROM "EagleAsset" WHERE id = ${row.id}`);
-  assert.equal(stored.libraryMode, 'MATERIAL');
-}));
+test('legacy writes without a mode remain material', () =>
+  isolated(async (tx, ownerId) => {
+    const row = await tx.eagleAsset.create({
+      data: {
+        ownerId,
+        originalName: 'old.jpg',
+        displayName: 'old',
+        normalizedDisplayName: 'old',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        originalObjectKey: `users/${ownerId}/assets/${randomUUID()}/old.jpg`,
+      },
+    });
+    const [stored] = await tx.$queryRaw(
+      Prisma.sql`SELECT "libraryMode" FROM "EagleAsset" WHERE id = ${row.id}`,
+    );
+    assert.equal(stored.libraryMode, 'MATERIAL');
+  }));
+
+test('valid photo associations survive independently when material is deleted', () =>
+  isolated(async (tx, ownerId) => {
+    const material = await asset(tx, ownerId, 'MATERIAL');
+    const photo = await asset(tx, ownerId, 'PHOTO');
+    const photoTag = await tag(tx, ownerId, 'PHOTO');
+    await tx.$executeRaw(
+      Prisma.sql`INSERT INTO "EagleAssetManualTag" ("ownerId", "libraryMode", "assetId", "tagId") VALUES (${ownerId}, 'PHOTO'::"LibraryMode", ${photo}, ${photoTag})`,
+    );
+    await tx.eagleAsset.delete({ where: { id: material } });
+    assert.equal(await tx.eagleAsset.count({ where: { id: photo } }), 1);
+    assert.equal(await tx.eagleAssetManualTag.count({ where: { assetId: photo } }), 1);
+  }));
+
+test('processing settings have independent rows per library', () =>
+  isolated(async (tx, ownerId) => {
+    await tx.eagleProcessingSetting.create({
+      data: { ownerId, libraryMode: 'MATERIAL', mode: 'PAUSED' },
+    });
+    await tx.eagleProcessingSetting.create({
+      data: { ownerId, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+    });
+    assert.equal(await tx.eagleProcessingSetting.count({ where: { ownerId } }), 2);
+  }));
+
+test('every scoped table rejects membership changes through a database trigger', async () => {
+  const [missing] = await prisma.$queryRaw(Prisma.sql`
+    SELECT count(*)::integer AS count FROM information_schema.columns c
+    WHERE c.table_schema = 'public' AND c.column_name = 'libraryMode'
+      AND NOT EXISTS (SELECT 1 FROM information_schema.triggers t WHERE t.event_object_schema = c.table_schema AND t.event_object_table = c.table_name AND t.trigger_name = 'library_mode_immutable')
+  `);
+  assert.equal(missing.count, 0);
+});
+
+test('database rejects cross-library job dependencies', () =>
+  isolated(async (tx, ownerId) => {
+    const material = await asset(tx, ownerId, 'MATERIAL');
+    const photo = await asset(tx, ownerId, 'PHOTO');
+    const dependency = await tx.eagleAssetProcessingJob.create({
+      data: {
+        ownerId,
+        libraryMode: 'MATERIAL',
+        assetId: material,
+        kind: 'GENERATE_PREVIEW',
+        assetRevision: 0,
+      },
+    });
+    await assert.rejects(
+      () =>
+        tx.eagleAssetProcessingJob.create({
+          data: {
+            ownerId,
+            libraryMode: 'PHOTO',
+            assetId: photo,
+            kind: 'GENERATE_PREVIEW',
+            assetRevision: 0,
+            dependsOnJobId: dependency.id,
+          },
+        }),
+      /foreign key/i,
+    );
+  }));

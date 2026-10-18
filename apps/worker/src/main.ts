@@ -154,7 +154,9 @@ async function canClaimBackgroundForOwner(
   ownerId: string,
   kind: EagleAssetProcessingJob['kind'],
 ): Promise<boolean> {
-  const settings = await prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
+  const settings = await prisma.eagleProcessingSetting.findUnique({
+    where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+  });
   if (kind === 'GENERATE_AI_TAGS') {
     return canClaimAiTagJobs(
       settings?.aiTagManualEnabled ?? false,
@@ -797,7 +799,13 @@ async function processAiTaggingJob(
       const name = names[index]!;
       const normalizedName = normalizedNames[index]!;
       const tag = await transaction.eagleAiTag.upsert({
-        where: { ownerId_normalizedName: { ownerId: asset.ownerId, normalizedName } },
+        where: {
+          ownerId_libraryMode_normalizedName: {
+            libraryMode: 'MATERIAL',
+            ownerId: asset.ownerId,
+            normalizedName,
+          },
+        },
         create: { ownerId: asset.ownerId, name, normalizedName, embeddingSpaceId },
         update: { name, embeddingSpaceId },
         select: { id: true },

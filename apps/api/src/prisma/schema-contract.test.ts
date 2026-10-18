@@ -135,7 +135,10 @@ void test('manual tag recency is owner-scoped and backfilled only from user assi
   const schema = await schemaText();
   const manualTagModel = schema.match(/model EagleManualTag \{[\s\S]*?\n\}/)?.[0];
   assert.match(manualTagModel ?? '', /lastUsedAt\s+DateTime\?/);
-  assert.match(manualTagModel ?? '', /@@index\(\[ownerId, lastUsedAt\(sort: Desc\), id\]\)/);
+  assert.match(
+    manualTagModel ?? '',
+    /@@index\(\[ownerId, libraryMode, lastUsedAt\(sort: Desc\), id\]\)/,
+  );
 
   const migration = await manualTagRecencyMigrationText();
   assert.match(migration, /WHERE "assignedByUser" = true/);
@@ -147,7 +150,7 @@ void test('private tag rules are additive and do not migrate legacy asset privac
   const schema = await schemaText();
   const manualTagModel = schema.match(/model EagleManualTag \{[\s\S]*?\n\}/)?.[0];
   assert.match(manualTagModel ?? '', /marksAssetsPrivate\s+Boolean\s+@default\(false\)/);
-  assert.match(manualTagModel ?? '', /@@index\(\[ownerId, marksAssetsPrivate, id\]\)/);
+  assert.match(manualTagModel ?? '', /@@index\(\[ownerId, libraryMode, marksAssetsPrivate, id\]\)/);
 
   const migration = await privateTagRulesMigrationText();
   assert.match(migration, /ADD COLUMN "marksAssetsPrivate" BOOLEAN NOT NULL DEFAULT false/);

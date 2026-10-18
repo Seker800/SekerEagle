@@ -80,7 +80,7 @@ export class EagleAiTagService {
 
   async updateSettings(ownerId: string, input: UpdateEagleAiTagSettingsDto) {
     const row = await this.prisma.eagleProcessingSetting.upsert({
-      where: { ownerId },
+      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
       create: {
         ownerId,
         aiTagManualEnabled: input.manualEnabled,
@@ -219,7 +219,9 @@ export class EagleAiTagService {
   }
 
   private async getSettings(ownerId: string) {
-    const row = await this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
+    const row = await this.prisma.eagleProcessingSetting.findUnique({
+      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+    });
     return serializeSettings(row);
   }
 }

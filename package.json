@@ -47,7 +47,8 @@
     "performance:verify": "npm run performance:library:100k && npm run performance:media-memory && npm run performance:desktop-cache:100k",
     "mlx:test": "./scripts/mlx-embedding-host.sh test",
     "oss:check": "node ./scripts/check-oss-readiness.mjs",
-    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check"
+    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check",
+    "test:library-integration": "npm run build --workspace @sekereagle/config && node scripts/testing/run-library-tests.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

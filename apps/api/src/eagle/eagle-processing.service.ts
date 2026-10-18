@@ -297,7 +297,7 @@ export class EagleProcessingService {
   }
   async updateSettings(ownerId: string, input: UpdateEagleProcessingSettingsDto) {
     const row = await this.prisma.eagleProcessingSetting.upsert({
-      where: { ownerId },
+      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
       create: { ownerId, ...input },
       update: input,
     });
@@ -309,7 +309,9 @@ export class EagleProcessingService {
     };
   }
   async getSettings(ownerId: string) {
-    const row = await this.prisma.eagleProcessingSetting.findUnique({ where: { ownerId } });
+    const row = await this.prisma.eagleProcessingSetting.findUnique({
+      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+    });
     return {
       mode: row?.mode ?? 'NIGHT',
       nightStart: row?.nightStart ?? '23:00',

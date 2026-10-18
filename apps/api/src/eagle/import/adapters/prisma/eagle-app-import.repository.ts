@@ -139,7 +139,13 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     }
     const declarationHash = hashRunDeclaration(input);
     const existingBeforeLibraryMutation = await this.prisma.eagleImportRun.findUnique({
-      where: { ownerId_idempotencyKey: { ownerId, idempotencyKey: input.idempotencyKey } },
+      where: {
+        ownerId_libraryMode_idempotencyKey: {
+          libraryMode: 'MATERIAL',
+          ownerId,
+          idempotencyKey: input.idempotencyKey,
+        },
+      },
       select: RUN_SELECT,
     });
     if (existingBeforeLibraryMutation) {
@@ -161,7 +167,8 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       return await this.prisma.$transaction(async (transaction) => {
         const library = await transaction.eagleExternalLibrary.upsert({
           where: {
-            ownerId_provider_externalLibraryId: {
+            ownerId_libraryMode_provider_externalLibraryId: {
+              libraryMode: 'MATERIAL',
               ownerId,
               provider: 'EAGLE_APP',
               externalLibraryId: input.externalLibraryId,
@@ -182,7 +189,13 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         });
         resolvedLibraryId = library.id;
         const existing = await transaction.eagleImportRun.findUnique({
-          where: { ownerId_idempotencyKey: { ownerId, idempotencyKey: input.idempotencyKey } },
+          where: {
+            ownerId_libraryMode_idempotencyKey: {
+              libraryMode: 'MATERIAL',
+              ownerId,
+              idempotencyKey: input.idempotencyKey,
+            },
+          },
           select: RUN_SELECT,
         });
         if (existing) {
@@ -206,7 +219,13 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     } catch (error) {
       if (!resolvedLibraryId || !isPrismaUniqueConstraintError(error)) throw error;
       const replay = await this.prisma.eagleImportRun.findUnique({
-        where: { ownerId_idempotencyKey: { ownerId, idempotencyKey: input.idempotencyKey } },
+        where: {
+          ownerId_libraryMode_idempotencyKey: {
+            libraryMode: 'MATERIAL',
+            ownerId,
+            idempotencyKey: input.idempotencyKey,
+          },
+        },
         select: RUN_SELECT,
       });
       if (!replay) throw error;

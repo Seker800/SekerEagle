@@ -10,6 +10,7 @@ function job(
 ): EagleAssetProcessingJob {
   const now = new Date('2026-08-17T00:00:00.000Z');
   return {
+    libraryMode: 'MATERIAL',
     id,
     ownerId: 'owner-1',
     assetId: `asset-${id}`,
