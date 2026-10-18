@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
 
 describe('owner-scoped Eagle asset entity stores', () => {
@@ -13,6 +13,22 @@ describe('owner-scoped Eagle asset entity stores', () => {
 
     releaseSecond();
     expect(getEagleAssetEntityStore(ownerId)).not.toBe(store);
+  });
+
+  it('evicts every dependent page cache only after the final consumer leaves', () => {
+    const scope = crypto.randomUUID();
+    const store = getEagleAssetEntityStore(scope);
+    const firstCache = vi.fn();
+    const secondCache = vi.fn();
+    const releaseFirst = retainEagleAssetEntityStore(scope, store, firstCache);
+    const releaseSecond = retainEagleAssetEntityStore(scope, store, secondCache);
+    releaseFirst();
+    expect(firstCache).not.toHaveBeenCalled();
+    expect(secondCache).not.toHaveBeenCalled();
+    releaseSecond();
+    releaseSecond();
+    expect(firstCache).toHaveBeenCalledTimes(1);
+    expect(secondCache).toHaveBeenCalledTimes(1);
   });
 
   it('makes release idempotent', () => {

@@ -328,7 +328,13 @@ export function SekerEaglePage({
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
   const assetStore = useMemo(() => getEagleAssetEntityStore(storeScope), [storeScope]);
-  useEffect(() => retainEagleAssetEntityStore(storeScope, assetStore), [assetStore, storeScope]);
+  useEffect(
+    () =>
+      retainEagleAssetEntityStore(storeScope, assetStore, () => {
+        queryClient.removeQueries({ queryKey: queryKeys.assets });
+      }),
+    [assetStore, queryClient, queryKeys.assets, storeScope],
+  );
   const assetStoreRevision = useSyncExternalStore(
     assetStore.subscribe,
     assetStore.getSnapshot,

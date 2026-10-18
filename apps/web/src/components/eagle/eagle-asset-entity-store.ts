@@ -77,6 +77,7 @@ export class EagleAssetEntityStore {
 interface OwnerStoreEntry {
   store: EagleAssetEntityStore;
   references: number;
+  evictionCallbacks: Set<() => void>;
 }
 
 const ownerStores = new Map<string, OwnerStoreEntry>();
@@ -84,19 +85,26 @@ const ownerStores = new Map<string, OwnerStoreEntry>();
 export function getEagleAssetEntityStore(ownerId: string) {
   let entry = ownerStores.get(ownerId);
   if (!entry) {
-    entry = { store: new EagleAssetEntityStore(), references: 0 };
+    entry = { store: new EagleAssetEntityStore(), references: 0, evictionCallbacks: new Set() };
     ownerStores.set(ownerId, entry);
   }
   return entry.store;
 }
 
-export function retainEagleAssetEntityStore(ownerId: string, store: EagleAssetEntityStore) {
+export function retainEagleAssetEntityStore(
+  ownerId: string,
+  store: EagleAssetEntityStore,
+  onEviction?: () => void,
+) {
   let entry = ownerStores.get(ownerId);
   if (!entry) {
-    entry = { store, references: 0 };
+    entry = { store, references: 0, evictionCallbacks: new Set() };
     ownerStores.set(ownerId, entry);
   }
   if (entry.store !== store) throw new Error('Asset entity store instance mismatch.');
+  // Every cache that normalized pages against this store must evict its ID-only pages
+  // when the last consumer releases the entities, including earlier consumers.
+  if (onEviction) entry.evictionCallbacks.add(onEviction);
   entry.references += 1;
   let released = false;
   return () => {
@@ -106,5 +114,7 @@ export function retainEagleAssetEntityStore(ownerId: string, store: EagleAssetEn
     if (entry.references > 0 || ownerStores.get(ownerId) !== entry) return;
     ownerStores.delete(ownerId);
     entry.store.clear();
+    for (const callback of entry.evictionCallbacks) callback();
+    entry.evictionCallbacks.clear();
   };
 }
