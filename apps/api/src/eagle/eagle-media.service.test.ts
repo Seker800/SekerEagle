@@ -256,3 +256,21 @@ test('pyramid tiles validate coordinates and remain owner-scoped', async () => {
     /切片不存在/,
   );
 });
+
+test('camera playback ranges preserve mode authorization and private cache policy', async () => {
+  let query: any;
+  let options: any;
+  const prisma = {eagleAssetRendition:{findFirst:async (input:any)=>{query=input;return {storageKey:'users/owner-a/assets/video/renditions/1/preview.mp4',mimeType:'video/mp4',kind:'PREVIEW',revision:1,byteSize:100n,asset:{mediaRevision:1,isPrivate:false}};}}};
+  const storage = {getObject:async (_key:string,input:any)=>{options=input;return {Body:{},ContentType:'video/mp4',ContentLength:16,ContentRange:'bytes 0-15/100'};}};
+  const service = new EagleMediaService(prisma as never,storage as never,'PHOTO');
+  const media = await service.getRendition('owner-a','video','preview',undefined,false,undefined,'bytes=0-15');
+  assert.equal(query.where.libraryMode,'PHOTO');
+  assert.equal(query.where.ownerId,'owner-a');
+  assert.equal(options.range,'bytes=0-15');
+  assert.equal(media.fullSize,100n);
+  assert.equal(media.desktopCacheEligible,false);
+  let reads=0;
+  const denied = new EagleMediaService({eagleAssetRendition:{findFirst:async()=>null}} as never,{getObject:async()=>{reads++;}} as never,'PHOTO');
+  await assert.rejects(denied.getRendition('owner-a','foreign','preview',undefined,false,undefined,'invalid'),/预览文件不存在/);
+  assert.equal(reads,0);
+});
