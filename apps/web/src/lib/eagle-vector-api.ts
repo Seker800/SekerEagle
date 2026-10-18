@@ -1,6 +1,10 @@
+import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { fetchWithBrowserSession } from './api-client';
+
 import { errorFromResponse } from './api-error';
-import { getEagleRenditionContentUrl } from './eagle-api';
+
+import { createEagleApi, getEagleRenditionContentUrl as defaultRenditionUrl } from './eagle-api';
+
 export interface EagleVectorSummary {
   model: string;
   dimensions: number;
@@ -39,6 +43,7 @@ export interface EagleVectorSummary {
   };
   refreshedAt: string;
 }
+
 export interface EagleVectorTag {
   id: string;
   name: string;
@@ -63,6 +68,7 @@ export interface EagleVectorTag {
   } | null;
   pendingSuggestionCount: number;
 }
+
 export interface EagleVectorAssetPreview {
   id: string;
   displayName: string;
@@ -76,6 +82,7 @@ export interface EagleVectorAssetPreview {
     height: number | null;
   }>;
 }
+
 export interface EagleVectorSuggestion {
   id: string;
   score: number;
@@ -89,124 +96,175 @@ export interface EagleVectorSuggestion {
   };
   asset: EagleVectorAssetPreview;
 }
+
 export interface EagleUnclassifiedAsset extends EagleVectorAssetPreview {
   embeddings: Array<{
     status: string;
     errorCode: string | null;
   }>;
 }
+
 export interface EagleTagDistanceAsset {
   assetId: string;
   distance: number;
   prototypeRank: number;
   asset: EagleVectorAssetPreview;
 }
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetchWithBrowserSession(`/api/eagle/vector/${path}`, {
-    ...init,
-    headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
-  });
-  if (!response.ok) {
-    throw await errorFromResponse(response, '向量服务请求失败（{{value1}}）');
+export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
+  const getEagleRenditionContentUrl = (...args: Parameters<typeof defaultRenditionUrl>) =>
+    libraryMode === 'PHOTO'
+      ? createEagleApi(libraryMode).getEagleRenditionContentUrl(...args)
+      : defaultRenditionUrl(...args);
+
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetchWithBrowserSession(
+      libraryApiPath(`/api/eagle/vector/${path}`, libraryMode),
+      {
+        ...init,
+        headers: init?.body
+          ? { 'content-type': 'application/json', ...init.headers }
+          : init?.headers,
+      },
+    );
+    if (!response.ok) {
+      throw await errorFromResponse(response, '向量服务请求失败（{{value1}}）');
+    }
+    return response.json() as Promise<T>;
   }
-  return response.json() as Promise<T>;
+
+  const getVectorThumbnailUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {
+    const rendition =
+      asset.renditions.find(({ kind }) => kind === 'THUMBNAIL') ?? asset.renditions[0];
+    return rendition ? getEagleRenditionContentUrl(asset.id, rendition.id, 'THUMBNAIL') : null;
+  };
+
+  const getVectorPreviewUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {
+    const rendition =
+      asset.renditions.find(({ kind }) => kind === 'PREVIEW') ??
+      asset.renditions.find(({ kind }) => kind === 'THUMBNAIL');
+    return rendition
+      ? getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind ?? 'THUMBNAIL')
+      : null;
+  };
+
+  function fetchEagleVectorSummary() {
+    return request<EagleVectorSummary>('summary');
+  }
+
+  function listEagleVectorTags(query?: string) {
+    const params = new URLSearchParams();
+    if (query?.trim()) params.set('query', query.trim());
+    const suffix = params.size ? `?${params}` : '';
+    return request<EagleVectorTag[]>(`tags${suffix}`);
+  }
+
+  function setEagleVectorTagEnabled(tagId: string, recommendationEnabled: boolean) {
+    return request(`tags/${encodeURIComponent(tagId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ recommendationEnabled }),
+    });
+  }
+
+  function rebuildEagleVectorTag(tagId: string) {
+    return request(`tags/${encodeURIComponent(tagId)}/rebuild`, { method: 'POST', body: '{}' });
+  }
+
+  function listEagleVectorSuggestions(tagId?: string, cursor?: string) {
+    const query = new URLSearchParams({ limit: '40', sort: 'SCORE_DESC' });
+    if (tagId) query.set('tagId', tagId);
+    if (cursor) query.set('cursor', cursor);
+    return request<{
+      items: EagleVectorSuggestion[];
+      nextCursor: string | null;
+    }>(`suggestions?${query}`);
+  }
+
+  function reviewEagleVectorSuggestions(suggestionIds: string[], action: 'ACCEPT' | 'REJECT') {
+    return request<{
+      items: Array<{
+        id: string;
+        status: string;
+        assetId: string;
+        privacyChanged: boolean;
+      }>;
+    }>('suggestions/review-batch', {
+      method: 'POST',
+      body: JSON.stringify({ suggestionIds, action }),
+    });
+  }
+
+  function listEagleUnclassifiedAssets(cursor?: string) {
+    const query = new URLSearchParams({ limit: '40' });
+    if (cursor) query.set('cursor', cursor);
+    return request<{
+      items: EagleUnclassifiedAsset[];
+      nextCursor: string | null;
+    }>(`unclassified?${query}`);
+  }
+
+  function retryFailedEagleEmbeddings() {
+    return request<{
+      retried: number;
+    }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
+  }
+
+  function scanMissingEagleEmbeddings() {
+    return request<{
+      scanned: number;
+      created: number;
+      repaired: number;
+    }>('embeddings/scan-missing', {
+      method: 'POST',
+      body: '{}',
+    });
+  }
+
+  function scanUnclassifiedEagleSuggestions() {
+    return request<{
+      scanned: number;
+      matched: number;
+    }>('suggestions/scan-unclassified', {
+      method: 'POST',
+      body: '{}',
+    });
+  }
+
+  function listEagleTagDistanceAssets(tagId: string, direction: 'ASC' | 'DESC', cursor?: string) {
+    const query = new URLSearchParams({ limit: '40', direction });
+    if (cursor) query.set('cursor', cursor);
+    return request<{
+      items: EagleTagDistanceAsset[];
+      nextCursor: string | null;
+    }>(`tags/${encodeURIComponent(tagId)}/assets?${query}`);
+  }
+  return {
+    getVectorThumbnailUrl,
+    getVectorPreviewUrl,
+    fetchEagleVectorSummary,
+    listEagleVectorTags,
+    setEagleVectorTagEnabled,
+    rebuildEagleVectorTag,
+    listEagleVectorSuggestions,
+    reviewEagleVectorSuggestions,
+    listEagleUnclassifiedAssets,
+    retryFailedEagleEmbeddings,
+    scanMissingEagleEmbeddings,
+    scanUnclassifiedEagleSuggestions,
+    listEagleTagDistanceAssets,
+  };
 }
-export const getVectorThumbnailUrl = (
-  asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>,
-) => {
-  const rendition =
-    asset.renditions.find(({ kind }) => kind === 'THUMBNAIL') ?? asset.renditions[0];
-  return rendition ? getEagleRenditionContentUrl(asset.id, rendition.id, 'THUMBNAIL') : null;
-};
-export const getVectorPreviewUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {
-  const rendition =
-    asset.renditions.find(({ kind }) => kind === 'PREVIEW') ??
-    asset.renditions.find(({ kind }) => kind === 'THUMBNAIL');
-  return rendition
-    ? getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind ?? 'THUMBNAIL')
-    : null;
-};
-export function fetchEagleVectorSummary() {
-  return request<EagleVectorSummary>('summary');
-}
-export function listEagleVectorTags(query?: string) {
-  const params = new URLSearchParams();
-  if (query?.trim()) params.set('query', query.trim());
-  const suffix = params.size ? `?${params}` : '';
-  return request<EagleVectorTag[]>(`tags${suffix}`);
-}
-export function setEagleVectorTagEnabled(tagId: string, recommendationEnabled: boolean) {
-  return request(`tags/${encodeURIComponent(tagId)}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ recommendationEnabled }),
-  });
-}
-export function rebuildEagleVectorTag(tagId: string) {
-  return request(`tags/${encodeURIComponent(tagId)}/rebuild`, { method: 'POST', body: '{}' });
-}
-export function listEagleVectorSuggestions(tagId?: string, cursor?: string) {
-  const query = new URLSearchParams({ limit: '40', sort: 'SCORE_DESC' });
-  if (tagId) query.set('tagId', tagId);
-  if (cursor) query.set('cursor', cursor);
-  return request<{
-    items: EagleVectorSuggestion[];
-    nextCursor: string | null;
-  }>(`suggestions?${query}`);
-}
-export function reviewEagleVectorSuggestions(suggestionIds: string[], action: 'ACCEPT' | 'REJECT') {
-  return request<{
-    items: Array<{
-      id: string;
-      status: string;
-      assetId: string;
-      privacyChanged: boolean;
-    }>;
-  }>('suggestions/review-batch', {
-    method: 'POST',
-    body: JSON.stringify({ suggestionIds, action }),
-  });
-}
-export function listEagleUnclassifiedAssets(cursor?: string) {
-  const query = new URLSearchParams({ limit: '40' });
-  if (cursor) query.set('cursor', cursor);
-  return request<{
-    items: EagleUnclassifiedAsset[];
-    nextCursor: string | null;
-  }>(`unclassified?${query}`);
-}
-export function retryFailedEagleEmbeddings() {
-  return request<{
-    retried: number;
-  }>('embeddings/retry-failed', { method: 'POST', body: '{}' });
-}
-export function scanMissingEagleEmbeddings() {
-  return request<{
-    scanned: number;
-    created: number;
-    repaired: number;
-  }>('embeddings/scan-missing', {
-    method: 'POST',
-    body: '{}',
-  });
-}
-export function scanUnclassifiedEagleSuggestions() {
-  return request<{
-    scanned: number;
-    matched: number;
-  }>('suggestions/scan-unclassified', {
-    method: 'POST',
-    body: '{}',
-  });
-}
-export function listEagleTagDistanceAssets(
-  tagId: string,
-  direction: 'ASC' | 'DESC',
-  cursor?: string,
-) {
-  const query = new URLSearchParams({ limit: '40', direction });
-  if (cursor) query.set('cursor', cursor);
-  return request<{
-    items: EagleTagDistanceAsset[];
-    nextCursor: string | null;
-  }>(`tags/${encodeURIComponent(tagId)}/assets?${query}`);
-}
+export const {
+  getVectorThumbnailUrl,
+  getVectorPreviewUrl,
+  fetchEagleVectorSummary,
+  listEagleVectorTags,
+  setEagleVectorTagEnabled,
+  rebuildEagleVectorTag,
+  listEagleVectorSuggestions,
+  reviewEagleVectorSuggestions,
+  listEagleUnclassifiedAssets,
+  retryFailedEagleEmbeddings,
+  scanMissingEagleEmbeddings,
+  scanUnclassifiedEagleSuggestions,
+  listEagleTagDistanceAssets,
+} = createEagleVectorApi();

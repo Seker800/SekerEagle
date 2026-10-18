@@ -1,3 +1,4 @@
+import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { request } from './api-client';
 
 export interface PrivacyVisibilityState {
@@ -11,14 +12,22 @@ export const DEFAULT_PRIVACY_VISIBILITY: PrivacyVisibilityState = {
   durationHours: 3,
   expiresAt: null,
 };
+export function createPrivacyVisibilityApi(libraryMode: LibraryMode = 'MATERIAL') {
+  function getPrivacyVisibility() {
+    return request<PrivacyVisibilityState>(
+      libraryApiPath('/api/auth/privacy-visibility', libraryMode),
+    );
+  }
 
-export function getPrivacyVisibility() {
-  return request<PrivacyVisibilityState>('/api/auth/privacy-visibility');
+  function updatePrivacyVisibility(enabled: boolean, durationHours: number) {
+    return request<PrivacyVisibilityState>(
+      libraryApiPath('/api/auth/privacy-visibility', libraryMode),
+      {
+        method: 'PUT',
+        body: JSON.stringify({ enabled, durationHours }),
+      },
+    );
+  }
+  return { getPrivacyVisibility, updatePrivacyVisibility };
 }
-
-export function updatePrivacyVisibility(enabled: boolean, durationHours: number) {
-  return request<PrivacyVisibilityState>('/api/auth/privacy-visibility', {
-    method: 'PUT',
-    body: JSON.stringify({ enabled, durationHours }),
-  });
-}
+export const { getPrivacyVisibility, updatePrivacyVisibility } = createPrivacyVisibilityApi();

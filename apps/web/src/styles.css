@@ -1061,3 +1061,30 @@ select:focus-visible {
 .desktop-connection-button > span.is-online {
   background: #22c55e;
 }
+
+.library-mode-switch {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--border-color, #d6d7dc);
+  border-radius: 10px;
+  background: var(--surface-color, #fff);
+  z-index: 50;
+  box-shadow: 0 2px 12px #0001;
+}
+.library-mode-switch button {
+  padding: 5px 18px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.library-mode-switch button[aria-pressed='true'] {
+  background: #4f63df;
+  color: white;
+}

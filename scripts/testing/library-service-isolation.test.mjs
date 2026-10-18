@@ -177,3 +177,53 @@ test('pagination cursor is bound to its original owner and library', async () =>
     1,
   );
 });
+
+test('real Nest photo routes preserve guards and inject the photo service graph', async () => {
+  const defaults = {
+    NODE_ENV: 'test',
+    PORT: '3000',
+    CANONICAL_ORIGIN: 'http://localhost:8180',
+    JWT_ACCESS_SECRET: 'isolated-test-signing-key-at-least-32-characters',
+    ACCESS_TOKEN_TTL_SECONDS: '900',
+    REFRESH_TOKEN_TTL_SECONDS: '2592000',
+    S3_PUBLIC_ENDPOINT: 'http://localhost:8180',
+    S3_REGION: 'us-east-1',
+    S3_ACCESS_KEY_ID: 'isolated-test-only',
+    S3_SECRET_ACCESS_KEY: 'isolated-test-only',
+  };
+  for (const [key, value] of Object.entries(defaults)) process.env[key] ??= value;
+  const { NestFactory } = await import('@nestjs/core');
+  const { ValidationPipe } = await import('@nestjs/common');
+  const { default: cookieParser } = await import('cookie-parser');
+  const { AppModule } = await import('../../apps/api/dist/app.module.js');
+  const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
+  const app = await NestFactory.create(AppModule, { logger: false });
+  app.setGlobalPrefix('api');
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+  );
+  try {
+    await app.listen(0, '127.0.0.1');
+    const f = await fixtures();
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: f.ownerId } });
+    const session = await app.get(SessionTokenService).createSession(user);
+    const { ACCESS_COOKIE_NAME } = await import('../../apps/api/dist/auth/auth.constants.js');
+    const headers = { cookie: `${ACCESS_COOKIE_NAME}=${session.accessToken}` };
+    const base = await app.getUrl();
+    const response = await fetch(`${base}/api/photos/assets?limit=10`, { headers });
+    assert.equal(response.status, 200);
+    assert.deepEqual(
+      (await response.json()).items.map((row) => row.id),
+      [f.photo.id],
+    );
+    assert.equal((await fetch(`${base}/api/eagle/assets/${f.photo.id}`, { headers })).status, 404);
+    assert.equal(
+      (await fetch(`${base}/api/photos/assets/${f.material.id}`, { headers })).status,
+      404,
+    );
+    assert.equal((await fetch(`${base}/api/photos/assets`)).status, 401);
+  } finally {
+    await app.close();
+  }
+});

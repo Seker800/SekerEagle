@@ -1,3 +1,4 @@
+import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { t } from '../i18n';
 const UUID_V4 = '[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
 const TILE_PATH = new RegExp(
@@ -129,8 +130,10 @@ export function resolveEagleRenditionUrl(
   assetId: string,
   renditionId: string,
   renditionKind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER',
+  libraryMode: LibraryMode = 'MATERIAL',
 ): string {
   const fallback = `/api/eagle/assets/${encodeURIComponent(assetId)}/renditions/${encodeURIComponent(renditionId)}`;
+  if (libraryMode === 'PHOTO') return libraryApiPath(fallback, libraryMode);
   return resolveMediaRequest({ kind: 'RENDITION', renditionKind, assetId, renditionId }, fallback);
 }
 export function resolveEagleMediaPath(path: string): string {

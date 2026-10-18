@@ -1,3 +1,4 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
   useCallback,
@@ -23,16 +24,9 @@ import { request } from '../../lib/api-client';
 import type { User } from '../../App';
 import {
   DEFAULT_PRIVACY_VISIBILITY,
-  getPrivacyVisibility,
-  updatePrivacyVisibility,
   type PrivacyVisibilityState,
 } from '../../lib/privacy-visibility-api';
-import {
-  getEaglePrivacySettings,
-  listEaglePrivacyTagOptions,
-  updateEaglePrivacySettings,
-  type EaglePrivacyTagOption,
-} from '../../lib/eagle-privacy-api';
+import { type EaglePrivacyTagOption } from '../../lib/eagle-privacy-api';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 interface PersonalAccessToken {
   id: string;
@@ -101,6 +95,16 @@ export function AccountHome({
   onPrivacyVisibilityChange?: (state: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
 }) {
+  const {
+    api: {
+      getPrivacyVisibility,
+      updatePrivacyVisibility,
+      getEaglePrivacySettings,
+      listEaglePrivacyTagOptions,
+      updateEaglePrivacySettings,
+    },
+  } = useLibraryWorkspace();
+
   const [activeSection, setActiveSection] = useState<AccountSection>('PRIVACY');
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);

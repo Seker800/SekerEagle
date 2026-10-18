@@ -1,15 +1,14 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  fetchEagleAiTagSummary,
-  retryFailedEagleAiTags,
-  updateEagleAiTagSettings,
-  type EagleAiTagSettings,
-  type EagleAiTagSummary,
-} from '../../lib/eagle-ai-tag-api';
+import { type EagleAiTagSettings, type EagleAiTagSummary } from '../../lib/eagle-ai-tag-api';
 import styles from './EagleAiTagSetupPanel.module.css';
 type SavingPhase = 'idle' | 'starting' | 'stopping' | 'schedule' | 'retrying';
 export function EagleAiTagSetupPanel() {
+  const {
+    api: { fetchEagleAiTagSummary, retryFailedEagleAiTags, updateEagleAiTagSettings },
+  } = useLibraryWorkspace();
+
   const [summary, setSummary] = useState<EagleAiTagSummary | null>(null);
   const [phase, setPhase] = useState<SavingPhase>('idle');
   const [notice, setNotice] = useState('');

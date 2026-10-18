@@ -1,8 +1,5 @@
-import {
-  getEagleRenditionContentUrl,
-  type EagleAssetListItem,
-  type EaglePyramidDescriptor,
-} from '../../lib/eagle-api';
+import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
+import { type EagleAssetListItem, type EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { resolveEagleMediaPath } from '../../lib/media-resolver';
 
 const IMAGE_PYRAMID_DIMENSION_THRESHOLD = 4_096;
@@ -15,7 +12,9 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
   const selected =
     currentRenditions.find(({ kind }) => kind === 'PREVIEW') ??
     currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
-  return selected ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind) : null;
+  return selected
+    ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind, asset.libraryMode)
+    : null;
 }
 
 export function createEagleTileSource(descriptor: EaglePyramidDescriptor) {

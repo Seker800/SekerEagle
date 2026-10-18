@@ -1,3 +1,4 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
   useCallback,
@@ -36,11 +37,6 @@ import sekerEagleLogo from '../../assets/seker-eagle-logo.svg';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import {
-  getEagleAsset,
-  getEagleTrashAsset,
-  getEaglePyramidDescriptor,
-  listEagleAssets,
-  listEagleTrash,
   type EagleAsset,
   type EagleAssetListItem,
   type EagleAssetFilters,
@@ -52,7 +48,7 @@ import {
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
 import { canCopyImageToClipboard, copyImageToClipboard } from '../../lib/image-clipboard';
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
-import { fetchEagleVectorSummary } from '../../lib/eagle-vector-api';
+
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
@@ -184,11 +180,9 @@ const ASSET_LIST_STALE_TIME_MS = 5 * 60000;
 const ASSET_LIST_GC_TIME_MS = 30 * 60000;
 const EAGLE_PREFERENCES_KEY = 'seker-eagle.preferences.v1';
 const DEFAULT_THUMBNAIL_SIZE = 210;
-function readThumbnailSize(): number {
+function readThumbnailSize(preferencesKey = EAGLE_PREFERENCES_KEY): number {
   try {
-    const preferences: unknown = JSON.parse(
-      window.localStorage.getItem(EAGLE_PREFERENCES_KEY) ?? '{}',
-    );
+    const preferences: unknown = JSON.parse(window.localStorage.getItem(preferencesKey) ?? '{}');
     const value =
       typeof preferences === 'object' && preferences !== null && 'thumbnailSize' in preferences
         ? preferences.thumbnailSize
@@ -216,13 +210,27 @@ export function SekerEaglePage({
   privacyVisibility,
   privacyRulesRevision = 0,
 }: SekerEaglePageProps) {
+  const { libraryMode } = useLibraryWorkspace();
+  const storeScope = JSON.stringify([ownerId, libraryMode]);
+  const preferencesKey = `${EAGLE_PREFERENCES_KEY}:${storeScope}`;
+  const {
+    api: {
+      getEagleAsset,
+      getEagleTrashAsset,
+      getEaglePyramidDescriptor,
+      listEagleAssets,
+      listEagleTrash,
+      fetchEagleVectorSummary,
+    },
+  } = useLibraryWorkspace();
+
   const accessToken = providedAccessToken ?? '';
   const queryClient = useQueryClient();
   const privateVisible = privacyVisibility?.enabled === true;
   const queryKeys = useMemo(() => {
     if (!ownerId) throw new Error('SekerEagle requires an authenticated owner identity.');
-    return createEagleQueryKeys(ownerId);
-  }, [ownerId]);
+    return createEagleQueryKeys(ownerId, libraryMode);
+  }, [ownerId, libraryMode]);
   const thumbnailScheduler = useMemo(() => new MediaLoadScheduler(), [ownerId]);
   const thumbnailLoadService = useMemo(() => new ThumbnailLoadService(), [ownerId]);
   const assetViewport = useEagleAssetViewport();
@@ -261,20 +269,20 @@ export function SekerEaglePage({
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
   const { scrollTop, viewportHeight } = assetViewport;
-  const [thumbnailSize, setThumbnailSize] = useState(readThumbnailSize);
+  const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const [editorTitle, setEditorTitle] = useState('');
   const [editorDescription, setEditorDescription] = useState('');
   const [editorSourceUrl, setEditorSourceUrl] = useState('');
   const imagePreview = useImagePreviewState();
   const { importFiles, uploadStatus } = useEagleUploadController(accessToken, queryKeys.assets);
   useEffect(() => {
-    window.localStorage.setItem(EAGLE_PREFERENCES_KEY, JSON.stringify({ thumbnailSize }));
-  }, [thumbnailSize]);
+    window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
+  }, [thumbnailSize, preferencesKey]);
   useEffect(() => {
     setOriginalFileError(null);
     setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
-  }, [ownerId]);
+  }, [ownerId, libraryMode]);
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
       aiTagsEnabled:
@@ -282,7 +290,7 @@ export function SekerEaglePage({
     });
   const workspaceSection = getWorkspaceSection(libraryView);
   const vectorSummaryQuery = useQuery({
-    queryKey: ['eagle', ownerId, 'vector-summary'],
+    queryKey: [...queryKeys.root, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
     staleTime: 60_000,
     refetchInterval:
@@ -305,8 +313,8 @@ export function SekerEaglePage({
     smartFolderId: activeSmartFolderId ?? undefined,
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
-  const assetStore = useMemo(() => getEagleAssetEntityStore(ownerId), [ownerId]);
-  useEffect(() => retainEagleAssetEntityStore(ownerId, assetStore), [assetStore, ownerId]);
+  const assetStore = useMemo(() => getEagleAssetEntityStore(storeScope), [storeScope]);
+  useEffect(() => retainEagleAssetEntityStore(storeScope, assetStore), [assetStore, storeScope]);
   const assetStoreRevision = useSyncExternalStore(
     assetStore.subscribe,
     assetStore.getSnapshot,
@@ -532,7 +540,7 @@ export function SekerEaglePage({
     previewImageAsset && needsEagleImagePyramid(previewImageAsset.width, previewImageAsset.height),
   );
   const previewPyramidQuery = useQuery({
-    queryKey: ['eagle', ownerId, 'pyramid', imagePreview.previewImage?.assetId ?? 'none'],
+    queryKey: [...queryKeys.root, 'pyramid', imagePreview.previewImage?.assetId ?? 'none'],
     queryFn: ({ signal }) =>
       getEaglePyramidDescriptor(accessToken, imagePreview.previewImage!.assetId!, signal),
     enabled: Boolean(imagePreview.previewImage?.assetId && previewCanHavePyramid),
@@ -688,7 +696,7 @@ export function SekerEaglePage({
       y: Math.max(8, Math.min(y, window.innerHeight - 280)),
     });
   };
-  const desktopAssetDragBridge = getDesktopAssetDragBridge();
+  const desktopAssetDragBridge = libraryMode === 'PHOTO' ? null : getDesktopAssetDragBridge();
   const assetDragSession = useMemo(
     () =>
       desktopAssetDragBridge
@@ -883,7 +891,10 @@ export function SekerEaglePage({
       onDrop={handleDrop}
     >
       <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
-        <nav className={styles.sidebar} aria-label={t('素材库导航')}>
+        <nav
+          className={styles.sidebar}
+          aria-label={libraryMode === 'PHOTO' ? t('照片库导航') : t('素材库导航')}
+        >
           <div className={styles.sidebarHeader}>
             <div className={styles.brand}>
               <span className={styles.mark} aria-hidden="true">
@@ -900,7 +911,7 @@ export function SekerEaglePage({
             onClick={() => changeLibraryView('ACTIVE')}
           >
             <IconPhoto size={17} />
-            {' ' + t('全部素材') + ' '}
+            {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
             {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{assets.length}</span>}
           </button>
           {privateVisible && (
@@ -908,10 +919,10 @@ export function SekerEaglePage({
               className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
               type="button"
               onClick={() => changeLibraryView('PRIVATE')}
-              aria-label={t('隐私素材')}
+              aria-label={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
             >
               <IconLock size={17} />
-              {' ' + t('隐私素材') + ' '}
+              {' ' + (libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')) + ' '}
               {libraryView === 'PRIVATE' && <span>{assets.length}</span>}
             </button>
           )}
@@ -1125,8 +1136,11 @@ export function SekerEaglePage({
                     {libraryView === 'TRASH'
                       ? t('回收站')
                       : libraryView === 'PRIVATE'
-                        ? t('隐私素材')
-                        : (activeSmartFolder?.name ?? t('全部素材'))}
+                        ? libraryMode === 'PHOTO'
+                          ? t('隐私照片')
+                          : t('隐私素材')
+                        : (activeSmartFolder?.name ??
+                          (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')))}
                   </h1>
                   <span>
                     {assets.length}
@@ -1400,7 +1414,10 @@ export function SekerEaglePage({
                             </span>
                           )}
                           {asset.isPrivate && (
-                            <span className={styles.privateMark} title={t('隐私素材')}>
+                            <span
+                              className={styles.privateMark}
+                              title={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
+                            >
                               <IconLock size={12} />
                             </span>
                           )}

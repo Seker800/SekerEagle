@@ -1,11 +1,9 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
+import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
-import {
-  getEagleAssetContentUrl,
-  getEagleRenditionContentUrl,
-  type EagleAssetListItem,
-} from '../../lib/eagle-api';
+import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import {
   ThumbnailLoadError,
@@ -41,7 +39,9 @@ export function getEagleAssetThumbnailUrls(
     const selected =
       candidates.find((rendition) => (rendition.width ?? 0) >= targetPixelWidth) ??
       candidates.at(-1);
-    return selected ? [getEagleRenditionContentUrl(asset.id, selected.id, selected.kind)] : [];
+    return selected
+      ? [getEagleRenditionContentUrl(asset.id, selected.id, selected.kind, asset.libraryMode)]
+      : [];
   });
 }
 export function EagleAssetThumbnail({
@@ -59,6 +59,10 @@ export function EagleAssetThumbnail({
   displayWidth: number;
   alt?: string;
 }) {
+  const {
+    api: { getEagleAssetContentUrl },
+  } = useLibraryWorkspace();
+
   const targetPixelWidth = Math.max(
     1,
     Math.ceil(displayWidth * (globalThis.devicePixelRatio || 1)),

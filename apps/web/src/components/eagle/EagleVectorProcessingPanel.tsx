@@ -1,13 +1,13 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useCallback, useEffect, useState } from 'react';
-import {
-  fetchEagleVectorSummary,
-  retryFailedEagleEmbeddings,
-  scanMissingEagleEmbeddings,
-  type EagleVectorSummary,
-} from '../../lib/eagle-vector-api';
+import { type EagleVectorSummary } from '../../lib/eagle-vector-api';
 import styles from './EagleVectorProcessingPanel.module.css';
 export function EagleVectorProcessingPanel({ compact = false }: { compact?: boolean } = {}) {
+  const {
+    api: { fetchEagleVectorSummary, retryFailedEagleEmbeddings, scanMissingEagleEmbeddings },
+  } = useLibraryWorkspace();
+
   const [summary, setSummary] = useState<EagleVectorSummary | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

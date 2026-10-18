@@ -1,4 +1,14 @@
-import { Controller, Module } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Put,
+  Req,
+  Res,
+  SetMetadata,
+  UseGuards,
+  Module,
+} from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
@@ -9,33 +19,67 @@ import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
 import { EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
 import { EagleMaintenanceService } from '../eagle/eagle-maintenance.service';
+import type { Request, Response } from 'express';
+import { AccessAuthGuard } from '../auth/access-auth.guard';
+import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
+import { BrowserOriginGuard } from '../auth/browser-origin.guard';
+import { CurrentPrincipal } from '../auth/current-principal.decorator';
+import type { AuthPrincipal } from '../auth/auth.types';
+import { PrivacyVisibilityService } from '../auth/privacy-visibility.service';
+import { UpdatePrivacyVisibilityDto } from '../auth/dto';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photos')
 @Controller('photos')
 export class PhotosController extends EagleController {}
 
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photo-uploads')
 @Controller('photos/uploads')
 export class PhotoUploadsController extends EagleUploadController {}
 
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photo-ai-tags')
 @Controller('photos/ai-tags')
 export class PhotoAiTagsController extends EagleAiTagController {}
 
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photo-vectors')
 @Controller('photos/vector')
 export class PhotoVectorsController extends EagleVectorController {}
 
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photo-processing')
 @Controller('admin/photo-processing')
 export class PhotoProcessingController extends EagleProcessingController {}
+
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
+@Controller('photos/privacy-visibility')
+@UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
+export class PhotoPrivacyVisibilityController {
+  constructor(private readonly visibility: PrivacyVisibilityService) {}
+  @Get()
+  get(@CurrentPrincipal() principal: AuthPrincipal, @Req() request: Request) {
+    return this.visibility.getStatus(principal.sub, request, 'PHOTO');
+  }
+  @Put()
+  @UseGuards(BrowserOriginGuard)
+  update(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: UpdatePrivacyVisibilityDto,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    return this.visibility.update(principal.sub, response, input, 'PHOTO');
+  }
+}
 
 /** Mode is a fixed dependency of this module, never a mutable current-page setting. */
 @Module({
   imports: [AuthModule, StorageModule],
   controllers: [
     PhotosController,
+    PhotoPrivacyVisibilityController,
     PhotoUploadsController,
     PhotoAiTagsController,
     PhotoVectorsController,

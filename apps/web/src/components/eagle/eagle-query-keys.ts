@@ -1,5 +1,8 @@
-export function createEagleQueryKeys(ownerId: string) {
-  const root = ['eagle', ownerId] as const;
+export function createEagleQueryKeys(
+  ownerId: string,
+  libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
+) {
+  const root = ['eagle', ownerId, libraryMode] as const;
   return {
     root,
     assets: [...root, 'assets'] as const,

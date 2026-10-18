@@ -1,10 +1,15 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useState } from 'react';
 import { useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { mapWithConcurrency } from '../../lib/async-pool';
-import { uploadEagleAsset } from '../../lib/eagle-api';
+
 const EAGLE_IMPORT_CONCURRENCY = 2;
 export function useEagleUploadController(accessToken: string, assetsQueryKey: QueryKey) {
+  const {
+    api: { uploadEagleAsset },
+  } = useLibraryWorkspace();
+
   const queryClient = useQueryClient();
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const importFiles = async (files: File[]) => {

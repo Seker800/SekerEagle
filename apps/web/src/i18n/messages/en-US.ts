@@ -1,4 +1,11 @@
 export const enUS = {
+  图库模式: 'Library mode',
+  照片: 'Photos',
+  全部照片: 'All photos',
+  照片时间线: 'Photo timeline',
+  照片库导航: 'Photo library navigation',
+  隐私照片: 'Private photos',
+
   '，请重试。': ', please try again.',
   '，已提交 {{value1}} 个标签中心刷新': 'Submitted {{value1}} tag centroid refreshes',
   '；标签中心暂未刷新，请保留基础图片后手动生成':

@@ -1,3 +1,4 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,7 +10,7 @@ import {
   type EagleFilterQuery,
 } from '@sekereagle/eagle-filter-core';
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
-import { countEagleAssets } from '../../lib/eagle-api';
+
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { EagleRuleBuilder } from './EagleRuleBuilder';
 import styles from './EagleSmartFolderDialog.module.css';
@@ -48,13 +49,19 @@ export function EagleSmartFolderDialog({
   onClose,
   onSave,
 }: EagleSmartFolderDialogProps) {
+  const {
+    libraryMode,
+    ownerId,
+    api: { countEagleAssets },
+  } = useLibraryWorkspace();
+
   const [name, setName] = useState(initialName);
   const [query, setQuery] = useState(() => createEditableQuery(initialQuery));
   const deferredQuery = useDebouncedValue(query, 250);
   const activeConditionCount = countActiveEagleFilterRules(query);
   const hasActiveDeferredCondition = countActiveEagleFilterRules(deferredQuery) > 0;
   const countQuery = useQuery({
-    queryKey: ['eagle', 'smart-folder-preview', deferredQuery],
+    queryKey: ['eagle', ownerId, libraryMode, 'smart-folder-preview', deferredQuery],
     queryFn: () => countEagleAssets(accessToken, deferredQuery),
     enabled: hasActiveDeferredCondition,
     staleTime: 10000,

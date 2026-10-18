@@ -1,24 +1,9 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { mapWithConcurrency } from '../../lib/async-pool';
 import {
-  batchChangeEagleManualTags,
-  batchUpdateEagleAssets,
-  batchRestoreEagleAssets,
-  batchTrashEagleAssets,
-  createEagleManualTag,
-  createEagleManualTagGroup,
-  createEagleSmartFolder,
-  deleteEagleManualTag,
-  deleteEagleManualTagGroup,
-  emptyEagleTrash,
-  moveEagleSmartFolder,
-  replaceEagleAssetManualTags,
-  updateEagleAsset,
-  updateEagleManualTag,
-  updateEagleManualTagGroup,
-  updateEagleSmartFolder,
   type EagleAsset,
   type EagleAssetChanges,
   type EagleAssetVersion,
@@ -59,6 +44,27 @@ export function useEagleMutations(
   queryKeys: EagleQueryKeys,
   callbacks: EagleMutationCallbacks,
 ) {
+  const {
+    api: {
+      batchChangeEagleManualTags,
+      batchUpdateEagleAssets,
+      batchRestoreEagleAssets,
+      batchTrashEagleAssets,
+      createEagleManualTag,
+      createEagleManualTagGroup,
+      createEagleSmartFolder,
+      deleteEagleManualTag,
+      deleteEagleManualTagGroup,
+      emptyEagleTrash,
+      moveEagleSmartFolder,
+      replaceEagleAssetManualTags,
+      updateEagleAsset,
+      updateEagleManualTag,
+      updateEagleManualTagGroup,
+      updateEagleSmartFolder,
+    },
+  } = useLibraryWorkspace();
+
   const queryClient = useQueryClient();
   const invalidate = (...queryKeysToInvalidate: QueryKey[]) =>
     Promise.all(

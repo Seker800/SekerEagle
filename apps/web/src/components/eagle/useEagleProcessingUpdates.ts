@@ -1,6 +1,7 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, type QueryKey } from '@tanstack/react-query';
-import { listEagleAssetUpdates, type EagleAssetListItem } from '../../lib/eagle-api';
+import { type EagleAssetListItem } from '../../lib/eagle-api';
 import type { EagleAssetEntityStore } from './eagle-asset-entity-store';
 
 export function getEagleProcessingPollInterval(
@@ -18,6 +19,10 @@ export function useEagleProcessingUpdates(input: {
   assetStore: EagleAssetEntityStore;
   updatesQueryKey: (assetIds: string[]) => QueryKey;
 }) {
+  const {
+    api: { listEagleAssetUpdates },
+  } = useLibraryWorkspace();
+
   const [visibility, setVisibility] = useState<DocumentVisibilityState>(() =>
     typeof document === 'undefined' ? 'visible' : document.visibilityState,
   );

@@ -479,7 +479,9 @@ describe('SekerEaglePage', () => {
     fireEvent.change(slider, { target: { value: '320' } });
 
     expect(slider).toHaveValue('320');
-    expect(window.localStorage.getItem('seker-eagle.preferences.v1')).toContain('320');
+    expect(
+      window.localStorage.getItem('seker-eagle.preferences.v1:["owner-test","MATERIAL"]'),
+    ).toContain('320');
   });
 
   it('applies common filters from a dedicated quick-filter popover', async () => {

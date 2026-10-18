@@ -1,7 +1,8 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useEffect, useRef } from 'react';
 import { IconX } from '@tabler/icons-react';
-import { getEagleAssetContentUrl, type EagleAssetListItem } from '../../lib/eagle-api';
+import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { getEaglePreviewContentUrl } from './eagle-media-sources';
 import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
@@ -9,6 +10,10 @@ interface EagleAssetLightboxProps {
   onClose: () => void;
 }
 export function EagleAssetLightbox({ asset, onClose }: EagleAssetLightboxProps) {
+  const {
+    api: { getEagleAssetContentUrl },
+  } = useLibraryWorkspace();
+
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     dialogRef.current?.focus();

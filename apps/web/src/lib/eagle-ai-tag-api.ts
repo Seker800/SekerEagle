@@ -1,5 +1,8 @@
+import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { fetchWithBrowserSession } from './api-client';
+
 import { errorFromResponse } from './api-error';
+
 export interface EagleAiTagSummary {
   eligible: number;
   analyzed: number;
@@ -13,6 +16,7 @@ export interface EagleAiTagSummary {
   };
   settings: EagleAiTagSettings;
 }
+
 export interface EagleAiTagSettings {
   manualEnabled: boolean;
   scheduleEnabled: boolean;
@@ -20,30 +24,51 @@ export interface EagleAiTagSettings {
   scheduleEnd: string;
   timeZone: 'Asia/Shanghai';
 }
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetchWithBrowserSession(`/api/eagle/ai-tags${path}`, init);
-  if (!response.ok) {
-    throw await errorFromResponse(response, '请求失败（{{value1}}）');
+export function createEagleAiTagApi(libraryMode: LibraryMode = 'MATERIAL') {
+  async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const response = await fetchWithBrowserSession(
+      libraryApiPath(`/api/eagle/ai-tags${path}`, libraryMode),
+      init,
+    );
+    if (!response.ok) {
+      throw await errorFromResponse(response, '请求失败（{{value1}}）');
+    }
+    return response.json() as Promise<T>;
   }
-  return response.json() as Promise<T>;
+
+  function fetchEagleAiTagSummary() {
+    return request<EagleAiTagSummary>('/summary');
+  }
+
+  function scanMissingEagleAiTags() {
+    return request<{
+      created: number;
+    }>('/scan-missing', { method: 'POST' });
+  }
+
+  function retryFailedEagleAiTags() {
+    return request<{
+      retried: number;
+    }>('/retry-failed', { method: 'POST' });
+  }
+
+  function updateEagleAiTagSettings(settings: Omit<EagleAiTagSettings, 'timeZone'>) {
+    return request<EagleAiTagSettings>('/settings', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+  }
+  return {
+    fetchEagleAiTagSummary,
+    scanMissingEagleAiTags,
+    retryFailedEagleAiTags,
+    updateEagleAiTagSettings,
+  };
 }
-export function fetchEagleAiTagSummary() {
-  return request<EagleAiTagSummary>('/summary');
-}
-export function scanMissingEagleAiTags() {
-  return request<{
-    created: number;
-  }>('/scan-missing', { method: 'POST' });
-}
-export function retryFailedEagleAiTags() {
-  return request<{
-    retried: number;
-  }>('/retry-failed', { method: 'POST' });
-}
-export function updateEagleAiTagSettings(settings: Omit<EagleAiTagSettings, 'timeZone'>) {
-  return request<EagleAiTagSettings>('/settings', {
-    method: 'PATCH',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(settings),
-  });
-}
+export const {
+  fetchEagleAiTagSummary,
+  scanMissingEagleAiTags,
+  retryFailedEagleAiTags,
+  updateEagleAiTagSettings,
+} = createEagleAiTagApi();

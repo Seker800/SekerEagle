@@ -1,12 +1,7 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import {
-  fetchEagleProcessingSummary,
-  listEagleProcessingJobs,
-  reconcileEagleProcessingJobs,
-  retryAllFailedEagleProcessingJobs,
-  retryEagleProcessingJob,
-  updateEagleProcessingSettings,
   type EagleProcessingJob,
   type EagleProcessingLane,
   type EagleProcessingMode,
@@ -76,6 +71,17 @@ export function EagleProcessingPage({
   accessToken?: string;
   canManageProcessing?: boolean;
 } = {}) {
+  const {
+    api: {
+      fetchEagleProcessingSummary,
+      listEagleProcessingJobs,
+      reconcileEagleProcessingJobs,
+      retryAllFailedEagleProcessingJobs,
+      retryEagleProcessingJob,
+      updateEagleProcessingSettings,
+    },
+  } = useLibraryWorkspace();
+
   const accessToken = providedAccessToken ?? '';
   const [summary, setSummary] = useState<EagleProcessingSummary | null>(null);
   const [jobs, setJobs] = useState<EagleProcessingJob[]>([]);

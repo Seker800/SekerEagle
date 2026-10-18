@@ -1,18 +1,9 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { IconCheck, IconMaximize, IconTags, IconTrash } from '@tabler/icons-react';
-import { listEagleManualTags, type EagleManualTag } from '../../lib/eagle-api';
+import { type EagleManualTag } from '../../lib/eagle-api';
 import {
-  getVectorThumbnailUrl,
-  getVectorPreviewUrl,
-  listEagleTagDistanceAssets,
-  listEagleUnclassifiedAssets,
-  listEagleVectorSuggestions,
-  listEagleVectorTags,
-  rebuildEagleVectorTag,
-  reviewEagleVectorSuggestions,
-  scanUnclassifiedEagleSuggestions,
-  setEagleVectorTagEnabled,
   type EagleTagDistanceAsset,
   type EagleUnclassifiedAsset,
   type EagleVectorAssetPreview,
@@ -51,6 +42,21 @@ export function EagleVectorWorkspace({
   onTrashAssets,
   onAssetPrivacyChanged,
 }: EagleVectorWorkspaceProps = {}) {
+  const {
+    api: {
+      listEagleManualTags,
+      getVectorPreviewUrl,
+      listEagleTagDistanceAssets,
+      listEagleUnclassifiedAssets,
+      listEagleVectorSuggestions,
+      listEagleVectorTags,
+      rebuildEagleVectorTag,
+      reviewEagleVectorSuggestions,
+      scanUnclassifiedEagleSuggestions,
+      setEagleVectorTagEnabled,
+    },
+  } = useLibraryWorkspace();
+
   const [tags, setTags] = useState<EagleVectorTag[]>([]);
   const [suggestions, setSuggestions] = useState<EagleVectorSuggestion[]>([]);
   const [unclassified, setUnclassified] = useState<EagleUnclassifiedAsset[]>([]);
@@ -1220,6 +1226,10 @@ function Preview({
     }>;
   };
 }) {
+  const {
+    api: { getVectorThumbnailUrl },
+  } = useLibraryWorkspace();
+
   const src = getVectorThumbnailUrl(asset);
   return src ? (
     <img src={src} alt="" loading="lazy" />

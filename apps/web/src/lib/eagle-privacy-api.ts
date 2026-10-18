@@ -1,3 +1,4 @@
+import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { request } from './api-client';
 
 export interface EaglePrivacySettings {
@@ -11,18 +12,27 @@ export interface EaglePrivacyTagOption {
   pinyin: string;
   pinyinInitials: string;
 }
+export function createEaglePrivacyApi(libraryMode: LibraryMode = 'MATERIAL') {
+  function getEaglePrivacySettings() {
+    return request<EaglePrivacySettings>(
+      libraryApiPath('/api/eagle/privacy-settings', libraryMode),
+    );
+  }
 
-export function getEaglePrivacySettings() {
-  return request<EaglePrivacySettings>('/api/eagle/privacy-settings');
-}
+  function listEaglePrivacyTagOptions() {
+    return request<EaglePrivacyTagOption[]>(libraryApiPath('/api/eagle/tags', libraryMode));
+  }
 
-export function listEaglePrivacyTagOptions() {
-  return request<EaglePrivacyTagOption[]>('/api/eagle/tags');
+  function updateEaglePrivacySettings(tagIds: string[]) {
+    return request<EaglePrivacySettings>(
+      libraryApiPath('/api/eagle/privacy-settings', libraryMode),
+      {
+        method: 'PUT',
+        body: JSON.stringify({ tagIds }),
+      },
+    );
+  }
+  return { getEaglePrivacySettings, listEaglePrivacyTagOptions, updateEaglePrivacySettings };
 }
-
-export function updateEaglePrivacySettings(tagIds: string[]) {
-  return request<EaglePrivacySettings>('/api/eagle/privacy-settings', {
-    method: 'PUT',
-    body: JSON.stringify({ tagIds }),
-  });
-}
+export const { getEaglePrivacySettings, listEaglePrivacyTagOptions, updateEaglePrivacySettings } =
+  createEaglePrivacyApi();

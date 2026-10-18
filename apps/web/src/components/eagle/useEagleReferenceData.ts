@@ -1,10 +1,6 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useQuery } from '@tanstack/react-query';
-import {
-  listEagleAiTags,
-  listEagleManualTagGroups,
-  listEagleManualTags,
-  listEagleSmartFolders,
-} from '../../lib/eagle-api';
+
 import type { createEagleQueryKeys } from './eagle-query-keys';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
@@ -14,6 +10,10 @@ export function useEagleReferenceData(
   queryKeys: EagleQueryKeys,
   options: { aiTagsEnabled: boolean },
 ) {
+  const {
+    api: { listEagleAiTags, listEagleManualTagGroups, listEagleManualTags, listEagleSmartFolders },
+  } = useLibraryWorkspace();
+
   const manualTagsQuery = useQuery({
     queryKey: queryKeys.manualTags,
     queryFn: () => listEagleManualTags(accessToken),

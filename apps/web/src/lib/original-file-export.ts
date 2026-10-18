@@ -1,3 +1,4 @@
+import type { LibraryMode } from './library-api-scope';
 import { getLocale, t } from '../i18n';
 import { getEagleAssetContentUrl } from './eagle-api';
 import {
@@ -9,6 +10,7 @@ import {
 export interface OriginalFileTarget {
   id: string;
   originalName: string;
+  libraryMode?: LibraryMode;
 }
 type TriggerBrowserDownload = (url: string, fileName: string) => void;
 interface SaveOriginalFileDependencies {
@@ -29,9 +31,10 @@ export function saveOriginalFile(
     dependencies.desktopBridge === undefined
       ? getDesktopOriginalFileBridge()
       : dependencies.desktopBridge;
-  if (desktopBridge) return desktopBridge.saveOriginalFile(target.id, getLocale());
+  if (desktopBridge && target.libraryMode !== 'PHOTO')
+    return desktopBridge.saveOriginalFile(target.id, getLocale());
   (dependencies.triggerBrowserDownload ?? triggerBrowserDownload)(
-    getEagleAssetContentUrl(target.id),
+    getEagleAssetContentUrl(target.id, target.libraryMode),
     target.originalName,
   );
   return Promise.resolve({ saved: true });
@@ -47,13 +50,15 @@ export function downloadOriginalFiles(
     dependencies.desktopBridge === undefined
       ? getDesktopOriginalFileDownloadBridge()
       : dependencies.desktopBridge;
-  if (desktopBridge)
+  if (desktopBridge && targets.every((target) => target.libraryMode !== 'PHOTO'))
     return desktopBridge.downloadOriginalFiles(
       targets.map(({ id }) => id),
       getLocale(),
     );
   const download = dependencies.triggerBrowserDownload ?? triggerBrowserDownload;
-  targets.forEach((target) => download(getEagleAssetContentUrl(target.id), target.originalName));
+  targets.forEach((target) =>
+    download(getEagleAssetContentUrl(target.id, target.libraryMode), target.originalName),
+  );
   return Promise.resolve({ downloaded: targets.length });
 }
 function triggerBrowserDownload(url: string, fileName: string): void {
