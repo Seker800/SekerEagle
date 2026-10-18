@@ -234,12 +234,7 @@ export interface EagleAssetPage {
     percentage: number;
     processorVersion: string;
   } | null;
-  searchExpansion?: Array<{
-    id: string;
-    name: string;
-    match: 'EXACT' | 'SEMANTIC';
-    similarity: number;
-  }>;
+  imageSearch?: { status: 'READY' | 'UNAVAILABLE'; spaceId: string };
 }
 
 export type EagleSmartFolderFilters = Omit<

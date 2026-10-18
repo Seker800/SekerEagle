@@ -1236,7 +1236,7 @@ export function SekerEaglePage({
                       <input
                         type="search"
                         aria-label={libraryMode === 'PHOTO' ? t('搜索照片') : t('搜索素材')}
-                        placeholder={t('搜索名称或标签')}
+                        placeholder={t('搜索名称或描述画面内容')}
                         value={search}
                         onChange={(event) => setSearch(event.target.value)}
                       />
@@ -1333,20 +1333,12 @@ export function SekerEaglePage({
                 />
               ) : null}
 
-              {deferredSearch && assetsQuery.data?.pages[0]?.searchExpansion?.length ? (
-                <div className={styles.searchExpansion} role="status">
-                  <strong>{t('标签匹配')}</strong>
-                  {assetsQuery.data.pages[0].searchExpansion.map((match) => (
-                    <span key={match.id} data-exact={match.match === 'EXACT'}>
-                      {match.name}
-                      {match.match === 'SEMANTIC'
-                        ? ` ${Math.round(match.similarity * 100)}%`
-                        : t('完全匹配')}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-
+              {deferredSearch &&
+                assetsQuery.data?.pages[0]?.imageSearch?.status === 'UNAVAILABLE' && (
+                  <div className={styles.statusBar} role="status">
+                    {t('图片内容搜索暂不可用，当前仅匹配名称和人工标签。')}
+                  </div>
+                )}
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
                   {uploadStatus}

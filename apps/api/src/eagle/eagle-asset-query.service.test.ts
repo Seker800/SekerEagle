@@ -186,7 +186,7 @@ test('asset listing only loads relations required by gallery cards', async () =>
   ]);
 });
 
-test('expanded search keeps exact manual-tag assets ahead of AI-only matches', async () => {
+test('image search preserves the ranked order without resolving AI tags', async () => {
   let rankingQuery = '';
   const assets = new Map(
     ['manual-asset', 'ai-asset'].map((id) => [
@@ -232,9 +232,11 @@ test('expanded search keeps exact manual-tag assets ahead of AI-only matches', a
       },
     } as never,
     {
-      resolveSearchTags: async () => [
-        { id: 'ai-ui', name: '用户界面', match: 'SEMANTIC' as const, similarity: 0.91 },
-      ],
+      prepare: async () => ({ status: 'READY', spaceId: 'space', vector: '[1]' }),
+      rank: async () => {
+        rankingQuery = 'direct-images';
+        return ['manual-asset', 'ai-asset'];
+      },
     } as never,
   );
 
@@ -244,10 +246,9 @@ test('expanded search keeps exact manual-tag assets ahead of AI-only matches', a
     result.items.map(({ id }) => id),
     ['manual-asset', 'ai-asset'],
   );
-  assert.match(rankingQuery, /EagleAssetManualTag/);
-  assert.match(rankingQuery, /EagleAssetAiTag/);
-  assert.match(rankingQuery, /::text/);
-  assert.doesNotMatch(rankingQuery, /::uuid/);
+  assert.equal(rankingQuery, 'direct-images');
+  assert.ok('imageSearch' in result);
+  assert.deepEqual(result.imageSearch, { status: 'READY', spaceId: 'space' });
 });
 
 test('private assets stay out of the regular gallery and use a dedicated unlocked view', async () => {

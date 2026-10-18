@@ -3,7 +3,7 @@ import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vecto
 
 @Injectable()
 export class EagleEmbeddingClient {
-  async embedText(text: string): Promise<{ embedding: number[] }> {
+  async embedText(text: string): Promise<{ embedding: number[]; revision: string }> {
     const baseUrl = process.env.MLX_EMBEDDING_URL?.replace(/\/+$/, '');
     const token = process.env.MLX_EMBEDDING_TOKEN;
     if (!baseUrl || !token) throw new Error('MLX_EMBEDDING_NOT_CONFIGURED');
@@ -20,11 +20,14 @@ export class EagleEmbeddingClient {
     if (!response.ok) throw new Error(`MLX_EMBEDDING_HTTP_${response.status}`);
     const payload = (await response.json()) as {
       embedding?: unknown;
+      revision?: unknown;
       model?: unknown;
       dimensions?: unknown;
       normalized?: unknown;
     };
     if (
+      payload.revision !==
+        (process.env.MLX_EMBEDDING_REVISION ?? '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda') ||
       payload.model !== EAGLE_EMBEDDING_MODEL ||
       payload.dimensions !== EAGLE_EMBEDDING_DIMENSIONS ||
       payload.normalized !== true ||
@@ -34,6 +37,6 @@ export class EagleEmbeddingClient {
     ) {
       throw new Error('MLX_EMBEDDING_CONTRACT_DRIFT');
     }
-    return { embedding: payload.embedding as number[] };
+    return { embedding: payload.embedding as number[], revision: payload.revision };
   }
 }

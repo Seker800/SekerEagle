@@ -11,7 +11,8 @@ import {
 import { Prisma } from '@prisma/client';
 import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
-import { EagleAiTagService, type EagleAiTagSearchMatch } from './eagle-ai-tag.service';
+import { EagleImageSearchService, type ImageSearchContext } from './eagle-image-search.service';
+import { createHash } from 'node:crypto';
 import type {
   BatchChangeEagleManualTagsDto,
   BatchUpdateEagleAssetsDto,
@@ -88,7 +89,7 @@ const BATCH_TAG_WRITE_ASSET_CHUNK_SIZE = 100;
 export class EagleService {
   constructor(
     private readonly prisma: PrismaService,
-    @Optional() private readonly aiTags?: EagleAiTagService,
+    @Optional() private readonly imageSearch?: EagleImageSearchService,
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
@@ -170,26 +171,21 @@ export class EagleService {
           ? folderConditions[0]
           : { OR: folderConditions };
     const queryWhere = folderWhere ? { AND: [baseWhere, folderWhere] } : baseWhere;
-    const semanticMatches =
-      filters.search && this.aiTags
-        ? await this.aiTags.resolveSearchTags(ownerId, filters.search)
-        : [];
-    if (semanticMatches.length) {
+    if (filters.search && this.imageSearch) {
+      const context = await this.imageSearch.prepare(ownerId, filters.search);
       const semanticBaseConditions: Prisma.EagleAssetWhereInput[] = [
         buildAssetWhere(ownerId, { ...filters, search: undefined }, trash, includePrivate),
       ];
-      if (ruleQuery)
-        semanticBaseConditions.push(buildEagleFilterWhere(ruleQuery, this.libraryMode));
       semanticBaseConditions.push(...baseConditions.slice(1));
       const semanticBaseWhere: Prisma.EagleAssetWhereInput = { AND: semanticBaseConditions };
       const semanticWhere = folderWhere
         ? { AND: [semanticBaseWhere, folderWhere] }
         : semanticBaseWhere;
-      return this.listExpandedSearchAssets(
+      return this.listRankedSearchAssets(
         ownerId,
         query,
         semanticWhere,
-        semanticMatches,
+        context,
         filterColor,
         includePrivate,
         trash,
@@ -283,6 +279,7 @@ export class EagleService {
     ownerId: string,
     assetIds: string[],
     queryWhere: Prisma.EagleAssetWhereInput,
+    matchIds?: (ids: string[]) => Promise<string[]>,
   ) {
     if (!assetIds.length) return [];
     const groups = await this.prisma.eaglePhotoGroup.findMany({
@@ -304,7 +301,20 @@ export class EagleService {
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    const stacks = groups
+    const matched = matchIds
+      ? new Set(
+          await matchIds([
+            ...new Set(groups.flatMap(({ members }) => members.map(({ assetId }) => assetId))),
+          ]),
+        )
+      : null;
+    const matchingGroups = matched
+      ? groups.map((group) => ({
+          ...group,
+          members: group.members.filter(({ assetId }) => matched.has(assetId)),
+        }))
+      : groups;
+    const stacks = matchingGroups
       .filter(({ members }) => members.length > 1)
       .map((group) => ({
         id: group.id,
@@ -334,33 +344,60 @@ export class EagleService {
     });
   }
 
-  private async listExpandedSearchAssets(
+  private async listRankedSearchAssets(
     ownerId: string,
     query: ListEagleAssetsDto,
     where: Prisma.EagleAssetWhereInput,
-    matches: EagleAiTagSearchMatch[],
+    context: ImageSearchContext,
     filterColor: string | undefined,
     includePrivate: boolean,
     trash: boolean,
   ) {
     const search = query.search?.normalize('NFKC').trim() ?? '';
-    const startOffset = decodeSemanticSearchCursor(query.cursor, search, {
+    const searchFilters = Object.fromEntries(
+      Object.entries(query).filter(([key]) => key !== 'cursor' && key !== 'limit'),
+    );
+    const searchKey = createHash('sha256')
+      .update(
+        JSON.stringify({
+          searchFilters,
+          trash,
+          includePrivate,
+          context: context.status,
+          spaceId: context.spaceId,
+          minimumSimilarity: process.env.EAGLE_IMAGE_SEARCH_MINIMUM_SIMILARITY ?? '0.25',
+        }),
+      )
+      .digest('hex');
+    const startOffset = decodeImageSearchCursor(query.cursor, searchKey, {
       ownerId,
       libraryMode: this.libraryMode,
     });
+    const hasStructuredFilters = Object.entries(searchFilters).some(
+      ([key, value]) => key !== 'search' && value !== undefined,
+    );
+    const eligibleAssetIds = hasStructuredFilters
+      ? (
+          await this.prisma.eagleAsset.findMany({
+            where: inLibrary(this.libraryMode, where),
+            select: { id: true },
+          })
+        ).map(({ id }) => id)
+      : undefined;
     const ranked: Array<{ row: AssetListRecord; nextOffset: number }> = [];
     let offset = startOffset;
     let exhausted = false;
     const candidateBatchSize = 250;
     while (ranked.length <= query.limit && !exhausted) {
-      const candidateIds = await this.rankExpandedSearchAssetIds(
+      const candidateIds = await this.imageSearch!.rank(
         ownerId,
         search,
-        matches,
+        context,
         offset,
         candidateBatchSize,
         includePrivate,
         trash,
+        eligibleAssetIds,
       );
       exhausted = candidateIds.length < candidateBatchSize;
       if (!candidateIds.length) break;
@@ -412,17 +449,31 @@ export class EagleService {
               ownerId,
               page.map(({ row }) => row.id),
               where,
+              (ids) =>
+                this.imageSearch!.rank(
+                  ownerId,
+                  search,
+                  context,
+                  0,
+                  ids.length,
+                  includePrivate,
+                  trash,
+                  ids,
+                ),
             ),
           }
         : {}),
       nextCursor:
         ranked.length > query.limit && page.length
-          ? encodeSemanticSearchCursor(search, page.at(-1)!.nextOffset, {
+          ? encodeImageSearchCursor(searchKey, page.at(-1)!.nextOffset, {
               ownerId,
               libraryMode: this.libraryMode,
             })
           : null,
-      searchExpansion: matches,
+      imageSearch: {
+        status: context.status,
+        spaceId: context.spaceId,
+      },
       colorCoverage: filterColor
         ? {
             eligible: colorEligible,
@@ -432,81 +483,6 @@ export class EagleService {
           }
         : null,
     };
-  }
-
-  private async rankExpandedSearchAssetIds(
-    ownerId: string,
-    search: string,
-    matches: EagleAiTagSearchMatch[],
-    offset: number,
-    limit: number,
-    includePrivate: boolean,
-    trash: boolean,
-  ): Promise<string[]> {
-    const normalizedSearch = normalizeKey(search);
-    const matchedAiTags = Prisma.join(
-      matches.map(
-        (match, index) =>
-          Prisma.sql`(${match.id}::text, ${match.match === 'EXACT' ? 2 : 1}::integer, ${match.similarity}::double precision, ${index}::integer)`,
-      ),
-    );
-    const privateClause = includePrivate ? Prisma.empty : Prisma.sql`AND asset."isPrivate" = false`;
-    const lifecycleClause = trash
-      ? Prisma.sql`AND asset."deletedAt" IS NOT NULL AND asset."purgeAfter" IS NULL`
-      : Prisma.sql`AND asset."deletedAt" IS NULL`;
-    const rows = await this.prisma.$queryRaw<Array<{ assetId: string }>>(Prisma.sql`
-      WITH matched_ai_tags("tagId", tier, similarity, priority) AS (VALUES ${matchedAiTags}),
-      candidates("assetId", tier, similarity, priority) AS (
-        SELECT link."assetId", 5::integer, 1::double precision, 0::integer
-        FROM "EagleAssetManualTag" AS link
-        JOIN "EagleManualTag" AS tag
-          ON tag."ownerId" = link."ownerId" AND tag.id = link."tagId"
-        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
-          AND tag."normalizedName" = ${normalizedSearch}
-        UNION ALL
-        SELECT link."assetId", 4::integer, 1::double precision, 0::integer
-        FROM "EagleAssetManualTag" AS link
-        JOIN "EagleManualTag" AS tag
-          ON tag."ownerId" = link."ownerId" AND tag.id = link."tagId"
-        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
-          AND tag."normalizedName" <> ${normalizedSearch}
-          AND strpos(tag."normalizedName", ${normalizedSearch}) > 0
-        UNION ALL
-        SELECT asset.id, 3::integer, 1::double precision, 0::integer
-        FROM "EagleAsset" AS asset
-        WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
-          AND (
-            strpos(asset."normalizedDisplayName", ${normalizedSearch}) > 0
-            OR strpos(lower(asset."originalName"), ${normalizedSearch}) > 0
-          )
-        UNION ALL
-        SELECT link."assetId", matched.tier, matched.similarity, matched.priority
-        FROM "EagleAssetAiTag" AS link
-        JOIN matched_ai_tags AS matched ON matched."tagId" = link."aiTagId"
-        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
-          AND link.status = 'ACTIVE'
-      ),
-      ranked AS (
-        SELECT candidate."assetId", max(candidate.tier) AS tier,
-          max(candidate.similarity) AS similarity,
-          min(candidate.priority) AS priority
-        FROM candidates AS candidate
-        JOIN "EagleAsset" AS asset
-          ON asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode" AND asset.id = candidate."assetId"
-        WHERE true
-          ${lifecycleClause}
-          ${privateClause}
-        GROUP BY candidate."assetId"
-      )
-      SELECT ranked."assetId"
-      FROM ranked
-      JOIN "EagleAsset" AS asset ON asset.id = ranked."assetId"
-      ORDER BY ranked.tier DESC, ranked.similarity DESC, ranked.priority,
-        asset."libraryAddedAt" DESC, ranked."assetId" DESC
-      OFFSET ${offset}
-      LIMIT ${limit}
-    `);
-    return rows.map((row) => row.assetId);
   }
 
   async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
@@ -1611,19 +1587,19 @@ function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {
   return { ownerId, id: { in: [] } };
 }
 
-function encodeSemanticSearchCursor(query: string, offset: number, scope: LibraryIdentity): string {
-  return `ai:${Buffer.from(JSON.stringify({ version: 2, query, offset, ...scope })).toString('base64url')}`;
+function encodeImageSearchCursor(query: string, offset: number, scope: LibraryIdentity): string {
+  return `image:${Buffer.from(JSON.stringify({ version: 3, query, offset, ...scope })).toString('base64url')}`;
 }
 
-function decodeSemanticSearchCursor(
+function decodeImageSearchCursor(
   cursor: string | undefined,
   query: string,
   scope: LibraryIdentity,
 ): number {
   if (!cursor) return 0;
-  if (!cursor.startsWith('ai:')) throw new BadRequestException('搜索游标无效。');
+  if (!cursor.startsWith('image:')) throw new BadRequestException('搜索游标无效。');
   try {
-    const payload = JSON.parse(Buffer.from(cursor.slice(3), 'base64url').toString('utf8')) as {
+    const payload = JSON.parse(Buffer.from(cursor.slice(6), 'base64url').toString('utf8')) as {
       version?: unknown;
       ownerId?: unknown;
       libraryMode?: unknown;
@@ -1631,9 +1607,9 @@ function decodeSemanticSearchCursor(
       offset?: unknown;
     };
     if (
-      (payload.version === 2
-        ? payload.ownerId !== scope.ownerId || payload.libraryMode !== scope.libraryMode
-        : payload.version !== 1 || scope.libraryMode !== 'MATERIAL') ||
+      payload.version !== 3 ||
+      payload.ownerId !== scope.ownerId ||
+      payload.libraryMode !== scope.libraryMode ||
       payload.query !== query ||
       !Number.isSafeInteger(payload.offset) ||
       (payload.offset as number) < 0
@@ -1661,14 +1637,6 @@ function buildAssetWhere(
         { normalizedDisplayName: { contains: normalizedSearch } },
         { originalName: { contains: search, mode: 'insensitive' } },
         { manualTagLinks: { some: { tag: { normalizedName: { contains: normalizedSearch } } } } },
-        {
-          aiTagLinks: {
-            some: {
-              status: 'ACTIVE',
-              aiTag: { normalizedName: { contains: normalizedSearch } },
-            },
-          },
-        },
       ],
     });
   }

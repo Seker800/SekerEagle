@@ -1,3 +1,4 @@
+import { EagleImageSearchService } from './eagle-image-search.service';
 import { Module, type Provider } from '@nestjs/common';
 import { LIBRARY_MODE } from './library-mode';
 import { AuthModule } from '../auth/auth.module';
@@ -32,6 +33,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
 export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
   EagleService,
+  EagleImageSearchService,
   EaglePrivacyService,
   EagleAiTagService,
   EagleEmbeddingClient,

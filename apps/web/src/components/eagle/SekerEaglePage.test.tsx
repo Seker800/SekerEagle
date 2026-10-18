@@ -357,6 +357,22 @@ describe('SekerEaglePage', () => {
     ).not.toHaveLength(0);
   });
 
+  it('explains when image search falls back to names and manual tags', async () => {
+    listEagleAssetsMock.mockResolvedValue({
+      items: [asset],
+      nextCursor: null,
+      imageSearch: { status: 'UNAVAILABLE', spaceId: 'test' },
+    });
+    renderPage();
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '窗边的猫' },
+    });
+    expect(
+      await screen.findByText('图片内容搜索暂不可用，当前仅匹配名称和人工标签。'),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('标签匹配')).not.toBeInTheDocument();
+  });
+
   it('keeps inspector visibility independent from the current asset selection', async () => {
     renderPage();
 

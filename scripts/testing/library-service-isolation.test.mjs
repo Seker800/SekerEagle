@@ -625,3 +625,209 @@ test('worker automatically groups new photographs and preserves a manually chose
   await prisma.$transaction((tx) => groupAnalyzedPhoto(tx, f.ownerId, third.id));
   assert.equal(await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId } }), 1);
 });
+
+test('direct image-vector retrieval isolates owner/mode/private/revisions and composes filters and cursors', async () => {
+  const { EagleImageSearchService } =
+    await import('../../apps/api/dist/eagle/eagle-image-search.service.js');
+  const { Prisma } = await import('@prisma/client');
+  const f = await fixtures(),
+    other = await fixtures();
+  const spaceId = 'qwen3-vl-embedding-2b-1024-v1',
+    revision = '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda';
+  const spaceData = {
+    model: 'Qwen/Qwen3-VL-Embedding-2B',
+    revision,
+    dimensions: 1024,
+    instructionVersion: 'image-retrieval-v1',
+    preprocessingVersion: 'preview-webp-v1',
+    normalized: true,
+    isCurrent: true,
+  };
+  await prisma.eagleEmbeddingSpace.upsert({
+    where: { id: spaceId },
+    create: { id: spaceId, ...spaceData },
+    update: spaceData,
+  });
+  const vector = Array.from({ length: 1024 }, (_, index) => (index === 0 ? 1 : 0)),
+    literal = `[${vector.join(',')}]`;
+  async function embed(asset, assetRevision = 0) {
+    await prisma.$executeRaw(Prisma.sql`
+    INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"updatedAt")
+    VALUES (${randomUUID()},${asset.ownerId},${asset.libraryMode}::"LibraryMode",${asset.id},${assetRevision},${spaceId},'READY',true,${literal}::vector,now())`);
+  }
+  await embed(f.material);
+  await embed(f.photo);
+  await embed(other.material);
+  const hidden = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'hidden.jpg',
+      displayName: 'hidden',
+      normalizedDisplayName: 'hidden',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `test/${randomUUID()}`,
+      isPrivate: true,
+      lifecycleStatus: 'READY',
+    },
+  });
+  await embed(hidden);
+  const stale = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'stale.jpg',
+      displayName: 'stale',
+      normalizedDisplayName: 'stale',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `test/${randomUUID()}`,
+      mediaRevision: 1,
+      lifecycleStatus: 'READY',
+    },
+  });
+  await embed(stale, 0);
+  const second = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'second.jpg',
+      displayName: 'second',
+      normalizedDisplayName: 'second',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `test/${randomUUID()}`,
+      rating: 5,
+      lifecycleStatus: 'READY',
+    },
+  });
+  await embed(second);
+  let textCalls = 0;
+  const client = {
+    embedText: async () => {
+      textCalls++;
+      return { embedding: vector, revision };
+    },
+  };
+  const search = new EagleImageSearchService(prisma, client, 'MATERIAL');
+  const materials = new EagleService(prisma, search, 'MATERIAL');
+  const photos = new EagleService(
+    prisma,
+    new EagleImageSearchService(prisma, client, 'PHOTO'),
+    'PHOTO',
+  );
+  const first = await materials.listAssets(f.ownerId, { limit: 1, search: '海边' });
+  assert.ok(first.nextCursor);
+  assert.equal(first.imageSearch.status, 'READY');
+  const next = await materials.listAssets(f.ownerId, {
+    limit: 1,
+    search: '海边',
+    cursor: first.nextCursor,
+  });
+  assert.notEqual(first.items[0].id, next.items[0].id);
+  assert.equal(textCalls, 1);
+  assert.deepEqual(
+    new Set([...first.items, ...next.items].map((row) => row.id)),
+    new Set([f.material.id, second.id]),
+  );
+  assert.deepEqual(
+    (await photos.listAssets(f.ownerId, { limit: 10, search: '海边' })).items.map((row) => row.id),
+    [f.photo.id],
+  );
+  const rules = {
+    version: 2,
+    conditions: [
+      {
+        id: 'rating',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [{ id: 'five', field: 'RATING', operator: 'EQUALS', value: '5' }],
+      },
+    ],
+  };
+  assert.deepEqual(
+    (
+      await materials.listAssets(f.ownerId, {
+        limit: 10,
+        search: '海边',
+        rules: JSON.stringify(rules),
+      })
+    ).items.map((row) => row.id),
+    [second.id],
+  );
+  await assert.rejects(
+    () =>
+      materials.listAssets(
+        f.ownerId,
+        { limit: 1, search: '海边', cursor: first.nextCursor, privacy: 'PRIVATE' },
+        { includePrivate: true },
+      ),
+    /游标/,
+  );
+  await assert.rejects(
+    () => photos.listAssets(f.ownerId, { limit: 1, search: '海边', cursor: first.nextCursor }),
+    /游标/,
+  );
+  await assert.rejects(
+    () =>
+      materials.listAssets(other.ownerId, { limit: 1, search: '海边', cursor: first.nextCursor }),
+    /游标/,
+  );
+  const { PhotoManagementService } =
+    await import('../../apps/api/dist/photos/photo-management.service.js');
+  const createPhoto = (name) =>
+    prisma.eagleAsset.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        originalName: `${name}.jpg`,
+        displayName: name,
+        normalizedDisplayName: name,
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        originalObjectKey: `test/${randomUUID()}`,
+        lifecycleStatus: 'READY',
+      },
+    });
+  const matching = await createPhoto('matching'),
+    unrelated = await createPhoto('unrelated');
+  await embed(matching);
+  const photography = new PhotoManagementService(prisma);
+  const group = await photography.createGroup(
+    f.ownerId,
+    [f.photo.id, matching.id, unrelated.id],
+    false,
+  );
+  await photography.updateGroup(f.ownerId, group.id, { bestAssetId: unrelated.id }, false);
+  const photoMatches = await photos.listAssets(f.ownerId, { limit: 10, search: '海边' });
+  assert.equal(photoMatches.photoStacks.length, 1);
+  assert.deepEqual(
+    new Set(photoMatches.photoStacks[0].assetIds),
+    new Set([f.photo.id, matching.id]),
+  );
+  assert.notEqual(photoMatches.photoStacks[0].cover.id, unrelated.id);
+  const offline = new EagleService(
+    prisma,
+    new EagleImageSearchService(
+      prisma,
+      {
+        embedText: async () => {
+          throw new Error('offline');
+        },
+      },
+      'MATERIAL',
+    ),
+    'MATERIAL',
+  );
+  const lexical = await offline.listAssets(f.ownerId, { limit: 10, search: 'sample' });
+  assert.equal(lexical.imageSearch.status, 'UNAVAILABLE');
+  assert.deepEqual(
+    lexical.items.map((row) => row.id),
+    [f.material.id],
+  );
+});

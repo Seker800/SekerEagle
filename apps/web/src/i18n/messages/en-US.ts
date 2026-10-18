@@ -1,4 +1,8 @@
 export const enUS = {
+  搜索名称或描述画面内容: 'Search names or describe image content',
+  '图片内容搜索暂不可用，当前仅匹配名称和人工标签。':
+    'Image content search is unavailable. Matching names and manual tags only.',
+
   没有匹配的照片: 'No matching photos',
   照片大图预览: 'Photo preview',
   暂无照片: 'No photos yet',

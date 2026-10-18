@@ -26,6 +26,12 @@ SekerEagle 是独立的多用户图片管理系统，提供业务数据完全分
 
 完整修改计划与待定事项见 [素材／照片双模式修改计划](photo-management-plan.md)。实施前须先完成计划中的模式隔离设计，不能跳过基础边界直接叠加摄影功能。
 
+## Image content search
+
+普通搜索的语义召回直接比较搜索词向量与 `EagleAssetEmbedding`，不再通过 AI 标签或其向量召回图片。使用既有 Qwen3-VL-Embedding-2B 的相同模型修订、1024 维与处理空间；只读取 READY、isCurrent 且 assetRevision 等于当前媒体版本的记录。名称与人工标签文字匹配保留，显式 AI 标签筛选不受影响。8B 标签生成是独立能力，不是搜索依赖。
+
+搜索继承 owner、模式、私密、回收状态和统一筛选边界。模型不可用或空间不兼容时明确提示退回文字匹配，不触发全库向量重建或 AI 打标。实现与验收范围见 [图片向量搜索](image-vector-search.md)。
+
 ## Dependency direction
 
 ```text
