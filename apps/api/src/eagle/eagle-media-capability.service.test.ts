@@ -67,3 +67,12 @@ test('rejects mismatches, unsupported media, oversized files, and unsafe sizes',
     assert.throws(() => service.assertUploadAllowed(candidate), BadRequestException);
   }
 });
+
+test('accepts browser-generic camera RAW, TIFF and camera video MIME declarations', () => {
+  for (const [fileName, mimeType] of [['capture.dng','application/octet-stream'],['capture.NEF',''],['clip.MOV','video/quicktime'],['clip.mts','video/mp2t'],['clip.mxf','application/mxf'],['scan.tif','image/tiff']]) {
+    const result = service.assertUploadAllowed({fileName:fileName!,mimeType:mimeType!,size:2048});
+    assert.ok(result.mimeType !== 'application/octet-stream');
+  }
+  assert.equal(service.assertUploadAllowed({fileName:'clip.mov',mimeType:'video/quicktime',size:512*1024*1024}).mediaType,'video');
+  assert.throws(() => service.assertUploadAllowed({fileName:'capture.dng',mimeType:'video/mp4',size:2048}),BadRequestException);
+});
