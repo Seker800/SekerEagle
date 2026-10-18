@@ -1088,3 +1088,47 @@ select:focus-visible {
   background: #4f63df;
   color: white;
 }
+
+.photo-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 20px;
+  border-bottom: 1px solid #ddd2;
+}
+.photo-toolbar input {
+  min-width: 130px;
+  width: 180px;
+}
+.photo-toolbar button[aria-pressed='true'] {
+  color: #4f63df;
+  font-weight: 600;
+}
+.photo-card-date {
+  position: absolute;
+  bottom: 4px;
+  left: 6px;
+  padding: 3px 5px;
+  background: #0009;
+  color: white;
+  font-size: 11px;
+  border-radius: 4px;
+}
+.photo-map-panel {
+  padding: 12px 20px;
+}
+.photo-metadata {
+  padding: 16px;
+  border-bottom: 1px solid #ddd3;
+  font-size: 12px;
+}
+.photo-metadata dl {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+}
+.photo-metadata dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

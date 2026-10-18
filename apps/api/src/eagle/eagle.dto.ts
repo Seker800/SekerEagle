@@ -28,6 +28,12 @@ function optionalTrimmed(value: unknown): unknown {
 }
 
 export class ListEagleAssetsDto {
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) cameraModel?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) lensModel?: string;
+  @ApiPropertyOptional({ enum: ['WITH', 'WITHOUT'] })
+  @IsOptional()
+  @IsIn(['WITH', 'WITHOUT'])
+  gps?: 'WITH' | 'WITHOUT';
   @ApiPropertyOptional({ maximum: 100, default: 30 })
   @Type(() => Number)
   @IsOptional()

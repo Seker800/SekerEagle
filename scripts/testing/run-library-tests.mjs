@@ -62,7 +62,7 @@ try {
   cpSync('apps/api/prisma/schema.prisma', schema);
   const baseline = join(temp, 'migrations');
   for (const entry of readdirSync('apps/api/prisma/migrations')) {
-    if (entry !== migration)
+    if (entry < migration || entry === 'migration_lock.toml')
       cpSync(join('apps/api/prisma/migrations', entry), join(baseline, entry), { recursive: true });
   }
   const prisma = ['node_modules/prisma/build/index.js', 'migrate', 'deploy', '--schema', schema];
@@ -92,6 +92,11 @@ try {
   cpSync(join('apps/api/prisma/migrations', migration), join(baseline, migration), {
     recursive: true,
   });
+  for (const entry of readdirSync('apps/api/prisma/migrations').filter(
+    (entry) => entry > migration && entry !== 'migration_lock.toml',
+  )) {
+    cpSync(join('apps/api/prisma/migrations', entry), join(baseline, entry), { recursive: true });
+  }
   run(process.execPath, prisma, { env, stdio: 'inherit' });
   run(
     process.execPath,

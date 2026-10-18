@@ -179,7 +179,11 @@ test('asset listing only loads relations required by gallery cards', async () =>
 
   await service.listAssets('owner-1', { limit: 40 });
 
-  assert.deepEqual(Object.keys(include ?? {}).sort(), ['manualTagLinks', 'renditions']);
+  assert.deepEqual(Object.keys(include ?? {}).sort(), [
+    'manualTagLinks',
+    'photoMetadata',
+    'renditions',
+  ]);
 });
 
 test('expanded search keeps exact manual-tag assets ahead of AI-only matches', async () => {

@@ -2958,6 +2958,9 @@ export interface operations {
   EagleController_listAssets: {
     parameters: {
       query?: {
+        cameraModel?: string;
+        lensModel?: string;
+        gps?: 'WITH' | 'WITHOUT';
         limit?: components['schemas']['Object'];
         cursor?: string;
         search?: string;
@@ -3350,6 +3353,9 @@ export interface operations {
   EagleController_listTrash: {
     parameters: {
       query?: {
+        cameraModel?: string;
+        lensModel?: string;
+        gps?: 'WITH' | 'WITHOUT';
         limit?: components['schemas']['Object'];
         cursor?: string;
         search?: string;
@@ -4884,6 +4890,9 @@ export interface operations {
   PhotosController_listAssets: {
     parameters: {
       query?: {
+        cameraModel?: string;
+        lensModel?: string;
+        gps?: 'WITH' | 'WITHOUT';
         limit?: components['schemas']['Object'];
         cursor?: string;
         search?: string;
@@ -5276,6 +5285,9 @@ export interface operations {
   PhotosController_listTrash: {
     parameters: {
       query?: {
+        cameraModel?: string;
+        lensModel?: string;
+        gps?: 'WITH' | 'WITHOUT';
         limit?: components['schemas']['Object'];
         cursor?: string;
         search?: string;

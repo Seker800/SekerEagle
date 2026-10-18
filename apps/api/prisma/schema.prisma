@@ -327,6 +327,7 @@ model EagleAsset {
   rating                         Int?
   isPrivate                      Boolean                        @default(false)
   libraryAddedAt                 DateTime                       @default(now())
+  chronologicalAt                DateTime                       @default(now())
   deletedAt                      DateTime?
   purgeAfter                     DateTime?
   createdAt                      DateTime                       @default(now())
@@ -350,10 +351,12 @@ model EagleAsset {
   vectorSuggestions              EagleVectorTagSuggestion[]
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
+  photoMetadata                  EaglePhotoMetadata?
 
   @@unique([ownerId, id])
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, deletedAt, libraryAddedAt, id])
+  @@index([ownerId, libraryMode, deletedAt, chronologicalAt, id])
   @@index([ownerId, libraryMode, isPrivate, deletedAt, libraryAddedAt, id])
   @@index([ownerId, libraryMode, deletedAt, rating])
   @@index([ownerId, libraryMode, deletedAt, aspectRatio])
@@ -1206,4 +1209,34 @@ model AppDeploymentIdentity {
   id        String   @id
   value     String   @unique
   createdAt DateTime @default(now())
+}
+
+
+model EaglePhotoMetadata {
+  assetId String @id
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  assetRevision Int
+  processorVersion String
+  capturedAt DateTime?
+  capturedLocal String?
+  captureTimeZoneKnown Boolean @default(false)
+  cameraMake String?
+  cameraModel String?
+  lensModel String?
+  focalLength Float?
+  aperture Float?
+  exposureSeconds Float?
+  iso Int?
+  latitude Float?
+  longitude Float?
+  altitude Float?
+  sharpnessScore Float?
+  perceptualHash String?
+  analyzedAt DateTime @default(now())
+  asset EagleAsset @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  @@unique([ownerId, libraryMode, assetId])
+  @@index([ownerId, libraryMode, capturedAt, assetId])
+  @@index([ownerId, libraryMode, cameraModel])
+  @@index([ownerId, libraryMode, lensModel])
 }

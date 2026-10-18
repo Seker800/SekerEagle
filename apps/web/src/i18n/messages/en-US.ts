@@ -1,4 +1,28 @@
 export const enUS = {
+  摄影信息: 'Photography metadata',
+  拍摄时间: 'Taken at',
+  相机: 'Camera',
+  镜头: 'Lens',
+  摄影参数: 'Camera settings',
+  清晰度参考分: 'Sharpness reference score',
+  '未知拍摄时间，按导入时间排列': 'Unknown capture date; sorted by import date',
+  时区未知: 'Timezone unknown',
+  '摄影信息等待处理，或原文件未包含摄影信息。':
+    'Photography metadata is pending or missing from the original file.',
+  照片地图: 'Photo map',
+  '当前照片没有 GPS 信息。': 'These photos have no GPS coordinates.',
+  '已加载 {{value1}} 张带位置照片': '{{value1}} geotagged photos loaded',
+  '地图底图暂不可用，照片坐标仍可在详情中查看。':
+    'Map tiles are unavailable. Coordinates remain available in photo details.',
+  按相机筛选: 'Filter by camera',
+  按镜头筛选: 'Filter by lens',
+  全部位置: 'All locations',
+  '有 GPS': 'With GPS',
+  '无 GPS': 'Without GPS',
+  时间线: 'Timeline',
+  地图: 'Map',
+  载入更多照片: 'Load more photos',
+
   图库模式: 'Library mode',
   照片: 'Photos',
   全部照片: 'All photos',

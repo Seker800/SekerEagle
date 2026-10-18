@@ -284,6 +284,31 @@
         "operationId": "EagleController_listAssets",
         "parameters": [
           {
+            "name": "cameraModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gps",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["WITH", "WITHOUT"]
+            }
+          },
+          {
             "name": "limit",
             "required": false,
             "in": "query",
@@ -893,6 +918,31 @@
       "get": {
         "operationId": "EagleController_listTrash",
         "parameters": [
+          {
+            "name": "cameraModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gps",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["WITH", "WITHOUT"]
+            }
+          },
           {
             "name": "limit",
             "required": false,
@@ -2947,6 +2997,31 @@
         "operationId": "PhotosController_listAssets",
         "parameters": [
           {
+            "name": "cameraModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gps",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["WITH", "WITHOUT"]
+            }
+          },
+          {
             "name": "limit",
             "required": false,
             "in": "query",
@@ -3556,6 +3631,31 @@
       "get": {
         "operationId": "PhotosController_listTrash",
         "parameters": [
+          {
+            "name": "cameraModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lensModel",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "gps",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["WITH", "WITHOUT"]
+            }
+          },
           {
             "name": "limit",
             "required": false,

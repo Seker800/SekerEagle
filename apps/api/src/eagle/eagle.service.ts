@@ -43,6 +43,7 @@ import {
 } from './eagle-privacy.service';
 
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
+  photoMetadata: true,
   renditions: {
     where: { status: 'READY' },
     orderBy: [{ revision: 'desc' }, { kind: 'asc' }],
@@ -131,6 +132,22 @@ export class EagleService {
       query.color ??
       readFilterColor(ruleQuery) ??
       activeFolderQueries.map(readStoredFilterColor).find((value) => value !== undefined);
+    if (this.libraryMode === 'PHOTO') {
+      if (query.cameraModel || query.lensModel || query.gps)
+        baseConditions.push({
+          photoMetadata: {
+            is: {
+              ...(query.cameraModel ? { cameraModel: query.cameraModel } : {}),
+              ...(query.lensModel ? { lensModel: query.lensModel } : {}),
+              ...(query.gps === 'WITH'
+                ? { latitude: { not: null }, longitude: { not: null } }
+                : {}),
+              ...(query.gps === 'WITHOUT' ? { latitude: null } : {}),
+            },
+          },
+        });
+    } else if (query.cameraModel || query.lensModel || query.gps)
+      throw new BadRequestException('摄影筛选只适用于照片图库。');
     const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
     const folderConditions = folderEntries.flatMap(({ where }) => (where ? [where] : []));
     const folderWhere = !smartFolder
@@ -150,6 +167,7 @@ export class EagleService {
         buildAssetWhere(ownerId, { ...filters, search: undefined }, trash, includePrivate),
       ];
       if (ruleQuery) semanticBaseConditions.push(buildEagleFilterWhere(ruleQuery));
+      semanticBaseConditions.push(...baseConditions.slice(1));
       const semanticBaseWhere: Prisma.EagleAssetWhereInput = { AND: semanticBaseConditions };
       const semanticWhere = folderWhere
         ? { AND: [semanticBaseWhere, folderWhere] }
@@ -167,14 +185,15 @@ export class EagleService {
     const cursor = query.cursor
       ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode })
       : null;
+    const dateField = this.libraryMode === 'PHOTO' ? 'chronologicalAt' : 'libraryAddedAt';
     const where: Prisma.EagleAssetWhereInput = cursor
       ? {
           AND: [
             queryWhere,
             {
               OR: [
-                { libraryAddedAt: { lt: cursor.libraryAddedAt } },
-                { libraryAddedAt: cursor.libraryAddedAt, id: { lt: cursor.id } },
+                { [dateField]: { lt: cursor.libraryAddedAt } },
+                { [dateField]: cursor.libraryAddedAt, id: { lt: cursor.id } },
               ],
             },
           ],
@@ -184,7 +203,7 @@ export class EagleService {
       this.prisma.eagleAsset.findMany({
         where: inLibrary(this.libraryMode, where),
         include: assetListInclude,
-        orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
+        orderBy: [{ [dateField]: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
       }),
       filterColor
@@ -221,7 +240,10 @@ export class EagleService {
       items: page.map(serializeAssetList),
       nextCursor:
         hasMore && page.length
-          ? encodeEagleAssetCursor(page.at(-1)!, { ownerId, libraryMode: this.libraryMode })
+          ? encodeEagleAssetCursor(
+              { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField] },
+              { ownerId, libraryMode: this.libraryMode },
+            )
           : null,
       colorCoverage: filterColor
         ? {

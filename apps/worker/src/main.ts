@@ -34,6 +34,7 @@ import {
   canClaimBackgroundJobs,
   taskBlocksAssetReady,
 } from './processing-policy';
+import { analyzePhotoPixels, readPhotoExif, PHOTO_ANALYSIS_VERSION } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
@@ -398,7 +399,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
               .toBuffer({ resolveWithObject: true }),
           });
         }
-        return { metadata, palette: null, rendered };
+        const photoAnalysis =
+          asset.libraryMode === 'PHOTO'
+            ? { ...(await readPhotoExif(metadata.exif)), ...(await analyzePhotoPixels(source)) }
+            : null;
+        return { metadata, palette: null, rendered, photoAnalysis };
       },
     );
     if (sourceDetails.verifiesOriginalHash) {
@@ -511,6 +516,29 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           },
           create: rendition,
           update: rendition,
+        });
+      }
+      if ('photoAnalysis' in processed && processed.photoAnalysis) {
+        const metadata = {
+          ...processed.photoAnalysis,
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetRevision: job.assetRevision,
+          processorVersion: PHOTO_ANALYSIS_VERSION,
+        };
+        await transaction.eaglePhotoMetadata.upsert({
+          where: { assetId: asset.id },
+          create: { ...metadata, assetId: asset.id },
+          update: { ...metadata, analyzedAt: new Date() },
+        });
+        await transaction.eagleAsset.updateMany({
+          where: {
+            id: asset.id,
+            ownerId: asset.ownerId,
+            libraryMode: 'PHOTO',
+            mediaRevision: job.assetRevision,
+          },
+          data: { chronologicalAt: metadata.capturedAt ?? asset.libraryAddedAt },
         });
       }
       await transaction.eagleAsset.updateMany({

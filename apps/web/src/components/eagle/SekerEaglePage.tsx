@@ -1,3 +1,5 @@
+import { PhotoMap } from '../photos/PhotoMap';
+import { PhotoMetadataDetails } from '../photos/PhotoMetadataDetails';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
@@ -247,6 +249,10 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
+  const [photoView, setPhotoView] = useState<'timeline' | 'map'>('timeline');
+  const [photoFilters, setPhotoFilters] = useState<
+    Pick<EagleAssetFilters, 'cameraModel' | 'lensModel' | 'gps'>
+  >({});
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
@@ -307,6 +313,7 @@ export function SekerEaglePage({
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
   const assetFilters: EagleAssetFilters = {
+    ...photoFilters,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
     rules: activeFilterCount ? filterQuery : undefined,
@@ -1130,6 +1137,60 @@ export function SekerEaglePage({
             />
           ) : (
             <>
+              {libraryMode === 'PHOTO' && (
+                <div className="photo-toolbar">
+                  <button
+                    type="button"
+                    aria-pressed={photoView === 'timeline'}
+                    onClick={() => setPhotoView('timeline')}
+                  >
+                    {t('时间线')}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={photoView === 'map'}
+                    onClick={() => setPhotoView('map')}
+                  >
+                    {t('地图')}
+                  </button>
+                  <input
+                    aria-label={t('按相机筛选')}
+                    placeholder={t('按相机筛选')}
+                    value={photoFilters.cameraModel ?? ''}
+                    onChange={(event) =>
+                      setPhotoFilters((current) => ({
+                        ...current,
+                        cameraModel: event.target.value || undefined,
+                      }))
+                    }
+                  />
+                  <input
+                    aria-label={t('按镜头筛选')}
+                    placeholder={t('按镜头筛选')}
+                    value={photoFilters.lensModel ?? ''}
+                    onChange={(event) =>
+                      setPhotoFilters((current) => ({
+                        ...current,
+                        lensModel: event.target.value || undefined,
+                      }))
+                    }
+                  />
+                  <select
+                    aria-label="GPS"
+                    value={photoFilters.gps ?? ''}
+                    onChange={(event) =>
+                      setPhotoFilters((current) => ({
+                        ...current,
+                        gps: (event.target.value || undefined) as 'WITH' | 'WITHOUT' | undefined,
+                      }))
+                    }
+                  >
+                    <option value="">{t('全部位置')}</option>
+                    <option value="WITH">{t('有 GPS')}</option>
+                    <option value="WITHOUT">{t('无 GPS')}</option>
+                  </select>
+                </div>
+              )}
               <div className={styles.toolbar}>
                 <div className={styles.titleBlock}>
                   <h1 id="eagle-library-title">
@@ -1301,7 +1362,24 @@ export function SekerEaglePage({
                   }
                 </div>
               )}
+              {libraryMode === 'PHOTO' && photoView === 'map' && (
+                <>
+                  <PhotoMap assets={assets} onOpen={openAssetPreview} />
+                  {assetsQuery.hasNextPage && (
+                    <button
+                      type="button"
+                      disabled={assetsQuery.isFetchingNextPage}
+                      onClick={() => void assetsQuery.fetchNextPage()}
+                    >
+                      {t('载入更多照片')}
+                    </button>
+                  )}
+                </>
+              )}
               <div
+                style={
+                  libraryMode === 'PHOTO' && photoView === 'map' ? { display: 'none' } : undefined
+                }
                 ref={assetViewport.containerRef}
                 className={styles.assetViewport}
                 role="region"
@@ -1408,6 +1486,15 @@ export function SekerEaglePage({
                             order={-masonryItem.top}
                             displayWidth={thumbnailSize}
                           />
+                          {libraryMode === 'PHOTO' && (
+                            <time
+                              className="photo-card-date"
+                              dateTime={asset.photoMetadata?.capturedAt ?? asset.libraryAddedAt}
+                            >
+                              {asset.photoMetadata?.capturedLocal?.slice(0, 10) ??
+                                `${asset.libraryAddedAt.slice(0, 10)} · ${t('时区未知')}`}
+                            </time>
+                          )}
                           {asset.lifecycleStatus !== 'READY' && (
                             <span className={styles.processing}>
                               {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
@@ -1479,6 +1566,9 @@ export function SekerEaglePage({
               </div>
             ) : selectedAsset ? (
               <>
+                {libraryMode === 'PHOTO' && (
+                  <PhotoMetadataDetails metadata={selectedAsset.photoMetadata} />
+                )}
                 {isSelectedAssetReadOnly && (
                   <p className={styles.saveFeedback}>{t('回收站中的素材信息为只读。')}</p>
                 )}

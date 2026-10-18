@@ -50,7 +50,26 @@ export interface EagleColorAnalysis {
   }>;
 }
 
+export interface PhotoMetadata {
+  capturedAt: string | null;
+  capturedLocal: string | null;
+  captureTimeZoneKnown: boolean;
+  cameraMake: string | null;
+  cameraModel: string | null;
+  lensModel: string | null;
+  focalLength: number | null;
+  aperture: number | null;
+  exposureSeconds: number | null;
+  iso: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  altitude: number | null;
+  sharpnessScore: number | null;
+  perceptualHash: string | null;
+}
 export interface EagleAssetListItem {
+  chronologicalAt?: string;
+  photoMetadata?: PhotoMetadata | null;
   libraryMode?: LibraryMode;
   id: string;
   originalName: string;
@@ -160,6 +179,9 @@ export interface EagleSmartFolder {
 }
 
 export interface EagleAssetFilters {
+  cameraModel?: string;
+  lensModel?: string;
+  gps?: 'WITH' | 'WITHOUT';
   limit?: number;
   cursor?: string;
   smartFolderId?: string;
@@ -232,6 +254,9 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   function assetQuery(filters: EagleAssetFilters): string {
     const query = new URLSearchParams({ limit: String(filters.limit ?? 100) });
     for (const key of [
+      'cameraModel',
+      'lensModel',
+      'gps',
       'cursor',
       'smartFolderId',
       'search',

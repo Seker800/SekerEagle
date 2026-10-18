@@ -41,3 +41,11 @@ redistributing binary images or installers.
 
 Run `npm run oss:check` before a release. A release process should also generate
 an SBOM from the exact container images or artifacts being published.
+
+## Photo metadata and maps
+
+Photo metadata parsing uses `exifr` (MIT). Interactive maps use Leaflet
+(BSD-2-Clause); the map retains visible OpenStreetMap attribution. Only visible
+map tiles are requested from the standard OpenStreetMap tile endpoint; no bulk
+or offline tile download is implemented. Photography metadata remains in the
+local application database.

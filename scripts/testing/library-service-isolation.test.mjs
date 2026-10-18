@@ -227,3 +227,39 @@ test('real Nest photo routes preserve guards and inject the photo service graph'
     await app.close();
   }
 });
+
+test('photo timeline and camera filters use captured metadata without exposing material records', async () => {
+  const f = await fixtures();
+  await prisma.eaglePhotoMetadata.create({
+    data: {
+      assetId: f.photo.id,
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetRevision: 0,
+      processorVersion: 'test',
+      cameraModel: 'Test Camera',
+      capturedAt: new Date('2000-01-01T00:00:00Z'),
+      latitude: 0,
+      longitude: 0,
+    },
+  });
+  await prisma.eagleAsset.update({
+    where: { id: f.photo.id },
+    data: { chronologicalAt: new Date('2000-01-01T00:00:00Z') },
+  });
+  const result = await f.photos.listAssets(f.ownerId, {
+    limit: 10,
+    cameraModel: 'Test Camera',
+    gps: 'WITH',
+  });
+  assert.equal(result.items[0].photoMetadata.cameraModel, 'Test Camera');
+  assert.equal(
+    (await f.photos.listAssets(f.ownerId, { limit: 10, cameraModel: 'Another Camera' })).items
+      .length,
+    0,
+  );
+  await assert.rejects(
+    () => f.materials.listAssets(f.ownerId, { limit: 10, cameraModel: 'Test Camera' }),
+    /摄影/,
+  );
+});
