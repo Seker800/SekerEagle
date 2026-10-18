@@ -149,3 +149,7 @@ test('rejects missing core imports, a copied photo controller, and a removed pro
 test('rejects malformed source instead of accepting a partial syntax tree', () => {
   rejectsMutation(page, (s) => s + '\nfunction broken( {', 'parse-error');
 });
+
+test('rejects photo-only overlays inside the shared card', () => {
+  rejectsMutation(page, (s) => s.replace('{isBatchSelection && (', "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{isBatchSelection && ("), 'shared-card');
+});
