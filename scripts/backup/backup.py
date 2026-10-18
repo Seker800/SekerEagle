@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Host-owned, single-successful-snapshot Eagle backup. No application secrets in status."""
+"""Host-owned plaintext Eagle backup; credentials never enter public status."""
 
 import argparse
-import bz2
 import fcntl
 import hashlib
 import io
@@ -19,6 +18,7 @@ import sys
 import tarfile
 import time
 import urllib.request
+import uuid
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -27,12 +27,7 @@ PRIVATE = ROOT / ".local/backup"
 PUBLIC = ROOT / ".runtime/backup-status"
 STATE = PRIVATE / "state.json"
 INPUT = PRIVATE / "input"
-PASSWORD = PRIVATE / "repository-password"
-RESTIC = PRIVATE / "bin/restic"
 REMOTE = "/volume1/homes/seker/sekereagle-backup"
-# DSM exposes shared-folder paths in its SFTP virtual filesystem.
-REPOSITORY = "sftp:SekerDesign:/home/sekereagle-backup/repository"
-TAG = "sekereagle-complete"
 EXPORT_CONTAINER = "sekereagle-backup-export"
 RESTORE_CONTAINER = "sekereagle-backup-restore-postgres"
 UTC = timezone.utc
@@ -77,19 +72,6 @@ def assert_ssh_target(config):
         "22",
     ):
         raise ValueError("SekerDesign SSH target changed; refusing backup")
-
-
-def obsolete_snapshots(snapshots, keep):
-    if not any(s.get("id") == keep for s in snapshots):
-        raise ValueError("Verified snapshot not present")
-    for snapshot in snapshots:
-        if TAG not in snapshot.get("tags", []) or not re.fullmatch(
-            "[a-f0-9]{64}", snapshot.get("id", "")
-        ):
-            raise ValueError(
-                "Repository contains an unowned snapshot; refusing retention"
-            )
-    return [s["id"] for s in snapshots if s["id"] != keep]
 
 
 def object_path(key):
@@ -170,19 +152,42 @@ def ssh(command):
     )
 
 
-def restic(*args, **kwargs):
-    env = {
-        **os.environ,
-        "RESTIC_REPOSITORY": REPOSITORY,
-        "RESTIC_PASSWORD_FILE": str(PASSWORD),
-        "RESTIC_CACHE_DIR": str(PRIVATE / "cache"),
-    }
-    return run(
-        [RESTIC, "-o", "sftp.args=-oBatchMode=yes -oConnectTimeout=10", *args],
-        env=env,
-        timeout=MAX_PAUSE,
-        **kwargs,
-    )
+def upload_receiver():
+    source = Path(__file__).with_name("plain_nas.py").read_bytes()
+    run(["ssh", "-o", "BatchMode=yes", "SekerDesign",
+         f"umask 077; mkdir -p {REMOTE}/tools; cat > {REMOTE}/tools/plain_nas.py.tmp && mv {REMOTE}/tools/plain_nas.py.tmp {REMOTE}/tools/plain_nas.py"], input=source)
+
+
+def remote(command, generation=None):
+    if command not in ("receive", "verify", "publish", "prune", "status"):
+        raise ValueError("Unsupported NAS operation")
+    if generation is not None and not re.fullmatch("[a-f0-9]{32,64}", generation):
+        raise ValueError("Invalid generation")
+    return run(["ssh", "-o", "BatchMode=yes", "SekerDesign",
+                f"python3 {REMOTE}/tools/plain_nas.py {command}" + (f" {generation}" if generation else "")], timeout=MAX_PAUSE).stdout
+
+
+def transfer_archive(generation):
+    if not re.fullmatch("[a-f0-9]{32}", generation):
+        raise ValueError("Invalid backup generation")
+    producer = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--archive"], stdout=subprocess.PIPE)
+    receiver = None
+    successful = False
+    try:
+        receiver = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "SekerDesign",
+            f"python3 {REMOTE}/tools/plain_nas.py receive {generation}"], stdin=producer.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        producer.stdout.close()
+        receiver.communicate(timeout=MAX_PAUSE)
+        if producer.wait(timeout=60) != 0 or receiver.returncode != 0:
+            raise RuntimeError("Plaintext source or NAS receiver failed")
+        successful = True
+    finally:
+        for process in (producer, receiver):
+            if process is not None and process.poll() is None:
+                process.kill()
+                process.wait()
+        if not successful:
+            run(["docker", "rm", "-f", EXPORT_CONTAINER], check=False)
 
 
 def inspect(name):
@@ -199,6 +204,7 @@ def preflight():
     available = int(ssh(f"df -Pk {REMOTE} | tail -1").split()[3]) * 1024
     if available < 20 * 1024**3 or shutil.disk_usage(PRIVATE).free < 16 * 1024**3:
         raise ValueError("Insufficient backup workspace")
+    upload_receiver()
     containers = {}
     for service in ("gateway", "api", "worker", "postgres", "minio"):
         info = inspect("sekereagle-" + service + "-1")
@@ -223,8 +229,8 @@ def preflight():
     run(
         ["docker", "exec", "sekereagle-api-1", "node", "scripts/assert-safe-target.mjs"]
     )
-    if restic("snapshots", "--json").returncode != 0:
-        raise ValueError("Backup repository unavailable")
+    if load_state().get("backupFormat") != "plain-directory-v1":
+        raise ValueError("Plaintext backup migration must finish before backup")
     return containers
 
 
@@ -485,35 +491,6 @@ def verify_archive(source, extract_database=None):
     return {"objects": len(objects), "bytes": sum(size for _, size in objects.values())}
 
 
-def verify_snapshot(snapshot, extract_database=None):
-    env = {
-        **os.environ,
-        "RESTIC_REPOSITORY": REPOSITORY,
-        "RESTIC_PASSWORD_FILE": str(PASSWORD),
-        "RESTIC_CACHE_DIR": str(PRIVATE / "cache"),
-    }
-    with subprocess.Popen(
-        [
-            str(RESTIC),
-            "-o",
-            "sftp.args=-oBatchMode=yes -oConnectTimeout=10",
-            "dump",
-            snapshot,
-            "/sekereagle.tar",
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        env=env,
-    ) as process:
-        result = verify_archive(process.stdout, extract_database)
-        # Consume stream tail so the producer can exit cleanly.
-        while process.stdout.read(1024 * 1024):
-            pass
-        if process.wait(timeout=60) != 0:
-            raise RuntimeError("Backup read-back failed")
-    return result
-
-
 def restore_database_check(directory):
     """Restore the complete database into a disposable, network-isolated test instance."""
     metadata = json.loads((directory / "deployment.json").read_text())
@@ -671,64 +648,29 @@ def backup():
             )
             # Every writer is now stopped; DB and object storage remain live.
             metadata = prepare_input(containers)
-            result = restic(
-                "backup",
-                "--json",
-                "--host",
-                "sekereagle-mac",
-                "--tag",
-                TAG,
-                "--stdin-from-command",
-                "--stdin-filename",
-                "sekereagle.tar",
-                "--",
-                sys.executable,
-                Path(__file__).resolve(),
-                "--archive",
-            )
-            summaries = [
-                json.loads(line)
-                for line in result.stdout.decode().splitlines()
-                if line.startswith("{")
-            ]
-            snapshot = next(
-                line["snapshot_id"]
-                for line in summaries
-                if line.get("message_type") == "summary"
-            )
-            # Source reads are complete: reopen Eagle before remote verification.
+            generation = uuid.uuid4().hex
+            transfer_archive(generation)
+            # Source reads are complete; NAS disk verification can run with Eagle online.
             restore_services(state)
             save_state(state)
-            restic("check")
-            drill = PRIVATE / "restore-check"
-            drill.mkdir(mode=0o700, exist_ok=True)
-            try:
-                integrity = verify_snapshot(snapshot, drill)
-                integrity["databaseCounts"] = restore_database_check(drill)
-            finally:
-                shutil.rmtree(drill, ignore_errors=True)
-            snapshots = json.loads(restic("snapshots", "--json").stdout)
-            # restic summary may abbreviate IDs; resolve only an unambiguous match.
-            matches = [s["id"] for s in snapshots if s["id"].startswith(snapshot)]
-            if len(matches) != 1:
-                raise ValueError("Ambiguous snapshot identity")
-            snapshot = matches[0]
-            old = obsolete_snapshots(snapshots, snapshot)
-            if old:
-                restic("forget", *old, "--prune", "--max-unused", "0")
-            else:
-                # Reclaim chunks from any interrupted first attempt as well.
-                restic("prune", "--max-unused", "0")
+            verified = json.loads(remote("verify", generation))
+            integrity = {"objects": verified["objects"], "bytes": verified["bytes"]}
+            integrity["databaseCounts"] = restore_database_check(INPUT)
+            remote("publish", generation)
+            remote("prune")
             state.update(
                 status="succeeded",
                 lastSuccessAt=stamp(),
-                lastSnapshotId=snapshot,
+                backupFormat="plain-directory-v1",
+                lastGenerationId=generation,
                 frozenAt=metadata["frozenAt"],
                 integrity=integrity,
                 lastRestoreTestAt=stamp(),
                 nextScheduledAt=following_slot(state["nextScheduledAt"], utcnow()),
             )
             state.pop("retryAfter", None)
+            state.pop("lastSnapshotId", None)
+            state.pop("failureReason", None)
         except BaseException:
             state["status"] = "failed"
             state["retryAfter"] = stamp(utcnow() + timedelta(hours=6))
@@ -811,33 +753,12 @@ def install():
     ssh(
         f'if test -e {REMOTE}; then test "$(cat {REMOTE}/owner-marker 2>/dev/null)" = sekereagle-independent-backup-v1; else umask 077; mkdir {REMOTE}; printf "%s\\n" sekereagle-independent-backup-v1 > {REMOTE}/owner-marker; fi'
     )
-    if not PASSWORD.exists():
-        fd = os.open(PASSWORD, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as file:
-            file.write(secrets.token_urlsafe(48) + "\n")
-    if not RESTIC.exists():
-        version = "0.19.1"
-        base = f"https://github.com/restic/restic/releases/download/v{version}/"
-        name = f"restic_{version}_darwin_arm64.bz2"
-        sums = urllib.request.urlopen(base + "SHA256SUMS", timeout=60).read().decode()
-        expected = next(
-            line.split()[0] for line in sums.splitlines() if line.split()[-1] == name
-        )
-        data = urllib.request.urlopen(base + name, timeout=120).read()
-        if hashlib.sha256(data).hexdigest() != expected:
-            raise ValueError("restic checksum mismatch")
-        RESTIC.parent.mkdir(parents=True, exist_ok=True)
-        RESTIC.write_bytes(bz2.decompress(data))
-        RESTIC.chmod(0o700)
-    existing = restic("snapshots", "--json", check=False)
-    if existing.returncode:
-        # Init only when the dedicated repository does not exist; never replace it.
-        ssh(f"test ! -e {REMOTE}/repository")
-        restic("init")
+    upload_receiver()
     if not STATE.exists():
         save_state(
             {
                 "configured": True,
+                "backupFormat": "plain-directory-v1",
                 "target": "SekerDesign",
                 "status": "never",
                 "lastAttemptAt": None,

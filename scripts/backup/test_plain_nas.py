@@ -5,7 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from test_backup import ArchiveIntegrityTests
+import test_backup
 
 spec = importlib.util.spec_from_file_location('plain_nas', Path(__file__).with_name('plain_nas.py'))
 nas = importlib.util.module_from_spec(spec)
@@ -22,7 +22,7 @@ class PlainNasTests(unittest.TestCase):
         (self.root / 'owner-marker').write_text('sekereagle-independent-backup-v1\n')
 
     def fixture(self, **kwargs):
-        return ArchiveIntegrityTests().fixture(**kwargs)
+        return test_backup.ArchiveIntegrityTests().fixture(**kwargs)
 
     def test_extract_verify_and_publish_plain_files_without_password(self):
         nas.receive(self.root, self.generation, self.fixture())

@@ -42,17 +42,6 @@ class BackupPolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 backup.assert_ssh_target(bad)
 
-    def test_only_backup_owned_snapshots_can_be_deleted(self):
-        snaps = [
-            {"id": "a" * 64, "tags": ["sekereagle-complete"]},
-            {"id": "b" * 64, "tags": ["sekereagle-complete"]},
-        ]
-        self.assertEqual(backup.obsolete_snapshots(snaps, "b" * 64), ["a" * 64])
-        with self.assertRaises(ValueError):
-            backup.obsolete_snapshots(snaps + [{"id": "c" * 64, "tags": []}], "b" * 64)
-        with self.assertRaises(ValueError):
-            backup.obsolete_snapshots(snaps, "c" * 64)
-
     def test_archive_key_cannot_escape_objects(self):
         self.assertEqual(
             backup.object_path("owner/assets/file.jpg"), "objects/owner/assets/file.jpg"
@@ -177,7 +166,7 @@ class RecoveryTests(unittest.TestCase):
             patch.object(backup, "restore_services", side_effect=resumed) as restore,
             patch.object(backup, "run"),
             patch.object(
-                backup, "restic", side_effect=RuntimeError("source failed")
+                backup, "transfer_archive", side_effect=RuntimeError("source failed")
             ) as restic,
             patch.object(backup.os, "getpgrp", return_value=123),
             patch.object(backup.os, "getpid", return_value=123),
@@ -189,7 +178,7 @@ class RecoveryTests(unittest.TestCase):
             self.assertEqual(
                 save.call_args.args[0]["lastSuccessAt"], state["lastSuccessAt"]
             )
-            self.assertTrue(all(c.args[0] != "forget" for c in restic.call_args_list))
+            restic.assert_called_once()
 
     def test_plain_backup_verifies_database_before_publish_and_never_uses_restic(self):
         state = {"nextScheduledAt": "2026-10-23T17:00:00Z"}
