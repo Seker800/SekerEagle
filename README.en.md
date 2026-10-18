@@ -13,6 +13,19 @@
   A self-hosted image and video library with cross-device sync, AI search, and automatic organization.
 </p>
 
+## Separate asset and photo libraries
+
+The top switch opens independent asset and photo workspaces with shared management
+components. Records, tags, uploads, processing preferences, privacy visibility and
+trash stay separate. Photos add capture-date timelines, camera/lens EXIF filters,
+GPS maps, optional local face recognition with manual corrections, burst/similarity
+groups and sharpness suggestions. Grouping never deletes originals.
+
+Face models are installed separately and are not silently downloaded or enabled.
+See the [photo acceptance notes](docs/photo-management-acceptance.md) (Chinese) for
+current batch limits, isolated test setup and future upgrade order. This change
+has not been deployed to an existing instance or imported a real Synology library.
+
 ## Why SekerEagle?
 
 - **Self-hosted**: Your library, your storage, your privacy.
