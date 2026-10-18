@@ -9,9 +9,19 @@
 </p>
 
 <p align="center">
-  <strong>A place for every spark of inspiration.</strong><br />
-  A self-hosted image and video library that finds images from fuzzy descriptions and learns from your manual tags.
+  <strong>Keep your library at home. Access it anywhere. Find images with words.</strong><br />
+  A self-hosted image and video library with cross-device sync, AI search, and automatic organization.
 </p>
+
+## Why SekerEagle?
+
+- **Self-hosted**: Your library, your storage, your privacy.
+- **Cross-device sync**: Access the same library from desktop and mobile browsers.
+- **AI semantic search**: Describe an image to find it, without tagging every file by hand.
+- **Automatic organization**: Smart folders collect matching images; AI helps categorize them.
+- **Hidden private content**: Excluded from everyday browsing and search until you enable it.
+- **Desktop caching**: Cache frequently viewed images locally to avoid repeated downloads.
+- **Multiple users, separate libraries**: Deploy once; each user's data stays isolated.
 
 <p align="center">
   <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>

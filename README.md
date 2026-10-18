@@ -9,9 +9,19 @@
 </p>
 
 <p align="center">
-  <strong>让灵感，各归其位。</strong><br />
-  一个可以自己部署的图片与视频素材库：用模糊描述找到图片，也能从人工标签中学习并辅助归类。
+  <strong>图库放家里，随处都能用，想找什么直接搜。</strong><br />
+  自托管的图片与视频素材库，支持多端同步、AI 搜图和自动整理。
 </p>
+
+## 核心优势
+
+- **私有部署**：图库与隐私自己掌控。
+- **多端同步**：电脑、手机浏览器随时访问同一图库。
+- **AI 语义搜图**：用描述找图片，省去逐张打标签。
+- **自动归类**：智能文件夹自动收图，AI 辅助分类。
+- **私密内容隐藏**：日常浏览与搜索不显示，手动开启才可见。
+- **客户端缓存**：常看图片本地缓存，减少重复加载。
+- **多人独立使用**：一次部署，多人使用，数据相互隔离。
 
 <p align="center">
   <a href="https://github.com/Seker800/SekerEagle/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Seker800/SekerEagle/ci.yml?branch=main&style=flat-square&label=CI" /></a>
