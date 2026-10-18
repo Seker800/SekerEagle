@@ -28,6 +28,14 @@ Prisma repositories / MinIO adapters
 - locale 只影响 Web 与桌面展示适配层；业务规则、用户数据和 API 领域对象保持语言无关。
 - 私密分类只由 owner 选择的人工标签规则决定；`EagleAsset.isPrivate` 是在标签写事务内同步的查询投影，不是第二套可编辑事实源。
 
+## Backup boundary
+
+- Host-owned backup orchestration pauses gateway/API/worker together; PostgreSQL and MinIO stay online.
+- The unencrypted, owner-private off-machine directory contains the complete database, all S3 objects, deployment configuration and source/version evidence.
+- The application only reads an administrator-only, sanitized status projection from a read-only mount. No public API can initiate backups, change SSH targets or access backup credentials.
+- A new ordinary-file generation is atomically published as successful only after full read-back integrity verification and an isolated database restore. Retention never removes the previous successful directory before that point.
+- An independent host watchdog terminates interrupted backup/export processes before reopening writers.
+
 ## Media memory boundary
 
 - 原图只用于下载、首轮预览生成和需要离线处理的后台切片任务；图库与大图预览不直接解码原图。
