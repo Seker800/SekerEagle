@@ -88,6 +88,8 @@ const {
 });
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
+const { copyImageMock } = vi.hoisted(() => ({ copyImageMock: vi.fn() }));
+vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: copyImageMock }));
 const image = {
   src: '/api/eagle/assets/asset-1/renditions/preview-1',
   alt: 'Owl Reference',
@@ -109,6 +111,16 @@ describe('EagleImageViewer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     handlers.clear();
+  });
+
+  it('copies the complete image even when viewing pyramid tiles', async () => {
+    copyImageMock.mockResolvedValue(undefined);
+    const onClose = vi.fn();
+    render(<EagleImageViewer image={image} descriptor={descriptor} onClose={onClose} />);
+    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    expect(copyImageMock).toHaveBeenCalledWith(image.src);
+    expect(await screen.findByText('已复制')).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('gives the browser a real image target for the large-image context menu', async () => {

@@ -47,7 +47,23 @@ const imageAsset: EagleAssetListItem = {
   ],
 };
 
+const { copyImageMock } = vi.hoisted(() => ({ copyImageMock: vi.fn() }));
+vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: copyImageMock }));
+
 describe('EagleAssetLightbox', () => {
+  it('copies the current photo preview and keeps native image context menus', () => {
+    copyImageMock.mockResolvedValue(undefined);
+    const view = render(<EagleAssetLightbox asset={imageAsset} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    expect(copyImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-1/renditions/preview-1');
+    expect(fireEvent.contextMenu(screen.getByRole('img'))).toBe(true);
+    view.rerender(<EagleAssetLightbox asset={{...imageAsset, id: 'image-2'}} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
+    expect(copyImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-2/renditions/preview-1');
+    view.rerender(<EagleAssetLightbox asset={videoAsset} onClose={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: '复制图片' })).not.toBeInTheDocument();
+  });
+
   it('renders video in a stage-constrained player', () => {
     const onClose = vi.fn();
     render(<EagleAssetLightbox asset={videoAsset} onClose={onClose} />);
