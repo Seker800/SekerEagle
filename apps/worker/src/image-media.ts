@@ -61,7 +61,7 @@ export async function withProcessableImage<T>(
   source: AsyncIterable<Uint8Array>,
   mimeType: string,
   storageKey: string,
-  operation: (image: Sharp) => Promise<T>,
+  operation: (image: Sharp, originalPath?: string) => Promise<T>,
 ): Promise<{ result: T; sha256: string }> {
   const hash = createHash('sha256');
   const hashTap = new Transform({
@@ -92,6 +92,7 @@ export async function withProcessableImage<T>(
     await decodeHeifFile(inputPath, outputPath);
     const result = await operation(
       sharp(outputPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS }),
+      inputPath,
     );
     return { result, sha256: hash.digest('hex') };
   } catch (error) {

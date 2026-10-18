@@ -5,6 +5,7 @@ COPY package.json package-lock.json tsconfig.base.json ./
 COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
+COPY packages/library-core/package.json packages/library-core/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/eagle-filter-core/package.json packages/eagle-filter-core/package.json
@@ -18,6 +19,9 @@ RUN npm run db:generate && npm run build --workspace @sekereagle/config && npm r
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg libheif-examples openssl && rm -rf /var/lib/apt/lists/*
+ARG WITH_PHOTO_FACE=0
+COPY services/photo-face/requirements.txt /tmp/photo-face-requirements.txt
+RUN if [ "$WITH_PHOTO_FACE" = "1" ]; then apt-get update && apt-get install -y --no-install-recommends python3 python3-venv && python3 -m venv /opt/photo-face && /opt/photo-face/bin/pip install --no-cache-dir -r /tmp/photo-face-requirements.txt && rm -rf /var/lib/apt/lists/*; fi
 ENV NODE_ENV=production
 WORKDIR /sekereagle
 COPY --from=build /sekereagle/node_modules ./node_modules
@@ -25,5 +29,6 @@ COPY --from=build /sekereagle/apps/worker/dist ./apps/worker/dist
 COPY --from=build /sekereagle/packages/config ./packages/config
 COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY package.json package-lock.json ./
+COPY services/photo-face services/photo-face
 USER node
 CMD ["node", "apps/worker/dist/main.js"]

@@ -284,6 +284,14 @@
         "operationId": "EagleController_listAssets",
         "parameters": [
           {
+            "name": "personId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cameraModel",
             "required": false,
             "in": "query",
@@ -918,6 +926,14 @@
       "get": {
         "operationId": "EagleController_listTrash",
         "parameters": [
+          {
+            "name": "personId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "cameraModel",
             "required": false,
@@ -2997,6 +3013,14 @@
         "operationId": "PhotosController_listAssets",
         "parameters": [
           {
+            "name": "personId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cameraModel",
             "required": false,
             "in": "query",
@@ -3631,6 +3655,14 @@
       "get": {
         "operationId": "PhotosController_listTrash",
         "parameters": [
+          {
+            "name": "personId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "cameraModel",
             "required": false,
@@ -4458,6 +4490,274 @@
           }
         ],
         "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/photography/facets": {
+      "get": {
+        "operationId": "PhotoManagementController_facets",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people": {
+      "get": {
+        "operationId": "PhotoManagementController_people",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/scan": {
+      "post": {
+        "operationId": "PhotoManagementController_scanPeople",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/{id}": {
+      "patch": {
+        "operationId": "PhotoManagementController_rename",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenamePersonDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/{id}/merge": {
+      "post": {
+        "operationId": "PhotoManagementController_merge",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergePeopleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/faces/{id}/person": {
+      "patch": {
+        "operationId": "PhotoManagementController_assign",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReassignFaceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups": {
+      "get": {
+        "operationId": "PhotoManagementController_groups",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups/scan": {
+      "post": {
+        "operationId": "PhotoManagementController_scanGroups",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups/manual": {
+      "post": {
+        "operationId": "PhotoManagementController_createGroup",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupMembersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups/{id}/members": {
+      "patch": {
+        "operationId": "PhotoManagementController_removeMembers",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroupMembersDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups/{id}/merge": {
+      "post": {
+        "operationId": "PhotoManagementController_mergeGroups",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergePeopleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/groups/{id}": {
+      "patch": {
+        "operationId": "PhotoManagementController_group",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGroupDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
       }
     },
     "/api/photos/privacy-visibility": {
@@ -5603,6 +5903,62 @@
       "BatchReviewVectorSuggestionsDto": {
         "type": "object",
         "properties": {}
+      },
+      "RenamePersonDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 120
+          }
+        },
+        "required": ["name"]
+      },
+      "MergePeopleDto": {
+        "type": "object",
+        "properties": {
+          "targetId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["targetId"]
+      },
+      "ReassignFaceDto": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "GroupMembersDto": {
+        "type": "object",
+        "properties": {
+          "assetIds": {
+            "minItems": 1,
+            "maxItems": 500,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["assetIds"]
+      },
+      "UpdateGroupDto": {
+        "type": "object",
+        "properties": {
+          "dismissed": {
+            "type": "boolean"
+          },
+          "bestAssetId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
       }
     }
   }

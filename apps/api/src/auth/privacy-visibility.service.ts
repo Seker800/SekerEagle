@@ -4,7 +4,10 @@ import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
 import type { LibraryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PRIVACY_VISIBILITY_COOKIE_NAME } from './auth.constants';
+import {
+  PRIVACY_VISIBILITY_COOKIE_NAME,
+  PHOTO_PRIVACY_VISIBILITY_COOKIE_NAME,
+} from './auth.constants';
 
 export const PRIVACY_VISIBILITY_DURATIONS = [1, 3, 6, 12, 24] as const;
 const DEFAULT_DURATION_HOURS = 3;
@@ -112,7 +115,7 @@ export class PrivacyVisibilityService {
 
   private cookieName(libraryMode: LibraryMode) {
     return libraryMode === 'PHOTO'
-      ? 'sekereagle_photo_privacy_visibility'
+      ? PHOTO_PRIVACY_VISIBILITY_COOKIE_NAME
       : PRIVACY_VISIBILITY_COOKIE_NAME;
   }
 

@@ -133,6 +133,10 @@ export class EagleService {
       readFilterColor(ruleQuery) ??
       activeFolderQueries.map(readStoredFilterColor).find((value) => value !== undefined);
     if (this.libraryMode === 'PHOTO') {
+      if (query.personId)
+        baseConditions.push({
+          photoFaces: { some: { personId: query.personId, isCurrent: true } },
+        });
       if (query.cameraModel || query.lensModel || query.gps)
         baseConditions.push({
           photoMetadata: {
@@ -146,7 +150,7 @@ export class EagleService {
             },
           },
         });
-    } else if (query.cameraModel || query.lensModel || query.gps)
+    } else if (query.personId || query.cameraModel || query.lensModel || query.gps)
       throw new BadRequestException('摄影筛选只适用于照片图库。');
     const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
     const folderConditions = folderEntries.flatMap(({ where }) => (where ? [where] : []));
@@ -494,12 +498,15 @@ export class EagleService {
       .findMany({
         where: {
           ownerId,
+          libraryMode: this.libraryMode,
           id: { in: assetIds },
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
         },
         select: {
           id: true,
+          chronologicalAt: true,
+          photoMetadata: true,
           lifecycleStatus: true,
           mediaErrorCode: true,
           updatedAt: true,

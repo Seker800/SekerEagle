@@ -7,6 +7,9 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       '.gitnexus/**',
+      '.omx/**',
+      '.runtime/**',
+      '.local/**',
       '**/node_modules/**',
       '**/.venv/**',
       'packages/contracts/src/generated/**',
@@ -18,6 +21,7 @@ export default tseslint.config(
     languageOptions: {
       globals: {
         fetch: 'readonly',
+        AbortSignal: 'readonly',
         process: 'readonly',
         URL: 'readonly',
       },

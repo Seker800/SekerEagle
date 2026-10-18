@@ -1,5 +1,10 @@
 import type { LibraryMode } from '@prisma/client';
-import { LIBRARY_MODE, inLibrary } from './library-mode';
+import {
+  LIBRARY_MODE,
+  LIBRARY_REVISION_OBSERVER,
+  type LibraryRevisionObserver,
+  inLibrary,
+} from './library-mode';
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
@@ -26,6 +31,9 @@ export class EagleUploadService {
     private readonly mediaCapabilities: EagleMediaCapabilityService,
     private readonly inspection: EagleUploadInspectionService,
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+    @Optional()
+    @Inject(LIBRARY_REVISION_OBSERVER)
+    private readonly revisionObserver?: LibraryRevisionObserver,
   ) {}
 
   partSizeFor(size: number): number {
@@ -330,6 +338,11 @@ export class EagleUploadService {
               rowVersion: { increment: 1 },
             },
           });
+          await this.revisionObserver?.onOriginalReplaced(
+            transaction,
+            { ownerId: session.uploaderId, libraryMode: this.libraryMode },
+            current.id,
+          );
           if (currentRenditions.length) {
             await transaction.eagleAssetRendition.deleteMany({
               where: {

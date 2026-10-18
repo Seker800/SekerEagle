@@ -28,6 +28,7 @@ function optionalTrimmed(value: unknown): unknown {
 }
 
 export class ListEagleAssetsDto {
+  @ApiPropertyOptional() @IsOptional() @IsUUID('4') personId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) cameraModel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) lensModel?: string;
   @ApiPropertyOptional({ enum: ['WITH', 'WITHOUT'] })

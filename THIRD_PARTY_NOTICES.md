@@ -49,3 +49,11 @@ Photo metadata parsing uses `exifr` (MIT). Interactive maps use Leaflet
 map tiles are requested from the standard OpenStreetMap tile endpoint; no bulk
 or offline tile download is implemented. Photography metadata remains in the
 local application database.
+
+## Local photo face models
+
+The optional `services/photo-face` subprocess uses OpenCV and NumPy. Its pinned
+YuNet detector weights are published by OpenCV Zoo under MIT, and SFace recognizer
+weights under Apache-2.0. Weights are downloaded separately with SHA-256 verification;
+the downloader retains each upstream model license beside the model file. See
+`services/photo-face/README.md` for exact upstream sources and runtime setup.

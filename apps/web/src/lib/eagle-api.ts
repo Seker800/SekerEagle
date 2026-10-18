@@ -105,6 +105,8 @@ export interface EagleAsset extends EagleAssetListItem {
 }
 
 export interface EagleAssetUpdate {
+  chronologicalAt?: string;
+  photoMetadata?: PhotoMetadata | null;
   id: string;
   lifecycleStatus: EagleAssetListItem['lifecycleStatus'];
   mediaErrorCode: string | null;
@@ -179,6 +181,7 @@ export interface EagleSmartFolder {
 }
 
 export interface EagleAssetFilters {
+  personId?: string;
   cameraModel?: string;
   lensModel?: string;
   gps?: 'WITH' | 'WITHOUT';
@@ -254,6 +257,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   function assetQuery(filters: EagleAssetFilters): string {
     const query = new URLSearchParams({ limit: String(filters.limit ?? 100) });
     for (const key of [
+      'personId',
       'cameraModel',
       'lensModel',
       'gps',

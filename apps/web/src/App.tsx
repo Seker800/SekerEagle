@@ -1,5 +1,5 @@
 import { t } from './i18n';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
@@ -20,6 +20,8 @@ export interface User {
 }
 export function App() {
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('MATERIAL');
+  const modeRef = useRef(libraryMode);
+  modeRef.current = libraryMode;
   const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -168,30 +170,32 @@ export function App() {
       ownerId={user.id}
     >
       <div className="standalone-eagle-shell">
-        <nav aria-label={t('图库模式')} className="library-mode-switch">
-          <button
-            type="button"
-            aria-pressed={libraryMode === 'MATERIAL'}
-            onClick={() => {
-              setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-              setLibraryMode('MATERIAL');
-            }}
-          >
-            {t('素材')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={libraryMode === 'PHOTO'}
-            onClick={() => {
-              setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-              setLibraryMode('PHOTO');
-            }}
-          >
-            {t('照片')}
-          </button>
-        </nav>
         {connectionButton}
         <SekerEaglePage
+          modeSwitcher={
+            <nav aria-label={t('图库模式')} className="library-mode-switch">
+              <button
+                type="button"
+                aria-pressed={libraryMode === 'MATERIAL'}
+                onClick={() => {
+                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                  setLibraryMode('MATERIAL');
+                }}
+              >
+                {t('素材')}
+              </button>
+              <button
+                type="button"
+                aria-pressed={libraryMode === 'PHOTO'}
+                onClick={() => {
+                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                  setLibraryMode('PHOTO');
+                }}
+              >
+                {t('照片')}
+              </button>
+            </nav>
+          }
           ownerId={user.id}
           canManageProcessing={user.role === 'ADMIN'}
           privacyVisibility={privacyVisibility}
@@ -202,7 +206,9 @@ export function App() {
               onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
               onLogout={() => void logout()}
               privacyVisibility={privacyVisibility}
-              onPrivacyVisibilityChange={setPrivacyVisibility}
+              onPrivacyVisibilityChange={(value) => {
+                if (modeRef.current === libraryMode) setPrivacyVisibility(value);
+              }}
               onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             />
           }

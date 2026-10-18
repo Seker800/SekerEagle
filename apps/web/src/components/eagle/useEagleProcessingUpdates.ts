@@ -1,6 +1,6 @@
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery, type QueryKey } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import type { EagleAssetEntityStore } from './eagle-asset-entity-store';
 
@@ -17,9 +17,12 @@ export function useEagleProcessingUpdates(input: {
   assets: EagleAssetListItem[];
   enabled: boolean;
   assetStore: EagleAssetEntityStore;
+  assetsQueryKey: QueryKey;
   updatesQueryKey: (assetIds: string[]) => QueryKey;
 }) {
+  const queryClient = useQueryClient();
   const {
+    libraryMode,
     api: { listEagleAssetUpdates },
   } = useLibraryWorkspace();
 
@@ -49,5 +52,7 @@ export function useEagleProcessingUpdates(input: {
     const updates = updatesQuery.data;
     if (!updates?.length) return;
     input.assetStore.mergeProcessingUpdates(updates);
-  }, [input.assetStore, updatesQuery.data]);
+    if (libraryMode === 'PHOTO' && updates.some((row) => row.lifecycleStatus === 'READY'))
+      void queryClient.invalidateQueries({ queryKey: input.assetsQueryKey });
+  }, [input.assetStore, input.assetsQueryKey, updatesQuery.data, libraryMode, queryClient]);
 }

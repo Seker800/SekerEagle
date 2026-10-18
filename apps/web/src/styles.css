@@ -624,6 +624,7 @@ select:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1062,33 +1063,39 @@ select:focus-visible {
   background: #22c55e;
 }
 
+.library-workspace-header {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 20px;
+  background: #17181b;
+  border-bottom: 1px solid #ffffff14;
+  font-size: 13px;
+}
 .library-mode-switch {
-  position: fixed;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
   display: flex;
   gap: 4px;
-  padding: 4px;
-  border: 1px solid var(--border-color, #d6d7dc);
-  border-radius: 10px;
-  background: var(--surface-color, #fff);
-  z-index: 50;
-  box-shadow: 0 2px 12px #0001;
+  padding: 3px;
+  border: 1px solid #ffffff14;
+  border-radius: 9px;
+  background: #111214;
 }
 .library-mode-switch button {
-  padding: 5px 18px;
+  padding: 5px 24px;
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: inherit;
+  color: #9b9ea6;
   cursor: pointer;
+  font-size: 12px;
 }
 .library-mode-switch button[aria-pressed='true'] {
-  background: #4f63df;
-  color: white;
+  background: #d69b4826;
+  color: #eab664;
+  font-weight: 600;
 }
-
 .photo-toolbar {
   display: flex;
   gap: 8px;
@@ -1131,4 +1138,132 @@ select:focus-visible {
 .photo-metadata dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.photo-collections {
+  overflow: auto;
+  padding: 20px;
+}
+.photo-collections-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.photo-person-grid,
+.photo-group-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px 0;
+}
+.photo-person-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #ddd5;
+  border-radius: 12px;
+}
+.photo-face-crop {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: block;
+  background: #9992;
+}
+.photo-face-crop img {
+  position: absolute;
+  max-width: none;
+}
+.photo-group {
+  border: 1px solid #9993;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 16px 0;
+}
+.photo-group-grid > div {
+  width: 150px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.photo-group-grid img {
+  width: 140px;
+  height: 140px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+.photo-person-editor {
+  padding: 16px;
+  border-top: 1px solid #9993;
+}
+.photo-person-editor form {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.photo-toolbar button,
+.photo-collections button {
+  padding: 7px 11px;
+  border: 1px solid #ffffff14;
+  border-radius: 6px;
+  background: #1d1f23;
+  color: #d8d9df;
+  font-size: 12px;
+  cursor: pointer;
+}
+.photo-toolbar button:hover,
+.photo-collections button:hover {
+  border-color: #d69b4870;
+  color: #eab664;
+}
+.photo-toolbar button[aria-pressed='true'],
+.photo-person-card[aria-pressed='true'] {
+  background: #d69b481a;
+  border-color: #d69b4870;
+  color: #eab664;
+}
+.photo-toolbar input,
+.photo-toolbar select,
+.photo-collections input,
+.photo-collections select {
+  padding: 7px 9px;
+  border: 1px solid #ffffff14;
+  border-radius: 6px;
+  background: #1d1f23;
+  color: #f0f1f3;
+  font-size: 12px;
+}
+.photo-collections button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.photo-collections h2 {
+  font-size: 18px;
+}
+.photo-collections h3 {
+  font-size: 14px;
+}
+.photo-collections p {
+  font-size: 12px;
+  color: #a0a3ad;
+}
+.photo-collections strong {
+  font-size: 12px;
+}
+.photo-group-grid > div > button:first-child {
+  padding: 4px;
+}
+.photo-group-grid > div > button {
+  width: 100%;
+  margin: 3px 0;
+}
+.photo-person-editor > button,
+.photo-person-editor > label {
+  margin: 8px 8px 8px 0;
 }

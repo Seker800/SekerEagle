@@ -15,6 +15,8 @@ function run(command, args, options = {}) {
   return result.stdout?.trim() ?? '';
 }
 let started = false;
+let restoreStarted = false;
+const restoreName = `${name}-restore`;
 try {
   run('docker', [
     'run',
@@ -52,7 +54,17 @@ try {
   for (let attempt = 0; attempt < 100; attempt++) {
     const ready = spawnSync(
       'docker',
-      ['exec', name, 'pg_isready', '-U', 'sekereagle_test', '-d', 'sekereagle_test'],
+      [
+        'exec',
+        name,
+        'pg_isready',
+        '-h',
+        '127.0.0.1',
+        '-U',
+        'sekereagle_test',
+        '-d',
+        'sekereagle_test',
+      ],
       { encoding: 'utf8' },
     );
     if (ready.status === 0) break;
@@ -130,8 +142,111 @@ try {
   );
   if (!source.startsWith('BEGIN;') || !source.trimEnd().endsWith('COMMIT;'))
     throw new Error('Migration must be atomic');
-  process.stdout.write('Library integration and historical upgrade checks passed.\n');
+  // Full database round-trip: all new photo tables and business corrections are
+  // restored into a second disposable database, never the operator's current data.
+  run('docker', [
+    'run',
+    '--detach',
+    '--rm',
+    '--name',
+    restoreName,
+    '--publish',
+    '127.0.0.1::5432',
+    '--tmpfs',
+    '/var/lib/postgresql/data:rw',
+    '--env',
+    'POSTGRES_HOST_AUTH_METHOD=trust',
+    '--env',
+    'POSTGRES_USER=sekereagle_test',
+    '--env',
+    'POSTGRES_DB=sekereagle_test',
+    'pgvector/pgvector:0.8.6-pg16',
+  ]);
+  restoreStarted = true;
+  const restorePort = run('docker', ['port', restoreName, '5432']).split(':').at(-1);
+  const restoreEnv = {
+    ...env,
+    DATABASE_URL: `postgresql://sekereagle_test@127.0.0.1:${restorePort}/sekereagle_test`,
+  };
+  run(process.execPath, ['scripts/assert-safe-target.mjs'], { env: restoreEnv, stdio: 'inherit' });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (
+      spawnSync('docker', [
+        'exec',
+        restoreName,
+        'pg_isready',
+        '-h',
+        '127.0.0.1',
+        '-U',
+        'sekereagle_test',
+        '-d',
+        'sekereagle_test',
+      ]).status === 0
+    )
+      break;
+    if (attempt === 99) throw new Error('Restore test database did not become ready');
+  }
+  const dump = spawnSync(
+    'docker',
+    ['exec', name, 'pg_dump', '-U', 'sekereagle_test', '-d', 'sekereagle_test', '--format=custom'],
+    { maxBuffer: 64 * 1024 * 1024 },
+  );
+  if (dump.status !== 0) throw new Error('Isolated database dump failed');
+  const restored = spawnSync(
+    'docker',
+    [
+      'exec',
+      '-i',
+      restoreName,
+      'pg_restore',
+      '-U',
+      'sekereagle_test',
+      '-d',
+      'sekereagle_test',
+      '--exit-on-error',
+      '--no-owner',
+    ],
+    { input: dump.stdout, maxBuffer: 4 * 1024 * 1024 },
+  );
+  if (restored.status !== 0)
+    throw new Error(`Isolated restore failed: ${restored.stderr.toString()}`);
+  const sqlArgs = (container) => [
+    'exec',
+    container,
+    'psql',
+    '-U',
+    'sekereagle_test',
+    '-d',
+    'sekereagle_test',
+    '-Atc',
+  ];
+  const tables = run('docker', [
+    ...sqlArgs(name),
+    "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename",
+  ]).split('\n');
+  if (!tables.every((table) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(table)))
+    throw new Error('Unexpected test table name');
+  const digestSql = tables
+    .map(
+      (table) =>
+        `SELECT '${table}', count(*), COALESCE(md5(string_agg(row_to_json(t)::text, '' ORDER BY row_to_json(t)::text)),'empty') FROM "${table}" t`,
+    )
+    .join(' UNION ALL ');
+  if (
+    run('docker', [...sqlArgs(name), digestSql]) !==
+    run('docker', [...sqlArgs(restoreName), digestSql])
+  )
+    throw new Error('Restored business data does not match the source test database');
+  if (process.argv.includes('--scale'))
+    run(process.execPath, ['scripts/testing/photo-library-scale.mjs'], {
+      env: restoreEnv,
+      stdio: 'inherit',
+    });
+  process.stdout.write(
+    'Library integration, historical upgrade, and complete database restore checks passed.\n',
+  );
 } finally {
+  if (restoreStarted) run('docker', ['stop', restoreName]);
   if (started) run('docker', ['stop', name]);
   rmSync(temp, { recursive: true, force: true });
 }

@@ -30,6 +30,7 @@ const KIND_LABELS: Record<string, string> = {
   GENERATE_IMAGE_PYRAMID: t('生成大图缩放切片'),
   GENERATE_EMBEDDING: t('生成图片向量'),
   GENERATE_AI_TAGS: t('生成 AI 标签'),
+  ANALYZE_PHOTO_FACES: t('分析人物'),
   PURGE_ASSET: t('永久清理素材'),
 };
 type ProcessingPage = 'QUEUE' | 'HISTORY' | 'BROWSE' | 'COLOR' | 'VECTOR';

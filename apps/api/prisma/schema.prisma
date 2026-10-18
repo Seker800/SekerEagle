@@ -63,6 +63,7 @@ enum EagleAiTagStatus {
 }
 
 enum EagleMediaJobKind {
+  ANALYZE_PHOTO_FACES
   GENERATE_RENDITIONS
   GENERATE_THUMBNAIL
   GENERATE_PREVIEW
@@ -163,6 +164,8 @@ enum EagleImportItemAction {
 }
 
 model User {
+  photoPeople EaglePhotoPerson[]
+  photoGroups EaglePhotoGroup[]
   id                       String                    @id @default(uuid())
   email                    String                    @unique
   passwordHash             String
@@ -352,6 +355,9 @@ model EagleAsset {
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
   photoMetadata                  EaglePhotoMetadata?
+  photoFaces                     EaglePhotoFace[]
+  bestPhotoGroups                EaglePhotoGroup[] @relation("PhotoGroupBestAsset")
+  photoGroupMembers              EaglePhotoGroupMember[]
 
   @@unique([ownerId, id])
   @@unique([ownerId, libraryMode, id])
@@ -1239,4 +1245,67 @@ model EaglePhotoMetadata {
   @@index([ownerId, libraryMode, capturedAt, assetId])
   @@index([ownerId, libraryMode, cameraModel])
   @@index([ownerId, libraryMode, lensModel])
+}
+
+
+model EaglePhotoPerson {
+  id String @id @default(uuid())
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  name String?
+  prototype Float[]
+  modelVersion String
+  rowVersion Int @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields:[ownerId],references:[id],onDelete:Restrict)
+  faces EaglePhotoFace[]
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode])
+}
+model EaglePhotoFace {
+  id String @id
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  assetId String
+  assetRevision Int
+  modelVersion String
+  personId String?
+  box Float[]
+  confidence Float
+  embedding Float[]
+  isCurrent Boolean @default(true)
+  userAssigned Boolean @default(false)
+  createdAt DateTime @default(now())
+  asset EagleAsset @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  person EaglePhotoPerson? @relation(fields: [ownerId, libraryMode, personId], references: [ownerId, libraryMode, id], onDelete: NoAction)
+  @@index([ownerId, libraryMode, personId])
+  @@index([ownerId, libraryMode, assetId, isCurrent])
+}
+model EaglePhotoGroup {
+  id String @id @default(uuid())
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  kind String
+  sourceKey String
+  title String?
+  bestAssetId String?
+  bestSelectedByUser Boolean @default(false)
+  dismissed Boolean @default(false)
+  createdAt DateTime @default(now())
+  owner User @relation(fields:[ownerId],references:[id],onDelete:Restrict)
+  bestAsset EagleAsset? @relation("PhotoGroupBestAsset",fields:[ownerId,libraryMode,bestAssetId],references:[ownerId,libraryMode,id],onDelete:NoAction)
+  members EaglePhotoGroupMember[]
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, sourceKey])
+}
+model EaglePhotoGroupMember {
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  groupId String
+  assetId String
+  group EaglePhotoGroup @relation(fields: [ownerId, libraryMode, groupId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  asset EagleAsset @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  @@id([groupId, assetId])
+  @@index([ownerId, libraryMode, assetId])
 }

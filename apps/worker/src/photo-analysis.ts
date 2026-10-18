@@ -50,13 +50,19 @@ export function normalizePhotoExif(exif: Record<string, unknown>) {
   };
 }
 
-export async function readPhotoExif(exif?: Buffer) {
+export async function readPhotoExif(exif?: Buffer, originalPath?: string) {
   let tags: Record<string, unknown> = {};
-  if (exif && exif.length <= 1024 * 1024) {
+  if ((exif && exif.length <= 1024 * 1024) || (!exif && originalPath)) {
     try {
       const value: unknown = await parse(
-        exif.subarray(0, 6).equals(Buffer.from('Exif\0\0')) ? exif.subarray(6) : exif,
+        exif
+          ? exif.subarray(0, 6).equals(Buffer.from('Exif\0\0'))
+            ? exif.subarray(6)
+            : exif
+          : originalPath!,
         {
+          chunkSize: 65536,
+          chunkLimit: 32,
           reviveValues: false,
           makerNote: false,
           userComment: false,

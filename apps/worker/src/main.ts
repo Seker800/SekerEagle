@@ -34,6 +34,7 @@ import {
   canClaimBackgroundJobs,
   taskBlocksAssetReady,
 } from './processing-policy';
+import { inferPhotoFaces, persistPhotoFaces, FACE_MODEL_VERSION } from './photo-faces';
 import { analyzePhotoPixels, readPhotoExif, PHOTO_ANALYSIS_VERSION } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
@@ -286,6 +287,23 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   if (job.kind === 'GENERATE_AI_TAGS') {
     if (await finishAlreadyAnalyzedAiTagJob(prisma, job)) return;
   }
+  if (job.kind === 'ANALYZE_PHOTO_FACES') {
+    if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
+    const preview = asset.renditions.find((row) => row.kind === 'PREVIEW');
+    if (!preview) throw new Error('PHOTO_FACE_PREVIEW_NOT_READY');
+    assertOwnedKey(asset.ownerId, preview.storageKey);
+    const object = await storage.send(
+      new GetObjectCommand({ Bucket: s3Bucket, Key: preview.storageKey }),
+    );
+    if (!object.Body) throw new Error('PHOTO_FACE_PREVIEW_MISSING');
+    const bytes = await readBoundedBytes(
+      object.Body as AsyncIterable<Uint8Array>,
+      20 * 1024 * 1024,
+    );
+    await persistPhotoFaces(prisma, job, await inferPhotoFaces(bytes));
+    return;
+  }
+
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
   if (job.kind === 'EXTRACT_COLOR_PALETTE') {
     await prisma.eagleAssetColorAnalysis.upsert({
@@ -361,7 +379,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       object.Body as AsyncIterable<Uint8Array>,
       sourceDetails.mimeType,
       sourceDetails.storageKey,
-      async (source) => {
+      async (source, originalPath) => {
         const metadataPromise = source.clone().metadata();
         if (job.kind === 'EXTRACT_COLOR_PALETTE') {
           const [{ data, info }, metadata] = await Promise.all([
@@ -401,7 +419,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         }
         const photoAnalysis =
           asset.libraryMode === 'PHOTO'
-            ? { ...(await readPhotoExif(metadata.exif)), ...(await analyzePhotoPixels(source)) }
+            ? {
+                ...(await readPhotoExif(metadata.exif, originalPath)),
+                ...(await analyzePhotoPixels(source)),
+              }
             : null;
         return { metadata, palette: null, rendered, photoAnalysis };
       },
@@ -516,6 +537,27 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           },
           create: rendition,
           update: rendition,
+        });
+      }
+      if (
+        asset.libraryMode === 'PHOTO' &&
+        process.env.PHOTO_FACE_PYTHON &&
+        process.env.PHOTO_FACE_MODEL_DIR
+      ) {
+        await transaction.eagleAssetProcessingJob.createMany({
+          data: [
+            {
+              ownerId: asset.ownerId,
+              libraryMode: 'PHOTO',
+              assetId: asset.id,
+              assetRevision: job.assetRevision,
+              kind: 'ANALYZE_PHOTO_FACES',
+              processorVersion: FACE_MODEL_VERSION,
+              lane: 'BACKGROUND',
+              dependsOnJobId: job.id,
+            },
+          ],
+          skipDuplicates: true,
         });
       }
       if ('photoAnalysis' in processed && processed.photoAnalysis) {

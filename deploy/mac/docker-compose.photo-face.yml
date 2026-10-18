@@ -1,0 +1,15 @@
+# Optional local CPU face inference. Download verified models before enabling.
+services:
+  api:
+    environment:
+      PHOTO_FACE_PYTHON: /opt/photo-face/bin/python
+      PHOTO_FACE_MODEL_DIR: /models
+  worker:
+    build:
+      args:
+        WITH_PHOTO_FACE: '1'
+    environment:
+      PHOTO_FACE_PYTHON: /opt/photo-face/bin/python
+      PHOTO_FACE_MODEL_DIR: /models
+    volumes:
+      - ../../.runtime/photo-face/models:/models:ro

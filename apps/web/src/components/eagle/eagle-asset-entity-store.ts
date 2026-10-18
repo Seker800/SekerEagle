@@ -53,6 +53,8 @@ export class EagleAssetEntityStore {
         lifecycleStatus: update.lifecycleStatus,
         mediaErrorCode: update.mediaErrorCode,
         updatedAt: update.updatedAt,
+        ...(update.chronologicalAt ? { chronologicalAt: update.chronologicalAt } : {}),
+        ...(update.photoMetadata !== undefined ? { photoMetadata: update.photoMetadata } : {}),
         renditions: update.renditions,
       });
       changed = true;

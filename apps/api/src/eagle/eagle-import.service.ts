@@ -433,7 +433,7 @@ export class EagleImportService {
     });
     await this.convergeRun(ownerId, runId);
     return this.prisma.eagleImportRunItem
-      .findUniqueOrThrow({ where: { id: itemId } })
+      .findUniqueOrThrow({ where: { id: itemId, libraryMode: 'MATERIAL' } })
       .then(serializeItem);
   }
 

@@ -1,3 +1,5 @@
+import { PhotoManagementController } from './photo-management.controller';
+import { PhotoManagementService } from './photo-management.service';
 import {
   Body,
   Controller,
@@ -27,7 +29,8 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { PrivacyVisibilityService } from '../auth/privacy-visibility.service';
 import { UpdatePrivacyVisibilityDto } from '../auth/dto';
-import { LIBRARY_MODE } from '../eagle/library-mode';
+import { PhotoRevisionObserver } from './photo-revision.observer';
+import { LIBRARY_MODE, LIBRARY_REVISION_OBSERVER } from '../eagle/library-mode';
 
 @SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photos')
@@ -79,6 +82,7 @@ export class PhotoPrivacyVisibilityController {
   imports: [AuthModule, StorageModule],
   controllers: [
     PhotosController,
+    PhotoManagementController,
     PhotoPrivacyVisibilityController,
     PhotoUploadsController,
     PhotoAiTagsController,
@@ -86,6 +90,9 @@ export class PhotoPrivacyVisibilityController {
     PhotoProcessingController,
   ],
   providers: [
+    PhotoManagementService,
+    PhotoRevisionObserver,
+    { provide: LIBRARY_REVISION_OBSERVER, useExisting: PhotoRevisionObserver },
     ...EAGLE_LIBRARY_PROVIDERS.filter((provider) => provider !== EagleMaintenanceService),
     { provide: LIBRARY_MODE, useValue: 'PHOTO' },
   ],

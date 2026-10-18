@@ -1,3 +1,5 @@
+import { PhotoWorkspaceNavigation } from '../photos/PhotoWorkspaceNavigation';
+import { PhotoCollections } from '../photos/PhotoCollections';
 import { PhotoMap } from '../photos/PhotoMap';
 import { PhotoMetadataDetails } from '../photos/PhotoMetadataDetails';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -88,6 +90,7 @@ import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
 interface SekerEaglePageProps {
+  modeSwitcher?: ReactNode;
   accessToken?: string;
   ownerId: string;
   canManageProcessing?: boolean;
@@ -205,6 +208,7 @@ function isFileDrag(event: DragEvent<HTMLElement>): boolean {
   return event.dataTransfer?.types?.includes('Files') === true;
 }
 export function SekerEaglePage({
+  modeSwitcher,
   accessToken: providedAccessToken,
   ownerId,
   canManageProcessing = false,
@@ -249,9 +253,9 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<'timeline' | 'map'>('timeline');
+  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'groups'>('timeline');
   const [photoFilters, setPhotoFilters] = useState<
-    Pick<EagleAssetFilters, 'cameraModel' | 'lensModel' | 'gps'>
+    Pick<EagleAssetFilters, 'cameraModel' | 'lensModel' | 'gps' | 'personId'>
   >({});
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
@@ -529,6 +533,7 @@ export function SekerEaglePage({
     });
   }, [assetsById, selectedAssetId, selectedAssetIds, visibleMasonryItems]);
   useEagleProcessingUpdates({
+    assetsQueryKey: queryKeys.assets,
     accessToken,
     assets: observedAssets,
     enabled: isAssetView,
@@ -897,7 +902,16 @@ export function SekerEaglePage({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
+      {modeSwitcher && (
+        <header className="library-workspace-header">
+          <strong>SekerEagle</strong>
+          {modeSwitcher}
+        </header>
+      )}
+      <div
+        style={modeSwitcher ? { height: 'calc(100dvh - 52px)' } : undefined}
+        className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}
+      >
         <nav
           className={styles.sidebar}
           aria-label={libraryMode === 'PHOTO' ? t('照片库导航') : t('素材库导航')}
@@ -1138,58 +1152,14 @@ export function SekerEaglePage({
           ) : (
             <>
               {libraryMode === 'PHOTO' && (
-                <div className="photo-toolbar">
-                  <button
-                    type="button"
-                    aria-pressed={photoView === 'timeline'}
-                    onClick={() => setPhotoView('timeline')}
-                  >
-                    {t('时间线')}
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={photoView === 'map'}
-                    onClick={() => setPhotoView('map')}
-                  >
-                    {t('地图')}
-                  </button>
-                  <input
-                    aria-label={t('按相机筛选')}
-                    placeholder={t('按相机筛选')}
-                    value={photoFilters.cameraModel ?? ''}
-                    onChange={(event) =>
-                      setPhotoFilters((current) => ({
-                        ...current,
-                        cameraModel: event.target.value || undefined,
-                      }))
-                    }
-                  />
-                  <input
-                    aria-label={t('按镜头筛选')}
-                    placeholder={t('按镜头筛选')}
-                    value={photoFilters.lensModel ?? ''}
-                    onChange={(event) =>
-                      setPhotoFilters((current) => ({
-                        ...current,
-                        lensModel: event.target.value || undefined,
-                      }))
-                    }
-                  />
-                  <select
-                    aria-label="GPS"
-                    value={photoFilters.gps ?? ''}
-                    onChange={(event) =>
-                      setPhotoFilters((current) => ({
-                        ...current,
-                        gps: (event.target.value || undefined) as 'WITH' | 'WITHOUT' | undefined,
-                      }))
-                    }
-                  >
-                    <option value="">{t('全部位置')}</option>
-                    <option value="WITH">{t('有 GPS')}</option>
-                    <option value="WITHOUT">{t('无 GPS')}</option>
-                  </select>
-                </div>
+                <PhotoWorkspaceNavigation
+                  selectedAssetIds={selectedAssetIds}
+                  includePrivate={privateVisible}
+                  view={photoView}
+                  filters={photoFilters}
+                  onViewChange={setPhotoView}
+                  onFiltersChange={setPhotoFilters}
+                />
               )}
               <div className={styles.toolbar}>
                 <div className={styles.titleBlock}>
@@ -1218,7 +1188,7 @@ export function SekerEaglePage({
                   <IconSearch size={17} aria-hidden="true" />
                   <input
                     type="search"
-                    aria-label={t('搜索素材')}
+                    aria-label={libraryMode === 'PHOTO' ? t('搜索照片') : t('搜索素材')}
                     placeholder={t('搜索名称或标签')}
                     value={search}
                     onChange={(event) => setSearch(event.target.value)}
@@ -1283,7 +1253,13 @@ export function SekerEaglePage({
                   <button
                     type="button"
                     className={isInspectorOpen ? styles.filterActive : undefined}
-                    aria-label={isInspectorOpen ? t('隐藏素材详情') : t('显示素材详情')}
+                    aria-label={
+                      isInspectorOpen
+                        ? t('隐藏素材详情')
+                        : libraryMode === 'PHOTO'
+                          ? t('显示照片详情')
+                          : t('显示素材详情')
+                    }
                     aria-pressed={isInspectorOpen}
                     onClick={() => setIsInspectorVisible((value) => !value)}
                   >
@@ -1362,6 +1338,17 @@ export function SekerEaglePage({
                   }
                 </div>
               )}
+              {libraryMode === 'PHOTO' && (photoView === 'people' || photoView === 'groups') && (
+                <PhotoCollections
+                  view={photoView}
+                  includePrivate={privateVisible}
+                  onOpen={openAssetPreview}
+                  onPerson={(personId) => {
+                    setPhotoFilters((current) => ({ ...current, personId }));
+                    setPhotoView('timeline');
+                  }}
+                />
+              )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
                 <>
                   <PhotoMap assets={assets} onOpen={openAssetPreview} />
@@ -1378,12 +1365,14 @@ export function SekerEaglePage({
               )}
               <div
                 style={
-                  libraryMode === 'PHOTO' && photoView === 'map' ? { display: 'none' } : undefined
+                  libraryMode === 'PHOTO' && photoView !== 'timeline'
+                    ? { display: 'none' }
+                    : undefined
                 }
                 ref={assetViewport.containerRef}
                 className={styles.assetViewport}
                 role="region"
-                aria-label={t('素材瀑布流')}
+                aria-label={libraryMode === 'PHOTO' ? t('照片时间线') : t('素材瀑布流')}
                 onClick={clearAssetSelection}
                 onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
               >
@@ -1492,7 +1481,7 @@ export function SekerEaglePage({
                               dateTime={asset.photoMetadata?.capturedAt ?? asset.libraryAddedAt}
                             >
                               {asset.photoMetadata?.capturedLocal?.slice(0, 10) ??
-                                `${asset.libraryAddedAt.slice(0, 10)} · ${t('时区未知')}`}
+                                `${asset.libraryAddedAt.slice(0, 10)} · ${t('导入日期')}`}
                             </time>
                           )}
                           {asset.lifecycleStatus !== 'READY' && (
@@ -1523,10 +1512,13 @@ export function SekerEaglePage({
         </section>
 
         {isInspectorOpen && (
-          <aside className={styles.inspector} aria-label={t('素材详情')}>
+          <aside
+            className={styles.inspector}
+            aria-label={libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}
+          >
             <div className={styles.inspectorHeader}>
               <div>
-                <strong>{t('素材详情')}</strong>
+                <strong>{libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}</strong>
                 {selectedAssetIds.length > 1 && (
                   <span>
                     {t('已选择') + ' '}
@@ -1537,7 +1529,7 @@ export function SekerEaglePage({
               </div>
               <button
                 type="button"
-                aria-label={t('关闭素材详情')}
+                aria-label={libraryMode === 'PHOTO' ? t('关闭照片详情') : t('关闭素材详情')}
                 onClick={() => setIsInspectorVisible(false)}
               >
                 <IconX size={17} />
@@ -1546,12 +1538,16 @@ export function SekerEaglePage({
             {selectedAssetId === null ? (
               <div className={styles.inspectorEmpty}>
                 <IconPhoto size={28} />
-                <span>{t('选择一项素材查看详情')}</span>
+                <span>
+                  {libraryMode === 'PHOTO' ? t('选择一张照片查看详情') : t('选择一项素材查看详情')}
+                </span>
               </div>
             ) : selectedAssetQuery.isPending ? (
               <div className={styles.inspectorEmpty} role="status">
                 <IconPhoto size={28} />
-                <span>{t('正在加载素材详情…')}</span>
+                <span>
+                  {libraryMode === 'PHOTO' ? t('正在加载照片详情…') : t('正在加载素材详情…')}
+                </span>
               </div>
             ) : selectedAssetQuery.isError ? (
               <div className={styles.inspectorEmpty} role="alert">
@@ -1862,7 +1858,9 @@ export function SekerEaglePage({
             ) : (
               <div className={styles.inspectorEmpty}>
                 <IconPhoto size={28} />
-                <span>{t('选择一项素材查看详情')}</span>
+                <span>
+                  {libraryMode === 'PHOTO' ? t('选择一张照片查看详情') : t('选择一项素材查看详情')}
+                </span>
               </div>
             )}
           </aside>
