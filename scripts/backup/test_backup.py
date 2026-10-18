@@ -191,6 +191,39 @@ class RecoveryTests(unittest.TestCase):
             )
             self.assertTrue(all(c.args[0] != "forget" for c in restic.call_args_list))
 
+    def test_plain_backup_verifies_database_before_publish_and_never_uses_restic(self):
+        state = {"nextScheduledAt": "2026-10-23T17:00:00Z"}
+        events = []
+        def resumed(value):
+            value["pausedServices"] = []
+        def remote(command, generation=None):
+            events.append(command)
+            return b'{"objects":1,"bytes":12}'
+        def restored(directory):
+            events.append("database-restored")
+            return {"assets":1}
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(backup, "PRIVATE", Path(directory)),
+            patch.object(backup, "INPUT", Path(directory) / "input"),
+            patch.object(backup, "load_state", return_value=state),
+            patch.object(backup, "save_state") as save,
+            patch.object(backup, "preflight", return_value={}),
+            patch.object(backup, "prepare_input", return_value={"frozenAt":"now"}),
+            patch.object(backup, "restore_services", side_effect=resumed),
+            patch.object(backup, "restore_database_check", side_effect=restored),
+            patch.object(backup, "transfer_archive", create=True),
+            patch.object(backup, "remote", side_effect=remote, create=True),
+            patch.object(backup, "restic", side_effect=RuntimeError("Legacy encryption forbidden"), create=True),
+            patch.object(backup, "run"),
+            patch.object(backup.os, "getpgrp", return_value=123),
+            patch.object(backup.os, "getpid", return_value=123),
+        ):
+            backup.backup()
+            self.assertEqual(events, ["verify", "database-restored", "publish", "prune"])
+            self.assertEqual(save.call_args.args[0]["backupFormat"], "plain-directory-v1")
+            self.assertEqual(save.call_args.args[0]["status"], "succeeded")
+
     def test_restart_recovery_reopens_only_previously_paused_services(self):
         state = {"pausedServices": ["gateway", "api", "worker"]}
 
