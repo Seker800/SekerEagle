@@ -64,7 +64,12 @@ class ArchiveIntegrityTests(unittest.TestCase):
             (root / "deployment.json").write_text(
                 json.dumps({"images": {"api": {"id": "sha256:test"}}})
             )
-            for name in ("database.dump", "globals.sql", "deployment.env", "source.tar.gz"):
+            for name in (
+                "database.dump",
+                "globals.sql",
+                "deployment.env",
+                "source.tar.gz",
+            ):
                 (root / name).write_bytes(b"test")
             process = unittest.mock.Mock()
             process.stdout = io.BytesIO(b'{"complete":true,"count":0,"bytes":0}\n')
@@ -145,6 +150,40 @@ class ArchiveIntegrityTests(unittest.TestCase):
             backup.verify_archive(stream)
 
 
+class PlainTransferTests(unittest.TestCase):
+    def test_either_failed_process_rejects_even_a_complete_receiver(self):
+        for source_code, receiver_code in [(7, 0), (0, 3)]:
+            producer = unittest.mock.Mock()
+            producer.wait.return_value = source_code
+            producer.poll.return_value = source_code
+            receiver = unittest.mock.Mock()
+            receiver.returncode = receiver_code
+            receiver.poll.return_value = receiver_code
+            with (
+                patch.object(
+                    backup.subprocess, "Popen", side_effect=[producer, receiver]
+                ),
+                patch.object(backup, "run") as cleanup,
+            ):
+                with self.assertRaises(RuntimeError):
+                    backup.transfer_archive("a" * 32)
+                cleanup.assert_called_once_with(
+                    ["docker", "rm", "-f", backup.EXPORT_CONTAINER], check=False
+                )
+
+    def test_successful_transfer_does_not_publish_or_delete_any_generation(self):
+        producer = unittest.mock.Mock()
+        producer.wait.return_value = producer.poll.return_value = 0
+        receiver = unittest.mock.Mock()
+        receiver.returncode = receiver.poll.return_value = 0
+        with (
+            patch.object(backup.subprocess, "Popen", side_effect=[producer, receiver]),
+            patch.object(backup, "run") as cleanup,
+        ):
+            backup.transfer_archive("a" * 32)
+            cleanup.assert_not_called()
+
+
 class RecoveryTests(unittest.TestCase):
     def test_export_failure_restores_writers_and_never_deletes_old_backup(self):
         state = {
@@ -183,14 +222,18 @@ class RecoveryTests(unittest.TestCase):
     def test_plain_backup_verifies_database_before_publish_and_never_uses_restic(self):
         state = {"nextScheduledAt": "2026-10-23T17:00:00Z"}
         events = []
+
         def resumed(value):
             value["pausedServices"] = []
+
         def remote(command, generation=None):
             events.append(command)
             return b'{"objects":1,"bytes":12}'
+
         def restored(directory):
             events.append("database-restored")
-            return {"assets":1}
+            return {"assets": 1}
+
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(backup, "PRIVATE", Path(directory)),
@@ -198,19 +241,28 @@ class RecoveryTests(unittest.TestCase):
             patch.object(backup, "load_state", return_value=state),
             patch.object(backup, "save_state") as save,
             patch.object(backup, "preflight", return_value={}),
-            patch.object(backup, "prepare_input", return_value={"frozenAt":"now"}),
+            patch.object(backup, "prepare_input", return_value={"frozenAt": "now"}),
             patch.object(backup, "restore_services", side_effect=resumed),
             patch.object(backup, "restore_database_check", side_effect=restored),
             patch.object(backup, "transfer_archive", create=True),
             patch.object(backup, "remote", side_effect=remote, create=True),
-            patch.object(backup, "restic", side_effect=RuntimeError("Legacy encryption forbidden"), create=True),
+            patch.object(
+                backup,
+                "restic",
+                side_effect=RuntimeError("Legacy encryption forbidden"),
+                create=True,
+            ),
             patch.object(backup, "run"),
             patch.object(backup.os, "getpgrp", return_value=123),
             patch.object(backup.os, "getpid", return_value=123),
         ):
             backup.backup()
-            self.assertEqual(events, ["verify", "database-restored", "publish", "prune"])
-            self.assertEqual(save.call_args.args[0]["backupFormat"], "plain-directory-v1")
+            self.assertEqual(
+                events, ["verify", "database-restored", "publish", "prune"]
+            )
+            self.assertEqual(
+                save.call_args.args[0]["backupFormat"], "plain-directory-v1"
+            )
             self.assertEqual(save.call_args.args[0]["status"], "succeeded")
 
     def test_restart_recovery_reopens_only_previously_paused_services(self):

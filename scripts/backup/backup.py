@@ -153,9 +153,20 @@ def ssh(command):
 
 
 def upload_receiver():
-    source = Path(__file__).with_name("plain_nas.py").read_bytes()
-    run(["ssh", "-o", "BatchMode=yes", "SekerDesign",
-         f"umask 077; mkdir -p {REMOTE}/tools; cat > {REMOTE}/tools/plain_nas.py.tmp && mv {REMOTE}/tools/plain_nas.py.tmp {REMOTE}/tools/plain_nas.py"], input=source)
+    for source, name in [
+        (Path(__file__).with_name("plain_nas.py"), "plain_nas.py"),
+        (Path(__file__), "host_backup.py"),
+    ]:
+        run(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "SekerDesign",
+                f"umask 077; mkdir -p {REMOTE}/tools; cat > {REMOTE}/tools/{name}.tmp && mv {REMOTE}/tools/{name}.tmp {REMOTE}/tools/{name}",
+            ],
+            input=source.read_bytes(),
+        )
 
 
 def remote(command, generation=None):
@@ -163,19 +174,43 @@ def remote(command, generation=None):
         raise ValueError("Unsupported NAS operation")
     if generation is not None and not re.fullmatch("[a-f0-9]{32,64}", generation):
         raise ValueError("Invalid generation")
-    return run(["ssh", "-o", "BatchMode=yes", "SekerDesign",
-                f"python3 {REMOTE}/tools/plain_nas.py {command}" + (f" {generation}" if generation else "")], timeout=MAX_PAUSE).stdout
+    return run(
+        [
+            "ssh",
+            "-o",
+            "BatchMode=yes",
+            "SekerDesign",
+            f"python3 {REMOTE}/tools/plain_nas.py {command}"
+            + (f" {generation}" if generation else ""),
+        ],
+        timeout=MAX_PAUSE,
+    ).stdout
 
 
 def transfer_archive(generation):
     if not re.fullmatch("[a-f0-9]{32}", generation):
         raise ValueError("Invalid backup generation")
-    producer = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "--archive"], stdout=subprocess.PIPE)
+    producer = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "--archive"],
+        stdout=subprocess.PIPE,
+    )
     receiver = None
     successful = False
     try:
-        receiver = subprocess.Popen(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "SekerDesign",
-            f"python3 {REMOTE}/tools/plain_nas.py receive {generation}"], stdin=producer.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        receiver = subprocess.Popen(
+            [
+                "ssh",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                "SekerDesign",
+                f"python3 {REMOTE}/tools/plain_nas.py receive {generation}",
+            ],
+            stdin=producer.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
         producer.stdout.close()
         receiver.communicate(timeout=MAX_PAUSE)
         if producer.wait(timeout=60) != 0 or receiver.returncode != 0:
@@ -333,7 +368,7 @@ def tar_info(name, size):
 
 
 def archive_stream():
-    """Producer exit is checked by restic --stdin-from-command; never accept a truncated stream."""
+    """Plaintext transport validates both producer exit and the complete manifest."""
     metadata = json.loads((INPUT / "deployment.json").read_text())
     image = metadata["images"]["api"]["id"]
     producer = subprocess.Popen(
