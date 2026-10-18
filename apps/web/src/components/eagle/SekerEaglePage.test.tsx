@@ -1,6 +1,7 @@
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SekerEaglePage } from './SekerEaglePage';
@@ -161,6 +162,7 @@ function renderPage(
   ownerId = 'owner-test',
   canManageProcessing = false,
   privacyVisibility?: { enabled: boolean; durationHours: number; expiresAt: string | null },
+  modeSwitcher?: ReactNode,
 ) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const page = (currentOwnerId: string) => (
@@ -168,6 +170,7 @@ function renderPage(
       <MemoryRouter>
         <SekerEaglePage
           accessToken="token"
+          modeSwitcher={modeSwitcher}
           ownerId={currentOwnerId}
           canManageProcessing={canManageProcessing}
           privacyVisibility={privacyVisibility}
@@ -341,6 +344,18 @@ describe('SekerEaglePage', () => {
       tags: { enabled: 15, ready: 12, awaitingCenter: 3 },
       suggestions: { unclassified: 38, pending: 32 },
     });
+  });
+
+  it('places the single mode switch in the sidebar brand position without a separate header', () => {
+    renderPage('owner-test', false, undefined,
+      <nav aria-label="图库模式"><button aria-pressed="true">素材</button><button aria-pressed="false">照片</button></nav>,
+    );
+    const sidebar = screen.getByRole('navigation', { name: '素材库导航' });
+    const switcher = within(sidebar).getByRole('navigation', { name: '图库模式' });
+    expect(screen.getAllByRole('navigation', { name: '图库模式' })).toHaveLength(1);
+    expect(within(switcher).getByRole('button', { name: '素材' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(sidebar).queryByText('SekerEagle')).not.toBeInTheDocument();
+    expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
   it('uses a fresh cache namespace when the owner changes', async () => {
