@@ -38,7 +38,7 @@ export class EagleAssetEntityStore {
   }
 
   normalizePage(page: EagleAssetPage): NormalizedEagleAssetPage {
-    this.upsertMany(page.items);
+    this.upsertMany([...page.items, ...(page.photoStacks?.map(({ cover }) => cover) ?? [])]);
     const { items, ...metadata } = page;
     return { ...metadata, assetIds: items.map(({ id }) => id) };
   }

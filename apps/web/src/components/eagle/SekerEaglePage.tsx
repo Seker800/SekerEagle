@@ -1,4 +1,7 @@
-import { PhotoWorkspaceNavigation } from '../photos/PhotoWorkspaceNavigation';
+import type { EaglePhotoStack } from '../../lib/eagle-api';
+import { collapsePhotoStacks } from '../photos/photo-stacks';
+import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
+import { usePhotoFilterOptions } from '../photos/usePhotoFilterOptions';
 import { PhotoCollections } from '../photos/PhotoCollections';
 import { PhotoMap } from '../photos/PhotoMap';
 import { PhotoMetadataDetails } from '../photos/PhotoMetadataDetails';
@@ -25,6 +28,8 @@ import {
   IconLayoutSidebarRight,
   IconLock,
   IconPhoto,
+  IconMapPin,
+  IconUsers,
   IconPlus,
   IconRefresh,
   IconSearch,
@@ -253,10 +258,7 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'groups'>('timeline');
-  const [photoFilters, setPhotoFilters] = useState<
-    Pick<EagleAssetFilters, 'cameraModel' | 'lensModel' | 'gps' | 'personId'>
-  >({});
+  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people'>('timeline');
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
@@ -314,10 +316,11 @@ export function SekerEaglePage({
   const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
+  const photoFieldOptions = usePhotoFilterOptions(privateVisible);
+  const showsAssetControls = libraryMode !== 'PHOTO' || photoView !== 'people';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
   const assetFilters: EagleAssetFilters = {
-    ...photoFilters,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
     rules: activeFilterCount ? filterQuery : undefined,
@@ -343,7 +346,7 @@ export function SekerEaglePage({
     },
     initialPageParam: '',
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-    enabled: isAssetView,
+    enabled: isAssetView && showsAssetControls,
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
@@ -411,7 +414,7 @@ export function SekerEaglePage({
       setQuickFilters(createEmptyEagleQuickFilterState());
     },
   });
-  const assets = useMemo(() => {
+  const loadedAssets = useMemo(() => {
     const uniqueAssets = new Map<string, EagleAssetListItem>();
     assetsQuery.data?.pages.forEach((page) => {
       assetStore.getMany(page.assetIds).forEach((item) => uniqueAssets.set(item.id, item));
@@ -431,6 +434,20 @@ export function SekerEaglePage({
     privacyRulesRevision,
     resetAssetPrivacyState,
   ]);
+  const photoStacks = useMemo(() => {
+    const stacks = new Map<string, EaglePhotoStack>();
+    for (const page of assetsQuery.data?.pages ?? [])
+      for (const stack of page.photoStacks ?? []) stacks.set(stack.id, stack);
+    return [...stacks.values()];
+  }, [assetsQuery.data]);
+  const assets = useMemo(
+    () =>
+      libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH'
+        ? collapsePhotoStacks(loadedAssets, photoStacks)
+        : loadedAssets,
+    [loadedAssets, photoStacks, libraryMode, photoView, libraryView],
+  );
+  const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
   const contextMenuAsset =
     selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
@@ -634,6 +651,7 @@ export function SekerEaglePage({
     setQuickFilters(createEmptyEagleQuickFilterState());
   };
   const changeLibraryView = (view: EagleLibraryView) => {
+    setPhotoView('timeline');
     setLibraryView(view);
     setActiveSmartFolderId(null);
     setSelectedAssetIds([]);
@@ -644,6 +662,7 @@ export function SekerEaglePage({
     resetFilters();
   };
   const applySmartFolder = (folder: EagleSmartFolder) => {
+    setPhotoView('timeline');
     setLibraryView('ACTIVE');
     setActiveSmartFolderId(folder.id);
     resetFilters();
@@ -818,6 +837,10 @@ export function SekerEaglePage({
     );
   };
   const openAssetPreview = (asset: EagleAssetListItem) => {
+    if (photoStacks.some((stack) => stack.assetIds.includes(asset.id))) {
+      setPreviewAssetId(asset.id);
+      return;
+    }
     if (asset.mimeType.startsWith('video/')) {
       setPreviewAssetId(asset.id);
       return;
@@ -926,15 +949,39 @@ export function SekerEaglePage({
           </div>
           <button
             className={
-              libraryView === 'ACTIVE' && !activeSmartFolderId ? styles.navActive : undefined
+              libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
+                ? styles.navActive
+                : undefined
             }
             type="button"
-            onClick={() => changeLibraryView('ACTIVE')}
+            onClick={() => {
+              changeLibraryView('ACTIVE');
+              setPhotoView('timeline');
+            }}
           >
             <IconPhoto size={17} />
             {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
-            {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{assets.length}</span>}
+            {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{loadedAssets.length}</span>}
           </button>
+          {libraryMode === 'PHOTO' &&
+            (['map', 'people'] as const).map((view) => (
+              <button
+                key={view}
+                type="button"
+                className={
+                  libraryView === 'ACTIVE' && photoView === view && !activeSmartFolderId
+                    ? styles.navActive
+                    : undefined
+                }
+                onClick={() => {
+                  changeLibraryView('ACTIVE');
+                  setPhotoView(view);
+                }}
+              >
+                {view === 'map' ? <IconMapPin size={17} /> : <IconUsers size={17} />}
+                {view === 'map' ? t('地图') : t('人物')}
+              </button>
+            ))}
           {privateVisible && (
             <button
               className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
@@ -944,7 +991,7 @@ export function SekerEaglePage({
             >
               <IconLock size={17} />
               {' ' + (libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')) + ' '}
-              {libraryView === 'PRIVATE' && <span>{assets.length}</span>}
+              {libraryView === 'PRIVATE' && <span>{loadedAssets.length}</span>}
             </button>
           )}
           <div className={`${styles.navSection} ${styles.smartFolderSection}`}>
@@ -1151,16 +1198,6 @@ export function SekerEaglePage({
             />
           ) : (
             <>
-              {libraryMode === 'PHOTO' && (
-                <PhotoWorkspaceNavigation
-                  selectedAssetIds={selectedAssetIds}
-                  includePrivate={privateVisible}
-                  view={photoView}
-                  filters={photoFilters}
-                  onViewChange={setPhotoView}
-                  onFiltersChange={setPhotoFilters}
-                />
-              )}
               <div className={styles.toolbar}>
                 <div className={styles.titleBlock}>
                   <h1 id="eagle-library-title">
@@ -1171,12 +1208,20 @@ export function SekerEaglePage({
                           ? t('隐私照片')
                           : t('隐私素材')
                         : (activeSmartFolder?.name ??
-                          (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')))}
+                          (libraryMode === 'PHOTO'
+                            ? photoView === 'map'
+                              ? t('地图')
+                              : photoView === 'people'
+                                ? t('人物')
+                                : t('照片时间线')
+                            : t('全部素材')))}
                   </h1>
-                  <span>
-                    {assets.length}
-                    {' ' + t('项')}
-                  </span>
+                  {showsAssetControls && (
+                    <span>
+                      {loadedAssets.length}
+                      {' ' + t('项')}
+                    </span>
+                  )}
                   {privateVisible && privacyVisibility?.expiresAt ? (
                     <span className={styles.privacyStatus}>
                       <IconLock size={12} />
@@ -1184,93 +1229,102 @@ export function SekerEaglePage({
                     </span>
                   ) : null}
                 </div>
-                <label className={styles.searchBox}>
-                  <IconSearch size={17} aria-hidden="true" />
-                  <input
-                    type="search"
-                    aria-label={libraryMode === 'PHOTO' ? t('搜索照片') : t('搜索素材')}
-                    placeholder={t('搜索名称或标签')}
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                  />
-                  {search && (
-                    <button type="button" aria-label={t('清除搜索')} onClick={() => setSearch('')}>
-                      <IconX size={14} />
-                    </button>
-                  )}
-                </label>
-                <div className={styles.toolbarActions}>
-                  {libraryView === 'TRASH' && (
-                    <button
-                      type="button"
-                      aria-label={t('恢复当前素材')}
-                      disabled={!selectedAssetId || restoreMutation.isPending}
-                      onClick={() => {
-                        if (selectedAssetId) restoreMutation.mutate([selectedAssetId]);
-                      }}
-                    >
-                      <IconRefresh size={18} />
-                      {' ' + t('恢复') + ' '}
-                    </button>
-                  )}
-                  {libraryView === 'TRASH' && (
-                    <button
-                      className={styles.dangerAction}
-                      type="button"
-                      aria-label={t('清空回收站')}
-                      disabled={assets.length === 0 || emptyTrashMutation.isPending}
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            t('确认清空回收站？其中的全部素材将被永久删除，且无法恢复。'),
-                          )
-                        ) {
-                          emptyTrashMutation.mutate();
+                {showsAssetControls && (
+                  <>
+                    <label className={styles.searchBox}>
+                      <IconSearch size={17} aria-hidden="true" />
+                      <input
+                        type="search"
+                        aria-label={libraryMode === 'PHOTO' ? t('搜索照片') : t('搜索素材')}
+                        placeholder={t('搜索名称或标签')}
+                        value={search}
+                        onChange={(event) => setSearch(event.target.value)}
+                      />
+                      {search && (
+                        <button
+                          type="button"
+                          aria-label={t('清除搜索')}
+                          onClick={() => setSearch('')}
+                        >
+                          <IconX size={14} />
+                        </button>
+                      )}
+                    </label>
+                    <div className={styles.toolbarActions}>
+                      {libraryView === 'TRASH' && (
+                        <button
+                          type="button"
+                          aria-label={t('恢复当前素材')}
+                          disabled={!selectedAssetId || restoreMutation.isPending}
+                          onClick={() => {
+                            if (selectedAssetId) restoreMutation.mutate([selectedAssetId]);
+                          }}
+                        >
+                          <IconRefresh size={18} />
+                          {' ' + t('恢复') + ' '}
+                        </button>
+                      )}
+                      {libraryView === 'TRASH' && (
+                        <button
+                          className={styles.dangerAction}
+                          type="button"
+                          aria-label={t('清空回收站')}
+                          disabled={assets.length === 0 || emptyTrashMutation.isPending}
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                t('确认清空回收站？其中的全部素材将被永久删除，且无法恢复。'),
+                              )
+                            ) {
+                              emptyTrashMutation.mutate();
+                            }
+                          }}
+                        >
+                          <IconTrash size={18} />
+                          {' ' + t('清空') + ' '}
+                        </button>
+                      )}
+                      <label
+                        className={styles.thumbnailControl}
+                        title={t('缩略图大小：{{value1}}px', {
+                          value1: thumbnailSize,
+                        })}
+                      >
+                        <IconLayoutGrid size={17} aria-hidden="true" />
+                        <input
+                          type="range"
+                          aria-label={t('缩略图大小')}
+                          min="140"
+                          max="320"
+                          step="10"
+                          value={thumbnailSize}
+                          onChange={(event) => setThumbnailSize(Number(event.target.value))}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className={isInspectorOpen ? styles.filterActive : undefined}
+                        aria-label={
+                          isInspectorOpen
+                            ? t('隐藏素材详情')
+                            : libraryMode === 'PHOTO'
+                              ? t('显示照片详情')
+                              : t('显示素材详情')
                         }
-                      }}
-                    >
-                      <IconTrash size={18} />
-                      {' ' + t('清空') + ' '}
-                    </button>
-                  )}
-                  <label
-                    className={styles.thumbnailControl}
-                    title={t('缩略图大小：{{value1}}px', {
-                      value1: thumbnailSize,
-                    })}
-                  >
-                    <IconLayoutGrid size={17} aria-hidden="true" />
-                    <input
-                      type="range"
-                      aria-label={t('缩略图大小')}
-                      min="140"
-                      max="320"
-                      step="10"
-                      value={thumbnailSize}
-                      onChange={(event) => setThumbnailSize(Number(event.target.value))}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className={isInspectorOpen ? styles.filterActive : undefined}
-                    aria-label={
-                      isInspectorOpen
-                        ? t('隐藏素材详情')
-                        : libraryMode === 'PHOTO'
-                          ? t('显示照片详情')
-                          : t('显示素材详情')
-                    }
-                    aria-pressed={isInspectorOpen}
-                    onClick={() => setIsInspectorVisible((value) => !value)}
-                  >
-                    <IconLayoutSidebarRight size={18} />
-                    {' ' + t('详情') + ' '}
-                  </button>
-                </div>
+                        aria-pressed={isInspectorOpen}
+                        onClick={() => setIsInspectorVisible((value) => !value)}
+                      >
+                        <IconLayoutSidebarRight size={18} />
+                        {' ' + t('详情') + ' '}
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {libraryView === 'ACTIVE' ? (
+              {libraryView === 'ACTIVE' && showsAssetControls ? (
                 <EagleQuickFilterBar
+                  fieldOptions={photoFieldOptions}
                   value={quickFilters}
                   manualTags={manualTags}
                   aiTags={aiTags}
@@ -1338,13 +1392,15 @@ export function SekerEaglePage({
                   }
                 </div>
               )}
-              {libraryMode === 'PHOTO' && (photoView === 'people' || photoView === 'groups') && (
+              {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
-                  view={photoView}
                   includePrivate={privateVisible}
                   onOpen={openAssetPreview}
                   onPerson={(personId) => {
-                    setPhotoFilters((current) => ({ ...current, personId }));
+                    setQuickFilters((current) => ({
+                      ...current,
+                      choices: { ...current.choices, PERSON: personId },
+                    }));
                     setPhotoView('timeline');
                   }}
                 />
@@ -1394,22 +1450,28 @@ export function SekerEaglePage({
                       <img src={sekerEagleLogo} alt="" />
                     </span>
                     <strong>
-                      {search
-                        ? t('没有匹配的素材')
+                      {search || activeFilterCount || activeSmartFolderId
+                        ? libraryMode === 'PHOTO'
+                          ? t('没有匹配的照片')
+                          : t('没有匹配的素材')
                         : libraryView === 'TRASH'
                           ? t('回收站是空的')
                           : libraryView === 'PRIVATE'
                             ? t('暂无隐私素材')
-                            : t('把第一份灵感放进来')}
+                            : libraryMode === 'PHOTO'
+                              ? t('暂无照片')
+                              : t('把第一份灵感放进来')}
                     </strong>
                     <p>
-                      {search
+                      {search || activeFilterCount || activeSmartFolderId
                         ? t('尝试其他名称或标签。')
                         : libraryView === 'TRASH'
                           ? t('移除的素材会暂时保留在这里。')
                           : libraryView === 'PRIVATE'
                             ? t('为素材添加已配置的私密标签。')
-                            : t('将图片或 MP4 拖入此处。')}
+                            : libraryMode === 'PHOTO'
+                              ? t('将照片拖入此处。')
+                              : t('将图片或 MP4 拖入此处。')}
                     </p>
                   </div>
                 )}
@@ -1463,6 +1525,15 @@ export function SekerEaglePage({
                           className={styles.preview}
                           style={{ height: masonryItem.previewHeight }}
                         >
+                          {photoStacks.find((stack) => stack.cover.id === asset.id) && (
+                            <span className="photo-stack-count">
+                              ▣{' '}
+                              {
+                                photoStacks.find((stack) => stack.cover.id === asset.id)!.assetIds
+                                  .length
+                              }
+                            </span>
+                          )}
                           {isBatchSelection && (
                             <span className={styles.selectionMark}>
                               {isSelected && <IconCheck size={13} />}
@@ -2040,8 +2111,16 @@ export function SekerEaglePage({
           <span>{t('支持批量图片和 MP4')}</span>
         </div>
       )}
-      {previewAsset && (
-        <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
+      {previewStack ? (
+        <PhotoStackLightbox
+          key={previewStack.id}
+          stack={previewStack}
+          onClose={() => setPreviewAssetId(null)}
+        />
+      ) : (
+        previewAsset && (
+          <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
+        )
       )}
       {imagePreview.previewImage ? (
         <EagleImageViewer
@@ -2052,6 +2131,7 @@ export function SekerEaglePage({
       ) : null}
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
+          fieldOptions={photoFieldOptions}
           accessToken={accessToken}
           initialQuery={
             editingSmartFolder ? toEagleFilterQuery(editingSmartFolder.queryJson) : filterQuery

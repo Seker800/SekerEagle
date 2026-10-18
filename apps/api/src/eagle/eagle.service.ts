@@ -33,6 +33,7 @@ import {
   syncCurrentTagMemberDistances,
 } from './eagle-vector.persistence';
 import {
+  assertFilterMode,
   buildEagleFilterWhere,
   readEagleFilterQuery,
   readEagleFilterTagDependencies,
@@ -111,7 +112,13 @@ export class EagleService {
       : [];
     const folderEntries = folderQueries.map((storedQuery) => ({
       storedQuery,
-      where: buildStoredSmartFolderWhere(ownerId, storedQuery, trash, includePrivate),
+      where: buildStoredSmartFolderWhere(
+        ownerId,
+        storedQuery,
+        trash,
+        includePrivate,
+        this.libraryMode,
+      ),
     }));
     const activeFolderQueries = folderEntries
       .filter(
@@ -127,31 +134,32 @@ export class EagleService {
       buildAssetWhere(ownerId, filters, trash, includePrivate),
     ];
     const ruleQuery = query.rules ? parseEncodedFilterQuery(query.rules) : null;
-    if (ruleQuery) baseConditions.push(buildEagleFilterWhere(ruleQuery));
+    if (ruleQuery) baseConditions.push(buildEagleFilterWhere(ruleQuery, this.libraryMode));
     const filterColor =
       query.color ??
       readFilterColor(ruleQuery) ??
       activeFolderQueries.map(readStoredFilterColor).find((value) => value !== undefined);
-    if (this.libraryMode === 'PHOTO') {
-      if (query.personId)
-        baseConditions.push({
-          photoFaces: { some: { personId: query.personId, isCurrent: true } },
-        });
-      if (query.cameraModel || query.lensModel || query.gps)
-        baseConditions.push({
-          photoMetadata: {
-            is: {
-              ...(query.cameraModel ? { cameraModel: query.cameraModel } : {}),
-              ...(query.lensModel ? { lensModel: query.lensModel } : {}),
-              ...(query.gps === 'WITH'
-                ? { latitude: { not: null }, longitude: { not: null } }
-                : {}),
-              ...(query.gps === 'WITHOUT' ? { latitude: null } : {}),
-            },
-          },
-        });
-    } else if (query.personId || query.cameraModel || query.lensModel || query.gps)
-      throw new BadRequestException('摄影筛选只适用于照片图库。');
+    // Older clients use named parameters; compile them through the same rule engine.
+    const photographyRules = [
+      ['PERSON', query.personId],
+      ['CAMERA_MODEL', query.cameraModel],
+      ['LENS_MODEL', query.lensModel],
+      ['GPS', query.gps],
+    ]
+      .filter(([, value]) => value)
+      .map(([field, value]) => ({ id: field, field, operator: 'EQUALS', value }));
+    if (photographyRules.length)
+      baseConditions.push(
+        buildEagleFilterWhere(
+          readEagleFilterQuery({
+            version: 2,
+            conditions: [
+              { id: 'photography', match: 'ALL', result: 'MATCH', rules: photographyRules },
+            ],
+          }),
+          this.libraryMode,
+        ),
+      );
     const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
     const folderConditions = folderEntries.flatMap(({ where }) => (where ? [where] : []));
     const folderWhere = !smartFolder
@@ -170,7 +178,8 @@ export class EagleService {
       const semanticBaseConditions: Prisma.EagleAssetWhereInput[] = [
         buildAssetWhere(ownerId, { ...filters, search: undefined }, trash, includePrivate),
       ];
-      if (ruleQuery) semanticBaseConditions.push(buildEagleFilterWhere(ruleQuery));
+      if (ruleQuery)
+        semanticBaseConditions.push(buildEagleFilterWhere(ruleQuery, this.libraryMode));
       semanticBaseConditions.push(...baseConditions.slice(1));
       const semanticBaseWhere: Prisma.EagleAssetWhereInput = { AND: semanticBaseConditions };
       const semanticWhere = folderWhere
@@ -242,6 +251,15 @@ export class EagleService {
     const page = rows.slice(0, query.limit);
     return {
       items: page.map(serializeAssetList),
+      ...(this.libraryMode === 'PHOTO' && !trash
+        ? {
+            photoStacks: await this.readPhotoStacks(
+              ownerId,
+              page.map(({ id }) => id),
+              queryWhere,
+            ),
+          }
+        : {}),
       nextCursor:
         hasMore && page.length
           ? encodeEagleAssetCursor(
@@ -258,6 +276,62 @@ export class EagleService {
           }
         : null,
     };
+  }
+
+  /** Page-local stack projection; cover and membership obey the exact same query as the grid. */
+  private async readPhotoStacks(
+    ownerId: string,
+    assetIds: string[],
+    queryWhere: Prisma.EagleAssetWhereInput,
+  ) {
+    if (!assetIds.length) return [];
+    const groups = await this.prisma.eaglePhotoGroup.findMany({
+      where: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        dismissed: false,
+        members: { some: { assetId: { in: assetIds } } },
+      },
+      select: {
+        id: true,
+        bestAssetId: true,
+        bestSelectedByUser: true,
+        members: {
+          where: { ownerId, libraryMode: 'PHOTO', asset: inLibrary('PHOTO', queryWhere) },
+          orderBy: { assetId: 'asc' },
+          select: { assetId: true },
+        },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const stacks = groups
+      .filter(({ members }) => members.length > 1)
+      .map((group) => ({
+        id: group.id,
+        bestSelectedByUser: group.bestSelectedByUser,
+        assetIds: group.members.map(({ assetId }) => assetId),
+        bestAssetId: group.members.some(({ assetId }) => assetId === group.bestAssetId)
+          ? group.bestAssetId!
+          : group.members[0]!.assetId,
+      }));
+    if (!stacks.length) return [];
+    const covers = await this.prisma.eagleAsset.findMany({
+      where: {
+        AND: [
+          queryWhere,
+          {
+            ownerId,
+            libraryMode: 'PHOTO',
+            id: { in: stacks.map(({ bestAssetId }) => bestAssetId) },
+          },
+        ],
+      },
+      include: assetListInclude,
+    });
+    return stacks.flatMap((stack) => {
+      const cover = covers.find(({ id }) => id === stack.bestAssetId);
+      return cover ? [{ ...stack, cover: serializeAssetList(cover) }] : [];
+    });
   }
 
   private async listExpandedSearchAssets(
@@ -332,6 +406,15 @@ export class EagleService {
       : [0, 0];
     return {
       items: page.map(({ row }) => serializeAssetList(row)),
+      ...(this.libraryMode === 'PHOTO' && !trash
+        ? {
+            photoStacks: await this.readPhotoStacks(
+              ownerId,
+              page.map(({ row }) => row.id),
+              where,
+            ),
+          }
+        : {}),
       nextCursor:
         ranked.length > query.limit && page.length
           ? encodeSemanticSearchCursor(search, page.at(-1)!.nextOffset, {
@@ -428,13 +511,14 @@ export class EagleService {
 
   async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
     const query = readEagleFilterQuery(input);
+    assertFilterMode(query, this.libraryMode);
     return {
       count: await this.prisma.eagleAsset.count({
         where: {
           ownerId,
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
-          ...buildEagleFilterWhere(query),
+          ...buildEagleFilterWhere(query, this.libraryMode),
           libraryMode: this.libraryMode,
         },
       }),
@@ -1092,6 +1176,8 @@ export class EagleService {
       _max: { position: true },
     });
     const queryJson = normalizeSmartFolderQuery(input.query, 'ANY');
+    if (isEagleFilterQuery(queryJson))
+      assertFilterMode(readEagleFilterQuery(queryJson), this.libraryMode);
     const dependencies = readSmartFolderDependencies(queryJson);
     await this.assertSmartFolderTagDependencies(ownerId, dependencies);
     try {
@@ -1145,6 +1231,8 @@ export class EagleService {
       input.name === undefined ? current.name : normalizeName(input.name, 64, '智能文件夹名称');
     const queryJson =
       input.query === undefined ? undefined : normalizeSmartFolderQuery(input.query);
+    if (queryJson && isEagleFilterQuery(queryJson))
+      assertFilterMode(readEagleFilterQuery(queryJson), this.libraryMode);
     const dependencies = queryJson ? readSmartFolderDependencies(queryJson) : null;
     if (dependencies) await this.assertSmartFolderTagDependencies(ownerId, dependencies);
     try {
@@ -1457,7 +1545,7 @@ function readSmartFolderFilters(value: Prisma.JsonValue): StoredAssetFilters {
   return { ...filters, color: filters.color ?? filters.assetColor };
 }
 
-function isEagleFilterQuery(value: Prisma.JsonValue): boolean {
+function isEagleFilterQuery(value: unknown): boolean {
   return Boolean(
     value &&
     typeof value === 'object' &&
@@ -1496,9 +1584,10 @@ function buildStoredSmartFolderWhere(
   query: Prisma.JsonValue,
   trash: boolean,
   includePrivate: boolean,
+  libraryMode: LibraryMode,
 ): Prisma.EagleAssetWhereInput | null {
   if (isEagleFilterQuery(query)) {
-    const ruleWhere = buildEagleFilterWhere(readEagleFilterQuery(query));
+    const ruleWhere = buildEagleFilterWhere(readEagleFilterQuery(query), libraryMode);
     if (Object.keys(ruleWhere).length === 0) return null;
     return {
       ownerId,

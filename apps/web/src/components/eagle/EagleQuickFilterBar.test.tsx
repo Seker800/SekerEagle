@@ -1,3 +1,4 @@
+import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
@@ -158,15 +159,48 @@ describe('buildEagleQuickFilterQuery', () => {
   });
 });
 
-
 it('photography uses the shared quick-filter state and clears with all filters', () => {
   const state = createEmptyEagleQuickFilterState();
   state.text.CAMERA_MODEL = 'Test Camera';
   state.choices = { GPS: 'WITHOUT', PERSON: 'person-1' };
   const query = buildEagleQuickFilterQuery(state);
-  expect(query.conditions.flatMap((condition) => condition.rules).map((rule) => rule.field))
-    .toEqual(expect.arrayContaining(['CAMERA_MODEL', 'GPS', 'PERSON']));
+  expect(
+    query.conditions.flatMap((condition) => condition.rules).map((rule) => rule.field),
+  ).toEqual(expect.arrayContaining(['CAMERA_MODEL', 'GPS', 'PERSON']));
   renderBar(state);
-  fireEvent.click(screen.getByRole('button', {name: /清除全部快捷筛选/}));
-  expect(screen.queryByRole('button', {name: /清除全部快捷筛选/})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
+  expect(screen.queryByRole('button', { name: /清除全部快捷筛选/ })).not.toBeInTheDocument();
+});
+
+it('material filter manager never offers photography fields', () => {
+  renderBar();
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  const manager = screen.getByRole('dialog', { name: '管理快捷筛选器' });
+  expect(within(manager).queryByText('相机')).not.toBeInTheDocument();
+  expect(within(manager).queryByText('镜头')).not.toBeInTheDocument();
+  expect(within(manager).queryByText('GPS')).not.toBeInTheDocument();
+});
+
+it('photo fields are managed and cleared in the existing filter toolbar', () => {
+  function PhotoBar() {
+    const [value, onChange] = useState(createEmptyEagleQuickFilterState());
+    return (
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="PHOTO">
+        <EagleQuickFilterBar value={value} manualTags={[]} aiTags={[]} onChange={onChange} />
+      </LibraryWorkspaceProvider>
+    );
+  }
+  render(<PhotoBar />);
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  fireEvent.click(screen.getByRole('button', { name: '固定 相机' }));
+  fireEvent.click(screen.getByRole('button', { name: '关闭筛选器管理' }));
+  fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
+  fireEvent.change(screen.getByLabelText('相机包含'), {
+    target: { value: 'Test Camera' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '关闭相机筛选' }));
+  expect(screen.getByRole('button', { name: /相机筛选，Test Camera/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
+  expect(screen.getByRole('button', { name: '相机筛选' })).toBeInTheDocument();
+  expect(screen.getAllByRole('toolbar', { name: '快捷筛选' })).toHaveLength(1);
 });

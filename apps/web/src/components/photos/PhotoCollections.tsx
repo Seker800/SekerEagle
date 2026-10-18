@@ -3,33 +3,25 @@ import { useQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
-  listPhotoGroups,
-  removePhotoGroupMembers,
-  mergePhotoGroups,
   listPhotoPeople,
-  scanPhotoGroups,
   scanPhotoPeople,
   renamePhotoPerson,
   mergePhotoPeople,
   splitPhotoFace,
-  updatePhotoGroup,
   type PhotoPerson,
 } from '../../lib/photo-management-api';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 
 export function PhotoCollections({
-  view,
   includePrivate,
   onOpen,
   onPerson,
 }: {
-  view: 'people' | 'groups';
   includePrivate: boolean;
   onOpen: (asset: EagleAssetListItem) => void;
   onPerson: (personId: string) => void;
 }) {
   const { ownerId, api } = useLibraryWorkspace();
-  const [mergeTargets, setMergeTargets] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -37,20 +29,14 @@ export function PhotoCollections({
   const people = useQuery({
     queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
     queryFn: listPhotoPeople,
-    enabled: view === 'people',
     refetchInterval: 10000,
-  });
-  const groups = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'groups', includePrivate],
-    queryFn: listPhotoGroups,
-    enabled: view === 'groups',
   });
   async function perform(action: () => Promise<unknown>) {
     setError(null);
     setPending(true);
     try {
       await action();
-      await Promise.all([people.refetch(), groups.refetch()]);
+      await people.refetch();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
@@ -67,38 +53,26 @@ export function PhotoCollections({
   return (
     <section className="photo-collections">
       <div className="photo-collections-header">
-        <h2>{view === 'people' ? t('人物') : t('照片组')}</h2>
+        <h2>{t('人物')}</h2>
         <button
           type="button"
-          disabled={pending || (view === 'people' && people.data?.runtimeConfigured === false)}
+          disabled={pending || people.data?.runtimeConfigured === false}
           onClick={() =>
             void perform(async () => {
-              if (view === 'people') {
-                const result = await scanPhotoPeople();
-                setFeedback(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
-              } else {
-                const result = await scanPhotoGroups();
-                setFeedback(
-                  t('分析 {{value1}} 张照片，新增 {{value2}} 个照片组', {
-                    value1: result.scanned,
-                    value2: result.created,
-                  }),
-                );
-              }
+              const result = await scanPhotoPeople();
+              setFeedback(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
             })
           }
         >
-          {view === 'people' ? t('分析人物') : t('查找连拍与相似照片')}
+          {t('分析人物')}
         </button>
       </div>
-      {view === 'people' && people.data?.runtimeConfigured === false && (
+      {people.data?.runtimeConfigured === false && (
         <p>{t('本地人物模型尚未启用，安装后可分析人物。')}</p>
       )}
       {feedback && <p role="status">{feedback}</p>}
-      {(error || people.error || groups.error) && (
-        <p role="alert">{error ?? people.error?.message ?? groups.error?.message}</p>
-      )}
-      {view === 'people' ? (
+      {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
+      {
         <>
           <div className="photo-person-grid">
             {people.data?.people.map((person, index) => {
@@ -150,100 +124,7 @@ export function PhotoCollections({
             <p>{t('尚未发现人物。导入照片后可运行本地分析。')}</p>
           )}
         </>
-      ) : (
-        <>
-          <p>{t('清晰度只作参考，所有原片都会保留。')}</p>
-          {groups.data?.map((group) => (
-            <article className="photo-group" key={group.id}>
-              <div className="photo-collections-header">
-                <h3>
-                  {group.kind === 'MANUAL'
-                    ? t('手动照片组')
-                    : group.kind === 'BURST'
-                      ? t('连拍组')
-                      : t('相似照片组')}
-                </h3>
-                <select
-                  aria-label={t('合并照片组')}
-                  value={mergeTargets[group.id] ?? ''}
-                  onChange={(event) =>
-                    setMergeTargets((current) => ({ ...current, [group.id]: event.target.value }))
-                  }
-                >
-                  <option value="">{t('选择照片组')}</option>
-                  {groups.data
-                    ?.filter((other) => other.id !== group.id)
-                    .map((other, index) => (
-                      <option key={other.id} value={other.id}>
-                        {t('照片组 {{value1}}', { value1: index + 1 })}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="button"
-                  disabled={pending || !mergeTargets[group.id]}
-                  onClick={() =>
-                    void perform(() => mergePhotoGroups(group.id, mergeTargets[group.id]))
-                  }
-                >
-                  {t('合并照片组')}
-                </button>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() =>
-                    void perform(() => updatePhotoGroup(group.id, { dismissed: true }))
-                  }
-                >
-                  {t('取消分组')}
-                </button>
-              </div>
-              <div className="photo-group-grid">
-                {group.members.map(({ asset }) => {
-                  const src = thumbnail(asset);
-                  return (
-                    <div key={asset.id}>
-                      <button type="button" onClick={() => onOpen(asset)}>
-                        {src && <img loading="lazy" src={src} alt={asset.displayName} />}
-                      </button>
-                      <p>{asset.displayName}</p>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() =>
-                          void perform(() => removePhotoGroupMembers(group.id, [asset.id]))
-                        }
-                      >
-                        {t('从组中移除')}
-                      </button>
-                      {group.bestAssetId === asset.id ? (
-                        <strong>
-                          {group.bestSelectedByUser ? t('已选代表照片') : t('建议保留的代表照片')}
-                        </strong>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={pending}
-                          onClick={() =>
-                            void perform(() =>
-                              updatePhotoGroup(group.id, { bestAssetId: asset.id }),
-                            )
-                          }
-                        >
-                          {t('设为代表照片')}
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </article>
-          ))}
-          {!groups.isPending && groups.data?.length === 0 && (
-            <p>{t('还没有照片组，可先查找连拍与相似照片。')}</p>
-          )}
-        </>
-      )}
+      }
     </section>
   );
 }

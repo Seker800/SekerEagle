@@ -1,3 +1,5 @@
+import { getEagleFilterFields } from '@sekereagle/eagle-filter-core';
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
@@ -10,6 +12,10 @@ import {
   IconLink,
   IconPalette,
   IconPhoto,
+  IconCamera,
+  IconAperture,
+  IconMapPin,
+  IconUsers,
   IconPin,
   IconPinnedOff,
   IconPlus,
@@ -47,6 +53,7 @@ export {
 };
 export type { EagleQuickFilterState };
 interface EagleQuickFilterBarProps {
+  fieldOptions?: Partial<Record<EagleQuickFilterField, Array<{ value: string; label: string }>>>;
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
@@ -76,6 +83,10 @@ const COLOR_OPTIONS = [
   '#171717',
 ];
 const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
+  CAMERA_MODEL: IconCamera,
+  LENS_MODEL: IconAperture,
+  GPS: IconMapPin,
+  PERSON: IconUsers,
   COLOR: IconPalette,
   MANUAL_TAGS: IconTags,
   AI_TAGS: IconSparkles,
@@ -93,20 +104,30 @@ const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   MODIFIED_AT: IconCalendar,
 };
 export function EagleQuickFilterBar({
+  fieldOptions,
   value,
   manualTags,
   aiTags,
   onRequestAiTags,
   onChange,
 }: EagleQuickFilterBarProps) {
+  const { libraryMode } = useLibraryWorkspace();
+  const availableFields = getEagleFilterFields(libraryMode).map(({ field }) => field);
   const rootRef = useRef<HTMLDivElement>(null);
   const [openField, setOpenField] = useState<EagleQuickFilterField | 'MANAGER' | null>(null);
-  const [pinnedFields, setPinnedFields] = useState<EagleQuickFilterField[]>(readPinnedFields);
+  const pinnedKey =
+    libraryMode === 'PHOTO' ? `${QUICK_FILTER_FIELDS_KEY}.PHOTO` : QUICK_FILTER_FIELDS_KEY;
+  const [pinnedFields, setPinnedFields] = useState<EagleQuickFilterField[]>(() =>
+    readPinnedFields(pinnedKey),
+  );
   const activeCount = countActiveEagleQuickFilters(value);
   const visibleFields = [
-    ...pinnedFields,
+    ...pinnedFields.filter((field) => availableFields.includes(field)),
     ...EAGLE_QUICK_FILTER_FIELDS.filter(
-      (field) => !pinnedFields.includes(field) && isEagleQuickFilterActive(value, field),
+      (field) =>
+        availableFields.includes(field) &&
+        !pinnedFields.includes(field) &&
+        isEagleQuickFilterActive(value, field),
     ),
   ];
   useEffect(() => {
@@ -118,7 +139,7 @@ export function EagleQuickFilterBar({
   }, []);
   const updatePinnedFields = (fields: EagleQuickFilterField[]) => {
     setPinnedFields(fields);
-    window.localStorage.setItem(QUICK_FILTER_FIELDS_KEY, JSON.stringify(fields));
+    window.localStorage.setItem(pinnedKey, JSON.stringify(fields));
   };
   return (
     <div
@@ -162,6 +183,7 @@ export function EagleQuickFilterBar({
               {openField === field ? (
                 <FieldPopover
                   field={field}
+                  options={fieldOptions?.[field]}
                   value={value}
                   manualTags={manualTags}
                   aiTags={aiTags}
@@ -185,6 +207,7 @@ export function EagleQuickFilterBar({
           </button>
           {openField === 'MANAGER' ? (
             <FilterManager
+              availableFields={availableFields}
               pinnedFields={pinnedFields}
               onChange={updatePinnedFields}
               onClose={() => setOpenField(null)}
@@ -210,6 +233,7 @@ export function EagleQuickFilterBar({
   );
 }
 function FieldPopover({
+  options,
   field,
   value,
   manualTags,
@@ -217,6 +241,7 @@ function FieldPopover({
   onChange,
   onClose,
 }: {
+  options?: Array<{ value: string; label: string }>;
   field: EagleQuickFilterField;
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
@@ -254,7 +279,7 @@ function FieldPopover({
         </div>
       </header>
       <div className={styles.popoverBody}>
-        {renderFieldControl(field, value, manualTags, aiTags, onChange)}
+        {renderFieldControl(field, value, manualTags, aiTags, onChange, options)}
       </div>
     </div>
   );
@@ -265,8 +290,48 @@ function renderFieldControl(
   manualTags: EagleManualTag[],
   aiTags: EagleAiTag[],
   onChange: (value: EagleQuickFilterState) => void,
+  options?: Array<{ value: string; label: string }>,
 ) {
   switch (field) {
+    case 'GPS':
+    case 'PERSON':
+      return (
+        <select
+          aria-label={EAGLE_QUICK_FILTER_FIELD_LABELS[field]}
+          value={value.choices?.[field] ?? ''}
+          onChange={(event) =>
+            onChange({
+              ...value,
+              choices: { ...value.choices, [field]: event.target.value || undefined },
+            })
+          }
+        >
+          <option value="">{t('全部')}</option>
+          {(field === 'GPS'
+            ? [
+                { value: 'WITH', label: t('有 GPS') },
+                { value: 'WITHOUT', label: t('无 GPS') },
+              ]
+            : (options ?? [])
+          ).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    case 'CAMERA_MODEL':
+    case 'LENS_MODEL':
+      return (
+        <>
+          <TextControl field={field} value={value} onChange={onChange} list={field} />
+          <datalist id={field}>
+            {options?.map((option) => (
+              <option key={option.value} value={option.value} />
+            ))}
+          </datalist>
+        </>
+      );
     case 'COLOR':
       return <ColorControl value={value} onChange={onChange} />;
     case 'MANUAL_TAGS':
@@ -617,10 +682,12 @@ function DateControl({
   );
 }
 function TextControl({
+  list,
   field,
   value,
   onChange,
 }: {
+  list?: string;
   field: EagleQuickTextField;
   value: EagleQuickFilterState;
   onChange: (value: EagleQuickFilterState) => void;
@@ -630,6 +697,7 @@ function TextControl({
     <label className={styles.textControl}>
       <IconSearch size={16} aria-hidden="true" />
       <input
+        list={list}
         autoFocus
         type="search"
         aria-label={t('{{value1}}包含', {
@@ -647,10 +715,12 @@ function TextControl({
   );
 }
 function FilterManager({
+  availableFields,
   pinnedFields,
   onChange,
   onClose,
 }: {
+  availableFields: EagleQuickFilterField[];
   pinnedFields: EagleQuickFilterField[];
   onChange: (fields: EagleQuickFilterField[]) => void;
   onClose: () => void;
@@ -658,7 +728,7 @@ function FilterManager({
   const [search, setSearch] = useState('');
   const [draggedField, setDraggedField] = useState<EagleQuickFilterField | null>(null);
   const normalizedSearch = search.normalize('NFKC').trim().toLocaleLowerCase();
-  const fields = EAGLE_QUICK_FILTER_FIELDS.filter((field) =>
+  const fields = availableFields.filter((field) =>
     EAGLE_QUICK_FILTER_FIELD_LABELS[field].toLocaleLowerCase().includes(normalizedSearch),
   );
   const togglePinned = (field: EagleQuickFilterField) => {
@@ -735,11 +805,9 @@ function FilterManager({
 function toggleValue(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
-function readPinnedFields(): EagleQuickFilterField[] {
+function readPinnedFields(key = QUICK_FILTER_FIELDS_KEY): EagleQuickFilterField[] {
   try {
-    const parsed: unknown = JSON.parse(
-      window.localStorage.getItem(QUICK_FILTER_FIELDS_KEY) ?? 'null',
-    );
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? 'null');
     if (!Array.isArray(parsed)) return [...DEFAULT_EAGLE_QUICK_FILTER_FIELDS];
     const valid = parsed.filter(
       (field): field is EagleQuickFilterField =>

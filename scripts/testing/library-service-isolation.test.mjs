@@ -253,6 +253,41 @@ test('photo timeline and camera filters use captured metadata without exposing m
     gps: 'WITH',
   });
   assert.equal(result.items[0].photoMetadata.cameraModel, 'Test Camera');
+  const sharedRules = {
+    version: 2,
+    conditions: [
+      {
+        id: 'camera-gps',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [
+          { id: 'camera', field: 'CAMERA_MODEL', operator: 'CONTAINS', value: 'Test' },
+          { id: 'gps', field: 'GPS', operator: 'EQUALS', value: 'WITH' },
+        ],
+      },
+    ],
+  };
+  assert.equal(
+    (await f.photos.listAssets(f.ownerId, { limit: 10, rules: JSON.stringify(sharedRules) })).items
+      .length,
+    1,
+  );
+  assert.equal((await f.photos.countAssets(f.ownerId, sharedRules)).count, 1);
+  const folder = await f.photos.createSmartFolder(f.ownerId, {
+    name: 'Photo Camera',
+    query: sharedRules,
+  });
+  assert.equal(
+    (await f.photos.listAssets(f.ownerId, { limit: 10, smartFolderId: folder.id })).items.length,
+    1,
+  );
+  await assert.rejects(() => f.materials.countAssets(f.ownerId, sharedRules), /摄影/);
+  await assert.rejects(
+    () =>
+      f.materials.createSmartFolder(f.ownerId, { name: 'Invalid Photo Rules', query: sharedRules }),
+    /摄影/,
+  );
+
   assert.equal(
     (await f.photos.listAssets(f.ownerId, { limit: 10, cameraModel: 'Another Camera' })).items
       .length,
@@ -486,22 +521,107 @@ test('privacy display duration is an independent per-library preference', async 
 
 test('photo stack projection respects shared rules and private members', async () => {
   const f = await fixtures();
-  const {PhotoManagementService} = await import('../../apps/api/dist/photos/photo-management.service.js');
+  const { PhotoManagementService } =
+    await import('../../apps/api/dist/photos/photo-management.service.js');
   const photography = new PhotoManagementService(prisma);
-  const other = await prisma.eagleAsset.create({data:{
-    ownerId:f.ownerId,libraryMode:'PHOTO',originalName:'stack-second.jpg',displayName:'second',normalizedDisplayName:'second',format:'jpeg',mimeType:'image/jpeg',byteSize:1n,originalObjectKey:`test/${randomUUID()}`,lifecycleStatus:'READY',
-  }});
-  const group = await photography.createGroup(f.ownerId,[f.photo.id,other.id],false);
-  await photography.updateGroup(f.ownerId,group.id,{bestAssetId:other.id},false);
-  const page = await f.photos.listAssets(f.ownerId,{limit:1});
-  assert.equal(page.photoStacks.length,1);
-  assert.equal(page.photoStacks[0].cover.id,other.id);
-  assert.equal(page.photoStacks[0].assetIds.length,2);
-  const filtered = await f.photos.listAssets(f.ownerId,{limit:10,rules:JSON.stringify({version:2,conditions:[{id:'one',match:'ALL',result:'MATCH',rules:[{id:'name',field:'NAME',operator:'EQUALS',value:'second'}]}]})});
-  assert.equal(filtered.photoStacks.length,0);
-  await prisma.eagleAsset.update({where:{id:other.id},data:{isPrivate:true}});
-  const hidden = await f.photos.listAssets(f.ownerId,{limit:10});
-  assert.equal(hidden.photoStacks.length,0);
-  assert.equal(hidden.items.some(row=>row.id===other.id),false);
-  assert.equal((await f.materials.listAssets(f.ownerId,{limit:10})).photoStacks,undefined);
+  const other = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'stack-second.jpg',
+      displayName: 'second',
+      normalizedDisplayName: 'second',
+      format: 'jpeg',
+      mimeType: 'image/jpeg',
+      byteSize: 1n,
+      originalObjectKey: `test/${randomUUID()}`,
+      lifecycleStatus: 'READY',
+    },
+  });
+  const group = await photography.createGroup(f.ownerId, [f.photo.id, other.id], false);
+  await photography.updateGroup(f.ownerId, group.id, { bestAssetId: other.id }, false);
+  const page = await f.photos.listAssets(f.ownerId, { limit: 1 });
+  assert.equal(page.photoStacks.length, 1);
+  assert.equal(page.photoStacks[0].cover.id, other.id);
+  assert.equal(page.photoStacks[0].assetIds.length, 2);
+  const filtered = await f.photos.listAssets(f.ownerId, {
+    limit: 10,
+    rules: JSON.stringify({
+      version: 2,
+      conditions: [
+        {
+          id: 'one',
+          match: 'ALL',
+          result: 'MATCH',
+          rules: [{ id: 'name', field: 'NAME', operator: 'EQUALS', value: 'second' }],
+        },
+      ],
+    }),
+  });
+  assert.equal(filtered.photoStacks.length, 0);
+  await prisma.eagleAsset.update({ where: { id: other.id }, data: { isPrivate: true } });
+  const hidden = await f.photos.listAssets(f.ownerId, { limit: 10 });
+  assert.equal(hidden.photoStacks.length, 0);
+  assert.equal(
+    hidden.items.some((row) => row.id === other.id),
+    false,
+  );
+  assert.equal((await f.materials.listAssets(f.ownerId, { limit: 10 })).photoStacks, undefined);
+});
+
+test('worker automatically groups new photographs and preserves a manually chosen cover', async () => {
+  const f = await fixtures();
+  const { groupAnalyzedPhoto } = await import('../../apps/worker/dist/photo-grouping.js');
+  const metadata = async (assetId, second, score) =>
+    prisma.eaglePhotoMetadata.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId,
+        assetRevision: 0,
+        processorVersion: 'test',
+        capturedAt: new Date(`2024-01-01T00:00:0${second}Z`),
+        cameraModel: 'camera',
+        perceptualHash: '0000000000000000',
+        sharpnessScore: score,
+      },
+    });
+  const add = () =>
+    prisma.eagleAsset.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        originalName: 'next.jpg',
+        displayName: 'next',
+        normalizedDisplayName: 'next',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        originalObjectKey: `test/${randomUUID()}`,
+        lifecycleStatus: 'READY',
+      },
+    });
+  await metadata(f.photo.id, 0, 10);
+  const second = await add();
+  await metadata(second.id, 1, 20);
+  await prisma.$transaction((tx) => groupAnalyzedPhoto(tx, f.ownerId, second.id));
+  const group = await prisma.eaglePhotoGroup.findFirstOrThrow({ where: { ownerId: f.ownerId } });
+  assert.equal(group.bestAssetId, second.id);
+  await prisma.eaglePhotoGroup.update({
+    where: { id: group.id },
+    data: { bestAssetId: f.photo.id, bestSelectedByUser: true },
+  });
+  const third = await add();
+  await metadata(third.id, 2, 100);
+  await prisma.$transaction((tx) => groupAnalyzedPhoto(tx, f.ownerId, third.id));
+  assert.equal(await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId } }), 1);
+  const updated = await prisma.eaglePhotoGroup.findUniqueOrThrow({
+    where: { id: group.id },
+    include: { members: true },
+  });
+  assert.equal(updated.members.length, 3);
+  assert.equal(updated.bestAssetId, f.photo.id);
+  await prisma.eaglePhotoGroup.update({ where: { id: group.id }, data: { dismissed: true } });
+  await prisma.$transaction((tx) => groupAnalyzedPhoto(tx, f.ownerId, third.id));
+  assert.equal(await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId } }), 1);
 });

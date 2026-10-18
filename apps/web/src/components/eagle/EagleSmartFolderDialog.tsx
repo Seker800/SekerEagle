@@ -12,9 +12,10 @@ import {
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { EagleRuleBuilder } from './EagleRuleBuilder';
+import { EagleRuleBuilder, type EagleFilterOptions } from './EagleRuleBuilder';
 import styles from './EagleSmartFolderDialog.module.css';
 interface EagleSmartFolderDialogProps {
+  fieldOptions?: EagleFilterOptions;
   accessToken?: string;
   initialQuery: EagleFilterQuery;
   initialName?: string;
@@ -38,6 +39,7 @@ function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
   };
 }
 export function EagleSmartFolderDialog({
+  fieldOptions,
   accessToken = '',
   initialQuery,
   initialName = '',
@@ -122,6 +124,7 @@ export function EagleSmartFolderDialog({
             {' ' + t('智能文件夹会依据筛选条件，自动把符合条件的素材显示在一起。') + ' '}
           </p>
           <EagleRuleBuilder
+            fieldOptions={fieldOptions}
             value={query}
             manualTags={manualTags}
             aiTags={aiTags}

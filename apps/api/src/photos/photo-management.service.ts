@@ -264,7 +264,7 @@ export class PhotoManagementService {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${ownerId}`}))`;
       const manualMembers = await tx.eaglePhotoGroupMember.findMany({
-        where: { ownerId, libraryMode: 'PHOTO', group: { dismissed: false, kind: 'MANUAL' } },
+        where: { ownerId, libraryMode: 'PHOTO', group: {} },
         select: { assetId: true },
       });
       const protectedAssets = new Set(manualMembers.map((row) => row.assetId));
@@ -417,7 +417,9 @@ export class PhotoManagementService {
           id,
           ownerId,
           libraryMode: 'PHOTO',
-          members: { some: {}, every: { asset: visible(ownerId, includePrivate) } },
+          members: input.bestAssetId
+            ? { some: { assetId: input.bestAssetId, asset: visible(ownerId, includePrivate) } }
+            : { some: {}, every: { asset: visible(ownerId, includePrivate) } },
         },
         include: { members: true },
       });

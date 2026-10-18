@@ -217,7 +217,15 @@ export interface EagleAssetChanges {
   sourceUrl?: string | null;
 }
 
+export interface EaglePhotoStack {
+  id: string;
+  bestAssetId: string;
+  bestSelectedByUser: boolean;
+  assetIds: string[];
+  cover: EagleAssetListItem;
+}
 export interface EagleAssetPage {
+  photoStacks?: EaglePhotoStack[];
   items: EagleAssetListItem[];
   nextCursor: string | null;
   colorCoverage: {

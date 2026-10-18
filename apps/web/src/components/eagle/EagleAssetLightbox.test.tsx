@@ -76,3 +76,26 @@ describe('EagleAssetLightbox', () => {
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 });
+
+it('supports keyboard and touch navigation without closing a photo stack', () => {
+  const onNext = vi.fn(),
+    onPrevious = vi.fn(),
+    onClose = vi.fn();
+  render(
+    <EagleAssetLightbox
+      asset={imageAsset}
+      onClose={onClose}
+      navigation={{ index: 0, count: 2, onNext, onPrevious }}
+    />,
+  );
+  const dialog = screen.getByRole('dialog');
+  fireEvent.keyDown(dialog, { key: 'ArrowRight' });
+  fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
+  expect(onNext).toHaveBeenCalledTimes(1);
+  expect(onPrevious).toHaveBeenCalledTimes(1);
+  const image = screen.getByRole('img');
+  fireEvent.touchStart(image, { touches: [{ clientX: 200, clientY: 100 }] });
+  fireEvent.touchEnd(image, { changedTouches: [{ clientX: 50, clientY: 100 }] });
+  expect(onNext).toHaveBeenCalledTimes(2);
+  expect(onClose).not.toHaveBeenCalled();
+});

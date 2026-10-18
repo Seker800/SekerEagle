@@ -80,12 +80,21 @@ test('uses the generated aspect ratio for shape filtering', () => {
   });
 });
 
-
 test('photography rules share the compiler and reject material mode', () => {
-  const query = readEagleFilterQuery({version: 2, conditions: [{id:'photo', match:'ALL', result:'MATCH', rules:[
-    {id:'camera', field:'CAMERA_MODEL', operator:'EQUALS', value:'Test Camera'},
-    {id:'gps', field:'GPS', operator:'EQUALS', value:'WITHOUT'},
-  ]}]});
+  const query = readEagleFilterQuery({
+    version: 2,
+    conditions: [
+      {
+        id: 'photo',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [
+          { id: 'camera', field: 'CAMERA_MODEL', operator: 'EQUALS', value: 'Test Camera' },
+          { id: 'gps', field: 'GPS', operator: 'EQUALS', value: 'WITHOUT' },
+        ],
+      },
+    ],
+  });
   assert.throws(() => buildEagleFilterWhere(query), /摄影筛选/);
   const where = buildEagleFilterWhere(query, 'PHOTO');
   assert.match(JSON.stringify(where), /Test Camera/);

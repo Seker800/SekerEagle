@@ -1,4 +1,14 @@
 export const enUS = {
+  没有匹配的照片: 'No matching photos',
+  照片大图预览: 'Photo preview',
+  暂无照片: 'No photos yet',
+  '将照片拖入此处。': 'Drop photos here.',
+
+  上一张: 'Previous photo',
+  下一张: 'Next photo',
+  当前主图: 'Current cover',
+  设为主图: 'Set as cover',
+
   手动照片组: 'Manual photo group',
   从组中移除: 'Remove from group',
   合并照片组: 'Merge photo groups',

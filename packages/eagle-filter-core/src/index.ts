@@ -3,6 +3,10 @@ export const EAGLE_FILTER_MAX_CONDITIONS = 30;
 export const EAGLE_FILTER_MAX_RULES_PER_CONDITION = 30;
 
 export type EagleFilterField =
+  | 'CAMERA_MODEL'
+  | 'LENS_MODEL'
+  | 'GPS'
+  | 'PERSON'
   | 'NAME'
   | 'FORMAT'
   | 'MANUAL_TAGS'
@@ -73,6 +77,7 @@ export type StoredEagleFilterQuery = EagleFilterQuery | LegacyEagleFilterQuery;
 export interface EagleFilterFieldDefinition {
   field: EagleFilterField;
   label: string;
+  libraryModes?: readonly ('MATERIAL' | 'PHOTO')[];
   kind: 'TEXT' | 'SELECT' | 'TAGS' | 'NUMBER' | 'DATE' | 'COLOR';
   operators: readonly EagleFilterOperator[];
   defaultOperator: EagleFilterOperator;
@@ -96,6 +101,37 @@ const SET_OPERATORS = ['ANY_OF', 'ALL_OF', 'NONE_OF', 'EMPTY', 'NOT_EMPTY'] as c
 const DATE_OPERATORS = ['BEFORE', 'AFTER', 'BETWEEN', 'WITHIN_DAYS'] as const;
 
 export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
+  ...(['CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
+    field,
+    label: field === 'CAMERA_MODEL' ? '相机' : '镜头',
+    libraryModes: ['PHOTO'] as const,
+    kind: 'TEXT' as const,
+    operators: TEXT_OPERATORS,
+    defaultOperator: 'CONTAINS' as const,
+    defaultValue: '',
+  })),
+  {
+    field: 'GPS',
+    label: 'GPS',
+    libraryModes: ['PHOTO'],
+    kind: 'SELECT',
+    operators: ['EQUALS'],
+    defaultOperator: 'EQUALS',
+    defaultValue: 'WITH',
+    options: [
+      { value: 'WITH', label: '有 GPS' },
+      { value: 'WITHOUT', label: '无 GPS' },
+    ],
+  },
+  {
+    field: 'PERSON',
+    label: '人物',
+    libraryModes: ['PHOTO'],
+    kind: 'TEXT',
+    operators: ['EQUALS'],
+    defaultOperator: 'EQUALS',
+    defaultValue: '',
+  },
   {
     field: 'NAME',
     label: '名称',
@@ -517,4 +553,18 @@ function addLegacyDateRange(
       },
     ],
   });
+}
+
+export function getEagleFilterFields(libraryMode: 'MATERIAL' | 'PHOTO') {
+  return EAGLE_FILTER_FIELDS.filter(
+    (definition) => !definition.libraryModes || definition.libraryModes.includes(libraryMode),
+  );
+}
+export function assertEagleFilterQueryMode(
+  query: EagleFilterQuery,
+  libraryMode: 'MATERIAL' | 'PHOTO',
+) {
+  const allowed = new Set(getEagleFilterFields(libraryMode).map(({ field }) => field));
+  if (query.conditions.some(({ rules }) => rules.some(({ field }) => !allowed.has(field))))
+    throw new Error('摄影筛选只适用于照片图库。');
 }

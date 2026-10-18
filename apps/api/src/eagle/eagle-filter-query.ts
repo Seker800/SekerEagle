@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  assertEagleFilterQueryMode,
   isActiveEagleFilterRule,
   parseEagleFilterQuery,
   type EagleFilterCondition,
@@ -19,7 +20,11 @@ export function readEagleFilterQuery(value: unknown): EagleFilterQuery {
   }
 }
 
-export function buildEagleFilterWhere(query: EagleFilterQuery): Prisma.EagleAssetWhereInput {
+export function buildEagleFilterWhere(
+  query: EagleFilterQuery,
+  libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
+): Prisma.EagleAssetWhereInput {
+  assertFilterMode(query, libraryMode);
   const conditions = query.conditions
     .map(buildConditionWhere)
     .filter((where): where is Prisma.EagleAssetWhereInput => where !== null);
@@ -53,6 +58,38 @@ function buildConditionWhere(condition: EagleFilterCondition): Prisma.EagleAsset
 
 function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
   switch (rule.field) {
+    case 'CAMERA_MODEL':
+    case 'LENS_MODEL': {
+      const field = rule.field === 'CAMERA_MODEL' ? 'cameraModel' : 'lensModel';
+      if (rule.operator === 'EMPTY')
+        return {
+          OR: [
+            { photoMetadata: { is: null } },
+            { photoMetadata: { is: { [field]: null } } },
+            { photoMetadata: { is: { [field]: '' } } },
+          ],
+        };
+      return {
+        photoMetadata: {
+          is: {
+            [field]:
+              rule.operator === 'NOT_EMPTY'
+                ? { not: null }
+                : textFilter(rule.operator, readString(rule)),
+          },
+        },
+      };
+    }
+    case 'GPS': {
+      const value = readString(rule);
+      if (!['WITH', 'WITHOUT'].includes(value)) throw new BadRequestException('GPS 筛选值无效。');
+      const located = {
+        photoMetadata: { is: { latitude: { not: null }, longitude: { not: null } } },
+      };
+      return value === 'WITH' ? located : { NOT: located };
+    }
+    case 'PERSON':
+      return { photoFaces: { some: { personId: readString(rule), isCurrent: true } } };
     case 'NAME':
       return buildTextWhere('NAME', rule);
     case 'DESCRIPTION':
@@ -305,4 +342,12 @@ function durationMultiplier(unit: EagleFilterRule['unit']): number {
   if (unit === 'HOURS') return 3_600_000;
   if (unit === 'MINUTES') return 60_000;
   return 1_000;
+}
+
+export function assertFilterMode(query: EagleFilterQuery, libraryMode: 'MATERIAL' | 'PHOTO') {
+  try {
+    assertEagleFilterQueryMode(query, libraryMode);
+  } catch (error) {
+    throw new BadRequestException(error instanceof Error ? error.message : '筛选模式无效。');
+  }
 }

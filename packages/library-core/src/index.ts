@@ -27,3 +27,5 @@ export function libraryScopeKey(scope: LibraryScope): string {
 export function sameLibraryScope(left: LibraryScope, right: LibraryScope): boolean {
   return left.ownerId === right.ownerId && left.libraryMode === right.libraryMode;
 }
+
+export { suggestPhotoGroups } from './photo-grouping';

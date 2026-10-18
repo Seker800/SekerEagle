@@ -10,7 +10,8 @@ export type EagleQuickFilterField = EagleFilterField;
 export type EagleQuickTagMatch = 'ANY' | 'ALL';
 export type EagleQuickRangeField = 'WIDTH' | 'HEIGHT' | 'FILE_SIZE' | 'DURATION';
 export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT';
-export type EagleQuickTextField = 'NAME' | 'DESCRIPTION' | 'SOURCE_URL';
+export type EagleQuickTextField =
+  'NAME' | 'DESCRIPTION' | 'SOURCE_URL' | 'CAMERA_MODEL' | 'LENS_MODEL';
 export interface EagleQuickNumberRange {
   min: string;
   max: string;
@@ -21,6 +22,7 @@ export interface EagleQuickDateRange {
   to: string;
 }
 export interface EagleQuickFilterState {
+  choices?: Partial<Record<'GPS' | 'PERSON', string>>;
   color?: string;
   manualTagIds: string[];
   manualTagMatch: EagleQuickTagMatch;
@@ -41,6 +43,10 @@ export const DEFAULT_EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[]
   'FORMAT',
 ];
 export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, string> = {
+  CAMERA_MODEL: t('相机'),
+  LENS_MODEL: t('镜头'),
+  GPS: 'GPS',
+  PERSON: t('人物'),
   COLOR: t('颜色'),
   MANUAL_TAGS: t('标签'),
   AI_TAGS: t('AI 标签'),
@@ -59,6 +65,10 @@ export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, stri
 };
 export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   ...DEFAULT_EAGLE_QUICK_FILTER_FIELDS,
+  'CAMERA_MODEL',
+  'LENS_MODEL',
+  'GPS',
+  'PERSON',
   'AI_TAGS',
   'WIDTH',
   'HEIGHT',
@@ -91,6 +101,9 @@ export function isEagleQuickFilterActive(
   field: EagleQuickFilterField,
 ): boolean {
   switch (field) {
+    case 'GPS':
+    case 'PERSON':
+      return Boolean(state.choices?.[field]);
     case 'COLOR':
       return Boolean(state.color);
     case 'MANUAL_TAGS':
@@ -115,6 +128,8 @@ export function isEagleQuickFilterActive(
       const range = state.dates[field];
       return Boolean(range?.from || range?.to);
     }
+    case 'CAMERA_MODEL':
+    case 'LENS_MODEL':
     case 'NAME':
     case 'DESCRIPTION':
     case 'SOURCE_URL':
@@ -126,6 +141,17 @@ export function summarizeEagleQuickFilter(
   field: EagleQuickFilterField,
 ): string | undefined {
   switch (field) {
+    case 'GPS':
+    case 'PERSON':
+      return field === 'GPS'
+        ? state.choices?.GPS === 'WITH'
+          ? t('有 GPS')
+          : state.choices?.GPS === 'WITHOUT'
+            ? t('无 GPS')
+            : undefined
+        : state.choices?.PERSON
+          ? t('已选择')
+          : undefined;
     case 'COLOR':
       return state.color?.toUpperCase();
     case 'MANUAL_TAGS':
@@ -158,6 +184,8 @@ export function summarizeEagleQuickFilter(
       if (!range) return undefined;
       return range.from && range.to ? `${range.from}–${range.to}` : range.from || range.to;
     }
+    case 'CAMERA_MODEL':
+    case 'LENS_MODEL':
     case 'NAME':
     case 'DESCRIPTION':
     case 'SOURCE_URL':
@@ -169,6 +197,9 @@ export function clearEagleQuickFilter(
   field: EagleQuickFilterField,
 ): EagleQuickFilterState {
   switch (field) {
+    case 'GPS':
+    case 'PERSON':
+      return { ...state, choices: { ...state.choices, [field]: undefined } };
     case 'COLOR':
       return { ...state, color: undefined };
     case 'MANUAL_TAGS':
@@ -195,6 +226,8 @@ export function clearEagleQuickFilter(
       delete dates[field];
       return { ...state, dates };
     }
+    case 'CAMERA_MODEL':
+    case 'LENS_MODEL':
     case 'NAME':
     case 'DESCRIPTION':
     case 'SOURCE_URL': {
@@ -251,9 +284,19 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     else if (range.from) addRule(field, 'AFTER', range.from);
     else if (range.to) addRule(field, 'BEFORE', range.to);
   }
-  for (const field of ['NAME', 'DESCRIPTION', 'SOURCE_URL'] as const) {
+  for (const field of [
+    'NAME',
+    'DESCRIPTION',
+    'SOURCE_URL',
+    'CAMERA_MODEL',
+    'LENS_MODEL',
+  ] as const) {
     const value = state.text[field]?.trim();
     if (value) addRule(field, 'CONTAINS', value);
+  }
+  for (const field of ['GPS', 'PERSON'] as const) {
+    const value = state.choices?.[field];
+    if (value) addRule(field, 'EQUALS', value);
   }
   return { version: 2, conditions };
 }

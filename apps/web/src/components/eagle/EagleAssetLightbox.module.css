@@ -3,7 +3,7 @@
   inset: 0;
   z-index: 100;
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr) 38px;
+  grid-template-rows: 58px minmax(0, 1fr) auto;
   outline: 0;
   color: #f1f2f4;
   background: rgb(7 8 10 / 96%);
@@ -75,4 +75,41 @@
   place-items: center;
   color: #666c75;
   font-size: 10px;
+}
+
+.stage {
+  position: relative;
+}
+.stage .previous,
+.stage .next {
+  position: absolute;
+  top: 50%;
+  z-index: 1;
+  font-size: 36px;
+  background: rgb(0 0 0 / 40%);
+}
+.previous {
+  left: 12px;
+}
+.next {
+  right: 12px;
+}
+.backdrop footer {
+  min-height: 38px;
+}
+.backdrop .navigation {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px;
+}
+.navigation button {
+  width: auto;
+  min-width: 70px;
+  padding: 0 10px;
+}
+.navigation button:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

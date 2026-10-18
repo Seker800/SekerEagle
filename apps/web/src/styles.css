@@ -1096,22 +1096,6 @@ select:focus-visible {
   color: #eab664;
   font-weight: 600;
 }
-.photo-toolbar {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  flex-wrap: wrap;
-  padding: 10px 20px;
-  border-bottom: 1px solid #ddd2;
-}
-.photo-toolbar input {
-  min-width: 130px;
-  width: 180px;
-}
-.photo-toolbar button[aria-pressed='true'] {
-  color: #4f63df;
-  font-weight: 600;
-}
 .photo-card-date {
   position: absolute;
   bottom: 4px;
@@ -1207,7 +1191,6 @@ select:focus-visible {
   margin: 12px 0;
 }
 
-.photo-toolbar button,
 .photo-collections button {
   padding: 7px 11px;
   border: 1px solid #ffffff14;
@@ -1217,19 +1200,15 @@ select:focus-visible {
   font-size: 12px;
   cursor: pointer;
 }
-.photo-toolbar button:hover,
 .photo-collections button:hover {
   border-color: #d69b4870;
   color: #eab664;
 }
-.photo-toolbar button[aria-pressed='true'],
 .photo-person-card[aria-pressed='true'] {
   background: #d69b481a;
   border-color: #d69b4870;
   color: #eab664;
 }
-.photo-toolbar input,
-.photo-toolbar select,
 .photo-collections input,
 .photo-collections select {
   padding: 7px 9px;
@@ -1266,4 +1245,16 @@ select:focus-visible {
 .photo-person-editor > button,
 .photo-person-editor > label {
   margin: 8px 8px 8px 0;
+}
+
+.photo-stack-count {
+  z-index: 2;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 7px;
+  border-radius: 5px;
+  color: white;
+  background: #000a;
+  font-size: 12px;
 }

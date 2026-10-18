@@ -97,3 +97,19 @@ test('upload creation freezes the target library on the session', async () => {
   ).initiate(ownerId, { originalName: 'photo.jpg', mimeType: 'image/jpeg', size: 1 });
   assert.equal(data?.libraryMode, 'PHOTO');
 });
+
+test('material counts reject photo rules before database access', async () => {
+  const service = new EagleService({} as never);
+  const query = {
+    version: 2,
+    conditions: [
+      {
+        id: 'photo',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [{ id: 'gps', field: 'GPS', operator: 'EQUALS', value: 'WITH' }],
+      },
+    ],
+  };
+  await assert.rejects(() => service.countAssets(ownerId, query), /摄影/);
+});

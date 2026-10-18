@@ -160,7 +160,9 @@ try {
       res.end();
     }
   });
-  await new Promise((resolve) => gateway.listen(0, '127.0.0.1', resolve));
+  await new Promise((resolve) =>
+    gateway.listen(Number(process.env.PHOTO_WORKBENCH_PORT ?? 0), '127.0.0.1', resolve),
+  );
   const origin = `http://localhost:${gateway.address().port}`;
   const env = {
     ...process.env,
@@ -381,8 +383,10 @@ try {
   );
   const people = await api('/photos/photography/people');
   assert.ok(people.people.length >= 1);
+  const automaticGroups = await api('/photos/photography/groups');
+  assert.equal(automaticGroups.length, 1, 'worker automatically stacks matching photographs');
   const groupScan = await api('/photos/photography/groups/scan', {});
-  assert.equal(groupScan.created, 1);
+  assert.equal(groupScan.created, 0, 'batch scan preserves the existing automatic stack');
   const groups = await api('/photos/photography/groups');
   assert.equal(groups[0].bestAssetId, a.assetId);
   const restoreBucket = 'sekereagle-test-assets';

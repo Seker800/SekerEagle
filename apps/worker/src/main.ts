@@ -1,3 +1,4 @@
+import { groupAnalyzedPhoto } from './photo-grouping';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
@@ -582,6 +583,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           },
           data: { chronologicalAt: metadata.capturedAt ?? asset.libraryAddedAt },
         });
+        await groupAnalyzedPhoto(transaction, asset.ownerId, asset.id);
       }
       await transaction.eagleAsset.updateMany({
         where: {

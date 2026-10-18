@@ -1,8 +1,9 @@
+import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { IconMinus, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import {
-  EAGLE_FILTER_FIELDS,
+  getEagleFilterFields,
   EAGLE_FILTER_MAX_CONDITIONS,
   EAGLE_FILTER_MAX_RULES_PER_CONDITION,
   EAGLE_FILTER_OPERATOR_LABELS,
@@ -17,13 +18,23 @@ import {
 import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 import { searchAndSortEagleTags } from './eagle-tag-index';
 import styles from './EagleRuleBuilder.module.css';
+export type EagleFilterOptions = Partial<
+  Record<EagleFilterField, Array<{ value: string; label: string }>>
+>;
 interface EagleRuleBuilderProps {
+  fieldOptions?: EagleFilterOptions;
   value: EagleFilterQuery;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
   onChange: (value: EagleFilterQuery) => void;
 }
-export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleRuleBuilderProps) {
+export function EagleRuleBuilder({
+  fieldOptions,
+  value,
+  manualTags,
+  aiTags,
+  onChange,
+}: EagleRuleBuilderProps) {
   const replaceCondition = (conditionId: string, next: EagleFilterCondition) =>
     onChange({
       ...value,
@@ -134,6 +145,7 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
           <div className={styles.rules}>
             {condition.rules.map((rule, ruleIndex) => (
               <RuleRow
+                fieldOptions={fieldOptions}
                 key={rule.id}
                 condition={condition}
                 rule={rule}
@@ -168,6 +180,7 @@ export function EagleRuleBuilder({ value, manualTags, aiTags, onChange }: EagleR
   );
 }
 interface RuleRowProps {
+  fieldOptions?: EagleFilterOptions;
   condition: EagleFilterCondition;
   rule: EagleFilterRule;
   ruleIndex: number;
@@ -178,6 +191,7 @@ interface RuleRowProps {
   onRemove: () => void;
 }
 function RuleRow({
+  fieldOptions,
   condition,
   rule,
   ruleIndex,
@@ -187,6 +201,7 @@ function RuleRow({
   onAdd,
   onRemove,
 }: RuleRowProps) {
+  const { libraryMode } = useLibraryWorkspace();
   const definition = getEagleFilterFieldDefinition(rule.field);
   const hideValue = rule.operator === 'EMPTY' || rule.operator === 'NOT_EMPTY';
   const changeField = (field: EagleFilterField) => onChange(createEagleFilterRule(field, rule.id));
@@ -205,7 +220,7 @@ function RuleRow({
         value={rule.field}
         onChange={(event) => changeField(event.target.value as EagleFilterField)}
       >
-        {EAGLE_FILTER_FIELDS.map((field) => (
+        {getEagleFilterFields(libraryMode).map((field) => (
           <option key={field.field} value={field.field}>
             {field.label}
           </option>
@@ -229,7 +244,13 @@ function RuleRow({
       </select>
       <div className={styles.valueCell}>
         {!hideValue && (
-          <RuleValue rule={rule} manualTags={manualTags} aiTags={aiTags} onChange={onChange} />
+          <RuleValue
+            fieldOptions={fieldOptions}
+            rule={rule}
+            manualTags={manualTags}
+            aiTags={aiTags}
+            onChange={onChange}
+          />
         )}
       </div>
       <div className={styles.ruleActions}>
@@ -276,11 +297,13 @@ function changeRuleOperator(
   return { ...rule, operator };
 }
 function RuleValue({
+  fieldOptions,
   rule,
   manualTags,
   aiTags,
   onChange,
 }: {
+  fieldOptions?: EagleFilterOptions;
   rule: EagleFilterRule;
   manualTags: EagleManualTag[];
   aiTags: EagleAiTag[];
@@ -297,7 +320,8 @@ function RuleValue({
       />
     );
   }
-  if (definition.kind === 'SELECT') {
+  if (definition.kind === 'SELECT' || rule.field === 'PERSON') {
+    const options = fieldOptions?.[rule.field] ?? definition.options ?? [];
     return (
       <select
         aria-label={t('{{value1}}值', {
@@ -306,7 +330,8 @@ function RuleValue({
         value={String(rule.value ?? definition.options?.[0]?.value ?? '')}
         onChange={(event) => onChange({ ...rule, value: event.target.value })}
       >
-        {definition.options?.map((option) => (
+        {rule.field === 'PERSON' && <option value="">{t('全部')}</option>}
+        {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>
