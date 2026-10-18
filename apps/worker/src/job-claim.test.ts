@@ -201,3 +201,20 @@ test('a paused AI backlog cannot hide ordinary background work', async () => {
 
   assert.equal(claimed?.id, 'embedding');
 });
+
+
+test('background permission is checked against the candidate library', async () => {
+  const photo = job('photo', 'BACKGROUND', { libraryMode: 'PHOTO' });
+  const checked: unknown[] = [];
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async ({ where }: { where: { lane: string } }) => where.lane === 'BACKGROUND' ? [photo] : [],
+      updateMany: async () => ({ count: 1 }),
+      findUniqueOrThrow: async () => photo,
+    },
+  };
+  await claimNextMediaJob(client, {
+    canClaimBackground: async (...args) => { checked.push(args); return true; },
+  });
+  assert.deepEqual(checked, [['owner-1', 'EXTRACT_COLOR_PALETTE', 'PHOTO']]);
+});
