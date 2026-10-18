@@ -335,6 +335,9 @@ def archive_stream():
             "docker",
             "run",
             "--rm",
+            # Binary stdout is the transport, never a persistent container log.
+            "--log-driver=none",
+            "--read-only",
             "--name",
             EXPORT_CONTAINER,
             "--network",
