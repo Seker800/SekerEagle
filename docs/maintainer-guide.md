@@ -60,6 +60,8 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 依赖方向应保持为“适配器 → 应用服务 → 领域规则与窄端口 → 基础设施实现”。不要让领域
 规则反向依赖 Controller、React、Prisma 或 MinIO 细节。
 
+素材／照片通用逻辑的边界、门禁命令与扩展流程见 [共用逻辑门禁](library-sharing-gate.md)。
+
 ## 开发工作流
 
 首次准备：
