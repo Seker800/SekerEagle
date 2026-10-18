@@ -5,6 +5,7 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { getEaglePreviewContentUrl, getEagleVideoContentUrl } from './eagle-media-sources';
+import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
   asset: EagleAssetListItem;
@@ -128,7 +129,10 @@ export function EagleAssetLightbox({
           <p>{t('预览图尚未生成')}</p>
         )}
       </div>
-      <footer className={navigation ? styles.navigation : undefined}>
+      <footer className={styles.navigation}>
+        {!loading && asset.mimeType.startsWith('image/') && previewUrl && (
+          <EagleImageCopyButton sourceUrl={previewUrl} />
+        )}
         {navigation ? (
           <>
             <span>

@@ -1,0 +1,32 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.root .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  height: 34px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  color: var(--color-text-primary, #f1f2f4);
+  border: 1px solid rgb(255 255 255 / 14%);
+  background: rgb(255 255 255 / 5%);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.root .button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.root small {
+  color: #e6b84b;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

@@ -55,11 +55,17 @@ describe('EagleAssetLightbox', () => {
     copyImageMock.mockResolvedValue(undefined);
     const view = render(<EagleAssetLightbox asset={imageAsset} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
-    expect(copyImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-1/renditions/preview-1');
+    expect(copyImageMock).toHaveBeenLastCalledWith(
+      '/api/eagle/assets/image-1/renditions/preview-1',
+    );
     expect(fireEvent.contextMenu(screen.getByRole('img'))).toBe(true);
-    view.rerender(<EagleAssetLightbox asset={{...imageAsset, id: 'image-2'}} onClose={vi.fn()} />);
+    view.rerender(
+      <EagleAssetLightbox asset={{ ...imageAsset, id: 'image-2' }} onClose={vi.fn()} />,
+    );
     fireEvent.click(screen.getByRole('button', { name: '复制图片' }));
-    expect(copyImageMock).toHaveBeenLastCalledWith('/api/eagle/assets/image-2/renditions/preview-1');
+    expect(copyImageMock).toHaveBeenLastCalledWith(
+      '/api/eagle/assets/image-2/renditions/preview-1',
+    );
     view.rerender(<EagleAssetLightbox asset={videoAsset} onClose={vi.fn()} />);
     expect(screen.queryByRole('button', { name: '复制图片' })).not.toBeInTheDocument();
   });

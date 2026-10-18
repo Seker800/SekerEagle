@@ -102,3 +102,11 @@
     transform: translateX(155%);
   }
 }
+
+.dialog footer {
+  flex-wrap: wrap;
+}
+.dialog footer > strong {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
