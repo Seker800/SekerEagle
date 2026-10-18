@@ -45,10 +45,9 @@ an SBOM from the exact container images or artifacts being published.
 ## Photo metadata and maps
 
 Photo metadata parsing uses `exifr` (MIT). Interactive maps use Leaflet
-(BSD-2-Clause); the map retains visible OpenStreetMap attribution. Only visible
-map tiles are requested from the standard OpenStreetMap tile endpoint; no bulk
-or offline tile download is implemented. Photography metadata remains in the
-local application database.
+(BSD-2-Clause). The current default uses the locally bundled Natural Earth data
+noted below and makes no requests to OpenStreetMap tiles. Photography metadata
+remains in the local application database.
 
 ## Local photo face models
 
@@ -57,3 +56,12 @@ YuNet detector weights are published by OpenCV Zoo under MIT, and SFace recogniz
 weights under Apache-2.0. Weights are downloaded separately with SHA-256 verification;
 the downloader retains each upstream model license beside the model file. See
 `services/photo-face/README.md` for exact upstream sources and runtime setup.
+
+## Local photo map data
+
+The photo map bundles Natural Earth 1:50m land geometry and 1:10m populated
+places. Natural Earth places this data in the public domain and allows
+modification and redistribution: https://www.naturalearthdata.com/about/terms-of-use/.
+The pinned source revision, source URLs, SHA-256 checksums and transformations
+are recorded in `apps/web/src/components/photos/basemap/sources.json`. Normal
+builds use the committed files; map viewing does not contact the data publisher.

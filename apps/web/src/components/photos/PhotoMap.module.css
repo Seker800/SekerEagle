@@ -1,0 +1,98 @@
+.panel {
+  padding: 12px 20px;
+  color: var(--eagle-text, #f0f1f3);
+}
+.heading,
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.heading p {
+  color: var(--eagle-muted, #989aa2);
+  font-size: 12px;
+}
+.heading button,
+.caption button,
+.photoLink {
+  border: 1px solid var(--eagle-line, #ffffff14);
+  border-radius: 7px;
+  padding: 7px 10px;
+  color: var(--eagle-accent, #d69b48);
+  background: var(--eagle-panel, #17181b);
+  cursor: pointer;
+}
+.heading button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.frame {
+  font-family: inherit;
+  height: min(65vh, 650px);
+  min-height: 320px;
+  border: 1px solid var(--eagle-line, #ffffff14);
+  border-radius: 12px;
+  background: var(--eagle-bg, #111214);
+  isolation: isolate;
+}
+.caption {
+  padding-top: 9px;
+  color: var(--eagle-muted, #989aa2);
+  font-size: 11px;
+}
+.cityIcon {
+  border: 0;
+  background: transparent;
+}
+.city {
+  position: absolute;
+  transform: translate(-50%, 10px);
+  white-space: nowrap;
+  color: var(--eagle-muted, #989aa2);
+  font-size: 11px;
+  font-family: inherit;
+  text-shadow:
+    0 1px 3px #000,
+    1px 0 3px #000,
+    -1px 0 3px #000;
+}
+.frame :global(.leaflet-control-zoom) {
+  border: 1px solid var(--eagle-line, #ffffff14);
+  box-shadow: 0 4px 16px #0006;
+}
+.frame :global(.leaflet-control-zoom a) {
+  background: var(--eagle-panel, #17181b);
+  border-color: var(--eagle-line, #ffffff14);
+  color: var(--eagle-accent, #d69b48);
+}
+.frame :global(.leaflet-control-zoom a:hover),
+.frame :global(.leaflet-control-zoom a:focus-visible) {
+  background: var(--eagle-panel-raised, #1d1f23);
+}
+.frame :global(.leaflet-control-zoom a.leaflet-disabled) {
+  color: var(--eagle-muted, #989aa2);
+  background: var(--eagle-panel, #17181b);
+  opacity: 0.5;
+}
+.frame :global(.leaflet-control-attribution) {
+  background: var(--eagle-bg, #111214);
+  color: var(--eagle-muted, #989aa2);
+  font-size: 10px;
+}
+.frame :global(.leaflet-control-attribution a) {
+  color: var(--eagle-accent, #d69b48);
+}
+.frame :global(.leaflet-popup-content-wrapper),
+.frame :global(.leaflet-popup-tip) {
+  color: var(--eagle-text, #f0f1f3);
+  background: var(--eagle-panel-raised, #1d1f23);
+}
+.frame :global(.leaflet-popup-content-wrapper) {
+  border: 1px solid var(--eagle-line, #ffffff14);
+  box-shadow: 0 8px 30px #0008;
+}
+.frame :global(a.leaflet-popup-close-button) {
+  color: var(--eagle-accent, #d69b48);
+}

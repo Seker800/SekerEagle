@@ -1106,9 +1106,6 @@ select:focus-visible {
   font-size: 11px;
   border-radius: 4px;
 }
-.photo-map-panel {
-  padding: 12px 20px;
-}
 .photo-metadata {
   padding: 16px;
   border-bottom: 1px solid #ddd3;

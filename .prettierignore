@@ -7,3 +7,7 @@
 .omx/
 .runtime/
 .local/
+
+# Generated Natural Earth data; regeneration and source hashes live beside the assets.
+apps/web/src/components/photos/basemap/land.geojson
+apps/web/src/components/photos/basemap/cities.json

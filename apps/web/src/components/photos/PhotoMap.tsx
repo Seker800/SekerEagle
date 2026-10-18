@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { t } from '../../i18n';
+import { getLocale, t } from '../../i18n';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
+import { loadLocalBasemap, selectCityLabels } from './local-basemap';
+import styles from './PhotoMap.module.css';
 
 export function PhotoMap({
   assets,
@@ -11,48 +13,172 @@ export function PhotoMap({
   assets: EagleAssetListItem[];
   onOpen: (asset: EagleAssetListItem) => void;
 }) {
-  const container = useRef<HTMLDivElement>(null);
-  const [tileError, setTileError] = useState(false);
-  const points = assets.filter(
-    (asset) => asset.photoMetadata?.latitude != null && asset.photoMetadata.longitude != null,
+  const container = useRef<HTMLDivElement>(null),
+    mapRef = useRef<L.Map | null>(null);
+  const onOpenRef = useRef(onOpen),
+    framed = useRef(false);
+  const [status, setStatus] = useState<'LOADING' | 'READY' | 'ERROR'>('LOADING');
+  const [reload, setReload] = useState(0);
+  const points = useMemo(
+    () =>
+      assets.flatMap((asset) => {
+        const latitude = asset.photoMetadata?.latitude,
+          longitude = asset.photoMetadata?.longitude;
+        return typeof latitude === 'number' &&
+          Number.isFinite(latitude) &&
+          Math.abs(latitude) <= 90 &&
+          typeof longitude === 'number' &&
+          Number.isFinite(longitude) &&
+          Math.abs(longitude) <= 180
+          ? [{ asset, coordinate: [latitude, longitude] as L.LatLngTuple }]
+          : [];
+      }),
+    [assets],
   );
   useEffect(() => {
+    onOpenRef.current = onOpen;
+  }, [onOpen]);
+  useEffect(() => {
     if (!container.current) return;
-    const map = L.map(container.current, { worldCopyJump: true }).setView([25, 10], 2);
-    const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-    tiles.on('tileerror', () => setTileError(true));
-    const bounds: L.LatLngTuple[] = [];
-    for (const asset of assets) {
-      const metadata = asset.photoMetadata;
-      if (metadata?.latitude == null || metadata.longitude == null) continue;
-      const coordinate: L.LatLngTuple = [metadata.latitude, metadata.longitude];
-      bounds.push(coordinate);
+    const map = L.map(container.current, {
+      minZoom: 1,
+      maxZoom: 12,
+      maxBounds: [
+        [-85, -180],
+        [85, 180],
+      ],
+      maxBoundsViscosity: 1,
+      preferCanvas: true,
+    }).setView([30, 105], 3);
+    mapRef.current = map;
+    framed.current = false;
+    const resize =
+      typeof ResizeObserver === 'function'
+        ? new ResizeObserver(() => map.invalidateSize({ animate: false }))
+        : null;
+    resize?.observe(container.current);
+    map.attributionControl.setPrefix(false);
+    map.attributionControl.addAttribution(
+      '<a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
+    );
+    const citiesPane = map.createPane('photoCities');
+    citiesPane.style.pointerEvents = 'none';
+    citiesPane.style.zIndex = '450';
+    map.createPane('photoLocations').style.zIndex = '600';
+    const labels = L.layerGroup().addTo(map),
+      controller = new AbortController();
+    const palette = getComputedStyle(container.current);
+    const accent = palette.getPropertyValue('--eagle-accent').trim() || '#d69b48';
+    const land = palette.getPropertyValue('--eagle-panel-raised').trim() || '#1d1f23';
+    setStatus('LOADING');
+    let updateLabels: (() => void) | undefined;
+    void loadLocalBasemap(controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        L.geoJSON(data.land, {
+          interactive: false,
+          style: { color: accent, weight: 0.7, opacity: 0.25, fillColor: land, fillOpacity: 1 },
+        }).addTo(map);
+        updateLabels = () => {
+          labels.clearLayers();
+          const visible = selectCityLabels(
+            data.cities,
+            map.getZoom(),
+            (city) => map.getBounds().contains([city.latitude, city.longitude]),
+            (city) => map.latLngToContainerPoint([city.latitude, city.longitude]),
+          );
+          for (const city of visible) {
+            const label = document.createElement('span');
+            label.className = styles.city;
+            label.textContent = getLocale() === 'zh-CN' ? city.nameZh : city.name;
+            L.marker([city.latitude, city.longitude], {
+              pane: 'photoCities',
+              interactive: false,
+              keyboard: false,
+              icon: L.divIcon({ className: styles.cityIcon, html: label, iconSize: [0, 0] }),
+            }).addTo(labels);
+          }
+        };
+        map.on('moveend zoomend', updateLabels);
+        updateLabels();
+        setStatus('READY');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setStatus('ERROR');
+      });
+    return () => {
+      controller.abort();
+      resize?.disconnect();
+      if (updateLabels) map.off('moveend zoomend', updateLabels);
+      map.remove();
+      mapRef.current = null;
+    };
+  }, [reload]);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const markers = L.layerGroup().addTo(map);
+    const accent = container.current
+      ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#d69b48'
+      : '#d69b48';
+    for (const { asset, coordinate } of points) {
       const label = document.createElement('button');
       label.type = 'button';
+      label.className = styles.photoLink;
       label.textContent = asset.displayName;
-      label.onclick = () => onOpen(asset);
-      L.circleMarker(coordinate, { radius: 8, color: '#4f63df', fillOpacity: 0.8 })
-        .addTo(map)
+      label.onclick = () => onOpenRef.current(asset);
+      L.circleMarker(coordinate, {
+        pane: 'photoLocations',
+        radius: 8,
+        color: accent,
+        weight: 2,
+        fillColor: accent,
+        fillOpacity: 0.85,
+      })
+        .addTo(markers)
         .bindPopup(label);
     }
-    if (bounds.length) map.fitBounds(L.latLngBounds(bounds), { maxZoom: 13, padding: [32, 32] });
+    if (points.length && !framed.current) {
+      map.fitBounds(L.latLngBounds(points.map((point) => point.coordinate)), {
+        maxZoom: 6,
+        padding: [48, 48],
+      });
+      framed.current = true;
+    }
     return () => {
-      map.remove();
+      markers.remove();
     };
-  }, [assets, onOpen]);
+  }, [points, reload]);
   return (
-    <section className="photo-map-panel">
-      <p>{t('已加载 {{value1}} 张带位置照片', { value1: points.length })}</p>
-      {tileError && <p role="status">{t('地图底图暂不可用，照片坐标仍可在详情中查看。')}</p>}
-      <div
-        ref={container}
-        style={{ height: 'min(65vh, 650px)', minHeight: 320 }}
-        aria-label={t('照片地图')}
-      />
+    <section className={styles.panel}>
+      <div className={styles.heading}>
+        <p>{t('已加载 {{value1}} 张带位置照片', { value1: points.length })}</p>
+        <button
+          type="button"
+          disabled={!points.length}
+          onClick={() =>
+            mapRef.current?.fitBounds(L.latLngBounds(points.map((point) => point.coordinate)), {
+              maxZoom: 6,
+              padding: [48, 48],
+            })
+          }
+        >
+          {t('显示全部照片位置')}
+        </button>
+      </div>
+      <div className={styles.frame} ref={container} aria-label={t('照片地图')} />
+      <div className={styles.caption}>
+        <span>{t('离线概览 · 不含街道级细节')}</span>
+        {status === 'LOADING' && <span role="status">{t('正在加载本地地图…')}</span>}
+        {status === 'ERROR' && (
+          <span role="alert">
+            {t('本地地图加载失败。')}{' '}
+            <button type="button" onClick={() => setReload((value) => value + 1)}>
+              {t('重试')}
+            </button>
+          </span>
+        )}
+      </div>
       {!points.length && <p>{t('当前照片没有 GPS 信息。')}</p>}
     </section>
   );

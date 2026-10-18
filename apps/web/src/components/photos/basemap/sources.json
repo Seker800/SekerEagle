@@ -1,0 +1,22 @@
+{
+  "provider": "Natural Earth",
+  "revision": "ca96624a56bd078437bca8184e78163e5039ad19",
+  "license": "Public domain",
+  "terms": "https://www.naturalearthdata.com/about/terms-of-use/",
+  "sources": [
+    {
+      "file": "ne_50m_land.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_50m_land.geojson",
+      "sha256": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b"
+    },
+    {
+      "file": "ne_10m_populated_places.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/ca96624a56bd078437bca8184e78163e5039ad19/geojson/ne_10m_populated_places.geojson",
+      "sha256": "9b8e3de09048ef00dfc70357dbb9fa324493f214b5e0ae4daf1aa79a8d10116b"
+    }
+  ],
+  "transforms": [
+    "Land: retain geometry only; round coordinates to four decimals.",
+    "Cities: retain names, coordinates, population and minimum zoom; sort by population."
+  ]
+}
