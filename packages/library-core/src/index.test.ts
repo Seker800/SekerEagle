@@ -18,7 +18,10 @@ test('explicit photos cannot alias materials or another owner', () => {
 });
 
 test('cache scope keys are unambiguous for arbitrary owner strings', () => {
-  assert.notEqual(libraryScopeKey(createLibraryScope('a:PHOTO')), libraryScopeKey(createLibraryScope('a', 'PHOTO')));
+  assert.notEqual(
+    libraryScopeKey(createLibraryScope('a:PHOTO')),
+    libraryScopeKey(createLibraryScope('a', 'PHOTO')),
+  );
 });
 
 test('invalid explicit modes fail closed rather than falling back to material', () => {
