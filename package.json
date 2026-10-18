@@ -22,7 +22,7 @@
   "scripts": {
     "build": "npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && npm run build --workspace @sekereagle/web && npm run build --workspace @sekereagle/contracts && npm run build --workspace @sekereagle/eagle-migrator && npm run build --workspace @sekereagle/desktop",
     "typecheck": "npm run typecheck --workspace @sekereagle/library-core && npm run typecheck --workspace @sekereagle/config && npm run typecheck --workspace @sekereagle/eagle-filter-core && npm run typecheck --workspace @sekereagle/vector-core && npm run typecheck --workspace @sekereagle/api && npm run typecheck --workspace @sekereagle/worker && npm run typecheck --workspace @sekereagle/web && npm run typecheck --workspace @sekereagle/contracts && npm run typecheck --workspace @sekereagle/eagle-migrator && npm run typecheck --workspace @sekereagle/desktop",
-    "test": "npm run test --workspace @sekereagle/library-core && npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/eagle-filter-core && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm run test --workspace @sekereagle/desktop && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/deploy-mac.test.mjs scripts/deployment-version-contract.test.mjs scripts/workspace-test-dependencies.test.mjs scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs",
+    "test": "npm run test --workspace @sekereagle/library-core && npm run test --workspace @sekereagle/config && npm run test --workspace @sekereagle/eagle-filter-core && npm run test --workspace @sekereagle/vector-core && npm run test --workspace @sekereagle/api && npm run test --workspace @sekereagle/worker && npm run test --workspace @sekereagle/web && npm run test --workspace @sekereagle/contracts && npm run test --workspace @sekereagle/eagle-migrator && npm run test --workspace @sekereagle/desktop && npm --prefix plugins/eagle-importer test && npm --prefix plugins/browser-capture test && node --test scripts/deploy-mac.test.mjs scripts/deployment-version-contract.test.mjs scripts/workspace-test-dependencies.test.mjs scripts/performance/library-scale-contract.test.mjs scripts/performance/media-memory-contract.test.mjs && npm run test:architecture",
     "lint": "eslint .",
     "format:check": "prettier --check .",
     "db:guard": "node ./scripts/assert-safe-target.mjs",
@@ -47,10 +47,12 @@
     "performance:verify": "npm run performance:library:100k && npm run performance:media-memory && npm run performance:desktop-cache:100k",
     "mlx:test": "./scripts/mlx-embedding-host.sh test",
     "oss:check": "node ./scripts/check-oss-readiness.mjs",
-    "ci:check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check",
+    "ci:check": "npm run architecture:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check",
     "test:library-integration": "npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && node scripts/testing/run-library-tests.mjs",
     "test:photo-smoke": "npm run db:generate && npm run build && node scripts/testing/photo-workbench.mjs",
-    "test:photo-workbench": "npm run db:generate && npm run build && node scripts/testing/photo-workbench.mjs --serve"
+    "test:photo-workbench": "npm run db:generate && npm run build && node scripts/testing/photo-workbench.mjs --serve",
+    "architecture:check": "node scripts/architecture/check-library-sharing.mjs",
+    "test:architecture": "node --test scripts/architecture/library-sharing.test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

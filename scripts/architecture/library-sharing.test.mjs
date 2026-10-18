@@ -13,29 +13,83 @@ function rejectsMutation(file, mutate, rule) {
   const after = mutate(before);
   assert.notEqual(after, before, 'mutation must change the fixture');
   sources.set(file, after);
-  assert.ok(checkLibrarySharing(sources).some((error) => error.rule === rule), rule);
+  const errors = checkLibrarySharing(sources);
+  if (rule !== 'parse-error')
+    assert.ok(
+      !errors.some((error) => error.rule === 'parse-error'),
+      'mutation must remain valid syntax',
+    );
+  assert.ok(
+    errors.some((error) => error.rule === rule),
+    rule,
+  );
 }
 
 test('current architecture shares generic paths and permits photography extensions', () => {
   assert.deepEqual(checkLibrarySharing(baseline), []);
 });
 test('rejects a second thumbnail renderer even when imported with an alias', () => {
-  rejectsMutation(page, (s) => s.replace('<EagleAssetThumbnail', '<EagleAssetThumbnail />\n<EagleAssetThumbnail'), 'shared-composition');
+  rejectsMutation(
+    page,
+    (s) =>
+      s
+        .replace(
+          'import { EagleAssetThumbnail }',
+          'import { EagleAssetThumbnail as ThumbnailAlias }',
+        )
+        .replaceAll('<EagleAssetThumbnail', '<ThumbnailAlias')
+        .replace('<ThumbnailAlias', '<ThumbnailAlias />\n<ThumbnailAlias'),
+    'shared-composition',
+  );
 });
 test('rejects mode-conditional generic rendering', () => {
-  rejectsMutation(page, (s) => s.replace('<EagleAssetThumbnail', "{libraryMode === 'PHOTO' && <EagleAssetThumbnail").replace('displayWidth={thumbnailSize}\n                          />', 'displayWidth={thumbnailSize}\n                          />}'), 'shared-composition');
+  rejectsMutation(
+    page,
+    (s) =>
+      s
+        .replace('<EagleAssetThumbnail', "{libraryMode === 'PHOTO' && <EagleAssetThumbnail")
+        .replace(
+          'displayWidth={thumbnailSize}\n                          />',
+          'displayWidth={thumbnailSize}\n                          />}',
+        ),
+    'shared-composition',
+  );
 });
 test('rejects photo-specific implementations inside shared layout', () => {
-  rejectsMutation('apps/web/src/components/eagle/eagle-masonry-layout.ts', (s) => "import { customLayout } from '../photos/custom-layout';\n" + s, 'dependency-direction');
+  rejectsMutation(
+    'apps/web/src/components/eagle/eagle-masonry-layout.ts',
+    (s) => "import { customLayout } from '../photos/custom-layout';\n" + s,
+    'dependency-direction',
+  );
 });
 test('rejects a mode branch inside the common layout algorithm', () => {
-  rejectsMutation('apps/web/src/components/eagle/eagle-masonry-layout.ts', (s) => s + "\nfunction fork(mode: string) { return mode === 'PHOTO' ? 200 : 300; }", 'mode-neutral-core');
+  rejectsMutation(
+    'apps/web/src/components/eagle/eagle-masonry-layout.ts',
+    (s) => s + "\nfunction fork(mode: string) { return mode === 'PHOTO' ? 200 : 300; }",
+    'mode-neutral-core',
+  );
 });
 test('rejects overrides on inherited generic photo routes', () => {
-  rejectsMutation(photoModule, (s) => s.replace('PhotosController extends EagleController {}', 'PhotosController extends EagleController { listAssets() { return []; } }'), 'inherited-controllers');
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        'PhotosController extends EagleController {}',
+        'PhotosController extends EagleController { listAssets() { return []; } }',
+      ),
+    'inherited-controllers',
+  );
 });
 test('rejects replacing the shared providers with a photo implementation', () => {
-  rejectsMutation(photoModule, (s) => s.replace('    PhotoManagementService,', '    PhotoManagementService,\n    { provide: EagleService, useClass: PhotoAssetService },'), 'shared-providers');
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        '    PhotoManagementService,',
+        '    PhotoManagementService,\n    { provide: EagleService, useClass: PhotoAssetService },',
+      ),
+    'shared-providers',
+  );
 });
 test('rejects missing shared composition instead of silently skipping a moved file', () => {
   const sources = new Map(baseline);
@@ -45,6 +99,53 @@ test('rejects missing shared composition instead of silently skipping a moved fi
 test('does not mistake comments or ordinary strings for imports or mode branches', () => {
   const sources = new Map(baseline);
   const file = 'apps/web/src/components/eagle/eagle-masonry-layout.ts';
-  sources.set(file, baseline.get(file) + "\n// import x from '../photos/fake'; if (mode === 'PHOTO') {}\n");
+  sources.set(
+    file,
+    baseline.get(file) + "\n// import x from '../photos/fake'; if (mode === 'PHOTO') {}\n",
+  );
   assert.deepEqual(checkLibrarySharing(sources), []);
+});
+
+test('rejects reverse dependencies through re-exports and dynamic imports', () => {
+  for (const edge of ["export { x } from '../photos/x';", "const x = import('../photos/x');"]) {
+    rejectsMutation(
+      'apps/web/src/components/eagle/eagle-masonry-layout.ts',
+      (s) => s + '\n' + edge,
+      'dependency-direction',
+    );
+  }
+});
+test('rejects a forked top-level workspace even if the existing page is retained', () => {
+  rejectsMutation(
+    'apps/web/src/App.tsx',
+    (s) =>
+      s
+        .replace('<SekerEaglePage', "{libraryMode === 'MATERIAL' && <SekerEaglePage")
+        .replace('        />\n      </div>', '        />}\n      </div>'),
+    'shared-composition',
+  );
+});
+test('rejects missing core imports, a copied photo controller, and a removed provider registry', () => {
+  rejectsMutation(
+    page,
+    (s) => s.replace("from './eagle-masonry-layout'", "from '../photos/layout'"),
+    'shared-composition',
+  );
+  rejectsMutation(
+    photoModule,
+    (s) => s.replace('PhotosController extends EagleController {}', 'PhotosController {}'),
+    'inherited-controllers',
+  );
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        '...EAGLE_LIBRARY_PROVIDERS.filter((provider) => provider !== EagleMaintenanceService),',
+        '',
+      ),
+    'shared-providers',
+  );
+});
+test('rejects malformed source instead of accepting a partial syntax tree', () => {
+  rejectsMutation(page, (s) => s + '\nfunction broken( {', 'parse-error');
 });
