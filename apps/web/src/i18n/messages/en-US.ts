@@ -1,4 +1,7 @@
 export const enUS = {
+  展开筛选: 'Expand filters',
+  收起筛选: 'Collapse filters',
+  '已启用 {{value1}} 项筛选': '{{value1}} active filters',
   显示全部照片位置: 'Show all photo locations',
   '离线概览 · 不含街道级细节': 'Offline overview · No street-level detail',
   '正在加载本地地图…': 'Loading local map…',

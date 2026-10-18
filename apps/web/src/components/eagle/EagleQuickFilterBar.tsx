@@ -1,9 +1,12 @@
 import { getEagleFilterFields } from '@sekereagle/eagle-filter-core';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
-import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type DragEvent } from 'react';
 import {
   IconAspectRatio,
+  IconChevronDown,
+  IconChevronUp,
+  IconFilter,
   IconCalendar,
   IconClock,
   IconFile,
@@ -114,6 +117,8 @@ export function EagleQuickFilterBar({
   const { libraryMode } = useLibraryWorkspace();
   const availableFields = getEagleFilterFields(libraryMode).map(({ field }) => field);
   const rootRef = useRef<HTMLDivElement>(null);
+  const fieldsId = useId();
+  const [expanded, setExpanded] = useState(false);
   const [openField, setOpenField] = useState<EagleQuickFilterField | 'MANAGER' | null>(null);
   const pinnedKey =
     libraryMode === 'PHOTO' ? `${QUICK_FILTER_FIELDS_KEY}.PHOTO` : QUICK_FILTER_FIELDS_KEY;
@@ -151,7 +156,32 @@ export function EagleQuickFilterBar({
         if (event.key === 'Escape') setOpenField(null);
       }}
     >
-      <div className={styles.fields}>
+      <div className={styles.entry}>
+        <button
+          type="button"
+          aria-label={expanded ? t('收起筛选') : t('展开筛选')}
+          aria-expanded={expanded}
+          aria-controls={fieldsId}
+          onClick={() => {
+            setOpenField(null);
+            setExpanded((current) => !current);
+          }}
+        >
+          <IconFilter size={18} aria-hidden="true" />
+          {expanded ? t('收起筛选') : t('展开筛选')}
+          {expanded ? (
+            <IconChevronUp size={14} aria-hidden="true" />
+          ) : (
+            <IconChevronDown size={14} aria-hidden="true" />
+          )}
+        </button>
+      </div>
+      {!expanded && activeCount > 0 && (
+        <span className={styles.activeSummary}>
+          {t('已启用 {{value1}} 项筛选', { value1: activeCount })}
+        </span>
+      )}
+      <div id={fieldsId} className={styles.fields} hidden={!expanded}>
         {visibleFields.map((field) => {
           const label = EAGLE_QUICK_FILTER_FIELD_LABELS[field];
           const FieldIcon = FIELD_ICONS[field];

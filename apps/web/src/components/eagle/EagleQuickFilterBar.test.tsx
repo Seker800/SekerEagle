@@ -50,7 +50,10 @@ const aiTags = [
   },
 ];
 
-function renderBar(initialValue: EagleQuickFilterState = createEmptyEagleQuickFilterState(), expand = true) {
+function renderBar(
+  initialValue: EagleQuickFilterState = createEmptyEagleQuickFilterState(),
+  expand = true,
+) {
   const onChange = vi.fn();
   function ControlledBar() {
     const [value, setValue] = useState(initialValue);

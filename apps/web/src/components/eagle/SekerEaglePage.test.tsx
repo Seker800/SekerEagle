@@ -536,6 +536,7 @@ describe('SekerEaglePage', () => {
   it('applies common filters from a dedicated quick-filter popover', async () => {
     renderPage();
 
+    fireEvent.click(await screen.findByRole('button', { name: '展开筛选' }));
     fireEvent.click(await screen.findByRole('button', { name: '格式筛选' }));
     const formatFilter = screen.getByRole('dialog', { name: '格式筛选' });
     fireEvent.click(within(formatFilter).getByRole('checkbox', { name: 'PNG' }));
@@ -565,6 +566,7 @@ describe('SekerEaglePage', () => {
     listEagleManualTagsMock.mockResolvedValue(manualTags);
     renderPage();
 
+    fireEvent.click(await screen.findByRole('button', { name: '展开筛选' }));
     fireEvent.click(await screen.findByRole('button', { name: '标签筛选' }));
     const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
     const manualTagSearch = within(filterPanel).getByRole('searchbox', { name: '搜索标签' });
@@ -586,6 +588,7 @@ describe('SekerEaglePage', () => {
   it('applies a canonical color as a server-side asset filter', async () => {
     renderPage();
 
+    fireEvent.click(await screen.findByRole('button', { name: '展开筛选' }));
     fireEvent.click(await screen.findByRole('button', { name: '颜色筛选' }));
     fireEvent.click(
       within(screen.getByRole('dialog', { name: '颜色筛选' })).getByRole('button', {
@@ -1028,6 +1031,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '标签' }));
     fireEvent.doubleClick(await screen.findByRole('button', { name: /人工标签 灵感/ }));
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
     const filterButton = screen.getByRole('button', { name: '标签筛选，1' });
     fireEvent.click(filterButton);
     const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
@@ -1053,6 +1057,7 @@ describe('SekerEaglePage', () => {
       }),
     );
     fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
     const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
     fireEvent.click(aiFilterButton);
     const aiFilterPanel = screen.getByRole('dialog', { name: 'AI 标签筛选' });
@@ -1837,6 +1842,8 @@ describe('SekerEaglePage', () => {
     await screen.findByRole('heading', { name: '全部素材' });
 
     const toolbar = screen.getByRole('toolbar', { name: '快捷筛选' });
+    expect(within(toolbar).queryByRole('button', { name: '颜色筛选' })).not.toBeInTheDocument();
+    fireEvent.click(within(toolbar).getByRole('button', { name: '展开筛选' }));
     expect(within(toolbar).getByRole('button', { name: '颜色筛选' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: '格式筛选' })).toBeInTheDocument();
@@ -1983,6 +1990,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '双标签素材' }));
     const filterPanel = screen.getByRole('toolbar', { name: '快捷筛选' });
+    fireEvent.click(within(filterPanel).getByRole('button', { name: '展开筛选' }));
     expect(within(filterPanel).getByRole('button', { name: '标签筛选' })).toHaveAttribute(
       'aria-expanded',
       'false',
