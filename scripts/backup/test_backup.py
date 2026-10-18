@@ -42,6 +42,11 @@ class BackupPolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 backup.assert_ssh_target(bad)
 
+    def test_plain_copy_space_reserves_complete_prior_dataset(self):
+        size = 78_293_967_382
+        self.assertGreater(backup.required_remote_space({"integrity":{"bytes":size}}), size)
+        self.assertGreaterEqual(backup.required_remote_space({}), 20 * 1024**3)
+
     def test_archive_key_cannot_escape_objects(self):
         self.assertEqual(
             backup.object_path("owner/assets/file.jpg"), "objects/owner/assets/file.jpg"
