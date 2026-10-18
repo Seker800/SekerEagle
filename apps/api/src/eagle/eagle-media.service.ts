@@ -1,3 +1,8 @@
+import {
+  parseRangeHeader,
+  isObjectRangeNotSatisfiableError,
+  RangeNotSatisfiableException,
+} from '../common/range-parser';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
 import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
@@ -63,6 +68,7 @@ export class EagleMediaService {
     ifNoneMatch?: string,
     includePrivate = false,
     abortSignal?: AbortSignal,
+    range?: string,
   ) {
     const rendition = await this.prisma.eagleAssetRendition.findFirst({
       where: {
@@ -78,19 +84,39 @@ export class EagleMediaService {
         mimeType: true,
         kind: true,
         revision: true,
+        byteSize: true,
         asset: { select: { isPrivate: true, mediaRevision: true } },
       },
     });
     if (!rendition || rendition.revision !== rendition.asset.mediaRevision) {
       throw new NotFoundException('预览文件不存在。');
     }
-    return this.open(
-      ownerId,
-      rendition.storageKey,
-      `${rendition.kind.toLowerCase()}.webp`,
-      rendition.mimeType,
-      { ifNoneMatch, desktopCacheEligible: !rendition.asset.isPrivate, abortSignal },
-    );
+    let parsedRange: string | undefined;
+    try {
+      parsedRange = parseRangeHeader(range);
+    } catch {
+      throw new RangeNotSatisfiableException(rendition.byteSize);
+    }
+    try {
+      return await this.open(
+        ownerId,
+        rendition.storageKey,
+        `${rendition.kind.toLowerCase()}.${rendition.mimeType === 'video/mp4' ? 'mp4' : 'webp'}`,
+        rendition.mimeType,
+        {
+          range: parsedRange,
+          fullSize: rendition.byteSize,
+          ifNoneMatch,
+          desktopCacheEligible:
+            !rendition.asset.isPrivate && rendition.mimeType.startsWith('image/'),
+          abortSignal,
+        },
+      );
+    } catch (error) {
+      if (isObjectRangeNotSatisfiableError(error))
+        throw new RangeNotSatisfiableException(rendition.byteSize);
+      throw error;
+    }
   }
 
   async getPyramidDescriptor(ownerId: string, assetId: string, includePrivate = false) {

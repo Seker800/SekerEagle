@@ -32,6 +32,10 @@ SekerEagle 是独立的多用户图片管理系统，提供业务数据完全分
 
 素材与照片的通用页面、瀑布流、缩略图、查看器、上传与编辑流程使用同一装配入口；API 的照片通用 Controller 只继承素材 Controller，不覆盖方法，服务从同一 provider 注册表装配。`npm run architecture:check` 在 CI 最前执行，`npm test` 同时运行分叉反例、API 方法／服务身份和客户端请求契约检查。摄影扩展保留在工作区组合层与摄影模块中。规则、允许差异和变更流程见 [共用逻辑门禁](library-sharing-gate.md)。
 
+## Camera media pipeline
+
+两种模式共用 `library-core` 的格式／资源预算策略及 `media-core` 的本地解码、探测与转码适配。RAW 用 LibRaw 验证与解码，视频生成 H.264／AAC 播放副本；原文件保持字节不变。所有派生媒体仍验证 owner、模式、私密与当前版本，视频支持受鉴权的 Range 读取。不得另建照片上传白名单或直接让浏览器解码相机原文件。格式、限制与验证方法见 [相机媒体兼容](camera-media.md)。
+
 ## Photo map delivery
 
 照片地图默认使用随应用打包的 Natural Earth 陆地与城市概览数据，通过同源静态资源加载；地图代码、底图与标记不依赖海外瓦片、CDN 或外部字体。网站的炭黑与琥珀黄色令牌也用于地图背景、陆地、照片点、按钮与弹窗。照片坐标保持 WGS84，不引入第三方坐标偏移。

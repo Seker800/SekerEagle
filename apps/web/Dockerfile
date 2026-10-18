@@ -5,14 +5,16 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/library-core/package.json packages/library-core/package.json
+COPY packages/media-core/package.json packages/media-core/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/eagle-filter-core/package.json packages/eagle-filter-core/package.json
 COPY packages/vector-core/package.json packages/vector-core/package.json
 RUN npm install --global npm@10.9.4 && npm ci
 COPY apps/web apps/web
+COPY packages/library-core packages/library-core
 COPY packages/eagle-filter-core packages/eagle-filter-core
-RUN npm run build --workspace @sekereagle/web
+RUN npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/web
 
 FROM nginx:1.31-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf

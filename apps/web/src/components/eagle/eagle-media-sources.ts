@@ -1,4 +1,5 @@
-import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
+import { libraryApiPath } from '../../lib/library-api-scope';
+import { getEagleAssetContentUrl, getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { type EagleAssetListItem, type EaglePyramidDescriptor } from '../../lib/eagle-api';
 import { resolveEagleMediaPath } from '../../lib/media-resolver';
 
@@ -50,4 +51,23 @@ export function needsEagleImagePyramid(width: number | null, height: number | nu
     Math.max(width, height) > IMAGE_PYRAMID_DIMENSION_THRESHOLD ||
     width * height > IMAGE_PYRAMID_PIXEL_THRESHOLD
   );
+}
+
+/** Camera originals are for download; browser playback uses the current normalized copy. */
+export function getEagleVideoContentUrl(asset: EagleAssetListItem): string | null {
+  const playback = asset.renditions.find(
+    (rendition) =>
+      rendition.kind === 'PREVIEW' &&
+      rendition.revision === asset.mediaRevision &&
+      rendition.mimeType === 'video/mp4',
+  );
+  if (playback)
+    return libraryApiPath(
+      `/api/eagle/assets/${encodeURIComponent(asset.id)}/renditions/${encodeURIComponent(playback.id)}`,
+      asset.libraryMode ?? 'MATERIAL',
+    );
+  // Existing H.264-only MP4 assets predate playback renditions.
+  return asset.mimeType === 'video/mp4' && asset.lifecycleStatus === 'READY'
+    ? getEagleAssetContentUrl(asset.id, asset.libraryMode)
+    : null;
 }

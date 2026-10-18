@@ -15,12 +15,13 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCookieAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
+import { ApiCookieAuth, ApiOkResponse, ApiTags, ApiHeader } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { Readable } from 'node:stream';
 import {
   isObjectRangeNotSatisfiableError,
   parseRangeHeader,
+  RangeNotSatisfiableException,
   setPartialContentHeaders,
   setRangeNotSatisfiableHeaders,
 } from '../common/range-parser';
@@ -193,6 +194,12 @@ export class EagleController {
     return this.getOriginal(principal, assetId, range, ifNoneMatch, response);
   }
 
+  @ApiHeader({
+    name: 'range',
+    required: false,
+    description: 'Optional single byte range for video playback',
+    schema: { type: 'string' },
+  })
   @Get('assets/:assetId/renditions/:renditionId')
   @EagleDerivedMediaReadThrottle()
   async getRendition(
@@ -201,16 +208,25 @@ export class EagleController {
     @Param('renditionId', new ParseUUIDPipe({ version: '4' })) renditionId: string,
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
+    @Headers('range') range?: string,
   ) {
     const abortSignal = createMediaAbortSignal(response);
-    const media = await this.media.getRendition(
-      principal.sub,
-      assetId,
-      renditionId,
-      ifNoneMatch,
-      principal.canViewPrivate,
-      abortSignal,
-    );
+    let media: Awaited<ReturnType<EagleMediaService['getRendition']>>;
+    try {
+      media = await this.media.getRendition(
+        principal.sub,
+        assetId,
+        renditionId,
+        ifNoneMatch,
+        principal.canViewPrivate,
+        abortSignal,
+        range,
+      );
+    } catch (error) {
+      if (!(error instanceof RangeNotSatisfiableException)) throw error;
+      setRangeNotSatisfiableHeaders(response, error.fullSize);
+      return;
+    }
     applyMediaHeaders(
       response,
       media,
@@ -220,10 +236,23 @@ export class EagleController {
       response.status(304);
       return;
     }
+    setPartialContentHeaders(
+      response,
+      range,
+      media.contentRange,
+      media.contentLength,
+      media.fullSize,
+    );
     bindMediaStreamLifetime(response, media.stream!);
     return new StreamableFile(media.stream!);
   }
 
+  @ApiHeader({
+    name: 'range',
+    required: false,
+    description: 'Optional single byte range for video playback',
+    schema: { type: 'string' },
+  })
   @Get('assets/:assetId/renditions/:renditionId/content')
   @EagleDerivedMediaReadThrottle()
   getRenditionContent(
@@ -232,8 +261,9 @@ export class EagleController {
     @Param('renditionId', new ParseUUIDPipe({ version: '4' })) renditionId: string,
     @Headers('if-none-match') ifNoneMatch: string | undefined,
     @Res({ passthrough: true }) response: Response,
+    @Headers('range') range?: string,
   ) {
-    return this.getRendition(principal, assetId, renditionId, ifNoneMatch, response);
+    return this.getRendition(principal, assetId, renditionId, ifNoneMatch, response, range);
   }
 
   @Get('assets/:assetId/pyramid')

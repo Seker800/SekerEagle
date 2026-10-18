@@ -1,3 +1,4 @@
+import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import {
   LIBRARY_MODE,
@@ -405,25 +406,24 @@ export class EagleUploadService {
             }
           }
         }
-        const jobs =
-          session.mimeType === 'video/mp4'
-            ? [
-                {
-                  ownerId: session.uploaderId,
-                  assetId: finalizedAssetId,
-                  kind: 'GENERATE_THUMBNAIL' as const,
-                  lane: 'INTERACTIVE' as const,
-                  assetRevision,
-                  processorVersion: 'video-thumbnail-v1',
-                },
-              ]
-            : buildImageProcessingJobs({
+        const jobs = isCameraVideoMime(session.mimeType)
+          ? [
+              {
                 ownerId: session.uploaderId,
                 assetId: finalizedAssetId,
+                kind: 'GENERATE_THUMBNAIL' as const,
+                lane: 'INTERACTIVE' as const,
                 assetRevision,
-                width: inspection.width,
-                height: inspection.height,
-              });
+                processorVersion: 'camera-video-preview-v2',
+              },
+            ]
+          : buildImageProcessingJobs({
+              ownerId: session.uploaderId,
+              assetId: finalizedAssetId,
+              assetRevision,
+              width: inspection.width,
+              height: inspection.height,
+            });
         if (!duplicate) {
           await transaction.eagleAssetProcessingJob.createMany({
             data: jobs.map((row) => inLibrary(this.libraryMode, row)),

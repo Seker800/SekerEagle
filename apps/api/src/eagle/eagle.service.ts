@@ -220,7 +220,7 @@ export class EagleService {
             where: {
               ownerId,
               deletedAt: null,
-              mimeType: { not: 'video/mp4' },
+              mimeType: { startsWith: 'image/' },
               ...privateVisibilityWhere(includePrivate),
               libraryMode: this.libraryMode,
             },
@@ -235,7 +235,7 @@ export class EagleService {
               status: 'COMPLETED',
               asset: {
                 deletedAt: null,
-                mimeType: { not: 'video/mp4' },
+                mimeType: { startsWith: 'image/' },
                 ...privateVisibilityWhere(includePrivate),
               },
               libraryMode: this.libraryMode,
@@ -420,7 +420,7 @@ export class EagleService {
             where: {
               ownerId,
               deletedAt: null,
-              mimeType: { not: 'video/mp4' },
+              mimeType: { startsWith: 'image/' },
               ...privateVisibilityWhere(includePrivate),
               libraryMode: this.libraryMode,
             },
@@ -433,7 +433,7 @@ export class EagleService {
               status: 'COMPLETED',
               asset: {
                 deletedAt: null,
-                mimeType: { not: 'video/mp4' },
+                mimeType: { startsWith: 'image/' },
                 ...privateVisibilityWhere(includePrivate),
               },
               libraryMode: this.libraryMode,

@@ -1,0 +1,2 @@
+-r ../../packages/media-core/python/requirements.txt
+tifffile==2025.6.11

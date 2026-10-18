@@ -3357,7 +3357,10 @@ export interface operations {
   EagleController_getRendition: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional single byte range for video playback */
+        range?: string;
+      };
       path: {
         assetId: string;
         renditionId: string;
@@ -3377,7 +3380,10 @@ export interface operations {
   EagleController_getRenditionContent: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional single byte range for video playback */
+        range?: string;
+      };
       path: {
         assetId: string;
         renditionId: string;
@@ -5291,7 +5297,10 @@ export interface operations {
   PhotosController_getRendition: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional single byte range for video playback */
+        range?: string;
+      };
       path: {
         assetId: string;
         renditionId: string;
@@ -5311,7 +5320,10 @@ export interface operations {
   PhotosController_getRenditionContent: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Optional single byte range for video playback */
+        range?: string;
+      };
       path: {
         assetId: string;
         renditionId: string;

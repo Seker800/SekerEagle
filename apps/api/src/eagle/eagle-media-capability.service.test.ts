@@ -4,33 +4,20 @@ import { BadRequestException } from '@nestjs/common';
 import { MAX_EAGLE_IMAGE_INPUT_PIXELS } from './eagle-image-processing-policy';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 
-const MEDIA_MAX_BYTES = 100 * 1024 * 1024;
+const MEDIA_MAX_BYTES = 250 * 1024 * 1024;
 const service = new EagleMediaCapabilityService();
 
-test('publishes the frozen P0 media capability matrix', () => {
-  assert.deepEqual(service.getCapabilities(), {
-    version: 1,
-    images: {
-      mimeTypes: [
-        'image/avif',
-        'image/jpeg',
-        'image/png',
-        'image/webp',
-        'image/gif',
-        'image/heic',
-        'image/heif',
-      ],
-      extensions: ['.avif', '.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif'],
-      maxBytes: MEDIA_MAX_BYTES,
-      maxPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-    },
-    videos: {
-      mimeTypes: ['video/mp4'],
-      extensions: ['.mp4'],
-      maxBytes: MEDIA_MAX_BYTES,
-      maxDurationMs: null,
-    },
-  });
+test('publishes frozen camera capabilities with separate image and video budgets', () => {
+  const capabilities = service.getCapabilities();
+  assert.equal(capabilities.version, 1);
+  assert.ok(Object.isFrozen(capabilities));
+  for (const extension of ['.jpg', '.tiff', '.dng', '.nef', '.cr3'])
+    assert.ok(capabilities.images.extensions.includes(extension));
+  for (const extension of ['.mp4', '.mov', '.mts', '.mxf'])
+    assert.ok(capabilities.videos.extensions.includes(extension));
+  assert.equal(capabilities.images.maxBytes, 250 * 1024 * 1024);
+  assert.equal(capabilities.videos.maxBytes, 2 * 1024 * 1024 * 1024);
+  assert.equal(capabilities.images.maxPixels, MAX_EAGLE_IMAGE_INPUT_PIXELS);
 });
 
 test('accepts the supported media matrix including AVIF', () => {
@@ -57,9 +44,9 @@ test('rejects mismatches, unsupported media, oversized files, and unsafe sizes',
     { fileName: 'not-a-video.jpg', mimeType: 'video/mp4', size: 2048 },
     { fileName: 'vector.svg', mimeType: 'image/svg+xml', size: 1 },
     { fileName: 'document.pdf', mimeType: 'application/pdf', size: 1 },
-    { fileName: 'movie.mov', mimeType: 'video/quicktime', size: 1 },
+    { fileName: 'movie.mkv', mimeType: 'video/x-matroska', size: 1 },
     { fileName: 'large.png', mimeType: 'image/png', size: MEDIA_MAX_BYTES + 1 },
-    { fileName: 'large.mp4', mimeType: 'video/mp4', size: MEDIA_MAX_BYTES + 1 },
+    { fileName: 'large.mp4', mimeType: 'video/mp4', size: 2 * 1024 * 1024 * 1024 + 1 },
     { fileName: 'empty.png', mimeType: 'image/png', size: 0 },
     { fileName: 'fraction.png', mimeType: 'image/png', size: 1.5 },
   ];
@@ -69,10 +56,32 @@ test('rejects mismatches, unsupported media, oversized files, and unsafe sizes',
 });
 
 test('accepts browser-generic camera RAW, TIFF and camera video MIME declarations', () => {
-  for (const [fileName, mimeType] of [['capture.dng','application/octet-stream'],['capture.NEF',''],['clip.MOV','video/quicktime'],['clip.mts','video/mp2t'],['clip.mxf','application/mxf'],['scan.tif','image/tiff']]) {
-    const result = service.assertUploadAllowed({fileName:fileName!,mimeType:mimeType!,size:2048});
+  for (const [fileName, mimeType] of [
+    ['capture.dng', 'application/octet-stream'],
+    ['capture.NEF', ''],
+    ['clip.MOV', 'video/quicktime'],
+    ['clip.mts', 'video/mp2t'],
+    ['clip.mxf', 'application/mxf'],
+    ['scan.tif', 'image/tiff'],
+  ]) {
+    const result = service.assertUploadAllowed({
+      fileName: fileName!,
+      mimeType: mimeType!,
+      size: 2048,
+    });
     assert.ok(result.mimeType !== 'application/octet-stream');
   }
-  assert.equal(service.assertUploadAllowed({fileName:'clip.mov',mimeType:'video/quicktime',size:512*1024*1024}).mediaType,'video');
-  assert.throws(() => service.assertUploadAllowed({fileName:'capture.dng',mimeType:'video/mp4',size:2048}),BadRequestException);
+  assert.equal(
+    service.assertUploadAllowed({
+      fileName: 'clip.mov',
+      mimeType: 'video/quicktime',
+      size: 512 * 1024 * 1024,
+    }).mediaType,
+    'video',
+  );
+  assert.throws(
+    () =>
+      service.assertUploadAllowed({ fileName: 'capture.dng', mimeType: 'video/mp4', size: 2048 }),
+    BadRequestException,
+  );
 });

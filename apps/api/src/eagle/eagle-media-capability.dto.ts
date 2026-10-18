@@ -7,7 +7,7 @@ export class EagleImageMediaCapabilityDto {
   @ApiProperty({ type: [String], example: ['.jpg', '.jpeg', '.png'] })
   extensions!: string[];
 
-  @ApiProperty({ example: 104_857_600 })
+  @ApiProperty({ example: 262_144_000 })
   maxBytes!: number;
 
   @ApiProperty({ example: 50_000_000 })
@@ -21,10 +21,10 @@ export class EagleVideoMediaCapabilityDto {
   @ApiProperty({ type: [String], example: ['.mp4'] })
   extensions!: string[];
 
-  @ApiProperty({ example: 104_857_600 })
+  @ApiProperty({ example: 2_147_483_648 })
   maxBytes!: number;
 
-  @ApiProperty({ nullable: true, type: Number, example: null })
+  @ApiProperty({ nullable: true, type: Number, example: 14_400_000 })
   maxDurationMs!: number | null;
 }
 

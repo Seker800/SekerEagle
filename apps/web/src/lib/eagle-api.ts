@@ -1,3 +1,4 @@
+import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { t } from '../i18n';
 
@@ -607,7 +608,9 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       method: 'POST',
       body: JSON.stringify({
         originalName: file.name,
-        mimeType: file.type || 'application/octet-stream',
+        mimeType:
+          normalizeCameraMimeType(file.name, file.type) ??
+          (file.type || 'application/octet-stream'),
         size: file.size,
       }),
     });

@@ -1,7 +1,18 @@
+import sharp from 'sharp';
+import {
+  CAMERA_MAX_VIDEO_BYTES,
+  CAMERA_MAX_IMAGE_BYTES,
+  isCameraVideoMime,
+} from '@sekereagle/library-core';
+import {
+  probeCameraVideo,
+  transcodeCameraVideo,
+  CAMERA_VIDEO_INPUT_OPTIONS,
+} from '@sekereagle/media-core';
 import { groupAnalyzedPhoto } from './photo-grouping';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { createWriteStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -42,7 +53,6 @@ import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
-import { parseBrowserCompatibleMp4Probe } from './media-video-policy';
 import { claimNextMediaJob } from './job-claim';
 import {
   isPermanentMediaValidationError,
@@ -329,7 +339,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   }
 
   if (asset.mimeType.startsWith('image/')) {
-    if (asset.byteSize > 250n * 1024n * 1024n)
+    if (asset.byteSize > BigInt(CAMERA_MAX_IMAGE_BYTES))
       throw new PermanentMediaValidationError(
         'IMAGE_CONTENT_MISMATCH',
         'IMAGE_TOO_LARGE_TO_PROCESS',
@@ -604,7 +614,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     return;
   }
 
-  if (asset.mimeType !== 'video/mp4')
+  if (!isCameraVideoMime(asset.mimeType))
     throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
   await processVideo(job, asset);
 }
@@ -616,20 +626,26 @@ async function processVideo(
     ownerId: string;
     libraryMode: LibraryMode;
     originalObjectKey: string;
+    mimeType: string;
     uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
   },
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
   const inputPath = join(directory, 'input.mp4');
   const posterPath = join(directory, 'poster.jpg');
+  const previewPath = join(directory, 'preview.mp4');
   try {
     const object = await storage.send(
       new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
     const hash = createHash('sha256');
+    let inputBytes = 0;
     const hashTap = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
+        inputBytes += chunk.byteLength;
+        if (inputBytes > CAMERA_MAX_VIDEO_BYTES)
+          return callback(new Error('VIDEO_SIZE_LIMIT_EXCEEDED'));
         hash.update(chunk);
         callback(null, chunk);
       },
@@ -641,14 +657,12 @@ async function processVideo(
     );
     const sha256 = hash.digest('hex');
     assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-    const { stdout } = await execFileAsync(
-      process.env.FFPROBE_PATH?.trim() || 'ffprobe',
-      ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', inputPath],
-      { maxBuffer: 2 * 1024 * 1024, timeout: 60_000 },
+    const metadata = await probeCameraVideo(inputPath, asset.mimeType);
+    const playbackMetadata = await transcodeCameraVideo(
+      inputPath,
+      previewPath,
+      metadata.durationMs,
     );
-    const parsedProbe: unknown = JSON.parse(stdout);
-    if (!parsedProbe || typeof parsedProbe !== 'object') throw new Error('INVALID_VIDEO_PROBE');
-    const metadata = parseBrowserCompatibleMp4Probe(parsedProbe);
     await execFileAsync(
       process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
       [
@@ -657,8 +671,9 @@ async function processVideo(
         '-y',
         '-ss',
         '0',
+        ...CAMERA_VIDEO_INPUT_OPTIONS,
         '-i',
-        inputPath,
+        previewPath,
         '-frames:v',
         '1',
         '-vf',
@@ -670,6 +685,18 @@ async function processVideo(
       { timeout: 120_000 },
     );
     const poster = await readFile(posterPath);
+    const posterMetadata = await sharp(poster).metadata();
+    const playbackKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/preview.mp4`;
+    const playbackSize = (await stat(previewPath)).size;
+    await storage.send(
+      new PutObjectCommand({
+        Bucket: s3Bucket,
+        Key: playbackKey,
+        Body: createReadStream(previewPath),
+        ContentLength: playbackSize,
+        ContentType: 'video/mp4',
+      }),
+    );
     const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/thumbnail.jpg`;
     await storage.send(
       new PutObjectCommand({
@@ -685,6 +712,34 @@ async function processVideo(
         data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
       });
       if (completed.count !== 1) return;
+      const playbackData = {
+        storageKey: playbackKey,
+        mimeType: 'video/mp4',
+        byteSize: BigInt(playbackSize),
+        width: playbackMetadata.width,
+        height: playbackMetadata.height,
+        status: 'READY' as const,
+      };
+      await transaction.eagleAssetRendition.upsert({
+        where: {
+          assetId_kind_revision_variant: {
+            assetId: asset.id,
+            kind: 'PREVIEW',
+            revision: job.assetRevision,
+            variant: 'default',
+          },
+        },
+        create: {
+          ...playbackData,
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetId: asset.id,
+          kind: 'PREVIEW',
+          variant: 'default',
+          revision: job.assetRevision,
+        },
+        update: playbackData,
+      });
       await transaction.eagleAssetRendition.upsert({
         where: {
           assetId_kind_revision_variant: {
@@ -704,16 +759,16 @@ async function processVideo(
           storageKey,
           mimeType: 'image/jpeg',
           byteSize: BigInt(poster.byteLength),
-          width: metadata.width,
-          height: metadata.height,
+          width: posterMetadata.width,
+          height: posterMetadata.height,
           status: 'READY',
         },
         update: {
           storageKey,
           mimeType: 'image/jpeg',
           byteSize: BigInt(poster.byteLength),
-          width: metadata.width,
-          height: metadata.height,
+          width: posterMetadata.width,
+          height: posterMetadata.height,
           status: 'READY',
         },
       });

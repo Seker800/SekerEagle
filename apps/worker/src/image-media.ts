@@ -1,3 +1,5 @@
+import { isCameraRawMime, CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
+import { readCameraRaw } from '@sekereagle/media-core';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
@@ -10,7 +12,7 @@ import { promisify } from 'node:util';
 import sharp, { type Sharp } from 'sharp';
 import { classifyImageInputError, PermanentMediaValidationError } from './media-validation-error';
 
-export const MAX_EAGLE_IMAGE_INPUT_PIXELS = 50_000_000;
+export const MAX_EAGLE_IMAGE_INPUT_PIXELS = CAMERA_MAX_IMAGE_PIXELS;
 const execFileAsync = promisify(execFile);
 
 // libvips otherwise retains a large process-global cache and may create one worker per CPU.
@@ -41,14 +43,15 @@ export async function decodeProcessableImage(
   mimeType: string,
   storageKey: string,
 ): Promise<Buffer> {
-  if (!requiresHeifDecode(mimeType, storageKey)) return input;
+  if (!requiresHeifDecode(mimeType, storageKey) && !isCameraRawMime(mimeType)) return input;
 
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-'));
   const inputPath = join(directory, 'input.heic');
-  const outputPath = join(directory, 'decoded.png');
+  const outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
   try {
     await writeFile(inputPath, input, { flag: 'wx' });
-    await decodeHeifFile(inputPath, outputPath);
+    if (isCameraRawMime(mimeType)) await readCameraRaw(inputPath, outputPath);
+    else await decodeHeifFile(inputPath, outputPath);
     return await readFile(outputPath);
   } catch (error) {
     throw classifyImageInputError(error);
@@ -70,7 +73,7 @@ export async function withProcessableImage<T>(
       callback(null, chunk);
     },
   });
-  if (!requiresHeifDecode(mimeType, storageKey)) {
+  if (!requiresHeifDecode(mimeType, storageKey) && !isCameraRawMime(mimeType)) {
     const image = sharp({ failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS });
     const resultPromise = operation(image);
     try {
@@ -86,10 +89,11 @@ export async function withProcessableImage<T>(
 
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-'));
   const inputPath = join(directory, 'input.heic');
-  const outputPath = join(directory, 'decoded.png');
+  const outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
   try {
     await pipeline(Readable.from(source), hashTap, createWriteStream(inputPath, { flags: 'wx' }));
-    await decodeHeifFile(inputPath, outputPath);
+    if (isCameraRawMime(mimeType)) await readCameraRaw(inputPath, outputPath);
+    else await decodeHeifFile(inputPath, outputPath);
     const result = await operation(
       sharp(outputPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS }),
       inputPath,

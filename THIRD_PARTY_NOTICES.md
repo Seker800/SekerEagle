@@ -65,3 +65,13 @@ modification and redistribution: https://www.naturalearthdata.com/about/terms-of
 The pinned source revision, source URLs, SHA-256 checksums and transformations
 are recorded in `apps/web/src/components/photos/basemap/sources.json`. Normal
 builds use the committed files; map viewing does not contact the data publisher.
+
+## Camera RAW decoding
+
+`packages/media-core/python` uses rawpy (MIT), NumPy (BSD-3-Clause) and Pillow
+(MIT-CMU / Pillow license) in a separate Python environment. rawpy wraps LibRaw,
+which is distributed under LGPL-2.1 or CDDL-1.0 terms. Preserve the license files
+included with their wheels and any codec libraries when redistributing runtime
+images. No camera firmware, camera profile packs, model weights or private RAW
+photographs are bundled. Tests generate their own Bayer DNG and video patterns.
+Upstream: https://github.com/letmaik/rawpy and https://www.libraw.org/ .

@@ -237,7 +237,7 @@ export class EagleProcessingService {
         where: {
           ownerId,
           deletedAt: null,
-          mimeType: { not: 'video/mp4' },
+          mimeType: { startsWith: 'image/' },
           ...(includePrivate ? {} : { isPrivate: false }),
           libraryMode: this.libraryMode,
         },

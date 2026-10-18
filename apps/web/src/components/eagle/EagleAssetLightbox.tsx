@@ -1,9 +1,10 @@
+import { isCameraVideoMime } from '@sekereagle/library-core';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
-import { getEaglePreviewContentUrl } from './eagle-media-sources';
+import { getEaglePreviewContentUrl, getEagleVideoContentUrl } from './eagle-media-sources';
 import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
   asset: EagleAssetListItem;
@@ -19,10 +20,7 @@ export function EagleAssetLightbox({
   actions,
   loading,
 }: EagleAssetLightboxProps) {
-  const {
-    libraryMode,
-    api: { getEagleAssetContentUrl },
-  } = useLibraryWorkspace();
+  const { libraryMode } = useLibraryWorkspace();
 
   const touchStart = useRef<{ x: number; y: number } | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -30,6 +28,7 @@ export function EagleAssetLightbox({
     dialogRef.current?.focus();
   }, []);
   const previewUrl = getEaglePreviewContentUrl(asset);
+  const videoUrl = getEagleVideoContentUrl(asset);
   return (
     <div
       ref={dialogRef}
@@ -103,18 +102,22 @@ export function EagleAssetLightbox({
         )}
         {loading ? (
           <p role="status">{t('正在加载…')}</p>
-        ) : asset.mimeType.startsWith('video/') ? (
-          <video
-            className={styles.videoPlayer}
-            src={getEagleAssetContentUrl(asset.id)}
-            aria-label={t('播放 {{value1}}', {
-              value1: asset.displayName,
-            })}
-            controls
-            autoPlay
-            playsInline
-            onClick={(event) => event.stopPropagation()}
-          />
+        ) : isCameraVideoMime(asset.mimeType) ? (
+          videoUrl ? (
+            <video
+              className={styles.videoPlayer}
+              src={videoUrl}
+              aria-label={t('播放 {{value1}}', {
+                value1: asset.displayName,
+              })}
+              controls
+              autoPlay
+              playsInline
+              onClick={(event) => event.stopPropagation()}
+            />
+          ) : (
+            <p>{t('预览图尚未生成')}</p>
+          )
         ) : previewUrl ? (
           <img
             src={previewUrl}

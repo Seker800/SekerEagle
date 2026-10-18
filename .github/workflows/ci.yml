@@ -19,6 +19,14 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm run ci:check
+      - name: Install camera media test runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg python3-venv
+          python3 -m venv .omx/camera-media/venv
+          .omx/camera-media/venv/bin/pip install -r scripts/testing/camera-requirements.txt
+      - name: Verify RAW decoding and camera video playback
+        run: CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run smoke:camera-media
       - run: docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet
       - run: docker build -f apps/api/Dockerfile .
       - run: docker build -f apps/worker/Dockerfile .

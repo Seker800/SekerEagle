@@ -1,39 +1,32 @@
-import { extname } from 'node:path';
+import {
+  CAMERA_MEDIA_FORMATS,
+  cameraMediaFormat,
+  normalizeCameraMimeType,
+} from '@sekereagle/library-core';
 
-export const EAGLE_IMAGE_MIME_BY_EXTENSION = new Map<string, string>([
-  ['.avif', 'image/avif'],
-  ['.jpg', 'image/jpeg'],
-  ['.jpeg', 'image/jpeg'],
-  ['.png', 'image/png'],
-  ['.webp', 'image/webp'],
-  ['.gif', 'image/gif'],
-  ['.heic', 'image/heic'],
-  ['.heif', 'image/heif'],
-]);
-
-export const EAGLE_VIDEO_MIME_BY_EXTENSION = new Map<string, string>([['.mp4', 'video/mp4']]);
-
+export const EAGLE_IMAGE_MIME_BY_EXTENSION = new Map(
+  CAMERA_MEDIA_FORMATS.filter((format) => format.kind !== 'video').map(
+    ({ extension, mimeType }) => [extension, mimeType],
+  ),
+);
+export const EAGLE_VIDEO_MIME_BY_EXTENSION = new Map(
+  CAMERA_MEDIA_FORMATS.filter((format) => format.kind === 'video').map(
+    ({ extension, mimeType }) => [extension, mimeType],
+  ),
+);
 export function expectedEagleMimeType(fileName: string): string | null {
-  const extension = extname(fileName.normalize('NFKC')).toLocaleLowerCase('en-US');
-  return (
-    EAGLE_IMAGE_MIME_BY_EXTENSION.get(extension) ??
-    EAGLE_VIDEO_MIME_BY_EXTENSION.get(extension) ??
-    null
-  );
+  return cameraMediaFormat(fileName)?.mimeType ?? null;
 }
-
 export function resolveEagleMediaType(candidate: {
   fileName: string;
   mimeType: string;
 }): { mediaType: 'image' | 'video'; mimeType: string } | null {
-  const extension = extname(candidate.fileName.normalize('NFKC')).toLocaleLowerCase('en-US');
-  const mimeType = candidate.mimeType.normalize('NFKC').trim().toLocaleLowerCase('en-US');
-  const imageMimeType = EAGLE_IMAGE_MIME_BY_EXTENSION.get(extension);
-  const expectedMimeType = expectedEagleMimeType(candidate.fileName);
-  if (!expectedMimeType || mimeType !== expectedMimeType) return null;
-  return { mediaType: imageMimeType ? 'image' : 'video', mimeType: expectedMimeType };
+  const format = cameraMediaFormat(candidate.fileName);
+  const mimeType = normalizeCameraMimeType(candidate.fileName, candidate.mimeType);
+  return format && mimeType
+    ? { mediaType: format.kind === 'video' ? 'video' : 'image', mimeType }
+    : null;
 }
-
 export function isSupportedEagleMedia(candidate: { fileName: string; mimeType: string }): boolean {
   return resolveEagleMediaType(candidate) !== null;
 }

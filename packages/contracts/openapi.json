@@ -625,6 +625,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "range",
+            "required": false,
+            "in": "header",
+            "description": "Optional single byte range for video playback",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -656,6 +665,15 @@
             "name": "renditionId",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "required": false,
+            "in": "header",
+            "description": "Optional single byte range for video playback",
             "schema": {
               "type": "string"
             }
@@ -3354,6 +3372,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "range",
+            "required": false,
+            "in": "header",
+            "description": "Optional single byte range for video playback",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3385,6 +3412,15 @@
             "name": "renditionId",
             "required": true,
             "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "range",
+            "required": false,
+            "in": "header",
+            "description": "Optional single byte range for video playback",
             "schema": {
               "type": "string"
             }
@@ -5862,7 +5898,7 @@
           "size": {
             "type": "number",
             "minimum": 1,
-            "maximum": 104857600
+            "maximum": 2147483648
           },
           "contentSha256": {
             "type": "string",

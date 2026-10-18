@@ -17,6 +17,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { JwtService } from '@nestjs/jwt';
 import sharp from 'sharp';
+import { createCameraFixtures } from './camera-media-fixtures.mjs';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 
 const root = process.cwd(),
@@ -324,10 +325,10 @@ try {
     })
     .jpeg({ quality: 90 })
     .toBuffer();
-  async function upload(mode, bytes, fileName) {
+  async function upload(mode, bytes, fileName, mimeType = 'image/jpeg') {
     const session = await api(`/${mode}/uploads`, {
       originalName: fileName,
-      mimeType: 'image/jpeg',
+      mimeType,
       size: bytes.length,
       contentSha256: createHash('sha256').update(bytes).digest('hex'),
     });
@@ -419,6 +420,63 @@ try {
   assert.equal(groupScan.created, 0, 'batch scan preserves the existing automatic stack');
   const groups = await api('/photos/photography/groups');
   assert.equal(groups[0].bestAssetId, a.assetId);
+  const cameraCases = [];
+  if (process.env.PHOTO_WORKBENCH_CAMERA === '1') {
+    const fixtures = await createCameraFixtures(join(root, '.omx/test-camera/workbench'));
+    for (const fixture of fixtures) {
+      const bytes = await readFile(fixture.path);
+      for (const mode of ['photos', 'eagle']) {
+        const uploaded = await upload(mode, bytes, fixture.name, fixture.mimeType);
+        cameraCases.push({
+          ...fixture,
+          mode,
+          assetId: uploaded.assetId,
+          sha256: createHash('sha256').update(bytes).digest('hex'),
+        });
+      }
+    }
+    await waitFor(
+      async () =>
+        (await db.eagleAsset.count({ where: { ownerId: owner.id, lifecycleStatus: 'READY' } })) ===
+        7 + cameraCases.length,
+      'camera RAW and video previews',
+      480,
+    );
+    for (const sample of cameraCases) {
+      const detail = await api(`/${sample.mode}/assets/${sample.assetId}`);
+      assert.ok(detail.width > 0 && detail.height > 0);
+      const original = await fetch(
+        `${origin}/api/${sample.mode}/assets/${sample.assetId}/original`,
+        { headers: { cookie: `sekereagle_access=${accessToken}` } },
+      );
+      assert.equal(original.status, 200);
+      assert.equal(
+        createHash('sha256')
+          .update(Buffer.from(await original.arrayBuffer()))
+          .digest('hex'),
+        sample.sha256,
+      );
+      const playback = detail.renditions.find(
+        (item) => item.kind === 'PREVIEW' && item.mimeType === 'video/mp4',
+      );
+      if (sample.codec) {
+        assert.ok(playback, 'camera video has an authorized browser playback copy');
+        const ranged = await fetch(
+          `${origin}/api/${sample.mode}/assets/${sample.assetId}/renditions/${playback.id}`,
+          { headers: { cookie: `sekereagle_access=${accessToken}`, range: 'bytes=0-31' } },
+        );
+        assert.equal(ranged.status, 206);
+        assert.match(ranged.headers.get('content-range'), /^bytes 0-31\//);
+        assert.equal((await ranged.arrayBuffer()).byteLength, 32);
+        const otherMode = sample.mode === 'photos' ? 'eagle' : 'photos';
+        const denied = await fetch(
+          `${origin}/api/${otherMode}/assets/${sample.assetId}/renditions/${playback.id}`,
+          { headers: { cookie: `sekereagle_access=${accessToken}`, range: 'invalid' } },
+        );
+        assert.equal(denied.status, 404, 'scope denial precedes range validation');
+      }
+    }
+  }
   const restoreBucket = 'sekereagle-test-assets';
   assertSafeRuntimeTarget({
     databaseUrl: env.DATABASE_URL,
@@ -464,8 +522,14 @@ try {
     loginUrl: `${origin}/__test/login`,
     containers,
     ownerId: owner.id,
-    photos: photos.items.length,
-    materials: materials.items.length,
+    photos: (await api('/photos/assets?limit=100')).items.length,
+    materials: (await api('/eagle/assets?limit=100')).items.length,
+    cameraCases: cameraCases.map(({ name, mimeType, mode, assetId }) => ({
+      name,
+      mimeType,
+      mode,
+      assetId,
+    })),
     people: people.people.length,
     faces: people.people.reduce((n, p) => n + p.faces.length, 0),
     groups: groups.length,

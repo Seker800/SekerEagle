@@ -1,4 +1,11 @@
-import { execFile } from 'node:child_process';
+import {
+  CAMERA_MEDIA_FORMATS,
+  CAMERA_MAX_IMAGE_BYTES,
+  CAMERA_MAX_VIDEO_BYTES,
+  isCameraRawMime,
+  isCameraVideoMime,
+} from '@sekereagle/library-core';
+import { readCameraRaw, probeCameraVideo } from '@sekereagle/media-core';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -6,14 +13,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { promisify } from 'node:util';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import sharp from 'sharp';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { MAX_EAGLE_IMAGE_INPUT_PIXELS } from './eagle-image-processing-policy';
-import { parseBrowserCompatibleMp4Probe, type MediaVideoProbe } from './eagle-video-inspection';
-
-const execFileAsync = promisify(execFile);
 
 @Injectable()
 export class EagleUploadInspectionService {
@@ -22,8 +25,8 @@ export class EagleUploadInspectionService {
   async inspect(objectKey: string, mimeType: string) {
     const object = await this.storage.getObject(objectKey);
     if (!object.Body) throw new NotFoundException('上传后的对象不存在。');
-    if (mimeType === 'video/mp4') {
-      return { format: 'mp4', ...(await inspectVideo(object.Body as unknown as Readable)) };
+    if (isCameraVideoMime(mimeType) || isCameraRawMime(mimeType)) {
+      return inspectCameraFile(object.Body as unknown as Readable, mimeType);
     }
     const hash = createHash('sha256');
     const hashingStream = new Transform({
@@ -52,8 +55,9 @@ export class EagleUploadInspectionService {
             webp: 'image/webp',
             gif: 'image/gif',
             heif: 'image/heic',
+            tiff: 'image/tiff',
           } as const
-        )[metadata.format as 'avif' | 'jpeg' | 'png' | 'webp' | 'gif' | 'heif'];
+        )[metadata.format as 'avif' | 'jpeg' | 'png' | 'webp' | 'gif' | 'heif' | 'tiff'];
       const heifAlias =
         metadata.format === 'heif' &&
         (mimeType === 'image/heic' || mimeType === 'image/heif') &&
@@ -75,30 +79,37 @@ export class EagleUploadInspectionService {
   }
 }
 
-async function inspectVideo(stream: Readable) {
-  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-video-inspect-'));
-  const inputPath = join(directory, 'input.mp4');
+async function inspectCameraFile(stream: Readable, mimeType: string) {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-camera-inspect-'));
+  const inputPath = join(directory, 'input');
+  const raw = isCameraRawMime(mimeType);
   try {
     const hash = createHash('sha256');
+    let byteSize = 0;
     const hashingStream = new Transform({
       transform(chunk: Buffer, _encoding, callback) {
+        byteSize += chunk.byteLength;
+        if (byteSize > (raw ? CAMERA_MAX_IMAGE_BYTES : CAMERA_MAX_VIDEO_BYTES))
+          return callback(new BadRequestException('媒体内容超出安全大小限制。'));
         hash.update(chunk);
         callback(null, chunk);
       },
     });
     await pipeline(stream, hashingStream, createWriteStream(inputPath, { flags: 'wx' }));
-    const { stdout } = await execFileAsync(
-      process.env.FFPROBE_PATH?.trim() || 'ffprobe',
-      ['-v', 'error', '-show_format', '-show_streams', '-of', 'json', inputPath],
-      { maxBuffer: 2 * 1024 * 1024, timeout: 120_000 },
-    );
-    return {
-      sha256: hash.digest('hex'),
-      ...parseBrowserCompatibleMp4Probe(JSON.parse(stdout) as MediaVideoProbe),
-    };
+    const metadata = raw
+      ? { ...(await readCameraRaw(inputPath)), durationMs: null }
+      : await probeCameraVideo(inputPath, mimeType);
+    const format = CAMERA_MEDIA_FORMATS.find(
+      (entry) => entry.mimeType === mimeType,
+    )!.extension.slice(1);
+    return { sha256: hash.digest('hex'), format, ...metadata };
   } catch (error) {
     if (error instanceof BadRequestException) throw error;
-    throw new BadRequestException('无法读取该 MP4 视频，请确认文件完整且编码受支持。');
+    throw new BadRequestException(
+      raw
+        ? '无法读取该 RAW，请确认文件完整、尺寸不超过 5000 万像素、相机受 LibRaw 支持且已安装 RAW 解码运行环境。'
+        : '无法读取该相机视频，请确认文件完整且容器与编码受支持。',
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

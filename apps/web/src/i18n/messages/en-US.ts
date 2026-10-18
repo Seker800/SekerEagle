@@ -357,7 +357,7 @@ export const enUS = {
   '将{{value1}}移出推荐': 'Remove {{value1}} from recommendations',
   '将清除 {{value1}} 项素材上的全部人工标签，共涉及 {{value2}} 个不同标签。AI 自动标签不受影响。确认继续？':
     'This will clear all manual tags from {{value1}} assets, involving {{value2}} unique tags. AI-generated tags are unaffected. Confirm?',
-  '将图片或 MP4 拖入此处。': 'Drag images or MP4s here.',
+  '将图片、RAW 或相机视频拖入此处。': 'Drag images, RAW files or camera videos here.',
   '将于 {{value1}} 自动关闭': 'Will auto-hide at {{value1}}',
   结束: 'End.',
   结束时间: 'End Time',

@@ -1,3 +1,4 @@
+import { CAMERA_MAX_VIDEO_BYTES } from '@sekereagle/library-core';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -27,11 +28,11 @@ export class InitiateEagleUploadDto {
   @MaxLength(200)
   mimeType!: string;
 
-  @ApiProperty({ minimum: 1, maximum: 100 * 1024 * 1024 })
+  @ApiProperty({ minimum: 1, maximum: CAMERA_MAX_VIDEO_BYTES })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(100 * 1024 * 1024)
+  @Max(CAMERA_MAX_VIDEO_BYTES)
   size!: number;
 
   @ApiPropertyOptional({ pattern: '^[a-fA-F0-9]{64}$' })

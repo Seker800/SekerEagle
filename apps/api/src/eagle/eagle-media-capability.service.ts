@@ -1,3 +1,8 @@
+import {
+  CAMERA_MAX_IMAGE_BYTES,
+  CAMERA_MAX_VIDEO_BYTES,
+  CAMERA_MAX_VIDEO_DURATION_MS,
+} from '@sekereagle/library-core';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { MAX_EAGLE_IMAGE_INPUT_PIXELS } from './eagle-image-processing-policy';
 import type { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
@@ -8,22 +13,19 @@ import {
   resolveEagleMediaType,
 } from './eagle-media-capability';
 
-const MEDIA_MAX_MB = 100;
-const MEDIA_MAX_BYTES = MEDIA_MAX_MB * 1024 * 1024;
-
 const CAPABILITIES: EagleMediaCapabilitiesDto = Object.freeze({
   version: 1 as const,
   images: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_IMAGE_MIME_BY_EXTENSION.values())]),
     extensions: Object.freeze([...EAGLE_IMAGE_MIME_BY_EXTENSION.keys()]),
-    maxBytes: MEDIA_MAX_BYTES,
+    maxBytes: CAMERA_MAX_IMAGE_BYTES,
     maxPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
   }),
   videos: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_VIDEO_MIME_BY_EXTENSION.values())]),
     extensions: Object.freeze([...EAGLE_VIDEO_MIME_BY_EXTENSION.keys()]),
-    maxBytes: MEDIA_MAX_BYTES,
-    maxDurationMs: null,
+    maxBytes: CAMERA_MAX_VIDEO_BYTES,
+    maxDurationMs: CAMERA_MAX_VIDEO_DURATION_MS,
   }),
 }) as EagleMediaCapabilitiesDto;
 
@@ -48,15 +50,13 @@ export class EagleMediaCapabilityService {
     }
     const expectedMimeType = expectedEagleMimeType(candidate.fileName);
     if (!expectedMimeType) throw new BadRequestException('不支持该媒体格式。');
-    if (
-      candidate.mimeType.normalize('NFKC').trim().toLocaleLowerCase('en-US') !== expectedMimeType
-    ) {
-      throw new BadRequestException('文件扩展名与媒体类型不匹配。');
-    }
-    const resolved = resolveEagleMediaType(candidate)!;
-    if (candidate.size > MEDIA_MAX_BYTES) {
+    const resolved = resolveEagleMediaType(candidate);
+    if (!resolved) throw new BadRequestException('文件扩展名与媒体类型不匹配。');
+    const maxBytes =
+      resolved.mediaType === 'image' ? CAMERA_MAX_IMAGE_BYTES : CAMERA_MAX_VIDEO_BYTES;
+    if (candidate.size > maxBytes) {
       throw new BadRequestException(
-        `${resolved.mediaType === 'image' ? '图片' : '视频'}大小不能超过 ${MEDIA_MAX_MB}MB。`,
+        `${resolved.mediaType === 'image' ? '图片' : '视频'}大小不能超过 ${maxBytes / 1024 / 1024}MB。`,
       );
     }
     return resolved;

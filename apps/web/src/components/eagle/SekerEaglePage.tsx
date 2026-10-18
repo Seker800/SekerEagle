@@ -1,3 +1,4 @@
+import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
 import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
@@ -847,7 +848,7 @@ export function SekerEaglePage({
       setPreviewAssetId(asset.id);
       return;
     }
-    if (asset.mimeType.startsWith('video/')) {
+    if (isCameraVideoMime(asset.mimeType)) {
       setPreviewAssetId(asset.id);
       return;
     }
@@ -1453,7 +1454,7 @@ export function SekerEaglePage({
                             ? t('为素材添加已配置的私密标签。')
                             : libraryMode === 'PHOTO'
                               ? t('将照片拖入此处。')
-                              : t('将图片或 MP4 拖入此处。')}
+                              : t('将图片、RAW 或相机视频拖入此处。')}
                     </p>
                   </div>
                 )}

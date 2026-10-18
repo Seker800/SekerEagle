@@ -1,4 +1,5 @@
-import { useLibraryWorkspace } from '../../lib/library-workspace';
+import { isCameraVideoMime } from '@sekereagle/library-core';
+import { getEagleVideoContentUrl } from './eagle-media-sources';
 import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,7 +32,12 @@ export function getEagleAssetThumbnailUrls(
 ): string[] {
   return RENDITION_PRIORITY.flatMap((kind) => {
     const candidates = asset.renditions
-      .filter((rendition) => rendition.kind === kind && rendition.revision === asset.mediaRevision)
+      .filter(
+        (rendition) =>
+          rendition.kind === kind &&
+          rendition.revision === asset.mediaRevision &&
+          rendition.mimeType.startsWith('image/'),
+      )
       .sort(
         (left, right) =>
           (left.width ?? Number.MAX_SAFE_INTEGER) - (right.width ?? Number.MAX_SAFE_INTEGER),
@@ -59,10 +65,6 @@ export function EagleAssetThumbnail({
   displayWidth: number;
   alt?: string;
 }) {
-  const {
-    api: { getEagleAssetContentUrl },
-  } = useLibraryWorkspace();
-
   const targetPixelWidth = Math.max(
     1,
     Math.ceil(displayWidth * (globalThis.devicePixelRatio || 1)),
@@ -295,7 +297,7 @@ export function EagleAssetThumbnail({
       />
     );
   }
-  const isVideo = asset.mimeType.startsWith('video/');
+  const isVideo = isCameraVideoMime(asset.mimeType);
   return (
     <span
       className={styles.thumbnailMedia}
@@ -312,10 +314,10 @@ export function EagleAssetThumbnail({
       }}
     >
       {thumbnailContent}
-      {isVideoPreviewActive && (
+      {isVideoPreviewActive && getEagleVideoContentUrl(asset) && (
         <video
           className={styles.thumbnailVideo}
-          src={getEagleAssetContentUrl(asset.id)}
+          src={getEagleVideoContentUrl(asset) ?? undefined}
           autoPlay
           muted
           loop
