@@ -34,6 +34,7 @@ def stamp():
 def atomic(path, value):
     temp = path.with_name(path.name + ".tmp")
     with temp.open("w") as file:
+        os.fchmod(file.fileno(), 0o600)
         json.dump(value, file)
         file.flush()
         os.fsync(file.fileno())
@@ -103,7 +104,11 @@ def progress(root, phase, count=0, size=0):
 def receive(root, generation, source):
     path = generation_path(root, generation)
     path.mkdir(parents=True, mode=0o700)
+    root.chmod(0o700)
+    path.parent.chmod(0o700)
+    path.chmod(0o700)
     (path / ".owner-marker").write_text(MARKER)
+    (path / ".owner-marker").chmod(0o600)
     actual = {}
     manifest = None
     count = size = 0
@@ -126,6 +131,7 @@ def receive(root, generation, source):
             target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             digest = hashlib.sha256()
             with target.open("xb") as output:
+                os.fchmod(output.fileno(), 0o600)
                 while True:
                     block = file.read(1024 * 1024)
                     if not block:
@@ -356,6 +362,7 @@ def main():
     parser.add_argument("generation", nargs="?")
     args = parser.parse_args()
     guard(ROOT)
+    ROOT.chmod(0o700)
     if args.command == "receive":
         result = receive(ROOT, args.generation, sys.stdin.buffer)
     elif args.command == "verify":

@@ -163,7 +163,7 @@ def upload_receiver():
                 "-o",
                 "BatchMode=yes",
                 "SekerDesign",
-                f"umask 077; mkdir -p {REMOTE}/tools; cat > {REMOTE}/tools/{name}.tmp && mv {REMOTE}/tools/{name}.tmp {REMOTE}/tools/{name}",
+                f"umask 077; chmod 700 {REMOTE}; mkdir -p {REMOTE}/tools; chmod 700 {REMOTE}/tools; cat > {REMOTE}/tools/{name}.tmp && chmod 600 {REMOTE}/tools/{name}.tmp && mv {REMOTE}/tools/{name}.tmp {REMOTE}/tools/{name}",
             ],
             input=source.read_bytes(),
         )
