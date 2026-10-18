@@ -53,3 +53,27 @@ test('enabling visibility stores the allowed duration in a scoped HttpOnly cooki
   assert.equal(result.durationHours, 6);
   assert.ok(result.expiresAt);
 });
+
+test('photo grants cannot unlock materials and material grants cannot unlock photos', async () => {
+  const claims = {
+    sub: 'owner-1',
+    kind: 'privacy-visibility',
+    libraryMode: 'PHOTO',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
+  const service = new PrivacyVisibilityService(
+    {} as never,
+    { verifyAsync: async () => claims } as never,
+    {} as never,
+  );
+  const request = {
+    cookies: {
+      sekereagle_privacy_visibility: 'photo',
+      sekereagle_photo_privacy_visibility: 'photo',
+    },
+  } as never;
+  assert.equal(await service.readGrant('owner-1', request), null);
+  assert.ok(await service.readGrant('owner-1', request, 'PHOTO'));
+  claims.libraryMode = 'MATERIAL';
+  assert.equal(await service.readGrant('owner-1', request, 'PHOTO'), null);
+});

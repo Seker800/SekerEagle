@@ -54,7 +54,11 @@ export interface MediaJobClaimClient {
 
 interface ClaimMediaJobOptions {
   now?: Date;
-  canClaimBackground(ownerId: string, kind: EagleAssetProcessingJob['kind']): Promise<boolean>;
+  canClaimBackground(
+    ownerId: string,
+    kind: EagleAssetProcessingJob['kind'],
+    libraryMode: EagleAssetProcessingJob['libraryMode'],
+  ): Promise<boolean>;
 }
 
 export async function claimNextMediaJob(
@@ -89,7 +93,11 @@ export async function claimNextMediaJob(
       for (const candidate of candidates) {
         if (
           candidate.lane === 'BACKGROUND' &&
-          !(await options.canClaimBackground(candidate.ownerId, candidate.kind))
+          !(await options.canClaimBackground(
+            candidate.ownerId,
+            candidate.kind,
+            candidate.libraryMode,
+          ))
         ) {
           continue;
         }

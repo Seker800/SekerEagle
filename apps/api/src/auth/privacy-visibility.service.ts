@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
+import type { LibraryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PRIVACY_VISIBILITY_COOKIE_NAME } from './auth.constants';
 
@@ -11,6 +12,7 @@ const DEFAULT_DURATION_HOURS = 3;
 interface PrivacyVisibilityClaims {
   sub: string;
   kind: 'privacy-visibility';
+  libraryMode?: LibraryMode;
   exp: number;
 }
 
@@ -28,13 +30,17 @@ export class PrivacyVisibilityService {
     private readonly config: ConfigService,
   ) {}
 
-  async getStatus(ownerId: string, request: Request): Promise<PrivacyVisibilityStatus> {
+  async getStatus(
+    ownerId: string,
+    request: Request,
+    libraryMode: LibraryMode = 'MATERIAL',
+  ): Promise<PrivacyVisibilityStatus> {
     const [preference, expiresAt] = await Promise.all([
       this.prisma.eaglePrivacyPreference.findUnique({
         where: { ownerId },
         select: { durationHours: true },
       }),
-      this.readGrant(ownerId, request),
+      this.readGrant(ownerId, request, libraryMode),
     ]);
     return {
       enabled: expiresAt !== null,
@@ -47,6 +53,7 @@ export class PrivacyVisibilityService {
     ownerId: string,
     response: Response,
     input: { enabled: boolean; durationHours: number },
+    libraryMode: LibraryMode = 'MATERIAL',
   ): Promise<PrivacyVisibilityStatus> {
     if (!PRIVACY_VISIBILITY_DURATIONS.some((hours) => hours === input.durationHours)) {
       throw new BadRequestException('隐私内容显示时长无效。');
@@ -57,7 +64,7 @@ export class PrivacyVisibilityService {
       update: { durationHours: input.durationHours },
     });
     if (!input.enabled) {
-      response.clearCookie(PRIVACY_VISIBILITY_COOKIE_NAME, {
+      response.clearCookie(this.cookieName(libraryMode), {
         ...this.cookieOptions(),
         path: '/api',
       });
@@ -66,10 +73,10 @@ export class PrivacyVisibilityService {
     const durationMs = input.durationHours * 60 * 60 * 1000;
     const expiresAt = new Date(Date.now() + durationMs);
     const token = await this.jwt.signAsync(
-      { sub: ownerId, kind: 'privacy-visibility' },
+      { sub: ownerId, kind: 'privacy-visibility', libraryMode },
       { expiresIn: input.durationHours * 60 * 60 },
     );
-    response.cookie(PRIVACY_VISIBILITY_COOKIE_NAME, token, {
+    response.cookie(this.cookieName(libraryMode), token, {
       ...this.cookieOptions(),
       path: '/api',
       maxAge: durationMs,
@@ -81,17 +88,32 @@ export class PrivacyVisibilityService {
     };
   }
 
-  async readGrant(ownerId: string, request: Request): Promise<Date | null> {
-    const token = request.cookies?.[PRIVACY_VISIBILITY_COOKIE_NAME] as string | undefined;
+  async readGrant(
+    ownerId: string,
+    request: Request,
+    libraryMode: LibraryMode = 'MATERIAL',
+  ): Promise<Date | null> {
+    const token = request.cookies?.[this.cookieName(libraryMode)] as string | undefined;
     if (!token) return null;
     try {
       const claims = await this.jwt.verifyAsync<PrivacyVisibilityClaims>(token);
-      if (claims.kind !== 'privacy-visibility' || claims.sub !== ownerId) return null;
+      if (
+        claims.kind !== 'privacy-visibility' ||
+        claims.sub !== ownerId ||
+        (claims.libraryMode ?? 'MATERIAL') !== libraryMode
+      )
+        return null;
       const expiresAt = new Date(claims.exp * 1000);
       return expiresAt.getTime() > Date.now() ? expiresAt : null;
     } catch {
       return null;
     }
+  }
+
+  private cookieName(libraryMode: LibraryMode) {
+    return libraryMode === 'PHOTO'
+      ? 'sekereagle_photo_privacy_visibility'
+      : PRIVACY_VISIBILITY_COOKIE_NAME;
   }
 
   private cookieOptions() {

@@ -1,5 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
+import { LIBRARY_MODE } from '../eagle/library-mode';
 import { ACCESS_COOKIE_NAME, PAT_PREFIX } from './auth.constants';
 import type { AuthPrincipal } from './auth.types';
 import { PatService } from './pat.service';
@@ -31,7 +32,13 @@ export class AccessAuthGuard implements CanActivate {
     const token = request.cookies?.[ACCESS_COOKIE_NAME] as string | undefined;
     if (!token) throw new UnauthorizedException('缺少登录状态。');
     request.user = await this.sessions.verifyAccessToken(token);
-    const visibleUntil = await this.privacyVisibility.readGrant(request.user.sub, request);
+    const visibleUntil = await this.privacyVisibility.readGrant(
+      request.user.sub,
+      request,
+      Reflect.getMetadata(LIBRARY_MODE, context.getClass?.() ?? Object) === 'PHOTO'
+        ? 'PHOTO'
+        : 'MATERIAL',
+    );
     request.user.canViewPrivate = visibleUntil !== null;
     request.user.privacyVisibleUntil = visibleUntil?.toISOString() ?? null;
     return true;

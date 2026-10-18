@@ -2,7 +2,13 @@ import type { EagleAssetProcessingJob } from '@prisma/client';
 
 type AiTagJobIdentity = Pick<
   EagleAssetProcessingJob,
-  'id' | 'ownerId' | 'assetId' | 'assetRevision' | 'processorVersion' | 'leaseVersion'
+  | 'libraryMode'
+  | 'id'
+  | 'ownerId'
+  | 'assetId'
+  | 'assetRevision'
+  | 'processorVersion'
+  | 'leaseVersion'
 >;
 
 interface AiTagCompletionClient {
@@ -10,6 +16,7 @@ interface AiTagCompletionClient {
     findFirst(input: {
       where: {
         ownerId: string;
+        libraryMode: EagleAssetProcessingJob['libraryMode'];
         assetId: string;
         assetRevision: number;
         processorVersion: string;
@@ -38,6 +45,7 @@ export async function finishAlreadyAnalyzedAiTagJob(
   const run = await client.eagleAiAnalysisRun.findFirst({
     where: {
       ownerId: job.ownerId,
+      libraryMode: job.libraryMode,
       assetId: job.assetId,
       assetRevision: job.assetRevision,
       processorVersion: job.processorVersion,

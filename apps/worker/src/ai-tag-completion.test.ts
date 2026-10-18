@@ -5,6 +5,7 @@ import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 const job = {
   id: 'job-1',
   ownerId: 'owner-1',
+  libraryMode: 'PHOTO' as const,
   assetId: 'asset-1',
   assetRevision: 2,
   processorVersion: 'processor-v2',
@@ -34,6 +35,7 @@ test('completed analysis consumes a duplicate queue job without running the mode
     {
       where: {
         ownerId: 'owner-1',
+        libraryMode: 'PHOTO' as const,
         assetId: 'asset-1',
         assetRevision: 2,
         processorVersion: 'processor-v2',

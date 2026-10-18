@@ -20,6 +20,7 @@ import {
   PrismaClient,
   type EagleAssetProcessingJob,
   type EagleTagSemanticBuild,
+  type LibraryMode,
 } from '@prisma/client';
 import {
   EAGLE_AI_TAG_DEFAULT_MODEL,
@@ -153,9 +154,10 @@ async function claimTagBuild(): Promise<EagleTagSemanticBuild | null> {
 async function canClaimBackgroundForOwner(
   ownerId: string,
   kind: EagleAssetProcessingJob['kind'],
+  libraryMode: LibraryMode,
 ): Promise<boolean> {
   const settings = await prisma.eagleProcessingSetting.findUnique({
-    where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+    where: { ownerId_libraryMode: { ownerId, libraryMode } },
   });
   if (kind === 'GENERATE_AI_TAGS') {
     return canClaimAiTagJobs(
@@ -182,6 +184,7 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
     where: { OR: [{ aiTagManualEnabled: true }, { aiTagScheduleEnabled: true }] },
     select: {
       ownerId: true,
+      libraryMode: true,
       aiTagManualEnabled: true,
       aiTagScheduleEnabled: true,
       aiTagScheduleStart: true,
@@ -201,20 +204,20 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
     }
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "EagleMediaJob" (
-        id, "ownerId", "assetId", kind, status, lane, "assetRevision", "processorVersion",
+        id, "ownerId", "libraryMode", "assetId", kind, status, lane, "assetRevision", "processorVersion",
         attempts, "leaseVersion", "availableAt", "createdAt", "updatedAt"
       )
-      SELECT gen_random_uuid(), asset."ownerId", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
+      SELECT gen_random_uuid(), asset."ownerId", asset."libraryMode", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
         'PENDING'::"EagleMediaJobStatus", 'BACKGROUND'::"EagleProcessingLane",
         asset."mediaRevision", ${EAGLE_AI_TAG_PROCESSOR_VERSION}, 0, 0, now(), now(), now()
       FROM "EagleAsset" AS asset
-      WHERE asset."ownerId" = ${setting.ownerId}
+      WHERE asset."ownerId" = ${setting.ownerId} AND asset."libraryMode" = ${setting.libraryMode}
         AND asset."deletedAt" IS NULL
         AND asset."isPrivate" = false
         AND asset."mimeType" LIKE 'image/%'
         AND EXISTS (
           SELECT 1 FROM "EagleAssetRendition" AS preview
-          WHERE preview."ownerId" = asset."ownerId"
+          WHERE preview."ownerId" = asset."ownerId" AND preview."libraryMode" = asset."libraryMode"
             AND preview."assetId" = asset.id
             AND preview.revision = asset."mediaRevision"
             AND preview.kind = 'PREVIEW'
@@ -229,7 +232,7 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
         )
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAiAnalysisRun" AS run
-          WHERE run."ownerId" = asset."ownerId"
+          WHERE run."ownerId" = asset."ownerId" AND run."libraryMode" = asset."libraryMode"
             AND run."assetId" = asset.id
             AND run."assetRevision" = asset."mediaRevision"
             AND run."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
@@ -251,6 +254,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     where: {
       id: job.assetId,
       ownerId: job.ownerId,
+      libraryMode: job.libraryMode,
       mediaRevision: job.assetRevision,
       deletedAt: null,
     },
@@ -293,6 +297,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       },
       create: {
         ownerId: job.ownerId,
+        libraryMode: job.libraryMode,
         assetId: job.assetId,
         assetRevision: job.assetRevision,
         processorVersion: job.processorVersion,
@@ -407,7 +412,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         });
         if (completed.count !== 1) return;
         await transaction.eagleAssetColorAnalysis.updateMany({
-          where: { ownerId: asset.ownerId, assetId: asset.id, isCurrent: true },
+          where: {
+            ownerId: asset.ownerId,
+            libraryMode: asset.libraryMode,
+            assetId: asset.id,
+            isCurrent: true,
+          },
           data: { isCurrent: false },
         });
         const analysis = await transaction.eagleAssetColorAnalysis.upsert({
@@ -420,6 +430,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           },
           create: {
             ownerId: asset.ownerId,
+            libraryMode: asset.libraryMode,
             assetId: asset.id,
             assetRevision: job.assetRevision,
             processorVersion: job.processorVersion,
@@ -436,12 +447,17 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           },
         });
         await transaction.eagleAssetColorSwatch.deleteMany({
-          where: { ownerId: asset.ownerId, analysisId: analysis.id },
+          where: {
+            ownerId: asset.ownerId,
+            libraryMode: asset.libraryMode,
+            analysisId: analysis.id,
+          },
         });
         if (processed.palette?.length) {
           await transaction.eagleAssetColorSwatch.createMany({
             data: processed.palette.map((swatch, rank) => ({
               ownerId: asset.ownerId,
+              libraryMode: asset.libraryMode,
               analysisId: analysis.id,
               rank,
               ...swatch,
@@ -464,6 +480,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       );
       renditions.push({
         ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
         assetId: asset.id,
         kind: spec.kind,
         variant: spec.variant,
@@ -497,7 +514,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         });
       }
       await transaction.eagleAsset.updateMany({
-        where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
+        where: {
+          id: asset.id,
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          mediaRevision: job.assetRevision,
+        },
         data: {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
@@ -520,6 +542,7 @@ async function processVideo(
   asset: {
     id: string;
     ownerId: string;
+    libraryMode: LibraryMode;
     originalObjectKey: string;
     uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
   },
@@ -601,6 +624,7 @@ async function processVideo(
         },
         create: {
           ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
           assetId: asset.id,
           kind: 'THUMBNAIL',
           variant: 'default',
@@ -622,7 +646,12 @@ async function processVideo(
         },
       });
       await transaction.eagleAsset.updateMany({
-        where: { id: asset.id, ownerId: asset.ownerId, mediaRevision: job.assetRevision },
+        where: {
+          id: asset.id,
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          mediaRevision: job.assetRevision,
+        },
         data: {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
@@ -640,7 +669,7 @@ async function processVideo(
 
 async function processEmbeddingJob(
   job: EagleAssetProcessingJob,
-  asset: { id: string; ownerId: string },
+  asset: { id: string; ownerId: string; libraryMode: LibraryMode },
   mimeType: string,
   source: AsyncIterable<Uint8Array>,
 ): Promise<void> {
@@ -677,6 +706,7 @@ async function processEmbeddingJob(
     },
     create: {
       ownerId: asset.ownerId,
+      libraryMode: asset.libraryMode,
       assetId: asset.id,
       assetRevision: job.assetRevision,
       spaceId: embeddingSpaceId,
@@ -701,7 +731,12 @@ async function processEmbeddingJob(
     });
     if (completed.count !== 1) return;
     await transaction.eagleAssetEmbedding.updateMany({
-      where: { ownerId: asset.ownerId, assetId: asset.id, isCurrent: true },
+      where: {
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        isCurrent: true,
+      },
       data: { isCurrent: false, status: 'SUPERSEDED' },
     });
     await transaction.eagleAssetEmbedding.update({
@@ -715,15 +750,15 @@ async function processEmbeddingJob(
       },
     });
     await transaction.$executeRaw(
-      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "id" = ${record.id}`,
+      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode} AND "id" = ${record.id}`,
     );
-    await createTopSuggestion(transaction, asset.ownerId, asset.id, record.id);
+    await createTopSuggestion(transaction, asset.ownerId, asset.libraryMode, asset.id, record.id);
   });
 }
 
 async function processAiTaggingJob(
   job: EagleAssetProcessingJob,
-  asset: { id: string; ownerId: string },
+  asset: { id: string; ownerId: string; libraryMode: LibraryMode },
   source: AsyncIterable<Uint8Array>,
   mimeType: string,
   storageKey: string,
@@ -734,6 +769,7 @@ async function processAiTaggingJob(
   const run = await prisma.eagleAiAnalysisRun.create({
     data: {
       ownerId: asset.ownerId,
+      libraryMode: asset.libraryMode,
       assetId: asset.id,
       assetRevision: job.assetRevision,
       provider: 'OLLAMA',
@@ -757,7 +793,7 @@ async function processAiTaggingJob(
     ? await prisma.$queryRaw<Array<{ normalizedName: string }>>(Prisma.sql`
         SELECT "normalizedName"
         FROM "EagleAiTag"
-        WHERE "ownerId" = ${asset.ownerId}
+        WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}
           AND "normalizedName" IN (${Prisma.join(normalizedNames)})
           AND "embeddingSpaceId" = ${embeddingSpaceId}
           AND embedding IS NOT NULL
@@ -783,6 +819,7 @@ async function processAiTaggingJob(
     await transaction.eagleAiAnalysisRun.updateMany({
       where: {
         ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
         assetId: asset.id,
         provider: 'OLLAMA',
         promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
@@ -792,7 +829,12 @@ async function processAiTaggingJob(
       data: { status: 'SUPERSEDED' },
     });
     await transaction.eagleAssetAiTag.updateMany({
-      where: { ownerId: asset.ownerId, assetId: asset.id, status: 'ACTIVE' },
+      where: {
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        status: 'ACTIVE',
+      },
       data: { status: 'HIDDEN' },
     });
     for (let index = 0; index < names.length; index += 1) {
@@ -801,12 +843,18 @@ async function processAiTaggingJob(
       const tag = await transaction.eagleAiTag.upsert({
         where: {
           ownerId_libraryMode_normalizedName: {
-            libraryMode: 'MATERIAL',
+            libraryMode: asset.libraryMode,
             ownerId: asset.ownerId,
             normalizedName,
           },
         },
-        create: { ownerId: asset.ownerId, name, normalizedName, embeddingSpaceId },
+        create: {
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          name,
+          normalizedName,
+          embeddingSpaceId,
+        },
         update: { name, embeddingSpaceId },
         select: { id: true },
       });
@@ -816,12 +864,13 @@ async function processAiTaggingJob(
         await transaction.$executeRaw(Prisma.sql`
           UPDATE "EagleAiTag"
           SET embedding = ${serialized}::vector, "embeddingSpaceId" = ${embeddingSpaceId}
-          WHERE "ownerId" = ${asset.ownerId} AND id = ${tag.id}
+          WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode} AND id = ${tag.id}
         `);
       }
       await transaction.eagleAssetAiTag.create({
         data: {
           ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
           assetId: asset.id,
           aiTagId: tag.id,
           analysisRunId: run.id,
@@ -866,6 +915,7 @@ function normalizeAiTagName(value: string): string {
 async function createTopSuggestion(
   transaction: Prisma.TransactionClient,
   ownerId: string,
+  libraryMode: LibraryMode,
   assetId: string,
   embeddingId: string,
 ): Promise<void> {
@@ -873,22 +923,22 @@ async function createTopSuggestion(
   await transaction.$executeRaw(
     Prisma.sql`
       INSERT INTO "EagleVectorTagSuggestion" (
-        "id", "ownerId", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
+        "id", "ownerId", "libraryMode", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
         "generationId", "isActive", "score", "distance", "prototypeRank", "status", "createdAt", "updatedAt"
       )
-      SELECT gen_random_uuid()::text, ${ownerId}, ${assetId}, candidate."tagId", ${embeddingId},
+      SELECT gen_random_uuid()::text, ${ownerId}, ${libraryMode}::"LibraryMode", ${assetId}, candidate."tagId", ${embeddingId},
              candidate."snapshotId", candidate."generationId", true, 1 - candidate.distance,
              candidate.distance, candidate.rank, 'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
       FROM (
         SELECT snapshot."tagId", prototype."snapshotId", snapshot."generationId", prototype.rank,
                prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleAssetEmbedding" embedding
-        JOIN "EagleTagPrototype" prototype ON prototype."ownerId" = embedding."ownerId"
+        JOIN "EagleTagPrototype" prototype ON prototype."ownerId" = embedding."ownerId" AND prototype."libraryMode" = embedding."libraryMode"
         JOIN "EagleTagPrototypeSnapshot" snapshot
-          ON snapshot."ownerId" = prototype."ownerId" AND snapshot.id = prototype."snapshotId"
+          ON snapshot."ownerId" = prototype."ownerId" AND snapshot."libraryMode" = prototype."libraryMode" AND snapshot.id = prototype."snapshotId"
         JOIN "EagleManualTagSemanticConfig" config
-          ON config."ownerId" = snapshot."ownerId" AND config."tagId" = snapshot."tagId"
-        WHERE embedding."ownerId" = ${ownerId} AND embedding.id = ${embeddingId}
+          ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
+        WHERE embedding."ownerId" = ${ownerId} AND embedding."libraryMode" = ${libraryMode}::"LibraryMode" AND embedding.id = ${embeddingId}
           AND snapshot."isCurrent" = true AND snapshot.status = 'ACTIVE'
           AND config."recommendationEnabled" = true
         ORDER BY prototype.embedding <=> embedding.embedding ASC
@@ -897,11 +947,11 @@ async function createTopSuggestion(
       WHERE 1 - candidate.distance >= ${minimumScore}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
-          WHERE manual."ownerId" = ${ownerId} AND manual."assetId" = ${assetId}
+          WHERE manual."ownerId" = ${ownerId} AND manual."libraryMode" = ${libraryMode}::"LibraryMode" AND manual."assetId" = ${assetId}
         )
         AND NOT EXISTS (
           SELECT 1 FROM "EagleVectorTagSuggestion" existing
-          WHERE existing."ownerId" = ${ownerId} AND existing."assetId" = ${assetId}
+          WHERE existing."ownerId" = ${ownerId} AND existing."libraryMode" = ${libraryMode}::"LibraryMode" AND existing."assetId" = ${assetId}
             AND existing."isActive" = true AND existing.status = 'PENDING' AND existing."invalidatedAt" IS NULL
         )
     `,
@@ -933,18 +983,23 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
     }),
     prisma.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } }),
     prisma.eagleTagPrototypeSnapshot.findFirst({
-      where: { ownerId: build.ownerId, tagId: build.tagId, isCurrent: true },
+      where: {
+        ownerId: build.ownerId,
+        libraryMode: build.libraryMode,
+        tagId: build.tagId,
+        isCurrent: true,
+      },
       select: { id: true, version: true, sourceAssetCount: true },
     }),
     prisma.$queryRaw<Array<{ count: bigint; digest: string }>>(Prisma.sql`
       SELECT COUNT(*)::bigint AS count,
              md5(string_agg(link."assetId", ',' ORDER BY link."assetId")) AS digest
       FROM "EagleAssetManualTag" link
-      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset.id = link."assetId"
+      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
       JOIN "EagleAssetEmbedding" embedding
-        ON embedding."ownerId" = link."ownerId" AND embedding."assetId" = link."assetId"
+        ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
        AND embedding."isCurrent" = true AND embedding.status = 'READY'
-      WHERE link."ownerId" = ${build.ownerId} AND link."tagId" = ${build.tagId}
+      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
         AND asset."deletedAt" IS NULL
     `),
   ]);
@@ -956,11 +1011,11 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
   const sample = await prisma.$queryRaw<Array<{ assetId: string; embedding: string }>>(Prisma.sql`
     SELECT link."assetId", embedding.embedding::text AS embedding
     FROM "EagleAssetManualTag" link
-    JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset.id = link."assetId"
+    JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
     JOIN "EagleAssetEmbedding" embedding
-      ON embedding."ownerId" = link."ownerId" AND embedding."assetId" = link."assetId"
+      ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
      AND embedding."isCurrent" = true AND embedding.status = 'READY'
-    WHERE link."ownerId" = ${build.ownerId} AND link."tagId" = ${build.tagId}
+    WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
       AND asset."deletedAt" IS NULL
     ORDER BY md5(link."assetId")
     LIMIT ${sampleLimit}
@@ -984,6 +1039,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
   const snapshot = await prisma.eagleTagPrototypeSnapshot.create({
     data: {
       ownerId: build.ownerId,
+      libraryMode: build.libraryMode,
       tagId: build.tagId,
       spaceId: space.id,
       version: (currentSnapshot?.version ?? 0) + 1,
@@ -1014,10 +1070,10 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
     await prisma.$executeRaw(
       Prisma.sql`
         INSERT INTO "EagleTagPrototype" (
-          "ownerId", "snapshotId", rank, embedding, "memberCount", weight,
+          "ownerId", "libraryMode", "snapshotId", rank, embedding, "memberCount", weight,
           "meanDistance", "p95Distance", "representativeAssetIds", "createdAt"
         ) VALUES (
-          ${build.ownerId}, ${snapshot.id}, ${prototype.rank}, ${vector}::vector,
+          ${build.ownerId}, ${build.libraryMode}::"LibraryMode", ${snapshot.id}, ${prototype.rank}, ${vector}::vector,
           ${prototype.memberCount}, ${prototype.weight}, ${prototype.meanDistance},
           ${prototype.p95Distance}, ${prototype.representativeAssetIds}, NOW()
         )
@@ -1027,23 +1083,23 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
   await prisma.$executeRaw(
     Prisma.sql`
       INSERT INTO "EagleTagMemberDistance" (
-        "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
+        "ownerId", "libraryMode", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
       )
-      SELECT link."ownerId", link."tagId", link."assetId", ${snapshot.id}, nearest.distance,
+      SELECT link."ownerId", link."libraryMode", link."tagId", link."assetId", ${snapshot.id}, nearest.distance,
              nearest.rank, NOW()
       FROM "EagleAssetManualTag" link
-      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset.id = link."assetId"
+      JOIN "EagleAsset" asset ON asset."ownerId" = link."ownerId" AND asset."libraryMode" = link."libraryMode" AND asset.id = link."assetId"
       JOIN "EagleAssetEmbedding" embedding
-        ON embedding."ownerId" = link."ownerId" AND embedding."assetId" = link."assetId"
+        ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
        AND embedding."isCurrent" = true AND embedding.status = 'READY'
       CROSS JOIN LATERAL (
         SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleTagPrototype" prototype
-        WHERE prototype."ownerId" = ${build.ownerId} AND prototype."snapshotId" = ${snapshot.id}
+        WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode} AND prototype."snapshotId" = ${snapshot.id}
         ORDER BY prototype.embedding <=> embedding.embedding
         LIMIT 1
       ) nearest
-      WHERE link."ownerId" = ${build.ownerId} AND link."tagId" = ${build.tagId}
+      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
         AND asset."deletedAt" IS NULL
     `,
   );
@@ -1061,10 +1117,10 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
                percentile_cont(0.95) WITHIN GROUP (ORDER BY distance.distance)::double precision
                  AS "p95Distance"
         FROM "EagleTagMemberDistance" distance
-        WHERE distance."ownerId" = ${build.ownerId} AND distance."snapshotId" = ${snapshot.id}
+        WHERE distance."ownerId" = ${build.ownerId} AND distance."libraryMode" = ${build.libraryMode} AND distance."snapshotId" = ${snapshot.id}
         GROUP BY distance."prototypeRank"
       ) statistics
-      WHERE prototype."ownerId" = ${build.ownerId}
+      WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}
         AND prototype."snapshotId" = ${snapshot.id}
         AND prototype.rank = statistics.rank
     `,
@@ -1081,23 +1137,23 @@ async function recomputeSuggestionGeneration(
   await prisma.$executeRaw(
     Prisma.sql`
       INSERT INTO "EagleVectorTagSuggestion" (
-        "id", "ownerId", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
+        "id", "ownerId", "libraryMode", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
         "generationId", "isActive", score, distance, "prototypeRank", status, "createdAt", "updatedAt"
       )
-      SELECT gen_random_uuid()::text, embedding."ownerId", embedding."assetId", nearest."tagId",
+      SELECT gen_random_uuid()::text, embedding."ownerId", embedding."libraryMode", embedding."assetId", nearest."tagId",
              embedding.id, nearest."snapshotId", ${generationId}, false, 1 - nearest.distance,
              nearest.distance, nearest.rank, 'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
       FROM "EagleAssetEmbedding" embedding
-      JOIN "EagleAsset" asset ON asset."ownerId" = embedding."ownerId" AND asset.id = embedding."assetId"
+      JOIN "EagleAsset" asset ON asset."ownerId" = embedding."ownerId" AND asset."libraryMode" = embedding."libraryMode" AND asset.id = embedding."assetId"
       CROSS JOIN LATERAL (
         SELECT snapshot."tagId", snapshot.id AS "snapshotId", prototype.rank,
                prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleTagPrototypeSnapshot" snapshot
         JOIN "EagleTagPrototype" prototype
-          ON prototype."ownerId" = snapshot."ownerId" AND prototype."snapshotId" = snapshot.id
+          ON prototype."ownerId" = snapshot."ownerId" AND prototype."libraryMode" = snapshot."libraryMode" AND prototype."snapshotId" = snapshot.id
         JOIN "EagleManualTagSemanticConfig" config
-          ON config."ownerId" = snapshot."ownerId" AND config."tagId" = snapshot."tagId"
-        WHERE snapshot."ownerId" = embedding."ownerId"
+          ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
+        WHERE snapshot."ownerId" = embedding."ownerId" AND snapshot."libraryMode" = embedding."libraryMode"
           AND config."recommendationEnabled" = true
           AND (snapshot.status = 'ACTIVE' OR snapshot.id = ${candidateSnapshotId})
           AND (
@@ -1108,18 +1164,24 @@ async function recomputeSuggestionGeneration(
         ORDER BY prototype.embedding <=> embedding.embedding
         LIMIT 1
       ) nearest
-      WHERE embedding."ownerId" = ${build.ownerId} AND embedding."isCurrent" = true
+      WHERE embedding."ownerId" = ${build.ownerId} AND embedding."libraryMode" = ${build.libraryMode} AND embedding."isCurrent" = true
         AND embedding.status = 'READY' AND asset."deletedAt" IS NULL
         AND 1 - nearest.distance >= ${minimumScore}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
-          WHERE manual."ownerId" = embedding."ownerId" AND manual."assetId" = embedding."assetId"
+          WHERE manual."ownerId" = embedding."ownerId" AND manual."libraryMode" = embedding."libraryMode" AND manual."assetId" = embedding."assetId"
         )
     `,
   );
   await prisma.$transaction(async (transaction) => {
     await transaction.eagleVectorTagSuggestion.updateMany({
-      where: { ownerId: build.ownerId, isActive: true, status: 'PENDING', invalidatedAt: null },
+      where: {
+        ownerId: build.ownerId,
+        libraryMode: build.libraryMode,
+        isActive: true,
+        status: 'PENDING',
+        invalidatedAt: null,
+      },
       data: {
         isActive: false,
         invalidatedAt: new Date(),
@@ -1128,7 +1190,12 @@ async function recomputeSuggestionGeneration(
     });
     if (candidateSnapshotId) {
       await transaction.eagleTagPrototypeSnapshot.updateMany({
-        where: { ownerId: build.ownerId, tagId: build.tagId, isCurrent: true },
+        where: {
+          ownerId: build.ownerId,
+          libraryMode: build.libraryMode,
+          tagId: build.tagId,
+          isCurrent: true,
+        },
         data: { isCurrent: false, status: 'SUPERSEDED' },
       });
       await transaction.eagleTagPrototypeSnapshot.update({
@@ -1141,7 +1208,13 @@ async function recomputeSuggestionGeneration(
       });
     }
     await transaction.eagleVectorTagSuggestion.updateMany({
-      where: { ownerId: build.ownerId, generationId, status: 'PENDING', invalidatedAt: null },
+      where: {
+        ownerId: build.ownerId,
+        libraryMode: build.libraryMode,
+        generationId,
+        status: 'PENDING',
+        invalidatedAt: null,
+      },
       data: { isActive: true },
     });
     await transaction.eagleTagSemanticBuild.updateMany({
@@ -1177,6 +1250,7 @@ async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown
       await transaction.eagleTagPrototypeSnapshot.updateMany({
         where: {
           ownerId: build.ownerId,
+          libraryMode: build.libraryMode,
           id: persistedBuild.candidateSnapshotId,
           status: 'BUILDING',
         },
@@ -1191,6 +1265,7 @@ async function generateImagePyramid(
   asset: {
     id: string;
     ownerId: string;
+    libraryMode: LibraryMode;
     mimeType: string;
     originalObjectKey: string;
     uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
@@ -1223,6 +1298,7 @@ async function generateImagePyramid(
           },
           create: {
             ownerId: asset.ownerId,
+            libraryMode: asset.libraryMode,
             assetId: asset.id,
             revision: job.assetRevision,
             processorVersion: job.processorVersion,
@@ -1307,6 +1383,7 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
     where: {
       id: job.assetId,
       ownerId: job.ownerId,
+      libraryMode: job.libraryMode,
       mediaRevision: job.assetRevision,
       deletedAt: { not: null },
       purgeAfter: { lte: new Date() },
@@ -1335,6 +1412,7 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
     where: {
       id: asset.id,
       ownerId: asset.ownerId,
+      libraryMode: asset.libraryMode,
       mediaRevision: job.assetRevision,
       deletedAt: { not: null },
       purgeAfter: { lte: new Date() },
@@ -1371,6 +1449,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
         create: {
           ownerId: job.ownerId,
+          libraryMode: job.libraryMode,
           assetId: job.assetId,
           assetRevision: job.assetRevision,
           processorVersion: job.processorVersion,
@@ -1389,6 +1468,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
       await transaction.eagleImagePyramid.updateMany({
         where: {
           ownerId: job.ownerId,
+          libraryMode: job.libraryMode,
           assetId: job.assetId,
           revision: job.assetRevision,
           processorVersion: job.processorVersion,
@@ -1404,6 +1484,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
       await transaction.eagleAssetEmbedding.updateMany({
         where: {
           ownerId: job.ownerId,
+          libraryMode: job.libraryMode,
           assetId: job.assetId,
           assetRevision: job.assetRevision,
           spaceId: embeddingSpaceId,
@@ -1419,6 +1500,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
       await transaction.eagleAiAnalysisRun.updateMany({
         where: {
           ownerId: job.ownerId,
+          libraryMode: job.libraryMode,
           assetId: job.assetId,
           assetRevision: job.assetRevision,
           provider: 'OLLAMA',
@@ -1434,7 +1516,12 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
     }
     if (terminal && taskBlocksAssetReady(job.kind)) {
       await transaction.eagleAsset.updateMany({
-        where: { id: job.assetId, ownerId: job.ownerId, mediaRevision: job.assetRevision },
+        where: {
+          id: job.assetId,
+          ownerId: job.ownerId,
+          libraryMode: job.libraryMode,
+          mediaRevision: job.assetRevision,
+        },
         data: { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) },
       });
     }
@@ -1484,6 +1571,7 @@ async function poll(): Promise<void> {
 
 interface PendingMediaWakeRow {
   ownerId: string;
+  libraryMode: LibraryMode;
   lane: EagleAssetProcessingJob['lane'];
   kind: EagleAssetProcessingJob['kind'];
   availableAt: Date;
@@ -1492,22 +1580,22 @@ interface PendingMediaWakeRow {
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
   const [mediaCandidates, nextTagBuild, settings] = await Promise.all([
     prisma.$queryRaw<PendingMediaWakeRow[]>(Prisma.sql`
-      SELECT candidate."ownerId", candidate.lane, candidate.kind,
+      SELECT candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind,
              MIN(candidate."availableAt") AS "availableAt"
       FROM (
-        SELECT job."ownerId", job.lane::text AS lane, job.kind::text AS kind,
+        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind,
                job."availableAt" AS "availableAt"
         FROM "EagleMediaJob" AS job
         LEFT JOIN "EagleMediaJob" AS dependency ON dependency.id = job."dependsOnJobId"
         WHERE job.status = 'PENDING'
           AND (job."dependsOnJobId" IS NULL OR dependency.status = 'COMPLETED')
         UNION ALL
-        SELECT job."ownerId", job.lane::text AS lane, job.kind::text AS kind,
+        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind,
                job."lockedAt" + INTERVAL '10 minutes' AS "availableAt"
         FROM "EagleMediaJob" AS job
         WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
       ) AS candidate
-      GROUP BY candidate."ownerId", candidate.lane, candidate.kind
+      GROUP BY candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind
     `),
     prisma.eagleTagSemanticBuild.findFirst({
       where: { status: 'PENDING' },
@@ -1517,13 +1605,17 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
     prisma.eagleProcessingSetting.findMany(),
   ]);
   const settingsByOwner = new Map(
-    settings.map((row) => [row.ownerId, normalizeWakeSettings(row)] as const),
+    settings.map(
+      (row) =>
+        [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
+    ),
   );
   let earliest = nextTagBuild?.availableAt ?? null;
   for (const candidate of mediaCandidates) {
     const wakeAt = nextEligibleWakeAt(
       candidate,
-      settingsByOwner.get(candidate.ownerId) ?? defaultWakeSettings(),
+      settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
+        defaultWakeSettings(),
       now,
     );
     if (wakeAt && (!earliest || wakeAt < earliest)) earliest = wakeAt;
