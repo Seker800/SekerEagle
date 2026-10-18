@@ -358,26 +358,56 @@ try {
       createHash('sha256').update(sharpPhoto).digest('hex'),
     );
   }
+  // Mixed aspect ratios exercise the shared masonry through real uploads and previews.
+  // Crops deliberately have no EXIF: they must not join the timestamped similar-photo stack.
+  const aspectSamples = [
+    { name: 'landscape', width: 512, height: 288, left: 0, top: 112 },
+    { name: 'portrait', width: 288, height: 512, left: 112, top: 0 },
+  ];
+  const aspectAssetIds = new Map();
+  for (const sample of aspectSamples) {
+    const bytes = await sharp(source)
+      .extract({ left: sample.left, top: sample.top, width: sample.width, height: sample.height })
+      .jpeg({ quality: 95 })
+      .toBuffer();
+    for (const mode of ['photos', 'eagle']) {
+      const uploaded = await upload(mode, bytes, `public-sample-${sample.name}.jpg`);
+      aspectAssetIds.set(`${mode}:${sample.name}`, uploaded.assetId);
+    }
+  }
   child('apps/worker/dist/main.js', env, 'worker');
   await waitFor(
     async () =>
-      (await db.eagleAsset.count({ where: { ownerId: owner.id, lifecycleStatus: 'READY' } })) === 3,
+      (await db.eagleAsset.count({ where: { ownerId: owner.id, lifecycleStatus: 'READY' } })) === 7,
     'generated previews',
     240,
   );
   const photos = await api('/photos/assets?limit=20');
-  assert.equal(photos.items.length, 2);
-  assert.equal((await api('/eagle/assets?limit=20')).items.length, 1);
-  assert.equal(photos.items[0].photoMetadata.cameraModel, 'Test Camera');
-  assert.equal(photos.items[0].photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');
+  assert.equal(photos.items.length, 4);
+  const materials = await api('/eagle/assets?limit=20');
+  assert.equal(materials.items.length, 3);
+  for (const sample of aspectSamples) {
+    for (const [mode, items] of [
+      ['photos', photos.items],
+      ['eagle', materials.items],
+    ]) {
+      const item = items.find((item) => item.id === aspectAssetIds.get(`${mode}:${sample.name}`));
+      assert.ok(item, `${sample.name} sample exists in each isolated mode`);
+      assert.equal(item.width, sample.width);
+      assert.equal(item.height, sample.height);
+    }
+  }
+  const capturedPhoto = photos.items.find((item) => item.id === b.assetId);
+  assert.equal(capturedPhoto.photoMetadata.cameraModel, 'Test Camera');
+  assert.equal(capturedPhoto.photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');
   assert.equal((await api('/photos/assets?limit=20&gps=WITH')).items.length, 1);
   const faceScan = await api('/photos/photography/people/scan', {});
-  assert.ok(faceScan.queued >= 2);
+  assert.ok(faceScan.queued >= 4);
   await waitFor(
     async () =>
       (await db.eagleAssetProcessingJob.count({
         where: { ownerId: owner.id, kind: 'ANALYZE_PHOTO_FACES', status: 'COMPLETED' },
-      })) === 2,
+      })) === 4,
     'local face inference',
     240,
   );
@@ -434,8 +464,8 @@ try {
     loginUrl: `${origin}/__test/login`,
     containers,
     ownerId: owner.id,
-    photos: 2,
-    materials: 1,
+    photos: photos.items.length,
+    materials: materials.items.length,
     people: people.people.length,
     faces: people.people.reduce((n, p) => n + p.faces.length, 0),
     groups: groups.length,
@@ -443,7 +473,8 @@ try {
     source: {
       url: 'https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut',
       license: 'NASA public domain',
-      synthetic: 'EXIF date, GPS, camera/lens and blurred derivative are synthetic test conditions',
+      synthetic:
+        'EXIF date, GPS, camera/lens and blurred / landscape / portrait derivatives are synthetic test conditions',
     },
     restoredObjects: objects.Contents?.length ?? 0,
     status: 'passed',

@@ -1538,15 +1538,6 @@ export function SekerEaglePage({
                             order={-masonryItem.top}
                             displayWidth={thumbnailSize}
                           />
-                          {libraryMode === 'PHOTO' && (
-                            <time
-                              className="photo-card-date"
-                              dateTime={asset.photoMetadata?.capturedAt ?? asset.libraryAddedAt}
-                            >
-                              {asset.photoMetadata?.capturedLocal?.slice(0, 10) ??
-                                `${asset.libraryAddedAt.slice(0, 10)} · ${t('导入日期')}`}
-                            </time>
-                          )}
                           {asset.lifecycleStatus !== 'READY' && (
                             <span className={styles.processing}>
                               {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}

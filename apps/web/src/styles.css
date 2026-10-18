@@ -1096,16 +1096,6 @@ select:focus-visible {
   color: #eab664;
   font-weight: 600;
 }
-.photo-card-date {
-  position: absolute;
-  bottom: 4px;
-  left: 6px;
-  padding: 3px 5px;
-  background: #0009;
-  color: white;
-  font-size: 11px;
-  border-radius: 4px;
-}
 .photo-metadata {
   padding: 16px;
   border-bottom: 1px solid #ddd3;
