@@ -467,3 +467,19 @@ test('replacing a photo invalidates automatic projections while retaining human 
     'Human name',
   );
 });
+
+test('privacy display duration is an independent per-library preference', async () => {
+  const { PrivacyVisibilityService } =
+    await import('../../apps/api/dist/auth/privacy-visibility.service.js');
+  const f = await fixtures();
+  const service = new PrivacyVisibilityService(
+    prisma,
+    { signAsync: async () => 'test-only' },
+    { getOrThrow: () => 'http://localhost:8180' },
+  );
+  const response = { clearCookie: () => {} };
+  await service.update(f.ownerId, response, { enabled: false, durationHours: 1 }, 'MATERIAL');
+  await service.update(f.ownerId, response, { enabled: false, durationHours: 12 }, 'PHOTO');
+  assert.equal((await service.getStatus(f.ownerId, {}, 'MATERIAL')).durationHours, 1);
+  assert.equal((await service.getStatus(f.ownerId, {}, 'PHOTO')).durationHours, 12);
+});

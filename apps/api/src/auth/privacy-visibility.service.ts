@@ -40,7 +40,7 @@ export class PrivacyVisibilityService {
   ): Promise<PrivacyVisibilityStatus> {
     const [preference, expiresAt] = await Promise.all([
       this.prisma.eaglePrivacyPreference.findUnique({
-        where: { ownerId },
+        where: { ownerId_libraryMode: { ownerId, libraryMode } },
         select: { durationHours: true },
       }),
       this.readGrant(ownerId, request, libraryMode),
@@ -62,8 +62,8 @@ export class PrivacyVisibilityService {
       throw new BadRequestException('隐私内容显示时长无效。');
     }
     await this.prisma.eaglePrivacyPreference.upsert({
-      where: { ownerId },
-      create: { ownerId, durationHours: input.durationHours },
+      where: { ownerId_libraryMode: { ownerId, libraryMode } },
+      create: { ownerId, libraryMode, durationHours: input.durationHours },
       update: { durationHours: input.durationHours },
     });
     if (!input.enabled) {
