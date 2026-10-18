@@ -63,6 +63,7 @@ test('an empty smart folder matches no assets', async () => {
   await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
 
   const folderWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[1];
+  assert.equal(queries[0]?.where.libraryMode, 'MATERIAL');
   assert.deepEqual(folderWhere, { ownerId: 'owner-1', id: { in: [] } });
 });
 
@@ -86,6 +87,7 @@ test('an empty parent contributes no assets and only aggregates its active child
   await service.listAssets('owner-1', { smartFolderId: 'folder-1', limit: 30 });
 
   const folderWhere = (queries[0]?.where.AND as Array<Record<string, unknown>>)[1];
+  assert.equal(queries[0]?.where.libraryMode, 'MATERIAL');
   assert.deepEqual(folderWhere, {
     ownerId: 'owner-1',
     deletedAt: null,

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Prisma } from '@prisma/client';
+import { Prisma, type LibraryMode } from '@prisma/client';
 
 type VectorSqlClient = Pick<Prisma.TransactionClient, '$executeRaw' | '$queryRaw'>;
 
@@ -10,7 +10,12 @@ function readMinimumSuggestionScore() {
 
 export async function refreshUnclassifiedSuggestions(
   transaction: VectorSqlClient,
-  input: { ownerId: string; assetIds?: string[]; includePrivate?: boolean },
+  input: {
+    libraryMode?: LibraryMode;
+    ownerId: string;
+    assetIds?: string[];
+    includePrivate?: boolean;
+  },
 ) {
   if (input.assetIds?.length === 0) return { scanned: 0, matched: 0 };
   const generationId = randomUUID();
@@ -24,7 +29,7 @@ export async function refreshUnclassifiedSuggestions(
   const rows = await transaction.$queryRaw<Array<{ scanned: number; matched: number }>>(
     Prisma.sql`
       WITH owner_lock AS MATERIALIZED (
-        SELECT pg_advisory_xact_lock(hashtextextended(${input.ownerId}, 913421))
+        SELECT pg_advisory_xact_lock(hashtextextended(${`${input.ownerId}:${input.libraryMode ?? 'MATERIAL'}`}, 913421))
       ), eligible AS MATERIALIZED (
         SELECT asset.id AS "assetId", embedding.id AS "embeddingId", embedding.embedding
         FROM "EagleAsset" asset
@@ -32,7 +37,7 @@ export async function refreshUnclassifiedSuggestions(
           ON embedding."ownerId" = asset."ownerId" AND embedding."assetId" = asset.id
          AND embedding."isCurrent" = true AND embedding.status = 'READY'
         CROSS JOIN owner_lock
-        WHERE asset."ownerId" = ${input.ownerId}
+        WHERE asset."ownerId" = ${input.ownerId} AND asset."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
           AND asset."deletedAt" IS NULL
           AND asset."mimeType" LIKE 'image/%'
           ${privateScope}
@@ -63,7 +68,7 @@ export async function refreshUnclassifiedSuggestions(
            AND prototype."snapshotId" = snapshot.id
           JOIN "EagleManualTagSemanticConfig" config
             ON config."ownerId" = snapshot."ownerId" AND config."tagId" = snapshot."tagId"
-          WHERE snapshot."ownerId" = ${input.ownerId}
+          WHERE snapshot."ownerId" = ${input.ownerId} AND snapshot."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
             AND snapshot."isCurrent" = true
             AND snapshot.status = 'ACTIVE'
             AND config."recommendationEnabled" = true
@@ -72,11 +77,11 @@ export async function refreshUnclassifiedSuggestions(
         ) nearest
       ), inserted AS (
         INSERT INTO "EagleVectorTagSuggestion" (
-          id, "ownerId", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
+          id, "ownerId", "libraryMode", "assetId", "suggestedTagId", "embeddingId", "snapshotId",
           "generationId", "isActive", score, distance, "prototypeRank", status,
           "createdAt", "updatedAt"
         )
-        SELECT gen_random_uuid()::text, ${input.ownerId}, candidate."assetId", candidate."tagId",
+        SELECT gen_random_uuid()::text, ${input.ownerId}, ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode", candidate."assetId", candidate."tagId",
                candidate."embeddingId", candidate."snapshotId", ${generationId}, true,
                1 - candidate.distance, candidate.distance, candidate.rank,
                'PENDING'::"EagleVectorSuggestionStatus", NOW(), NOW()
@@ -94,6 +99,7 @@ export async function refreshUnclassifiedSuggestions(
 export async function upsertAcceptedSuggestionMemberDistance(
   transaction: VectorSqlClient,
   input: {
+    libraryMode?: LibraryMode;
     ownerId: string;
     tagId: string;
     assetId: string;
@@ -104,21 +110,21 @@ export async function upsertAcceptedSuggestionMemberDistance(
   await transaction.$executeRaw(
     Prisma.sql`
       INSERT INTO "EagleTagMemberDistance" (
-        "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
+        "ownerId", "libraryMode", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
       )
-      SELECT ${input.ownerId}, ${input.tagId}, ${input.assetId},
+      SELECT ${input.ownerId}, ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode", ${input.tagId}, ${input.assetId},
              prototype."snapshotId", prototype.embedding <=> embedding.embedding,
              prototype.rank, NOW()
       FROM "EagleAssetEmbedding" embedding
       CROSS JOIN LATERAL (
         SELECT candidate."snapshotId", candidate.rank, candidate.embedding
         FROM "EagleTagPrototype" candidate
-        WHERE candidate."ownerId" = ${input.ownerId}
+        WHERE candidate."ownerId" = ${input.ownerId} AND candidate."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
           AND candidate."snapshotId" = ${input.snapshotId}
         ORDER BY candidate.embedding <=> embedding.embedding
         LIMIT 1
       ) prototype
-      WHERE embedding."ownerId" = ${input.ownerId} AND embedding.id = ${input.embeddingId}
+      WHERE embedding."ownerId" = ${input.ownerId} AND embedding."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode" AND embedding.id = ${input.embeddingId}
       ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId") DO NOTHING
     `,
   );
@@ -129,14 +135,15 @@ export async function syncCurrentTagMemberDistances(
   ownerId: string,
   assetIds: string[],
   tagIds: string[],
+  libraryMode: LibraryMode = 'MATERIAL',
 ) {
   if (!assetIds.length || !tagIds.length) return;
   await transaction.$executeRaw(
     Prisma.sql`
       INSERT INTO "EagleTagMemberDistance" (
-        "ownerId", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
+        "ownerId", "libraryMode", "tagId", "assetId", "snapshotId", distance, "prototypeRank", "createdAt"
       )
-      SELECT link."ownerId", link."tagId", link."assetId", config."currentSnapshotId",
+      SELECT link."ownerId", link."libraryMode", link."tagId", link."assetId", config."currentSnapshotId",
              nearest.distance, nearest.rank, NOW()
       FROM "EagleAssetManualTag" link
       JOIN "EagleManualTagSemanticConfig" config
@@ -153,7 +160,7 @@ export async function syncCurrentTagMemberDistances(
         ORDER BY prototype.embedding <=> embedding.embedding
         LIMIT 1
       ) nearest
-      WHERE link."ownerId" = ${ownerId}
+      WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${libraryMode}::"LibraryMode"
         AND link."assetId" IN (${Prisma.join(assetIds)})
         AND link."tagId" IN (${Prisma.join(tagIds)})
       ON CONFLICT ("ownerId", "tagId", "assetId", "snapshotId")

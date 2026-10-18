@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE, inLibrary } from './library-mode';
+import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
 import { EagleMediaJobStatus, Prisma } from '@prisma/client';
 import { EAGLE_AI_TAG_PROCESSOR_VERSION } from '@sekereagle/config';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,7 +13,10 @@ import { buildMissingImageProcessingJobs } from './media-job-plan';
 
 @Injectable()
 export class EagleProcessingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+  ) {}
 
   async summary(ownerId: string, includePrivate = false) {
     const visibleAsset = includePrivate ? {} : { isPrivate: false };
@@ -23,13 +28,18 @@ export class EagleProcessingService {
           where: { heartbeatAt: { gte: onlineSince } },
         }),
         this.prisma.eagleAssetProcessingJob.count({
-          where: { ownerId, status: 'PROCESSING', asset: visibleAsset },
+          where: {
+            ownerId,
+            status: 'PROCESSING',
+            asset: visibleAsset,
+            libraryMode: this.libraryMode,
+          },
         }),
         this.prisma.eagleAssetProcessingJob.count({
-          where: { ownerId, status: 'PENDING', asset: visibleAsset },
+          where: { ownerId, status: 'PENDING', asset: visibleAsset, libraryMode: this.libraryMode },
         }),
         this.prisma.eagleAssetProcessingJob.count({
-          where: { ownerId, status: 'FAILED', asset: visibleAsset },
+          where: { ownerId, status: 'FAILED', asset: visibleAsset, libraryMode: this.libraryMode },
         }),
         this.prisma.eagleAssetProcessingJob.count({
           where: {
@@ -37,16 +47,17 @@ export class EagleProcessingService {
             status: 'COMPLETED',
             completedAt: { gte: since },
             asset: visibleAsset,
+            libraryMode: this.libraryMode,
           },
         }),
         this.prisma.eagleAssetProcessingJob.groupBy({
           by: ['lane', 'status'],
-          where: { ownerId, asset: visibleAsset },
+          where: { ownerId, asset: visibleAsset, libraryMode: this.libraryMode },
           _count: true,
         }),
         this.prisma.eagleAssetColorAnalysis.groupBy({
           by: ['status'],
-          where: { ownerId, isCurrent: true, asset: visibleAsset },
+          where: { ownerId, isCurrent: true, asset: visibleAsset, libraryMode: this.libraryMode },
           _count: true,
         }),
         this.getSettings(ownerId),
@@ -59,6 +70,7 @@ export class EagleProcessingService {
         deletedAt: null,
         mimeType: { startsWith: 'image/' },
         ...visibleAsset,
+        libraryMode: this.libraryMode,
       },
     });
     const completed = countColor('COMPLETED');
@@ -99,6 +111,7 @@ export class EagleProcessingService {
         lane: query.lane,
         kind: query.kind,
         asset: includePrivate ? {} : { isPrivate: false },
+        libraryMode: this.libraryMode,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -138,12 +151,13 @@ export class EagleProcessingService {
           id: jobId,
           status: 'FAILED',
           asset: includePrivate ? {} : { isPrivate: false },
+          libraryMode: this.libraryMode,
         },
         select: { id: true, assetId: true, assetRevision: true, kind: true },
       });
       if (!job) return 0;
       const result = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { ownerId, id: job.id, status: 'FAILED' },
+        where: { ownerId, id: job.id, status: 'FAILED', libraryMode: this.libraryMode },
         data: retryJobData(),
       });
       if (result.count && job.kind !== 'EXTRACT_COLOR_PALETTE' && job.kind !== 'PURGE_ASSET') {
@@ -153,6 +167,7 @@ export class EagleProcessingService {
             id: job.assetId,
             mediaRevision: job.assetRevision,
             deletedAt: null,
+            libraryMode: this.libraryMode,
           },
           data: { lifecycleStatus: 'PROCESSING', mediaErrorCode: null },
         });
@@ -177,7 +192,7 @@ export class EagleProcessingService {
             "lastError" = NULL,
             "updatedAt" = NOW()
           FROM "EagleAsset" AS visible_asset
-          WHERE job."ownerId" = ${ownerId}
+          WHERE job."ownerId" = ${ownerId} AND job."libraryMode" = ${this.libraryMode}::"LibraryMode"
             AND job."status" = 'FAILED'::"EagleMediaJobStatus"
             AND visible_asset."ownerId" = job."ownerId"
             AND visible_asset."id" = job."assetId"
@@ -197,7 +212,7 @@ export class EagleProcessingService {
               'PURGE_ASSET'::"EagleMediaJobKind"
             )
           ) AS current_job
-          WHERE asset."ownerId" = ${ownerId}
+          WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
             AND asset."id" = current_job."assetId"
             AND asset."mediaRevision" = current_job."assetRevision"
             AND asset."deletedAt" IS NULL
@@ -224,6 +239,7 @@ export class EagleProcessingService {
           deletedAt: null,
           mimeType: { not: 'video/mp4' },
           ...(includePrivate ? {} : { isPrivate: false }),
+          libraryMode: this.libraryMode,
         },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: pageSize,
@@ -233,7 +249,11 @@ export class EagleProcessingService {
       if (!assets.length) break;
       scanned += assets.length;
       const existing = await this.prisma.eagleAssetProcessingJob.findMany({
-        where: { ownerId, assetId: { in: assets.map(({ id }) => id) } },
+        where: {
+          ownerId,
+          assetId: { in: assets.map(({ id }) => id) },
+          libraryMode: this.libraryMode,
+        },
         select: {
           id: true,
           assetId: true,
@@ -249,6 +269,7 @@ export class EagleProcessingService {
           assetId: { in: assets.map(({ id }) => id) },
           processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
           status: { in: ['SUCCEEDED', 'SUPERSEDED'] },
+          libraryMode: this.libraryMode,
         },
       });
       const completedAiTagRevisions = new Set(
@@ -280,7 +301,7 @@ export class EagleProcessingService {
       const creatable = missing.slice(0, Math.max(0, creationLimit - created));
       if (creatable.length) {
         const result = await this.prisma.eagleAssetProcessingJob.createMany({
-          data: creatable,
+          data: creatable.map((row) => inLibrary(this.libraryMode, row)),
           skipDuplicates: true,
         });
         created += result.count;
@@ -297,8 +318,11 @@ export class EagleProcessingService {
   }
   async updateSettings(ownerId: string, input: UpdateEagleProcessingSettingsDto) {
     const row = await this.prisma.eagleProcessingSetting.upsert({
-      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
-      create: { ownerId, ...input },
+      where: {
+        ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+        libraryMode: this.libraryMode,
+      },
+      create: { ownerId, ...input, libraryMode: this.libraryMode },
       update: input,
     });
     return {
@@ -310,7 +334,10 @@ export class EagleProcessingService {
   }
   async getSettings(ownerId: string) {
     const row = await this.prisma.eagleProcessingSetting.findUnique({
-      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+      where: {
+        ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+        libraryMode: this.libraryMode,
+      },
     });
     return {
       mode: row?.mode ?? 'NIGHT',

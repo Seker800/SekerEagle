@@ -54,6 +54,7 @@ test('reconciler creates every missing current-version image task', async () => 
   const createdJob = { ...(paletteJob as Record<string, unknown>) };
   delete createdJob.id;
   assert.deepEqual(createdJob, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     assetId: 'asset-2',
     assetRevision: 3,
@@ -133,6 +134,7 @@ test('reconciler skips an AI job whose completed result survived job pruning', a
     {
       by: ['assetId', 'assetRevision'],
       where: {
+        libraryMode: 'MATERIAL',
         ownerId: 'owner-1',
         assetId: { in: ['asset-1'] },
         processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
@@ -169,6 +171,7 @@ test('retrying a required media task restores the current asset processing lifec
   assert.deepEqual(await service.retry('owner-1', 'job-1'), { retried: 1 });
   assert.deepEqual(assetWrites[0], {
     where: {
+      libraryMode: 'MATERIAL',
       ownerId: 'owner-1',
       id: 'asset-1',
       mediaRevision: 4,

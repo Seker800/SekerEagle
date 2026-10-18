@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { Module, type Provider } from '@nestjs/common';
+import { LIBRARY_MODE } from './library-mode';
 import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EagleController } from './eagle.controller';
@@ -29,6 +30,29 @@ import { EAGLE_IMPORTS_REPOSITORY } from './import/eagle-app-import.repository';
 import { EagleImportsService } from './import/eagle-app-import.service';
 import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
 
+export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
+  EagleService,
+  EaglePrivacyService,
+  EagleAiTagService,
+  EagleEmbeddingClient,
+  EagleBrowserCaptureService,
+  EagleMediaService,
+  EagleMaintenanceService,
+  EagleMediaCapabilityService,
+  EagleMediaThrottleGuard,
+  EagleUploadService,
+  EagleUploadRecoveryService,
+  EagleUploadInspectionService,
+  EagleImportService,
+  EagleImportsService,
+  PrismaEagleImportsRepository,
+  PrismaSekerEagleIngestionAdapter,
+  { provide: EAGLE_IMPORTS_REPOSITORY, useExisting: PrismaEagleImportsRepository },
+  { provide: SEKER_EAGLE_INGESTION_PORT, useExisting: PrismaSekerEagleIngestionAdapter },
+  EagleProcessingService,
+  EagleVectorService,
+];
+
 @Module({
   imports: [AuthModule, StorageModule],
   controllers: [
@@ -40,28 +64,7 @@ import { SEKER_EAGLE_INGESTION_PORT } from './seker-eagle-ingestion.port';
     EagleProcessingController,
     EagleVectorController,
   ],
-  providers: [
-    EagleService,
-    EaglePrivacyService,
-    EagleAiTagService,
-    EagleEmbeddingClient,
-    EagleBrowserCaptureService,
-    EagleMediaService,
-    EagleMaintenanceService,
-    EagleMediaCapabilityService,
-    EagleMediaThrottleGuard,
-    EagleUploadService,
-    EagleUploadRecoveryService,
-    EagleUploadInspectionService,
-    EagleImportService,
-    EagleImportsService,
-    PrismaEagleImportsRepository,
-    PrismaSekerEagleIngestionAdapter,
-    { provide: EAGLE_IMPORTS_REPOSITORY, useExisting: PrismaEagleImportsRepository },
-    { provide: SEKER_EAGLE_INGESTION_PORT, useExisting: PrismaSekerEagleIngestionAdapter },
-    EagleProcessingService,
-    EagleVectorService,
-  ],
+  providers: [...EAGLE_LIBRARY_PROVIDERS, { provide: LIBRARY_MODE, useValue: 'MATERIAL' }],
   exports: [EagleService],
 })
 export class EagleModule {}

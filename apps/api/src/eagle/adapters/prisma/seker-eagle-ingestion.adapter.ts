@@ -24,13 +24,14 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
         ownerId: command.ownerId,
         assetId: command.assetId,
         sourceKey: command.sourceKey,
+        libraryMode: 'MATERIAL',
       },
       select: { tagId: true },
     });
     const manualTagIds = await this.resolveManualTags(command, transaction);
 
     await transaction.eagleAsset.update({
-      where: { id: command.assetId },
+      where: { id: command.assetId, libraryMode: 'MATERIAL' },
       data: {
         displayName: command.displayName,
         normalizedDisplayName: command.displayName
@@ -43,39 +44,47 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     });
     if (command.description || command.sourceUrl) {
       await transaction.eagleAssetAnnotation.upsert({
-        where: { ownerId_assetId: { ownerId: command.ownerId, assetId: command.assetId } },
+        where: {
+          ownerId_assetId: { ownerId: command.ownerId, assetId: command.assetId },
+          libraryMode: 'MATERIAL',
+        },
         update: { description: command.description, sourceUrl: command.sourceUrl },
         create: {
           ownerId: command.ownerId,
           assetId: command.assetId,
           description: command.description,
           sourceUrl: command.sourceUrl,
+          libraryMode: 'MATERIAL',
         },
       });
     } else {
       await transaction.eagleAssetAnnotation.updateMany({
-        where: { ownerId: command.ownerId, assetId: command.assetId },
+        where: { ownerId: command.ownerId, assetId: command.assetId, libraryMode: 'MATERIAL' },
         data: { description: null, sourceUrl: null },
       });
     }
     if (manualTagIds.length) {
       await transaction.eagleAssetManualTag.createMany({
-        data: manualTagIds.map((tagId) => ({
-          ownerId: command.ownerId,
-          assetId: command.assetId,
-          tagId,
-          assignedByUser: false,
-          assignmentProvenance: 'EAGLE_IMPORTED',
-        })),
+        data: manualTagIds
+          .map((tagId) => ({
+            ownerId: command.ownerId,
+            assetId: command.assetId,
+            tagId,
+            assignedByUser: false,
+            assignmentProvenance: 'EAGLE_IMPORTED',
+          }))
+          .map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
         skipDuplicates: true,
       });
       await transaction.eagleAssetManualTagIngestion.createMany({
-        data: manualTagIds.map((tagId) => ({
-          ownerId: command.ownerId,
-          assetId: command.assetId,
-          tagId,
-          sourceKey: command.sourceKey,
-        })),
+        data: manualTagIds
+          .map((tagId) => ({
+            ownerId: command.ownerId,
+            assetId: command.assetId,
+            tagId,
+            sourceKey: command.sourceKey,
+          }))
+          .map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
         skipDuplicates: true,
       });
     }
@@ -91,6 +100,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
           assetId: command.assetId,
           sourceKey: command.sourceKey,
           tagId: { in: staleTagIds },
+          libraryMode: 'MATERIAL',
         },
       });
       await transaction.eagleAssetManualTag.deleteMany({
@@ -100,6 +110,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
           tagId: { in: staleTagIds },
           assignedByUser: false,
           ingestionOrigins: { none: {} },
+          libraryMode: 'MATERIAL',
         },
       });
     }
@@ -117,6 +128,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
       where: {
         ownerId: command.ownerId,
         normalizedName: { in: candidates.map(({ normalizedName }) => normalizedName) },
+        libraryMode: 'MATERIAL',
       },
       select: { id: true, normalizedName: true },
     });
@@ -126,13 +138,15 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     );
     if (newCandidates.length) {
       await transaction.eagleManualTag.createMany({
-        data: newCandidates.map((candidate) => ({
-          ownerId: command.ownerId,
-          name: candidate.name,
-          normalizedName: candidate.normalizedName,
-          color: candidate.color,
-          isStarred: candidate.isStarred,
-        })),
+        data: newCandidates
+          .map((candidate) => ({
+            ownerId: command.ownerId,
+            name: candidate.name,
+            normalizedName: candidate.normalizedName,
+            color: candidate.color,
+            isStarred: candidate.isStarred,
+          }))
+          .map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
         skipDuplicates: true,
       });
     }
@@ -142,6 +156,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
           where: {
             ownerId: command.ownerId,
             normalizedName: { in: candidates.map(({ normalizedName }) => normalizedName) },
+            libraryMode: 'MATERIAL',
           },
           select: { id: true, normalizedName: true },
         })
@@ -164,6 +179,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
       where: {
         ownerId,
         normalizedName: { in: groupCandidates.map(({ normalizedName }) => normalizedName) },
+        libraryMode: 'MATERIAL',
       },
       select: { id: true, normalizedName: true },
     });
@@ -173,13 +189,15 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     );
     if (missing.length) {
       await transaction.eagleManualTagGroup.createMany({
-        data: missing.map((group) => ({
-          ownerId,
-          name: group.name,
-          normalizedName: group.normalizedName,
-          color: group.color,
-          description: group.description,
-        })),
+        data: missing
+          .map((group) => ({
+            ownerId,
+            name: group.name,
+            normalizedName: group.normalizedName,
+            color: group.color,
+            description: group.description,
+          }))
+          .map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
         skipDuplicates: true,
       });
     }
@@ -188,6 +206,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
           where: {
             ownerId,
             normalizedName: { in: groupCandidates.map(({ normalizedName }) => normalizedName) },
+            libraryMode: 'MATERIAL',
           },
           select: { id: true, normalizedName: true },
         })
@@ -202,7 +221,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     );
     if (!memberships.length) return;
     await transaction.eagleManualTagGroupMembership.createMany({
-      data: memberships,
+      data: memberships.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
       skipDuplicates: true,
     });
 
@@ -218,7 +237,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
       UPDATE "EagleManualTag" AS tag
       SET "groupId" = mapping."groupId", "updatedAt" = CURRENT_TIMESTAMP
       FROM (VALUES ${Prisma.join(rows)}) AS mapping("tagId", "groupId")
-      WHERE tag."ownerId" = ${ownerId} AND tag."id" = mapping."tagId"
+      WHERE tag."ownerId" = ${ownerId} AND tag."libraryMode" = 'MATERIAL'::"LibraryMode" AND tag."id" = mapping."tagId"
     `);
   }
 }

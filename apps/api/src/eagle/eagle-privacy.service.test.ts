@@ -109,16 +109,22 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   );
   assert.equal(tagWrites.length, 2);
   assert.deepEqual(tagWrites[0], {
-    where: { ownerId: 'owner-a', marksAssetsPrivate: true, id: { notIn: ['tag-a', 'tag-b'] } },
+    where: {
+      libraryMode: 'MATERIAL',
+      ownerId: 'owner-a',
+      marksAssetsPrivate: true,
+      id: { notIn: ['tag-a', 'tag-b'] },
+    },
     data: { marksAssetsPrivate: false },
   });
   assert.deepEqual(tagWrites[1], {
-    where: { ownerId: 'owner-a', id: { in: ['tag-a', 'tag-b'] } },
+    where: { libraryMode: 'MATERIAL', ownerId: 'owner-a', id: { in: ['tag-a', 'tag-b'] } },
     data: { marksAssetsPrivate: true },
   });
   assert.equal(assetWrites.length, 2);
   assert.deepEqual(assetWrites[0], {
     where: {
+      libraryMode: 'MATERIAL',
       ownerId: 'owner-a',
       isPrivate: true,
       manualTagLinks: { none: { tag: { marksAssetsPrivate: true } } },
@@ -127,6 +133,7 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   });
   assert.deepEqual(assetWrites[1], {
     where: {
+      libraryMode: 'MATERIAL',
       ownerId: 'owner-a',
       isPrivate: false,
       manualTagLinks: { some: { tag: { marksAssetsPrivate: true } } },

@@ -23,7 +23,10 @@ test('decodes the original v1 created-at cursor for compatibility', () => {
 test('scoped cursor cannot cross library mode or owner', () => {
   const material = { ownerId: 'owner-a', libraryMode: 'MATERIAL' as const };
   const photo = { ownerId: 'owner-a', libraryMode: 'PHOTO' as const };
-  const cursor = encodeEagleAssetCursor({ libraryAddedAt: new Date('2026-01-01'), id: 'asset' }, photo);
+  const cursor = encodeEagleAssetCursor(
+    { libraryAddedAt: new Date('2026-01-01'), id: 'asset' },
+    photo,
+  );
   assert.equal(decodeEagleAssetCursor(cursor, photo).id, 'asset');
   assert.throws(() => decodeEagleAssetCursor(cursor, material));
   assert.throws(() => decodeEagleAssetCursor(cursor, { ...photo, ownerId: 'owner-b' }));

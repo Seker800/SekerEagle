@@ -35,7 +35,13 @@ test('media lookup stays owner-scoped, hides private assets and remains availabl
   await service.getOriginal('owner-a', 'asset-1', undefined, undefined, false, abort.signal);
 
   assert.deepEqual(queries[0], {
-    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null, isPrivate: false },
+    where: {
+      libraryMode: 'MATERIAL',
+      ownerId: 'owner-a',
+      id: 'asset-1',
+      purgeAfter: null,
+      isPrivate: false,
+    },
     select: {
       originalObjectKey: true,
       originalName: true,
@@ -189,7 +195,13 @@ test('pyramid descriptor is owner-scoped and only exposes the current ready revi
     tileUrlTemplate: '/api/eagle/assets/asset-1/pyramids/pyramid-1/tiles/{level}/{x}/{y}',
   });
   assert.deepEqual(queries[0], {
-    where: { ownerId: 'owner-a', id: 'asset-1', purgeAfter: null, isPrivate: false },
+    where: {
+      libraryMode: 'MATERIAL',
+      ownerId: 'owner-a',
+      id: 'asset-1',
+      purgeAfter: null,
+      isPrivate: false,
+    },
     select: {
       mediaRevision: true,
       imagePyramids: {

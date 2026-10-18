@@ -112,11 +112,19 @@ test('batch clear removes every manual tag and distance for owned assets without
   assert.deepEqual(deletes, [
     {
       table: 'manual-tags',
-      where: { ownerId: 'owner-a', assetId: { in: ['asset-a', 'asset-b'] } },
+      where: {
+        libraryMode: 'MATERIAL',
+        ownerId: 'owner-a',
+        assetId: { in: ['asset-a', 'asset-b'] },
+      },
     },
     {
       table: 'tag-distances',
-      where: { ownerId: 'owner-a', assetId: { in: ['asset-a', 'asset-b'] } },
+      where: {
+        libraryMode: 'MATERIAL',
+        ownerId: 'owner-a',
+        assetId: { in: ['asset-a', 'asset-b'] },
+      },
     },
   ]);
   assert.equal(suggestionRefreshes.length, 1);
@@ -205,6 +213,7 @@ test('large batch tag additions split relation inserts into bounded chunks', asy
   assert.equal(distanceSyncs, 3);
   assert.equal(recentTagWrites.length, 1);
   assert.deepEqual(recentTagWrites[0]?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-a',
     id: { in: tagIds },
   });

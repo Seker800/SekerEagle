@@ -34,6 +34,7 @@ test('AI tag summary counts only the current pipeline and reports its default mo
 
     assert.deepEqual(analysisFilters, [
       {
+        libraryMode: 'MATERIAL',
         ownerId: 'owner-1',
         status: 'SUCCEEDED',
         provider: 'OLLAMA',

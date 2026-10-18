@@ -576,6 +576,7 @@ test('projects terminal import item progress in one recoverable batch', async ()
   assert.deepEqual((itemWrites[0] as { where: unknown }).where, {
     id: { in: ['item-1', 'item-2', 'item-3'] },
     terminalProgressAppliedAt: null,
+    libraryMode: 'MATERIAL',
   });
 });
 

@@ -1,4 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE } from './library-mode';
+import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
 import { Readable } from 'node:stream';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertOwnedObjectKey } from '../storage/object-key';
@@ -9,6 +11,7 @@ export class EagleMediaService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
   async getOriginal(
@@ -25,6 +28,7 @@ export class EagleMediaService {
         id: assetId,
         purgeAfter: null,
         ...(includePrivate ? {} : { isPrivate: false }),
+        libraryMode: this.libraryMode,
       },
       select: { originalObjectKey: true, originalName: true, mimeType: true, byteSize: true },
     });
@@ -44,6 +48,7 @@ export class EagleMediaService {
         id: assetId,
         purgeAfter: null,
         ...(includePrivate ? {} : { isPrivate: false }),
+        libraryMode: this.libraryMode,
       },
       select: { byteSize: true },
     });
@@ -66,6 +71,7 @@ export class EagleMediaService {
         id: renditionId,
         status: 'READY',
         asset: { purgeAfter: null, ...(includePrivate ? {} : { isPrivate: false }) },
+        libraryMode: this.libraryMode,
       },
       select: {
         storageKey: true,
@@ -94,6 +100,7 @@ export class EagleMediaService {
         id: assetId,
         purgeAfter: null,
         ...(includePrivate ? {} : { isPrivate: false }),
+        libraryMode: this.libraryMode,
       },
       select: {
         mediaRevision: true,
@@ -123,7 +130,7 @@ export class EagleMediaService {
       overlap: pyramid.overlap,
       format: pyramid.format,
       maxLevel: pyramid.maxLevel,
-      tileUrlTemplate: `/api/eagle/assets/${encodeURIComponent(assetId)}/pyramids/${encodeURIComponent(pyramid.id)}/tiles/{level}/{x}/{y}`,
+      tileUrlTemplate: `/api/${this.libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${encodeURIComponent(assetId)}/pyramids/${encodeURIComponent(pyramid.id)}/tiles/{level}/{x}/{y}`,
     };
   }
 
@@ -145,6 +152,7 @@ export class EagleMediaService {
         assetId,
         status: 'READY',
         asset: { purgeAfter: null, ...(includePrivate ? {} : { isPrivate: false }) },
+        libraryMode: this.libraryMode,
       },
       select: {
         storagePrefix: true,

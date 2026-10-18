@@ -1,4 +1,13 @@
-import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE } from './library-mode';
+import {
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+  type OnModuleInit,
+  Optional,
+  Inject,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleUploadService } from './eagle-upload.service';
@@ -17,6 +26,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     private readonly uploads: EagleUploadService,
     private readonly imports: EagleImportsService,
     private readonly storage: ObjectStorageService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
   onModuleInit(): void {
@@ -33,7 +43,11 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     const staleInitiatedCutoff = new Date(Date.now() - RECOVERY_INTERVAL_MS);
     const staleFinalizingCutoff = new Date(Date.now() - 5 * RECOVERY_INTERVAL_MS);
     await this.prisma.uploadSession.updateMany({
-      where: { status: 'FINALIZING', finalizationStartedAt: { lt: staleFinalizingCutoff } },
+      where: {
+        status: 'FINALIZING',
+        finalizationStartedAt: { lt: staleFinalizingCutoff },
+        libraryMode: this.libraryMode,
+      },
       data: { status: 'FAILED', lastError: 'Finalization lease expired before completion.' },
     });
     const sessions = await this.prisma.uploadSession.findMany({
@@ -47,6 +61,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
             updatedAt: { lt: staleInitiatedCutoff },
           },
         ],
+        libraryMode: this.libraryMode,
       },
       select: { id: true, uploaderId: true },
       orderBy: { updatedAt: 'asc' },
@@ -78,7 +93,11 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
 
   private async recoverObjectCleanup(): Promise<void> {
     const sessions = await this.prisma.uploadSession.findMany({
-      where: { objectCleanupPending: true, status: { in: ['COMPLETED', 'FAILED'] } },
+      where: {
+        objectCleanupPending: true,
+        status: { in: ['COMPLETED', 'FAILED'] },
+        libraryMode: this.libraryMode,
+      },
       select: { id: true, objectKey: true },
       orderBy: { updatedAt: 'asc' },
       take: 50,
@@ -87,7 +106,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
       try {
         await this.storage.deleteObject(session.objectKey);
         await this.prisma.uploadSession.updateMany({
-          where: { id: session.id, objectCleanupPending: true },
+          where: { id: session.id, objectCleanupPending: true, libraryMode: this.libraryMode },
           data: { objectCleanupPending: false },
         });
       } catch (error) {
@@ -104,6 +123,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
       where: {
         retiredObjectKeys: { isEmpty: false },
         replacementAsset: { lifecycleStatus: 'READY' },
+        libraryMode: this.libraryMode,
       },
       select: { uploadSessionId: true, retiredObjectKeys: true },
       take: 50,
@@ -112,7 +132,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
       try {
         for (const key of replacement.retiredObjectKeys) await this.storage.deleteObject(key);
         await this.prisma.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: replacement.uploadSessionId },
+          where: { uploadSessionId: replacement.uploadSessionId, libraryMode: this.libraryMode },
           data: { retiredObjectKeys: [], replacementAssetId: null },
         });
       } catch (error) {

@@ -1,8 +1,12 @@
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -49,7 +53,10 @@ const reviewableSuggestionAssetWhere = (includePrivate: boolean) => ({
 
 @Injectable()
 export class EagleVectorService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
+  ) {}
 
   async summary(ownerId: string, includePrivate = false) {
     const visibleAsset = includePrivate ? {} : { isPrivate: false };
@@ -67,7 +74,13 @@ export class EagleVectorService {
       processableRows,
     ] = await Promise.all([
       this.prisma.eagleAsset.count({
-        where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' }, ...visibleAsset },
+        where: {
+          ownerId,
+          deletedAt: null,
+          mimeType: { startsWith: 'image/' },
+          ...visibleAsset,
+          libraryMode: this.libraryMode,
+        },
       }),
       this.prisma.eagleAssetEmbedding.count({
         where: {
@@ -75,6 +88,7 @@ export class EagleVectorService {
           isCurrent: true,
           status: 'READY',
           asset: { deletedAt: null, ...visibleAsset },
+          libraryMode: this.libraryMode,
         },
       }),
       this.prisma.eagleAssetEmbedding.count({
@@ -83,16 +97,28 @@ export class EagleVectorService {
           isCurrent: true,
           status: 'FAILED',
           asset: { deletedAt: null, ...visibleAsset },
+          libraryMode: this.libraryMode,
         },
       }),
       this.prisma.eagleManualTagSemanticConfig.count({
-        where: { ownerId, recommendationEnabled: true },
+        where: { ownerId, recommendationEnabled: true, libraryMode: this.libraryMode },
       }),
       this.prisma.eagleManualTagSemanticConfig.count({
-        where: { ownerId, recommendationEnabled: true, currentSnapshotId: { not: null } },
+        where: {
+          ownerId,
+          recommendationEnabled: true,
+          currentSnapshotId: { not: null },
+          libraryMode: this.libraryMode,
+        },
       }),
       this.prisma.eagleAsset.count({
-        where: { ownerId, deletedAt: null, manualTagLinks: { none: {} }, ...visibleAsset },
+        where: {
+          ownerId,
+          deletedAt: null,
+          manualTagLinks: { none: {} },
+          ...visibleAsset,
+          libraryMode: this.libraryMode,
+        },
       }),
       this.prisma.eagleVectorTagSuggestion.count({
         where: {
@@ -101,6 +127,7 @@ export class EagleVectorService {
           isActive: true,
           invalidatedAt: null,
           asset: reviewableSuggestionAssetWhere(includePrivate),
+          libraryMode: this.libraryMode,
         },
       }),
       this.checkEmbeddingHost(),
@@ -111,23 +138,27 @@ export class EagleVectorService {
           kind: 'GENERATE_EMBEDDING',
           processorVersion: EMBEDDING_PROCESSOR_VERSION,
           asset: { deletedAt: null, ...visibleAsset },
+          libraryMode: this.libraryMode,
         },
         _count: true,
       }),
       this.prisma.eagleProcessingSetting.findUnique({
-        where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+        where: {
+          ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+          libraryMode: this.libraryMode,
+        },
       }),
       this.prisma.$queryRaw<Array<{ count: number }>>(Prisma.sql`
         SELECT COUNT(*)::integer AS count
         FROM "EagleAsset" AS asset
-        WHERE asset."ownerId" = ${ownerId}
+        WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND asset."deletedAt" IS NULL
           AND asset."mimeType" LIKE 'image/%'
           AND (${includePrivate} OR asset."isPrivate" = false)
           AND EXISTS (
             SELECT 1
             FROM "EagleAssetRendition" AS preview
-            WHERE preview."ownerId" = ${ownerId}
+            WHERE preview."ownerId" = ${ownerId} AND preview."libraryMode" = ${this.libraryMode}::"LibraryMode"
               AND preview."assetId" = asset.id
               AND preview.revision = asset."mediaRevision"
               AND preview.kind = 'PREVIEW'
@@ -171,7 +202,12 @@ export class EagleVectorService {
 
   async retryFailedEmbeddings(ownerId: string) {
     const result = await this.prisma.eagleAssetProcessingJob.updateMany({
-      where: { ownerId, kind: 'GENERATE_EMBEDDING', status: 'FAILED' },
+      where: {
+        ownerId,
+        kind: 'GENERATE_EMBEDDING',
+        status: 'FAILED',
+        libraryMode: this.libraryMode,
+      },
       data: {
         status: 'PENDING',
         attempts: 0,
@@ -186,7 +222,11 @@ export class EagleVectorService {
   }
 
   scanUnclassifiedSuggestions(ownerId: string, includePrivate = false) {
-    return refreshUnclassifiedSuggestions(this.prisma, { ownerId, includePrivate });
+    return refreshUnclassifiedSuggestions(this.prisma, {
+      libraryMode: this.libraryMode,
+      ownerId,
+      includePrivate,
+    });
   }
 
   async scanMissingEmbeddings(ownerId: string) {
@@ -198,8 +238,8 @@ export class EagleVectorService {
             "lockedAt" = NULL, "startedAt" = NULL, "completedAt" = NULL,
             "lastError" = NULL, "updatedAt" = CURRENT_TIMESTAMP
         FROM "EagleAsset" AS asset
-        WHERE job."ownerId" = ${ownerId}
-          AND asset."ownerId" = ${ownerId}
+        WHERE job."ownerId" = ${ownerId} AND job."libraryMode" = ${this.libraryMode}::"LibraryMode"
+          AND asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND asset.id = job."assetId"
           AND asset."deletedAt" IS NULL
           AND asset."mimeType" LIKE 'image/%'
@@ -210,7 +250,7 @@ export class EagleVectorService {
           AND NOT EXISTS (
             SELECT 1
             FROM "EagleAssetEmbedding" AS embedding
-            WHERE embedding."ownerId" = ${ownerId}
+            WHERE embedding."ownerId" = ${ownerId} AND embedding."libraryMode" = ${this.libraryMode}::"LibraryMode"
               AND embedding."assetId" = asset.id
               AND embedding."assetRevision" = asset."mediaRevision"
               AND embedding."isCurrent" = true
@@ -219,10 +259,10 @@ export class EagleVectorService {
       `);
         const createdCount = await transaction.$executeRaw(Prisma.sql`
         INSERT INTO "EagleMediaJob" (
-          id, "ownerId", "assetId", kind, status, lane, "assetRevision",
+          id, "ownerId", "libraryMode", "assetId", kind, status, lane, "assetRevision",
           "processorVersion", "dependsOnJobId", "createdAt", "updatedAt"
         )
-        SELECT gen_random_uuid()::text, asset."ownerId", asset.id,
+        SELECT gen_random_uuid()::text, asset."ownerId", asset."libraryMode", asset.id,
           'GENERATE_EMBEDDING'::"EagleMediaJobKind", 'PENDING'::"EagleMediaJobStatus",
           'BACKGROUND'::"EagleProcessingLane", asset."mediaRevision",
           ${EMBEDDING_PROCESSOR_VERSION}, dependency.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
@@ -230,7 +270,7 @@ export class EagleVectorService {
         JOIN LATERAL (
           SELECT rendition.id
           FROM "EagleMediaJob" AS rendition
-          WHERE rendition."ownerId" = ${ownerId}
+          WHERE rendition."ownerId" = ${ownerId} AND rendition."libraryMode" = ${this.libraryMode}::"LibraryMode"
             AND rendition."assetId" = asset.id
             AND rendition."assetRevision" = asset."mediaRevision"
             AND rendition.kind = 'GENERATE_RENDITIONS'
@@ -239,12 +279,12 @@ export class EagleVectorService {
           ORDER BY rendition."completedAt" DESC NULLS LAST, rendition.id
           LIMIT 1
         ) AS dependency ON true
-        WHERE asset."ownerId" = ${ownerId}
+        WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND asset."deletedAt" IS NULL
           AND asset."mimeType" LIKE 'image/%'
           AND EXISTS (
             SELECT 1 FROM "EagleAssetRendition" AS preview
-            WHERE preview."ownerId" = ${ownerId}
+            WHERE preview."ownerId" = ${ownerId} AND preview."libraryMode" = ${this.libraryMode}::"LibraryMode"
               AND preview."assetId" = asset.id
               AND preview.revision = asset."mediaRevision"
               AND preview.kind = 'PREVIEW'
@@ -314,7 +354,7 @@ export class EagleVectorService {
         }
       : { ownerId, semanticConfig: { is: { recommendationEnabled: true } } };
     const tags = await this.prisma.eagleManualTag.findMany({
-      where,
+      where: inLibrary(this.libraryMode, where),
       orderBy: [{ isStarred: 'desc' }, { normalizedName: 'asc' }],
       ...(normalizedQuery ? { take: 20 } : {}),
       select: {
@@ -377,13 +417,13 @@ export class EagleVectorService {
   async setRecommendationEnabled(ownerId: string, tagId: string, enabled: boolean) {
     return this.prisma.$transaction(async (transaction) => {
       const tag = await transaction.eagleManualTag.findFirst({
-        where: { ownerId, id: tagId },
+        where: { ownerId, id: tagId, libraryMode: this.libraryMode },
         select: { id: true },
       });
       if (!tag) throw new NotFoundException('标签不存在。');
       const config = await transaction.eagleManualTagSemanticConfig.upsert({
-        where: { ownerId_tagId: { ownerId, tagId } },
-        create: { ownerId, tagId, recommendationEnabled: enabled },
+        where: { ownerId_tagId: { ownerId, tagId }, libraryMode: this.libraryMode },
+        create: { ownerId, tagId, recommendationEnabled: enabled, libraryMode: this.libraryMode },
         update: { recommendationEnabled: enabled },
         select: { recommendationEnabled: true, currentSnapshotId: true },
       });
@@ -396,6 +436,7 @@ export class EagleVectorService {
             status: 'PENDING',
             isActive: true,
             invalidatedAt: null,
+            libraryMode: this.libraryMode,
           },
           data: {
             isActive: false,
@@ -411,12 +452,18 @@ export class EagleVectorService {
             tagId,
             operation: 'RECOMPUTE_SUGGESTIONS',
             status: { in: ['PENDING', 'PROCESSING'] },
+            libraryMode: this.libraryMode,
           },
           select: { id: true },
         });
         if (!activeGeneration) {
           await transaction.eagleTagSemanticBuild.create({
-            data: { ownerId, tagId, operation: 'RECOMPUTE_SUGGESTIONS' },
+            data: {
+              ownerId,
+              tagId,
+              operation: 'RECOMPUTE_SUGGESTIONS',
+              libraryMode: this.libraryMode,
+            },
           });
         }
       }
@@ -427,18 +474,23 @@ export class EagleVectorService {
   async requestTagRebuild(ownerId: string, tagId: string) {
     const [tag, config, activeBuild] = await Promise.all([
       this.prisma.eagleManualTag.findFirst({
-        where: { ownerId, id: tagId },
+        where: { ownerId, id: tagId, libraryMode: this.libraryMode },
         select: {
           id: true,
           _count: { select: { assetLinks: { where: { asset: { deletedAt: null } } } } },
         },
       }),
       this.prisma.eagleManualTagSemanticConfig.findUnique({
-        where: { ownerId_tagId: { ownerId, tagId } },
+        where: { ownerId_tagId: { ownerId, tagId }, libraryMode: this.libraryMode },
         select: { recommendationEnabled: true },
       }),
       this.prisma.eagleTagSemanticBuild.findFirst({
-        where: { ownerId, tagId, status: { in: ['PENDING', 'PROCESSING'] } },
+        where: {
+          ownerId,
+          tagId,
+          status: { in: ['PENDING', 'PROCESSING'] },
+          libraryMode: this.libraryMode,
+        },
         orderBy: { createdAt: 'desc' },
       }),
     ]);
@@ -448,7 +500,13 @@ export class EagleVectorService {
       throw new BadRequestException('标签没有可用图片，无法生成向量中心。');
     if (activeBuild) return activeBuild;
     return this.prisma.eagleTagSemanticBuild.create({
-      data: { ownerId, tagId, operation: 'REBUILD_CENTER', status: 'PENDING' },
+      data: {
+        ownerId,
+        tagId,
+        operation: 'REBUILD_CENTER',
+        status: 'PENDING',
+        libraryMode: this.libraryMode,
+      },
     });
   }
 
@@ -462,6 +520,7 @@ export class EagleVectorService {
         isActive: true,
         invalidatedAt: null,
         asset: reviewableSuggestionAssetWhere(includePrivate),
+        libraryMode: this.libraryMode,
       },
       orderBy:
         query.sort === 'NEWEST'
@@ -504,6 +563,7 @@ export class EagleVectorService {
         vectorSuggestions: {
           none: { status: 'PENDING', isActive: true, invalidatedAt: null },
         },
+        libraryMode: this.libraryMode,
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -540,6 +600,7 @@ export class EagleVectorService {
           isActive: true,
           invalidatedAt: null,
           asset: includePrivate ? {} : { isPrivate: false },
+          libraryMode: this.libraryMode,
         },
         include: {
           embedding: { select: { isCurrent: true, status: true } },
@@ -558,6 +619,7 @@ export class EagleVectorService {
             status: 'PENDING',
             isActive: true,
             invalidatedAt: null,
+            libraryMode: this.libraryMode,
           },
           data: { status: 'REJECTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
         });
@@ -569,9 +631,9 @@ export class EagleVectorService {
           privacyChanged: false,
         };
       }
-      await lockOwnerPrivacyProjection(transaction, ownerId);
+      await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       const manualTagCount = await transaction.eagleAssetManualTag.count({
-        where: { ownerId, assetId: suggestion.assetId },
+        where: { ownerId, assetId: suggestion.assetId, libraryMode: this.libraryMode },
       });
       const remainsValid =
         manualTagCount === 0 &&
@@ -588,6 +650,7 @@ export class EagleVectorService {
             status: 'PENDING',
             isActive: true,
             invalidatedAt: null,
+            libraryMode: this.libraryMode,
           },
           data: {
             isActive: false,
@@ -604,6 +667,7 @@ export class EagleVectorService {
             assetId: suggestion.assetId,
             tagId: suggestion.suggestedTagId,
           },
+          libraryMode: this.libraryMode,
         },
         create: {
           ownerId,
@@ -612,6 +676,7 @@ export class EagleVectorService {
           assignedByUser: true,
           assignmentProvenance: 'VECTOR_SUGGESTED_HUMAN_ACCEPTED',
           acceptedSuggestionId: suggestion.id,
+          libraryMode: this.libraryMode,
         },
         update: {
           assignedByUser: true,
@@ -620,19 +685,23 @@ export class EagleVectorService {
         },
       });
       await transaction.eagleManualTag.updateMany({
-        where: { ownerId, id: suggestion.suggestedTagId },
+        where: { ownerId, id: suggestion.suggestedTagId, libraryMode: this.libraryMode },
         data: { lastUsedAt: new Date() },
       });
       await upsertAcceptedSuggestionMemberDistance(transaction, {
+        libraryMode: this.libraryMode,
         ownerId,
         tagId: suggestion.suggestedTagId,
         assetId: suggestion.assetId,
         snapshotId: suggestion.snapshotId,
         embeddingId: suggestion.embeddingId,
       });
-      const privacyChangedAssetCount = await syncAssetPrivacyFromManualTags(transaction, ownerId, [
-        suggestion.assetId,
-      ]);
+      const privacyChangedAssetCount = await syncAssetPrivacyFromManualTags(
+        transaction,
+        ownerId,
+        [suggestion.assetId],
+        this.libraryMode,
+      );
       const updated = await transaction.eagleVectorTagSuggestion.updateMany({
         where: {
           ownerId,
@@ -640,6 +709,7 @@ export class EagleVectorService {
           status: 'PENDING',
           isActive: true,
           invalidatedAt: null,
+          libraryMode: this.libraryMode,
         },
         data: { status: 'ACCEPTED', reviewedAt: new Date(), reviewedByUserId: ownerId },
       });
@@ -675,7 +745,7 @@ export class EagleVectorService {
     includePrivate = false,
   ) {
     const tag = await this.prisma.eagleManualTag.findFirst({
-      where: { ownerId, id: tagId },
+      where: { ownerId, id: tagId, libraryMode: this.libraryMode },
       select: { semanticConfig: { select: { currentSnapshotId: true } } },
     });
     if (!tag) throw new NotFoundException('标签不存在。');
@@ -700,7 +770,7 @@ export class EagleVectorService {
     };
     const limit = query.limit ?? 40;
     const rows = await this.prisma.eagleTagMemberDistance.findMany({
-      where,
+      where: inLibrary(this.libraryMode, where),
       orderBy: [
         { distance: direction === 'DESC' ? 'desc' : 'asc' },
         { assetId: direction === 'DESC' ? 'desc' : 'asc' },

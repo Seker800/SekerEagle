@@ -93,10 +93,18 @@ try {
     recursive: true,
   });
   run(process.execPath, prisma, { env, stdio: 'inherit' });
-  run(process.execPath, ['--test', 'scripts/testing/library-isolation.test.mjs'], {
-    env,
-    stdio: 'inherit',
-  });
+  run(
+    process.execPath,
+    [
+      '--test',
+      'scripts/testing/library-isolation.test.mjs',
+      'scripts/testing/library-service-isolation.test.mjs',
+    ],
+    {
+      env,
+      stdio: 'inherit',
+    },
+  );
   const preserved = run('docker', [
     'exec',
     name,

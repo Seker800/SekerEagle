@@ -1,9 +1,13 @@
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE, inLibrary } from './library-mode';
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { createAssetObjectKey } from '../storage/object-key';
@@ -21,6 +25,7 @@ export class EagleUploadService {
     private readonly storage: ObjectStorageService,
     private readonly mediaCapabilities: EagleMediaCapabilityService,
     private readonly inspection: EagleUploadInspectionService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
   partSizeFor(size: number): number {
@@ -51,6 +56,7 @@ export class EagleUploadService {
               expectedContentSha256: input.contentSha256?.toLowerCase(),
             },
           },
+          libraryMode: this.libraryMode,
         },
         select: {
           id: true,
@@ -70,7 +76,7 @@ export class EagleUploadService {
 
   async getSession(ownerId: string, uploadSessionId: string) {
     const session = await this.prisma.uploadSession.findFirst({
-      where: { id: uploadSessionId, uploaderId: ownerId },
+      where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },
       select: {
         id: true,
         status: true,
@@ -140,7 +146,12 @@ export class EagleUploadService {
         : normalizeStoredParts(session.completionParts);
     if (session.status === 'INITIATED') {
       await this.prisma.uploadSession.updateMany({
-        where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+        where: {
+          id: session.id,
+          uploaderId: ownerId,
+          status: 'INITIATED',
+          libraryMode: this.libraryMode,
+        },
         data: { completionParts: parts },
       });
       try {
@@ -155,7 +166,12 @@ export class EagleUploadService {
         });
       }
       await this.prisma.uploadSession.updateMany({
-        where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+        where: {
+          id: session.id,
+          uploaderId: ownerId,
+          status: 'INITIATED',
+          libraryMode: this.libraryMode,
+        },
         data: { status: 'ASSEMBLED', assembledAt: new Date(), lastError: null },
       });
     }
@@ -168,6 +184,7 @@ export class EagleUploadService {
         id: uploadSessionId,
         status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED'] },
         finalizationAttempts: { lt: 10 },
+        libraryMode: this.libraryMode,
       },
       include: { eagleState: true },
     });
@@ -186,7 +203,7 @@ export class EagleUploadService {
         });
       }
       await this.prisma.uploadSession.updateMany({
-        where: { id: session.id, status: 'INITIATED' },
+        where: { id: session.id, status: 'INITIATED', libraryMode: this.libraryMode },
         data: { status: 'ASSEMBLED', assembledAt: new Date(), lastError: null },
       });
     }
@@ -200,7 +217,7 @@ export class EagleUploadService {
     const head = await this.storage.headObject(session.objectKey);
     if (head.ContentLength === undefined || BigInt(head.ContentLength) !== session.size) {
       await this.prisma.uploadSession.update({
-        where: { id: session.id },
+        where: { id: session.id, libraryMode: this.libraryMode },
         data: {
           status: 'FAILED',
           finalizationAttempts: 10,
@@ -232,6 +249,7 @@ export class EagleUploadService {
           id: session.id,
           uploaderId: session.uploaderId,
           status: { in: ['ASSEMBLED', 'FAILED'] },
+          libraryMode: this.libraryMode,
         },
         data: {
           status: 'FAILED',
@@ -251,6 +269,7 @@ export class EagleUploadService {
             uploaderId: session.uploaderId,
             status: { in: ['ASSEMBLED', 'FAILED'] },
             finalizationAttempts: { lt: 10 },
+            libraryMode: this.libraryMode,
           },
           data: {
             status: 'FINALIZING',
@@ -261,7 +280,7 @@ export class EagleUploadService {
         });
         if (claimed.count !== 1) throw new ConflictException('上传会话状态已改变。');
         const browserCapture = await transaction.eagleBrowserCapture.findUnique({
-          where: { uploadSessionId: session.id },
+          where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
           select: { id: true, displayName: true, pageUrl: true },
         });
         let finalizedAssetId: string = assetId;
@@ -275,6 +294,7 @@ export class EagleUploadService {
               id: session.eagleState.replacementAssetId,
               ownerId: session.uploaderId,
               deletedAt: null,
+              libraryMode: this.libraryMode,
             },
             include: {
               renditions: {
@@ -293,7 +313,7 @@ export class EagleUploadService {
             ...currentRenditions.map(({ storageKey }) => storageKey),
           ];
           await transaction.eagleAsset.update({
-            where: { id: current.id },
+            where: { id: current.id, libraryMode: this.libraryMode },
             data: {
               originalName: session.originalName,
               mimeType: session.mimeType,
@@ -312,12 +332,16 @@ export class EagleUploadService {
           });
           if (currentRenditions.length) {
             await transaction.eagleAssetRendition.deleteMany({
-              where: { assetId: current.id, revision: current.mediaRevision },
+              where: {
+                assetId: current.id,
+                revision: current.mediaRevision,
+                libraryMode: this.libraryMode,
+              },
             });
           }
         } else {
           await transaction.$executeRaw`
-            SELECT pg_advisory_xact_lock(hashtext(${session.uploaderId}), hashtext(${inspection.sha256}))
+            SELECT pg_advisory_xact_lock(hashtext(${`${session.uploaderId}:${this.libraryMode}`}), hashtext(${inspection.sha256}))
           `;
           const existing =
             session.eagleState?.duplicatePolicy === 'CREATE_COPY'
@@ -327,6 +351,7 @@ export class EagleUploadService {
                     ownerId: session.uploaderId,
                     sha256: inspection.sha256,
                     deletedAt: null,
+                    libraryMode: this.libraryMode,
                   },
                   select: { id: true },
                 });
@@ -352,6 +377,7 @@ export class EagleUploadService {
                 height: inspection.height,
                 durationMs: inspection.durationMs,
                 mediaRevision: assetRevision,
+                libraryMode: this.libraryMode,
               },
             });
             if (browserCapture) {
@@ -360,6 +386,7 @@ export class EagleUploadService {
                   ownerId: session.uploaderId,
                   assetId,
                   sourceUrl: browserCapture.pageUrl,
+                  libraryMode: this.libraryMode,
                 },
               });
             }
@@ -386,21 +413,21 @@ export class EagleUploadService {
               });
         if (!duplicate) {
           await transaction.eagleAssetProcessingJob.createMany({
-            data: jobs,
+            data: jobs.map((row) => inLibrary(this.libraryMode, row)),
           });
         }
         if (browserCapture) {
           await transaction.eagleBrowserCapture.update({
-            where: { id: browserCapture.id },
+            where: { id: browserCapture.id, libraryMode: this.libraryMode },
             data: { assetId: finalizedAssetId, completedAt: now },
           });
         }
         await transaction.eagleUploadSessionState.update({
-          where: { uploadSessionId: session.id },
+          where: { uploadSessionId: session.id, libraryMode: this.libraryMode },
           data: { assetId: finalizedAssetId, retiredObjectKeys },
         });
         await transaction.uploadSession.update({
-          where: { id: session.id },
+          where: { id: session.id, libraryMode: this.libraryMode },
           data: {
             status: 'COMPLETED',
             eagleAssetId: finalizedAssetId,
@@ -423,6 +450,7 @@ export class EagleUploadService {
           id: session.id,
           uploaderId: session.uploaderId,
           status: { in: ['ASSEMBLED', 'FINALIZING', 'FAILED'] },
+          libraryMode: this.libraryMode,
         },
         data: {
           status: 'FAILED',
@@ -439,7 +467,12 @@ export class EagleUploadService {
     const session = await this.requireInitiated(ownerId, uploadSessionId);
     await this.storage.abortMultipartUpload(session.objectKey, session.multipartUploadId);
     const result = await this.prisma.uploadSession.updateMany({
-      where: { id: session.id, uploaderId: ownerId, status: 'INITIATED' },
+      where: {
+        id: session.id,
+        uploaderId: ownerId,
+        status: 'INITIATED',
+        libraryMode: this.libraryMode,
+      },
       data: { status: 'ABORTED', abortedAt: new Date() },
     });
     if (result.count !== 1) throw new ConflictException('上传会话状态已改变。');
@@ -448,12 +481,17 @@ export class EagleUploadService {
 
   private async requireInitiated(ownerId: string, uploadSessionId: string) {
     const session = await this.prisma.uploadSession.findFirst({
-      where: { id: uploadSessionId, uploaderId: ownerId, status: 'INITIATED' },
+      where: {
+        id: uploadSessionId,
+        uploaderId: ownerId,
+        status: 'INITIATED',
+        libraryMode: this.libraryMode,
+      },
       include: { eagleState: true },
     });
     if (!session) {
       const exists = await this.prisma.uploadSession.count({
-        where: { id: uploadSessionId, uploaderId: ownerId },
+        where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },
       });
       if (!exists) throw new NotFoundException('上传会话不存在。');
       throw new ConflictException('上传会话不再可修改。');
@@ -467,12 +505,13 @@ export class EagleUploadService {
         id: uploadSessionId,
         uploaderId: ownerId,
         status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED', 'COMPLETED'] },
+        libraryMode: this.libraryMode,
       },
       include: { eagleState: true },
     });
     if (!session) {
       const exists = await this.prisma.uploadSession.count({
-        where: { id: uploadSessionId, uploaderId: ownerId },
+        where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },
       });
       if (!exists) throw new NotFoundException('上传会话不存在。');
       throw new ConflictException('上传会话不再可完成。');
@@ -486,12 +525,13 @@ export class EagleUploadService {
         id: uploadSessionId,
         uploaderId: ownerId,
         status: { in: ['INITIATED', 'ASSEMBLED', 'FINALIZING', 'FAILED', 'COMPLETED'] },
+        libraryMode: this.libraryMode,
       },
       include: { eagleState: true },
     });
     if (!session) {
       const exists = await this.prisma.uploadSession.count({
-        where: { id: uploadSessionId, uploaderId: ownerId },
+        where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },
       });
       if (!exists) throw new NotFoundException('上传会话不存在。');
       throw new ConflictException('上传会话不再可读取分片。');

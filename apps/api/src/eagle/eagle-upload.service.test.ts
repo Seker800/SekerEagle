@@ -361,6 +361,7 @@ test('new browser captures commit provenance and initial metadata with the uploa
   assert.equal(assetWrites[0]?.normalizedDisplayName, 'sunset inspiration');
   assert.deepEqual(annotationWrites, [
     {
+      libraryMode: 'MATERIAL',
       ownerId,
       assetId: result.assetId,
       sourceUrl: 'https://example.com/gallery?id=7',

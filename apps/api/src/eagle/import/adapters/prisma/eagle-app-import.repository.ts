@@ -145,6 +145,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           ownerId,
           idempotencyKey: input.idempotencyKey,
         },
+        libraryMode: 'MATERIAL',
       },
       select: RUN_SELECT,
     });
@@ -173,6 +174,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
               provider: 'EAGLE_APP',
               externalLibraryId: input.externalLibraryId,
             },
+            libraryMode: 'MATERIAL',
           },
           update: {
             displayName: input.libraryName,
@@ -184,6 +186,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             externalLibraryId: input.externalLibraryId,
             displayName: input.libraryName,
             sourceModifiedAt: input.sourceModifiedAt,
+            libraryMode: 'MATERIAL',
           },
           select: { id: true },
         });
@@ -195,6 +198,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
               ownerId,
               idempotencyKey: input.idempotencyKey,
             },
+            libraryMode: 'MATERIAL',
           },
           select: RUN_SELECT,
         });
@@ -211,6 +215,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             manifestVersion: input.manifestVersion,
             declaredItemCount: input.declaredItemCount,
             declaredByteSize: BigInt(input.declaredByteSize),
+            libraryMode: 'MATERIAL',
           },
           select: RUN_SELECT,
         });
@@ -225,6 +230,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             ownerId,
             idempotencyKey: input.idempotencyKey,
           },
+          libraryMode: 'MATERIAL',
         },
         select: RUN_SELECT,
       });
@@ -240,7 +246,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     return this.prisma.$transaction(async (transaction) => {
       await lockImportRun(transaction, ownerId, runId);
       const run = await transaction.eagleImportRun.findFirst({
-        where: { id: runId, ownerId },
+        where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
         select: { id: true, externalLibraryId: true, status: true, createdAt: true },
       });
       if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
@@ -249,7 +255,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       }
 
       const existingChunk = await transaction.eagleImportManifestChunk.findUnique({
-        where: { runId_chunkKey: { runId, chunkKey: input.chunkKey } },
+        where: { runId_chunkKey: { runId, chunkKey: input.chunkKey }, libraryMode: 'MATERIAL' },
       });
       if (existingChunk) {
         if (existingChunk.contentHash !== contentHash) {
@@ -301,7 +307,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       });
 
       const folders = await transaction.eagleImportFolderDefinition.findMany({
-        where: { ownerId, runId },
+        where: { ownerId, runId, libraryMode: 'MATERIAL' },
         select: { sourceFolderId: true, name: true, parentSourceFolderId: true },
       });
       const folderInputs = folders.map((folder) => ({
@@ -313,7 +319,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       const sourceItemIds = input.items.map((item) => item.sourceItemId);
       const priorItems = sourceItemIds.length
         ? await transaction.eagleImportRunItem.findMany({
-            where: { runId, sourceItemId: { in: sourceItemIds } },
+            where: { runId, sourceItemId: { in: sourceItemIds }, libraryMode: 'MATERIAL' },
             select: { sourceItemId: true },
           })
         : [];
@@ -343,6 +349,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
               ownerId,
               externalLibraryId: run.externalLibraryId,
               externalItemId: { in: sourceItemIds },
+              libraryMode: 'MATERIAL',
             },
             select: {
               id: true,
@@ -365,7 +372,9 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           externalItemId: item.sourceItemId,
         }));
       if (newExternalAssets.length) {
-        await transaction.eagleExternalAsset.createMany({ data: newExternalAssets });
+        await transaction.eagleExternalAsset.createMany({
+          data: newExternalAssets.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
+        });
       }
       const externalAssets = sourceItemIds.length
         ? await transaction.eagleExternalAsset.findMany({
@@ -373,6 +382,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
               ownerId,
               externalLibraryId: run.externalLibraryId,
               externalItemId: { in: sourceItemIds },
+              libraryMode: 'MATERIAL',
             },
             select: {
               id: true,
@@ -447,7 +457,9 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         },
       );
       if (runItems.length) {
-        await transaction.eagleImportRunItem.createMany({ data: runItems });
+        await transaction.eagleImportRunItem.createMany({
+          data: runItems.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
+        });
         await recordSourceObservations(
           transaction,
           runItems.map((item) => ({
@@ -464,7 +476,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
 
       const chunkCounts = countItemStatuses(runItems);
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: counterIncrements(chunkCounts),
       });
       await transaction.eagleImportManifestChunk.create({
@@ -476,6 +488,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           acceptedItemCount: validation.acceptedItemIds.length,
           skippedItemCount:
             validation.skippedDeletedItemIds.length + validation.skippedUnsupportedItemIds.length,
+          libraryMode: 'MATERIAL',
         },
       });
       return {
@@ -493,7 +506,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       async (transaction) => {
         await lockImportRun(transaction, ownerId, runId);
         const run = await transaction.eagleImportRun.findFirst({
-          where: { id: runId, ownerId },
+          where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
           select: {
             id: true,
             status: true,
@@ -531,12 +544,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
                   ON folder."ownerId" = referenced_item."ownerId"
                  AND folder."runId" = referenced_item."runId"
                  AND folder."sourceFolderId" = folder_id
-                WHERE referenced_item."ownerId" = ${ownerId}
+                WHERE referenced_item."ownerId" = ${ownerId} AND referenced_item."libraryMode" = 'MATERIAL'::"LibraryMode"
                   AND referenced_item."runId" = ${runId}
                   AND folder."id" IS NULL
               ), ARRAY[]::text[]) AS "missingFolderIds"
             FROM "EagleImportRunItem" item
-            WHERE item."ownerId" = ${ownerId} AND item."runId" = ${runId}
+            WHERE item."ownerId" = ${ownerId} AND item."libraryMode" = 'MATERIAL'::"LibraryMode" AND item."runId" = ${runId}
           `,
         );
         if (!summary) throw new Error('Eagle 导入预检聚合未返回结果。');
@@ -564,7 +577,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         const nextStatus =
           readyItemCount === 0 ? EagleImportRunStatus.COMPLETED : EagleImportRunStatus.PREFLIGHTED;
         await transaction.eagleImportRun.update({
-          where: { id: runId },
+          where: { id: runId, libraryMode: 'MATERIAL' },
           data: {
             stagedItemCount: readyItemCount,
             importedItemCount: Number(summary.alreadyImportedItemCount),
@@ -599,7 +612,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
 
   async getRun(ownerId: string, runId: string) {
     const run = await this.prisma.eagleImportRun.findFirst({
-      where: { id: runId, ownerId },
+      where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
       select: RUN_SELECT,
     });
     if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
@@ -627,6 +640,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
               ],
             }
           : {}),
+        libraryMode: 'MATERIAL',
       },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
@@ -663,7 +677,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         ON external."ownerId" = library."ownerId"
        AND external."externalLibraryId" = library."id"
        AND external."assetId" IS NOT NULL
-      WHERE library."ownerId" = ${ownerId}
+      WHERE library."ownerId" = ${ownerId} AND library."libraryMode" = 'MATERIAL'::"LibraryMode"
       GROUP BY library."id"
       ORDER BY library."updatedAt" DESC, library."id" DESC
     `);
@@ -689,6 +703,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         runId,
         ...(input.status ? { status: input.status } : {}),
         ...(cursorId ? { id: { gt: cursorId } } : {}),
+        libraryMode: 'MATERIAL',
       },
       orderBy: { id: 'asc' },
       take: limit + 1,
@@ -701,7 +716,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       .filter((id): id is string => Boolean(id));
     const sessions = activeSessionIds.length
       ? await this.prisma.uploadSession.findMany({
-          where: { uploaderId: ownerId, id: { in: activeSessionIds } },
+          where: { uploaderId: ownerId, id: { in: activeSessionIds }, libraryMode: 'MATERIAL' },
           select: { id: true, status: true, createdAt: true, updatedAt: true },
         })
       : [];
@@ -719,7 +734,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       await lockImportRun(transaction, ownerId, runId);
       await lockImportItem(transaction, ownerId, runId, itemId);
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { id: itemId, runId, ownerId },
+        where: { id: itemId, runId, ownerId, libraryMode: 'MATERIAL' },
         select: {
           id: true,
           runId: true,
@@ -741,12 +756,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       }
       if (item.activeUploadSessionId) {
         await transaction.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: item.activeUploadSessionId, ownerId },
+          where: { uploadSessionId: item.activeUploadSessionId, ownerId, libraryMode: 'MATERIAL' },
           data: { supersededAt: new Date() },
         });
       }
       const updated = await transaction.eagleImportRunItem.update({
-        where: { id: itemId },
+        where: { id: itemId, libraryMode: 'MATERIAL' },
         data: {
           status: EagleImportItemStatus.STAGED,
           activeUploadSessionId: null,
@@ -758,7 +773,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         select: IMPORT_ITEM_SELECT,
       });
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: {
           stagedItemCount: { increment: 1 },
           ...(item.terminalProgressAppliedAt ? { failedItemCount: { decrement: 1 } } : {}),
@@ -774,7 +789,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     return this.prisma.$transaction(async (transaction) => {
       await lockImportRun(transaction, ownerId, runId);
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { id: itemId, runId, ownerId },
+        where: { id: itemId, runId, ownerId, libraryMode: 'MATERIAL' },
         select: {
           id: true,
           status: true,
@@ -789,7 +804,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       }
       const session = item.activeUploadSessionId
         ? await transaction.uploadSession.findFirst({
-            where: { id: item.activeUploadSessionId, uploaderId: ownerId },
+            where: { id: item.activeUploadSessionId, uploaderId: ownerId, libraryMode: 'MATERIAL' },
             select: { status: true, createdAt: true },
           })
         : null;
@@ -811,12 +826,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       }
       if (item.activeUploadSessionId) {
         await transaction.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: item.activeUploadSessionId, ownerId },
+          where: { uploadSessionId: item.activeUploadSessionId, ownerId, libraryMode: 'MATERIAL' },
           data: { supersededAt: new Date() },
         });
       }
       const updated = await transaction.eagleImportRunItem.update({
-        where: { id: item.id },
+        where: { id: item.id, libraryMode: 'MATERIAL' },
         data: {
           status: EagleImportItemStatus.STAGED,
           activeUploadSessionId: null,
@@ -828,7 +843,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         select: IMPORT_ITEM_SELECT,
       });
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: {
           stagedItemCount: { increment: 1 },
           ...(item.status === EagleImportItemStatus.FAILED && item.terminalProgressAppliedAt
@@ -845,7 +860,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   async cancel(ownerId: string, runId: string) {
     return this.prisma.$transaction(async (transaction) => {
       const run = await transaction.eagleImportRun.findFirst({
-        where: { id: runId, ownerId },
+        where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
         select: { id: true, status: true },
       });
       if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
@@ -864,11 +879,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             ownerId,
             runId,
             status: EagleImportItemStatus.STAGED,
+            libraryMode: 'MATERIAL',
           },
           data: { status: EagleImportItemStatus.CANCELLED, completedAt: cancelledAt },
         });
         await transaction.eagleImportRun.update({
-          where: { id: runId },
+          where: { id: runId, libraryMode: 'MATERIAL' },
           data: {
             ...(cancelled.count > 0 ? { stagedItemCount: { decrement: cancelled.count } } : {}),
             status: EagleImportRunStatus.CANCELLED,
@@ -885,7 +901,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       this.assertRun(ownerId, runId),
       this.prisma.eagleImportRunItem.groupBy({
         by: ['status'],
-        where: { ownerId, runId },
+        where: { ownerId, runId, libraryMode: 'MATERIAL' },
         _count: { _all: true },
       }),
       this.prisma.$queryRaw<
@@ -922,7 +938,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           FROM "EagleImportRunItem" item
           JOIN "EagleExternalAsset" external ON external."id" = item."externalAssetId"
           LEFT JOIN "UploadSession" session ON session."id" = item."activeUploadSessionId"
-          WHERE item."ownerId" = ${ownerId} AND item."runId" = ${runId}
+          WHERE item."ownerId" = ${ownerId} AND item."libraryMode" = 'MATERIAL'::"LibraryMode" AND item."runId" = ${runId}
         `,
       ),
     ]);
@@ -966,7 +982,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     return this.prisma.$transaction(async (transaction) => {
       await lockImportItem(transaction, ownerId, runId, itemId);
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { id: itemId, ownerId, runId },
+        where: { id: itemId, ownerId, runId, libraryMode: 'MATERIAL' },
         select: {
           status: true,
           action: true,
@@ -991,7 +1007,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       }
       if (item.status === EagleImportItemStatus.UPLOADING && item.activeUploadSessionId) {
         const session = await transaction.uploadSession.findFirst({
-          where: { id: item.activeUploadSessionId, uploaderId: ownerId },
+          where: { id: item.activeUploadSessionId, uploaderId: ownerId, libraryMode: 'MATERIAL' },
           select: { status: true, createdAt: true, finalizationAttempts: true },
         });
         const expired = Boolean(
@@ -1009,15 +1025,15 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         }
         const replacedSessionId = item.activeUploadSessionId;
         await transaction.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: replacedSessionId, ownerId },
+          where: { uploadSessionId: replacedSessionId, ownerId, libraryMode: 'MATERIAL' },
           data: { supersededAt: new Date() },
         });
         await transaction.eagleImportRunItem.update({
-          where: { id: itemId },
+          where: { id: itemId, libraryMode: 'MATERIAL' },
           data: { status: EagleImportItemStatus.STAGED, activeUploadSessionId: null },
         });
         await transaction.eagleImportRun.update({
-          where: { id: runId },
+          where: { id: runId, libraryMode: 'MATERIAL' },
           data: { stagedItemCount: { increment: 1 } },
         });
         return {
@@ -1052,7 +1068,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   }): Promise<{ accepted: boolean; activeUploadSessionId: string }> {
     return this.prisma.$transaction(async (transaction) => {
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { id: input.runItemId, ownerId: input.ownerId, runId: input.runId },
+        where: {
+          id: input.runItemId,
+          ownerId: input.ownerId,
+          runId: input.runId,
+          libraryMode: 'MATERIAL',
+        },
         select: {
           id: true,
           runId: true,
@@ -1085,7 +1106,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         throw new ConflictException('当前 Eagle 导入项不能开始上传。');
       }
       const claimed = await transaction.eagleImportRunItem.updateMany({
-        where: { id: item.id, ownerId: input.ownerId, status: EagleImportItemStatus.STAGED },
+        where: {
+          id: item.id,
+          ownerId: input.ownerId,
+          status: EagleImportItemStatus.STAGED,
+          libraryMode: 'MATERIAL',
+        },
         data: {
           status: EagleImportItemStatus.UPLOADING,
           activeUploadSessionId: input.uploadSessionId,
@@ -1094,7 +1120,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       });
       if (claimed.count !== 1) {
         const winner = await transaction.eagleImportRunItem.findFirst({
-          where: { id: item.id, ownerId: input.ownerId },
+          where: { id: item.id, ownerId: input.ownerId, libraryMode: 'MATERIAL' },
           select: { activeUploadSessionId: true },
         });
         if (winner?.activeUploadSessionId) {
@@ -1103,7 +1129,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         throw new ConflictException('Eagle 导入项已被其他上传占用。');
       }
       await transaction.eagleUploadSessionState.update({
-        where: { uploadSessionId: input.uploadSessionId },
+        where: { uploadSessionId: input.uploadSessionId, libraryMode: 'MATERIAL' },
         data: {
           duplicatePolicy: 'CREATE_COPY',
           replacementAssetId:
@@ -1112,7 +1138,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         },
       });
       await transaction.eagleImportRun.update({
-        where: { id: item.runId },
+        where: { id: item.runId, libraryMode: 'MATERIAL' },
         data: {
           stagedItemCount: { decrement: 1 },
           status: EagleImportRunStatus.RUNNING,
@@ -1126,7 +1152,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   async finalizeUpload(ownerId: string, uploadSessionId: string, assetId: string) {
     return this.prisma.$transaction(async (transaction) => {
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { ownerId, activeUploadSessionId: uploadSessionId },
+        where: { ownerId, activeUploadSessionId: uploadSessionId, libraryMode: 'MATERIAL' },
         select: {
           id: true,
           runId: true,
@@ -1170,6 +1196,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
             ownerId,
             status: EagleImportItemStatus.UPLOADING,
             activeUploadSessionId: uploadSessionId,
+            libraryMode: 'MATERIAL',
           },
           data: { status: EagleImportItemStatus.FINALIZING },
         });
@@ -1179,7 +1206,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       await this.applyImportMetadata(transaction, ownerId, item, assetId);
       const completedAt = new Date();
       await transaction.eagleExternalAsset.update({
-        where: { id: item.externalAssetId },
+        where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
         data: {
           assetId,
           sourceImportedAt: item.sourceImportedAt,
@@ -1193,7 +1220,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         },
       });
       await transaction.eagleImportRunItem.update({
-        where: { id: item.id },
+        where: { id: item.id, libraryMode: 'MATERIAL' },
         data: {
           assetId,
           status: EagleImportItemStatus.IMPORTED,
@@ -1228,7 +1255,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   ) {
     await this.prisma.$transaction(async (transaction) => {
       const item = await transaction.eagleImportRunItem.findFirst({
-        where: { ownerId, activeUploadSessionId: uploadSessionId },
+        where: { ownerId, activeUploadSessionId: uploadSessionId, libraryMode: 'MATERIAL' },
         select: {
           id: true,
           runId: true,
@@ -1249,6 +1276,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           ownerId,
           activeUploadSessionId: uploadSessionId,
           status: { in: [EagleImportItemStatus.UPLOADING, EagleImportItemStatus.FINALIZING] },
+          libraryMode: 'MATERIAL',
         },
         data: {
           ...(context.terminal
@@ -1269,7 +1297,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       const completedAt = new Date();
       if (!context.terminal) {
         await transaction.eagleImportRun.update({
-          where: { id: item.runId },
+          where: { id: item.runId, libraryMode: 'MATERIAL' },
           data: { lastErrorCode: 'ITEM_FAILED' },
         });
       } else {
@@ -1297,6 +1325,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           id: uploadSessionId,
           uploaderId: ownerId,
           status: UploadSessionStatus.INITIATED,
+          libraryMode: 'MATERIAL',
         },
         data: {
           status: UploadSessionStatus.ABORTED,
@@ -1310,6 +1339,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           ownerId,
           activeUploadSessionId: uploadSessionId,
           status: EagleImportItemStatus.UPLOADING,
+          libraryMode: 'MATERIAL',
         },
         select: {
           id: true,
@@ -1325,6 +1355,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           ownerId,
           activeUploadSessionId: uploadSessionId,
           status: EagleImportItemStatus.UPLOADING,
+          libraryMode: 'MATERIAL',
         },
         data: {
           status: EagleImportItemStatus.FAILED,
@@ -1337,7 +1368,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       if (converged.count !== 1) return true;
 
       await transaction.eagleUploadSessionState.updateMany({
-        where: { ownerId, uploadSessionId },
+        where: { ownerId, uploadSessionId, libraryMode: 'MATERIAL' },
         data: { supersededAt: expiredAt },
       });
       await this.applyTerminalItemDelta(
@@ -1421,7 +1452,10 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       `);
       if (converged.length) {
         await transaction.eagleUploadSessionState.updateMany({
-          where: { uploadSessionId: { in: converged.map((item) => item.uploadSessionId) } },
+          where: {
+            uploadSessionId: { in: converged.map((item) => item.uploadSessionId) },
+            libraryMode: 'MATERIAL',
+          },
           data: { supersededAt: new Date() },
         });
       }
@@ -1485,11 +1519,11 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
 
       const groups = await transaction.eagleImportRunItem.groupBy({
         by: ['status'],
-        where: { ownerId: run.ownerId, runId: run.id },
+        where: { ownerId: run.ownerId, runId: run.id, libraryMode: 'MATERIAL' },
         _count: { _all: true },
       });
       await transaction.eagleImportRun.update({
-        where: { id: run.id },
+        where: { id: run.id, libraryMode: 'MATERIAL' },
         data: countGroupedItemStatuses(groups),
       });
 
@@ -1510,6 +1544,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         where: {
           id: { in: candidates.map(({ id }) => id) },
           terminalProgressAppliedAt: null,
+          libraryMode: 'MATERIAL',
         },
         data: { terminalProgressAppliedAt: new Date() },
       });
@@ -1614,7 +1649,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
 
   private async assertRun(ownerId: string, runId: string) {
     const run = await this.prisma.eagleImportRun.findFirst({
-      where: { id: runId, ownerId },
+      where: { id: runId, ownerId, libraryMode: 'MATERIAL' },
       select: RUN_SELECT,
     });
     if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
@@ -1630,7 +1665,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     const normalizedNames = [...new Set(item.tagNames.map(normalizeIdentity))];
     const tagDefinitions = normalizedNames.length
       ? await transaction.eagleImportTagDefinition.findMany({
-          where: { ownerId, runId: item.runId, normalizedName: { in: normalizedNames } },
+          where: {
+            ownerId,
+            runId: item.runId,
+            normalizedName: { in: normalizedNames },
+            libraryMode: 'MATERIAL',
+          },
         })
       : [];
     const groupSourceIds = [
@@ -1638,7 +1678,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     ];
     const groupDefinitions = groupSourceIds.length
       ? await transaction.eagleImportTagGroupDefinition.findMany({
-          where: { ownerId, runId: item.runId, sourceGroupId: { in: groupSourceIds } },
+          where: {
+            ownerId,
+            runId: item.runId,
+            sourceGroupId: { in: groupSourceIds },
+            libraryMode: 'MATERIAL',
+          },
         })
       : [];
     const definitionByName = new Map(
@@ -1692,7 +1737,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
   ) {
     if (eagleImportProgressMode() === 'PROJECTED') return;
     const run = await transaction.eagleImportRun.update({
-      where: { id: runId },
+      where: { id: runId, libraryMode: 'MATERIAL' },
       data: {
         ...counterDeltaIncrements(delta),
         ...(lastErrorCode ? { lastErrorCode } : {}),
@@ -1705,7 +1750,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       },
     });
     const marked = await transaction.eagleImportRunItem.updateMany({
-      where: { id: { in: itemIds }, terminalProgressAppliedAt: null },
+      where: { id: { in: itemIds }, terminalProgressAppliedAt: null, libraryMode: 'MATERIAL' },
       data: { terminalProgressAppliedAt: completedAt },
     });
     if (marked.count !== itemIds.length) {
@@ -1713,11 +1758,16 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     }
     if (run.status === EagleImportRunStatus.CANCELLED) return;
     const activeItem = await transaction.eagleImportRunItem.findFirst({
-      where: { ownerId, runId, status: { in: [...ACTIVE_EAGLE_IMPORT_ITEM_STATUSES] } },
+      where: {
+        ownerId,
+        runId,
+        status: { in: [...ACTIVE_EAGLE_IMPORT_ITEM_STATUSES] },
+        libraryMode: 'MATERIAL',
+      },
       select: { id: true },
     });
     await transaction.eagleImportRun.update({
-      where: { id: runId },
+      where: { id: runId, libraryMode: 'MATERIAL' },
       data: {
         status: resolveEagleImportRunCompletion({
           activeItemCount: activeItem ? 1 : 0,
@@ -1743,7 +1793,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     projectedAt: Date,
   ): Promise<void> {
     const run = await transaction.eagleImportRun.update({
-      where: { id: group.runId },
+      where: { id: group.runId, libraryMode: 'MATERIAL' },
       data: {
         ...counterDeltaIncrements({
           importedItemCount: group.importedItemCount,
@@ -1760,7 +1810,11 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
       },
     });
     const marked = await transaction.eagleImportRunItem.updateMany({
-      where: { id: { in: group.itemIds }, terminalProgressAppliedAt: null },
+      where: {
+        id: { in: group.itemIds },
+        terminalProgressAppliedAt: null,
+        libraryMode: 'MATERIAL',
+      },
       data: { terminalProgressAppliedAt: projectedAt },
     });
     if (marked.count !== group.itemIds.length) {
@@ -1772,11 +1826,12 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         ownerId: group.ownerId,
         runId: group.runId,
         status: { in: [...ACTIVE_EAGLE_IMPORT_ITEM_STATUSES] },
+        libraryMode: 'MATERIAL',
       },
       select: { id: true },
     });
     await transaction.eagleImportRun.update({
-      where: { id: group.runId },
+      where: { id: group.runId, libraryMode: 'MATERIAL' },
       data: {
         status: resolveEagleImportRunCompletion({
           activeItemCount: activeItem ? 1 : 0,
@@ -1816,13 +1871,21 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     const [existingFolders, existingTagGroups, existingTags] = await Promise.all([
       folders.length
         ? transaction.eagleImportFolderDefinition.findMany({
-            where: { runId, sourceFolderId: { in: folders.map((item) => item.sourceFolderId) } },
+            where: {
+              runId,
+              sourceFolderId: { in: folders.map((item) => item.sourceFolderId) },
+              libraryMode: 'MATERIAL',
+            },
             select: { sourceFolderId: true, name: true, parentSourceFolderId: true },
           })
         : [],
       tagGroups.length
         ? transaction.eagleImportTagGroupDefinition.findMany({
-            where: { runId, sourceGroupId: { in: tagGroups.map((item) => item.sourceGroupId) } },
+            where: {
+              runId,
+              sourceGroupId: { in: tagGroups.map((item) => item.sourceGroupId) },
+              libraryMode: 'MATERIAL',
+            },
             select: {
               sourceGroupId: true,
               name: true,
@@ -1834,7 +1897,11 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         : [],
       tags.length
         ? transaction.eagleImportTagDefinition.findMany({
-            where: { runId, normalizedName: { in: tags.map((item) => item.normalizedName) } },
+            where: {
+              runId,
+              normalizedName: { in: tags.map((item) => item.normalizedName) },
+              libraryMode: 'MATERIAL',
+            },
             select: {
               name: true,
               normalizedName: true,
@@ -1856,18 +1923,21 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
     await Promise.all([
       folders.length
         ? transaction.eagleImportFolderDefinition.createMany({
-            data: folders,
+            data: folders.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
             skipDuplicates: true,
           })
         : undefined,
       tagGroups.length
         ? transaction.eagleImportTagGroupDefinition.createMany({
-            data: tagGroups,
+            data: tagGroups.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
             skipDuplicates: true,
           })
         : undefined,
       tags.length
-        ? transaction.eagleImportTagDefinition.createMany({ data: tags, skipDuplicates: true })
+        ? transaction.eagleImportTagDefinition.createMany({
+            data: tags.map((row) => ({ ...row, libraryMode: 'MATERIAL' as const })),
+            skipDuplicates: true,
+          })
         : undefined,
     ]);
   }
@@ -1886,6 +1956,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           status: EagleImportItemStatus.STAGED,
           action: EagleImportItemAction.METADATA_UPDATE,
           assetId: { not: null },
+          libraryMode: 'MATERIAL',
         },
         orderBy: { id: 'asc' },
         take: 200,
@@ -1914,7 +1985,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
         await this.applyImportMetadata(transaction, ownerId, item, item.assetId);
         const completedAt = new Date();
         await transaction.eagleExternalAsset.update({
-          where: { id: item.externalAssetId },
+          where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
           data: {
             sourceImportedAt: item.sourceImportedAt,
             sourceModifiedAt: item.sourceModifiedAt,
@@ -1927,7 +1998,7 @@ export class PrismaEagleImportsRepository implements EagleImportsRepository {
           },
         });
         await transaction.eagleImportRunItem.update({
-          where: { id: item.id },
+          where: { id: item.id, libraryMode: 'MATERIAL' },
           data: {
             status: EagleImportItemStatus.IMPORTED,
             errorCode: null,
@@ -1986,7 +2057,7 @@ async function lockImportRun(
   runId: string,
 ) {
   await transaction.$queryRaw(
-    Prisma.sql`SELECT "id" FROM "EagleImportRun" WHERE "ownerId" = ${ownerId} AND "id" = ${runId} FOR UPDATE`,
+    Prisma.sql`SELECT "id" FROM "EagleImportRun" WHERE "ownerId" = ${ownerId} AND "libraryMode" = 'MATERIAL'::"LibraryMode" AND "id" = ${runId} FOR UPDATE`,
   );
 }
 
@@ -1997,7 +2068,7 @@ async function lockImportItem(
   itemId: string,
 ) {
   await transaction.$queryRaw(
-    Prisma.sql`SELECT "id" FROM "EagleImportRunItem" WHERE "ownerId" = ${ownerId} AND "runId" = ${runId} AND "id" = ${itemId} FOR UPDATE`,
+    Prisma.sql`SELECT "id" FROM "EagleImportRunItem" WHERE "ownerId" = ${ownerId} AND "libraryMode" = 'MATERIAL'::"LibraryMode" AND "runId" = ${runId} AND "id" = ${itemId} FOR UPDATE`,
   );
 }
 

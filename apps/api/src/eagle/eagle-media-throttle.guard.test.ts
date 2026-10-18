@@ -29,8 +29,10 @@ const limits = {
   EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: 100,
 };
 
-void test('media throttle isolates normal capacity by authenticated owner', async () => {
-  const guard = new EagleMediaThrottleGuard(config(limits) as never, new ThrottlerStorageService());
+void test('media throttle isolates normal capacity by authenticated owner', async (t) => {
+  const storage = new ThrottlerStorageService();
+  t.after(() => storage.onApplicationShutdown());
+  const guard = new EagleMediaThrottleGuard(config(limits) as never, storage);
   const ownerA = contextFor('owner-a', '203.0.113.10');
   const ownerB = contextFor('owner-b', '203.0.113.10');
 
@@ -40,8 +42,10 @@ void test('media throttle isolates normal capacity by authenticated owner', asyn
   await guard.canActivate(ownerB.context);
 });
 
-void test('media throttle shares owner capacity across client IPs and returns recovery headers', async () => {
-  const guard = new EagleMediaThrottleGuard(config(limits) as never, new ThrottlerStorageService());
+void test('media throttle shares owner capacity across client IPs and returns recovery headers', async (t) => {
+  const storage = new ThrottlerStorageService();
+  t.after(() => storage.onApplicationShutdown());
+  const guard = new EagleMediaThrottleGuard(config(limits) as never, storage);
   const firstClient = contextFor('owner-a', '203.0.113.10');
   const secondClient = contextFor('owner-a', '198.51.100.20');
 
@@ -55,8 +59,10 @@ void test('media throttle shares owner capacity across client IPs and returns re
   assert.equal(secondClient.headers.get('RateLimit-Policy'), 'owner-second;w=1');
 });
 
-void test('media throttle fails closed when authentication has not populated a principal', async () => {
-  const guard = new EagleMediaThrottleGuard(config(limits) as never, new ThrottlerStorageService());
+void test('media throttle fails closed when authentication has not populated a principal', async (t) => {
+  const storage = new ThrottlerStorageService();
+  t.after(() => storage.onApplicationShutdown());
+  const guard = new EagleMediaThrottleGuard(config(limits) as never, storage);
   const request = contextFor('', '203.0.113.10');
   (request.context.switchToHttp().getRequest() as { user?: unknown }).user = undefined;
 

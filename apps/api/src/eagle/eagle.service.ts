@@ -1,9 +1,12 @@
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE, inLibrary, type LibraryIdentity } from './library-mode';
 import {
   BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
   Optional,
+  Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
@@ -84,13 +87,14 @@ export class EagleService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly aiTags?: EagleAiTagService,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
   async listAssets(ownerId: string, query: ListEagleAssetsDto, options: AssetListOptions = {}) {
     const { trash = false, includePrivate = false } = options;
     const smartFolder = query.smartFolderId
       ? await this.prisma.eagleSmartFolder.findFirst({
-          where: { ownerId, id: query.smartFolderId },
+          where: { ownerId, id: query.smartFolderId, libraryMode: this.libraryMode },
           select: {
             queryJson: true,
             children: {
@@ -160,7 +164,9 @@ export class EagleService {
         trash,
       );
     }
-    const cursor = query.cursor ? decodeEagleAssetCursor(query.cursor) : null;
+    const cursor = query.cursor
+      ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode })
+      : null;
     const where: Prisma.EagleAssetWhereInput = cursor
       ? {
           AND: [
@@ -176,7 +182,7 @@ export class EagleService {
       : queryWhere;
     const [rows, colorEligible, colorCompleted] = await Promise.all([
       this.prisma.eagleAsset.findMany({
-        where,
+        where: inLibrary(this.libraryMode, where),
         include: assetListInclude,
         orderBy: [{ libraryAddedAt: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
@@ -188,6 +194,7 @@ export class EagleService {
               deletedAt: null,
               mimeType: { not: 'video/mp4' },
               ...privateVisibilityWhere(includePrivate),
+              libraryMode: this.libraryMode,
             },
           })
         : Promise.resolve(0),
@@ -203,6 +210,7 @@ export class EagleService {
                 mimeType: { not: 'video/mp4' },
                 ...privateVisibilityWhere(includePrivate),
               },
+              libraryMode: this.libraryMode,
             },
           })
         : Promise.resolve(0),
@@ -211,7 +219,10 @@ export class EagleService {
     const page = rows.slice(0, query.limit);
     return {
       items: page.map(serializeAssetList),
-      nextCursor: hasMore && page.length ? encodeEagleAssetCursor(page.at(-1)!) : null,
+      nextCursor:
+        hasMore && page.length
+          ? encodeEagleAssetCursor(page.at(-1)!, { ownerId, libraryMode: this.libraryMode })
+          : null,
       colorCoverage: filterColor
         ? {
             eligible: colorEligible,
@@ -233,7 +244,10 @@ export class EagleService {
     trash: boolean,
   ) {
     const search = query.search?.normalize('NFKC').trim() ?? '';
-    const startOffset = decodeSemanticSearchCursor(query.cursor, search);
+    const startOffset = decodeSemanticSearchCursor(query.cursor, search, {
+      ownerId,
+      libraryMode: this.libraryMode,
+    });
     const ranked: Array<{ row: AssetListRecord; nextOffset: number }> = [];
     let offset = startOffset;
     let exhausted = false;
@@ -251,7 +265,7 @@ export class EagleService {
       exhausted = candidateIds.length < candidateBatchSize;
       if (!candidateIds.length) break;
       const rows = await this.prisma.eagleAsset.findMany({
-        where: { AND: [where, { id: { in: candidateIds } }] },
+        where: { AND: [where, { id: { in: candidateIds } }], libraryMode: this.libraryMode },
         include: assetListInclude,
       });
       const byId = new Map(rows.map((row) => [row.id, row]));
@@ -271,6 +285,7 @@ export class EagleService {
               deletedAt: null,
               mimeType: { not: 'video/mp4' },
               ...privateVisibilityWhere(includePrivate),
+              libraryMode: this.libraryMode,
             },
           }),
           this.prisma.eagleAssetColorAnalysis.count({
@@ -284,6 +299,7 @@ export class EagleService {
                 mimeType: { not: 'video/mp4' },
                 ...privateVisibilityWhere(includePrivate),
               },
+              libraryMode: this.libraryMode,
             },
           }),
         ])
@@ -292,7 +308,10 @@ export class EagleService {
       items: page.map(({ row }) => serializeAssetList(row)),
       nextCursor:
         ranked.length > query.limit && page.length
-          ? encodeSemanticSearchCursor(search, page.at(-1)!.nextOffset)
+          ? encodeSemanticSearchCursor(search, page.at(-1)!.nextOffset, {
+              ownerId,
+              libraryMode: this.libraryMode,
+            })
           : null,
       searchExpansion: matches,
       colorCoverage: filterColor
@@ -333,20 +352,20 @@ export class EagleService {
         FROM "EagleAssetManualTag" AS link
         JOIN "EagleManualTag" AS tag
           ON tag."ownerId" = link."ownerId" AND tag.id = link."tagId"
-        WHERE link."ownerId" = ${ownerId}
+        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND tag."normalizedName" = ${normalizedSearch}
         UNION ALL
         SELECT link."assetId", 4::integer, 1::double precision, 0::integer
         FROM "EagleAssetManualTag" AS link
         JOIN "EagleManualTag" AS tag
           ON tag."ownerId" = link."ownerId" AND tag.id = link."tagId"
-        WHERE link."ownerId" = ${ownerId}
+        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND tag."normalizedName" <> ${normalizedSearch}
           AND strpos(tag."normalizedName", ${normalizedSearch}) > 0
         UNION ALL
         SELECT asset.id, 3::integer, 1::double precision, 0::integer
         FROM "EagleAsset" AS asset
-        WHERE asset."ownerId" = ${ownerId}
+        WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND (
             strpos(asset."normalizedDisplayName", ${normalizedSearch}) > 0
             OR strpos(lower(asset."originalName"), ${normalizedSearch}) > 0
@@ -355,7 +374,7 @@ export class EagleService {
         SELECT link."assetId", matched.tier, matched.similarity, matched.priority
         FROM "EagleAssetAiTag" AS link
         JOIN matched_ai_tags AS matched ON matched."tagId" = link."aiTagId"
-        WHERE link."ownerId" = ${ownerId}
+        WHERE link."ownerId" = ${ownerId} AND link."libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND link.status = 'ACTIVE'
       ),
       ranked AS (
@@ -364,7 +383,7 @@ export class EagleService {
           min(candidate.priority) AS priority
         FROM candidates AS candidate
         JOIN "EagleAsset" AS asset
-          ON asset."ownerId" = ${ownerId} AND asset.id = candidate."assetId"
+          ON asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode" AND asset.id = candidate."assetId"
         WHERE true
           ${lifecycleClause}
           ${privateClause}
@@ -390,6 +409,7 @@ export class EagleService {
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
           ...buildEagleFilterWhere(query),
+          libraryMode: this.libraryMode,
         },
       }),
     };
@@ -408,6 +428,7 @@ export class EagleService {
         deletedAt: trash ? { not: null } : null,
         purgeAfter: trash ? null : undefined,
         ...privateVisibilityWhere(includePrivate),
+        libraryMode: this.libraryMode,
       },
       include: assetInclude,
     });
@@ -430,14 +451,15 @@ export class EagleService {
           deletedAt: null,
           rowVersion: input.rowVersion,
           ...privateVisibilityWhere(includePrivate),
+          libraryMode: this.libraryMode,
         },
         data: { ...data, rowVersion: { increment: 1 } },
       });
       if (updated.count !== 1) await this.throwAssetWriteError(transaction, ownerId, assetId);
       if (annotation) {
         await transaction.eagleAssetAnnotation.upsert({
-          where: { ownerId_assetId: { ownerId, assetId } },
-          create: { ownerId, assetId, ...annotation },
+          where: { ownerId_assetId: { ownerId, assetId }, libraryMode: this.libraryMode },
+          create: { ownerId, assetId, ...annotation, libraryMode: this.libraryMode },
           update: annotation,
         });
       }
@@ -494,6 +516,7 @@ export class EagleService {
           id: { in: input.assets.map(({ assetId }) => assetId) },
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
+          libraryMode: this.libraryMode,
         },
         select: { id: true, rowVersion: true },
       });
@@ -509,6 +532,7 @@ export class EagleService {
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
           OR: input.assets.map(({ assetId, rowVersion }) => ({ id: assetId, rowVersion })),
+          libraryMode: this.libraryMode,
         },
         data: { ...data, rowVersion: { increment: 1 } },
       });
@@ -518,8 +542,8 @@ export class EagleService {
       if (annotation) {
         for (const { assetId } of input.assets) {
           await transaction.eagleAssetAnnotation.upsert({
-            where: { ownerId_assetId: { ownerId, assetId } },
-            create: { ownerId, assetId, ...annotation },
+            where: { ownerId_assetId: { ownerId, assetId }, libraryMode: this.libraryMode },
+            create: { ownerId, assetId, ...annotation, libraryMode: this.libraryMode },
             update: annotation,
           });
         }
@@ -542,11 +566,12 @@ export class EagleService {
           id: { in: input.assetIds },
           deletedAt: null,
           ...privateVisibilityWhere(includePrivate),
+          libraryMode: this.libraryMode,
         },
         select: { id: true },
       }),
       this.prisma.eagleManualTag.findMany({
-        where: { ownerId, id: { in: tagIds } },
+        where: { ownerId, id: { in: tagIds }, libraryMode: this.libraryMode },
         select: { id: true },
       }),
     ]);
@@ -554,22 +579,36 @@ export class EagleService {
       throw new NotFoundException('一个或多个素材或标签不存在。');
     }
     const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
-      await lockOwnerPrivacyProjection(transaction, ownerId);
+      await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       if (input.clearAll) {
         const where = { ownerId, assetId: { in: input.assetIds } };
-        await transaction.eagleAssetManualTag.deleteMany({ where });
-        await transaction.eagleTagMemberDistance.deleteMany({ where });
-      } else if (input.removeTagIds.length) {
         await transaction.eagleAssetManualTag.deleteMany({
-          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
+          where: inLibrary(this.libraryMode, where),
         });
         await transaction.eagleTagMemberDistance.deleteMany({
-          where: { ownerId, assetId: { in: input.assetIds }, tagId: { in: input.removeTagIds } },
+          where: inLibrary(this.libraryMode, where),
+        });
+      } else if (input.removeTagIds.length) {
+        await transaction.eagleAssetManualTag.deleteMany({
+          where: {
+            ownerId,
+            assetId: { in: input.assetIds },
+            tagId: { in: input.removeTagIds },
+            libraryMode: this.libraryMode,
+          },
+        });
+        await transaction.eagleTagMemberDistance.deleteMany({
+          where: {
+            ownerId,
+            assetId: { in: input.assetIds },
+            tagId: { in: input.removeTagIds },
+            libraryMode: this.libraryMode,
+          },
         });
       }
       if (input.addTagIds.length) {
         await transaction.eagleManualTag.updateMany({
-          where: { ownerId, id: { in: input.addTagIds } },
+          where: { ownerId, id: { in: input.addTagIds }, libraryMode: this.libraryMode },
           data: { lastUsedAt: new Date() },
         });
         for (
@@ -579,26 +618,38 @@ export class EagleService {
         ) {
           const assetIds = input.assetIds.slice(offset, offset + BATCH_TAG_WRITE_ASSET_CHUNK_SIZE);
           await transaction.eagleAssetManualTag.updateMany({
-            where: { ownerId, assetId: { in: assetIds }, tagId: { in: input.addTagIds } },
+            where: {
+              ownerId,
+              assetId: { in: assetIds },
+              tagId: { in: input.addTagIds },
+              libraryMode: this.libraryMode,
+            },
             data: { assignedByUser: true },
           });
           await transaction.eagleAssetManualTag.createMany({
-            data: assetIds.flatMap((assetId) =>
-              input.addTagIds.map((tagId) => ({ ownerId, assetId, tagId })),
-            ),
+            data: assetIds
+              .flatMap((assetId) => input.addTagIds.map((tagId) => ({ ownerId, assetId, tagId })))
+              .map((row) => inLibrary(this.libraryMode, row)),
             skipDuplicates: true,
           });
-          await syncCurrentTagMemberDistances(transaction, ownerId, assetIds, input.addTagIds);
+          await syncCurrentTagMemberDistances(
+            transaction,
+            ownerId,
+            assetIds,
+            input.addTagIds,
+            this.libraryMode,
+          );
         }
       }
       if (input.clearAll || input.removeTagIds.length) {
         await refreshUnclassifiedSuggestions(transaction, {
+          libraryMode: this.libraryMode,
           ownerId,
           assetIds: input.assetIds,
           includePrivate,
         });
       }
-      return syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds);
+      return syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds, this.libraryMode);
     });
     return { affectedAssetCount: input.assetIds.length, privacyChangedAssetCount };
   }
@@ -614,6 +665,7 @@ export class EagleService {
           deletedAt: restore ? { not: null } : null,
           purgeAfter: restore ? null : undefined,
           ...privateVisibilityWhere(includePrivate),
+          libraryMode: this.libraryMode,
         },
         data: {
           deletedAt: restore ? null : new Date(),
@@ -635,19 +687,21 @@ export class EagleService {
           UPDATE "EagleAsset"
           SET "purgeAfter" = ${purgeAfter}, "rowVersion" = "rowVersion" + 1,
               "updatedAt" = CURRENT_TIMESTAMP
-          WHERE "ownerId" = ${ownerId} AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
+          WHERE "ownerId" = ${ownerId} AND "libraryMode" = ${this.libraryMode}::"LibraryMode" AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
           RETURNING "id", "mediaRevision"
         `,
       );
       if (!assets.length) return 0;
       await transaction.eagleAssetProcessingJob.createMany({
-        data: assets.map((asset) => ({
-          ownerId,
-          assetId: asset.id,
-          kind: 'PURGE_ASSET' as const,
-          lane: 'MAINTENANCE' as const,
-          assetRevision: asset.mediaRevision,
-        })),
+        data: assets
+          .map((asset) => ({
+            ownerId,
+            assetId: asset.id,
+            kind: 'PURGE_ASSET' as const,
+            lane: 'MAINTENANCE' as const,
+            assetRevision: asset.mediaRevision,
+          }))
+          .map((row) => inLibrary(this.libraryMode, row)),
         skipDuplicates: true,
       });
       return assets.length;
@@ -657,7 +711,7 @@ export class EagleService {
 
   async listManualTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleManualTag.findMany({
-      where: { ownerId },
+      where: { ownerId, libraryMode: this.libraryMode },
       orderBy: [{ isStarred: 'desc' }, { normalizedName: 'asc' }],
       select: {
         id: true,
@@ -694,6 +748,7 @@ export class EagleService {
           name,
           normalizedName: normalizeKey(name),
           color: normalizeColor(input.color),
+          libraryMode: this.libraryMode,
         },
         select: {
           id: true,
@@ -723,19 +778,28 @@ export class EagleService {
     input: UpdateManualTagDto,
     includePrivate = false,
   ) {
-    const current = await this.prisma.eagleManualTag.findFirst({ where: { ownerId, id: tagId } });
+    const current = await this.prisma.eagleManualTag.findFirst({
+      where: { ownerId, id: tagId, libraryMode: this.libraryMode },
+    });
     if (!current) throw new NotFoundException('标签不存在。');
     const name =
       input.name === undefined ? current.name : normalizeName(input.name, 64, '标签名称');
     if (
       input.groupId &&
-      !(await this.prisma.eagleManualTagGroup.count({ where: { ownerId, id: input.groupId } }))
+      !(await this.prisma.eagleManualTagGroup.count({
+        where: { ownerId, id: input.groupId, libraryMode: this.libraryMode },
+      }))
     )
       throw new NotFoundException('标签组不存在。');
     try {
       await this.prisma.$transaction(async (transaction) => {
         const updated = await transaction.eagleManualTag.updateMany({
-          where: { ownerId, id: tagId, rowVersion: input.rowVersion },
+          where: {
+            ownerId,
+            id: tagId,
+            rowVersion: input.rowVersion,
+            libraryMode: this.libraryMode,
+          },
           data: {
             name,
             normalizedName: normalizeKey(name),
@@ -747,10 +811,12 @@ export class EagleService {
         });
         if (updated.count !== 1) await this.throwTagWriteError(transaction, ownerId, tagId);
         if (input.groupId !== undefined) {
-          await transaction.eagleManualTagGroupMembership.deleteMany({ where: { ownerId, tagId } });
+          await transaction.eagleManualTagGroupMembership.deleteMany({
+            where: { ownerId, tagId, libraryMode: this.libraryMode },
+          });
           if (input.groupId) {
             await transaction.eagleManualTagGroupMembership.create({
-              data: { ownerId, tagId, groupId: input.groupId },
+              data: { ownerId, tagId, groupId: input.groupId, libraryMode: this.libraryMode },
             });
           }
         }
@@ -760,7 +826,7 @@ export class EagleService {
       throw error;
     }
     const tag = await this.prisma.eagleManualTag.findFirstOrThrow({
-      where: { ownerId, id: tagId },
+      where: { ownerId, id: tagId, libraryMode: this.libraryMode },
       select: {
         id: true,
         name: true,
@@ -791,18 +857,22 @@ export class EagleService {
   async deleteManualTag(ownerId: string, tagId: string) {
     try {
       await this.prisma.$transaction(async (transaction) => {
-        await lockOwnerPrivacyProjection(transaction, ownerId);
+        await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
         const tag = await transaction.eagleManualTag.findFirst({
-          where: { ownerId, id: tagId },
+          where: { ownerId, id: tagId, libraryMode: this.libraryMode },
           select: { id: true, marksAssetsPrivate: true },
         });
         if (!tag) throw new NotFoundException('标签不存在。');
         if (tag.marksAssetsPrivate) {
           throw new ConflictException('请先在私密设置中移除该标签，再删除标签。');
         }
-        await transaction.eagleAssetManualTag.deleteMany({ where: { ownerId, tagId } });
-        await transaction.eagleManualTag.delete({ where: { id: tagId } });
-        await syncAssetPrivacyFromManualTags(transaction, ownerId);
+        await transaction.eagleAssetManualTag.deleteMany({
+          where: { ownerId, tagId, libraryMode: this.libraryMode },
+        });
+        await transaction.eagleManualTag.delete({
+          where: { id: tagId, libraryMode: this.libraryMode },
+        });
+        await syncAssetPrivacyFromManualTags(transaction, ownerId, undefined, this.libraryMode);
       });
       return { deletedId: tagId };
     } catch (error) {
@@ -814,7 +884,7 @@ export class EagleService {
 
   async listManualTagGroups(ownerId: string) {
     const groups = await this.prisma.eagleManualTagGroup.findMany({
-      where: { ownerId },
+      where: { ownerId, libraryMode: this.libraryMode },
       orderBy: { normalizedName: 'asc' },
       include: { _count: { select: { tagMemberships: true } } },
     });
@@ -831,6 +901,7 @@ export class EagleService {
           normalizedName: normalizeKey(name),
           color: normalizeColor(input.color),
           description: input.description?.trim() || null,
+          libraryMode: this.libraryMode,
         },
       });
       return { ...group, tagCount: 0 };
@@ -842,14 +913,19 @@ export class EagleService {
 
   async updateManualTagGroup(ownerId: string, groupId: string, input: UpdateManualTagGroupDto) {
     const current = await this.prisma.eagleManualTagGroup.findFirst({
-      where: { ownerId, id: groupId },
+      where: { ownerId, id: groupId, libraryMode: this.libraryMode },
     });
     if (!current) throw new NotFoundException('标签组不存在。');
     const name =
       input.name === undefined ? current.name : normalizeName(input.name, 64, '标签组名称');
     try {
       const result = await this.prisma.eagleManualTagGroup.updateMany({
-        where: { ownerId, id: groupId, rowVersion: input.rowVersion },
+        where: {
+          ownerId,
+          id: groupId,
+          rowVersion: input.rowVersion,
+          libraryMode: this.libraryMode,
+        },
         data: {
           name,
           normalizedName: normalizeKey(name),
@@ -863,7 +939,7 @@ export class EagleService {
       });
       if (result.count !== 1) throw new ConflictException('标签组已被更新，请刷新后重试。');
       const group = await this.prisma.eagleManualTagGroup.findFirstOrThrow({
-        where: { ownerId, id: groupId },
+        where: { ownerId, id: groupId, libraryMode: this.libraryMode },
         include: { _count: { select: { tagMemberships: true } } },
       });
       const { _count, ...fields } = group;
@@ -876,23 +952,25 @@ export class EagleService {
 
   async deleteManualTagGroup(ownerId: string, groupId: string) {
     const group = await this.prisma.eagleManualTagGroup.findFirst({
-      where: { ownerId, id: groupId },
+      where: { ownerId, id: groupId, libraryMode: this.libraryMode },
       select: { id: true },
     });
     if (!group) throw new NotFoundException('标签组不存在。');
     await this.prisma.$transaction(async (transaction) => {
       await transaction.eagleManualTag.updateMany({
-        where: { ownerId, groupId },
+        where: { ownerId, groupId, libraryMode: this.libraryMode },
         data: { groupId: null, rowVersion: { increment: 1 } },
       });
-      await transaction.eagleManualTagGroup.delete({ where: { id: groupId } });
+      await transaction.eagleManualTagGroup.delete({
+        where: { id: groupId, libraryMode: this.libraryMode },
+      });
     });
     return { deletedId: groupId };
   }
 
   async listAiTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleAiTag.findMany({
-      where: { ownerId },
+      where: { ownerId, libraryMode: this.libraryMode },
       orderBy: { normalizedName: 'asc' },
       include: {
         _count: {
@@ -923,7 +1001,7 @@ export class EagleService {
     const ids = [...new Set(tagIds)];
     if (ids.length !== tagIds.length) throw new BadRequestException('标签不能重复。');
     const privacyChangedAssetCount = await this.prisma.$transaction(async (transaction) => {
-      await lockOwnerPrivacyProjection(transaction, ownerId);
+      await lockOwnerPrivacyProjection(transaction, ownerId, this.libraryMode);
       const [asset, tagCount] = await Promise.all([
         transaction.eagleAsset.findFirst({
           where: {
@@ -931,38 +1009,48 @@ export class EagleService {
             id: assetId,
             deletedAt: null,
             ...privateVisibilityWhere(includePrivate),
+            libraryMode: this.libraryMode,
           },
           select: { id: true },
         }),
-        transaction.eagleManualTag.count({ where: { ownerId, id: { in: ids } } }),
+        transaction.eagleManualTag.count({
+          where: { ownerId, id: { in: ids }, libraryMode: this.libraryMode },
+        }),
       ]);
       if (!asset || tagCount !== ids.length) throw new NotFoundException('素材或标签不存在。');
-      await transaction.eagleAssetManualTag.deleteMany({ where: { ownerId, assetId } });
-      await transaction.eagleTagMemberDistance.deleteMany({ where: { ownerId, assetId } });
+      await transaction.eagleAssetManualTag.deleteMany({
+        where: { ownerId, assetId, libraryMode: this.libraryMode },
+      });
+      await transaction.eagleTagMemberDistance.deleteMany({
+        where: { ownerId, assetId, libraryMode: this.libraryMode },
+      });
       if (ids.length) {
         await transaction.eagleManualTag.updateMany({
-          where: { ownerId, id: { in: ids } },
+          where: { ownerId, id: { in: ids }, libraryMode: this.libraryMode },
           data: { lastUsedAt: new Date() },
         });
         await transaction.eagleAssetManualTag.createMany({
-          data: ids.map((tagId) => ({ ownerId, assetId, tagId, assignedByUser: true })),
+          data: ids
+            .map((tagId) => ({ ownerId, assetId, tagId, assignedByUser: true }))
+            .map((row) => inLibrary(this.libraryMode, row)),
         });
-        await syncCurrentTagMemberDistances(transaction, ownerId, [assetId], ids);
+        await syncCurrentTagMemberDistances(transaction, ownerId, [assetId], ids, this.libraryMode);
       } else {
         await refreshUnclassifiedSuggestions(transaction, {
+          libraryMode: this.libraryMode,
           ownerId,
           assetIds: [assetId],
           includePrivate,
         });
       }
-      return syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId]);
+      return syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId], this.libraryMode);
     });
     return { affectedAssetCount: 1, privacyChangedAssetCount };
   }
 
   listSmartFolders(ownerId: string) {
     return this.prisma.eagleSmartFolder.findMany({
-      where: { ownerId },
+      where: { ownerId, libraryMode: this.libraryMode },
       orderBy: [{ parentId: 'asc' }, { position: 'asc' }, { id: 'asc' }],
     });
   }
@@ -971,7 +1059,7 @@ export class EagleService {
     const parent = await this.resolveParent(ownerId, input.parentId);
     const name = normalizeName(input.name, 64, '智能文件夹名称');
     const position = await this.prisma.eagleSmartFolder.aggregate({
-      where: { ownerId, parentId: parent?.id ?? null },
+      where: { ownerId, parentId: parent?.id ?? null, libraryMode: this.libraryMode },
       _max: { position: true },
     });
     const queryJson = normalizeSmartFolderQuery(input.query, 'ANY');
@@ -989,6 +1077,7 @@ export class EagleService {
             queryVersion: readStoredQueryVersion(queryJson),
             queryJson,
             position: (position._max.position ?? -1) + 1,
+            libraryMode: this.libraryMode,
           },
         });
         await this.replaceSmartFolderDependencies(transaction, ownerId, folder.id, dependencies);
@@ -1004,7 +1093,7 @@ export class EagleService {
     if (input.parentId === folderId)
       throw new BadRequestException('智能文件夹不能作为自己的父级。');
     const current = await this.prisma.eagleSmartFolder.findFirst({
-      where: { ownerId, id: folderId },
+      where: { ownerId, id: folderId, libraryMode: this.libraryMode },
     });
     if (!current) throw new NotFoundException('智能文件夹不存在。');
     if (
@@ -1019,7 +1108,7 @@ export class EagleService {
         ? await this.resolveParent(ownerId, current.parentId)
         : await this.resolveParent(ownerId, input.parentId);
     const childCount = await this.prisma.eagleSmartFolder.count({
-      where: { ownerId, parentId: folderId },
+      where: { ownerId, parentId: folderId, libraryMode: this.libraryMode },
     });
     if (input.parentId !== undefined && parent && childCount > 0)
       throw new BadRequestException('已有子级的文件夹不能继续嵌套。');
@@ -1032,7 +1121,12 @@ export class EagleService {
     try {
       return await this.prisma.$transaction(async (transaction) => {
         const result = await transaction.eagleSmartFolder.updateMany({
-          where: { ownerId, id: folderId, rowVersion: input.rowVersion },
+          where: {
+            ownerId,
+            id: folderId,
+            rowVersion: input.rowVersion,
+            libraryMode: this.libraryMode,
+          },
           data: {
             parentId: input.parentId === undefined ? undefined : (parent?.id ?? null),
             name,
@@ -1047,15 +1141,17 @@ export class EagleService {
         if (dependencies) {
           await Promise.all([
             transaction.eagleSmartFolderManualTagDependency.deleteMany({
-              where: { ownerId, smartFolderId: folderId },
+              where: { ownerId, smartFolderId: folderId, libraryMode: this.libraryMode },
             }),
             transaction.eagleSmartFolderAiTagDependency.deleteMany({
-              where: { ownerId, smartFolderId: folderId },
+              where: { ownerId, smartFolderId: folderId, libraryMode: this.libraryMode },
             }),
           ]);
           await this.replaceSmartFolderDependencies(transaction, ownerId, folderId, dependencies);
         }
-        return transaction.eagleSmartFolder.findFirstOrThrow({ where: { ownerId, id: folderId } });
+        return transaction.eagleSmartFolder.findFirstOrThrow({
+          where: { ownerId, id: folderId, libraryMode: this.libraryMode },
+        });
       });
     } catch (error) {
       if (isUniqueError(error)) throw new ConflictException('智能文件夹名称已存在。');
@@ -1069,13 +1165,13 @@ export class EagleService {
     return this.prisma.$transaction(
       async (transaction) => {
         const folder = await transaction.eagleSmartFolder.findFirst({
-          where: { ownerId, id: folderId },
+          where: { ownerId, id: folderId, libraryMode: this.libraryMode },
           select: { id: true, parentId: true, position: true },
         });
         if (!folder) throw new NotFoundException('智能文件夹不存在。');
         const parent = input.parentId
           ? await transaction.eagleSmartFolder.findFirst({
-              where: { ownerId, id: input.parentId },
+              where: { ownerId, id: input.parentId, libraryMode: this.libraryMode },
               select: { id: true, parentId: true },
             })
           : null;
@@ -1083,12 +1179,19 @@ export class EagleService {
         if (parent?.parentId) throw new BadRequestException('智能文件夹最多两层。');
         if (
           parent &&
-          (await transaction.eagleSmartFolder.count({ where: { ownerId, parentId: folderId } }))
+          (await transaction.eagleSmartFolder.count({
+            where: { ownerId, parentId: folderId, libraryMode: this.libraryMode },
+          }))
         )
           throw new BadRequestException('已有子级的文件夹不能继续嵌套。');
 
         const destinationSiblingCount = await transaction.eagleSmartFolder.count({
-          where: { ownerId, parentId: input.parentId ?? null, id: { not: folderId } },
+          where: {
+            ownerId,
+            parentId: input.parentId ?? null,
+            id: { not: folderId },
+            libraryMode: this.libraryMode,
+          },
         });
         const destinationPosition = Math.min(input.position, destinationSiblingCount);
         if (folder.parentId === (input.parentId ?? null)) {
@@ -1099,6 +1202,7 @@ export class EagleService {
                 parentId: folder.parentId,
                 id: { not: folderId },
                 position: { gte: destinationPosition, lt: folder.position },
+                libraryMode: this.libraryMode,
               },
               data: { position: { increment: 1 } },
             });
@@ -1109,6 +1213,7 @@ export class EagleService {
                 parentId: folder.parentId,
                 id: { not: folderId },
                 position: { gt: folder.position, lte: destinationPosition },
+                libraryMode: this.libraryMode,
               },
               data: { position: { decrement: 1 } },
             });
@@ -1120,6 +1225,7 @@ export class EagleService {
               parentId: folder.parentId,
               id: { not: folderId },
               position: { gt: folder.position },
+              libraryMode: this.libraryMode,
             },
             data: { position: { decrement: 1 } },
           });
@@ -1129,12 +1235,18 @@ export class EagleService {
               parentId: input.parentId ?? null,
               id: { not: folderId },
               position: { gte: destinationPosition },
+              libraryMode: this.libraryMode,
             },
             data: { position: { increment: 1 } },
           });
         }
         const result = await transaction.eagleSmartFolder.updateMany({
-          where: { ownerId, id: folderId, rowVersion: input.rowVersion },
+          where: {
+            ownerId,
+            id: folderId,
+            rowVersion: input.rowVersion,
+            libraryMode: this.libraryMode,
+          },
           data: {
             parentId: input.parentId ?? null,
             position: destinationPosition,
@@ -1142,18 +1254,24 @@ export class EagleService {
           },
         });
         if (result.count !== 1) throw new ConflictException('智能文件夹已被更新，请刷新后重试。');
-        return transaction.eagleSmartFolder.findFirstOrThrow({ where: { ownerId, id: folderId } });
+        return transaction.eagleSmartFolder.findFirstOrThrow({
+          where: { ownerId, id: folderId, libraryMode: this.libraryMode },
+        });
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
   }
 
   async deleteSmartFolder(ownerId: string, folderId: string) {
-    if (await this.prisma.eagleSmartFolder.count({ where: { ownerId, parentId: folderId } })) {
+    if (
+      await this.prisma.eagleSmartFolder.count({
+        where: { ownerId, parentId: folderId, libraryMode: this.libraryMode },
+      })
+    ) {
       throw new ConflictException('请先删除或移出子级智能文件夹。');
     }
     const result = await this.prisma.eagleSmartFolder.deleteMany({
-      where: { ownerId, id: folderId },
+      where: { ownerId, id: folderId, libraryMode: this.libraryMode },
     });
     if (result.count !== 1) throw new NotFoundException('智能文件夹不存在。');
     return { id: folderId };
@@ -1162,7 +1280,7 @@ export class EagleService {
   private async resolveParent(ownerId: string, parentId: string | null | undefined) {
     if (!parentId) return null;
     const parent = await this.prisma.eagleSmartFolder.findFirst({
-      where: { ownerId, id: parentId },
+      where: { ownerId, id: parentId, libraryMode: this.libraryMode },
       select: { id: true, parentId: true },
     });
     if (!parent) throw new NotFoundException('父级智能文件夹不存在。');
@@ -1176,9 +1294,11 @@ export class EagleService {
   ) {
     const [manualTagCount, aiTagCount] = await Promise.all([
       this.prisma.eagleManualTag.count({
-        where: { ownerId, id: { in: dependencies.manualTagIds } },
+        where: { ownerId, id: { in: dependencies.manualTagIds }, libraryMode: this.libraryMode },
       }),
-      this.prisma.eagleAiTag.count({ where: { ownerId, id: { in: dependencies.aiTagIds } } }),
+      this.prisma.eagleAiTag.count({
+        where: { ownerId, id: { in: dependencies.aiTagIds }, libraryMode: this.libraryMode },
+      }),
     ]);
     if (manualTagCount !== dependencies.manualTagIds.length)
       throw new NotFoundException('一个或多个人工标签不存在。');
@@ -1194,20 +1314,24 @@ export class EagleService {
   ) {
     if (dependencies.manualTagIds.length) {
       await transaction.eagleSmartFolderManualTagDependency.createMany({
-        data: dependencies.manualTagIds.map((manualTagId) => ({
-          ownerId,
-          smartFolderId: folderId,
-          manualTagId,
-        })),
+        data: dependencies.manualTagIds
+          .map((manualTagId) => ({
+            ownerId,
+            smartFolderId: folderId,
+            manualTagId,
+          }))
+          .map((row) => inLibrary(this.libraryMode, row)),
       });
     }
     if (dependencies.aiTagIds.length) {
       await transaction.eagleSmartFolderAiTagDependency.createMany({
-        data: dependencies.aiTagIds.map((aiTagId) => ({
-          ownerId,
-          smartFolderId: folderId,
-          aiTagId,
-        })),
+        data: dependencies.aiTagIds
+          .map((aiTagId) => ({
+            ownerId,
+            smartFolderId: folderId,
+            aiTagId,
+          }))
+          .map((row) => inLibrary(this.libraryMode, row)),
       });
     }
   }
@@ -1218,7 +1342,7 @@ export class EagleService {
     assetId: string,
   ): Promise<never> {
     const exists = await transaction.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, deletedAt: null },
+      where: { ownerId, id: assetId, deletedAt: null, libraryMode: this.libraryMode },
       select: { id: true },
     });
     if (!exists) throw new NotFoundException('素材不存在。');
@@ -1230,7 +1354,11 @@ export class EagleService {
     ownerId: string,
     tagId: string,
   ): Promise<never> {
-    if (!(await transaction.eagleManualTag.count({ where: { ownerId, id: tagId } })))
+    if (
+      !(await transaction.eagleManualTag.count({
+        where: { ownerId, id: tagId, libraryMode: this.libraryMode },
+      }))
+    )
       throw new NotFoundException('标签不存在。');
     throw new ConflictException('标签已被其他操作更新，请刷新后重试。');
   }
@@ -1240,7 +1368,11 @@ export class EagleService {
     ownerId: string,
     folderId: string,
   ): Promise<never> {
-    if (!(await transaction.eagleSmartFolder.count({ where: { ownerId, id: folderId } })))
+    if (
+      !(await transaction.eagleSmartFolder.count({
+        where: { ownerId, id: folderId, libraryMode: this.libraryMode },
+      }))
+    )
       throw new NotFoundException('智能文件夹不存在。');
     throw new ConflictException('智能文件夹已被其他操作更新，请刷新后重试。');
   }
@@ -1271,11 +1403,11 @@ function serializeAssetList(asset: AssetListRecord) {
   return {
     ...safe,
     byteSize: Number(asset.byteSize),
-    originalUrl: `/api/eagle/assets/${asset.id}/original`,
+    originalUrl: `/api/${asset.libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${asset.id}/original`,
     renditions: asset.renditions.map((rendition) => ({
       ...rendition,
       byteSize: Number(rendition.byteSize),
-      url: `/api/eagle/assets/${asset.id}/renditions/${rendition.id}`,
+      url: `/api/${asset.libraryMode === 'PHOTO' ? 'photos' : 'eagle'}/assets/${asset.id}/renditions/${rendition.id}`,
     })),
     manualTags: manualTagLinks.map(({ tag }) => tag),
   };
@@ -1361,21 +1493,29 @@ function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {
   return { ownerId, id: { in: [] } };
 }
 
-function encodeSemanticSearchCursor(query: string, offset: number): string {
-  return `ai:${Buffer.from(JSON.stringify({ version: 1, query, offset })).toString('base64url')}`;
+function encodeSemanticSearchCursor(query: string, offset: number, scope: LibraryIdentity): string {
+  return `ai:${Buffer.from(JSON.stringify({ version: 2, query, offset, ...scope })).toString('base64url')}`;
 }
 
-function decodeSemanticSearchCursor(cursor: string | undefined, query: string): number {
+function decodeSemanticSearchCursor(
+  cursor: string | undefined,
+  query: string,
+  scope: LibraryIdentity,
+): number {
   if (!cursor) return 0;
   if (!cursor.startsWith('ai:')) throw new BadRequestException('搜索游标无效。');
   try {
     const payload = JSON.parse(Buffer.from(cursor.slice(3), 'base64url').toString('utf8')) as {
       version?: unknown;
+      ownerId?: unknown;
+      libraryMode?: unknown;
       query?: unknown;
       offset?: unknown;
     };
     if (
-      payload.version !== 1 ||
+      (payload.version === 2
+        ? payload.ownerId !== scope.ownerId || payload.libraryMode !== scope.libraryMode
+        : payload.version !== 1 || scope.libraryMode !== 'MATERIAL') ||
       payload.query !== query ||
       !Number.isSafeInteger(payload.offset) ||
       (payload.offset as number) < 0

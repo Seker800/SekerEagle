@@ -24,7 +24,7 @@ export class EagleImportService {
 
   async listLibraries(ownerId: string) {
     const libraries = await this.prisma.eagleExternalLibrary.findMany({
-      where: { ownerId },
+      where: { ownerId, libraryMode: 'MATERIAL' },
       orderBy: { updatedAt: 'desc' },
       include: {
         _count: { select: { assets: true } },
@@ -50,6 +50,7 @@ export class EagleImportService {
           ownerId,
           idempotencyKey: input.idempotencyKey,
         },
+        libraryMode: 'MATERIAL',
       },
     });
     if (existing) return serializeRun(existing);
@@ -61,12 +62,14 @@ export class EagleImportService {
           provider: 'EAGLE_APP',
           externalLibraryId: input.externalLibraryId,
         },
+        libraryMode: 'MATERIAL',
       },
       create: {
         ownerId,
         externalLibraryId: input.externalLibraryId,
         displayName: normalized(input.libraryName, 255),
         sourceModifiedAt: input.sourceModifiedAt,
+        libraryMode: 'MATERIAL',
       },
       update: {
         displayName: normalized(input.libraryName, 255),
@@ -81,13 +84,16 @@ export class EagleImportService {
         manifestVersion: input.manifestVersion,
         declaredItemCount: input.declaredItemCount,
         declaredByteSize: BigInt(input.declaredByteSize),
+        libraryMode: 'MATERIAL',
       },
     });
     return serializeRun(run);
   }
 
   async getRun(ownerId: string, runId: string) {
-    const run = await this.prisma.eagleImportRun.findFirst({ where: { ownerId, id: runId } });
+    const run = await this.prisma.eagleImportRun.findFirst({
+      where: { ownerId, id: runId, libraryMode: 'MATERIAL' },
+    });
     if (!run) throw new NotFoundException('Eagle 导入任务不存在。');
     return serializeRun(run);
   }
@@ -98,7 +104,7 @@ export class EagleImportService {
       throw new BadRequestException('清单版本与任务不一致。');
     const contentHash = sha256Json(chunk);
     const replay = await this.prisma.eagleImportManifestChunk.findUnique({
-      where: { runId_chunkKey: { runId, chunkKey: chunk.chunkKey } },
+      where: { runId_chunkKey: { runId, chunkKey: chunk.chunkKey }, libraryMode: 'MATERIAL' },
     });
     if (replay) {
       if (replay.contentHash !== contentHash)
@@ -123,6 +129,7 @@ export class EagleImportService {
             normalizedName: normalizeKey(group.name),
             color: group.color,
             description: group.description,
+            libraryMode: 'MATERIAL',
           },
         });
       }
@@ -136,6 +143,7 @@ export class EagleImportService {
             color: tag.color,
             isStarred: tag.isStarred ?? false,
             groupSourceIds: tag.groupSourceIds ?? [],
+            libraryMode: 'MATERIAL',
           },
         });
       }
@@ -147,6 +155,7 @@ export class EagleImportService {
             sourceFolderId: folder.sourceId,
             name: normalized(folder.name, 255),
             parentSourceFolderId: folder.parentSourceId,
+            libraryMode: 'MATERIAL',
           },
         });
       }
@@ -158,18 +167,20 @@ export class EagleImportService {
               externalLibraryId: run.externalLibraryId,
               externalItemId: item.sourceItemId,
             },
+            libraryMode: 'MATERIAL',
           },
           create: {
             ownerId,
             externalLibraryId: run.externalLibraryId,
             externalItemId: item.sourceItemId,
             lastSeenAt: new Date(),
+            libraryMode: 'MATERIAL',
           },
           update: { lastSeenAt: new Date() },
         });
         try {
           await transaction.eagleImportRunItem.create({
-            data: importItemData(ownerId, runId, external.id, item),
+            data: { ...importItemData(ownerId, runId, external.id, item), libraryMode: 'MATERIAL' },
           });
           acceptedItemCount += 1;
         } catch (error) {
@@ -185,10 +196,11 @@ export class EagleImportService {
           contentHash,
           acceptedItemCount,
           skippedItemCount,
+          libraryMode: 'MATERIAL',
         },
       });
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: { stagedItemCount: { increment: acceptedItemCount } },
       });
     });
@@ -198,7 +210,7 @@ export class EagleImportService {
   async preflight(ownerId: string, runId: string) {
     const run = await this.requireDraftRun(ownerId, runId);
     const items = await this.prisma.eagleImportRunItem.findMany({
-      where: { ownerId, runId },
+      where: { ownerId, runId, libraryMode: 'MATERIAL' },
       include: { externalAsset: { include: { asset: true } } },
     });
     const counts = {
@@ -250,7 +262,7 @@ export class EagleImportService {
             `eagle-library:${run.externalLibraryId}`,
           );
           await transaction.eagleExternalAsset.update({
-            where: { id: item.externalAssetId },
+            where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
             data: {
               metadataHash: item.metadataHash,
               sourceImportedAt: item.sourceImportedAt,
@@ -262,7 +274,7 @@ export class EagleImportService {
         }
         const terminal = !needsUpload;
         await transaction.eagleImportRunItem.update({
-          where: { id: item.id },
+          where: { id: item.id, libraryMode: 'MATERIAL' },
           data: {
             action,
             status: action === 'METADATA_UPDATE' ? 'IMPORTED' : terminal ? 'SKIPPED' : 'STAGED',
@@ -273,7 +285,7 @@ export class EagleImportService {
         });
       }
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: {
           status: counts.uploadItemCount ? 'PREFLIGHTED' : 'COMPLETED',
           importedItemCount: counts.metadataUpdateItemCount,
@@ -305,6 +317,7 @@ export class EagleImportService {
         runId,
         status: query.status as never,
         ...(query.cursor ? { id: { gt: query.cursor } } : {}),
+        libraryMode: 'MATERIAL',
       },
       orderBy: { id: 'asc' },
       take: query.limit + 1,
@@ -324,6 +337,7 @@ export class EagleImportService {
         id: itemId,
         status: 'STAGED',
         action: { in: ['NEW', 'CONTENT_REPLACE'] },
+        libraryMode: 'MATERIAL',
       },
       data: {
         status: 'UPLOADING',
@@ -342,6 +356,7 @@ export class EagleImportService {
         id: itemId,
         status: 'STAGED',
         action: { in: ['NEW', 'CONTENT_REPLACE'] },
+        libraryMode: 'MATERIAL',
       },
       select: {
         originalFileName: true,
@@ -356,13 +371,13 @@ export class EagleImportService {
 
   async finishItem(ownerId: string, runId: string, itemId: string, assetId: string) {
     const item = await this.prisma.eagleImportRunItem.findFirst({
-      where: { ownerId, runId, id: itemId },
+      where: { ownerId, runId, id: itemId, libraryMode: 'MATERIAL' },
       include: { externalAsset: true },
     });
     if (!item) throw new NotFoundException('Eagle 导入项不存在。');
     if (item.status === 'IMPORTED' && item.assetId === assetId) return serializeItem(item);
     const asset = await this.prisma.eagleAsset.findFirst({
-      where: { ownerId, id: assetId },
+      where: { ownerId, id: assetId, libraryMode: 'MATERIAL' },
       select: { id: true },
     });
     if (!asset) throw new NotFoundException('上传后的素材不存在。');
@@ -380,11 +395,11 @@ export class EagleImportService {
         item.externalAsset.assetId !== assetId
       )
         await transaction.eagleAsset.updateMany({
-          where: { ownerId, id: item.externalAsset.assetId },
+          where: { ownerId, id: item.externalAsset.assetId, libraryMode: 'MATERIAL' },
           data: { deletedAt: new Date() },
         });
       await transaction.eagleExternalAsset.update({
-        where: { id: item.externalAssetId },
+        where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
         data: {
           assetId,
           metadataHash: item.metadataHash,
@@ -398,7 +413,7 @@ export class EagleImportService {
         },
       });
       await transaction.eagleImportRunItem.update({
-        where: { id: item.id },
+        where: { id: item.id, libraryMode: 'MATERIAL' },
         data: {
           status: 'IMPORTED',
           assetId,
@@ -408,7 +423,7 @@ export class EagleImportService {
         },
       });
       await transaction.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: {
           status: 'RUNNING',
           startedAt: item.completedAt ?? new Date(),
@@ -424,7 +439,12 @@ export class EagleImportService {
 
   async cancel(ownerId: string, runId: string) {
     const result = await this.prisma.eagleImportRun.updateMany({
-      where: { ownerId, id: runId, status: { in: ['DRAFT', 'PREFLIGHTED', 'RUNNING'] } },
+      where: {
+        ownerId,
+        id: runId,
+        status: { in: ['DRAFT', 'PREFLIGHTED', 'RUNNING'] },
+        libraryMode: 'MATERIAL',
+      },
       data: { status: 'CANCELLED', cancelledAt: new Date() },
     });
     if (result.count !== 1) throw new ConflictException('导入任务不能取消。');
@@ -433,7 +453,7 @@ export class EagleImportService {
 
   private async requireDraftRun(ownerId: string, runId: string) {
     const run = await this.prisma.eagleImportRun.findFirst({
-      where: { ownerId, id: runId, status: 'DRAFT' },
+      where: { ownerId, id: runId, status: 'DRAFT', libraryMode: 'MATERIAL' },
     });
     if (!run) throw new ConflictException('Eagle 导入任务不在清单阶段。');
     return run;
@@ -442,13 +462,20 @@ export class EagleImportService {
   private async convergeRun(ownerId: string, runId: string) {
     const [pending, failed] = await Promise.all([
       this.prisma.eagleImportRunItem.count({
-        where: { ownerId, runId, status: { in: ['STAGED', 'UPLOADING', 'FINALIZING'] } },
+        where: {
+          ownerId,
+          runId,
+          status: { in: ['STAGED', 'UPLOADING', 'FINALIZING'] },
+          libraryMode: 'MATERIAL',
+        },
       }),
-      this.prisma.eagleImportRunItem.count({ where: { ownerId, runId, status: 'FAILED' } }),
+      this.prisma.eagleImportRunItem.count({
+        where: { ownerId, runId, status: 'FAILED', libraryMode: 'MATERIAL' },
+      }),
     ]);
     if (!pending)
       await this.prisma.eagleImportRun.update({
-        where: { id: runId },
+        where: { id: runId, libraryMode: 'MATERIAL' },
         data: {
           status: failed ? 'PARTIAL' : 'COMPLETED',
           failedItemCount: failed,
@@ -549,11 +576,11 @@ async function applyImportedMetadata(
 ): Promise<void> {
   await lockOwnerPrivacyProjection(transaction, ownerId);
   const previous = await transaction.eagleAssetManualTagIngestion.findMany({
-    where: { ownerId, assetId, sourceKey },
+    where: { ownerId, assetId, sourceKey, libraryMode: 'MATERIAL' },
     select: { tagId: true },
   });
   await transaction.eagleAssetManualTagIngestion.deleteMany({
-    where: { ownerId, assetId, sourceKey },
+    where: { ownerId, assetId, sourceKey, libraryMode: 'MATERIAL' },
   });
   for (const tagName of item.tagNames) {
     const name = normalized(tagName, 100);
@@ -564,39 +591,47 @@ async function applyImportedMetadata(
           ownerId,
           normalizedName: normalizeKey(name),
         },
+        libraryMode: 'MATERIAL',
       },
-      create: { ownerId, name, normalizedName: normalizeKey(name) },
+      create: { ownerId, name, normalizedName: normalizeKey(name), libraryMode: 'MATERIAL' },
       update: {},
       select: { id: true },
     });
     await transaction.eagleAssetManualTag.upsert({
-      where: { ownerId_assetId_tagId: { ownerId, assetId, tagId: tag.id } },
-      create: { ownerId, assetId, tagId: tag.id, assignedByUser: false },
+      where: {
+        ownerId_assetId_tagId: { ownerId, assetId, tagId: tag.id },
+        libraryMode: 'MATERIAL',
+      },
+      create: { ownerId, assetId, tagId: tag.id, assignedByUser: false, libraryMode: 'MATERIAL' },
       update: {},
     });
     await transaction.eagleAssetManualTagIngestion.create({
-      data: { ownerId, assetId, tagId: tag.id, sourceKey },
+      data: { ownerId, assetId, tagId: tag.id, sourceKey, libraryMode: 'MATERIAL' },
     });
   }
   for (const { tagId } of previous) {
     const link = await transaction.eagleAssetManualTag.findUnique({
-      where: { ownerId_assetId_tagId: { ownerId, assetId, tagId } },
+      where: { ownerId_assetId_tagId: { ownerId, assetId, tagId }, libraryMode: 'MATERIAL' },
       select: { assignedByUser: true, _count: { select: { ingestionOrigins: true } } },
     });
     if (link && !link.assignedByUser && link._count.ingestionOrigins === 0) {
       await transaction.eagleAssetManualTag.delete({
-        where: { ownerId_assetId_tagId: { ownerId, assetId, tagId } },
+        where: { ownerId_assetId_tagId: { ownerId, assetId, tagId }, libraryMode: 'MATERIAL' },
       });
     }
   }
-  await transaction.eagleAsset.update({ where: { id: assetId }, data: { rating: item.rating } });
+  await transaction.eagleAsset.update({
+    where: { id: assetId, libraryMode: 'MATERIAL' },
+    data: { rating: item.rating },
+  });
   await transaction.eagleAssetAnnotation.upsert({
-    where: { ownerId_assetId: { ownerId, assetId } },
+    where: { ownerId_assetId: { ownerId, assetId }, libraryMode: 'MATERIAL' },
     create: {
       ownerId,
       assetId,
       description: item.description,
       sourceUrl: validSourceUrl(item.sourceUrl),
+      libraryMode: 'MATERIAL',
     },
     update: { description: item.description, sourceUrl: validSourceUrl(item.sourceUrl) },
   });

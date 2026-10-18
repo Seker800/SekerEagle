@@ -31,6 +31,7 @@ export class EagleBrowserCaptureService {
           clientCaptureId: input.clientCaptureId,
           uploadSessionId: session.id,
           ...declaration,
+          libraryMode: 'MATERIAL',
         },
         include: {
           uploadSession: {
@@ -95,7 +96,7 @@ export class EagleBrowserCaptureService {
 
   private find(ownerId: string, clientCaptureId: string) {
     return this.prisma.eagleBrowserCapture.findFirst({
-      where: { ownerId, clientCaptureId },
+      where: { ownerId, clientCaptureId, libraryMode: 'MATERIAL' },
       include: { uploadSession: { include: { eagleState: true } } },
     });
   }

@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import type { LibraryMode } from '@prisma/client';
+import { LIBRARY_MODE } from './library-mode';
+import { Injectable, Optional, Inject } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
   EAGLE_AI_TAG_DEFAULT_MODEL,
@@ -24,6 +26,7 @@ export class EagleAiTagService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly embeddings: EagleEmbeddingClient,
+    @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
   async summary(ownerId: string, includePrivate = false) {
@@ -31,7 +34,13 @@ export class EagleAiTagService {
     const [eligible, analyzed, queued, running, failed, tags, ollama, settings] = await Promise.all(
       [
         this.prisma.eagleAsset.count({
-          where: { ownerId, deletedAt: null, mimeType: { startsWith: 'image/' }, ...visibleAsset },
+          where: {
+            ownerId,
+            deletedAt: null,
+            mimeType: { startsWith: 'image/' },
+            ...visibleAsset,
+            libraryMode: this.libraryMode,
+          },
         }),
         this.prisma.eagleAiAnalysisRun.count({
           where: {
@@ -41,6 +50,7 @@ export class EagleAiTagService {
             promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
             processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
             asset: { deletedAt: null, ...visibleAsset },
+            libraryMode: this.libraryMode,
           },
         }),
         this.prisma.eagleAssetProcessingJob.count({
@@ -50,6 +60,7 @@ export class EagleAiTagService {
             processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
             status: 'PENDING',
             asset: visibleAsset,
+            libraryMode: this.libraryMode,
           },
         }),
         this.prisma.eagleAssetProcessingJob.count({
@@ -59,6 +70,7 @@ export class EagleAiTagService {
             processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
             status: 'PROCESSING',
             asset: visibleAsset,
+            libraryMode: this.libraryMode,
           },
         }),
         this.prisma.eagleAssetProcessingJob.count({
@@ -68,9 +80,10 @@ export class EagleAiTagService {
             processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
             status: 'FAILED',
             asset: visibleAsset,
+            libraryMode: this.libraryMode,
           },
         }),
-        this.prisma.eagleAiTag.count({ where: { ownerId } }),
+        this.prisma.eagleAiTag.count({ where: { ownerId, libraryMode: this.libraryMode } }),
         this.checkOllama(),
         this.getSettings(ownerId),
       ],
@@ -80,13 +93,17 @@ export class EagleAiTagService {
 
   async updateSettings(ownerId: string, input: UpdateEagleAiTagSettingsDto) {
     const row = await this.prisma.eagleProcessingSetting.upsert({
-      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+      where: {
+        ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+        libraryMode: this.libraryMode,
+      },
       create: {
         ownerId,
         aiTagManualEnabled: input.manualEnabled,
         aiTagScheduleEnabled: input.scheduleEnabled,
         aiTagScheduleStart: input.scheduleStart,
         aiTagScheduleEnd: input.scheduleEnd,
+        libraryMode: this.libraryMode,
       },
       update: {
         aiTagManualEnabled: input.manualEnabled,
@@ -102,20 +119,20 @@ export class EagleAiTagService {
     const privateClause = includePrivate ? Prisma.empty : Prisma.sql`AND asset."isPrivate" = false`;
     const created = await this.prisma.$executeRaw(Prisma.sql`
       INSERT INTO "EagleMediaJob" (
-        id, "ownerId", "assetId", kind, status, lane, "assetRevision", "processorVersion",
+        id, "ownerId", "libraryMode", "assetId", kind, status, lane, "assetRevision", "processorVersion",
         attempts, "leaseVersion", "availableAt", "createdAt", "updatedAt"
       )
-      SELECT gen_random_uuid(), asset."ownerId", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
+      SELECT gen_random_uuid(), asset."ownerId", asset."libraryMode", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
         'PENDING'::"EagleMediaJobStatus", 'BACKGROUND'::"EagleProcessingLane",
         asset."mediaRevision", ${EAGLE_AI_TAG_PROCESSOR_VERSION}, 0, 0, now(), now(), now()
       FROM "EagleAsset" AS asset
-      WHERE asset."ownerId" = ${ownerId}
+      WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
         AND asset."deletedAt" IS NULL
         AND asset."mimeType" LIKE 'image/%'
         ${privateClause}
         AND EXISTS (
           SELECT 1 FROM "EagleAssetRendition" AS preview
-          WHERE preview."ownerId" = ${ownerId}
+          WHERE preview."ownerId" = ${ownerId} AND preview."libraryMode" = ${this.libraryMode}::"LibraryMode"
             AND preview."assetId" = asset.id
             AND preview.revision = asset."mediaRevision"
             AND preview.kind = 'PREVIEW'
@@ -149,6 +166,7 @@ export class EagleAiTagService {
         processorVersion: EAGLE_AI_TAG_PROCESSOR_VERSION,
         status: 'FAILED',
         asset: includePrivate ? {} : { isPrivate: false },
+        libraryMode: this.libraryMode,
       },
       data: {
         status: 'PENDING',
@@ -167,7 +185,7 @@ export class EagleAiTagService {
     const normalizedName = query.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
     if (!normalizedName) return [];
     const exact = await this.prisma.eagleAiTag.findFirst({
-      where: { ownerId, normalizedName },
+      where: { ownerId, normalizedName, libraryMode: this.libraryMode },
       select: { id: true, name: true },
     });
     let semantic: Array<{ id: string; name: string; similarity: number }> = [];
@@ -180,7 +198,7 @@ export class EagleAiTagService {
       semantic = await this.prisma.$queryRaw(Prisma.sql`
         SELECT id, name, (1 - (embedding <=> ${vector}::vector))::double precision AS similarity
         FROM "EagleAiTag"
-        WHERE "ownerId" = ${ownerId}
+        WHERE "ownerId" = ${ownerId} AND "libraryMode" = ${this.libraryMode}::"LibraryMode"
           AND "embeddingSpaceId" = ${AI_TAG_EMBEDDING_SPACE_ID}
           AND embedding IS NOT NULL
           ${exact ? Prisma.sql`AND id <> ${exact.id}` : Prisma.empty}
@@ -220,7 +238,10 @@ export class EagleAiTagService {
 
   private async getSettings(ownerId: string) {
     const row = await this.prisma.eagleProcessingSetting.findUnique({
-      where: { ownerId_libraryMode: { ownerId, libraryMode: 'MATERIAL' } },
+      where: {
+        ownerId_libraryMode: { ownerId, libraryMode: this.libraryMode },
+        libraryMode: this.libraryMode,
+      },
     });
     return serializeSettings(row);
   }

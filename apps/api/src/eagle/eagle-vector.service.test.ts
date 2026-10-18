@@ -24,6 +24,7 @@ test('summary counts only suggestions that can appear in recommendation review',
   await service.summary('owner-1', false);
 
   assert.deepEqual(pendingSuggestionQuery?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     status: 'PENDING',
     isActive: true,
@@ -47,11 +48,13 @@ test('tag semantics defaults to enabled tags and search is bounded to disabled c
   await service.listTagSemantics('owner-1', ' 汽车 ');
 
   assert.deepEqual(queries[0]?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     semanticConfig: { is: { recommendationEnabled: true } },
   });
   assert.equal('take' in (queries[0] ?? {}), false);
   assert.deepEqual(queries[1]?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     normalizedName: { contains: '汽车' },
     OR: [
@@ -92,12 +95,13 @@ test('disabling recommendation invalidates only the owner tag pending suggestion
   const result = await service.setRecommendationEnabled('owner-1', 'tag-1', false);
 
   assert.deepEqual(result, { tagId: 'tag-1', recommendationEnabled: false, invalidated: 2 });
-  assert.deepEqual(writes[0], { ownerId: 'owner-1', id: 'tag-1' });
+  assert.deepEqual(writes[0], { libraryMode: 'MATERIAL', ownerId: 'owner-1', id: 'tag-1' });
   const invalidation = writes[2] as {
     where: unknown;
     data: { invalidatedAt: unknown; invalidReason: string };
   };
   assert.deepEqual(invalidation.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     suggestedTagId: 'tag-1',
     status: 'PENDING',
@@ -259,6 +263,7 @@ test('distance inspection loads an owner-visible thumbnail for visual classifica
   await service.listTagDistanceAssets('owner-1', 'tag-1', { limit: 40, direction: 'DESC' }, false);
 
   assert.deepEqual(distanceQuery?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     tagId: 'tag-1',
     snapshotId: 'snapshot-1',
@@ -305,6 +310,7 @@ test('distance inspection defaults to lowest similarity first across cursor page
 
   assert.deepEqual(queries[0]?.orderBy, [{ distance: 'desc' }, { assetId: 'desc' }]);
   assert.deepEqual(queries[0]?.where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     tagId: 'tag-1',
     snapshotId: 'snapshot-1',
@@ -368,9 +374,11 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
   });
   assert.deepEqual(creates[0], {
     where: {
+      libraryMode: 'MATERIAL',
       ownerId_assetId_tagId: { ownerId: 'owner-1', assetId: 'asset-1', tagId: 'tag-1' },
     },
     create: {
+      libraryMode: 'MATERIAL',
       ownerId: 'owner-1',
       assetId: 'asset-1',
       tagId: 'tag-1',
@@ -388,6 +396,7 @@ test('accepting a suggestion atomically creates an audited manual tag relation',
   assert.equal(privacyWrites.length, 2);
   assert.match(JSON.stringify(privacyWrites), /marksAssetsPrivate/);
   assert.deepEqual((recentTagWrites[0] as { where: unknown }).where, {
+    libraryMode: 'MATERIAL',
     ownerId: 'owner-1',
     id: 'tag-1',
   });
