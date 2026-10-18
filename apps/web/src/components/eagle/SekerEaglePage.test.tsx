@@ -347,13 +347,22 @@ describe('SekerEaglePage', () => {
   });
 
   it('places the single mode switch in the sidebar brand position without a separate header', () => {
-    renderPage('owner-test', false, undefined,
-      <nav aria-label="图库模式"><button aria-pressed="true">素材</button><button aria-pressed="false">照片</button></nav>,
+    renderPage(
+      'owner-test',
+      false,
+      undefined,
+      <nav aria-label="图库模式">
+        <button aria-pressed="true">素材</button>
+        <button aria-pressed="false">照片</button>
+      </nav>,
     );
     const sidebar = screen.getByRole('navigation', { name: '素材库导航' });
     const switcher = within(sidebar).getByRole('navigation', { name: '图库模式' });
     expect(screen.getAllByRole('navigation', { name: '图库模式' })).toHaveLength(1);
-    expect(within(switcher).getByRole('button', { name: '素材' })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(switcher).getByRole('button', { name: '素材' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
     expect(within(sidebar).queryByText('SekerEagle')).not.toBeInTheDocument();
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });

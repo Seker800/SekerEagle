@@ -17,29 +17,6 @@
   font: inherit;
 }
 
-.brand {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.mark {
-  width: 25px;
-  height: 25px;
-  border-radius: 7px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-  background: #08090a;
-}
-.mark img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-}
 .workspace {
   width: 100%;
   min-width: 0;
@@ -67,6 +44,7 @@
 }
 .sidebarHeader {
   height: 44px;
+  flex-shrink: 0;
   margin: 0 -8px 6px;
   padding: 0 8px 0 10px;
   border-bottom: 1px solid var(--eagle-line);
@@ -975,12 +953,25 @@
 @media (max-width: 720px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr) clamp(180px, 38vw, 240px);
+    grid-template-rows: 44px minmax(0, 1fr);
   }
   .workspaceWide {
     grid-template-columns: minmax(0, 1fr);
   }
   .sidebar {
+    grid-column: 1 / -1;
+    padding: 0 8px;
+    border-right: 0;
+    border-bottom: 1px solid var(--eagle-line);
+  }
+  .sidebar > :not(.sidebarHeader) {
     display: none;
+  }
+  .sidebarHeader {
+    width: min(100%, 220px);
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
   }
   .assetViewport {
     padding: 10px;

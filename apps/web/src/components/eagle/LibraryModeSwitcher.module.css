@@ -1,0 +1,38 @@
+.switcher {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 8px;
+  background: var(--eagle-bg);
+}
+.switcher > .option {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  min-height: 28px;
+  justify-content: center;
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--eagle-muted);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: center;
+}
+.switcher > .option:hover {
+  color: var(--eagle-text);
+  background: rgb(255 255 255 / 4%);
+}
+.switcher > .option[aria-pressed='true'] {
+  background: rgb(214 155 72 / 14%);
+  color: #eab664;
+  font-weight: 600;
+}
+.switcher > .option:focus-visible {
+  outline: 2px solid var(--eagle-accent);
+  outline-offset: 1px;
+}

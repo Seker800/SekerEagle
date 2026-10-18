@@ -925,28 +925,12 @@ export function SekerEaglePage({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {modeSwitcher && (
-        <header className="library-workspace-header">
-          <strong>SekerEagle</strong>
-          {modeSwitcher}
-        </header>
-      )}
-      <div
-        style={modeSwitcher ? { height: 'calc(100dvh - 52px)' } : undefined}
-        className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}
-      >
+      <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
         <nav
           className={styles.sidebar}
           aria-label={libraryMode === 'PHOTO' ? t('照片库导航') : t('素材库导航')}
         >
-          <div className={styles.sidebarHeader}>
-            <div className={styles.brand}>
-              <span className={styles.mark} aria-hidden="true">
-                <img src={sekerEagleLogo} alt="" />
-              </span>
-              <span>SekerEagle</span>
-            </div>
-          </div>
+          <div className={styles.sidebarHeader}>{modeSwitcher}</div>
           <button
             className={
               libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'

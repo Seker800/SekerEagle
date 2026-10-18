@@ -4,6 +4,7 @@ import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
+import modeStyles from './components/eagle/LibraryModeSwitcher.module.css';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { LibraryWorkspaceProvider } from './lib/library-workspace';
 import { createPrivacyVisibilityApi } from './lib/privacy-visibility-api';
@@ -173,9 +174,10 @@ export function App() {
         {connectionButton}
         <SekerEaglePage
           modeSwitcher={
-            <nav aria-label={t('图库模式')} className="library-mode-switch">
+            <nav aria-label={t('图库模式')} className={modeStyles.switcher}>
               <button
                 type="button"
+                className={modeStyles.option}
                 aria-pressed={libraryMode === 'MATERIAL'}
                 onClick={() => {
                   setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
@@ -186,6 +188,7 @@ export function App() {
               </button>
               <button
                 type="button"
+                className={modeStyles.option}
                 aria-pressed={libraryMode === 'PHOTO'}
                 onClick={() => {
                   setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);

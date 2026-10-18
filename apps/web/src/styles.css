@@ -1063,39 +1063,6 @@ select:focus-visible {
   background: #22c55e;
 }
 
-.library-workspace-header {
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 6px 20px;
-  background: #17181b;
-  border-bottom: 1px solid #ffffff14;
-  font-size: 13px;
-}
-.library-mode-switch {
-  display: flex;
-  gap: 4px;
-  padding: 3px;
-  border: 1px solid #ffffff14;
-  border-radius: 9px;
-  background: #111214;
-}
-.library-mode-switch button {
-  padding: 5px 24px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #9b9ea6;
-  cursor: pointer;
-  font-size: 12px;
-}
-.library-mode-switch button[aria-pressed='true'] {
-  background: #d69b4826;
-  color: #eab664;
-  font-weight: 600;
-}
 .photo-metadata {
   padding: 16px;
   border-bottom: 1px solid #ddd3;
