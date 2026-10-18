@@ -157,3 +157,16 @@ describe('buildEagleQuickFilterQuery', () => {
     );
   });
 });
+
+
+it('photography uses the shared quick-filter state and clears with all filters', () => {
+  const state = createEmptyEagleQuickFilterState();
+  state.text.CAMERA_MODEL = 'Test Camera';
+  state.choices = { GPS: 'WITHOUT', PERSON: 'person-1' };
+  const query = buildEagleQuickFilterQuery(state);
+  expect(query.conditions.flatMap((condition) => condition.rules).map((rule) => rule.field))
+    .toEqual(expect.arrayContaining(['CAMERA_MODEL', 'GPS', 'PERSON']));
+  renderBar(state);
+  fireEvent.click(screen.getByRole('button', {name: /清除全部快捷筛选/}));
+  expect(screen.queryByRole('button', {name: /清除全部快捷筛选/})).not.toBeInTheDocument();
+});
