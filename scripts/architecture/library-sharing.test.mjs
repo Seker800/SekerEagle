@@ -151,5 +151,13 @@ test('rejects malformed source instead of accepting a partial syntax tree', () =
 });
 
 test('rejects photo-only overlays inside the shared card', () => {
-  rejectsMutation(page, (s) => s.replace('{isBatchSelection && (', "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{isBatchSelection && ("), 'shared-card');
+  rejectsMutation(
+    page,
+    (s) =>
+      s.replace(
+        '{isBatchSelection && (',
+        "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{isBatchSelection && (",
+      ),
+    'shared-card',
+  );
 });

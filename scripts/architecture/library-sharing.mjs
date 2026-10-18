@@ -195,6 +195,41 @@ export function checkLibrarySharing(sources) {
       }
     }
   }
+  const pageTree = trees.get(page);
+  if (pageTree) {
+    let cards = 0;
+    walk(pageTree, (node) => {
+      if (!ts.isJsxElement(node)) return;
+      let isCard = false;
+      walk(node.openingElement.attributes, (child) => {
+        if (
+          ts.isPropertyAccessExpression(child) &&
+          child.expression.getText(pageTree) === 'styles' &&
+          child.name.text === 'assetCard'
+        )
+          isCard = true;
+      });
+      if (!isCard) return;
+      cards++;
+      let fork = false;
+      walk(node, (child) => {
+        if (
+          ((ts.isIdentifier(child) && child.text === 'libraryMode') ||
+            (ts.isStringLiteral(child) && ['PHOTO', 'MATERIAL'].includes(child.text))) &&
+          !isPresentationLabel(child)
+        )
+          fork = true;
+      });
+      if (fork)
+        report(
+          page,
+          'shared-card',
+          'Generic cards cannot branch by library mode; only accessible wording may differ.',
+        );
+    });
+    if (cards !== 1)
+      report(page, 'shared-card', 'Keep one shared card composition for both libraries.');
+  }
   const photoTree = trees.get(photoModule);
   if (photoTree) {
     const classes = new Map();
