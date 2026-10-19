@@ -47,6 +47,10 @@ class UpdateGroupDto {
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
 export class PhotoManagementController {
   constructor(private readonly photos: PhotoManagementService) {}
+  @Get('timeline')
+  timeline(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.photos.timeline(p.sub, p.canViewPrivate);
+  }
   @Get('facets')
   facets(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.facets(p.sub, p.canViewPrivate);

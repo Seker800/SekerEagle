@@ -4528,6 +4528,18 @@
         "tags": ["eagle", "photos"]
       }
     },
+    "/api/photos/photography/timeline": {
+      "get": {
+        "operationId": "PhotoManagementController_timeline",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
     "/api/photos/photography/facets": {
       "get": {
         "operationId": "PhotoManagementController_facets",

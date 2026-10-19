@@ -994,3 +994,19 @@
     flex-wrap: wrap;
   }
 }
+
+.assetBrowser {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.horizontalViewport {
+  padding: 12px 4px 16px 12px;
+}
+.masonry[data-layout='justified'] .assetCard {
+  border-radius: 3px;
+}
+.masonry[data-layout='justified'] .preview img {
+  object-fit: contain;
+}

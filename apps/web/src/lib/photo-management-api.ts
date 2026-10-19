@@ -72,3 +72,11 @@ export const mergePhotoGroups = (id: string, targetId: string) =>
     method: 'POST',
     body: JSON.stringify({ targetId }),
   });
+
+export interface PhotoTimelineMonth {
+  month: string;
+  count: number;
+  cursor: string;
+}
+export const getPhotoTimeline = (signal?: AbortSignal) =>
+  request<{ months: PhotoTimelineMonth[] }>(`${base}/timeline`, { signal });

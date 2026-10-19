@@ -134,17 +134,49 @@ describe('buildEagleMasonryLayout', () => {
 });
 
 it('lays justified rows left to right at equal height without cropping or horizontal overflow', () => {
-  const assets = Array.from({length: 40}, (_, i) => ({id:String(i), width:i % 2 ? 400:800, height:600}));
-  const layout = buildEagleMasonryLayout(assets, 900, {strategy:'justified',targetCardWidth:180});
-  expect(layout.items.map(x=>x.id)).toEqual(assets.map(x=>x.id));
-  const firstRow = layout.items.filter(x=>x.top===0);
+  const assets = Array.from({ length: 40 }, (_, i) => ({
+    id: String(i),
+    width: i % 2 ? 400 : 800,
+    height: 600,
+  }));
+  const layout = buildEagleMasonryLayout(assets, 900, {
+    strategy: 'justified',
+    targetCardWidth: 180,
+  });
+  expect(layout.items.map((x) => x.id)).toEqual(assets.map((x) => x.id));
+  const firstRow = layout.items.filter((x) => x.top === 0);
   expect(firstRow.length).toBeGreaterThan(1);
-  expect(new Set(firstRow.map(x=>x.height)).size).toBe(1);
-  expect(firstRow.at(-1)!.left+firstRow.at(-1)!.width).toBeCloseTo(900,5);
+  expect(new Set(firstRow.map((x) => x.height)).size).toBe(1);
+  expect(firstRow.at(-1)!.left + firstRow.at(-1)!.width).toBeCloseTo(900, 5);
   for (const item of layout.items) {
-    const asset=assets.find(x=>x.id===item.id)!;
-    expect((item.width-2)/item.previewHeight).toBeCloseTo(asset.width/asset.height,5);
-    expect(item.left+item.width).toBeLessThanOrEqual(900.00001);
+    const asset = assets.find((x) => x.id === item.id)!;
+    expect((item.width - 2) / item.previewHeight).toBeCloseTo(asset.width / asset.height, 5);
+    expect(item.left + item.width).toBeLessThanOrEqual(900.00001);
     expect(item.height).toBeGreaterThan(0);
   }
+});
+
+it('keeps justified empty, narrow and partial rows finite and within the viewport', () => {
+  expect(buildEagleMasonryLayout([], 900, { strategy: 'justified' }).height).toBe(0);
+  for (const width of [0, 30, 400, 1200]) {
+    const layout = buildEagleMasonryLayout(
+      [
+        { id: 'a', width: null, height: null },
+        { id: 'b', width: -1, height: 40 },
+        { id: 'c', width: 100000, height: 1 },
+      ],
+      width,
+      { strategy: 'justified' },
+    );
+    for (const item of layout.items) {
+      expect(Number.isFinite(item.height)).toBe(true);
+      expect(item.height).toBeGreaterThan(0);
+      expect(item.left + item.width).toBeLessThanOrEqual(Math.max(3, width) + 0.0001);
+    }
+  }
+  const last = buildEagleMasonryLayout([{ id: 'one', width: 400, height: 400 }], 1200, {
+    strategy: 'justified',
+    targetCardWidth: 210,
+  });
+  expect(last.items[0].width).toBe(212);
 });

@@ -223,6 +223,13 @@ test('real Nest photo routes preserve guards and inject the photo service graph'
       404,
     );
     assert.equal((await fetch(`${base}/api/photos/assets`)).status, 401);
+    assert.equal((await fetch(`${base}/api/photos/photography/timeline`)).status, 401);
+    const timelineResponse = await fetch(`${base}/api/photos/photography/timeline`, { headers });
+    assert.equal(timelineResponse.status, 200);
+    assert.equal(
+      (await timelineResponse.json()).months.reduce((sum, row) => sum + row.count, 0),
+      1,
+    );
   } finally {
     await app.close();
   }
@@ -829,5 +836,66 @@ test('direct image-vector retrieval isolates owner/mode/private/revisions and co
   assert.deepEqual(
     lexical.items.map((row) => row.id),
     [f.material.id],
+  );
+});
+
+test('full photo month index excludes other owners, materials, trash and hidden photos and seeks beyond page one', async () => {
+  const { PhotoManagementService } =
+    await import('../../apps/api/dist/photos/photo-management.service.js');
+  const f = await fixtures(),
+    foreign = await fixtures();
+  await prisma.eagleAsset.update({
+    where: { id: f.photo.id },
+    data: { chronologicalAt: new Date('2001-01-05T12:00:00Z') },
+  });
+  const seed = (index, date, extra = {}) => ({
+    id: randomUUID(),
+    ownerId: f.ownerId,
+    libraryMode: 'PHOTO',
+    originalName: 'date.jpg',
+    displayName: 'date',
+    normalizedDisplayName: 'date',
+    mimeType: 'image/jpeg',
+    format: 'jpeg',
+    byteSize: 1,
+    originalObjectKey: `users/${f.ownerId}/timeline/${index}`,
+    chronologicalAt: new Date(date),
+    ...extra,
+  });
+  await prisma.eagleAsset.createMany({
+    data: [
+      ...Array.from({ length: 65 }, (_, i) => seed(i, '2024-03-01T12:00:00Z')),
+      seed('private', '1980-01-01T00:00:00Z', { isPrivate: true }),
+      seed('trash', '1970-01-01T00:00:00Z', { deletedAt: new Date() }),
+      seed('foreign', '1960-01-01T00:00:00Z', { ownerId: foreign.ownerId }),
+      seed('material', '1950-01-01T00:00:00Z', { libraryMode: 'MATERIAL' }),
+    ],
+  });
+  const service = new PhotoManagementService(prisma);
+  const index = await service.timeline(f.ownerId, false);
+  assert.deepEqual(
+    index.months.map((row) => [row.month, row.count]),
+    [
+      ['2024-03', 65],
+      ['2001-01', 1],
+    ],
+  );
+  const firstPage = await f.photos.listAssets(f.ownerId, { limit: 10 });
+  assert.equal(
+    firstPage.items.some((row) => row.id === f.photo.id),
+    false,
+  );
+  const older = await f.photos.listAssets(f.ownerId, { limit: 10, cursor: index.months[1].cursor });
+  assert.deepEqual(
+    older.items.map((row) => row.id),
+    [f.photo.id],
+  );
+  const visiblePrivate = await service.timeline(f.ownerId, true);
+  assert.deepEqual(
+    visiblePrivate.months.map((row) => row.month),
+    ['2024-03', '2001-01', '1980-01'],
+  );
+  await assert.rejects(() =>
+    f.materials.listAssets(f.ownerId, { limit: 10, cursor: index.months[1].cursor }),
   );
 });

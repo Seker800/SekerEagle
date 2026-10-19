@@ -477,6 +477,22 @@ try {
       }
     }
   }
+  // Synthetic historical import dates make the full-library date rail visible in acceptance.
+  // Files without EXIF retain the production fallback: chronologicalAt equals libraryAddedAt.
+  const historicalImports = [
+    [aspectAssetIds.get('photos:portrait'), '2025-06-01T12:00:00Z'],
+    [aspectAssetIds.get('photos:landscape'), '2023-09-01T12:00:00Z'],
+    ...cameraCases
+      .filter((row) => row.mode === 'photos')
+      .map((row, index) => [row.assetId, `${2022 - index}-02-01T12:00:00Z`]),
+  ];
+  for (const [id, timestamp] of historicalImports) {
+    if (!id) continue;
+    await db.eagleAsset.update({
+      where: { id },
+      data: { chronologicalAt: new Date(timestamp), libraryAddedAt: new Date(timestamp) },
+    });
+  }
   const restoreBucket = 'sekereagle-test-assets';
   assertSafeRuntimeTarget({
     databaseUrl: env.DATABASE_URL,
@@ -538,7 +554,7 @@ try {
       url: 'https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut',
       license: 'NASA public domain',
       synthetic:
-        'EXIF date, GPS, camera/lens and blurred / landscape / portrait derivatives are synthetic test conditions',
+        'EXIF date, GPS, camera/lens, historical import dates and blurred / landscape / portrait derivatives are synthetic test conditions',
     },
     restoredObjects: objects.Contents?.length ?? 0,
     status: 'passed',

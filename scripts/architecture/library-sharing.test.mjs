@@ -46,12 +46,10 @@ test('rejects mode-conditional generic rendering', () => {
   rejectsMutation(
     page,
     (s) =>
-      s
-        .replace('<EagleAssetThumbnail', "{libraryMode === 'PHOTO' && <EagleAssetThumbnail")
-        .replace(
-          'displayWidth={thumbnailSize}\n                          />',
-          'displayWidth={thumbnailSize}\n                          />}',
-        ),
+      s.replace(
+        /<EagleAssetThumbnail\b[\s\S]*?\/>/,
+        (thumbnail) => `{libraryMode === 'PHOTO' && ${thumbnail}}`,
+      ),
     'shared-composition',
   );
 });

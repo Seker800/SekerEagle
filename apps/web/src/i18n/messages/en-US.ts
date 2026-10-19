@@ -1,4 +1,9 @@
 export const enUS = {
+  照片日期导航: 'Photo date navigation',
+  回到最新照片: 'Back to latest photos',
+  重试日期导航: 'Retry date navigation',
+  按年月跳转: 'Jump by month',
+  '{{value1}} 张照片': '{{value1}} photos',
   展开筛选: 'Expand filters',
   收起筛选: 'Collapse filters',
   '已启用 {{value1}} 项筛选': '{{value1}} active filters',

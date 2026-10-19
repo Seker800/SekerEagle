@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { encodeEagleAssetCursor } from '../eagle/eagle-cursor';
 import { suggestPhotoGroups } from './photo-grouping';
 
 const MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
@@ -57,6 +58,29 @@ const serializePreview = (
 @Injectable()
 export class PhotoManagementService {
   constructor(private readonly prisma: PrismaService) {}
+  async timeline(ownerId: string, includePrivate: boolean) {
+    const rows = await this.prisma.$queryRaw<Array<{ month: Date; count: bigint }>>(Prisma.sql`
+      SELECT date_trunc('month', "chronologicalAt") AS month, count(*) AS count
+      FROM "EagleAsset"
+      WHERE "ownerId" = ${ownerId} AND "libraryMode" = 'PHOTO' AND "deletedAt" IS NULL
+        ${includePrivate ? Prisma.empty : Prisma.sql`AND "isPrivate" = false`}
+      GROUP BY 1 ORDER BY 1 DESC
+    `);
+    return {
+      months: rows.map((row) => {
+        const boundary = new Date(row.month);
+        boundary.setUTCMonth(boundary.getUTCMonth() + 1);
+        return {
+          month: row.month.toISOString().slice(0, 7),
+          count: Number(row.count),
+          cursor: encodeEagleAssetCursor(
+            { libraryAddedAt: boundary, id: '00000000-0000-0000-0000-000000000000' },
+            { ownerId, libraryMode: 'PHOTO' },
+          ),
+        };
+      }),
+    };
+  }
   async facets(ownerId: string, includePrivate: boolean) {
     const where = {
       ownerId,
