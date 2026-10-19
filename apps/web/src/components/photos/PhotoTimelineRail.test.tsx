@@ -81,89 +81,31 @@ describe('PhotoTimelineRail', () => {
   });
 });
 
-describe('calendar month selection', () => {
-  const sparseMonths = [
-    { month: '2026-10', count: 20, cursor: 'october' },
-    { month: '2026-02', count: 8, cursor: 'february' },
-    { month: '2025-11', count: 9, cursor: 'november' },
-    { month: '2024-03', count: 2, cursor: 'march' },
-    { month: '2023-01', count: 1, cursor: 'january' },
-  ];
-  it('reveals a selectable month grid and jumps with the exact existing month cursor', () => {
-    const onJump = vi.fn();
-    render(
-      <PhotoTimelineRail
-        months={sparseMonths}
-        onJump={onJump}
-        onLatest={vi.fn()}
-        onRetry={vi.fn()}
-      />,
-    );
-    const slider = screen.getByRole('slider');
-    fireEvent.focus(slider);
-    const picker = screen.getByRole('navigation', { name: '按年月跳转' });
-    expect(picker.querySelectorAll('button')).toHaveLength(12);
-    const february = screen.getByRole('button', { name: '2026年2月' });
-    expect(february).toBeEnabled();
-    expect(screen.getByRole('button', { name: '2026年3月' })).toBeDisabled();
-    fireEvent.click(february);
-    expect(onJump).toHaveBeenCalledExactlyOnceWith(sparseMonths[1]);
-    expect(slider).toHaveAttribute('aria-valuetext', '2026年2月');
-    fireEvent.keyDown(picker, { key: 'Escape' });
-    expect(screen.queryByRole('navigation', { name: '按年月跳转' })).not.toBeInTheDocument();
-  });
-  it('anchors every year to the same calendar boundary despite uneven photo dates', () => {
-    render(
-      <PhotoTimelineRail
-        months={sparseMonths}
-        onJump={vi.fn()}
-        onLatest={vi.fn()}
-        onRetry={vi.fn()}
-      />,
-    );
-    const positions = ['2026', '2025', '2024'].map((year) =>
-      parseFloat(screen.getByText(year, { exact: true }).style.top),
-    );
-    expect(positions[1] - positions[0]).toBeCloseTo(positions[2] - positions[1], 5);
-    expect(screen.getByText('2026/10')).toHaveStyle({ top: '0%' });
-    expect(screen.getByText('2023/01')).toHaveStyle({ top: '100%' });
-  });
-  it('keeps the picker open when focus moves from the slider to a month button', () => {
-    render(
-      <PhotoTimelineRail
-        months={sparseMonths}
-        onJump={vi.fn()}
-        onLatest={vi.fn()}
-        onRetry={vi.fn()}
-      />,
-    );
-    const slider = screen.getByRole('slider');
-    fireEvent.focus(slider);
-    const month = screen.getByRole('button', { name: '2026年2月' });
-    fireEvent.blur(slider, { relatedTarget: month });
-    fireEvent.focus(month);
-    expect(slider).toHaveAttribute('aria-valuetext', '2026年10月');
-    expect(screen.getByRole('navigation', { name: '按年月跳转' })).toBeVisible();
-    fireEvent.blur(month, { relatedTarget: document.body });
-    expect(screen.queryByRole('navigation', { name: '按年月跳转' })).not.toBeInTheDocument();
-  });
-});
 
-it('hovering a year label selects that year even when January is closer to another year’s photos', () => {
-  render(
-    <PhotoTimelineRail
-      months={[
-        { month: '2026-10', count: 2, cursor: 'new' },
-        { month: '2025-11', count: 3, cursor: 'november' },
-        { month: '2024-12', count: 4, cursor: 'december' },
-        { month: '2023-01', count: 1, cursor: 'old' },
-      ]}
-      onJump={vi.fn()}
-      onLatest={vi.fn()}
-      onRetry={vi.fn()}
-    />,
-  );
-  fireEvent.pointerMove(screen.getByText('2025', { exact: true }));
-  expect(screen.getByRole('button', { name: '2025年11月' })).toBeEnabled();
-  expect(screen.queryByRole('button', { name: '2024年12月' })).not.toBeInTheDocument();
+it('renders calendar month ruler marks and magnifies only the ticks near the pointer without a popup', () => {
+  render(<PhotoTimelineRail months={months} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+  const slider = screen.getByRole('slider');
+  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({top: 100, height: 500} as DOMRect);
+  const marks = slider.querySelectorAll('[data-ruler-month]');
+  expect(marks.length).toBe(310);
+  const major = slider.querySelector('[data-ruler-month="2025-01"]')!;
+  const minor = slider.querySelector('[data-ruler-month="2025-02"]')!;
+  expect(major).toHaveAttribute('data-major', 'true');
+  expect(minor).toHaveAttribute('data-major', 'false');
+  const restingWidth = parseFloat((major as HTMLElement).style.width);
+  fireEvent.pointerMove(slider, {clientY: 100 + parseFloat((major as HTMLElement).style.top) * 5});
+  expect(parseFloat((major as HTMLElement).style.width)).toBeGreaterThan(restingWidth);
+  expect(screen.getByRole('tooltip')).toHaveTextContent(/年.*月/);
+  expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  fireEvent.pointerLeave(slider);
+  expect((major as HTMLElement).style.width).toBe(`${restingWidth}px`);
+});
+it('keeps calendar year labels equally spaced with uneven photo dates', () => {
+  render(<PhotoTimelineRail months={[
+    {month:'2026-10',count:1,cursor:'new'}, {month:'2025-11',count:1,cursor:'middle'},
+    {month:'2024-03',count:1,cursor:'older'}, {month:'2023-01',count:1,cursor:'old'},
+  ]} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+  const positions = ['2026','2025','2024'].map(year => parseFloat(screen.getByText(year).style.top));
+  expect(positions[1]-positions[0]).toBeCloseTo(positions[2]-positions[1]);
 });
