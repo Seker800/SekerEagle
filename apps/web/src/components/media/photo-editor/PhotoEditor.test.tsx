@@ -59,6 +59,17 @@ beforeEach(() => {
 });
 
 describe('photo editor interactions', () => {
+  it('keeps precision adjustment arrow keys inside the editor instead of navigating the gallery behind it', async () => {
+    const galleryNavigation = vi.fn();
+    window.addEventListener('keydown', galleryNavigation);
+    try {
+      render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+      const exposure = screen.getByRole('slider', { name: '曝光' });
+      await waitFor(() => expect(exposure).toBeEnabled());
+      fireEvent.keyDown(exposure, { key: 'ArrowRight' });
+      expect(galleryNavigation).not.toHaveBeenCalled();
+    } finally { window.removeEventListener('keydown', galleryNavigation); }
+  });
   it('supports free and fixed framing, resize handles, undo, reset and extra aspect ratios', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
@@ -264,6 +275,7 @@ describe('photo editor interactions', () => {
     expect(button).toBeEnabled();
     fireEvent.click(button);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+    expect(save.mock.calls[1][0]).toBe(save.mock.calls[0][0]);
   });
   it('supports adjustments, undo, redo and reset without closing the photo', async () => {
     render(<PhotoEditor onSave={vi.fn()} source="/photo.png" name="Photo.png" onClose={vi.fn()} />);
