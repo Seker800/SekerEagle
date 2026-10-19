@@ -1124,6 +1124,7 @@ export const enUS = {
   对比度: 'Contrast',
   饱和度: 'Saturation',
   中间调: 'Midtones',
+  调整前: 'Before adjustments',
   照片滤镜: 'Photo filters',
   滤镜强度: 'Filter intensity',
   构图: 'Composition',

@@ -28,7 +28,11 @@ import styles from './PhotoEditor.module.css';
 import { editedPhotoName, type SavedPhoto } from './photo-editor-save';
 import { PhotoAdjustmentControl } from './PhotoAdjustmentControl';
 import { PhotoAdjustmentsPanel } from './PhotoAdjustmentsPanel';
-import { PHOTO_ADJUSTMENTS, type ActiveAdjustmentKey } from './photo-adjustment-catalog';
+import {
+  PHOTO_ADJUSTMENTS,
+  resetPhotoAdjustments,
+  type ActiveAdjustmentKey,
+} from './photo-adjustment-catalog';
 import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
 import { PhotoCropViewport } from './PhotoCropViewport';
 import { PhotoCropPanel } from './PhotoCropPanel';
@@ -281,21 +285,20 @@ export function PhotoEditor({
     const sequence = ++renderSequence.current;
     setRendering(true);
     const timer = window.setTimeout(() => {
-      const original = compare;
-      const renderEdits = original ? DEFAULT_PHOTO_EDITS : edits;
+      const renderEdits: PhotoEdits = compare
+        ? {
+            ...resetPhotoAdjustments(edits),
+            filter: 'original',
+            filterStrength: DEFAULT_PHOTO_EDITS.filterStrength,
+          }
+        : edits;
       void renderer
         .render(input, renderEdits)
         .then((result) => {
           if (!canvasRef.current || sequence < paintedSequence.current) return;
           const view = viewRef.current;
           if (view.source !== source || view.compare !== compare || view.tab !== tab) return;
-          composePhoto(
-            canvasRef.current,
-            result,
-            renderEdits,
-            metadata,
-            tab !== 'crop' || original,
-          );
+          composePhoto(canvasRef.current, result, renderEdits, metadata, tab !== 'crop');
           setWatermarkSource(result);
           paintedSequence.current = sequence;
           setPreviewSize({ width: canvasRef.current.width, height: canvasRef.current.height });
@@ -494,17 +497,12 @@ export function PhotoEditor({
       </header>
       <main className={styles.stage} inert={confirmClose}>
         <div className={styles.stageTop}>
-          <span>{compare ? t('原图') : tab === 'crop' ? t('裁剪区域预览') : t('成片预览')}</span>
+          <span>{compare ? t('调整前') : tab === 'crop' ? t('裁剪区域预览') : t('成片预览')}</span>
           <span>
             {loaded
               ? (() => {
-                  const size = photoCrop(
-                    loaded.naturalWidth,
-                    loaded.naturalHeight,
-                    compare ? DEFAULT_PHOTO_EDITS : edits,
-                  );
-                  const template =
-                    !compare && tab !== 'crop' ? findWatermark(edits.watermark) : undefined;
+                  const size = photoCrop(loaded.naturalWidth, loaded.naturalHeight, edits);
+                  const template = tab !== 'crop' ? findWatermark(edits.watermark) : undefined;
                   const output = template
                     ? photoWatermarkLayout(size.width, size.height, template)
                     : size;
@@ -536,12 +534,12 @@ export function PhotoEditor({
               aria-label={t('照片编辑预览')}
               className={loaded ? styles.canvas : styles.hiddenCanvas}
             />
-            {loaded && tab === 'crop' && !compare && crop && (
+            {loaded && tab === 'crop' && crop && (
               <PhotoCropViewport
                 edits={edits}
                 width={loaded.naturalWidth}
                 height={loaded.naturalHeight}
-                disabled={busy}
+                disabled={busy || compare}
                 onStart={() => {
                   sliderStartRef.current ??= edits;
                 }}
@@ -588,16 +586,7 @@ export function PhotoEditor({
               canReset={PHOTO_ADJUSTMENTS.some(
                 (option) => edits[option.key] !== DEFAULT_PHOTO_EDITS[option.key],
               )}
-              onReset={() =>
-                update(
-                  Object.fromEntries(
-                    PHOTO_ADJUSTMENTS.map((option) => [
-                      option.key,
-                      DEFAULT_PHOTO_EDITS[option.key],
-                    ]),
-                  ),
-                )
-              }
+              onReset={() => update(resetPhotoAdjustments(edits))}
               compareControl={compareControl}
               onResetOption={(option) => update({ [option.key]: DEFAULT_PHOTO_EDITS[option.key] })}
               renderControl={(option) =>

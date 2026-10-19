@@ -1,5 +1,5 @@
 import { t } from '../../../i18n';
-import type { PhotoEdits } from './photo-editor-model';
+import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
 
 export type AdjustmentGroup = 'tone' | 'color' | 'detail';
 export type ActiveAdjustmentKey =
@@ -74,4 +74,12 @@ export function adjustmentValue(option: PhotoAdjustmentOption, edits: PhotoEdits
   if (!option.key) return '—';
   const value = edits[option.key];
   return `${value > 0 ? '+' : ''}${value.toFixed(option.step && option.step < 1 ? 2 : 0)}`;
+}
+
+/** Reset only the catalogued pixel adjustments; framing and watermark remain intact. */
+export function resetPhotoAdjustments(edits: PhotoEdits): PhotoEdits {
+  return {
+    ...edits,
+    ...Object.fromEntries(PHOTO_ADJUSTMENTS.map(({ key }) => [key, DEFAULT_PHOTO_EDITS[key]])),
+  };
 }

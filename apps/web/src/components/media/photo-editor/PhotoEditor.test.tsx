@@ -219,11 +219,14 @@ describe('photo editor interactions', () => {
     const edited = vi.mocked(composePhoto).mock.calls.at(-1)![2];
     const dimensions = screen.getByText(/^[0-9]+ × [0-9]+$/).textContent;
     fireEvent.click(screen.getByRole('button', { name: '对比原图' }));
-    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toEqual({
-      ...edited,
-      ...Object.fromEntries(PHOTO_ADJUSTMENTS.map(({ key }) => [key, DEFAULT_PHOTO_EDITS[key]])),
-      filter: 'original', filterStrength: 100,
-    }));
+    await waitFor(() =>
+      expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toEqual({
+        ...edited,
+        ...Object.fromEntries(PHOTO_ADJUSTMENTS.map(({ key }) => [key, DEFAULT_PHOTO_EDITS[key]])),
+        filter: 'original',
+        filterStrength: 100,
+      }),
+    );
     expect(screen.getByText(/^[0-9]+ × [0-9]+$/)).toHaveTextContent(dimensions!);
     fireEvent.click(screen.getByRole('button', { name: '返回编辑' }));
     await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toEqual(edited));
