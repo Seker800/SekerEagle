@@ -245,24 +245,35 @@ it('resolves consolidated legacy layouts to canonical templates', () => {
   expect(findWatermark('unknown')).toBeUndefined();
 });
 
-
 describe('watermark typography and content hierarchy', () => {
   function capture(id: string, align: 'left' | 'right' = 'left') {
     const photo = createCanvas(1600, 1000);
     const drawn: { text: string; size: number }[] = [];
-    renderPhotoWatermark(asHTML(photo), {
-      ...DEFAULT_PHOTO_EDITS, watermark: id, watermarkText: 'Mountain light',
-      watermarkShowTime: true, watermarkAlign: align,
-    }, { camera: 'FUJIFILM X-E5', parameters: '35mm · f/2.8 · 1/250s · ISO 400', capturedAt: '2026.10.19' }, () => {
-      const canvas = createCanvas(1, 1);
-      const context = canvas.getContext('2d');
-      const original = context.fillText.bind(context);
-      vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
-        drawn.push({ text, size: Number(context.font.match(/([\d.]+)px/)?.[1]) });
-        original(text, x, y);
-      });
-      return asHTML(canvas);
-    });
+    renderPhotoWatermark(
+      asHTML(photo),
+      {
+        ...DEFAULT_PHOTO_EDITS,
+        watermark: id,
+        watermarkText: 'Mountain light',
+        watermarkShowTime: true,
+        watermarkAlign: align,
+      },
+      {
+        camera: 'FUJIFILM X-E5',
+        parameters: '35mm · f/2.8 · 1/250s · ISO 400',
+        capturedAt: '2026.10.19',
+      },
+      () => {
+        const canvas = createCanvas(1, 1);
+        const context = canvas.getContext('2d');
+        const original = context.fillText.bind(context);
+        vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
+          drawn.push({ text, size: Number(context.font.match(/([\d.]+)px/)?.[1]) });
+          original(text, x, y);
+        });
+        return asHTML(canvas);
+      },
+    );
     return drawn;
   }
   it('uses a compact photographic footer and keeps parameters readable', () => {
@@ -280,4 +291,89 @@ describe('watermark typography and content hierarchy', () => {
   it('keeps the date visible for a right-aligned signature', () => {
     expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');
   });
+});
+
+it('keeps watermark text inside the output without collisions at maximum size', () => {
+  for (const [width, height] of [
+    [1600, 1000],
+    [1000, 1500],
+    [1600, 400],
+  ]) {
+    for (const template of WATERMARK_TEMPLATES) {
+      const boxes: { left: number; top: number; right: number; bottom: number }[] = [];
+      const output = renderPhotoWatermark(
+        asHTML(createCanvas(width, height)),
+        {
+          ...DEFAULT_PHOTO_EDITS,
+          watermark: template.id,
+          watermarkText: '山间的光 Mountain light',
+          watermarkScale: 160,
+          watermarkShowTime: true,
+        },
+        {
+          camera: 'FUJIFILM X-E5',
+          parameters: '35mm · f/2.8 · 1/250s · ISO 400',
+          capturedAt: '2026.10.19 10:30',
+        },
+        () => {
+          const canvas = createCanvas(1, 1),
+            context = canvas.getContext('2d');
+          const original = context.fillText.bind(context);
+          vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
+            const metrics = context.measureText(text),
+              matrix = context.getTransform();
+            const corners = [
+              [x - metrics.actualBoundingBoxLeft, y - metrics.actualBoundingBoxAscent],
+              [x + metrics.actualBoundingBoxRight, y + metrics.actualBoundingBoxDescent],
+              [x - metrics.actualBoundingBoxLeft, y + metrics.actualBoundingBoxDescent],
+              [x + metrics.actualBoundingBoxRight, y - metrics.actualBoundingBoxAscent],
+            ].map(([px, py]) => ({
+              x: matrix.a * px + matrix.c * py + matrix.e,
+              y: matrix.b * px + matrix.d * py + matrix.f,
+            }));
+            boxes.push({
+              left: Math.min(...corners.map((p) => p.x)),
+              right: Math.max(...corners.map((p) => p.x)),
+              top: Math.min(...corners.map((p) => p.y)),
+              bottom: Math.max(...corners.map((p) => p.y)),
+            });
+            original(text, x, y);
+          });
+          return asHTML(canvas);
+        },
+      );
+      for (const [index, box] of boxes.entries()) {
+        expect(box.left, template.id).toBeGreaterThanOrEqual(-1);
+        expect(box.top, template.id).toBeGreaterThanOrEqual(-1);
+        expect(box.right, template.id).toBeLessThanOrEqual(output.width + 1);
+        expect(box.bottom, template.id).toBeLessThanOrEqual(output.height + 1);
+        for (const other of boxes.slice(index + 1)) {
+          const overlapWidth = Math.min(box.right, other.right) - Math.max(box.left, other.left);
+          const overlapHeight = Math.min(box.bottom, other.bottom) - Math.max(box.top, other.top);
+          expect(overlapWidth > 1 && overlapHeight > 1, `${template.id}: text collision`).toBe(
+            false,
+          );
+        }
+      }
+    }
+  }
+});
+
+
+it('composes an editable auxiliary website in every layout and respects its switch', () => {
+  for (const template of WATERMARK_TEMPLATES) {
+    for (const enabled of [true, false]) {
+      const drawn: string[] = [];
+      renderPhotoWatermark(asHTML(createCanvas(1600, 1000)), {
+        ...DEFAULT_PHOTO_EDITS, watermark: template.id,
+        watermarkWebsite: 'PHOTO.EXAMPLE.COM', watermarkShowWebsite: enabled,
+      }, {}, () => {
+        const canvas = createCanvas(1, 1), context = canvas.getContext('2d');
+        vi.spyOn(context, 'fillText').mockImplementation((text) => { drawn.push(text); });
+        return asHTML(canvas);
+      });
+      expect(drawn.includes('PHOTO.EXAMPLE.COM'), template.id).toBe(enabled);
+      expect(drawn).not.toContain('WWW.SEKER.WANG');
+    }
+  }
 });
