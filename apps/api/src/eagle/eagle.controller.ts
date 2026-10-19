@@ -1,3 +1,4 @@
+import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
 import { Optional } from '@nestjs/common';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
@@ -79,6 +80,7 @@ export class EagleController {
   }
 
   @Get('media-capabilities')
+  @ApiOkResponse({ type: EagleMediaCapabilitiesDto })
   getMediaCapabilities() {
     return this.mediaCapabilities.getCapabilities();
   }

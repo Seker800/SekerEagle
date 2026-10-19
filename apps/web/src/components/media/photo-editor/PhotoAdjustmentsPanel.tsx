@@ -74,9 +74,8 @@ export function PhotoAdjustmentsPanel({
     });
   };
   const selected = options.find((option) => option.id === selection[group]) ?? options[0];
-  const selectedRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    selectedRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    buttons.current.get(selected.id)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [selected.id]);
   return (
     <div className={styles.adjustmentsPanel}>
@@ -141,7 +140,6 @@ export function PhotoAdjustmentsPanel({
               ref={(button) => {
                 if (button) buttons.current.set(option.id, button);
                 else buttons.current.delete(option.id);
-                if (selected.id === option.id) selectedRef.current = button;
               }}
               disabled={disabled}
               aria-pressed={selected.id === option.id}

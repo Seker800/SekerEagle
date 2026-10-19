@@ -584,6 +584,34 @@ try {
           'RAW has a dedicated browser-editable derivative',
         );
         assert.ok(edit.width > 0 && edit.height > 0 && Math.max(edit.width, edit.height) <= 6000);
+        const editResponse = await fetch(
+          `${origin}/api/${sample.mode}/assets/${sample.assetId}/renditions/${edit.id}`,
+          {
+            headers: { cookie: `sekereagle_access=${accessToken}` },
+          },
+        );
+        assert.equal(editResponse.status, 200);
+        const decodedEdit = Buffer.from(await editResponse.arrayBuffer());
+        const editMetadata = await sharp(decodedEdit).metadata();
+        assert.equal(editMetadata.width, edit.width);
+        assert.equal(editMetadata.height, edit.height);
+        const editedPng = await sharp(decodedEdit).png().toBuffer();
+        const editedCopy = await upload(sample.mode, editedPng, 'raw-edited.png', 'image/png', {
+          duplicatePolicy: 'CREATE_COPY',
+          copySourceAssetId: sample.assetId,
+          copySourceRowVersion: detail.rowVersion,
+        });
+        assert.notEqual(editedCopy.assetId, sample.assetId);
+        await waitFor(
+          async () =>
+            (await api(`/${sample.mode}/assets/${editedCopy.assetId}`)).lifecycleStatus === 'READY',
+          'RAW edited PNG copy',
+          120,
+        );
+        assert.equal(
+          (await api(`/${sample.mode}/assets/${sample.assetId}`)).mimeType,
+          sample.mimeType,
+        );
         const otherMode = sample.mode === 'photos' ? 'eagle' : 'photos';
         const denied = await fetch(
           `${origin}/api/${otherMode}/assets/${sample.assetId}/renditions/${edit.id}`,

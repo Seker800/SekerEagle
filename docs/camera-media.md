@@ -10,13 +10,13 @@
 | 相机 RAW | DNG、CR2／CR3／CRW、NEF／NRW、ARW／SR2、RAF、ORF、RW2、RWL、PEF、SRW、KDC、RAW | LibRaw 验证并解码，生成可浏览的 sRGB 派生图片；EXIF 尽力从原文件提取 |
 | 相机视频 | MP4／M4V、MOV、MTS／M2TS、AVI、MXF、MPG／MPEG                                  | 验证真实容器及编码，生成海报与浏览器播放副本                         |
 
-视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
+视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影关闭自动提亮，使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
 
 RAW 的拍摄时间、镜头、GPS 等元数据取决于原文件与 EXIF 解析器支持。普通 TIFF／DNG 等可读字段沿用现有摄影信息模块；不能把生成预览成功视作所有专有 MakerNote 或 CR3 元数据均已支持。本轮不增加视频的人物识别或视频摄影元数据管理。
 
 ## 资源限制与安全边界
 
-- 图片／RAW：单文件 250 MiB，最多 5000 万输入像素，保留已有像素预算。高于该像素数的相机原片目前会明确拒绝，不能通过压低缩略图尺寸绕过原片解码限制。
+- 图片／RAW：单文件 250 MiB，普通图片最多 5000 万输入像素；RAW 传感器输入最多 1.2 亿像素。LibRaw 解包前检查真实传感器与可见尺寸，高于 5000 万可见像素的 RAW 使用半尺寸显影，RGB 输出仍最多 5000 万像素。图库记录真实原片尺寸，原片下载字节不变；不能只修改缩略图尺寸绕过 RAW 输入预算。
 - 视频：单文件 2 GiB，最多四小时，输入每边不超过 16384 像素且总像素不超过一亿。播放副本最长边 1920、H.264 8-bit／AAC，生成预算约 1 GiB、30 分钟；超时或不完整副本不会被标记为可用。
 - 浏览器提供空 MIME 或 `application/octet-stream` 时，依据同一格式目录补齐声明；有冲突的声明拒绝。上传完成后仍检查真实内容：LibRaw 拒绝伪装 RAW，FFprobe 拒绝不匹配容器或不支持的编码。
 - RAW 在读取元数据、检查原始尺寸后才执行像素解包；在独立进程中运行，有时间和输出限制。原文件写入独立临时目录，成功与失败均清理。
@@ -36,6 +36,8 @@ python3 -m venv .omx/camera-media/venv
 export CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python"
 # FFmpeg 和 FFprobe 不在 PATH 时，设置 FFMPEG_PATH 与 FFPROBE_PATH。
 ```
+
+RAW 同时生成最长边 6000 的无损 WebP `PREVIEW/edit`，供原有编辑器编辑显影副本；它不是传感器级 RAW 编辑，不复制相机厂商电影模拟或手机多帧计算摄影。普通图库只读取 `PREVIEW/default`。旧资源可通过现有处理页“扫描缺失任务”补齐编辑副本，完成后出现 RAW 编辑入口，不使用低清缩略图替代。能力接口分别声明 `images.maxPixels` 与 `images.maxRawPixels`，普通图片预算不随 RAW 提升。
 
 纯 RAW 运行环境缺失时，RAW 上传校验明确失败，不将其伪装成已支持的普通图片。其他图片和视频不依赖 RAW Python 模块。
 
@@ -59,3 +61,28 @@ CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run smoke:camera-
 本机额外下载的 Canon 40D sRAW CR2 样本来自 [rawpy 测试数据](https://github.com/letmaik/rawpy/tree/main/test)，原提供者为 rawsamples.ch，许可见其 [README](https://github.com/letmaik/rawpy/blob/main/test/README.txt)（CC BY-NC-SA 4.0）。样本仅用于本地非商业验证，不随仓库或镜像分发。来源、大小和哈希记录在忽略目录中的 `camera-public-source.json`；可用 `CAMERA_TEST_RAW` 显式传入公开样本运行额外解码测试，默认 CI 不下载第三方照片。
 
 这些小样本不构成所有品牌／机型、两小时 8K 视频或最大文件边界的全面性能验收。正式实例与群晖真实图库本轮均不部署、不迁移。
+
+## 新机型色彩与本机验证
+
+LibRaw 能解包不代表具备机型色彩校准。本机 rawpy 0.27.1／LibRaw 0.22.1 可解包 X-E5，但其相机到 XYZ 矩阵全为零。共用 Python 适配器为这种情况读取显式 X-E5 校准数据：先由 LibRaw 输出经过相机白平衡的线性 16-bit 相机 RGB，再按校准矩阵转换到线性 sRGB 并编码 sRGB。矩阵运算按 128 行处理，限制临时内存；不改写 LibRaw 内部数据、不将机型伪装成另一款相机。未来 LibRaw 自带矩阵时自动优先使用内置校准。数据来源和 CC-BY-SA-3.0 署名见 `camera-profiles.json` 与第三方声明。
+
+数值测试检查灰阶中性、黑白端点及已知线性 sRGB 色块往返；真实样本经过 API 内容检查、worker 显影、四种派生规格及原片哈希校验。可对自己提供的本地样本重复执行：
+
+```sh
+CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" \
+  node scripts/testing/camera-device-audit.mjs /path/to/photo.RAF /path/to/photo.NEF /path/to/photo.DNG
+```
+
+测试只读取本地文件，不上传样本；结果记录在忽略目录 `.omx/artifacts/camera-device-audit.json`。公开 RAF／NEF 测试样本来自 [raw.pixls.us](https://raw.pixls.us/)，每份样本的来源、许可、压缩模式及 SHA-256 记录在本地样本 manifest 中，不随仓库分发照片。小米 DNG 使用本机既有四份 17 Ultra 实拍样本。合成 DNG 的双模式 HTTP 验收还检查显影副本鉴权、PNG 独立副本保存、跨模式拒绝，以及旧 RAW 缺少编辑副本时的扫描修复。
+
+本次实拍验收覆盖如下，不将机型列表代替实拍结果：
+
+| 设备             | 实测文件                                                  |
+| ---------------- | --------------------------------------------------------- |
+| Fujifilm X-E5    | 14-bit 未压缩、无损压缩、有损压缩 RAF                     |
+| Fujifilm X-Pro3  | 14-bit 未压缩、压缩 RAF                                   |
+| Fujifilm GFX100S | 14-bit 无损压缩、压缩 RAF，约 1.02 亿可见像素，半尺寸显影 |
+| Nikon Z5         | 12/14-bit 无损压缩及有损压缩 NEF，共四份                  |
+| Xiaomi 17 Ultra  | 三份 Ultra RAW DNG 与一份普通 RAW DNG                     |
+
+以上合计 15 份实拍文件。单一机型通过这些模式不代表其他固件、镜头校正、所有压缩模式或厂商外观均已逐一验证；GFX100S 的其他位深模式本轮未取得完整样本，不列入实拍已验证范围。

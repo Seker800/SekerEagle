@@ -307,7 +307,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleMediaCapabilitiesDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3337,7 +3344,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EagleMediaCapabilitiesDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6132,6 +6146,84 @@
           }
         },
         "required": ["assetIds", "operationId"]
+      },
+      "EagleImageMediaCapabilityDto": {
+        "type": "object",
+        "properties": {
+          "mimeTypes": {
+            "example": ["image/jpeg", "image/png"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "example": [".jpg", ".jpeg", ".png"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxBytes": {
+            "type": "number",
+            "example": 262144000
+          },
+          "maxPixels": {
+            "type": "number",
+            "example": 50000000
+          },
+          "maxRawPixels": {
+            "type": "number",
+            "example": 120000000
+          }
+        },
+        "required": ["mimeTypes", "extensions", "maxBytes", "maxPixels", "maxRawPixels"]
+      },
+      "EagleVideoMediaCapabilityDto": {
+        "type": "object",
+        "properties": {
+          "mimeTypes": {
+            "example": ["video/mp4"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "extensions": {
+            "example": [".mp4"],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "maxBytes": {
+            "type": "number",
+            "example": 2147483648
+          },
+          "maxDurationMs": {
+            "type": "number",
+            "nullable": true,
+            "example": 14400000
+          }
+        },
+        "required": ["mimeTypes", "extensions", "maxBytes", "maxDurationMs"]
+      },
+      "EagleMediaCapabilitiesDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1],
+            "example": 1
+          },
+          "images": {
+            "$ref": "#/components/schemas/EagleImageMediaCapabilityDto"
+          },
+          "videos": {
+            "$ref": "#/components/schemas/EagleVideoMediaCapabilityDto"
+          }
+        },
+        "required": ["version", "images", "videos"]
       },
       "CountEagleAssetsDto": {
         "type": "object",

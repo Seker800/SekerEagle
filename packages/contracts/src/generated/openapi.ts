@@ -2840,6 +2840,56 @@ export interface components {
       /** Format: uuid */
       operationId: string;
     };
+    EagleImageMediaCapabilityDto: {
+      /**
+       * @example [
+       *       "image/jpeg",
+       *       "image/png"
+       *     ]
+       */
+      mimeTypes: string[];
+      /**
+       * @example [
+       *       ".jpg",
+       *       ".jpeg",
+       *       ".png"
+       *     ]
+       */
+      extensions: string[];
+      /** @example 262144000 */
+      maxBytes: number;
+      /** @example 50000000 */
+      maxPixels: number;
+      /** @example 120000000 */
+      maxRawPixels: number;
+    };
+    EagleVideoMediaCapabilityDto: {
+      /**
+       * @example [
+       *       "video/mp4"
+       *     ]
+       */
+      mimeTypes: string[];
+      /**
+       * @example [
+       *       ".mp4"
+       *     ]
+       */
+      extensions: string[];
+      /** @example 2147483648 */
+      maxBytes: number;
+      /** @example 14400000 */
+      maxDurationMs: number | null;
+    };
+    EagleMediaCapabilitiesDto: {
+      /**
+       * @example 1
+       * @enum {number}
+       */
+      version: 1;
+      images: components['schemas']['EagleImageMediaCapabilityDto'];
+      videos: components['schemas']['EagleVideoMediaCapabilityDto'];
+    };
     CountEagleAssetsDto: {
       query: {
         [key: string]: unknown;
@@ -3330,7 +3380,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
       };
     };
   };
@@ -5346,7 +5398,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
+        };
       };
     };
   };
