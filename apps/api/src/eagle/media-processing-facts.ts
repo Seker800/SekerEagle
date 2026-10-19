@@ -20,7 +20,7 @@ export function readMediaProcessingFacts(
 ) {
   return client.$queryRaw<MediaProcessingFacts[]>(Prisma.sql`
     SELECT a.id AS "assetId", a."mediaRevision" AS "assetRevision",
-      (EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='PREVIEW' AND r.status='READY')
+      (EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='PREVIEW' AND r.variant='default' AND r.status='READY')
        AND EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='THUMBNAIL' AND r.variant='512' AND r.status='READY')
        AND (a."mimeType" NOT IN (${Prisma.join(CAMERA_MEDIA_FORMATS.filter((format) => format.kind === 'raw').map((format) => format.mimeType))})
          OR EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='PREVIEW' AND r.variant='edit' AND r.status='READY'))) AS "renditionsReady",
