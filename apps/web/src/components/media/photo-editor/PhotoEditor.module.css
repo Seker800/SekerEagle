@@ -908,6 +908,9 @@
   background: #202020;
   color: var(--photo-text);
 }
+.watermarkOptions button[data-category-start='true'] {
+  margin-left: 8px;
+}
 .editor .watermarkOptions button[aria-pressed='true'] {
   border-color: var(--photo-accent);
 }

@@ -4,14 +4,9 @@ import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
 import { drawPhoto } from './photo-editor-render';
 import { renderPhotoWatermark } from './photo-editor-watermark';
-import {
-  findWatermark,
-  WATERMARK_CATEGORIES,
-  WATERMARK_TEMPLATES,
-  type PhotoMetadata,
-  type WatermarkCategory,
-} from './photo-watermark-model';
+import { findWatermark, WATERMARK_CATEGORIES, type PhotoMetadata } from './photo-watermark-model';
 import styles from './PhotoEditor.module.css';
+import { useWatermarkNavigation, ORDERED_WATERMARK_TEMPLATES } from './useWatermarkNavigation';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 function WatermarkPreview({
@@ -173,18 +168,11 @@ export function PhotoWatermarkPanel({
   metadataLoading: boolean;
   onChange: (patch: Partial<PhotoEdits>) => void;
 }) {
-  const [group, setGroup] = useState<WatermarkCategory>('photo');
+  const navigation = useWatermarkNavigation(edits.watermark);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const selected = findWatermark(edits.watermark);
   const { rotation, flip, cropRatio, cropZoom, cropAspect, cropX, cropY } = edits;
-  const selectedRef = useRef<HTMLButtonElement>(null);
   const settingsButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (selected) setGroup(selected.category);
-  }, [selected]);
-  useEffect(() => {
-    selectedRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [edits.watermark, group]);
   const thumbnail = useMemo(() => {
     if (!source) return null;
     const oriented = document.createElement('canvas');
@@ -273,28 +261,41 @@ export function PhotoWatermarkPanel({
             type="button"
             key={item.id}
             disabled={disabled}
-            aria-pressed={group === item.id}
-            onClick={() => setGroup(item.id)}
+            ref={navigation.group === item.id ? navigation.categoryRef : undefined}
+            aria-pressed={navigation.group === item.id}
+            onClick={() => navigation.selectCategory(item.id)}
           >
             {item.label}
           </button>
         ))}
       </ScrollableToolRow>
-      <ScrollableToolRow className={styles.watermarkOptions} label={t('水印模板')}>
+      <ScrollableToolRow
+        className={styles.watermarkOptions}
+        label={t('水印模板')}
+        viewportRef={navigation.viewportRef}
+        onScroll={navigation.followScroll}
+        onNavigate={navigation.beginNavigation}
+      >
         <button
           type="button"
           disabled={disabled}
+          ref={navigation.templateRef('none')}
           aria-pressed={edits.watermark === 'none'}
           onClick={() => onChange({ watermark: 'none' })}
         >
           <IconBan size={28} />
           <span>{t('无水印')}</span>
         </button>
-        {WATERMARK_TEMPLATES.filter((item) => item.category === group).map((template) => (
+        {ORDERED_WATERMARK_TEMPLATES.map((template, index) => (
           <button
             key={template.id}
             type="button"
-            ref={selected?.id === template.id ? selectedRef : undefined}
+            ref={navigation.templateRef(template.id)}
+            data-category-start={
+              (index > 0 &&
+                ORDERED_WATERMARK_TEMPLATES[index - 1].category !== template.category) ||
+              undefined
+            }
             disabled={disabled}
             aria-pressed={edits.watermark === template.id}
             aria-label={template.label}

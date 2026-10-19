@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { IconChevronLeft, IconChevronRight } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import styles from './PhotoEditor.module.css';
@@ -8,12 +8,19 @@ export function ScrollableToolRow({
   children,
   className,
   label,
+  viewportRef,
+  onScroll,
+  onNavigate,
 }: {
   children: ReactNode;
   className: string;
   label: string;
+  viewportRef?: RefObject<HTMLDivElement | null>;
+  onScroll?: (viewport: HTMLDivElement) => void;
+  onNavigate?: () => void;
 }) {
-  const viewport = useRef<HTMLDivElement>(null);
+  const localViewport = useRef<HTMLDivElement>(null);
+  const viewport = viewportRef ?? localViewport;
   const drag = useRef({ x: 0, left: 0, active: false, moved: false });
   const [edges, setEdges] = useState({ left: false, right: false });
   useEffect(() => {
@@ -27,6 +34,7 @@ export function ScrollableToolRow({
       );
     };
     const wheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) onNavigate?.();
       if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       const end = element.scrollWidth - element.clientWidth;
       if (end <= 1 || (event.deltaY < 0 ? element.scrollLeft <= 0 : element.scrollLeft >= end - 1))
@@ -47,8 +55,9 @@ export function ScrollableToolRow({
       element.removeEventListener('scroll', measure);
       element.removeEventListener('wheel', wheel);
     };
-  }, [children]);
+  }, [children, onNavigate, viewport]);
   const page = (direction: number) => {
+    onNavigate?.();
     const element = viewport.current;
     if (element)
       element.scrollBy({ left: direction * element.clientWidth * 0.8, behavior: 'smooth' });
@@ -70,6 +79,7 @@ export function ScrollableToolRow({
         role="group"
         aria-label={label}
         tabIndex={0}
+        onScroll={(event) => onScroll?.(event.currentTarget)}
         className={`${className} ${styles.toolScrollViewport}`}
         onKeyDown={(event) => {
           if (event.target !== event.currentTarget) return;
@@ -79,6 +89,7 @@ export function ScrollableToolRow({
           }
         }}
         onPointerDown={(event) => {
+          onNavigate?.();
           if (event.pointerType !== 'mouse' || event.button !== 0) return;
           drag.current = {
             x: event.clientX,
