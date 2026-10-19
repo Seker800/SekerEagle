@@ -50,10 +50,7 @@ const aiTags = [
   },
 ];
 
-function renderBar(
-  initialValue: EagleQuickFilterState = createEmptyEagleQuickFilterState(),
-  expand = true,
-) {
+function renderBar(initialValue: EagleQuickFilterState = createEmptyEagleQuickFilterState()) {
   const onChange = vi.fn();
   function ControlledBar() {
     const [value, setValue] = useState(initialValue);
@@ -70,36 +67,10 @@ function renderBar(
     );
   }
   render(<ControlledBar />);
-  if (expand) fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
   return onChange;
 }
 
 describe('EagleQuickFilterBar', () => {
-  it('starts collapsed and preserves active filters when collapsing an open menu', () => {
-    const onChange = renderBar(undefined, false);
-    const toggle = screen.getByRole('button', { name: '展开筛选' });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.queryByRole('button', { name: '格式筛选' })).not.toBeInTheDocument();
-    fireEvent.click(toggle);
-    fireEvent.click(screen.getByRole('button', { name: '格式筛选' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'PNG' }));
-    const applied = onChange.mock.lastCall?.[0];
-    expect(applied.formats).toEqual(['png']);
-    onChange.mockClear();
-    fireEvent.click(screen.getByRole('button', { name: '收起筛选' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /格式筛选/ })).not.toBeInTheDocument();
-    expect(screen.getByText('已启用 1 项筛选')).toBeInTheDocument();
-    expect(onChange).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
-    expect(screen.getByRole('button', { name: /格式筛选，PNG/ })).toBeInTheDocument();
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '收起筛选' }));
-    fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
-    expect(screen.queryByText('已启用 1 项筛选')).not.toBeInTheDocument();
-    expect(onChange.mock.lastCall?.[0].formats).toEqual([]);
-  });
-
   it('shows Eagle-style pinned field entries instead of a rule builder', () => {
     renderBar();
 
@@ -220,8 +191,6 @@ it('photo fields are managed and cleared in the existing filter toolbar', () => 
     );
   }
   render(<PhotoBar />);
-  expect(screen.queryByRole('button', { name: '相机筛选' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
   fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
   fireEvent.click(screen.getByRole('button', { name: '固定 相机' }));
   fireEvent.click(screen.getByRole('button', { name: '关闭筛选器管理' }));

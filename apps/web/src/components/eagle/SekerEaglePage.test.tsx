@@ -1841,7 +1841,9 @@ describe('SekerEaglePage', () => {
     renderPage();
     const toggle = await screen.findByRole('button', { name: '展开筛选' });
     expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
-    expect(toggle.parentElement).toContainElement(screen.getByRole('slider', { name: '缩略图大小' }));
+    expect(toggle.parentElement).toContainElement(
+      screen.getByRole('slider', { name: '缩略图大小' }),
+    );
     fireEvent.click(toggle);
     fireEvent.click(screen.getByRole('button', { name: '格式筛选' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'PNG' }));
@@ -1862,9 +1864,9 @@ describe('SekerEaglePage', () => {
     renderPage();
     await screen.findByRole('heading', { name: '全部素材' });
 
+    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
     const toolbar = screen.getByRole('toolbar', { name: '快捷筛选' });
-    expect(within(toolbar).queryByRole('button', { name: '颜色筛选' })).not.toBeInTheDocument();
-    fireEvent.click(within(toolbar).getByRole('button', { name: '展开筛选' }));
     expect(within(toolbar).getByRole('button', { name: '颜色筛选' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: '标签筛选' })).toBeInTheDocument();
     expect(within(toolbar).getByRole('button', { name: '格式筛选' })).toBeInTheDocument();
@@ -2010,8 +2012,8 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: '双标签素材' }));
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
     const filterPanel = screen.getByRole('toolbar', { name: '快捷筛选' });
-    fireEvent.click(within(filterPanel).getByRole('button', { name: '展开筛选' }));
     expect(within(filterPanel).getByRole('button', { name: '标签筛选' })).toHaveAttribute(
       'aria-expanded',
       'false',

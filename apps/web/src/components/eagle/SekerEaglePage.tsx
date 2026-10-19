@@ -11,6 +11,7 @@ import { getLocale, t } from '../../i18n';
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -24,6 +25,9 @@ import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
   IconCopy,
+  IconFilter,
+  IconChevronDown,
+  IconChevronUp,
   IconDownload,
   IconLayoutGrid,
   IconLayoutSidebarRight,
@@ -273,6 +277,11 @@ export function SekerEaglePage({
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
   const [quickFilters, setQuickFilters] = useState(createEmptyEagleQuickFilterState);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const filterPanelId = useId();
+  useEffect(() => {
+    setFiltersExpanded(false);
+  }, [libraryView, photoView]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [isInspectorVisible, setIsInspectorVisible] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -1242,6 +1251,48 @@ export function SekerEaglePage({
                       )}
                     </label>
                     <div className={styles.toolbarActions}>
+                      {libraryView === 'ACTIVE' && (
+                        <>
+                          <button
+                            type="button"
+                            className={
+                              filtersExpanded || activeFilterCount ? styles.filterActive : undefined
+                            }
+                            aria-label={filtersExpanded ? t('收起筛选') : t('展开筛选')}
+                            aria-expanded={filtersExpanded}
+                            aria-controls={filterPanelId}
+                            title={
+                              activeFilterCount
+                                ? t('已启用 {{value1}} 项筛选', { value1: activeFilterCount })
+                                : undefined
+                            }
+                            onClick={() => setFiltersExpanded((current) => !current)}
+                          >
+                            <IconFilter size={18} aria-hidden="true" />
+                            {filtersExpanded ? t('收起筛选') : t('展开筛选')}
+                            {activeFilterCount > 0 && <span>{activeFilterCount}</span>}
+                            {filtersExpanded ? (
+                              <IconChevronUp size={14} aria-hidden="true" />
+                            ) : (
+                              <IconChevronDown size={14} aria-hidden="true" />
+                            )}
+                          </button>
+                          {!filtersExpanded && activeFilterCount > 0 && (
+                            <button
+                              type="button"
+                              aria-label={t('清除全部快捷筛选，共 {{value1}} 项', {
+                                value1: activeFilterCount,
+                              })}
+                              title={t('清除全部快捷筛选，共 {{value1}} 项', {
+                                value1: activeFilterCount,
+                              })}
+                              onClick={() => setQuickFilters(createEmptyEagleQuickFilterState())}
+                            >
+                              <IconX size={16} aria-hidden="true" />
+                            </button>
+                          )}
+                        </>
+                      )}
                       {libraryView === 'TRASH' && (
                         <button
                           type="button"
@@ -1313,15 +1364,17 @@ export function SekerEaglePage({
                 )}
               </div>
 
-              {libraryView === 'ACTIVE' && showsAssetControls ? (
-                <EagleQuickFilterBar
-                  fieldOptions={photoFieldOptions}
-                  value={quickFilters}
-                  manualTags={manualTags}
-                  aiTags={aiTags}
-                  onRequestAiTags={() => setAiTagReferenceRequested(true)}
-                  onChange={setQuickFilters}
-                />
+              {libraryView === 'ACTIVE' && showsAssetControls && filtersExpanded ? (
+                <div id={filterPanelId}>
+                  <EagleQuickFilterBar
+                    fieldOptions={photoFieldOptions}
+                    value={quickFilters}
+                    manualTags={manualTags}
+                    aiTags={aiTags}
+                    onRequestAiTags={() => setAiTagReferenceRequested(true)}
+                    onChange={setQuickFilters}
+                  />
+                </div>
               ) : null}
 
               {deferredSearch &&

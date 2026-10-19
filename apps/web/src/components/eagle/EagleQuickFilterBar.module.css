@@ -514,12 +514,3 @@
     background: #151619;
   }
 }
-
-.fields[hidden] {
-  display: none;
-}
-.activeSummary {
-  color: var(--eagle-accent);
-  font-size: 12px;
-  white-space: nowrap;
-}
