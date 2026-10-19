@@ -185,8 +185,8 @@ try {
     S3_SECRET_ACCESS_KEY: secretKey,
     MLX_EMBEDDING_URL: 'http://127.0.0.1:9',
     OLLAMA_URL: 'http://127.0.0.1:9',
-    PHOTO_FACE_PYTHON: resolve('.omx/photo-face/venv/bin/python'),
-    PHOTO_FACE_MODEL_DIR: resolve('.omx/photo-face/models'),
+    PHOTO_FACE_PYTHON: process.env.PHOTO_FACE_PYTHON || resolve('.omx/photo-face/venv/bin/python'),
+    PHOTO_FACE_MODEL_DIR: process.env.PHOTO_FACE_MODEL_DIR || resolve('.omx/photo-face/models'),
   };
   assertSafeRuntimeTarget({
     databaseUrl: env.DATABASE_URL,
@@ -575,6 +575,45 @@ try {
           .digest('hex'),
         sample.sha256,
       );
+      if (sample.mimeType === 'image/x-adobe-dng') {
+        const edit = detail.renditions.find(
+          (row) => row.variant === 'edit' && row.revision === detail.mediaRevision,
+        );
+        assert.ok(
+          edit && edit.mimeType === 'image/webp',
+          'RAW has a dedicated browser-editable derivative',
+        );
+        assert.ok(edit.width > 0 && edit.height > 0 && Math.max(edit.width, edit.height) <= 6000);
+        const otherMode = sample.mode === 'photos' ? 'eagle' : 'photos';
+        const denied = await fetch(
+          `${origin}/api/${otherMode}/assets/${sample.assetId}/renditions/${edit.id}`,
+          {
+            headers: { cookie: `sekereagle_access=${accessToken}` },
+          },
+        );
+        assert.equal(denied.status, 404, 'RAW edit derivative remains mode scoped');
+        const { readMediaProcessingFacts } =
+          await import('../../apps/api/dist/eagle/media-processing-facts.js');
+        const stored = await db.eagleAsset.findUniqueOrThrow({ where: { id: sample.assetId } });
+        const mode = sample.mode === 'photos' ? 'PHOTO' : 'MATERIAL';
+        await db.eagleAssetRendition.delete({ where: { id: edit.id } });
+        const [facts] = await readMediaProcessingFacts(db, stored.ownerId, mode, [sample.assetId]);
+        assert.equal(facts.renditionsReady, false, 'old RAW missing edit copy must be repairable');
+        await api(
+          `/admin/${sample.mode === 'photos' ? 'photo' : 'eagle'}-processing/reconcile`,
+          {},
+        );
+        await waitFor(
+          async () => {
+            const row = await api(`/${sample.mode}/assets/${sample.assetId}`);
+            return row.renditions.some(
+              (r) => r.variant === 'edit' && r.revision === row.mediaRevision,
+            );
+          },
+          'RAW edit derivative repair',
+          120,
+        );
+      }
       const playback = detail.renditions.find(
         (item) => item.kind === 'PREVIEW' && item.mimeType === 'video/mp4',
       );
