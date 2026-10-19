@@ -3,6 +3,8 @@
 
 import argparse
 import hashlib
+import fcntl
+from contextlib import contextmanager
 import json
 import os
 from pathlib import Path
@@ -12,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import time
+import uuid
 from datetime import datetime, timezone
 
 ROOT = Path("/volume1/homes/seker/sekereagle-backup")
@@ -104,56 +107,61 @@ def progress(root, phase, count=0, size=0):
 def receive(root, generation, source):
     path = generation_path(root, generation)
     path.mkdir(parents=True, mode=0o700)
-    root.chmod(0o700)
-    path.parent.chmod(0o700)
-    path.chmod(0o700)
-    (path / ".owner-marker").write_text(MARKER)
-    (path / ".owner-marker").chmod(0o600)
-    actual = {}
-    manifest = None
-    count = size = 0
-    with tarfile.open(fileobj=source, mode="r|") as archive:
-        for member in archive:
-            name = member.name
-            if not member.isfile() or manifest is not None:
-                raise ValueError("Unexpected archive entry")
-            if name != "manifest.json" and name not in FILES:
-                if not name.startswith("objects/") or object_name(name[8:]) != name:
-                    raise ValueError("Unexpected archive path")
-            if name in actual:
-                raise ValueError("Duplicate archive entry")
-            file = archive.extractfile(member)
-            if name == "manifest.json":
-                manifest = json.load(file)
-                atomic(path / name, manifest)
-                continue
-            target = path / name
-            target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-            digest = hashlib.sha256()
-            with target.open("xb") as output:
-                os.fchmod(output.fileno(), 0o600)
-                while True:
-                    block = file.read(1024 * 1024)
-                    if not block:
-                        break
-                    output.write(block)
-                    digest.update(block)
-            actual[name] = (digest.hexdigest(), member.size)
-            if name.startswith("objects/"):
-                count += 1
-                size += member.size
-                if count % 1000 == 0:
-                    progress(root, "extracting", count, size)
-    if manifest is None:
-        raise ValueError("Missing final manifest")
-    expected = expected_files(manifest)
-    if set(actual) != set(expected) or any(
-        actual[n][0] != d or (s is not None and actual[n][1] != s)
-        for n, (d, s) in expected.items()
-    ):
-        raise ValueError("Archive integrity mismatch")
-    # Receipt is deliberately absent until a separate on-disk verification passes.
-    return {"objects": count, "bytes": size}
+    try:
+        root.chmod(0o700)
+        path.parent.chmod(0o700)
+        path.chmod(0o700)
+        (path / ".owner-marker").write_text(MARKER)
+        (path / ".owner-marker").chmod(0o600)
+        actual = {}
+        manifest = None
+        count = size = 0
+        with tarfile.open(fileobj=source, mode="r|") as archive:
+            for member in archive:
+                name = member.name
+                if not member.isfile() or manifest is not None:
+                    raise ValueError("Unexpected archive entry")
+                if name != "manifest.json" and name not in FILES:
+                    if not name.startswith("objects/") or object_name(name[8:]) != name:
+                        raise ValueError("Unexpected archive path")
+                if name in actual:
+                    raise ValueError("Duplicate archive entry")
+                file = archive.extractfile(member)
+                if name == "manifest.json":
+                    manifest = json.load(file)
+                    atomic(path / name, manifest)
+                    continue
+                target = path / name
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                digest = hashlib.sha256()
+                with target.open("xb") as output:
+                    os.fchmod(output.fileno(), 0o600)
+                    while True:
+                        block = file.read(1024 * 1024)
+                        if not block:
+                            break
+                        output.write(block)
+                        digest.update(block)
+                actual[name] = (digest.hexdigest(), member.size)
+                if name.startswith("objects/"):
+                    count += 1
+                    size += member.size
+                    if count % 1000 == 0:
+                        progress(root, "extracting", count, size)
+        if manifest is None:
+            raise ValueError("Missing final manifest")
+        expected = expected_files(manifest)
+        if set(actual) != set(expected) or any(
+            actual[n][0] != d or (s is not None and actual[n][1] != s)
+            for n, (d, s) in expected.items()
+        ):
+            raise ValueError("Archive integrity mismatch")
+        # Receipt is deliberately absent until a separate on-disk verification passes.
+        return {"objects": count, "bytes": size}
+    except BaseException:
+        # mkdir succeeded above: this invocation owns the entire newly created tree.
+        shutil.rmtree(str(path))
+        raise
 
 
 def verify(root, generation):
@@ -258,22 +266,50 @@ def publish(root, generation):
     return result
 
 
+def owned_generation(path):
+    marker = path / ".owner-marker"
+    return (
+        not path.is_symlink()
+        and path.is_dir()
+        and not marker.is_symlink()
+        and marker.is_file()
+        and marker.read_text() == MARKER
+    )
+
+
+def discard(root, generation):
+    path = generation_path(root, generation)
+    current = root / "current"
+    if current.exists() or current.is_symlink():
+        if current_generation(root) == generation:
+            raise ValueError("Cannot discard the published backup")
+    if not path.exists():
+        return {"discarded": generation}
+    if not owned_generation(path):
+        raise ValueError("Unknown generation; discard refused")
+    shutil.rmtree(str(path))
+    return {"discarded": generation}
+
+
 def prune(root):
     keep = current_generation(root)
     receipt(root, keep)
-    candidates = []
-    for path in (root / "generations").iterdir():
-        generation_path(root, path.name)
-        if (
-            not path.is_dir()
-            or not (path / ".owner-marker").is_file()
-            or (path / ".owner-marker").read_text() != MARKER
-        ):
-            raise ValueError("Unknown directory; retention refused")
-        if path.name != keep:
-            candidates.append(path)
-    for path in candidates:
-        shutil.rmtree(str(path))
+    quarantine = root / "quarantine"
+    if quarantine.is_symlink():
+        raise ValueError("Unsafe quarantine directory")
+    for path in list((root / "generations").iterdir()):
+        if path.name == keep:
+            continue
+        if re.fullmatch("[a-f0-9]{32,64}", path.name) and owned_generation(path):
+            shutil.rmtree(str(path))
+        else:
+            # Rename the entry itself, including symlinks; never traverse unknown data.
+            quarantine.mkdir(mode=0o700, exist_ok=True)
+            os.rename(str(path), str(quarantine / uuid.uuid4().hex))
+    return {
+        "retained": keep,
+        "quarantined": len(list(quarantine.iterdir())) if quarantine.exists() else 0,
+    }
 
 
 def retire(root):
@@ -344,6 +380,14 @@ def convert(root, generation):
         (root / ".conversion-password").unlink(missing_ok=True)
 
 
+@contextmanager
+def operation_lock(root):
+    guard(root)
+    with (root / ".operation.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+
+
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser()
@@ -354,6 +398,7 @@ def main():
             "verify",
             "publish",
             "prune",
+            "discard",
             "retire",
             "convert",
             "status",
@@ -363,24 +408,27 @@ def main():
     args = parser.parse_args()
     guard(ROOT)
     ROOT.chmod(0o700)
-    if args.command == "receive":
-        result = receive(ROOT, args.generation, sys.stdin.buffer)
-    elif args.command == "verify":
-        os.sync()
-        result = verify(ROOT, args.generation)
-    elif args.command == "publish":
-        result = publish(ROOT, args.generation)
-    elif args.command == "prune":
-        prune(ROOT)
-        result = {"retained": current_generation(ROOT)}
-    elif args.command == "retire":
-        retire(ROOT)
-        result = {"encryptedRepositoryRemoved": True}
-    elif args.command == "convert":
-        convert(ROOT, args.generation)
-        result = {"verified": args.generation}
-    else:
-        result = receipt(ROOT, current_generation(ROOT))
+    # Serialize receive/verify/cleanup even after an SSH disconnect.
+    with operation_lock(ROOT):
+        if args.command == "receive":
+            result = receive(ROOT, args.generation, sys.stdin.buffer)
+        elif args.command == "verify":
+            os.sync()
+            result = verify(ROOT, args.generation)
+        elif args.command == "publish":
+            result = publish(ROOT, args.generation)
+        elif args.command == "prune":
+            result = prune(ROOT)
+        elif args.command == "discard":
+            result = discard(ROOT, args.generation)
+        elif args.command == "retire":
+            retire(ROOT)
+            result = {"encryptedRepositoryRemoved": True}
+        elif args.command == "convert":
+            convert(ROOT, args.generation)
+            result = {"verified": args.generation}
+        else:
+            result = receipt(ROOT, current_generation(ROOT))
     print(json.dumps(result))
 
 

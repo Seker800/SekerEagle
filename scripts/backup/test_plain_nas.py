@@ -91,7 +91,7 @@ class PlainNasTests(unittest.TestCase):
         self.assertFalse(repository.exists())
         self.assertTrue((self.root / "current/objects/users/asset/original").exists())
 
-    def test_retention_preserves_current_and_refuses_unknown_directories(self):
+    def test_retention_preserves_current_and_quarantines_unknown_directories(self):
         for key in [self.generation, "b" * 64]:
             nas.receive(self.root, key, self.fixture())
             nas.verify(self.root, key)
@@ -100,8 +100,8 @@ class PlainNasTests(unittest.TestCase):
         self.assertFalse((self.root / "generations" / self.generation).exists())
         self.assertTrue((self.root / "current/manifest.json").exists())
         (self.root / "generations" / ("c" * 64)).mkdir()
-        with self.assertRaises(ValueError):
-            nas.prune(self.root)
+        self.assertEqual(nas.prune(self.root)["quarantined"], 1)
+        self.assertTrue((self.root / "current/manifest.json").exists())
 
 
 if __name__ == "__main__":

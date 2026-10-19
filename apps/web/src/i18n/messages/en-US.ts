@@ -934,4 +934,29 @@ export const enUS = {
   '正在准备原文件（{{value1}}/{{value2}}）…': 'Preparing original files ({{value1}}/{{value2}})…',
   '原文件准备已取消，可重新拖动。': 'Original-file preparation was cancelled. Drag again to retry.',
   '原文件准备超时，请重新拖动。': 'Original-file preparation timed out. Drag again to retry.',
+  尚无记录: 'No record yet',
+  尚未成功备份: 'No successful backup yet',
+  正在备份: 'Backup in progress',
+  备份成功: 'Backup successful',
+  最近一次备份失败: 'Last backup attempt failed',
+  备份: 'Backup',
+  完整数据备份: 'Complete data backup',
+  '每两周周六凌晨 01:00（北京时间），保留最近一次成功副本。':
+    'Every other Saturday at 01:00 China time. Only the latest successful backup is retained.',
+  '暂时无法读取备份状态，请稍后重试。':
+    'Backup status is temporarily unavailable. Please try again later.',
+  '正在读取备份状态…': 'Loading backup status…',
+  尚未配置自动备份: 'Automatic backup is not configured',
+  '备份已超期，请检查运行电脑和群晖连接。':
+    'Backup is overdue. Check the host computer and NAS connection.',
+  '备份清理待重试，已成功发布的副本仍然有效。':
+    'Backup cleanup will be retried. The published backup remains valid.',
+  '发现未知备份目录，已隔离保留，请管理员检查。':
+    'Unknown backup entries were quarantined. An administrator should review them.',
+  最后成功备份: 'Last successful backup',
+  最近执行时间: 'Last attempt',
+  下次计划备份: 'Next scheduled backup',
+  备份目标: 'Backup destination',
+  '电脑未运行时将在恢复运行后补做。备份期间图库暂时不可用。':
+    'Missed backups run when the computer is available again. The library is temporarily unavailable during backup.',
 } as const;

@@ -309,3 +309,46 @@ describe('AccountHome', () => {
     expect(screen.queryByRole('button', { name: '打开桌面设置' })).not.toBeInTheDocument();
   });
 });
+
+describe('administrator backup entry', () => {
+  it('opens the backup panel from the actual account tab and supports keyboard navigation', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) =>
+        jsonResponse(
+          (typeof input === 'string'
+            ? input
+            : input instanceof URL
+              ? input.pathname
+              : input.url
+          ).includes('/backup/status')
+            ? {
+                configured: true,
+                target: 'SekerDesign',
+                status: 'succeeded',
+                lastSuccessAt: '2026-10-19T00:00:00Z',
+                lastAttemptAt: null,
+                nextScheduledAt: null,
+                overdue: false,
+                cleanupPending: true,
+                quarantinePending: true,
+              }
+            : [],
+        ),
+      ),
+    );
+    render(
+      <AccountHome
+        user={{ ...user, role: 'ADMIN' }}
+        onPasswordChanged={vi.fn()}
+        onLogout={vi.fn()}
+        privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole('tab', { name: '隐私' }), { key: 'End' });
+    expect(screen.getByRole('tab', { name: '备份' })).toHaveAttribute('aria-selected', 'true');
+    expect(await screen.findByText('备份成功')).toBeVisible();
+    expect(screen.getByText('备份清理待重试，已成功发布的副本仍然有效。')).toBeVisible();
+    expect(screen.getByText('发现未知备份目录，已隔离保留，请管理员检查。')).toBeVisible();
+  });
+});

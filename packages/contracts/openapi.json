@@ -1,6 +1,18 @@
 {
   "openapi": "3.0.0",
   "paths": {
+    "/api/backup/status": {
+      "get": {
+        "operationId": "BackupController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["backup"]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "AuthController_login",

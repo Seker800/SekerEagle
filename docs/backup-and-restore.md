@@ -28,7 +28,7 @@ SSH 只负责传输与登录认证；SSH 登录凭据和备份文件解密密码
 6. 接收端拒绝路径穿越、链接、重复或缺失条目，并核对完整 SHA-256 清单；发送进程或接收进程失败均不发布。
 7. 源读取结束后恢复 Eagle；群晖在本地重新读取普通文件做完整磁盘校验，不把素材传回 Mac。
 8. 用本机已有数据库导出，在无网络、无生产卷的临时 `sekereagle_test` 中完整恢复并核对记录数。
-9. 全部通过后原子替换 `current` 指针，再清理其他受标记保护的副本，更新最后成功时间。
+9. 全部通过后先持久化发布意图，原子替换 `current`，立即持久化最后成功时间与校验证据；之后清理旧副本。清理失败只显示待重试，不推翻备份成功。发布响应丢失时按已验证的 `current` 与持久化意图对账。
 
 每次计划备份会完整读取并传输当时的数据。普通目录方案不依赖 restic 的块级去重。
 本次取消加密的转换例外：直接在群晖内解密现有仓库，不重新读取或传输生产素材。
@@ -36,6 +36,9 @@ SSH 只负责传输与登录认证；SSH 登录凭据和备份文件解密密码
 
 脚本在停止服务前持久化暂停意图。异常时恢复服务；独立 launchd 每分钟检查进程，
 中断或超时后先终止专用导出进程，再恢复写入。未校验的新目录不会覆盖当前成功副本。
+恢复检查容器使用专用 label；创建命令超时也会按容器 ID 清理。旧版无 label 容器只有在镜像、离线网络、测试数据库和只读 dump 挂载全部一致时才能自动清理，否则要求人工核对。
+接收异常只删除本次新建目录；中断后的 generation 按持久化意图用 `discard` 清理，禁止删除 current 或未知所有权目录。清理在空间检查前重试；后台每六小时重试失败的清理。NAS 进程锁防止接收和清理并发。
+`generations/` 下未知条目会原子移动到 `quarantine/`，保留内容并显示管理员提示；不会跟随链接或删除未知内容。隔离内容仍占空间，管理员核对后自行处理。
 
 ## 本机操作与状态
 
@@ -66,4 +69,39 @@ npm run backup:test
 原子切换与普通文件校验的实现保存在根目录的 `tools/plain_nas.py`；当前主机协调脚本也同步保存在 `tools/host_backup.py`。
 历史 `source.tar.gz` 中可能保留转换前的备份脚本，不应重新安装其中已经废弃的加密备份方案。
 
-恢复自动备份前，应将群晖 `tools/host_backup.py` 复制为工程的 `scripts/backup/backup.py`，并将 `tools/plain_nas.py` 放入同目录，再执行 `backup:install`。
+恢复自动备份前，优先使用当前仓库受版本控制的备份脚本，执行 `backup:install`。NAS 上的脚本仅作灾难恢复证据，使用前需要审核版本，不能直接覆盖当前代码。
+
+## SSH 主机身份
+
+所有 SSH（包括上传工具、传输、迁移）显式设置 `StrictHostKeyChecking=yes`、`BatchMode=yes`、`ProxyCommand=none` 和 `ProxyJump=none`，并固定 `Hostname=192.168.31.146`、`User=seker`、`Port=22`、`HostKeyAlias=192.168.31.146`；用相同选项的 `ssh -G` 校验目标与安全策略。新机器必须先通过 NAS 控制台或可信管理渠道核对主机公钥并写入 known_hosts；不得使用 `StrictHostKeyChecking=no` 或未经核验的 `ssh-keyscan` 结果自动信任。
+
+2026-10-19 本机 known_hosts 的已登记指纹（本次仅离线读取，未重新通过 NAS 控制台认证）：
+
+- ED25519：`SHA256:7E/h1y57XO5S1HnNbmJVSXOiDNlJXXkR+BpJc7U2OKs`
+- ECDSA：`SHA256:i0rXib9Blmb67wKoqp4e8khzEjxfXfx8IDIV6luIxRU`
+
+主机重装或换钥匙时，先通过可信渠道确认变更再更新登记；不要为了让备份通过而关闭校验。
+
+## 从旧 restic state 迁移
+
+这是一次显式维护操作，正常安装不会删除旧备份或凭据。当前机器已经转换完成，无需重复执行。以下命令由维护者在确需升级旧机器时运行；本次代码验证没有执行这些操作。
+
+1. 停止旧备份调度，确认没有运行中的备份与暂停服务。保留旧 state 和仓库；从私有 state 读取 `lastSnapshotId` 的完整 64 位十六进制值，设为下面的 `SNAPSHOT`。不要用“最新快照”猜测身份。
+2. 用强制主机校验的 SSH 将当前仓库 `scripts/backup/plain_nas.py` 上传到专用根目录 `tools/plain_nas.py`（工具文件权限 600，根和 tools 权限 700）。确认根所有权标记。NAS 必须已有可信的 `tools/restic-linux-amd64`；若需补装，核验官方发布校验和后再安装，不从未知地址下载可执行文件。
+3. 在 NAS 上通过可信私有输入准备 `.conversion-password`（600）。它只用于读取旧仓库，`convert` 完成或失败都会移除，不要把密码写入命令行、源码或文档。确保有完整副本空间。
+4. 在 NAS 的专用根目录执行（以实际完整快照 ID 替换 `SNAPSHOT`；`set -e` 保证失败后不发布）：
+
+   ```sh
+   set -e
+   cd /volume1/homes/seker/sekereagle-backup
+   python3 tools/plain_nas.py convert "$SNAPSHOT"
+   python3 tools/plain_nas.py verify "$SNAPSHOT"
+   python3 tools/plain_nas.py publish "$SNAPSHOT"
+   ```
+
+   中断后重试前，可用 `python3 tools/plain_nas.py discard "$SNAPSHOT"` 删除同一 ID 的受标记半成品；它拒绝删除已发布的 current。已发布则直接继续下一步。未知目录不能用此命令删除。
+
+5. 在 Mac 当前仓库运行 `npm run backup:migrate`。命令加锁，要求 current 精确对应旧 state 的快照，重新做 NAS 磁盘校验，下载 dump 与元数据并核对清单哈希，在隔离数据库恢复成功后才写入 `plain-directory-v1`。保留原最后成功时间、冻结时间和计划，不把转换记为新备份。
+6. 成功 state 落盘后才执行 NAS `retire`：删除受保护的旧加密仓库、转换密码/缓存与旧 restic 工具，并清理 Mac 专用备份目录的 `repository-password` 和旧工具。若 retire 失败，state 保留 `retirementPending`，再次运行 `backup:migrate` 仅重试退役，不重复转换或修改成功时间。最后运行 `npm run backup:install` 安装现行调度。
+
+`retire` 单独运行虽要求已校验的 current，但不会替代 Mac 隔离恢复检查，正常迁移必须按上述顺序完成。`.local/`、`.runtime/`、`.venv/` 及其嵌套目录始终排除于 Docker context；CI 用无真实数据的哨兵文件验证 Docker 本身的排除行为。Python 备份测试已经纳入 `npm test` 与 CI。

@@ -32,7 +32,9 @@ class BackupPolicyTests(unittest.TestCase):
         )
 
     def test_rejects_protected_or_changed_ssh_target(self):
-        good = "hostname 192.168.31.146\nuser seker\nport 22\n"
+        good = (
+            "hostname 192.168.31.146\nuser seker\nport 22\nstricthostkeychecking true\n"
+        )
         backup.assert_ssh_target(good)
         for bad in (
             good.replace("146", "89"),
@@ -210,6 +212,9 @@ class RecoveryTests(unittest.TestCase):
             patch.object(backup, "preflight", return_value={}),
             patch.object(backup, "prepare_input", return_value={"frozenAt": "now"}),
             patch.object(backup, "restore_services", side_effect=resumed) as restore,
+            patch.object(backup, "cleanup_restore_container"),
+            patch.object(backup, "remote", return_value=b"{}"),
+            patch.object(backup, "cleanup_restore_container"),
             patch.object(backup, "run"),
             patch.object(
                 backup, "transfer_archive", side_effect=RuntimeError("source failed")
@@ -259,6 +264,7 @@ class RecoveryTests(unittest.TestCase):
                 side_effect=RuntimeError("Legacy encryption forbidden"),
                 create=True,
             ),
+            patch.object(backup, "cleanup_restore_container"),
             patch.object(backup, "run"),
             patch.object(backup.os, "getpgrp", return_value=123),
             patch.object(backup.os, "getpid", return_value=123),
@@ -279,6 +285,9 @@ class RecoveryTests(unittest.TestCase):
             s["pausedServices"] = []
 
         with (
+            tempfile.TemporaryDirectory() as directory,
+            patch.object(backup, "PRIVATE", Path(directory)),
+            patch.object(backup, "cleanup_restore_container"),
             patch.object(backup, "run"),
             patch.object(backup, "restore_services", side_effect=resumed) as restore,
             patch.object(backup, "save_state"),

@@ -88,6 +88,9 @@ Prisma repositories / MinIO adapters
 - The application only reads an administrator-only, sanitized status projection from a read-only mount. No public API can initiate backups, change SSH targets or access backup credentials.
 - A new ordinary-file generation is atomically published as successful only after full read-back integrity verification and an isolated database restore. Retention never removes the previous successful directory before that point.
 - An independent host watchdog terminates interrupted backup/export processes before reopening writers.
+- Persist generation intent before receiving and publication evidence before switching current. Recovery reconciles a lost publish acknowledgement; a retention failure never reverses durable success. Owned partial generations are discarded before capacity checks, and NAS operations share a process lock.
+- Restore verification containers carry an explicit role label and are removed by inspected immutable ID, including run timeouts. Legacy containers require exact independent identity evidence. Unknown NAS entries are quarantined without traversal or deletion.
+- Every SSH path forces known-host verification and a direct connection. Docker contexts use a source allowlist and exclude private runtime directories at all depths. Legacy conversion is an explicit, documented operation; installation never silently adopts an encrypted state.
 
 ## Media memory boundary
 

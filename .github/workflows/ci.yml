@@ -28,6 +28,8 @@ jobs:
       - name: Verify RAW decoding and camera video playback
         run: CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run smoke:camera-media
       - run: docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet
+      - name: Verify private backup files never enter Docker context
+        run: SEKEREAGLE_TEST_DOCKER_CONTEXT=1 node --test scripts/backup-build-context.test.mjs
       - run: docker build -f apps/api/Dockerfile .
       - run: docker build -f apps/worker/Dockerfile .
       - run: docker build -f apps/web/Dockerfile .

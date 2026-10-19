@@ -14,6 +14,7 @@ import secrets
 import shutil
 import signal
 import subprocess
+import tempfile
 import sys
 import tarfile
 import time
@@ -30,6 +31,27 @@ INPUT = PRIVATE / "input"
 REMOTE = "/volume1/homes/seker/sekereagle-backup"
 EXPORT_CONTAINER = "sekereagle-backup-export"
 RESTORE_CONTAINER = "sekereagle-backup-restore-postgres"
+RESTORE_LABEL = "com.sekereagle.backup.role"
+SSH_OPTIONS = [
+    "-o",
+    "Hostname=192.168.31.146",
+    "-o",
+    "User=seker",
+    "-o",
+    "Port=22",
+    "-o",
+    "HostKeyAlias=192.168.31.146",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=10",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ProxyCommand=none",
+    "-o",
+    "ProxyJump=none",
+]
 UTC = timezone.utc
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 PERIOD = timedelta(days=14)
@@ -72,6 +94,12 @@ def assert_ssh_target(config):
         "22",
     ):
         raise ValueError("SekerDesign SSH target changed; refusing backup")
+    if (
+        fields.get("stricthostkeychecking") not in ("yes", "true")
+        or fields.get("proxycommand", "none") != "none"
+        or fields.get("proxyjump", "none") != "none"
+    ):
+        raise ValueError("SSH must verify known host keys and connect directly")
 
 
 def object_path(key):
@@ -134,6 +162,8 @@ def save_state(state):
         "lastAttemptAt",
         "lastSuccessAt",
         "nextScheduledAt",
+        "cleanupPending",
+        "quarantinePending",
     )
     atomic_json(PUBLIC / "status.json", {k: state.get(k) for k in keys}, 0o644)
 
@@ -142,10 +172,7 @@ def ssh(command):
     return text(
         [
             "ssh",
-            "-o",
-            "BatchMode=yes",
-            "-o",
-            "ConnectTimeout=10",
+            *SSH_OPTIONS,
             "SekerDesign",
             command,
         ]
@@ -160,8 +187,7 @@ def upload_receiver():
         run(
             [
                 "ssh",
-                "-o",
-                "BatchMode=yes",
+                *SSH_OPTIONS,
                 "SekerDesign",
                 f"umask 077; chmod 700 {REMOTE}; mkdir -p {REMOTE}/tools; chmod 700 {REMOTE}/tools; cat > {REMOTE}/tools/{name}.tmp && chmod 600 {REMOTE}/tools/{name}.tmp && mv {REMOTE}/tools/{name}.tmp {REMOTE}/tools/{name}",
             ],
@@ -170,15 +196,23 @@ def upload_receiver():
 
 
 def remote(command, generation=None):
-    if command not in ("receive", "verify", "publish", "prune", "status"):
+    if command not in (
+        "receive",
+        "verify",
+        "publish",
+        "prune",
+        "status",
+        "discard",
+        "retire",
+        "convert",
+    ):
         raise ValueError("Unsupported NAS operation")
     if generation is not None and not re.fullmatch("[a-f0-9]{32,64}", generation):
         raise ValueError("Invalid generation")
     return run(
         [
             "ssh",
-            "-o",
-            "BatchMode=yes",
+            *SSH_OPTIONS,
             "SekerDesign",
             f"python3 {REMOTE}/tools/plain_nas.py {command}"
             + (f" {generation}" if generation else ""),
@@ -200,10 +234,7 @@ def transfer_archive(generation):
         receiver = subprocess.Popen(
             [
                 "ssh",
-                "-o",
-                "BatchMode=yes",
-                "-o",
-                "ConnectTimeout=10",
+                *SSH_OPTIONS,
                 "SekerDesign",
                 f"python3 {REMOTE}/tools/plain_nas.py receive {generation}",
             ],
@@ -235,16 +266,20 @@ def required_remote_space(state):
     return int(previous * 1.25) + 20 * 1024**3
 
 
-def preflight():
-    assert_ssh_target(text(["ssh", "-G", "SekerDesign"]))
+def preflight(state=None):
+    state = load_state() if state is None else state
+    assert_ssh_target(text(["ssh", *SSH_OPTIONS, "-G", "SekerDesign"]))
     if ssh("hostname").strip() != "SEKER_DESIGN":
         raise ValueError("Remote machine identity mismatch")
     marker = ssh(f"cat {REMOTE}/owner-marker").strip()
     if marker != "sekereagle-independent-backup-v1":
         raise ValueError("Remote backup ownership marker mismatch")
+    if state.get("lastGenerationId"):
+        cleanup_published(state)  # Reclaim old owned partials BEFORE capacity checks.
+        save_state(state)
     available = int(ssh(f"df -Pk {REMOTE} | tail -1").split()[3]) * 1024
     if (
-        available < required_remote_space(load_state())
+        available < required_remote_space(state)
         or shutil.disk_usage(PRIVATE).free < 16 * 1024**3
     ):
         raise ValueError("Insufficient backup workspace")
@@ -273,7 +308,7 @@ def preflight():
     run(
         ["docker", "exec", "sekereagle-api-1", "node", "scripts/assert-safe-target.mjs"]
     )
-    if load_state().get("backupFormat") != "plain-directory-v1":
+    if state.get("backupFormat") != "plain-directory-v1":
         raise ValueError("Plaintext backup migration must finish before backup")
     return containers
 
@@ -535,6 +570,86 @@ def verify_archive(source, extract_database=None):
     return {"objects": len(objects), "bytes": sum(size for _, size in objects.values())}
 
 
+def legacy_restore_container(container):
+    """Adopt pre-label leftovers only with independent image, mount and DB evidence."""
+    metadata = INPUT / "deployment.json"
+    if not metadata.is_file():
+        return False
+    image = json.loads(metadata.read_text())["images"]["postgres"]["id"]
+    env = container.get("Config", {}).get("Env", [])
+    mounts = container.get("Mounts", [])
+    return (
+        container.get("Name") == "/" + RESTORE_CONTAINER
+        and container.get("Image") == image
+        and container.get("HostConfig", {}).get("NetworkMode") == "none"
+        and "POSTGRES_DB=sekereagle_test" in env
+        and "POSTGRES_USER=sekereagle" in env
+        and any(
+            m.get("Type") == "bind"
+            and m.get("Destination") == "/restore.dump"
+            and m.get("Source") == str(INPUT / "database.dump")
+            and m.get("RW") is False
+            for m in mounts
+        )
+        and all(
+            m.get("Type") == "volume"
+            or (m.get("Destination") == "/restore.dump" and m.get("RW") is False)
+            for m in mounts
+        )
+    )
+
+
+def cleanup_restore_container():
+    """Remove only our labelled temporary database, using its immutable Docker ID."""
+    result = run(["docker", "inspect", RESTORE_CONTAINER], check=False)
+    if result.returncode:
+        # Distinguish absence from a disconnected daemon; never assume inspection failed safely.
+        run(["docker", "info", "--format", "{{.ID}}"])
+        return
+    container = json.loads(result.stdout)[0]
+    labels = container.get("Config", {}).get("Labels") or {}
+    if labels.get(RESTORE_LABEL) != "restore":
+        if labels.get(RESTORE_LABEL) or not legacy_restore_container(container):
+            raise ValueError(
+                "Unlabelled restore container requires manual identity verification"
+            )
+    run(["docker", "rm", "-f", "-v", container["Id"]])
+
+
+def cleanup_attempt(state):
+    """A durable generation intent makes failed receives recoverable before space checks."""
+    pending = state.get("pendingPublication")
+    if pending:
+        try:
+            current = json.loads(remote("status"))
+        except Exception:
+            state["cleanupPending"] = True
+            return False
+        if current.get("generation") == pending["lastGenerationId"]:
+            state.update(pending)
+            state.pop("attemptGeneration", None)
+            state.pop("retryAfter", None)
+        state.pop("pendingPublication", None)
+    generation = state.get("attemptGeneration")
+    if generation:
+        try:
+            remote("discard", generation)
+        except Exception:
+            state["cleanupPending"] = True
+            return False
+        state.pop("attemptGeneration", None)
+    return True
+
+
+def cleanup_published(state):
+    try:
+        result = json.loads(remote("prune"))
+        state["cleanupPending"] = False
+        state["quarantinePending"] = bool(result.get("quarantined"))
+    except Exception:
+        state["cleanupPending"] = True
+
+
 def restore_database_check(directory):
     """Restore the complete database into a disposable, network-isolated test instance."""
     metadata = json.loads((directory / "deployment.json").read_text())
@@ -558,8 +673,7 @@ def restore_database_check(directory):
             "scripts/assert-safe-target.mjs",
         ]
     )
-    if run(["docker", "inspect", RESTORE_CONTAINER], check=False).returncode == 0:
-        raise ValueError("Restore verification container already exists")
+    cleanup_restore_container()
     envfile = directory / "postgres.env"
     envfile.write_text(
         "POSTGRES_USER=sekereagle\nPOSTGRES_DB=sekereagle_test\nPOSTGRES_PASSWORD="
@@ -567,7 +681,6 @@ def restore_database_check(directory):
         + "\n"
     )
     envfile.chmod(0o600)
-    created = False
     try:
         run(
             [
@@ -576,6 +689,8 @@ def restore_database_check(directory):
                 "-d",
                 "--name",
                 RESTORE_CONTAINER,
+                "--label",
+                RESTORE_LABEL + "=restore",
                 "--network",
                 "none",
                 "--env-file",
@@ -585,7 +700,6 @@ def restore_database_check(directory):
                 metadata["images"]["postgres"]["id"],
             ]
         )
-        created = True
         ready = False
         for _ in range(60):
             result = run(
@@ -644,10 +758,10 @@ def restore_database_check(directory):
             raise ValueError("Restored database counts differ from source")
         return metadata["referenceCounts"]
     finally:
-        if created:
-            # -v only removes this newly-created container's anonymous data volume.
-            run(["docker", "rm", "-f", "-v", RESTORE_CONTAINER])
-        envfile.unlink(missing_ok=True)
+        try:
+            cleanup_restore_container()
+        finally:
+            envfile.unlink(missing_ok=True)
 
 
 def backup():
@@ -673,7 +787,14 @@ def backup():
             else None
         )
         try:
-            containers = preflight()
+            cleanup_restore_container()
+            if not cleanup_attempt(state):
+                raise RuntimeError(
+                    "Unfinished generation cleanup must complete before backup"
+                )
+            state["status"] = "running"
+            save_state(state)
+            containers = preflight(state)
             state["pausedServices"] = ["gateway", "api", "worker"]
             save_state(state)  # Recovery intent must be durable BEFORE any stop.
             run(
@@ -693,6 +814,8 @@ def backup():
             # Every writer is now stopped; DB and object storage remain live.
             metadata = prepare_input(containers)
             generation = uuid.uuid4().hex
+            state["attemptGeneration"] = generation
+            save_state(state)  # Intent precedes the first remote byte.
             transfer_archive(generation)
             # Source reads are complete; NAS disk verification can run with Eagle online.
             restore_services(state)
@@ -700,9 +823,7 @@ def backup():
             verified = json.loads(remote("verify", generation))
             integrity = {"objects": verified["objects"], "bytes": verified["bytes"]}
             integrity["databaseCounts"] = restore_database_check(INPUT)
-            remote("publish", generation)
-            remote("prune")
-            state.update(
+            success = dict(
                 status="succeeded",
                 lastSuccessAt=stamp(),
                 backupFormat="plain-directory-v1",
@@ -712,13 +833,24 @@ def backup():
                 lastRestoreTestAt=stamp(),
                 nextScheduledAt=following_slot(state["nextScheduledAt"], utcnow()),
             )
+            state["pendingPublication"] = success
+            save_state(state)
+            remote("publish", generation)
+            state.update(success)
             state.pop("retryAfter", None)
             state.pop("lastSnapshotId", None)
             state.pop("failureReason", None)
+            state.pop("attemptGeneration", None)
+            state["cleanupPending"] = True
+            save_state(state)  # Publication succeeds independently of retention.
+            state.pop("pendingPublication", None)
+            cleanup_published(state)
         except BaseException:
             state["status"] = "failed"
             state["retryAfter"] = stamp(utcnow() + timedelta(hours=6))
-            raise
+            cleanup_attempt(state)
+            if state.get("status") != "succeeded":
+                raise
         finally:
             try:
                 if state.get("pausedServices"):
@@ -755,15 +887,26 @@ def recover(state):
     if alive:
         # All export/backup processes inherit the dedicated session from tick.
         os.killpg(pid, signal.SIGKILL)
-    run(["docker", "rm", "-f", EXPORT_CONTAINER], check=False)
-    if state.get("pausedServices"):
-        restore_services(state)
-    state.update(status="failed", retryAfter=stamp(utcnow() + timedelta(hours=6)))
-    state.pop("pid", None)
-    state.pop("deadline", None)
-    state.pop("processIdentity", None)
-    save_state(state)
-    return True
+    with (PRIVATE / "run.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        run(["docker", "rm", "-f", EXPORT_CONTAINER], check=False)
+        if state.get("pausedServices"):
+            restore_services(state)
+        cleanup_restore_container()
+        cleanup_attempt(state)
+        # A crash after durable publication must not turn success into failure.
+        if state.get("status") != "succeeded":
+            state.update(
+                status="failed", retryAfter=stamp(utcnow() + timedelta(hours=6))
+            )
+        state.pop("pid", None)
+        state.pop("deadline", None)
+        state.pop("processIdentity", None)
+        save_state(state)
+        return True
 
 
 def tick():
@@ -771,6 +914,19 @@ def tick():
     if state.get("pid") or state.get("pausedServices"):
         recover(state)
         return
+    if state.get("cleanupPending") and (
+        not state.get("cleanupRetryAfter")
+        or utcnow() >= parsed(state["cleanupRetryAfter"])
+    ):
+        with (PRIVATE / "run.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return
+            if cleanup_attempt(state) and state.get("lastGenerationId"):
+                cleanup_published(state)
+            state["cleanupRetryAfter"] = stamp(utcnow() + timedelta(hours=6))
+            save_state(state)
     if utcnow() < parsed(state["nextScheduledAt"]):
         return
     if state.get("retryAfter") and utcnow() < parsed(state["retryAfter"]):
@@ -785,12 +941,112 @@ def tick():
         )
 
 
+def migrate():
+    """Finalize documented NAS-local conversion without claiming a new backup date."""
+    with (PRIVATE / "run.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        state = load_state()
+        if state.get("pid") or state.get("pausedServices"):
+            raise ValueError("Recover the interrupted backup before migration")
+        if state.get("backupFormat") == "plain-directory-v1":
+            if state.get("retirementPending"):
+                assert_ssh_target(text(["ssh", *SSH_OPTIONS, "-G", "SekerDesign"]))
+                if ssh("hostname").strip() != "SEKER_DESIGN":
+                    raise ValueError("Unexpected NAS")
+            finish_retirement(state)
+            return
+        generation = state.get("lastSnapshotId", "")
+        if not re.fullmatch("[a-f0-9]{64}", generation) or not state.get(
+            "lastSuccessAt"
+        ):
+            raise ValueError(
+                "Migration needs the full successful legacy snapshot ID and timestamp"
+            )
+        assert_ssh_target(text(["ssh", *SSH_OPTIONS, "-G", "SekerDesign"]))
+        if ssh("hostname").strip() != "SEKER_DESIGN":
+            raise ValueError("Unexpected NAS")
+        upload_receiver()
+        current = json.loads(remote("status"))
+        if current.get("generation") != generation:
+            raise ValueError(
+                "Convert, verify and publish the exact legacy snapshot before --migrate"
+            )
+        verified = json.loads(remote("verify", generation))
+        if verified.get("manifestSha256") != current.get("manifestSha256"):
+            raise ValueError("Published migration manifest changed")
+        # Download only the dump and its metadata to an isolated temporary directory.
+        with tempfile.TemporaryDirectory(dir=PRIVATE) as temporary:
+            directory = Path(temporary)
+            for name in ("database.dump", "deployment.json"):
+                with (directory / name).open("wb") as output:
+                    run(
+                        [
+                            "ssh",
+                            *SSH_OPTIONS,
+                            "SekerDesign",
+                            f"cat {REMOTE}/generations/{generation}/{name}",
+                        ],
+                        stdout=output,
+                        timeout=MAX_PAUSE,
+                    )
+            # Hash the downloaded files against the verified remote manifest.
+            manifest_data = ssh(f"cat {REMOTE}/generations/{generation}/manifest.json")
+            if (
+                hashlib.sha256(manifest_data.encode()).hexdigest()
+                != current["manifestSha256"]
+            ):
+                raise ValueError("Migration manifest integrity mismatch")
+            manifest = json.loads(manifest_data)
+            for name in ("database.dump", "deployment.json"):
+                digest = hashlib.sha256()
+                with (directory / name).open("rb") as source:
+                    for block in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(block)
+                if digest.hexdigest() != manifest["files"][name]:
+                    raise ValueError("Migration download integrity mismatch")
+            counts = restore_database_check(directory)
+        state.update(
+            backupFormat="plain-directory-v1",
+            lastGenerationId=generation,
+            integrity={
+                "objects": verified["objects"],
+                "bytes": verified["bytes"],
+                "databaseCounts": counts,
+            },
+            lastRestoreTestAt=stamp(),
+            retirementPending=True,
+        )
+        state.pop("lastSnapshotId", None)
+        save_state(state)  # Keep the original lastSuccessAt, frozenAt and schedule.
+        finish_retirement(state)
+
+
+def finish_retirement(state):
+    # Retirement is deliberately opt-in via --migrate, never an install side effect.
+    if not state.get("retirementPending"):
+        return
+    remote("retire")
+    for name in (
+        "repository-password",
+        "restic",
+        "restic-darwin-arm64",
+        "restic-linux-amd64",
+    ):
+        (PRIVATE / name).unlink(missing_ok=True)
+    state.pop("retirementPending", None)
+    save_state(state)
+
+
 def install():
+    if STATE.exists() and load_state().get("backupFormat") != "plain-directory-v1":
+        raise ValueError(
+            "Legacy backup state: follow docs/backup-and-restore.md migration steps, then run --migrate before --install"
+        )
     PRIVATE.mkdir(parents=True, exist_ok=True, mode=0o700)
     PRIVATE.chmod(0o700)
     PUBLIC.mkdir(parents=True, exist_ok=True)
     PUBLIC.chmod(0o755)
-    assert_ssh_target(text(["ssh", "-G", "SekerDesign"]))
+    assert_ssh_target(text(["ssh", *SSH_OPTIONS, "-G", "SekerDesign"]))
     if ssh("hostname").strip() != "SEKER_DESIGN":
         raise ValueError("Unexpected NAS")
     # A pre-existing, unmarked directory must never be adopted or cleaned.
@@ -838,7 +1094,7 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group(required=True)
-    for option in ("install", "run", "tick", "archive", "verify-archive"):
+    for option in ("install", "migrate", "run", "tick", "archive", "verify-archive"):
         group.add_argument("--" + option, action="store_true")
     args = parser.parse_args()
     if args.archive:
@@ -847,6 +1103,8 @@ def main():
         print(json.dumps(verify_archive(sys.stdin.buffer)))
     elif args.install:
         install()
+    elif args.migrate:
+        migrate()
     elif args.tick:
         tick()
     else:

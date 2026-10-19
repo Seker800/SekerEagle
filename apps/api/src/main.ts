@@ -8,6 +8,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  app.enableShutdownHooks();
   const config = app.get(ConfigService);
   app.set('trust proxy', 1);
   app.use(cookieParser());
