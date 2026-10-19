@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  assertBuildSpace,
   assertGatewayBindings,
   composeArgs,
   expectedGatewayBindings,
@@ -9,6 +10,13 @@ import {
   parseEnv,
   selectComposeFiles,
 } from './deploy-mac.mjs';
+
+test('deployment refuses to build when host disk headroom is insufficient', () => {
+  for (const bytes of [0, 8 * 1024 ** 3, Number.NaN]) {
+    assert.throws(() => assertBuildSpace(bytes), /free host disk space/);
+  }
+  assert.doesNotThrow(() => assertBuildSpace(24 * 1024 ** 3));
+});
 
 test('parses deployment values without printing the environment', () => {
   const env = parseEnv(`

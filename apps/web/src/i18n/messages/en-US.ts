@@ -137,6 +137,10 @@ export const enUS = {
   照片库导航: 'Photo library navigation',
   隐私照片: 'Private photos',
 
+  无法连接素材库: 'Cannot connect to the library',
+  '正在自动重试，网络恢复后会继续打开图库。':
+    'Retrying automatically. The library will open when the connection returns.',
+  立即重试: 'Retry now',
   '，请重试。': ', please try again.',
   '，已提交 {{value1}} 个标签中心刷新': 'Submitted {{value1}} tag centroid refreshes',
   '；标签中心暂未刷新，请保留基础图片后手动生成':

@@ -10,6 +10,9 @@ import { parseAssetDragInput, parsePreparedDragToken } from '../main/original-dr
 
 contextBridge.exposeInMainWorld('sekerDesktop', {
   version: 1,
+  refreshSession(): Promise<{ status: number; code: string | null }> {
+    return ipcRenderer.invoke('desktop:refresh-session');
+  },
   createMediaUrl(media: DesktopMediaIdentity) {
     return createDesktopMediaUrl(media);
   },
@@ -45,6 +48,9 @@ contextBridge.exposeInMainWorld('sekerDesktop', {
   },
   testConnections(input: unknown) {
     return ipcRenderer.invoke('desktop:test-connections', input);
+  },
+  retryConnections() {
+    return ipcRenderer.invoke('desktop:retry-connections');
   },
   saveConnections(input: unknown) {
     return ipcRenderer.invoke('desktop:save-connections', input);

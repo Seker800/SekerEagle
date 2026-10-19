@@ -13,6 +13,32 @@ function jsonResponse(body: unknown, status = 200) {
 describe('browser session recovery', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
+  });
+
+  it('uses the desktop session coordinator when the access cookie expires', async () => {
+    const refreshSession = vi.fn().mockResolvedValue({ status: 200, code: null });
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = { refreshSession };
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ user: { id: 'owner-1' } }));
+
+    await expect(request('/api/auth/me')).resolves.toEqual({ user: { id: 'owner-1' } });
+    expect(refreshSession).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/auth/me', '/api/auth/me']);
+  });
+
+  it('preserves an origin rejection returned by desktop refresh', async () => {
+    (globalThis as { sekerDesktop?: unknown }).sekerDesktop = {
+      refreshSession: vi.fn().mockResolvedValue({ status: 403, code: 'ORIGIN_REJECTED' }),
+    };
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401));
+
+    await expect(request('/api/auth/me')).rejects.toMatchObject({
+      status: 403,
+      code: 'ORIGIN_REJECTED',
+    });
   });
 
   it('refreshes an expired access cookie and retries the original request once', async () => {

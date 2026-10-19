@@ -8,11 +8,26 @@ function sessionEnded(): never {
   throw new DOMException('Session ended', 'AbortError');
 }
 async function refreshBrowserSession(): Promise<void> {
-  refreshInFlight ??= fetch(REFRESH_PATH, {
-    method: 'POST',
-    credentials: 'include',
-    signal: AbortSignal.timeout(30_000),
-  })
+  const desktop = (
+    globalThis as {
+      sekerDesktop?: { refreshSession?: () => Promise<{ status: number; code: string | null }> };
+    }
+  ).sekerDesktop;
+  refreshInFlight ??= (
+    desktop?.refreshSession
+      ? desktop.refreshSession().then(
+          ({ status, code }) =>
+            new Response(status === 204 ? null : JSON.stringify({ code }), {
+              status,
+              headers: { 'content-type': 'application/json' },
+            }),
+        )
+      : fetch(REFRESH_PATH, {
+          method: 'POST',
+          credentials: 'include',
+          signal: AbortSignal.timeout(30_000),
+        })
+  )
     .then(async (response) => {
       if (!response.ok) throw await errorFromResponse(response, '刷新登录状态失败（{{value1}}）');
     })

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
-import { describe, expect, it } from 'vitest';
+import { JSDOM } from 'jsdom';
+import { describe, expect, it, vi } from 'vitest';
 
 describe('offline-capable desktop connection page', () => {
   it('ships local, LAN and public inputs without inline executable code', async () => {
@@ -35,7 +36,7 @@ describe('offline-capable desktop connection page', () => {
     expect(html).toContain('id="open-cache-folder"');
   });
 
-  it('uses the library workspace structure and persistent settings sidebar', async () => {
+  it('shows a focused recovery screen and keeps detailed settings collapsed', async () => {
     const html = await readFile(
       new URL('../src/connection-page/index.html', import.meta.url),
       'utf8',
@@ -44,15 +45,16 @@ describe('offline-capable desktop connection page', () => {
       new URL('../src/connection-page/connection.css', import.meta.url),
       'utf8',
     );
-    expect(html).toContain('class="workspace"');
-    expect(html).toContain('class="sidebar"');
-    expect(html).toContain('aria-label="桌面设置导航"');
-    expect(html).toContain('href="#connection-settings"');
-    expect(html).toContain('href="#cache-settings"');
-    expect(html).toContain('class="page-toolbar"');
+    expect(html).toContain('id="offline-view"');
+    expect(html).toContain('id="online-view"');
+    expect(html).toContain('id="retry"');
+    expect(html).toContain('id="show-connection-settings"');
+    expect(html).toContain('<details id="connection-details"');
+    expect(html).toContain('class="cache-summary"');
     expect(html).toContain('src="/seker-eagle-logo.svg"');
-    expect(css).toMatch(/grid-template-columns:\s*216px minmax\(0, 1fr\)/u);
-    expect(css).toContain('height: 44px');
+    expect(css).toContain('.status-panel');
+    expect(css).toContain('.settings-group');
+    expect(html).not.toContain('class="sidebar"');
   });
 
   it('tests, saves, resets deployment binding and returns to the active library through preload only', async () => {
@@ -63,6 +65,7 @@ describe('offline-capable desktop connection page', () => {
     for (const method of [
       'getConnectionManagerState',
       'testConnections',
+      'retryConnections',
       'saveConnections',
       'resetDeploymentBinding',
       'cancelConnectionManager',
@@ -89,19 +92,21 @@ describe('offline-capable desktop connection page', () => {
       /const settings = formValue\(\);[\s\S]*run\(async \(\) => render\(await bridge\.saveConnections\(settings\)\)\)/u,
     );
     expect(script).toMatch(
-      /const settings = formValue\(\);[\s\S]*run\(async \(\) => render\(await bridge\.testConnections\(settings\)\)\)/u,
+      /const settings = formValue\(\);[\s\S]*run\(async \(\) => renderProbes\(await bridge\.testConnections\(settings\)\)\)/u,
     );
   });
 
-  it('switches settings panels from the sidebar instead of stacking a long page', async () => {
+  it('retries unavailable connections and keeps advanced controls out of the first view', async () => {
     const script = await readFile(
       new URL('../src/connection-page/connection.js', import.meta.url),
       'utf8',
     );
-    expect(script).toContain('activateSettingsSection(window.location.hash.slice(1))');
-    expect(script).toContain("requestedSection === 'cache-settings'");
-    expect(script).toContain('section.hidden = section.id !== sectionId');
-    expect(script).toContain("navigation.setAttribute('aria-current', 'page')");
+    expect(script).toContain('window.setInterval');
+    expect(script).toContain('bridge.retryConnections()');
+    expect(script).toContain('connectionDetails.open = true');
+    expect(script).toContain(
+      "document.querySelector('#offline-view').hidden = Boolean(state.active)",
+    );
   });
 
   it('localizes the isolated settings page from its locale query without inline scripts', async () => {
@@ -113,7 +118,7 @@ describe('offline-capable desktop connection page', () => {
       new URL('../src/connection-page/connection.js', import.meta.url),
       'utf8',
     );
-    expect(html).toContain('data-i18n="desktopSettings"');
+    expect(html).toContain('data-i18n="pageTitle"');
     expect(script).toContain("new window.URLSearchParams(window.location.search).get('lang')");
     expect(script).toContain("'en-US'");
     expect(script).toContain('Desktop Settings');
@@ -125,6 +130,78 @@ describe('offline-capable desktop connection page', () => {
     expect(englishCatalog).not.toMatch(/\p{Script=Han}/u);
     for (const [, key] of html.matchAll(/data-i18n="([^"]+)"/gu)) {
       expect(englishCatalog).toContain(`${key}:`);
+    }
+  });
+
+  it('shows the offline message and returns to the connected state after retry succeeds', async () => {
+    const [html, script] = await Promise.all([
+      readFile(new URL('../src/connection-page/index.html', import.meta.url), 'utf8'),
+      readFile(new URL('../src/connection-page/connection.js', import.meta.url), 'utf8'),
+    ]);
+    const dom = new JSDOM(html, {
+      url: 'https://connection.invalid/?lang=zh-CN',
+      runScripts: 'outside-only',
+    });
+    const settings = {
+      mode: 'AUTO',
+      localUrl: 'http://localhost:8180',
+      lanUrl: '',
+      publicUrl: '',
+      allowInsecureLan: false,
+      allowInsecurePublicHttp: false,
+      deploymentId: null,
+    };
+    const offline = { settings, active: null, probes: [] };
+    const online = {
+      settings,
+      active: { slot: 'LOCAL', url: 'http://localhost:8180', latencyMs: 5 },
+      probes: [],
+    };
+    const retryConnections = vi.fn().mockResolvedValue(online);
+    const testConnections = vi.fn().mockResolvedValue(online);
+    Object.defineProperty(dom.window, 'sekerDesktop', {
+      value: {
+        getConnectionManagerState: () => Promise.resolve(offline),
+        getCacheManagerStatus: () =>
+          Promise.resolve({
+            globalAllocatedBytes: 0,
+            limitBytes: 1024 ** 3,
+            currentAccountStats: null,
+            globalEntryCount: 0,
+            availableBytes: 1024 ** 3,
+            cachePath: '/tmp/cache',
+          }),
+        retryConnections,
+        testConnections,
+      },
+    });
+    try {
+      dom.window.eval(script);
+      await vi.waitFor(() => {
+        expect(dom.window.document.querySelector('#offline-view')?.hasAttribute('hidden')).toBe(
+          false,
+        );
+        expect(
+          (dom.window.document.querySelector('#retry') as { disabled: boolean } | null)?.disabled,
+        ).toBe(false);
+      });
+      (dom.window.document.querySelector('#test') as { click(): void } | null)?.click();
+      await vi.waitFor(() => {
+        expect(testConnections).toHaveBeenCalledOnce();
+        expect(dom.window.document.querySelector('#message')?.textContent).toBe('');
+        expect(dom.window.document.querySelector('#offline-view')?.hasAttribute('hidden')).toBe(
+          false,
+        );
+      });
+      (dom.window.document.querySelector('#retry') as { click(): void } | null)?.click();
+      await vi.waitFor(() => {
+        expect(retryConnections).toHaveBeenCalledOnce();
+        expect(dom.window.document.querySelector('#online-view')?.hasAttribute('hidden')).toBe(
+          false,
+        );
+      });
+    } finally {
+      dom.window.close();
     }
   });
 });

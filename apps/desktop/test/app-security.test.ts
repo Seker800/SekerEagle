@@ -98,6 +98,9 @@ describe('desktop server and navigation security', () => {
     expect(main).toContain("protocol.handle('sekereagle-app'");
     expect(main).toContain("ipcMain.handle('desktop:get-connection-status'");
     expect(main).toContain("ipcMain.handle('desktop:save-connections'");
+    expect(main).toMatch(
+      /desktop:retry-connections'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,
+    );
     expect(main).toContain('assertTrustedConnectionSender(event)');
     expect(main).toMatch(
       /desktop:reset-deployment-binding'[\s\S]{0,180}assertConnectionPageSender\(event\)/u,

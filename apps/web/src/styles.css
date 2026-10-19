@@ -1212,3 +1212,22 @@ select:focus-visible {
   background: #000a;
   font-size: 12px;
 }
+
+.auth-offline-shell {
+  display: grid;
+  place-items: center;
+}
+
+.auth-offline-card {
+  width: min(420px, calc(100vw - 40px));
+  text-align: center;
+}
+
+.auth-offline-card img {
+  width: 48px;
+  height: 48px;
+}
+
+.auth-offline-card p {
+  color: #aeb3bc;
+}

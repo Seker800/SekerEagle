@@ -1,6 +1,6 @@
 {
   "name": "@sekereagle/desktop",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "SekerEagle online-first desktop media library with a secure local cache.",
   "author": "SekerEagle contributors",
   "license": "Apache-2.0",
@@ -22,6 +22,7 @@
     "electron": "43.4.1",
     "electron-builder": "26.15.3",
     "esbuild": "^0.25.12",
+    "jsdom": "^27.4.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
   },

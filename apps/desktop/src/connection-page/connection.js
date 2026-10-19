@@ -61,6 +61,15 @@ const messages = {
     connectionFailed: '连接设置失败。',
     readingCache: '正在读取缓存状态…',
     cacheFailed: '缓存设置失败。',
+    cannotConnect: '无法连接素材库',
+    autoRetryDescription: '正在自动重试。连接恢复后会自动打开图库。',
+    retryNow: '立即重试',
+    checkConnectionSettings: '检查连接设置',
+    connected: '已连接素材库',
+    connectionSettings: '连接设置',
+    connectionSettingsHint: '更改地址或查看连接问题',
+    cacheSimpleDescription: '常用图片保存在这台电脑上，空间不足时会自动清理。',
+    cacheManagement: '管理缓存',
   },
   'en-US': {
     pageTitle: 'SekerEagle Desktop Settings',
@@ -129,13 +138,23 @@ const messages = {
     connectionFailed: 'Connection settings failed.',
     readingCache: 'Reading cache status…',
     cacheFailed: 'Cache settings failed.',
+    cannotConnect: 'Cannot connect to the library',
+    autoRetryDescription:
+      'Retrying automatically. The library will open when the connection returns.',
+    retryNow: 'Retry now',
+    checkConnectionSettings: 'Check connection settings',
+    connected: 'Connected to the library',
+    connectionSettings: 'Connection settings',
+    connectionSettingsHint: 'Change addresses or inspect connection problems',
+    cacheSimpleDescription:
+      'Common images are stored on this computer and cleaned up when space is low.',
+    cacheManagement: 'Manage cache',
   },
 };
 const form = document.querySelector('#connection-form');
 const message = document.querySelector('#message');
 const testButton = document.querySelector('#test');
 const cancelButton = document.querySelector('#cancel');
-const sidebarCancelButton = document.querySelector('#sidebar-cancel');
 const resetButton = document.querySelector('#reset');
 const submitButton = form.querySelector('button[type="submit"]');
 const cacheForm = document.querySelector('#cache-form');
@@ -143,12 +162,19 @@ const cacheMessage = document.querySelector('#cache-message');
 const saveCacheButton = document.querySelector('#save-cache');
 const clearCacheButton = document.querySelector('#clear-cache');
 const openCacheFolderButton = document.querySelector('#open-cache-folder');
-const settingsNavigations = [...document.querySelectorAll('.nav-item[href]')];
+const retryButton = document.querySelector('#retry');
+const connectionDetails = document.querySelector('#connection-details');
 let canClearCurrentAccount = false;
+let retryPromise = null;
+let connectionBusy = false;
 
 applyStaticTranslations();
-activateSettingsSection(window.location.hash.slice(1));
 void load();
+window.setInterval(() => {
+  if (!document.querySelector('#offline-view').hidden) {
+    void retryConnection();
+  }
+}, 5000);
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
@@ -157,19 +183,18 @@ form.addEventListener('submit', (event) => {
 });
 testButton.addEventListener('click', () => {
   const settings = formValue();
-  void run(async () => render(await bridge.testConnections(settings)));
+  void run(async () => renderProbes(await bridge.testConnections(settings)));
 });
 cancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
-sidebarCancelButton.addEventListener('click', () => void bridge.cancelConnectionManager());
-for (const navigation of settingsNavigations) {
-  navigation.addEventListener('click', (event) => {
-    event.preventDefault();
-    const target = navigation.getAttribute('href').slice(1);
-    window.location.hash = target;
-    activateSettingsSection(target);
-  });
-}
-window.addEventListener('hashchange', () => activateSettingsSection(window.location.hash.slice(1)));
+document
+  .querySelector('#online-return')
+  .addEventListener('click', () => void bridge.cancelConnectionManager());
+document.querySelector('#show-connection-settings').addEventListener('click', () => {
+  connectionDetails.open = true;
+  connectionDetails.scrollIntoView({ behavior: 'smooth' });
+});
+retryButton.addEventListener('click', () => void retryConnection());
+window.addEventListener('online', () => void retryConnection());
 resetButton.addEventListener('click', () => {
   if (!window.confirm(tr('resetConfirm'))) return;
   void run(async () => render(await bridge.resetDeploymentBinding()));
@@ -209,6 +234,20 @@ async function load() {
     }),
     runCache(loadCacheStatus),
   ]);
+}
+
+async function retryConnection() {
+  if (retryPromise || connectionBusy || document.querySelector('#offline-view').hidden) return;
+  retryButton.disabled = true;
+  retryPromise = bridge.retryConnections();
+  try {
+    render(await retryPromise);
+  } catch (error) {
+    message.textContent = localizedError(error, 'connectionFailed');
+  } finally {
+    retryPromise = null;
+    retryButton.disabled = false;
+  }
 }
 
 async function loadCacheStatus() {
@@ -257,21 +296,23 @@ function fill(settings) {
 }
 
 function render(state) {
+  renderProbes(state);
+  cancelButton.hidden = !state.active;
+  document.querySelector('#offline-view').hidden = Boolean(state.active);
+  document.querySelector('#online-view').hidden = !state.active;
+  document.querySelector('#cache-settings').hidden = !state.active;
+  document.querySelector('#active-connection').textContent = state.active?.url ?? '—';
+  resetButton.hidden = !state.settings.deploymentId;
+  message.textContent = '';
+}
+
+function renderProbes(state) {
   for (const slot of ['LOCAL', 'LAN', 'PUBLIC']) {
     const target = document.querySelector(`[data-status="${slot}"]`);
     const probe = state.probes.find((item) => item.slot === slot);
     target.textContent = probe ? probeLabel(probe) : connectionConfigured(state.settings, slot);
     target.dataset.state = probe?.state ?? 'IDLE';
   }
-  cancelButton.hidden = !state.active;
-  sidebarCancelButton.hidden = !state.active;
-  resetButton.hidden = !state.settings.deploymentId;
-  message.textContent = state.active
-    ? tr('selectedConnection', {
-        url: state.active.url,
-        latency: Math.round(state.active.latencyMs),
-      })
-    : tr('noConnection');
 }
 
 function probeLabel(probe) {
@@ -290,28 +331,18 @@ function connectionConfigured(settings, slot) {
   return settings[key] ? tr('notTested') : tr('notConfigured');
 }
 
-function activateSettingsSection(requestedSection) {
-  const sectionId =
-    requestedSection === 'cache-settings' ? requestedSection : 'connection-settings';
-  for (const navigation of settingsNavigations) {
-    const isActive = navigation.getAttribute('href') === `#${sectionId}`;
-    if (isActive) navigation.setAttribute('aria-current', 'page');
-    else navigation.removeAttribute('aria-current');
-  }
-  for (const section of document.querySelectorAll('.settings-card')) {
-    section.hidden = section.id !== sectionId;
-  }
-  document.querySelector('.settings-scroll').scrollTop = 0;
-}
-
 async function run(action) {
+  if (retryPromise) await retryPromise.catch(() => undefined);
+  connectionBusy = true;
   setBusy(true);
   message.textContent = tr('testingConnections');
   try {
     await action();
+    if (message.textContent === tr('testingConnections')) message.textContent = '';
   } catch (error) {
     message.textContent = localizedError(error, 'connectionFailed');
   } finally {
+    connectionBusy = false;
     setBusy(false);
   }
 }
@@ -332,6 +363,7 @@ async function runCache(action) {
 function setBusy(busy) {
   for (const element of form.elements) element.disabled = busy;
   submitButton.disabled = busy;
+  retryButton.disabled = busy || Boolean(retryPromise);
 }
 
 function setCacheBusy(busy) {
