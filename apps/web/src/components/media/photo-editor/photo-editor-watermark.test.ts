@@ -97,11 +97,11 @@ describe('real canvas watermark composition', () => {
     expect(output.width).toBe(150);
     expect(output.height).toBeGreaterThan(output.width);
   });
-  it('preserves transparency for overlay watermarks and allows opacity to reach zero', () => {
+  it('preserves transparent photo pixels when all overlay text is empty', () => {
     const photo = createCanvas(200, 120);
     const output = renderPhotoWatermark(
       asHTML(photo),
-      { ...DEFAULT_PHOTO_EDITS, watermark: 'standard-left', watermarkOpacity: 0 },
+      { ...DEFAULT_PHOTO_EDITS, watermark: 'standard-left', watermarkShowWebsite: false },
       {},
       create,
     );
@@ -428,23 +428,45 @@ it('never invents a title, shows detected capture time by default and respects m
   expect(cleared).toEqual(['WWW.SEKER.WANG']);
 });
 
-
 it('draws every watermark with one regular sans font, solid black or white and no effects', () => {
   for (const template of WATERMARK_TEMPLATES) {
     for (const theme of ['black', 'white'] as const) {
-      const draws: { font: string; color: unknown; alpha: number; shadow: number; filter: string; blend: string }[] = [];
-      renderPhotoWatermark(asHTML(createCanvas(1600, 1000)), {
-        ...DEFAULT_PHOTO_EDITS, watermark: template.id, watermarkTheme: theme,
-        watermarkText: 'NIKON D80',
-      }, { parameters: '135mm · f/5.6 · 1/500s · ISO 125', capturedAt: '2026.10.19' }, () => {
-        const canvas = createCanvas(1, 1), context = canvas.getContext('2d');
-        vi.spyOn(context, 'strokeText').mockImplementation(() => { throw new Error('Text outline is forbidden'); });
-        vi.spyOn(context, 'fillText').mockImplementation(() => {
-          draws.push({ font: context.font, color: context.fillStyle, alpha: context.globalAlpha,
-            shadow: context.shadowBlur, filter: context.filter, blend: context.globalCompositeOperation });
-        });
-        return asHTML(canvas);
-      });
+      const draws: {
+        font: string;
+        color: unknown;
+        alpha: number;
+        shadow: number;
+        filter: string;
+        blend: string;
+      }[] = [];
+      renderPhotoWatermark(
+        asHTML(createCanvas(1600, 1000)),
+        {
+          ...DEFAULT_PHOTO_EDITS,
+          watermark: template.id,
+          watermarkTheme: theme,
+          watermarkText: 'NIKON D80',
+        },
+        { parameters: '135mm · f/5.6 · 1/500s · ISO 125', capturedAt: '2026.10.19' },
+        () => {
+          const canvas = createCanvas(1, 1),
+            context = canvas.getContext('2d');
+          vi.spyOn(context, 'strokeText').mockImplementation(() => {
+            throw new Error('Text outline is forbidden');
+          });
+          vi.spyOn(context, 'fillText').mockImplementation(() => {
+            draws.push({
+              font: context.font,
+              color: context.fillStyle,
+              alpha: context.globalAlpha,
+              shadow: context.shadowBlur,
+              filter: context.filter,
+              blend: context.globalCompositeOperation,
+            });
+          });
+          return asHTML(canvas);
+        },
+      );
       expect(draws.length, template.id).toBeGreaterThan(0);
       for (const draw of draws) {
         expect(draw.font, template.id).toMatch(/^400 [\d.]+px system-ui, sans-serif$/);

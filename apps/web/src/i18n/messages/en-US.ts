@@ -1027,7 +1027,6 @@ export const enUS = {
   '仅修改水印显示文字，不改写照片拍摄信息。':
     'Changes the watermark text only, without rewriting capture information.',
   文字大小: 'Text size',
-  文字不透明度: 'Text opacity',
   完成: 'Done',
   白字: 'White text',
   黑字: 'Black text',

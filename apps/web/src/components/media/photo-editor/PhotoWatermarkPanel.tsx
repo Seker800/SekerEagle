@@ -162,19 +162,6 @@ function WatermarkSettingsEditor({
             onChange={(event) => change({ watermarkScale: Number(event.target.value) })}
           />
         </label>
-        <label>
-          {t('文字不透明度')}
-          <output>{draft.watermarkOpacity}%</output>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={draft.watermarkOpacity}
-            aria-label={t('文字不透明度')}
-            onChange={(event) => change({ watermarkOpacity: Number(event.target.value) })}
-          />
-        </label>
         <div className={styles.watermarkSettingsActions}>
           <button type="button" onClick={onClose}>
             {t('取消')}
@@ -190,7 +177,6 @@ function WatermarkSettingsEditor({
                 watermarkCapturedAt: draft.watermarkCapturedAt,
                 watermarkWebsite: draft.watermarkWebsite,
                 watermarkScale: draft.watermarkScale,
-                watermarkOpacity: draft.watermarkOpacity,
               });
               onClose();
             }}

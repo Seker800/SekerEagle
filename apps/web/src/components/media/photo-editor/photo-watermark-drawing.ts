@@ -30,13 +30,19 @@ export function label(
   size: number,
   width: number,
   align: CanvasTextAlign = 'left',
-  weight = 400,
-  family = 'system-ui, sans-serif',
   color = d.foreground,
 ) {
   if (!value || width <= 0) return;
   const context = d.context;
-  context.font = `${weight} ${Math.max(0.5, size)}px ${family}`;
+  context.save();
+  context.globalAlpha = 1;
+  context.globalCompositeOperation = 'source-over';
+  context.filter = 'none';
+  context.shadowBlur = 0;
+  context.shadowOffsetX = 0;
+  context.shadowOffsetY = 0;
+  context.shadowColor = 'transparent';
+  context.font = `400 ${Math.max(0.5, size)}px system-ui, sans-serif`;
   context.textAlign = align;
   context.textBaseline = 'alphabetic';
   context.fillStyle = color;
@@ -47,6 +53,7 @@ export function label(
     if (characters.length) characters.push('…');
   }
   context.fillText(characters.join(''), x, y);
+  context.restore();
 }
 export function rule(
   d: WatermarkDrawing,
@@ -68,8 +75,6 @@ export function rule(
 interface TextLine {
   value: string;
   size: number;
-  family?: string;
-  weight?: number;
   color?: string;
 }
 
@@ -102,7 +107,7 @@ export function textBlock(
   const x = box.x + (align === 'center' ? box.width / 2 : align === 'right' ? box.width : 0);
   for (const line of visible) {
     const size = line.size * scale;
-    label(d, line.value, x, y + size, size, box.width, align, line.weight, line.family, line.color);
+    label(d, line.value, x, y + size, size, box.width, align, line.color);
     y += size * 1.4;
   }
 }

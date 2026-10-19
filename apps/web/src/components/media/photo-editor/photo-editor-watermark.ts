@@ -22,15 +22,15 @@ export function renderPhotoWatermark(
   const overlay = !!template.overlay;
   const dark = edits.watermarkTheme === 'black';
   const background = dark ? '#141414' : '#ffffff';
-  const foreground = overlay ? (dark ? '#151515' : '#ffffff') : dark ? '#f5f5f5' : '#171717';
-  const secondary = overlay ? (dark ? '#555555' : '#dddddd') : dark ? '#bdbdbd' : '#777777';
+  const foreground = overlay ? (dark ? '#000000' : '#ffffff') : dark ? '#ffffff' : '#000000';
+  const secondary = foreground;
   if (!overlay) {
     context.fillStyle = background;
     context.fillRect(0, 0, canvas.width, canvas.height);
   }
   context.drawImage(source, layout.x, layout.y);
   context.save();
-  context.globalAlpha = Math.max(0, Math.min(100, edits.watermarkOpacity)) / 100;
+  context.globalAlpha = 1;
   const camera = (edits.watermarkCamera ?? metadata.camera ?? '').trim();
   paintWatermark({
     context,

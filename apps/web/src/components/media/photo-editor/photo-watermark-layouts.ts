@@ -2,21 +2,15 @@ import { label, textBlock, rule, type WatermarkDrawing } from './photo-watermark
 import { watermarkAlignment, type WatermarkStyle } from './photo-watermark-model';
 
 type Painter = (drawing: WatermarkDrawing) => void;
-const sans = '"Helvetica Neue", Arial, "PingFang SC", sans-serif';
-const serif = 'Georgia, "Songti SC", serif';
-const mono = '"SFMono-Regular", Consolas, monospace';
 const fields = (d: WatermarkDrawing) => d.details.split(/\s*[·|]\s*/).filter(Boolean);
 const secondary = (d: WatermarkDrawing, value: string, size = d.size * 0.58) => ({
   value,
   size,
-  family: sans,
   color: d.secondary,
 });
 const heading = (d: WatermarkDrawing, value = d.title, size = d.size * 0.9) => ({
   value,
   size,
-  family: sans,
-  weight: 500,
 });
 
 const website = (d: WatermarkDrawing) => secondary(d, d.website, d.size * 0.44);
@@ -33,14 +27,13 @@ const painters: Record<WatermarkStyle, Painter> = {
       width: p.width * 0.43,
       height: p.height,
     });
-    textBlock(
-      d,
-      [
-        { value: d.details, size: s * 0.62, family: mono, weight: 500 },
-        secondary(d, d.time, s * 0.5),
-      ],
-      { x: p.width * 0.5, y: p.y, width: p.width * 0.5 - pad, height: p.height, align: 'right' },
-    );
+    textBlock(d, [{ value: d.details, size: s * 0.62 }, secondary(d, d.time, s * 0.5)], {
+      x: p.width * 0.5,
+      y: p.y,
+      width: p.width * 0.5 - pad,
+      height: p.height,
+      align: 'right',
+    });
   },
   side(d) {
     const { layout: l, size: s, context: c } = d,
@@ -59,7 +52,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: fields(d).join('  /  '), size: s * 0.6, family: mono, weight: 500 },
+        { value: fields(d).join('  /  '), size: s * 0.6 },
         secondary(d, d.time, s * 0.48),
         website(d),
       ],
@@ -75,7 +68,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s, family: serif },
+        { value: d.title, size: s },
         secondary(d, d.details, s * 0.58),
         secondary(d, d.time, s * 0.48),
         website(d),
@@ -93,17 +86,7 @@ const painters: Record<WatermarkStyle, Painter> = {
   cornerGrid(d) {
     const { layout: l, size: s } = d;
     const pad = Math.min(l.photoWidth * 0.04, l.photoHeight * 0.08);
-    label(
-      d,
-      d.camera || d.title,
-      pad,
-      pad + s * 0.72,
-      s * 0.72,
-      l.width - pad * 2,
-      'left',
-      500,
-      sans,
-    );
+    label(d, d.camera || d.title, pad, pad + s * 0.72, s * 0.72, l.width - pad * 2, 'left');
     const height = Math.min(s * 3.5, l.height * 0.34);
     textBlock(
       d,
@@ -118,8 +101,8 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: parts.slice(0, 2).join('  /  '), size: s * 0.6, family: mono },
-        { value: parts.slice(2).join('  /  '), size: s * 0.54, family: mono, color: d.secondary },
+        { value: parts.slice(0, 2).join('  /  '), size: s * 0.6 },
+        { value: parts.slice(2).join('  /  '), size: s * 0.54, color: d.secondary },
       ],
       {
         x: l.width * 0.5,
@@ -149,7 +132,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s * 0.76, family: sans, weight: 500, color: '#ffffff' },
+        { value: d.title, size: s * 0.76, color: '#ffffff' },
         { ...website(d), color: '#ffffff' },
       ],
       {
@@ -162,8 +145,8 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.details, size: s * 0.56, family: mono, color: '#202020' },
-        { value: d.time, size: s * 0.46, family: sans, color: '#777777' },
+        { value: d.details, size: s * 0.56, color: '#000000' },
+        { value: d.time, size: s * 0.46, color: '#000000' },
       ],
       { x: x + split + w * 0.025, y, width: w - split - w * 0.05, height: h, align: 'right' },
     );
@@ -174,7 +157,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s * 1.05, family: serif },
+        { value: d.title, size: s * 1.05 },
         secondary(
           d,
           [d.camera === d.title ? '' : d.camera, d.details].filter(Boolean).join('  ·  '),
@@ -219,8 +202,8 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: parts[0] || '', size: s * 0.75, family: mono, weight: 500 },
-        { value: parts.slice(1).join('  /  '), size: s * 0.56, family: mono, color: d.secondary },
+        { value: parts[0] || '', size: s * 0.75 },
+        { value: parts.slice(1).join('  /  '), size: s * 0.56, color: d.secondary },
       ],
       {
         x: x + width * 0.46,
@@ -239,11 +222,13 @@ const painters: Record<WatermarkStyle, Painter> = {
       width = p.width - pad * 2;
     const camera = d.camera === d.title ? '' : d.camera;
     const titleHeight = Math.min(s * 4, p.height * 0.4);
-    textBlock(
-      d,
-      [{ value: d.title, size: s * 0.92, family: serif }, secondary(d, camera, s * 0.5)],
-      { x, y: p.y + pad, width, height: titleHeight, vertical: 'start' },
-    );
+    textBlock(d, [{ value: d.title, size: s * 0.92 }, secondary(d, camera, s * 0.5)], {
+      x,
+      y: p.y + pad,
+      width,
+      height: titleHeight,
+      vertical: 'start',
+    });
     const bottomHeight = Math.min(p.height * 0.48, s * 7);
     const bottom = p.y + p.height - pad;
     rule(
@@ -258,7 +243,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        ...fields(d).map((value) => ({ value, size: s * 0.56, family: mono })),
+        ...fields(d).map((value) => ({ value, size: s * 0.56 })),
         secondary(d, d.time, s * 0.48),
         website(d),
       ],

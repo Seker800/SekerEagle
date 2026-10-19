@@ -44,7 +44,6 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermarkShowWebsite: boolean;
   watermarkShowTime: boolean;
   watermarkShowParameters: boolean;
-  watermarkOpacity: number;
   watermarkScale: number;
   filter: PhotoFilter;
   filterStrength: number;
@@ -90,7 +89,6 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermarkShowWebsite: true,
   watermarkShowTime: true,
   watermarkShowParameters: true,
-  watermarkOpacity: 90,
   watermarkScale: 100,
   filter: 'original',
   filterStrength: 100,
