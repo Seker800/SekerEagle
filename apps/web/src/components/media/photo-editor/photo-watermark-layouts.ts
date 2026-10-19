@@ -64,11 +64,12 @@ const painters: Record<WatermarkStyle, Painter> = {
     const { layout: l, size: s } = d;
     const align = watermarkAlignment(d.edits.watermark, d.edits.watermarkAlign);
     const pad = Math.min(l.photoWidth * 0.045, l.photoHeight * 0.1);
-    const height = Math.min(s * 4.1, l.height - pad * 2);
+    const height = Math.min(s * 5, l.height - pad * 2);
     textBlock(
       d,
       [
         { value: d.title, size: s },
+        secondary(d, d.camera === d.title ? '' : d.camera),
         secondary(d, d.details, s * 0.58),
         secondary(d, d.time, s * 0.48),
         website(d),
@@ -133,6 +134,7 @@ const painters: Record<WatermarkStyle, Painter> = {
       d,
       [
         { value: d.title, size: s * 0.76, color: '#ffffff' },
+        { value: d.camera === d.title ? '' : d.camera, size: s * 0.5, color: '#ffffff' },
         { ...website(d), color: '#ffffff' },
       ],
       {

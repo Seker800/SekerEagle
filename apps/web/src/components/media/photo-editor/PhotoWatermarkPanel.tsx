@@ -56,14 +56,8 @@ function WatermarkSettingsEditor({
   onApply: (patch: Partial<PhotoEdits>) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(() => ({
-    ...edits,
-    watermarkCamera: edits.watermarkCamera ?? metadata.camera ?? '',
-    watermarkParameters: edits.watermarkParameters ?? metadata.parameters ?? '',
-    watermarkCapturedAt: edits.watermarkCapturedAt ?? metadata.capturedAt ?? '',
-  }));
-  const change = (patch: Partial<typeof draft>) =>
-    setDraft((current) => ({ ...current, ...patch }));
+  const [draft, setDraft] = useState(edits);
+  const change = (patch: Partial<PhotoEdits>) => setDraft((current) => ({ ...current, ...patch }));
   return (
     <div
       className={styles.watermarkSettingsBackdrop}
@@ -114,7 +108,7 @@ function WatermarkSettingsEditor({
           <input
             type="text"
             maxLength={64}
-            value={draft.watermarkCamera}
+            value={draft.watermarkCamera ?? metadata.camera ?? ''}
             placeholder={t('输入相机或手机型号')}
             onChange={(event) => change({ watermarkCamera: event.target.value })}
           />
@@ -124,7 +118,7 @@ function WatermarkSettingsEditor({
           <input
             type="text"
             maxLength={200}
-            value={draft.watermarkParameters}
+            value={draft.watermarkParameters ?? metadata.parameters ?? ''}
             placeholder={t('输入焦距、光圈、快门和 ISO')}
             onChange={(event) => change({ watermarkParameters: event.target.value })}
           />
@@ -134,7 +128,7 @@ function WatermarkSettingsEditor({
           <input
             type="text"
             maxLength={64}
-            value={draft.watermarkCapturedAt}
+            value={draft.watermarkCapturedAt ?? metadata.capturedAt ?? ''}
             placeholder={t('输入拍摄时间')}
             onChange={(event) => change({ watermarkCapturedAt: event.target.value })}
           />
@@ -148,6 +142,15 @@ function WatermarkSettingsEditor({
             onChange={(event) => change({ watermarkWebsite: event.target.value })}
           />
         </label>
+        <button
+          type="button"
+          disabled={!metadata.camera && !metadata.parameters && !metadata.capturedAt}
+          onClick={() =>
+            change({ watermarkCamera: null, watermarkParameters: null, watermarkCapturedAt: null })
+          }
+        >
+          {t('恢复照片信息')}
+        </button>
         <p className={styles.hint}>{t('仅修改水印显示文字，不改写照片拍摄信息。')}</p>
         <label>
           {t('文字大小')}

@@ -480,18 +480,32 @@ it('draws every watermark with one regular sans font, solid black or white and n
   }
 });
 
-
 it('keeps the detected camera in every layout when a separate signature is present', () => {
   for (const template of WATERMARK_TEMPLATES) {
     const texts: string[] = [];
-    renderPhotoWatermark(asHTML(createCanvas(1600, 1000)), {
-      ...DEFAULT_PHOTO_EDITS, watermark: template.id, watermarkText: 'Signature',
-    }, { camera: 'NIKON D80', parameters: '135mm · f/5.6' }, () => {
-      const canvas = createCanvas(1, 1);
-      vi.spyOn(canvas.getContext('2d'), 'fillText').mockImplementation(text => { texts.push(text); });
-      return asHTML(canvas);
-    });
-    expect(texts.some(text => text.includes('NIKON D80')), template.id).toBe(true);
-    expect(texts.some(text => text.includes('Signature')), template.id).toBe(true);
+    renderPhotoWatermark(
+      asHTML(createCanvas(1600, 1000)),
+      {
+        ...DEFAULT_PHOTO_EDITS,
+        watermark: template.id,
+        watermarkText: 'Signature',
+      },
+      { camera: 'NIKON D80', parameters: '135mm · f/5.6' },
+      () => {
+        const canvas = createCanvas(1, 1);
+        vi.spyOn(canvas.getContext('2d'), 'fillText').mockImplementation((text) => {
+          texts.push(text);
+        });
+        return asHTML(canvas);
+      },
+    );
+    expect(
+      texts.some((text) => text.includes('NIKON D80')),
+      template.id,
+    ).toBe(true);
+    expect(
+      texts.some((text) => text.includes('Signature')),
+      template.id,
+    ).toBe(true);
   }
 });
