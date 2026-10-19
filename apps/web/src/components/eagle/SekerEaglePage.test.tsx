@@ -1837,6 +1837,27 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByText('导入完成，跳过 1 个重复素材')).not.toBeInTheDocument();
   });
 
+  it('removes the entire filter row when collapsed and keeps its toggle in the existing header', async () => {
+    renderPage();
+    const toggle = await screen.findByRole('button', { name: '展开筛选' });
+    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
+    expect(toggle.parentElement).toContainElement(screen.getByRole('slider', { name: '缩略图大小' }));
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: '格式筛选' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'PNG' }));
+    fireEvent.click(screen.getByRole('button', { name: '收起筛选' }));
+    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '格式筛选' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '展开筛选' })).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
+    expect(screen.getByRole('button', { name: '格式筛选，PNG' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: '格式筛选' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '收起筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
+    expect(screen.getByRole('button', { name: '展开筛选' })).not.toHaveTextContent('1');
+    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
+  });
+
   it('shows the Eagle-style quick-filter toolbar without a generic rule-builder button', async () => {
     renderPage();
     await screen.findByRole('heading', { name: '全部素材' });
