@@ -2847,6 +2847,7 @@ export interface components {
     };
     EagleRenditionResponseDto: {
       id: string;
+      variant: string;
       /** @enum {string} */
       kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
       revision: number;

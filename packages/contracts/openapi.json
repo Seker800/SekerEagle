@@ -6149,6 +6149,9 @@
           "id": {
             "type": "string"
           },
+          "variant": {
+            "type": "string"
+          },
           "kind": {
             "type": "string",
             "enum": ["THUMBNAIL", "PREVIEW", "POSTER"]
@@ -6171,7 +6174,7 @@
             "nullable": true
           }
         },
-        "required": ["id", "kind", "revision", "mimeType", "byteSize", "width", "height"]
+        "required": ["id", "variant", "kind", "revision", "mimeType", "byteSize", "width", "height"]
       },
       "EagleAssetUpdateResponseDto": {
         "type": "object",

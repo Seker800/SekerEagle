@@ -137,7 +137,7 @@ it('edits camera RAW from a current dedicated derivative, never from the sensor 
   expect(getEagleEditContentUrl({ ...raw, renditions: [] })).toBeNull();
   expect(getEagleEditContentUrl({ ...raw, renditions: raw.renditions.slice(0, 1) })).toBeNull();
   expect(getEagleEditContentUrl({ ...asset, lifecycleStatus: 'READY' })).toBe(
-    '/api/eagle/assets/asset-1/content',
+    '/api/eagle/assets/asset-1/original',
   );
   expect(getEagleEditContentUrl({ ...raw, lifecycleStatus: 'FAILED' })).toBeNull();
 });
