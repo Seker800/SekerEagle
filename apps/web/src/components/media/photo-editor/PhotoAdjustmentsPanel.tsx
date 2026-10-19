@@ -45,7 +45,34 @@ export function PhotoAdjustmentsPanel({
     curves: 'curveMaster2',
     grading: 'gradeShadowsHue',
   });
+  const basicGroups = ['tone', 'color', 'detail'];
+  const basic = basicGroups.includes(group);
   const options = PHOTO_ADJUSTMENTS.filter((option) => option.group === group);
+  const visibleOptions = basic
+    ? PHOTO_ADJUSTMENTS.filter((option) => basicGroups.includes(option.group))
+    : options;
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const manualScroll = useRef(false);
+  const [visibleGroup, setVisibleGroup] = useState<AdjustmentGroup>('tone');
+  const selectGroup = (next: AdjustmentGroup) => {
+    manualScroll.current = false;
+    setGroup(next);
+    setVisibleGroup(next);
+    requestAnimationFrame(() => {
+      const first = PHOTO_ADJUSTMENTS.find((option) => option.group === next);
+      const button = first && buttons.current.get(first.id);
+      const viewport = viewportRef.current;
+      if (button && viewport)
+        viewport.scrollTo?.({
+          left:
+            viewport.scrollLeft +
+            button.getBoundingClientRect().left -
+            viewport.getBoundingClientRect().left,
+          behavior: 'smooth',
+        });
+    });
+  };
   const selected = options.find((option) => option.id === selection[group]) ?? options[0];
   const selectedRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -59,9 +86,9 @@ export function PhotoAdjustmentsPanel({
             <button
               type="button"
               key={item.id}
-              aria-pressed={group === item.id}
+              aria-pressed={visibleGroup === item.id}
               disabled={disabled}
-              onClick={() => setGroup(item.id)}
+              onClick={() => selectGroup(item.id)}
             >
               {item.label}
             </button>
@@ -90,17 +117,41 @@ export function PhotoAdjustmentsPanel({
           onCommit={onGestureCommit}
         />
       ) : (
-        <ScrollableToolRow className={styles.adjustmentOptions} label={t('调整选项')}>
-          {options.map((option) => (
+        <ScrollableToolRow
+          className={styles.adjustmentOptions}
+          label={t('调整选项')}
+          viewportRef={viewportRef}
+          onNavigate={() => {
+            manualScroll.current = true;
+          }}
+          onScroll={(viewport) => {
+            if (!manualScroll.current || viewport.scrollWidth <= viewport.clientWidth + 1) return;
+            const left = viewport.getBoundingClientRect().left + 8;
+            const leading = visibleOptions.find((option) => {
+              const button = buttons.current.get(option.id);
+              return button && button.getBoundingClientRect().right > left;
+            });
+            if (leading) setVisibleGroup(leading.group);
+          }}
+        >
+          {visibleOptions.map((option) => (
             <button
               type="button"
               key={option.id}
-              ref={selected.id === option.id ? selectedRef : undefined}
+              ref={(button) => {
+                if (button) buttons.current.set(option.id, button);
+                else buttons.current.delete(option.id);
+                if (selected.id === option.id) selectedRef.current = button;
+              }}
               disabled={disabled}
               aria-pressed={selected.id === option.id}
               aria-label={option.label}
               title={`${option.label} · ${t('双击重置此项')}`}
-              onClick={() => setSelection((current) => ({ ...current, [group]: option.id }))}
+              onClick={() => {
+                setGroup(option.group);
+                setVisibleGroup(option.group);
+                setSelection((current) => ({ ...current, [option.group]: option.id }));
+              }}
               onDoubleClick={() => onResetOption(option)}
             >
               <span className={styles.optionValue} data-modified={edits[option.key] !== 0}>
