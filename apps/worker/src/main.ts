@@ -267,7 +267,14 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           kind: { in: ['THUMBNAIL', 'PREVIEW'] },
           status: 'READY',
         },
-        select: { kind: true, revision: true, status: true, storageKey: true, mimeType: true },
+        select: {
+          kind: true,
+          variant: true,
+          revision: true,
+          status: true,
+          storageKey: true,
+          mimeType: true,
+        },
       },
       uploadSessions: {
         where: { status: 'COMPLETED' },
@@ -294,10 +301,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   }
   if (job.kind === 'ANALYZE_PHOTO_FACES') {
     if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
-    const preview = asset.renditions.find(
-      (row) => row.kind === 'PREVIEW' && row.mimeType.startsWith('image/'),
-    );
-    if (!preview) throw new Error('PHOTO_FACE_PREVIEW_NOT_READY');
+    const preview = selectImageJobSource(asset, job.kind);
     assertOwnedKey(asset.ownerId, preview.storageKey);
     const object = await storage.send(
       new GetObjectCommand({ Bucket: s3Bucket, Key: preview.storageKey }),

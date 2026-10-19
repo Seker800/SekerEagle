@@ -6,6 +6,7 @@ interface ImageSourceAsset {
   mediaRevision: number;
   renditions: Array<{
     kind: string;
+    variant?: string;
     revision: number;
     status: string;
     storageKey: string;
@@ -14,10 +15,15 @@ interface ImageSourceAsset {
 }
 
 export function selectImageJobSource(asset: ImageSourceAsset, kind: EagleMediaJobKind) {
-  if (kind === 'GENERATE_EMBEDDING' || kind === 'GENERATE_AI_TAGS') {
+  if (
+    kind === 'GENERATE_EMBEDDING' ||
+    kind === 'GENERATE_AI_TAGS' ||
+    kind === 'ANALYZE_PHOTO_FACES'
+  ) {
     const preview = asset.renditions.find(
       (rendition) =>
         rendition.kind === 'PREVIEW' &&
+        rendition.variant !== 'edit' &&
         rendition.mimeType.startsWith('image/') &&
         rendition.revision === asset.mediaRevision &&
         rendition.status === 'READY',

@@ -120,10 +120,23 @@ test('image AI jobs skip video motion previews', () => {
 });
 
 test('analysis never loads the large RAW edit copy, even when it precedes the browsing preview', () => {
-  const edit = { kind: 'PREVIEW', variant: 'edit', revision: 3, status: 'READY', storageKey: 'edit.webp', mimeType: 'image/webp' };
+  const edit = {
+    kind: 'PREVIEW',
+    variant: 'edit',
+    revision: 3,
+    status: 'READY',
+    storageKey: 'edit.webp',
+    mimeType: 'image/webp',
+  };
   const preview = { ...edit, variant: 'default', storageKey: 'preview.webp' };
   for (const kind of ['GENERATE_AI_TAGS', 'GENERATE_EMBEDDING', 'ANALYZE_PHOTO_FACES'] as const) {
-    assert.equal(selectImageJobSource({ ...asset, renditions: [edit, preview] }, kind).storageKey, 'preview.webp');
-    assert.throws(() => selectImageJobSource({ ...asset, renditions: [edit] }, kind), /READY_PREVIEW_MISSING/);
+    assert.equal(
+      selectImageJobSource({ ...asset, renditions: [edit, preview] }, kind).storageKey,
+      'preview.webp',
+    );
+    assert.throws(
+      () => selectImageJobSource({ ...asset, renditions: [edit] }, kind),
+      /READY_PREVIEW_MISSING/,
+    );
   }
 });
