@@ -31,7 +31,7 @@ function setup(width = 300) {
   };
   const view = render(<PhotoWatermarkPanel {...props} />);
   const row = screen.getByRole('group', { name: '水印模板' });
-  Object.defineProperties(row, { clientWidth: { value: width }, scrollWidth: { value: 1400 } });
+  Object.defineProperties(row, { clientWidth: { value: width }, scrollWidth: { value: 900 } });
   const rect = (left: number, w: number) => ({
     left,
     top: 0,
@@ -52,7 +52,7 @@ function setup(width = 300) {
       );
     });
   const scrollTo = vi.fn(({ left }: { left: number }) => {
-    row.scrollLeft = Math.max(0, Math.min(1400 - width, left));
+    row.scrollLeft = Math.max(0, Math.min(900 - width, left));
     fireEvent.scroll(row);
   });
   Object.defineProperty(row, 'scrollTo', { value: scrollTo });
@@ -64,11 +64,11 @@ it('keeps every watermark layout in one row when navigating categories without e
   expect(within(row).getAllByRole('button')).toHaveLength(WATERMARK_TEMPLATES.length + 1);
   for (const template of WATERMARK_TEMPLATES)
     expect(within(row).getByRole('button', { name: template.label })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '胶片' }));
-  expect(scrollTo).toHaveBeenLastCalledWith({ left: 800, behavior: 'smooth' });
-  expect(screen.getByRole('button', { name: '胶片' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '留白' }));
+  expect(scrollTo).toHaveBeenLastCalledWith({ left: 600, behavior: 'smooth' });
+  expect(screen.getByRole('button', { name: '留白' })).toHaveAttribute('aria-pressed', 'true');
   expect(within(row).getByRole('button', { name: '摄影信息条' })).toBeInTheDocument();
-  expect(within(row).getByRole('button', { name: '海报相框' })).toBeInTheDocument();
+  expect(within(row).getByRole('button', { name: '居中留白' })).toBeInTheDocument();
   expect(within(row).getByRole('button', { name: '无水印' })).toHaveAttribute(
     'aria-pressed',
     'true',
@@ -77,41 +77,55 @@ it('keeps every watermark layout in one row when navigating categories without e
 });
 
 it('keeps the requested category active when its scroll target is clamped on a wide viewport', () => {
-  const { row, onChange } = setup(1000);
-  fireEvent.click(screen.getByRole('button', { name: '标准' }));
-  expect(row.scrollLeft).toBe(400);
-  expect(screen.getByRole('button', { name: '标准' })).toHaveAttribute('aria-pressed', 'true');
+  const { row, onChange } = setup(650);
+  fireEvent.click(screen.getByRole('button', { name: '叠印' }));
+  expect(row.scrollLeft).toBe(250);
+  expect(screen.getByRole('button', { name: '叠印' })).toHaveAttribute('aria-pressed', 'true');
   expect(onChange).not.toHaveBeenCalled();
 });
 
 it('follows manual scrolling across categories and includes the final category at the end', () => {
-  const { row, onChange } = setup();
+  const { row, onChange } = setup(200);
   fireEvent.wheel(row, { deltaY: 1 });
-  row.scrollLeft = 900;
+  row.scrollLeft = 300;
   fireEvent.scroll(row);
-  expect(screen.getByRole('button', { name: '胶片' })).toHaveAttribute('aria-pressed', 'true');
-  row.scrollLeft = 1000;
+  expect(screen.getByRole('button', { name: '叠印' })).toHaveAttribute('aria-pressed', 'true');
+  row.scrollLeft = 600;
   fireEvent.scroll(row);
-  expect(screen.getByRole('button', { name: '运动' })).toHaveAttribute('aria-pressed', 'true');
-  row.scrollLeft = 1100;
+  expect(screen.getByRole('button', { name: '留白' })).toHaveAttribute('aria-pressed', 'true');
+  row.scrollLeft = 700;
   fireEvent.scroll(row);
-  expect(screen.getByRole('button', { name: '相框' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '侧版' })).toHaveAttribute('aria-pressed', 'true');
   expect(onChange).not.toHaveBeenCalled();
 });
 
 it('selects layouts across categories and reveals the selected category on undo or redo', () => {
   const { onChange, row, view, props } = setup();
-  const frame = within(row).getByRole('button', { name: '海报相框' });
+  const frame = within(row).getByRole('button', { name: '居中留白' });
   fireEvent.click(frame);
-  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ watermark: 'frame-poster' }));
+  expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ watermark: 'frame-minimal' }));
   view.rerender(
     <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'frame-poster' }} />,
   );
-  expect(screen.getByRole('button', { name: '相框' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '留白' })).toHaveAttribute('aria-pressed', 'true');
   view.rerender(<PhotoWatermarkPanel {...props} />);
   expect(within(row).getByRole('button', { name: '无水印' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
   expect(screen.getByRole('button', { name: '摄影' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+it('merges signature alignment into controls instead of separate layouts', () => {
+  const { props, view, onChange, row } = setup();
+  view.rerender(
+    <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'standard-right' }} />,
+  );
+  expect(screen.getByRole('button', { name: '右对齐' })).toHaveAttribute('aria-pressed', 'true');
+  expect(within(row).getByRole('button', { name: '平面签名' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  fireEvent.click(screen.getByRole('button', { name: '左对齐' }));
+  expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
 });

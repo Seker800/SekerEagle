@@ -20,32 +20,11 @@ export function renderPhotoWatermark(
   canvas.height = layout.height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
-  const overlay = template.style === 'overlay';
-  const dark =
-    ['film', 'cinema', 'blueprint'].includes(template.style) ||
-    (template.theme && edits.watermarkTheme === 'black');
-  const background =
-    template.style === 'blueprint'
-      ? '#102633'
-      : template.style === 'postcard'
-        ? '#f5efe3'
-        : dark
-          ? '#141414'
-          : template.style === 'instant'
-            ? '#faf8f2'
-            : '#ffffff';
-  const foreground =
-    template.style === 'blueprint'
-      ? '#b9e6ed'
-      : overlay
-        ? edits.watermarkTheme === 'black'
-          ? '#151515'
-          : '#ffffff'
-        : dark
-          ? '#f5f5f5'
-          : '#171717';
-  const secondary =
-    template.style === 'blueprint' ? '#85b9c7' : dark || overlay ? '#c6c6c6' : '#777777';
+  const overlay = !!template.overlay;
+  const dark = edits.watermarkTheme === 'black';
+  const background = dark ? '#141414' : '#ffffff';
+  const foreground = overlay ? (dark ? '#151515' : '#ffffff') : dark ? '#f5f5f5' : '#171717';
+  const secondary = overlay ? (dark ? '#555555' : '#dddddd') : dark ? '#bdbdbd' : '#777777';
   if (!overlay) {
     context.fillStyle = background;
     context.fillRect(0, 0, canvas.width, canvas.height);

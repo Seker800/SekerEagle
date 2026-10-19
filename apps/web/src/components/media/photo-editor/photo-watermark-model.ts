@@ -1,16 +1,15 @@
 import { t } from '../../../i18n';
 
-export type WatermarkCategory = 'photo' | 'standard' | 'frame' | 'film' | 'creative';
+export type WatermarkCategory = 'photo' | 'standard' | 'frame' | 'creative';
 export type WatermarkStyle =
   | 'strip'
-  | 'editorial'
+  | 'side'
   | 'overlay'
-  | 'gallery'
-  | 'instant'
-  | 'film'
-  | 'cinema'
-  | 'postcard'
-  | 'blueprint';
+  | 'frame'
+  | 'headerFooter'
+  | 'colorBlock'
+  | 'cornerGrid'
+  | 'editorial';
 export type WatermarkAlignment = 'left' | 'center' | 'right';
 export interface WatermarkTemplate {
   id: string;
@@ -20,9 +19,12 @@ export interface WatermarkTemplate {
   time: boolean;
   theme: boolean;
   alignment?: boolean;
+  overlay?: boolean;
+  reference: string;
 }
 
-// One entry per composition. Alignment and theme are controls, never duplicate templates.
+// Reduced from the reference project's real layouts; no OEM logos or extracted assets.
+// A theme or alignment change is a setting, not another template.
 export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'photo-strip',
@@ -31,15 +33,16 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
     style: 'strip',
     time: true,
     theme: true,
-    alignment: true,
+    reference: 'classic/17,20',
   },
   {
     id: 'photo-side',
-    label: t('杂志侧栏'),
+    label: t('纵向参数栏'),
     category: 'photo',
-    style: 'editorial',
+    style: 'side',
     time: true,
     theme: true,
+    reference: 'leica_cloud/89',
   },
   {
     id: 'standard-left',
@@ -49,62 +52,62 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
     time: true,
     theme: true,
     alignment: true,
+    overlay: true,
+    reference: 'standard/6,7,8',
+  },
+  {
+    id: 'corner-grid',
+    label: t('四角信息'),
+    category: 'standard',
+    style: 'cornerGrid',
+    time: true,
+    theme: true,
+    overlay: true,
+    reference: 'leica_cloud/88',
+  },
+  {
+    id: 'color-block',
+    label: t('色块信息条'),
+    category: 'standard',
+    style: 'colorBlock',
+    time: true,
+    theme: false,
+    overlay: true,
+    reference: 'tag/9',
   },
   {
     id: 'frame-minimal',
-    label: t('展签相框'),
+    label: t('居中留白'),
     category: 'frame',
-    style: 'gallery',
+    style: 'frame',
     time: true,
     theme: true,
+    reference: 'classic/18,leica_cloud/90',
   },
   {
-    id: 'instant-print',
-    label: t('拍立得'),
+    id: 'header-footer',
+    label: t('上下分区'),
     category: 'frame',
-    style: 'instant',
+    style: 'headerFooter',
     time: true,
     theme: true,
+    reference: 'tag/11',
   },
   {
-    id: 'film-perforated',
-    label: t('胶片齿孔'),
-    category: 'film',
-    style: 'film',
-    time: true,
-    theme: false,
-  },
-  {
-    id: 'cinema-bars',
-    label: t('电影画幅'),
-    category: 'film',
-    style: 'cinema',
-    time: true,
-    theme: false,
-  },
-  {
-    id: 'postcard',
-    label: t('明信片'),
+    id: 'editorial-panel',
+    label: t('左侧题签'),
     category: 'creative',
-    style: 'postcard',
+    style: 'editorial',
     time: true,
-    theme: false,
-  },
-  {
-    id: 'blueprint',
-    label: t('技术图纸'),
-    category: 'creative',
-    style: 'blueprint',
-    time: true,
-    theme: false,
+    theme: true,
+    reference: 'classic/22',
   },
 ];
 export const WATERMARK_CATEGORIES: readonly { id: WatermarkCategory; label: string }[] = [
   { id: 'photo', label: t('摄影') },
-  { id: 'standard', label: t('签名') },
-  { id: 'frame', label: t('相框') },
-  { id: 'film', label: t('胶片') },
-  { id: 'creative', label: t('创意') },
+  { id: 'standard', label: t('叠印') },
+  { id: 'frame', label: t('留白') },
+  { id: 'creative', label: t('侧版') },
 ];
 export interface PhotoMetadata {
   camera?: string;
@@ -113,14 +116,19 @@ export interface PhotoMetadata {
 }
 
 const LEGACY_WATERMARKS: Record<string, string> = {
-  'photo-poster': 'instant-print',
+  'photo-poster': 'frame-minimal',
   'standard-right': 'standard-left',
   'classic-strip': 'photo-strip',
   'classic-frame': 'frame-minimal',
-  'film-dark': 'film-perforated',
+  'film-dark': 'header-footer',
+  'film-perforated': 'header-footer',
   'sport-tag': 'standard-left',
   'sport-rail': 'photo-side',
-  'frame-poster': 'instant-print',
+  'frame-poster': 'frame-minimal',
+  'instant-print': 'frame-minimal',
+  'cinema-bars': 'header-footer',
+  postcard: 'editorial-panel',
+  blueprint: 'corner-grid',
 };
 export function findWatermark(id: string): WatermarkTemplate | undefined {
   return WATERMARK_TEMPLATES.find((template) => template.id === (LEGACY_WATERMARKS[id] ?? id));
@@ -132,16 +140,14 @@ export function watermarkAlignment(id: string, alignment: WatermarkAlignment): W
 /** All borders are outside the original photo; never resize or cover pixels to fit a frame. */
 export function photoWatermarkLayout(width: number, height: number, template: WatermarkTemplate) {
   const geometry: Record<WatermarkStyle, readonly [number, number, number, number]> = {
-    // top / right / bottom / left, relative to photo width
-    strip: [0.025, 0.025, 0.15, 0.025],
-    editorial: [0.04, 0.4, 0.04, 0.04],
+    strip: [0, 0, 0.12, 0],
+    side: [0, 0.11, 0, 0],
     overlay: [0, 0, 0, 0],
-    gallery: [0.12, 0.12, 0.28, 0.12],
-    instant: [0.055, 0.055, 0.34, 0.055],
-    film: [0.065, 0.04, 0.12, 0.04],
-    cinema: [0.11, 0, 0.14, 0],
-    postcard: [0.055, 0.52, 0.055, 0.055],
-    blueprint: [0.095, 0.075, 0.095, 0.075],
+    cornerGrid: [0, 0, 0, 0],
+    colorBlock: [0, 0, 0, 0],
+    frame: [0.055, 0.055, 0.2, 0.055],
+    headerFooter: [0.12, 0.03, 0.15, 0.03],
+    editorial: [0.04, 0.04, 0.04, 0.32],
   };
   const [top, right, bottom, left] = geometry[template.style].map((value) =>
     Math.round(value * width),
@@ -150,11 +156,10 @@ export function photoWatermarkLayout(width: number, height: number, template: Wa
   const outputHeight = Math.max(
     1,
     height + top + bottom,
-    template.style === 'editorial' || template.style === 'postcard' ? Math.round(width * 0.6) : 0,
+    template.style === 'editorial' ? Math.round(width * 0.55) : 0,
   );
   const x = left,
     y = top + Math.floor((outputHeight - height - top - bottom) / 2);
-  const side = template.style === 'editorial' || template.style === 'postcard';
   return {
     width: outputWidth,
     height: outputHeight,
@@ -162,9 +167,12 @@ export function photoWatermarkLayout(width: number, height: number, template: Wa
     y,
     photoWidth: width,
     photoHeight: height,
-    caption: side ? right : bottom,
-    panel: side
-      ? { x: x + width, y: top, width: right, height: outputHeight - top - bottom }
-      : { x, y: y + height, width, height: outputHeight - y - height },
+    caption: template.style === 'side' ? right : template.style === 'editorial' ? left : bottom,
+    panel:
+      template.style === 'side'
+        ? { x: x + width, y: 0, width: right, height: outputHeight }
+        : template.style === 'editorial'
+          ? { x: 0, y: top, width: left, height: outputHeight - top - bottom }
+          : { x, y: y + height, width, height: outputHeight - y - height },
   };
 }

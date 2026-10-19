@@ -11,7 +11,12 @@ import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
 import { drawPhoto } from './photo-editor-render';
 import { renderPhotoWatermark } from './photo-editor-watermark';
-import { findWatermark, WATERMARK_CATEGORIES, type PhotoMetadata } from './photo-watermark-model';
+import {
+  findWatermark,
+  watermarkAlignment,
+  WATERMARK_CATEGORIES,
+  type PhotoMetadata,
+} from './photo-watermark-model';
 import styles from './PhotoEditor.module.css';
 import { useWatermarkNavigation, ORDERED_WATERMARK_TEMPLATES } from './useWatermarkNavigation';
 import { ScrollableToolRow } from './ScrollableToolRow';
@@ -215,7 +220,7 @@ export function PhotoWatermarkPanel({
               disabled={disabled}
               onClick={() => onChange({ watermarkTheme: 'white' })}
             >
-              {selected.style === 'overlay' ? t('白字') : t('白底')}
+              {selected.overlay ? t('白字') : t('白底')}
             </button>
             <button
               type="button"
@@ -223,7 +228,7 @@ export function PhotoWatermarkPanel({
               disabled={disabled}
               onClick={() => onChange({ watermarkTheme: 'black' })}
             >
-              {selected.style === 'overlay' ? t('黑字') : t('黑底')}
+              {selected.overlay ? t('黑字') : t('黑底')}
             </button>
           </>
         )}

@@ -94,7 +94,7 @@ describe('real canvas watermark composition', () => {
     drawPhoto(asHTML(geometry), asHTML(photo), edits);
     expect([geometry.width, geometry.height]).toEqual([150, 150]);
     const output = renderPhotoWatermark(asHTML(geometry), edits, {}, create);
-    expect(output.width).toBeGreaterThan(150);
+    expect(output.width).toBe(150);
     expect(output.height).toBeGreaterThan(output.width);
   });
   it('preserves transparency for overlay watermarks and allows opacity to reach zero', () => {
@@ -151,9 +151,25 @@ describe('distinct and flat watermark layouts', () => {
     );
     for (const id of ['header-footer', 'color-block', 'corner-grid', 'editorial-panel'])
       expect(WATERMARK_TEMPLATES.some((template) => template.id === id)).toBe(true);
-    expect(WATERMARK_TEMPLATES.map(template=>template.style)).not.toEqual(expect.arrayContaining(['instant','film','cinema','postcard','blueprint']));
-    const signatures=WATERMARK_TEMPLATES.map(template=>{
-      const result=renderPhotoWatermark(asHTML(source()),{...DEFAULT_PHOTO_EDITS,watermark:template.id,watermarkText:'Mountain light',watermarkShowTime:true},{camera:'Nikon D80',parameters:'24mm · f/4 · 1/125s · ISO 200',capturedAt:'2026.10.19'},create) as unknown as Canvas;
+    expect(WATERMARK_TEMPLATES.map((template) => template.style)).not.toEqual(
+      expect.arrayContaining(['instant', 'film', 'cinema', 'postcard', 'blueprint']),
+    );
+    const signatures = WATERMARK_TEMPLATES.map((template) => {
+      const result = renderPhotoWatermark(
+        asHTML(source()),
+        {
+          ...DEFAULT_PHOTO_EDITS,
+          watermark: template.id,
+          watermarkText: 'Mountain light',
+          watermarkShowTime: true,
+        },
+        {
+          camera: 'Nikon D80',
+          parameters: '24mm · f/4 · 1/125s · ISO 200',
+          capturedAt: '2026.10.19',
+        },
+        create,
+      ) as unknown as Canvas;
       return result.toBuffer('image/png').toString('base64');
     });
     expect(new Set(signatures).size).toBe(WATERMARK_TEMPLATES.length);
