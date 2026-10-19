@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { IconCrop, IconFlipHorizontal, IconRotateClockwise } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import { CROP_RATIO_PAIRS, photoCrop, type CropRatio, type PhotoEdits } from './photo-editor-model';
@@ -23,12 +23,17 @@ export function PhotoCropPanel({
   height: number;
   onChange: (patch: Partial<PhotoEdits>) => void;
 }) {
+  const selectedRatioRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    selectedRatioRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [edits.cropRatio]);
   const [preferredPortrait, setPreferredPortrait] = useState(false);
   const pair = CROP_RATIO_PAIRS.find((ratios) => ratios.some((ratio) => ratio === edits.cropRatio));
   // Read locked orientation from history, so undo / redo always restores the controls too.
   const portrait = pair && pair[0] !== pair[1] ? edits.cropRatio === pair[1] : preferredPortrait;
   const selectRatio = (cropRatio: CropRatio) => {
     if (cropRatio === edits.cropRatio) return;
+    if (cropRatio === 'free') setPreferredPortrait(portrait);
     onChange(
       cropRatio === 'free'
         ? {
@@ -94,6 +99,7 @@ export function PhotoCropPanel({
       <ScrollableToolRow className={styles.cropRatios} label={t('裁剪比例')}>
         <button
           type="button"
+          ref={edits.cropRatio === 'free' ? selectedRatioRef : undefined}
           aria-pressed={edits.cropRatio === 'free'}
           onClick={() => selectRatio('free')}
         >
@@ -104,6 +110,7 @@ export function PhotoCropPanel({
         </button>
         <button
           type="button"
+          ref={edits.cropRatio === 'original' ? selectedRatioRef : undefined}
           aria-pressed={edits.cropRatio === 'original'}
           onClick={() => selectRatio('original')}
         >
@@ -118,6 +125,7 @@ export function PhotoCropPanel({
             <button
               type="button"
               key={ratios[0]}
+              ref={edits.cropRatio === ratio ? selectedRatioRef : undefined}
               aria-pressed={edits.cropRatio === ratio}
               onClick={() => selectRatio(ratio)}
             >
