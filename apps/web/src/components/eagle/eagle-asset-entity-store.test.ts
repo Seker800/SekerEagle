@@ -79,6 +79,7 @@ it('replaces the media revision together with its renditions after original repl
       renditions: [
         {
           id: 'preview-2',
+          variant: 'default',
           kind: 'PREVIEW',
           revision: 2,
           mimeType: 'image/webp',

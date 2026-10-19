@@ -15,6 +15,8 @@ def decode_raw(raw, input_limit, output_limit, output_path=None, profile=None):
         raise ValueError("RAW pixel limit exceeded")
     # Validate the actual sensor payload even when only probing metadata.
     raw.unpack()
+    if profile and raw.rgb_xyz_matrix.any():
+        profile = None
     if sizes.flip in (5, 6):
         width, height = height, width
     result = {"width": width, "height": height}
@@ -28,13 +30,14 @@ def decode_raw(raw, input_limit, output_limit, output_path=None, profile=None):
             # characterization before encoding sRGB. No gamma before the matrix.
             pixels = raw.postprocess(**params, output_color=rawpy.ColorSpace.raw,
                                      output_bps=16, gamma=(1, 1))
-            pixels = camera_rgb_to_srgb(pixels, profile)
         else:
             pixels = raw.postprocess(**params, output_color=rawpy.ColorSpace.sRGB,
                                      output_bps=8)
         decoded_height, decoded_width = pixels.shape[:2]
         if decoded_width * decoded_height > output_limit:
             raise ValueError("RAW output pixel limit exceeded")
+        if profile:
+            pixels = camera_rgb_to_srgb(pixels, profile)
         with open(output_path, "xb") as output:
             Image.fromarray(pixels).save(output, format="TIFF", compression="raw")
         result.update(decodedWidth=decoded_width, decodedHeight=decoded_height)
@@ -50,8 +53,6 @@ def main():
         # unpack the entire sensor payload before any file is accepted.
         with open(source, 'rb') as original:
             profile = load_raf_profile(original.read(108))
-        if raw.rgb_xyz_matrix.any():
-            profile = None
         print(json.dumps(decode_raw(raw, input_limit, output_limit, output_path, profile)))
 
 

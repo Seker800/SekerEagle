@@ -161,17 +161,35 @@ describe('photo editor interactions', () => {
     }
     fireEvent.click(screen.getByRole('button', { name: '锐化' }));
     expect(screen.getByRole('slider', { name: '锐化' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '细节', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: '细节' })).toHaveAttribute('aria-pressed', 'true');
     expect(strip).toContainElement(screen.getByRole('button', { name: '曝光' }));
     fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
     expect(screen.getByRole('slider', { name: '饱和度' })).toBeEnabled();
-    expect(screen.getByRole('button', { name: '色彩', exact: true })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    expect(screen.getByRole('button', { name: '色彩' })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('follows manual horizontal scrolling without changing the active adjustment', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    const strip = screen.getByRole('group', { name: '调整选项' });
+    Object.defineProperties(strip, { scrollWidth: { value: 2200 }, clientWidth: { value: 600 } });
+    for (const option of PHOTO_ADJUSTMENTS.filter((item) =>
+      ['tone', 'color', 'detail'].includes(item.group),
+    )) {
+      vi.spyOn(
+        screen.getByRole('button', { name: option.label }),
+        'getBoundingClientRect',
+      ).mockReturnValue({
+        left: option.group === 'tone' ? -100 : 20,
+        right: option.group === 'tone' ? -10 : 90,
+      } as DOMRect);
+    }
+    // Programmatic category navigation must not fight its own smooth scroll.
+    fireEvent.scroll(strip);
+    expect(screen.getByRole('button', { name: '影调' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.pointerDown(strip, { pointerType: 'touch' });
+    fireEvent.scroll(strip);
+    expect(screen.getByRole('button', { name: '色彩' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled();
   });
   it('keeps existing adjustments when switching categories and remembers each selected parameter', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);

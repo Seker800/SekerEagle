@@ -1092,6 +1092,7 @@ export const enUS = {
   测试照片仅缩小尺寸: 'Test photo resized only',
   使用示例图片: 'Use sample image',
   编辑照片: 'Edit photo',
+  '编辑 RAW 显影副本': 'Edit developed RAW copy',
   关闭编辑器: 'Close editor',
   '照片处理失败，请重试。': 'Photo processing failed. Please retry.',
   '暂支持不超过 4800 万像素的照片，请先缩小图片。':

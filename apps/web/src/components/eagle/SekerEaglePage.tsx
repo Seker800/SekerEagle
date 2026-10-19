@@ -247,7 +247,6 @@ export function SekerEaglePage({
   const {
     api: {
       getEagleAsset,
-      getEagleAssetContentUrl,
       uploadEagleAsset,
       getEagleAssetLocation,
       getEagleTrashAsset,

@@ -27,6 +27,24 @@ class RawPolicyTests(unittest.TestCase):
         self.assertTrue(self.raw.postprocess.call_args.kwargs["half_size"])
         self.assertTrue(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
 
+    def test_missing_native_calibration_uses_profile_after_unpack(self):
+        self.raw.rgb_xyz_matrix.any.return_value = False
+        with patch("builtins.open", MagicMock()), patch.object(self.module, "camera_rgb_to_srgb") as convert:
+            convert.return_value = SimpleNamespace(shape=(5824, 4368, 3))
+            self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff", {"xyzToCamera": []})
+            convert.assert_called_once()
+            self.assertEqual(self.raw.postprocess.call_args.kwargs["output_bps"], 16)
+            self.assertEqual(self.raw.postprocess.call_args.kwargs["gamma"], (1, 1))
+        self.raw.unpack.assert_called_once()
+
+    def test_native_calibration_takes_precedence_over_profile(self):
+        self.raw.rgb_xyz_matrix.any.return_value = True
+        with patch("builtins.open", MagicMock()), patch.object(self.module, "camera_rgb_to_srgb") as convert:
+            self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff", {"xyzToCamera": []})
+            convert.assert_not_called()
+            self.assertEqual(self.raw.postprocess.call_args.kwargs["output_bps"], 8)
+        self.raw.unpack.assert_called_once()
+
     def test_regular_raw_retains_full_decode_resolution(self):
         self.raw.sizes = SimpleNamespace(raw_width=4100, raw_height=3100, width=4096, height=3072, flip=0)
         self.raw.postprocess.return_value = SimpleNamespace(shape=(3072, 4096, 3))
