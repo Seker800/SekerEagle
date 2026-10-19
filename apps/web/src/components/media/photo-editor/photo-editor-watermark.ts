@@ -1,5 +1,6 @@
 import type { PhotoEdits } from './photo-editor-model';
 import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
+import { paintFrostedWatermarkBackground } from './photo-watermark-background';
 import { paintWatermark } from './photo-watermark-layouts';
 
 /** Shared, flat compositor for thumbnails, live preview and full-resolution export. */
@@ -20,11 +21,15 @@ export function renderPhotoWatermark(
   const context = canvas.getContext('2d');
   if (!context) throw new Error('CANVAS_UNAVAILABLE');
   const overlay = !!template.overlay;
+  const frosted = !overlay && edits.watermarkTheme === 'frosted';
   const dark = edits.watermarkTheme === 'black';
   const background = dark ? '#141414' : '#ffffff';
   const foreground = overlay ? (dark ? '#000000' : '#ffffff') : dark ? '#ffffff' : '#000000';
   const secondary = foreground;
-  if (!overlay) {
+  if (frosted) {
+    paintFrostedWatermarkBackground(source, canvas, createCanvas);
+    context.clearRect(layout.x, layout.y, source.width, source.height);
+  } else if (!overlay) {
     context.fillStyle = background;
     context.fillRect(0, 0, canvas.width, canvas.height);
   }

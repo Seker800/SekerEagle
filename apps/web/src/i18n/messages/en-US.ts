@@ -1188,4 +1188,5 @@ export const enUS = {
   '输入焦距、光圈、快门和 ISO': 'Enter focal length, aperture, shutter speed and ISO',
   输入拍摄时间: 'Enter capture date and time',
   恢复照片信息: 'Restore photo metadata',
+  毛玻璃底: 'Frosted glass',
 } as const;

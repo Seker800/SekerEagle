@@ -516,14 +516,22 @@ it('ignores signature and font-size remnants from an existing edit session in ev
   }
 });
 
-
 it('renders a blurred photo-colored background while preserving every source pixel', () => {
   const photo = source();
-  for (const template of WATERMARK_TEMPLATES.filter(template => template.theme && !template.overlay)) {
-    const edits = { ...DEFAULT_PHOTO_EDITS, watermark: template.id, watermarkTheme: 'frosted' as const, watermarkWebsite: '' };
+  for (const template of WATERMARK_TEMPLATES.filter(
+    (template) => template.theme && !template.overlay,
+  )) {
+    const edits = {
+      ...DEFAULT_PHOTO_EDITS,
+      watermark: template.id,
+      watermarkTheme: 'frosted' as const,
+      watermarkWebsite: '',
+    };
     const output = renderPhotoWatermark(asHTML(photo), edits, {}, create);
     const layout = photoWatermarkLayout(photo.width, photo.height, template);
-    const actual = output.getContext('2d')!.getImageData(layout.x, layout.y, photo.width, photo.height).data;
+    const actual = output
+      .getContext('2d')!
+      .getImageData(layout.x, layout.y, photo.width, photo.height).data;
     const expected = photo.getContext('2d').getImageData(0, 0, photo.width, photo.height).data;
     expect(Buffer.from(actual).equals(Buffer.from(expected)), template.id).toBe(true);
     const p = layout.panel;
@@ -532,8 +540,12 @@ it('renders a blurred photo-colored background while preserving every source pix
     expect(sample, template.id).not.toEqual([20, 20, 20, 255]);
     expect(sample[3]).toBe(255);
     const neighbor = pixel(output, p.x + 3, p.y + 2);
-    expect(Math.max(...sample.map((value, index) => Math.abs(value - neighbor[index])))).toBeLessThan(12);
+    expect(
+      Math.max(...sample.map((value, index) => Math.abs(value - neighbor[index]))),
+    ).toBeLessThan(12);
     const again = renderPhotoWatermark(asHTML(photo), edits, {}, create) as unknown as Canvas;
-    expect(again.toBuffer('image/png').equals((output as unknown as Canvas).toBuffer('image/png'))).toBe(true);
+    expect(
+      again.toBuffer('image/png').equals((output as unknown as Canvas).toBuffer('image/png')),
+    ).toBe(true);
   }
 });

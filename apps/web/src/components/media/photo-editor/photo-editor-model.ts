@@ -35,7 +35,7 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   vignette: number;
   watermark: string;
   watermarkAlign: 'left' | 'center' | 'right';
-  watermarkTheme: 'white' | 'black';
+  watermarkTheme: 'white' | 'black' | 'frosted';
   watermarkCamera: string | null;
   watermarkParameters: string | null;
   watermarkCapturedAt: string | null;

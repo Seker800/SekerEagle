@@ -232,6 +232,16 @@ export function PhotoWatermarkPanel({
             >
               {selected.overlay ? t('黑字') : t('黑底')}
             </button>
+            {!selected.overlay && (
+              <button
+                type="button"
+                aria-pressed={edits.watermarkTheme === 'frosted'}
+                disabled={disabled}
+                onClick={() => onChange({ watermarkTheme: 'frosted' })}
+              >
+                {t('毛玻璃底')}
+              </button>
+            )}
           </>
         )}
         {selected && (
@@ -352,7 +362,11 @@ export function PhotoWatermarkPanel({
             onClick={() =>
               onChange({
                 watermark: template.id,
-                watermarkTheme: template.theme ? edits.watermarkTheme : 'black',
+                watermarkTheme: template.theme
+                  ? template.overlay && edits.watermarkTheme === 'frosted'
+                    ? 'white'
+                    : edits.watermarkTheme
+                  : 'black',
                 watermarkShowTime: template.time && edits.watermarkShowTime,
               })
             }

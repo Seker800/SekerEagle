@@ -571,7 +571,6 @@ it('keeps filter strength above its thumbnails in the common tool inspector', as
   expect(screen.getByRole('slider', { name: '滤镜强度' })).toHaveValue('45');
 });
 
-
 it('undoes and redoes the frosted watermark background as one ordinary edit', async () => {
   render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
