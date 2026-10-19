@@ -551,3 +551,21 @@ describe('photo editor interactions', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 });
+
+
+it('keeps filter strength above its thumbnails in the common tool inspector', async () => {
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '滤镜' }));
+  const strength = screen.getByRole('slider', { name: '滤镜强度' });
+  expect(strength).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: '复古' }));
+  expect(strength).toBeEnabled();
+  const thumbnails = screen.getByRole('group', { name: '照片滤镜' });
+  expect(strength.compareDocumentPosition(thumbnails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByRole('button', { name: '对比原图' })).toHaveLength(1);
+  fireEvent.change(strength, { target: { value: '45' } });
+  fireEvent.click(screen.getByRole('button', { name: '调整' }));
+  fireEvent.click(screen.getByRole('button', { name: '滤镜' }));
+  expect(screen.getByRole('slider', { name: '滤镜强度' })).toHaveValue('45');
+});

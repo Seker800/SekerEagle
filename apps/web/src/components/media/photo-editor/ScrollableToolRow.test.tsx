@@ -102,3 +102,19 @@ it('ends interrupted mouse gestures and leaves touch scrolling to the browser', 
   pointer(row, 'pointermove', 150, 1, 'touch');
   expect(row.scrollLeft).toBe(left);
 });
+
+
+it('reserves trailing space so the final category can align to the start even on a wide viewport', () => {
+  vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(900);
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    const left = this.hasAttribute('data-category-start') ? 400 : this.tagName === 'BUTTON' ? 600 : 0;
+    return { left, right: left + 100, width: 100 } as DOMRect;
+  });
+  render(<ScrollableToolRow className="tools" label="分类工具" anchorSelector="[data-category-start]">
+    <button>第一组</button><button data-category-start>末组</button><button>末组第二项</button>
+  </ScrollableToolRow>);
+  const row = screen.getByRole('group', { name: '分类工具' });
+  expect(row.lastElementChild).toHaveAttribute('aria-hidden', 'true');
+  expect(row.lastElementChild).toHaveStyle({ flexBasis: '600px' });
+});
