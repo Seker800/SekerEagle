@@ -260,3 +260,15 @@ it('can restore detected information after an empty or custom override without c
     }),
   );
 });
+
+
+it('offers exactly camera, parameters, time and website, without a signature or size slider', () => {
+  const { props, view } = setup();
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip' }} metadata={{ camera: 'NIKON D80' }} />);
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  expect(screen.getAllByRole('textbox')).toHaveLength(4);
+  expect(screen.queryByRole('textbox', { name: '签名文字' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('slider', { name: '文字大小' })).not.toBeInTheDocument();
+  expect(DEFAULT_PHOTO_EDITS).not.toHaveProperty('watermarkText');
+  expect(DEFAULT_PHOTO_EDITS).not.toHaveProperty('watermarkScale');
+});
