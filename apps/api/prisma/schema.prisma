@@ -1330,3 +1330,22 @@ model EaglePhotoGroupMember {
   @@id([groupId, assetId])
   @@index([ownerId, libraryMode, assetId])
 }
+
+// Independent of asset/user cascades: deletion intent survives removing its source rows.
+model EagleObjectDeletion {
+  id           String      @id @default(uuid())
+  ownerId      String
+  libraryMode  LibraryMode
+  objectKeys   String[]
+  prefixes     String[]
+  status       String      @default("PENDING")
+  attempts     Int         @default(0)
+  leaseVersion Int         @default(0)
+  lockedAt     DateTime?
+  availableAt  DateTime    @default(now())
+  lastError    String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([status, availableAt])
+}

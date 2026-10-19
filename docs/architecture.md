@@ -69,6 +69,10 @@ domain rules and narrow ports
 Prisma repositories / MinIO adapters
 ```
 
+## Asset deletion boundary
+
+清空回收站只处理当前 owner、模式和私密可见范围。worker 在事务中锁定任务租约及资产，清空上传／采集的限制性引用，将原文件、派生文件和金字塔前缀写入独立删除 outbox 后删除资产行；提交后才允许消费者删除对象。outbox 不随资产级联删除，失败保留意图并带租约重试。禁止先删对象再尝试删除数据库资源。
+
 ## Invariants
 
 - ownerId 只从认证主体推导，任何请求 DTO 都不接受 ownerId。

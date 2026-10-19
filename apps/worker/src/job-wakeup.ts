@@ -3,7 +3,7 @@ import { Client, type Notification } from 'pg';
 
 export const WORKER_WAKEUP_CHANNEL = 'sekereagle_worker_wakeup';
 const SHANGHAI_UTC_OFFSET_HOURS = 8;
-const MAX_TIMER_DELAY_MS = 2_147_000_000;
+const FALLBACK_POLL_MS = 30_000;
 
 export interface PendingWakeCandidate {
   availableAt: Date;
@@ -69,6 +69,8 @@ export class JobWakeScheduler {
         if (this.rerunRequested && !this.stopped) {
           this.rerunRequested = false;
           this.wakeNow();
+        } else if (!this.stopped && !this.timer) {
+          this.scheduleAt(null);
         }
       });
   }
@@ -76,8 +78,9 @@ export class JobWakeScheduler {
   scheduleAt(date: Date | null): void {
     if (this.stopped) return;
     this.clearTimer();
-    if (!date) return;
-    const delay = Math.max(0, Math.min(MAX_TIMER_DELAY_MS, date.getTime() - this.now()));
+    const delay = date
+      ? Math.max(0, Math.min(FALLBACK_POLL_MS, date.getTime() - this.now()))
+      : FALLBACK_POLL_MS;
     this.timer = setTimeout(() => {
       this.timer = null;
       this.wakeNow();

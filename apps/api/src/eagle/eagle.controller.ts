@@ -400,13 +400,13 @@ export class EagleController {
   @Delete('trash')
   @UseGuards(BrowserOriginGuard)
   emptyTrash(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.emptyTrash(principal.sub);
+    return this.eagle.emptyTrash(principal.sub, principal.canViewPrivate);
   }
 
   @Post('trash/empty')
   @UseGuards(BrowserOriginGuard)
   emptyTrashCompat(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.emptyTrash(principal.sub);
+    return this.eagle.emptyTrash(principal.sub, principal.canViewPrivate);
   }
 
   @Get(['tags', 'manual-tags'])

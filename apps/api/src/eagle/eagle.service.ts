@@ -837,7 +837,7 @@ export class EagleService {
     return { affectedAssetCount };
   }
 
-  async emptyTrash(ownerId: string) {
+  async emptyTrash(ownerId: string, includePrivate = false) {
     const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
       const purgeAfter = new Date();
       const assets = await transaction.$queryRaw<Array<{ id: string; mediaRevision: number }>>(
@@ -846,6 +846,7 @@ export class EagleService {
           SET "purgeAfter" = ${purgeAfter}, "rowVersion" = "rowVersion" + 1,
               "updatedAt" = CURRENT_TIMESTAMP
           WHERE "ownerId" = ${ownerId} AND "libraryMode" = ${this.libraryMode}::"LibraryMode" AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
+            AND (${includePrivate} OR "isPrivate" = false)
           RETURNING "id", "mediaRevision"
         `,
       );
@@ -861,6 +862,24 @@ export class EagleService {
           }))
           .map((row) => inLibrary(this.libraryMode, row)),
         skipDuplicates: true,
+      });
+      await transaction.eagleAssetProcessingJob.updateMany({
+        where: {
+          ownerId,
+          libraryMode: this.libraryMode,
+          assetId: { in: assets.map((asset) => asset.id) },
+          kind: 'PURGE_ASSET',
+          status: { in: ['PENDING', 'FAILED', 'COMPLETED'] },
+        },
+        data: {
+          status: 'PENDING',
+          attempts: 0,
+          availableAt: purgeAfter,
+          completedAt: null,
+          lockedAt: null,
+          lastError: null,
+          leaseVersion: { increment: 1 },
+        },
       });
       return assets.length;
     });

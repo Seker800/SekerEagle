@@ -1253,3 +1253,145 @@ test('concurrent source edits or conflicting sends never publish duplicate targe
     2,
   );
 });
+
+test('purge commits asset deletion and detached upload/capture pointers before retryable object cleanup', async () => {
+  const { prepareAssetPurge, drainObjectDeletion } =
+    await import('../../apps/worker/dist/asset-purge.js');
+  const f = await fixtures();
+  const privateAsset = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'private.jpg',
+      displayName: 'private',
+      normalizedDisplayName: 'private',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `users/${f.ownerId}/private`,
+      isPrivate: true,
+      deletedAt: new Date(),
+    },
+  });
+  await prisma.eagleAsset.updateMany({
+    where: { id: { in: [f.material.id, f.photo.id] } },
+    data: { deletedAt: new Date() },
+  });
+  const upload = await prisma.uploadSession.create({
+    data: {
+      uploaderId: f.ownerId,
+      eagleAssetId: f.material.id,
+      originalName: 'original.jpg',
+      mimeType: 'image/jpeg',
+      size: 1,
+      objectKey: `users/${f.ownerId}/upload`,
+      multipartUploadId: 'test-only',
+      status: 'COMPLETED',
+    },
+  });
+  await prisma.eagleUploadSessionState.create({
+    data: {
+      ownerId: f.ownerId,
+      uploadSessionId: upload.id,
+      assetId: f.material.id,
+      replacementAssetId: f.material.id,
+    },
+  });
+  const capture = await prisma.eagleBrowserCapture.create({
+    data: {
+      ownerId: f.ownerId,
+      uploadSessionId: upload.id,
+      assetId: f.material.id,
+      clientCaptureId: randomUUID(),
+      displayName: 'test',
+      pageTitle: 'test',
+      pageUrl: 'https://example.invalid',
+      capturedAt: new Date(),
+      extensionVersion: 'test',
+    },
+  });
+  await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.material.id,
+      kind: 'PURGE_ASSET',
+      lane: 'MAINTENANCE',
+      assetRevision: 1,
+      status: 'COMPLETED',
+    },
+  });
+  assert.equal((await f.materials.emptyTrash(f.ownerId)).affectedAssetCount, 1);
+  assert.equal(
+    (await prisma.eagleAsset.findUnique({ where: { id: privateAsset.id } })).purgeAfter,
+    null,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUnique({ where: { id: f.photo.id } })).purgeAfter,
+    null,
+  );
+  await assert.rejects(f.materials.setTrash(f.ownerId, [f.material.id], true), NotFoundException);
+  const pending = await prisma.eagleAssetProcessingJob.findFirst({
+    where: { assetId: f.material.id, kind: 'PURGE_ASSET' },
+  });
+  assert.equal(pending.status, 'PENDING');
+  const job = await prisma.eagleAssetProcessingJob.update({
+    where: { id: pending.id },
+    data: { status: 'PROCESSING', leaseVersion: { increment: 1 } },
+  });
+  await prisma.$executeRawUnsafe(
+    'CREATE TABLE "PurgeFailureFixture" ("assetId" TEXT REFERENCES "EagleAsset"(id) ON DELETE RESTRICT)',
+  );
+  try {
+    await prisma.$executeRaw`INSERT INTO "PurgeFailureFixture" VALUES (${f.material.id})`;
+    await assert.rejects(prisma.$transaction((tx) => prepareAssetPurge(tx, job)));
+    assert.ok(await prisma.eagleAsset.findUnique({ where: { id: f.material.id } }));
+    assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }), 0);
+    assert.equal(
+      (await prisma.uploadSession.findUnique({ where: { id: upload.id } })).eagleAssetId,
+      f.material.id,
+    );
+  } finally {
+    await prisma.$executeRawUnsafe('DROP TABLE "PurgeFailureFixture"');
+  }
+  await prisma.$transaction((tx) => prepareAssetPurge(tx, job));
+  assert.equal(await prisma.eagleAsset.findUnique({ where: { id: f.material.id } }), null);
+  assert.equal(
+    (await prisma.uploadSession.findUnique({ where: { id: upload.id } })).eagleAssetId,
+    null,
+  );
+  assert.equal(
+    (await prisma.eagleBrowserCapture.findUnique({ where: { id: capture.id } })).assetId,
+    null,
+  );
+  const state = await prisma.eagleUploadSessionState.findUnique({
+    where: { uploadSessionId: upload.id },
+  });
+  assert.equal(state.assetId, null);
+  assert.equal(state.replacementAssetId, null);
+  // Other owners' outboxes are not present in this isolated fixture, and no real S3 is used.
+  const deletion = await prisma.eagleObjectDeletion.findFirst({ where: { ownerId: f.ownerId } });
+  assert.ok(deletion.objectKeys.includes(f.material.originalObjectKey));
+  await drainObjectDeletion(prisma, {
+    deleteObject: async () => {
+      throw new Error('test storage offline');
+    },
+    deletePrefix: async () => {},
+  });
+  assert.equal(
+    (await prisma.eagleObjectDeletion.findUnique({ where: { id: deletion.id } })).status,
+    'PENDING',
+  );
+  await prisma.eagleObjectDeletion.update({
+    where: { id: deletion.id },
+    data: { availableAt: new Date(0) },
+  });
+  const removed = [];
+  await drainObjectDeletion(prisma, {
+    deleteObject: async (key) => {
+      removed.push(key);
+    },
+    deletePrefix: async () => {},
+  });
+  assert.ok(removed.includes(f.material.originalObjectKey));
+  assert.equal(await prisma.eagleObjectDeletion.findUnique({ where: { id: deletion.id } }), null);
+});

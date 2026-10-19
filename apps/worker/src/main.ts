@@ -1,3 +1,4 @@
+import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
 import sharp from 'sharp';
 import {
   CAMERA_MAX_VIDEO_BYTES,
@@ -97,6 +98,7 @@ let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
 let stopping = false;
 let activeJobCount = 0;
+let deletingObjects = false;
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   ? Math.min(4, Math.max(1, configuredConcurrency))
@@ -1544,45 +1546,7 @@ async function listFiles(directory: string): Promise<string[]> {
 }
 
 async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
-  const asset = await prisma.eagleAsset.findFirst({
-    where: {
-      id: job.assetId,
-      ownerId: job.ownerId,
-      libraryMode: job.libraryMode,
-      mediaRevision: job.assetRevision,
-      deletedAt: { not: null },
-      purgeAfter: { lte: new Date() },
-    },
-    include: {
-      renditions: { select: { storageKey: true } },
-      imagePyramids: { select: { storagePrefix: true } },
-    },
-  });
-  if (!asset) {
-    await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-    });
-    return;
-  }
-  const keys = [asset.originalObjectKey, ...asset.renditions.map(({ storageKey }) => storageKey)];
-  for (const key of keys) {
-    assertOwnedKey(asset.ownerId, key);
-    await storage.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
-  }
-  for (const { storagePrefix } of asset.imagePyramids) {
-    await deleteOwnedPrefix(asset.ownerId, `${storagePrefix}/`);
-  }
-  await prisma.eagleAsset.deleteMany({
-    where: {
-      id: asset.id,
-      ownerId: asset.ownerId,
-      libraryMode: asset.libraryMode,
-      mediaRevision: job.assetRevision,
-      deletedAt: { not: null },
-      purgeAfter: { lte: new Date() },
-    },
-  });
+  await prisma.$transaction((transaction) => prepareAssetPurge(transaction, job));
 }
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
@@ -1707,18 +1671,32 @@ async function deleteOwnedPrefix(ownerId: string, prefix: string): Promise<void>
     const keys = (page.Contents ?? []).flatMap(({ Key }) => (Key ? [Key] : []));
     for (const key of keys) assertOwnedKey(ownerId, key);
     if (keys.length) {
-      await storage.send(
+      const result = await storage.send(
         new DeleteObjectsCommand({
           Bucket: s3Bucket,
           Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
         }),
       );
+      if (result.Errors?.length) throw new Error('OBJECT_PREFIX_DELETION_INCOMPLETE');
     }
     continuationToken = page.IsTruncated ? page.NextContinuationToken : undefined;
   } while (continuationToken);
 }
 
 async function poll(): Promise<void> {
+  if (!stopping && !deletingObjects) {
+    deletingObjects = true;
+    void drainObjectDeletion(prisma, {
+      deleteObject: async (key) => {
+        await storage.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
+      },
+      deletePrefix: deleteOwnedPrefix,
+    })
+      .catch(reportLoopError)
+      .finally(() => {
+        deletingObjects = false;
+      });
+  }
   if (stopping || activeJobCount >= workerConcurrency) return;
   while (!stopping && activeJobCount < workerConcurrency) {
     const job = await claimJob();

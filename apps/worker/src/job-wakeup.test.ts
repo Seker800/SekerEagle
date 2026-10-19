@@ -145,3 +145,21 @@ test('scheduler reports a failed run and remains available for later work', asyn
   assert.match(String(errors[0]), /temporary failure/);
   scheduler.stop();
 });
+
+test('idle and failed drains retry without another notification', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let runs = 0;
+  const scheduler = new JobWakeScheduler(
+    async () => {
+      runs++;
+      if (runs === 1) throw new Error('temporary');
+    },
+    () => {},
+  );
+  scheduler.wakeNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(30_000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runs, 2);
+  scheduler.stop();
+});
