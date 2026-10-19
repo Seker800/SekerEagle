@@ -4,6 +4,10 @@ import { applyPhotoTone, MIDTONE_GAMMA_STOPS } from './photo-editor-tone';
 import { applyExtendedTone } from './photo-editor-extended-tone';
 import { applyPhotoDetail } from './photo-editor-detail';
 
+import { applyPhotoColorMixer } from './photo-editor-color-mixer';
+import { applyPhotoDenoise } from './photo-editor-denoise';
+import { applyPhotoDehaze } from './photo-editor-dehaze';
+
 export function processPhotoPixels(
   pixels: Uint8Array,
   width: number,
@@ -12,7 +16,16 @@ export function processPhotoPixels(
 ): Uint8Array {
   let image: photon.PhotonImage | undefined;
   try {
-    const adjusted = applyExtendedTone(applyPhotoTone(pixels, edits), edits);
+    const cleaned = applyPhotoDehaze(
+      applyPhotoDenoise(pixels, width, height, edits),
+      width,
+      height,
+      edits,
+    );
+    const adjusted = applyPhotoColorMixer(
+      applyExtendedTone(applyPhotoTone(cleaned, edits), edits),
+      edits,
+    );
     if (!edits.gamma && (edits.filter === 'original' || edits.filterStrength === 0))
       return applyPhotoDetail(adjusted, width, height, edits);
     image = new photon.PhotonImage(adjusted, width, height);

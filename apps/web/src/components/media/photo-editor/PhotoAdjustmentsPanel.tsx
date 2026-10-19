@@ -10,6 +10,7 @@ import {
   type PhotoAdjustmentOption,
 } from './photo-adjustment-catalog';
 import styles from './PhotoEditor.module.css';
+import { PhotoAdvancedAdjustments } from './PhotoAdvancedAdjustments';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 export function PhotoAdjustmentsPanel({
@@ -20,6 +21,9 @@ export function PhotoAdjustmentsPanel({
   renderControl,
   compareControl,
   onResetOption,
+  onChangeOption,
+  onGestureStart,
+  onGestureCommit,
 }: {
   edits: PhotoEdits;
   disabled: boolean;
@@ -28,12 +32,18 @@ export function PhotoAdjustmentsPanel({
   renderControl: (option: PhotoAdjustmentOption) => ReactNode;
   compareControl: ReactNode;
   onResetOption: (option: PhotoAdjustmentOption) => void;
+  onChangeOption: (key: PhotoAdjustmentOption['key'], value: number) => void;
+  onGestureStart: () => void;
+  onGestureCommit: () => void;
 }) {
   const [group, setGroup] = useState<AdjustmentGroup>('tone');
   const [selection, setSelection] = useState<Record<AdjustmentGroup, string>>({
     tone: 'exposure',
     color: 'saturation',
     detail: 'sharpen',
+    hsl: 'hslRedHue',
+    curves: 'curveMaster2',
+    grading: 'gradeShadowsHue',
   });
   const options = PHOTO_ADJUSTMENTS.filter((option) => option.group === group);
   const selected = options.find((option) => option.id === selection[group]) ?? options[0];
@@ -44,7 +54,7 @@ export function PhotoAdjustmentsPanel({
   return (
     <div className={styles.adjustmentsPanel}>
       <div className={styles.adjustmentCategoryRow}>
-        <div className={styles.adjustmentGroups} role="group" aria-label={t('调整分类')}>
+        <ScrollableToolRow className={styles.adjustmentGroups} label={t('调整分类')}>
           {ADJUSTMENT_GROUPS.map((item) => (
             <button
               type="button"
@@ -56,7 +66,7 @@ export function PhotoAdjustmentsPanel({
               {item.label}
             </button>
           ))}
-        </div>
+        </ScrollableToolRow>
         <button
           type="button"
           disabled={disabled || !canReset}
@@ -67,26 +77,40 @@ export function PhotoAdjustmentsPanel({
           {t('重置全部')}
         </button>
       </div>
-      <ScrollableToolRow className={styles.adjustmentOptions} label={t('调整选项')}>
-        {options.map((option) => (
-          <button
-            type="button"
-            key={option.id}
-            ref={selected.id === option.id ? selectedRef : undefined}
-            disabled={disabled}
-            aria-pressed={selected.id === option.id}
-            aria-label={option.label}
-            title={`${option.label} · ${t('双击重置此项')}`}
-            onClick={() => setSelection((current) => ({ ...current, [group]: option.id }))}
-            onDoubleClick={() => onResetOption(option)}
-          >
-            <span className={styles.optionValue} data-modified={edits[option.key] !== 0}>
-              {adjustmentValue(option, edits)}
-            </span>
-            <span className={styles.optionName}>{option.label}</span>
-          </button>
-        ))}
-      </ScrollableToolRow>
+      {group === 'hsl' || group === 'curves' || group === 'grading' ? (
+        <PhotoAdvancedAdjustments
+          group={group}
+          options={options}
+          selected={selected}
+          edits={edits}
+          disabled={disabled}
+          onSelect={(option) => setSelection((current) => ({ ...current, [group]: option.id }))}
+          onChange={onChangeOption}
+          onStart={onGestureStart}
+          onCommit={onGestureCommit}
+        />
+      ) : (
+        <ScrollableToolRow className={styles.adjustmentOptions} label={t('调整选项')}>
+          {options.map((option) => (
+            <button
+              type="button"
+              key={option.id}
+              ref={selected.id === option.id ? selectedRef : undefined}
+              disabled={disabled}
+              aria-pressed={selected.id === option.id}
+              aria-label={option.label}
+              title={`${option.label} · ${t('双击重置此项')}`}
+              onClick={() => setSelection((current) => ({ ...current, [group]: option.id }))}
+              onDoubleClick={() => onResetOption(option)}
+            >
+              <span className={styles.optionValue} data-modified={edits[option.key] !== 0}>
+                {adjustmentValue(option, edits)}
+              </span>
+              <span className={styles.optionName}>{option.label}</span>
+            </button>
+          ))}
+        </ScrollableToolRow>
+      )}
       <div className={styles.parameterInspector}>
         <div className={styles.parameterRow}>
           {compareControl}

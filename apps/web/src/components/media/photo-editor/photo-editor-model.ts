@@ -1,3 +1,4 @@
+import { DEFAULT_ADVANCED_EDITS, type AdvancedKey } from './photo-editor-advanced-model';
 export type PhotoFilter = 'original' | 'vintage' | 'oceanic' | 'monochrome';
 // Each pair shares one visual preset, with an explicit landscape / portrait choice.
 export const CROP_RATIO_PAIRS = [
@@ -10,7 +11,10 @@ export const CROP_RATIO_PAIRS = [
 ] as const;
 export const FIXED_CROP_RATIOS = ['original', ...new Set(CROP_RATIO_PAIRS.flat())] as const;
 export type CropRatio = 'free' | (typeof FIXED_CROP_RATIOS)[number];
-export interface PhotoEdits {
+export interface PhotoEdits extends Record<AdvancedKey, number> {
+  dehaze: number;
+  luminanceNoise: number;
+  colorNoise: number;
   exposure: number;
   contrast: number;
   saturation: number;
@@ -48,6 +52,10 @@ export interface PhotoEdits {
   cropY: number;
 }
 export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
+  ...DEFAULT_ADVANCED_EDITS,
+  dehaze: 0,
+  luminanceNoise: 0,
+  colorNoise: 0,
   exposure: 0,
   contrast: 0,
   saturation: 0,

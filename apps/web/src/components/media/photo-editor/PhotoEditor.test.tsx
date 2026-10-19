@@ -200,24 +200,43 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
     const hsl = screen.getByRole('slider', { name: '蓝色 · 饱和度' });
     fireEvent.change(hsl, { target: { value: '-50' } });
-    fireEvent.click(screen.getByRole('button', { name: '撤销' })); expect(hsl).toHaveValue('0');
-    fireEvent.click(screen.getByRole('button', { name: '重做' })); expect(hsl).toHaveValue('-50');
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    expect(hsl).toHaveValue('0');
+    fireEvent.click(screen.getByRole('button', { name: '重做' }));
+    expect(hsl).toHaveValue('-50');
     fireEvent.click(screen.getByRole('button', { name: '曲线' }));
     fireEvent.click(screen.getByRole('button', { name: '主曲线' }));
     fireEvent.click(screen.getByRole('button', { name: '中间调' }));
-    fireEvent.change(screen.getByRole('slider', { name: '主曲线 · 中间调' }), { target: { value: '15' } });
+    fireEvent.change(screen.getByRole('slider', { name: '主曲线 · 中间调' }), {
+      target: { value: '15' },
+    });
     fireEvent.click(screen.getByRole('button', { name: '色彩分级' }));
     fireEvent.click(screen.getByRole('button', { name: '阴影' }));
     fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
-    fireEvent.change(screen.getByRole('slider', { name: '阴影 · 饱和度' }), { target: { value: '40' } });
+    fireEvent.change(screen.getByRole('slider', { name: '阴影 · 饱和度' }), {
+      target: { value: '40' },
+    });
     await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '对比原图' }));
-    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toMatchObject({ hslBlueSaturation:0, curveMaster2:0, gradeShadowsSaturation:0 }));
+    await waitFor(() =>
+      expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toMatchObject({
+        hslBlueSaturation: 0,
+        curveMaster2: 0,
+        gradeShadowsSaturation: 0,
+      }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '返回编辑' }));
-    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toMatchObject({ hslBlueSaturation:-50, curveMaster2:15, gradeShadowsSaturation:40 }));
+    await waitFor(() =>
+      expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toMatchObject({
+        hslBlueSaturation: -50,
+        curveMaster2: 15,
+        gradeShadowsSaturation: 40,
+      }),
+    );
     fireEvent.click(screen.getByRole('button', { name: '重置全部' }));
     expect(screen.getByRole('slider', { name: '阴影 · 饱和度' })).toHaveValue('0');
-    fireEvent.click(screen.getByRole('button', { name: 'HSL' })); expect(screen.getByRole('slider', { name: '蓝色 · 饱和度' })).toHaveValue('0');
+    fireEvent.click(screen.getByRole('button', { name: 'HSL' }));
+    expect(screen.getByRole('slider', { name: '蓝色 · 饱和度' })).toHaveValue('0');
   });
   it('supports press-and-hold original comparison and restores editing on release', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);

@@ -587,6 +587,11 @@ export function PhotoEditor({
                 (option) => edits[option.key] !== DEFAULT_PHOTO_EDITS[option.key],
               )}
               onReset={() => update(resetPhotoAdjustments(edits))}
+              onGestureStart={() => {
+                sliderStartRef.current ??= edits;
+              }}
+              onGestureCommit={finishSlider}
+              onChangeOption={(key, value) => update({ [key]: value }, false)}
               compareControl={compareControl}
               onResetOption={(option) => update({ [option.key]: DEFAULT_PHOTO_EDITS[option.key] })}
               renderControl={(option) =>

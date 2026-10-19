@@ -10,7 +10,7 @@
   z-index: 100;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: 58px minmax(120px, 1fr) 198px 56px;
+  grid-template-rows: 58px minmax(120px, 1fr) var(--photo-controls-size, 198px) 56px;
   height: 100dvh;
   color: var(--photo-text);
   background: var(--photo-bg);
@@ -1000,7 +1000,7 @@
 @media (max-width: 760px) {
   .editor {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 58px minmax(120px, 1fr) 198px 56px;
+    grid-template-rows: 58px minmax(120px, 1fr) var(--photo-controls-size, 198px) 56px;
   }
   .header {
     gap: 6px;
@@ -1163,4 +1163,111 @@
   .editor .precisionRow button {
     min-height: 28px;
   }
+}
+
+.editor:has(.advancedOptions) {
+  --photo-controls-size: 228px;
+}
+.editor:has(.curveGraph) {
+  --photo-controls-size: 308px;
+}
+.adjustmentCategoryRow > .toolScrollFrame {
+  flex: 1;
+  min-width: 0;
+}
+.adjustmentCategoryRow > button {
+  flex-shrink: 0;
+}
+.advancedOptions {
+  max-width: 700px;
+  width: 100%;
+  margin: 0 auto;
+}
+.advancedFamilies {
+  display: flex;
+  justify-content: safe center;
+  gap: 6px;
+  padding: 4px 2px 7px;
+}
+.editor .advancedFamilies button {
+  flex-direction: column;
+  gap: 4px;
+  min-width: 44px;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--photo-muted);
+}
+.colorDot {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px #ffffff30;
+}
+.editor .advancedFamilies button[aria-pressed='true'] {
+  color: var(--photo-accent);
+  border-color: var(--photo-accent);
+  background: #e8b26c12;
+}
+.advancedAxes {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 3px 0;
+}
+.editor .advancedAxes button {
+  flex-direction: column;
+  min-width: 44px;
+  min-height: 40px;
+  gap: 2px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  font-size: 11px;
+  background: #ffffff09;
+}
+.advancedAxes small {
+  font-variant-numeric: tabular-nums;
+  color: var(--photo-muted);
+}
+.editor .advancedAxes button[aria-pressed='true'] {
+  border-color: var(--photo-accent);
+  color: var(--photo-accent);
+}
+.curveGraph {
+  display: block;
+  width: calc(100% - 52px);
+  height: 78px;
+  margin: 4px auto;
+  overflow: visible;
+  background: #141414;
+  border: 1px solid var(--photo-line);
+  cursor: crosshair;
+  touch-action: none;
+}
+.curveGrid,
+.curveIdentity,
+.curveLine {
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+.curveGrid {
+  stroke: #ffffff10;
+  stroke-width: 1;
+}
+.curveIdentity {
+  stroke: #ffffff30;
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+}
+.curveLine {
+  stroke: var(--photo-accent);
+  stroke-width: 2;
+}
+.curveNode {
+  fill: var(--photo-accent);
+  stroke: #080808;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
