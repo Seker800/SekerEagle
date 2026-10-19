@@ -507,6 +507,7 @@ export async function uploadEagleAsset(
   _token: string,
   file: File,
   onProgress: (value: { percent: number }) => void,
+  options?: { duplicatePolicy: 'CREATE_COPY' },
 ) {
   const session = await api<{
     id: string;
@@ -517,6 +518,7 @@ export async function uploadEagleAsset(
       originalName: file.name,
       mimeType: file.type || 'application/octet-stream',
       size: file.size,
+      ...(options ? { duplicatePolicy: options.duplicatePolicy } : {}),
     }),
   });
   const parts: Array<{

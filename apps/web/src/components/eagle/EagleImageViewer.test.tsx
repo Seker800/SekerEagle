@@ -134,7 +134,7 @@ describe('EagleImageViewer', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
-  it('uses a low-latency navigator viewer for an ordinary preview image', async () => {
+  it('uses a low-latency viewer without a navigator thumbnail', async () => {
     render(<EagleImageViewer image={image} onClose={vi.fn()} />);
 
     await waitFor(() => expect(openSeadragonMock).toHaveBeenCalledTimes(1));
@@ -149,7 +149,7 @@ describe('EagleImageViewer', () => {
         maxImageCacheCount: 64,
         maxZoomPixelRatio: 8,
         minScrollDeltaTime: 0,
-        showNavigator: true,
+        showNavigator: false,
         tileSources: { type: 'image', url: image.src },
         zoomPerScroll: 1.12,
       }),

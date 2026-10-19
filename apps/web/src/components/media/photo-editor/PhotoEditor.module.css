@@ -1,0 +1,1082 @@
+.editor {
+  --photo-bg: #080808;
+  --photo-panel: #080808;
+  --photo-line: #2b2b2b;
+  --photo-text: #eeeff1;
+  --photo-muted: #93979f;
+  --photo-accent: #e8b26c;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 58px minmax(120px, 1fr) 198px 56px;
+  height: 100dvh;
+  color: var(--photo-text);
+  background: var(--photo-bg);
+  font-size: 12px;
+  outline: none;
+}
+.editor button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 5px 9px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.editor button:hover:not(:disabled) {
+  background: #ffffff0d;
+}
+.editor button:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.editor :focus-visible {
+  outline: 2px solid var(--photo-accent);
+  outline-offset: 3px;
+}
+.header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 max(12px, env(safe-area-inset-right)) 0 max(9px, env(safe-area-inset-left));
+  background: var(--photo-bg);
+}
+.title {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 14px;
+}
+.title strong {
+  display: none;
+}
+.title span {
+  color: var(--photo-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editor .exportButton {
+  background: transparent;
+  color: var(--photo-text);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.editor .exportButton:hover:not(:disabled) {
+  background: #ffffff0d;
+}
+.stage {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+}
+.stageTop,
+.stageBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--photo-muted);
+  font-size: 12px;
+}
+.stageTop {
+  min-height: 22px;
+  padding: 0 14px;
+  background: transparent;
+}
+.stageTop > :first-child {
+  color: #c9cbd1;
+  font-size: 11px;
+}
+.stageBottom {
+  min-height: 24px;
+  padding: 0 12px;
+  background: transparent;
+}
+.imageArea {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  justify-content: center;
+  align-items: center;
+  padding: 8px 0;
+  overflow: hidden;
+  position: relative;
+}
+.imageFrame {
+  position: relative;
+  flex: 0 1 auto;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+  overflow: hidden;
+  box-shadow: 0 2px 8px #0006;
+}
+.canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+.hiddenCanvas {
+  display: none;
+}
+.cropFrame {
+  position: absolute;
+  border: 1px solid #fff;
+  box-shadow: 0 0 0 2000px #0008;
+  touch-action: none;
+  cursor: grab;
+}
+.cropFrame:active {
+  cursor: grabbing;
+}
+.imageFrame[data-cropping='true'] {
+  overflow: visible;
+}
+.imageArea.cropImageArea {
+  padding: 20px;
+}
+.cropModes {
+  display: flex;
+  gap: 8px;
+  margin: 6px 0;
+}
+.editor .cropModes button {
+  border: 1px solid var(--photo-line);
+  min-height: 34px;
+  padding: 5px 16px;
+  border-radius: 18px;
+}
+.editor .cropHandle {
+  position: absolute;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+}
+.cropHandle::after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid white;
+  border-radius: 2px;
+  background: #171717;
+  box-shadow: 0 1px 4px #0009;
+}
+.cropHandle[data-crop-handle='nw'] {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+.cropHandle[data-crop-handle='n'] {
+  left: 50%;
+  top: 0;
+  cursor: ns-resize;
+}
+.cropHandle[data-crop-handle='ne'] {
+  left: 100%;
+  top: 0;
+  cursor: nesw-resize;
+}
+.cropHandle[data-crop-handle='e'] {
+  left: 100%;
+  top: 50%;
+  cursor: ew-resize;
+}
+.cropHandle[data-crop-handle='se'] {
+  left: 100%;
+  top: 100%;
+  cursor: nwse-resize;
+}
+.cropHandle[data-crop-handle='s'] {
+  left: 50%;
+  top: 100%;
+  cursor: ns-resize;
+}
+.cropHandle[data-crop-handle='sw'] {
+  left: 0;
+  top: 100%;
+  cursor: nesw-resize;
+}
+.cropHandle[data-crop-handle='w'] {
+  left: 0;
+  top: 50%;
+  cursor: ew-resize;
+}
+.cropToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.cropToolbar > button {
+  flex: 0 0 auto;
+  border-color: var(--photo-line);
+}
+.cropToolbar .ratioLabel {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  gap: 3px;
+}
+.cropToolbar .ratioLabel select {
+  width: 100%;
+  min-height: 34px;
+  padding: 4px 8px;
+}
+.cropToolbar + .slider {
+  margin-bottom: 0;
+}
+.cropControls .sectionTitle {
+  min-height: 28px;
+  margin-bottom: 2px;
+}
+.cropControls .cropToolbar {
+  margin-bottom: 4px;
+}
+.cropControls .adjustmentHeading {
+  margin-bottom: 2px;
+}
+.cropControls .precisionRow input,
+.editor .cropControls .precisionRow button {
+  min-height: 36px;
+}
+.cropControls .hint {
+  margin: 4px 0;
+  font-size: 10px;
+}
+.cropFrame span {
+  position: absolute;
+  background: #ffffff65;
+  pointer-events: none;
+}
+.cropFrame span:nth-child(1),
+.cropFrame span:nth-child(2) {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  left: 33.333%;
+}
+.cropFrame span:nth-child(2) {
+  left: 66.666%;
+}
+.cropFrame span:nth-child(3),
+.cropFrame span:nth-child(4) {
+  left: 0;
+  right: 0;
+  height: 1px;
+  top: 33.333%;
+}
+.cropFrame span:nth-child(4) {
+  top: 66.666%;
+}
+.history {
+  display: flex;
+  border-left: 1px solid #444;
+  padding-left: 8px;
+}
+.editor .history button,
+.editor .iconButton {
+  min-width: 40px;
+  min-height: 40px;
+}
+.editor .compare {
+  color: var(--photo-text);
+  border: 0;
+  min-width: 40px;
+  min-height: 40px;
+}
+.editor button[aria-pressed='true'] {
+  color: var(--photo-accent);
+  background: #e8b26c12;
+  border-color: #e8b26c55;
+}
+.renderState {
+  min-width: 86px;
+  text-align: right;
+}
+.panel {
+  grid-column: 1;
+  grid-row: 3;
+  background: var(--photo-panel);
+  border: 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0 max(16px, calc((100% - 960px) / 2));
+}
+.tabs {
+  grid-column: 1;
+  grid-row: 4;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 100px));
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0 max(3px, env(safe-area-inset-bottom));
+  background: var(--photo-bg);
+}
+.editor .tabs button {
+  flex-direction: row;
+  gap: 7px;
+  min-height: 36px;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 15px;
+  color: var(--photo-muted);
+}
+.tabs svg {
+  display: none;
+}
+.editor .tabs button[aria-pressed='true'] {
+  color: #20180b;
+  background: var(--photo-accent);
+  border-color: transparent;
+}
+.controls {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  flex: 1;
+}
+.adjustmentControls {
+  overflow-y: auto;
+}
+.sectionTitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  min-height: 40px;
+  border-bottom: 1px solid var(--photo-line);
+}
+.sectionTitle strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+.sectionTitle button {
+  font-size: 11px;
+  color: var(--photo-muted);
+  padding-right: 0;
+}
+.slider {
+  display: block;
+  margin-bottom: 16px;
+}
+.slider > span {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  color: #c6c8cd;
+  font-size: 13px;
+}
+.slider output {
+  color: var(--photo-muted);
+  font-variant-numeric: tabular-nums;
+}
+.slider input {
+  width: 100%;
+  min-height: 28px;
+  accent-color: var(--photo-accent);
+  cursor: pointer;
+  margin: 0;
+}
+.adjustmentHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.editor .adjustmentLabel {
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  font-size: 13px;
+  color: #c6c8cd;
+}
+.slider .numberInput {
+  width: 76px;
+  min-height: 30px;
+  padding: 3px 7px;
+  border: 1px solid var(--photo-line);
+  border-radius: 5px;
+  background: var(--photo-bg);
+  color: #c6c8cd;
+  text-align: right;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.precisionRow {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+.editor .precisionRow button {
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--photo-line);
+  font-size: 17px;
+}
+.precisionRow input {
+  min-height: 36px;
+}
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  margin-bottom: 30px;
+}
+.filters button {
+  flex-direction: column;
+  position: relative;
+  border-color: var(--photo-line);
+}
+.filters svg {
+  position: absolute;
+  right: 7px;
+  bottom: 12px;
+}
+.swatch {
+  display: block;
+  width: 100%;
+  height: 55px;
+  border-radius: 5px;
+  background: linear-gradient(150deg, #a7c3d3 10%, #71847e 48%, #344a40 49%, #b9ad89 80%);
+}
+.swatch[data-filter='vintage'] {
+  filter: sepia(0.6);
+}
+.swatch[data-filter='oceanic'] {
+  filter: hue-rotate(25deg);
+}
+.swatch[data-filter='monochrome'] {
+  filter: grayscale(1);
+}
+.geometry {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+.geometry button {
+  flex: 1;
+  border-color: var(--photo-line);
+}
+.ratioLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+.ratioLabel select {
+  min-height: 44px;
+  border: 1px solid var(--photo-line);
+  border-radius: 8px;
+  background: var(--photo-bg);
+  color: inherit;
+  padding: 8px 12px;
+}
+.hint,
+.note {
+  color: var(--photo-muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.note {
+  display: none;
+}
+.adjustmentsPanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-height: max-content;
+}
+.toolScrollFrame {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 24px;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  width: 100%;
+}
+.toolScrollViewport {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #82715a #ffffff0a;
+  user-select: none;
+}
+.toolScrollViewport::-webkit-scrollbar {
+  display: block;
+  height: 5px;
+}
+.toolScrollViewport::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: #82715a;
+}
+.toolScrollViewport > button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.editor .toolScrollArrow {
+  grid-column: 1;
+  grid-row: 1;
+  width: 24px;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0;
+  color: var(--photo-accent);
+}
+.editor .toolScrollArrow:last-child {
+  grid-column: 3;
+}
+.editor .toolScrollArrow[hidden] {
+  display: none;
+}
+.sectionTitle strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.adjustmentGroups {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+}
+.editor .adjustmentGroups button {
+  border: 0;
+  border-radius: 0;
+  color: var(--photo-muted);
+  font-size: 14px;
+  min-height: 36px;
+}
+.editor .adjustmentGroups button[aria-pressed='true'] {
+  color: var(--photo-text);
+  background: transparent;
+}
+.adjustmentOptions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 76px;
+  justify-content: safe center;
+  align-content: start;
+  gap: 10px;
+  min-height: 84px;
+  padding: 5px 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.editor .adjustmentOptions button {
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 72px;
+  padding: 8px 6px;
+  gap: 4px;
+  border-radius: 12px;
+  font-size: 12px;
+  background: #1c1c1c;
+}
+.editor .adjustmentOptions button[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--photo-accent);
+  color: #21180c;
+}
+.editor .adjustmentOptions button[aria-pressed='true'] > span {
+  color: #21180c;
+}
+.optionName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.optionValue {
+  color: #8c929c;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.optionValue[data-modified='true'] {
+  color: var(--photo-accent);
+}
+.pendingBadge {
+  color: #9297a0;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.parameterInspector {
+  order: -1;
+  flex-shrink: 0;
+  width: 700px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 0;
+  background: var(--photo-panel);
+}
+.parameterInspector .slider {
+  margin-bottom: 4px;
+}
+.parameterHint {
+  color: var(--photo-muted);
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+  text-align: center;
+  min-height: 15px;
+}
+.adjustmentCategoryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 36px;
+}
+.editor .adjustmentCategoryRow > button {
+  color: var(--photo-muted);
+  font-size: 12px;
+}
+.parameterRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+}
+.parameterRow > .slider {
+  flex: 1;
+  min-width: 0;
+}
+.slider[data-compact='true'] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.slider[data-compact='true'] .adjustmentHeading {
+  display: contents;
+}
+.slider[data-compact='true'] .adjustmentLabel {
+  display: none;
+}
+.slider[data-compact='true'] .numberInput {
+  grid-column: 2;
+  grid-row: 1;
+  width: 64px;
+  background: transparent;
+  border-color: transparent;
+}
+.slider[data-compact='true'] .precisionRow {
+  grid-column: 1;
+  grid-row: 1;
+}
+.error {
+  color: #ffc2b6;
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  align-items: center;
+  padding: 6px;
+  font-size: 13px;
+}
+.saveNotice {
+  position: absolute;
+  top: max(72px, calc(env(safe-area-inset-top) + 58px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - 32px);
+  padding: 12px 18px;
+  border: 1px solid #e8b26c55;
+  border-radius: 10px;
+  background: #23221ef5;
+  color: var(--photo-accent);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  font-size: 12px;
+}
+.confirmBackdrop {
+  position: absolute;
+  inset: 0;
+  background: #000a;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.confirm {
+  max-width: 400px;
+  background: var(--photo-panel);
+  border: 1px solid var(--photo-line);
+  border-radius: 16px;
+  padding: 24px;
+  line-height: 1.6;
+}
+.confirm h2 {
+  font-size: 18px;
+}
+.confirm p {
+  color: var(--photo-muted);
+}
+.confirm button {
+  border-color: var(--photo-line);
+  margin-right: 8px;
+}
+.watermarkCapabilities,
+.watermarkCategories,
+.watermarkOptions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+.watermarkCapabilities {
+  min-height: 42px;
+  justify-content: safe center;
+  gap: 4px;
+}
+.editor .watermarkCapabilities button {
+  flex-shrink: 0;
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid var(--photo-line);
+  border-radius: 16px;
+  font-size: 11px;
+}
+.watermarkCategories {
+  min-height: 38px;
+  justify-content: safe center;
+  gap: 10px;
+}
+.editor .watermarkCategories button {
+  flex-shrink: 0;
+  color: var(--photo-muted);
+  font-size: 14px;
+  border: 0;
+  background: transparent;
+  padding: 5px 10px;
+}
+.editor .watermarkCategories button[aria-pressed='true'] {
+  color: var(--photo-text);
+  font-weight: 600;
+}
+.watermarkOptions {
+  min-height: 100px;
+  justify-content: safe center;
+  padding: 4px 0;
+  gap: 10px;
+}
+.editor .watermarkOptions button {
+  flex: 0 0 92px;
+  flex-direction: column;
+  min-height: 82px;
+  height: 82px;
+  padding: 0;
+  gap: 0;
+  border-radius: 7px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: #202020;
+  color: var(--photo-text);
+}
+.editor .watermarkOptions button[aria-pressed='true'] {
+  border-color: var(--photo-accent);
+}
+.watermarkOptions button > span {
+  width: 100%;
+  font-size: 10px;
+  line-height: 20px;
+  background: #161616;
+}
+.watermarkThumbnail {
+  display: block;
+  width: 100%;
+  height: 58px;
+  object-fit: contain;
+}
+.watermarkOptions button > svg {
+  flex: 1;
+}
+.watermarkMetadataStatus {
+  color: var(--photo-muted);
+  font-size: 10px;
+}
+.watermarkSettingsBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 103;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 14px 12px max(14px, env(safe-area-inset-bottom));
+  background: #0009;
+}
+.watermarkSettings {
+  width: 420px;
+  max-width: 100%;
+  max-height: calc(100dvh - 50px);
+  overflow-y: auto;
+  background: #1c1c1c;
+  border: 1px solid var(--photo-line);
+  border-radius: 12px;
+  padding: 16px;
+}
+.watermarkSettingsHeading,
+.watermarkSettingsActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.watermarkSettingsPreview {
+  margin: 8px 0 12px;
+}
+.watermarkSettingsPreview canvas {
+  height: 110px;
+}
+.watermarkSettings label {
+  display: block;
+  margin-bottom: 12px;
+  color: #d3d3d3;
+  font-size: 12px;
+}
+.watermarkSettings input[type='text'] {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid #444;
+  border-radius: 5px;
+  background: #101010;
+  color: var(--photo-text);
+  padding: 7px 10px;
+  margin-top: 6px;
+}
+.watermarkSettings input[type='range'] {
+  width: 100%;
+  min-height: 36px;
+  accent-color: var(--photo-accent);
+}
+.watermarkSettings output {
+  float: right;
+  color: var(--photo-muted);
+}
+.editor .watermarkSettingsActions button {
+  min-height: 40px;
+  min-width: 84px;
+}
+.editor .watermarkApply {
+  background: var(--photo-accent);
+  color: #21180c;
+}
+@media (max-width: 760px) {
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 58px minmax(120px, 1fr) 198px 56px;
+  }
+  .header {
+    gap: 6px;
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .title span {
+    max-width: 36vw;
+  }
+  .title {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .stage {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 0;
+  }
+  .imageArea {
+    padding: 8px 0;
+  }
+  .imageFrame {
+    max-width: 100%;
+  }
+  .panel {
+    grid-column: 1;
+    grid-row: 3;
+    border-left: 0;
+    border-top: 0;
+    padding: 0 max(12px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+  .tabs {
+    grid-column: 1;
+    grid-row: 4;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 82px));
+    gap: 4px;
+    padding: 3px 0 max(3px, env(safe-area-inset-bottom));
+    border-right: 0;
+    border-top: 0;
+  }
+  .editor .tabs button {
+    flex-direction: row;
+    min-height: 36px;
+    font-size: 15px;
+  }
+  .controls {
+    padding: 0;
+    overflow-y: auto;
+  }
+  .adjustmentControls {
+    overflow-y: auto;
+  }
+  .adjustmentsPanel {
+    height: auto;
+  }
+  .adjustmentOptions {
+    min-height: 84px;
+    overflow-x: auto;
+  }
+  .editor .adjustmentOptions button {
+    min-height: 72px;
+    font-size: 12px;
+  }
+  .parameterInspector {
+    flex-shrink: 0;
+    margin-top: 0;
+    padding: 0;
+  }
+  .parameterHint {
+    margin-top: 0;
+  }
+  .adjustmentGroups {
+    margin-bottom: 0;
+  }
+  .sectionTitle {
+    margin-bottom: 0;
+    min-height: 32px;
+  }
+  .slider {
+    margin-bottom: 14px;
+  }
+  .precisionRow {
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+  }
+  .editor .precisionRow button,
+  .precisionRow input {
+    min-height: 44px;
+  }
+  .note {
+    display: none;
+  }
+  .filters {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+    margin-bottom: 12px;
+  }
+  .swatch {
+    height: 32px;
+  }
+  .renderState {
+    display: none;
+  }
+}
+@media (max-height: 500px) and (min-width: 600px) {
+  .saveNotice {
+    top: 44px;
+  }
+  .editor {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 40px minmax(80px, 1fr) 150px 40px;
+  }
+  .stage {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .tabs {
+    grid-column: 1;
+    grid-row: 4;
+    display: grid;
+    padding: 0;
+    border-top: 1px solid var(--photo-line);
+  }
+  .editor .tabs button {
+    flex-direction: row;
+    min-height: 34px;
+    font-size: 11px;
+  }
+  .panel {
+    grid-column: 1;
+    grid-row: 3;
+    border-top: 0;
+  }
+  .controls {
+    overflow-y: auto;
+  }
+  .adjustmentsPanel {
+    height: auto;
+  }
+  .adjustmentOptions {
+    min-height: 40px;
+    overflow-x: auto;
+  }
+  .adjustmentsPanel .sectionTitle,
+  .parameterHint,
+  .stageTop {
+    display: none;
+  }
+  .parameterInspector {
+    margin-top: 2px;
+  }
+  .editor .adjustmentGroups button {
+    min-height: 24px;
+    padding: 2px 6px;
+  }
+  .editor .adjustmentOptions button {
+    min-height: 35px;
+    padding: 2px 6px;
+    gap: 2px;
+  }
+  .slider .numberInput,
+  .editor .adjustmentLabel {
+    min-height: 24px;
+  }
+  .precisionRow input,
+  .editor .precisionRow button {
+    min-height: 28px;
+  }
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}

@@ -1,0 +1,76 @@
+# 照片编辑（第一阶段）
+
+当前目标是在本机逐项开发和验证网页照片编辑，同时为后续手机 WebView 保留通用 UI 和处理逻辑；本阶段不添加手机壳、不进行 App 打包。
+
+## 本地启动
+
+使用 Node.js 22 和 npm 10，安装依赖后运行 `npm run dev --workspace @sekereagle/web`。
+打开 `http://127.0.0.1:4173/dev/photo-editor`，选择本机 JPG、PNG 或 WebP 照片。
+这个入口仅存在于 Vite 开发环境，不连接数据库、对象存储或鉴权接口，也不绕过正式页面的登录。
+正式素材库在图片预览中提供「编辑照片」，读取认证接口提供的原文件，不以预览图冒充原图。
+开发入口提供 6000 × 2696 的真实相机照片，并在浏览器 IndexedDB 中提供明确标识的「本地测试相册」；它不连接、也不冒充服务器素材库。示例来源和许可见 fixtures/ATTRIBUTION.md。
+
+## 算法来源
+
+预览和保存共用标准公式与 Apache-2.0 的 `@silvia-odwyer/photon` 0.3.3；WASM 随构建本地提供，无 CDN 请求。照片基本调整不再把滑块数值直接传入 Photon 的加法亮度或 HSL 增饱和接口。
+
+- 曝光：-1…+1 EV，普通步长 0.01，共 201 个可选值。先用 W3C sRGB 传递函数转为线性光，再乘 `2^EV`，最后编码回 sRGB。不是旧的逐通道加减亮度。为已成片的相册照片采用此范围；它是本项目的交互取舍，不是 Adobe 的参数范围。相比先前 ±5 EV，同滑轨长度下拖动灵敏度降到五分之一；只减小 step 而不收窄范围，并不能解决鼠标和触摸拖动过敏。像素处理函数仍接受 ±5 EV，以保持底层 EV 语义。
+- 对比度：-100…+100，步长 1，共 201 个可选值。使用 ImageMagick 公开的归一化 sigmoid（负值用反函数），中点 50%，保持纯黑、纯白及中性中点。本项目标定 `strength = 6 × abs(value)/100`，使 +50 对应其文档的典型强度 3；该标定不是 Adobe 的闭源实现。
+- 饱和度：-100…+100，步长 1，共 201 个可选值。采用 W3C 的 sRGB 饱和度矩阵，系数 `s = 1 + value/100`，-100 为灰度、+100 为 2 倍色度。它与 Adobe 公开的端点语义相符，但不承诺与 Adobe 的内部色彩管理逐像素一致。
+- 中间调：Photon `gamma_correction`，滑块 -100…100 映射到 gamma `2^(value/200)`，即约 0.707…1.414；比旧版 0.5…2 更温和。
+- 复古、清冷：上游 `filter` 的 `vintage` / `oceanic`；黑白：`grayscale`。
+- 滤镜强度：在调整后原像素与预设结果间做线性插值，保留 alpha。
+
+新增 14 项均已接入真实像素处理，0 值跳过新增阶段，保留原有四项的中性输出和强度：
+
+| 选项       | 来源与实现                                                                              | 本项目强度标定                                                                             |
+| ---------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| 亮度       | glfx.js additive brightness，区别于线性光曝光                                           | ±100 对应 sRGB 加减 0.18                                                                   |
+| 高光、阴影 | GPUImage HighlightShadow 的单调端点曲线；反向调节使用其数值反函数，以亮度比例作用于 RGB | -100…100 对端点曲线线性混合，避免原参数低强度死区；改用 Rec.709 亮度权重，纯黑处分母保护   |
+| 黑白色阶   | GPUImage Levels 的输入 / 输出色阶                                                       | 黑场端点最多 0.12，白场端点最多 0.15；正黑抬黑、负黑压黑、正白提白、负白压白               |
+| 光感       | 上述阴影 / 高光曲线加中间调的组合控制                                                   | 正向抬阴影 0.45、压高光 0.30、gamma 最多 `2^0.2`；负向反转。此组合不是小米专有光感算法     |
+| 自然饱和度 | glfx.js Vibrance 的 max / average 自适应色度变化                                        | 内部 amount = 滑块 / 100 × 0.65；不承诺肤色识别                                            |
+| 色温、色调 | GPUImage WhiteBalance 的暖色 overlay 与 YIQ 色度偏移                                    | 色温 ±0.30 的 overlay 混合，色调最大 Q 偏移 0.05226；仅做相对冷暖，不伪称 RAW 开尔文白平衡 |
+| 褪色       | Levels 输出区间压缩                                                                     | 100 时黑场 0.16、白场 0.94                                                                 |
+| 锐化       | glfx.js UnsharpMask 的原图 + strength × (原图 − 模糊)                                   | 亮度通道，小半径 `longEdge × 0.0006`，强度最高 0.8                                         |
+| 清晰度     | 同一反遮罩公式，使用更大的局部邻域                                                      | 半径 `longEdge × 0.008`，强度最高 0.55；透明图像用预乘 alpha 的模糊避免隐形颜色污染        |
+| 颗粒       | glfx.js 的单色噪声，固定随机种子，并对归一化纹理双线性采样                              | 100 对应最多约 ±15 个 8-bit 码值；重复预览和保存不会重新随机                               |
+| 晕影       | glfx.js Vignette 的 smoothstep 边缘衰减                                                 | 正值压暗边缘、负值提亮；坐标映射到旋转 / 镜像后的最终裁剪区域                              |
+
+上游源码：[glfx.js adjustment shaders](https://github.com/evanw/glfx.js/tree/master/src/filters/adjust)、[triangle blur](https://github.com/evanw/glfx.js/blob/master/src/filters/blur/triangleblur.js)、[GPUImage HighlightShadow](https://github.com/BradLarson/GPUImage/blob/master/framework/Source/GPUImageHighlightShadowFilter.m)、[WhiteBalance](https://github.com/BradLarson/GPUImage/blob/master/framework/Source/GPUImageWhiteBalanceFilter.m)、[Levels](https://github.com/BradLarson/GPUImage/blob/master/framework/Source/GPUImageLevelsFilter.m)。新增模块的 BSD / MIT 完整声明见 `third-party/photo-editor/`；控件强度是本项目标定，不根据菜单数字推断原厂实现。
+
+源码：[colour_spaces.rs](https://github.com/silvia-odwyer/photon/blob/master/crate/src/colour_spaces.rs)、[effects.rs](https://github.com/silvia-odwyer/photon/blob/master/crate/src/effects.rs)、[filters.rs](https://github.com/silvia-odwyer/photon/blob/master/crate/src/filters.rs)。
+精确发布接口和行为以锁定的 npm 包内 `photon_rs.d.ts` 和 WASM 为准，主分支可能不同。
+
+范围和语义参考 [Adobe Camera Raw 官方说明](https://helpx.adobe.com/camera-raw/using/make-color-tonal-adjustments-camera.html)和 [Adobe Lightroom API 参数范围](https://developer.adobe.com/firefly-services/docs/lightroom/guides/apply-edits/)。Adobe 没有公开其完整调色内核，不把这些实现称为 Camera Raw 算法。
+公开数学依据：[W3C sRGB 转换](https://www.w3.org/TR/css-color-4/#color-conversion-code)、[W3C 饱和度矩阵](https://www.w3.org/TR/filter-effects-1/#feColorMatrixElement)、[ImageMagick sigmoid 公式](https://usage.imagemagick.org/color_mods/#sigmoidal)。
+例如低饱和像素 `(132,120,108)` 在旧版 +10 后变成 `(142,120,97)`，新版 +10 为 `(133,120,107)`；测试固定这些参考值，防止轻微操作产生过强变化。
+
+普通方向键或 +/- 按钮每次调整 1 个步长；Shift+方向键和 PageUp/PageDown 调整 10 个步长。数值框支持输入后回车，滑块双击归零。上述步长为本项目的交互选择，不能仅根据 Adobe 的显示范围推导内部步进。
+
+预览最长边 1280，照片色彩处理放在 Web Worker 中；预览与全尺寸 PNG 保存使用相同处理函数、操作顺序和裁剪几何。参考 `LatestFrameWorker`，仅保留一个运行帧和一个最新待处理帧，丢弃过期的排队帧并结清对应 Promise；16 ms 合并交互事件，已完成的顺序帧可持续显示，只有当前参数完成后才允许保存。缓存只保留屏幕代理图，修改水印时复用已处理照片，不常驻完整分辨率的输入 / 输出缓存。
+旋转按 90° 递增，支持水平镜像。裁剪工作区显示完整照片、半透明框外遮罩以及四角 / 四边共八个拖拽点；拖动框内移动裁切区域。自由模式独立调整宽高，固定模式锁定选择的比例，提供原始、1:1、4:3、3:4、3:2、2:3、5:4、4:5、16:9、9:16 和 21:9。固定模式拖动角点保持对角锚点，拖动边缘保持对边并以中心对称调整另一维；区域始终限制在照片内，触摸命中区 32 像素。一整次拖动合并为一次撤销，框及手柄都可用方向键微调；重置裁剪不清空调整和水印。不使用滚轮缩放，也不显示缩放滑杆。共享矩形几何决定预览和原始像素保存范围；裁切会减少输出尺寸，不人为插值放大。普通照片复用处理代理，颗粒 / 暗角开启时重新计算以保持效果相对裁切区域的位置。覆盖约束参考 sekerwatermark 的 CropMatrixCoverage，本实现使用原生网页指针事件及矩形取样，不调用 APK。
+裁剪工作区先点击「完成裁剪」进入「成片预览」，再「保存到相册」；原图对比期间禁用保存。只有当前参数的预览处理完成后才能保存。
+所有尺寸均使用参考 sekerwatermark `EditorScreen` 的纵向工作区：顶部关闭 / 撤销 / 重做 / 保存，中央照片，下方依次为对比与精细滑杆、分类、横向调整项，主工具导航固定在最底部。分类沿用「影调 / 色彩 / 细节」，选中调整项使用暖黄色实心样式。18 项均可使用，包括参考仓库的 17 项及现有「中间调」。分类记住选中项并自动滚动到可见位置；调整卡片双击归零，拖动一次产生一个撤销步骤，重复选择和未改变的设置不产生空历史。调整页重置只清空调整参数，保留滤镜、裁剪和水印。鼠标 / 触摸按住对比显示原图，松开恢复；键盘仍可切换对比。
+
+## 水印
+
+调整选项、水印设置、分类和模板行均提供原生横向滚动、可见滚动条及按边界启用的左右翻页按钮；鼠标可拖动或使用滚轮横移，触屏可左右滑动，工具行聚焦后可用左右方向键翻页。短窗口的工具面板允许纵向滚动，末尾选项不再被固定高度裁掉。
+
+- 底部水印工具提供摄影、标准、经典、胶片、运动、相框六类、13 个浏览器模板。版式参考 sekerwatermark 的 strip / side / overlay / frame / dark / poster / film 七种基本布局，由本仓库 Canvas 渲染，不依赖手机 APK。移植的是版式能力与交互，尚未与原厂 29 款模板做逐像素校准。
+- 根据模板能力提供白底 / 黑底或白字 / 黑字、拍摄参数和拍摄时间开关；「无水印」直接移除效果。
+- 文字编辑面板提供签名、显示机型、字号及文字透明度，具有实时小预览。确认合并为一次撤销，取消或 Escape 不改动照片。
+- exifr 只解析 Make / Model / FocalLength / FocalLengthIn35mmFormat / FNumber / ExposureTime / ISO / DateTimeOriginal。缺失字段保持缺失，禁用相应开关，不补造拍摄日期或参数。显示文字与原 EXIF 分离，GPS 不解析。
+- 统一合成顺序：照片调整与滤镜 → 几何裁剪 → 水印。照片调整只作用于照片，不影响水印底色、文字或边框。边框扩展画布，照片保留原有像素尺寸。预览、缩略图和全分辨率导出共用 `renderPhotoWatermark`。
+- 输出安全上限 4800 万像素、单边 16384。输出仍为新 PNG，不自动把源 EXIF / ICC 写入 PNG；水印是可见文字，不能把它当作新增的真实拍摄元数据。
+
+## 当前边界和后续验证
+
+- 原图保持不变；「保存到相册」创建新的 PNG 素材，文件名带「已编辑」后缀和时间戳。重新打开保存后的照片从中性参数开始，不恢复之前的调整参数。
+- 正式库通过现有认证分片上传流程保存。上传 DTO 只新增经过枚举校验的 `duplicatePolicy`；照片编辑指定 `CREATE_COPY`，普通导入保持 `SKIP`。用户资源归属继续由认证主体推导，不接受 ownerId 或 replacementAssetId。
+- 输入上限 4800 万像素；浏览器解码仍可能占用较多内存，不能据此宣称已通过手机真机性能验证。
+- 输出为浏览器 sRGB 画布编码的 PNG，不承诺保留原 EXIF、ICC、HDR 或 RAW 信息；透明 PNG 保留 alpha。
+- 当前曝光是 SDR 照片的线性光调整，高光压缩只能调整已有 RGB 信息，不能恢复已丢失的 RAW 高光或 HDR 信息。自由角度拉直、透视校正和自动增强不在本轮新增调节与水印范围内。
+- 当前曝光之后逐通道截断到 SDR 范围，没有高光滚降；对比度逐通道处理，饱和度使用图形滤镜矩阵。这些公式有公开依据，但组合效果未通过与成熟照片编辑器的参考输出比对，数学单测不等于照片观感验证。预览先缩小再调色，保存先全尺寸调色；非线性处理与缩放不交换，不能据共用函数声称二者逐像素一致。
+- 不接入外部图片服务。正式环境的授权与存储边界保持原流程。
+- 后续逐项完成编辑参数持久化、更多照片调整、真机手势与内存验证。

@@ -37,6 +37,8 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import {
   getEagleAsset,
+  getEagleAssetContentUrl,
+  uploadEagleAsset,
   getEagleTrashAsset,
   getEaglePyramidDescriptor,
   listEagleAssets,
@@ -1942,6 +1944,19 @@ export function SekerEaglePage({
         <EagleImageViewer
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
+          onSavePhoto={async (file) => {
+            const result = await uploadEagleAsset(accessToken, file, () => undefined, {
+              duplicatePolicy: 'CREATE_COPY',
+            });
+            await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
+            return { id: result.asset.id, name: file.name };
+          }}
+          editSource={
+            previewImageAsset &&
+            ['image/jpeg', 'image/png', 'image/webp'].includes(previewImageAsset.mimeType)
+              ? getEagleAssetContentUrl(previewImageAsset.id)
+              : undefined
+          }
           onClose={imagePreview.closePreview}
         />
       ) : null}

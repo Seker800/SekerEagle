@@ -49,6 +49,7 @@ export class EagleUploadService {
             create: {
               owner: { connect: { id: ownerId } },
               expectedContentSha256: input.contentSha256?.toLowerCase(),
+              duplicatePolicy: input.duplicatePolicy ?? 'SKIP',
             },
           },
         },

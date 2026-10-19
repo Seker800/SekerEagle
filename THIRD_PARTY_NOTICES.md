@@ -28,12 +28,44 @@ and licenses before redistribution.
 
 ## Image processing
 
+The browser photo editor uses Photon (`@silvia-odwyer/photon` 0.3.3),
+Copyright Silvia O'Dwyer and contributors, under Apache-2.0.
+Its WebAssembly binary is bundled locally. Preserve the package's `LICENSE.md`
+when redistributing it. Upstream: https://github.com/silvia-odwyer/photon.
+
+Additional browser photo controls adapt published shader formulas from:
+
+- glfx.js, Copyright (C) 2011 Evan Wallace, MIT. Brightness, vibrance,
+  unsharp-mask/pyramid convolution, monochrome noise and vignette.
+  Source: https://github.com/evanw/glfx.js. Complete notice:
+  `third-party/photo-editor/glfx-LICENSE.txt`.
+- GPUImage, Copyright (c) 2012 Brad Larson, Ben Cochran, Hugues Lismonde,
+  Keitaroh Kobayashi, Alaric Cole, Matthew Clark, Jacob Gundersen, Chris Williams,
+  BSD-3-Clause. Highlight/shadow curves, levels and white balance.
+  Source: https://github.com/BradLarson/GPUImage. Complete notice:
+  `third-party/photo-editor/GPUImage-LICENSE.txt`.
+
+The CPU adaptations, signed inverse curves, luminance-only detail processing,
+normalized grain coordinates and slider calibration are documented in
+`docs/photo-editor.md`. These are not Adobe or Xiaomi proprietary renderers.
+
+Photography metadata is read with exifr 7.1.3, Copyright (c) 2020 Mike Kovařík,
+Mutiny.cz, MIT. Upstream: https://github.com/MikeKovarik/exifr. Complete notice:
+`third-party/photo-editor/exifr-LICENSE.txt`.
+Only the photography-field whitelist is used; GPS is not parsed.
+
 The Node.js dependency tree includes Sharp distributions that bundle libvips.
 Those binary distributions report a combination of Apache-2.0, LGPL-3.0-or-later
 and MIT terms depending on platform. Preserve their bundled license notices when
 redistributing binary images or installers.
 
 ## Complete inventory
+
+The development-only photo workbench includes `fronalpstock.jpg`, a resized
+photograph by Hannes Röst, under CC BY-SA 3.0. This photograph is separate from
+the Apache-2.0 application source and is excluded from production bundles.
+See `apps/web/src/components/media/photo-editor/fixtures/ATTRIBUTION.md` for
+source, license, and modification details.
 
 - Node.js: `package-lock.json`
 - Python: `services/mlx-embedding/uv.lock`
