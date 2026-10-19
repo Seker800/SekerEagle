@@ -1,0 +1,58 @@
+"""RAW policy regression tests, independent of optional native decoder installation."""
+import importlib.util
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+import unittest
+from unittest.mock import MagicMock, patch
+
+
+class RawPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.rawpy = MagicMock()
+        self.image = MagicMock()
+        with patch.dict(sys.modules, {"rawpy": self.rawpy, "PIL": SimpleNamespace(Image=self.image)}):
+            spec = importlib.util.spec_from_file_location("raw_image", Path(__file__).with_name("raw_image.py"))
+            self.module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(self.module)
+        self.raw = MagicMock()
+        self.raw.sizes = SimpleNamespace(raw_width=11664, raw_height=8750, width=11648, height=8736, flip=6)
+        self.raw.postprocess.return_value = SimpleNamespace(shape=(5824, 4368, 3))
+
+    def test_high_resolution_original_keeps_dimensions_and_decodes_half_size(self):
+        with patch("builtins.open", MagicMock()):
+            result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff")
+        self.assertEqual((result["width"], result["height"]), (8736, 11648))
+        self.assertEqual((result["decodedWidth"], result["decodedHeight"]), (4368, 5824))
+        self.assertTrue(self.raw.postprocess.call_args.kwargs["half_size"])
+        self.assertTrue(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
+
+    def test_regular_raw_retains_full_decode_resolution(self):
+        self.raw.sizes = SimpleNamespace(raw_width=4100, raw_height=3100, width=4096, height=3072, flip=0)
+        self.raw.postprocess.return_value = SimpleNamespace(shape=(3072, 4096, 3))
+        with patch("builtins.open", MagicMock()):
+            self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff")
+        self.assertFalse(self.raw.postprocess.call_args.kwargs["half_size"])
+
+    def test_oversize_and_invalid_raw_rejected_before_unpack(self):
+        for w, h in [(16000, 12000), (0, 1000), (-1, 1000)]:
+            self.raw.sizes.raw_width, self.raw.sizes.raw_height = w, h
+            with self.assertRaises(ValueError):
+                self.module.decode_raw(self.raw, 120_000_000, 50_000_000)
+        self.raw.unpack.assert_not_called()
+
+    def test_probe_unpacks_without_rendering(self):
+        result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000)
+        self.assertEqual(result, {"width": 8736, "height": 11648})
+        self.raw.unpack.assert_called_once()
+        self.raw.postprocess.assert_not_called()
+
+    def test_oversized_decoded_output_is_not_saved(self):
+        self.raw.postprocess.return_value = SimpleNamespace(shape=(12000, 12000, 3))
+        with self.assertRaises(ValueError):
+            self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff")
+        self.image.fromarray.assert_not_called()
+
+
+if __name__ == "__main__":
+    unittest.main()
