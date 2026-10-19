@@ -624,22 +624,49 @@ try {
           await import('../../apps/api/dist/eagle/media-processing-facts.js');
         const stored = await db.eagleAsset.findUniqueOrThrow({ where: { id: sample.assetId } });
         const mode = sample.mode === 'photos' ? 'PHOTO' : 'MATERIAL';
-        await db.eagleAssetRendition.delete({ where: { id: edit.id } });
-        const [facts] = await readMediaProcessingFacts(db, stored.ownerId, mode, [sample.assetId]);
-        assert.equal(facts.renditionsReady, false, 'old RAW missing edit copy must be repairable');
-        await api(
-          `/admin/${sample.mode === 'photos' ? 'photo' : 'eagle'}-processing/reconcile`,
-          {},
+        const preview = detail.renditions.find(
+          (row) => row.kind === 'PREVIEW' && row.variant === 'default',
         );
-        await waitFor(
-          async () => {
-            const row = await api(`/${sample.mode}/assets/${sample.assetId}`);
-            return row.renditions.some(
-              (r) => r.variant === 'edit' && r.revision === row.mediaRevision,
-            );
+        for (const [variant, id] of [
+          ['edit', edit.id],
+          ['default', preview.id],
+        ]) {
+          await db.eagleAssetRendition.delete({ where: { id } });
+          const [facts] = await readMediaProcessingFacts(db, stored.ownerId, mode, [
+            sample.assetId,
+          ]);
+          assert.equal(
+            facts.renditionsReady,
+            false,
+            `RAW missing ${variant} copy must be repairable`,
+          );
+          await api(
+            `/admin/${sample.mode === 'photos' ? 'photo' : 'eagle'}-processing/reconcile`,
+            {},
+          );
+          await waitFor(
+            async () => {
+              const row = await api(`/${sample.mode}/assets/${sample.assetId}`);
+              return row.renditions.some(
+                (r) => r.variant === variant && r.revision === row.mediaRevision,
+              );
+            },
+            `RAW ${variant} derivative repair`,
+            120,
+          );
+        }
+        const preservedOriginal = await fetch(
+          `${origin}/api/${sample.mode}/assets/${sample.assetId}/original`,
+          {
+            headers: { cookie: `sekereagle_access=${accessToken}` },
           },
-          'RAW edit derivative repair',
-          120,
+        );
+        assert.equal(preservedOriginal.status, 200);
+        assert.equal(
+          createHash('sha256')
+            .update(Buffer.from(await preservedOriginal.arrayBuffer()))
+            .digest('hex'),
+          sample.sha256,
         );
       }
       const playback = detail.renditions.find(
