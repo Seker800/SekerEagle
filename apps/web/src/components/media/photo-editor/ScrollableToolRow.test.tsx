@@ -59,3 +59,46 @@ it('hides unnecessary navigation when every tool fits', () => {
   expect(screen.queryByRole('button', { name: '工具 · 向右滚动' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '选项' })).toBeEnabled();
 });
+
+function pointer(row: HTMLElement, type: string, x: number, buttons = 1, pointerType = 'mouse') {
+  const event = new MouseEvent(type, { bubbles: true, clientX: x, button: 0, buttons });
+  Object.defineProperties(event, { pointerId: { value: 1 }, pointerType: { value: pointerType } });
+  fireEvent(row, event);
+}
+it('drags the continuous tool strip without accidentally selecting the released thumbnail', () => {
+  const { row, select } = setup();
+  const capture = vi.fn();
+  Object.defineProperty(row, 'setPointerCapture', { value: capture });
+  row.scrollLeft = 200;
+  pointer(row, 'pointerdown', 100);
+  pointer(row, 'pointermove', 103);
+  expect(row.scrollLeft).toBe(200);
+  pointer(row, 'pointermove', 150);
+  expect(row.scrollLeft).toBe(150);
+  expect(capture).toHaveBeenCalledWith(1);
+  pointer(row, 'pointerup', 150);
+  fireEvent.click(screen.getByRole('button', { name: '选项' }));
+  expect(select).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '选项' }));
+  expect(select).toHaveBeenCalledOnce();
+});
+it('ends interrupted mouse gestures and leaves touch scrolling to the browser', () => {
+  const { row, select } = setup();
+  Object.defineProperty(row, 'setPointerCapture', { value: vi.fn() });
+  pointer(row, 'pointerdown', 100);
+  pointer(row, 'pointermove', 150);
+  pointer(row, 'pointercancel', 150);
+  fireEvent.click(screen.getByRole('button', { name: '选项' }));
+  expect(select).toHaveBeenCalledOnce();
+  pointer(row, 'pointerdown', 100);
+  pointer(row, 'lostpointercapture', 100);
+  pointer(row, 'pointermove', 150);
+  const left = row.scrollLeft;
+  pointer(row, 'pointerdown', 100);
+  pointer(row, 'pointermove', 130, 0);
+  pointer(row, 'pointermove', 180);
+  expect(row.scrollLeft).toBe(left);
+  pointer(row, 'pointerdown', 100, 1, 'touch');
+  pointer(row, 'pointermove', 150, 1, 'touch');
+  expect(row.scrollLeft).toBe(left);
+});
