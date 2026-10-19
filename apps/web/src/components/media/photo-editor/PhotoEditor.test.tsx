@@ -74,27 +74,62 @@ describe('photo editor interactions', () => {
       window.removeEventListener('keydown', galleryNavigation);
     }
   });
-  it('supports free and fixed framing, resize handles, undo, reset and extra aspect ratios', async () => {
+  it('starts free, explicitly selects ratios in either orientation, and supports undo and reset', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
-    expect(screen.queryByRole('slider', { name: '缩放' })).not.toBeInTheDocument();
-    expect(screen.getAllByRole('option')).toHaveLength(11);
-    fireEvent.change(screen.getByRole('combobox', { name: '裁剪比例' }), {
-      target: { value: '9:16' },
-    });
-    fireEvent.click(screen.getByRole('button', { name: '自由' }));
-    expect(screen.queryByRole('combobox', { name: '裁剪比例' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: '裁剪右下角' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '纵向' }));
+    expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '9:16', exact: true }));
+    expect(screen.getByRole('button', { name: '9:16', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '横向' }));
+    expect(screen.getByRole('button', { name: '16:9', exact: true })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
-    expect(screen.getByRole('combobox', { name: '裁剪比例' })).toHaveValue('9:16');
+    expect(screen.getByRole('button', { name: '9:16', exact: true })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '重做' }));
-    expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '固定比例' }));
-    expect(screen.getByRole('combobox', { name: '裁剪比例' })).toHaveValue('9:16');
+    expect(screen.getByRole('button', { name: '16:9', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '自由' }));
+    expect(screen.getByRole('button', { name: '裁剪右下角' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: '重置裁剪' }));
-    expect(screen.getByRole('combobox', { name: '裁剪比例' })).toHaveValue('original');
+    expect(screen.getByRole('button', { name: '自由' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '纵向' }));
+    for (const ratio of ['1:1', '3:4', '2:3', '4:5', '9:16', '9:21']) {
+      fireEvent.click(screen.getByRole('button', { name: ratio, exact: true }));
+      expect(screen.getByRole('button', { name: ratio, exact: true })).toHaveAttribute('aria-pressed', 'true');
+    }
+    fireEvent.click(screen.getByRole('button', { name: '原始比例' }));
+    expect(screen.getByRole('button', { name: '原始比例' })).toHaveAttribute('aria-pressed', 'true');
+  });
+  it('supports negative sharpening and clarity with undo and reset', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '细节' }));
+    for (const label of ['锐化', '清晰度']) {
+      fireEvent.click(screen.getByRole('button', { name: label }));
+      const slider = screen.getByRole('slider', { name: label });
+      expect(slider).toHaveAttribute('min', '-100');
+      fireEvent.change(slider, { target: { value: '-60' } });
+      expect(slider).toHaveValue('-60');
+      fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+      expect(slider).toHaveValue('0');
+      fireEvent.click(screen.getByRole('button', { name: '重做' }));
+      expect(slider).toHaveValue('-60');
+      fireEvent.doubleClick(slider);
+      expect(slider).toHaveValue('0');
+    }
+  });
+  it('presents filters in a scrollable row and retains strength when switching filters', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '滤镜', exact: true }));
+    expect(screen.getByRole('group', { name: '照片滤镜', exact: true })).toHaveAttribute('tabindex', '0');
+    fireEvent.click(screen.getByRole('button', { name: '复古', exact: true }));
+    fireEvent.change(screen.getByRole('slider', { name: '滤镜强度' }), { target: { value: '42' } });
+    fireEvent.click(screen.getByRole('button', { name: '黑白', exact: true }));
+    expect(screen.getByRole('slider', { name: '滤镜强度' })).toHaveValue('42');
+    fireEvent.click(screen.getByRole('button', { name: '原图', exact: true }));
+    expect(screen.queryByRole('slider', { name: '滤镜强度' })).not.toBeInTheDocument();
   });
   it('reopens a full-resolution framed photo larger than the old 24 megapixel limit', async () => {
     class FramedImage {
@@ -213,9 +248,7 @@ describe('photo editor interactions', () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
-    fireEvent.change(screen.getByRole('combobox', { name: '裁剪比例' }), {
-      target: { value: '1:1' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: '1:1', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '水印' }));
     fireEvent.click(screen.getByRole('button', { name: '摄影信息条' }));
     fireEvent.click(screen.getByRole('button', { name: '调整' }));
@@ -223,7 +256,7 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '重置全部' }));
     expect(screen.getByRole('slider', { name: '曝光' })).toHaveValue('0');
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
-    expect(screen.getByRole('combobox', { name: '裁剪比例' })).toHaveValue('1:1');
+    expect(screen.getByRole('button', { name: '1:1', exact: true })).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: '水印' }));
     expect(screen.getByRole('button', { name: '摄影信息条' })).toHaveAttribute(
       'aria-pressed',
@@ -251,9 +284,7 @@ describe('photo editor interactions', () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={save} />);
     await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
-    fireEvent.change(screen.getByRole('combobox', { name: '裁剪比例' }), {
-      target: { value: '1:1' },
-    });
+    fireEvent.click(screen.getByRole('button', { name: '1:1', exact: true }));
     const done = screen.getByRole('button', { name: '完成裁剪' });
     await waitFor(() => expect(done).toBeEnabled());
     fireEvent.click(done);

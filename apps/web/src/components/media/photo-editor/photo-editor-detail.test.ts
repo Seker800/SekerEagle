@@ -34,6 +34,24 @@ describe('spatial photo controls', () => {
     expect(sharp[(width / 2 - 5) * 4]).toBe(96);
     expect(clarity[(width / 2 - 5) * 4]).toBeLessThan(96);
   });
+  it.each(['sharpen', 'clarity'] as const)('uses negative %s to soften contrast without changing alpha or the source', (key) => {
+    const width = 512, height = 4, input = solid(width, height, 96);
+    for (let y = 0; y < height; y++)
+      for (let x = width / 2; x < width; x++) input.set([160, 160, 160, 255], (y * width + x) * 4);
+    const before = input.slice();
+    const edits = { ...DEFAULT_PHOTO_EDITS, [key]: -100 };
+    const result = applyPhotoDetail(input, width, height, edits);
+    expect(result[(width / 2 - 1) * 4]).toBeGreaterThan(96);
+    expect(result[width / 2 * 4]).toBeLessThan(160);
+    expect(result[(width / 2 - 5) * 4]).toBe(key === 'sharpen' ? 96 : expect.any(Number));
+    if (key === 'clarity') expect(result[(width / 2 - 5) * 4]).toBeGreaterThan(96);
+    expect(input).toEqual(before);
+    expect(applyPhotoDetail(input, width, height, { ...edits, [key]: -200 })).toEqual(result);
+    for (let i = 3; i < result.length; i += 4) expect(result[i]).toBe(input[i]);
+    expect(applyPhotoDetail(solid(3, 3), 3, 3, edits)).toEqual(solid(3, 3));
+    const transparent = new Uint8Array([255, 0, 0, 0, 128, 128, 128, 255, 0, 255, 0, 0]);
+    expect(applyPhotoDetail(transparent, 3, 1, edits)).toEqual(transparent);
+  });
   it('does not pull invisible RGB colors into the visible photo when sharpening', () => {
     const pixels = new Uint8Array([255, 0, 0, 0, 128, 128, 128, 255, 0, 255, 0, 0]);
     const result = applyPhotoDetail(pixels, 3, 1, {
