@@ -104,3 +104,40 @@ void test('永久 PAT 被撤销后仍然拒绝认证', async () => {
   );
   assert.equal(lastUsedUpdated, false);
 });
+
+void test('PAT last-used tracking is bounded without weakening revocation checks', async () => {
+  for (const lastUsedAt of [new Date(), new Date(Date.now() - 120_000), null]) {
+    const writes: Array<{ where?: Record<string, unknown> }> = [];
+    const record = {
+      id: 'pat-1',
+      userId: 'owner-1',
+      scopes: ['capture:write'],
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt,
+      user: {
+        id: 'owner-1',
+        email: 'owner@example.invalid',
+        role: UserRole.USER,
+        authVersion: 1,
+        disabledAt: null,
+      },
+    };
+    const write = async (query: { where?: Record<string, unknown> }) => {
+      writes.push(query);
+      return { count: 1 };
+    };
+    const prisma = {
+      personalAccessToken: { findUnique: async () => record, update: write, updateMany: write },
+    } as unknown as PrismaService;
+    const principal = await new PatService(prisma).authenticate('sea_pat_test-token');
+    assert.equal(principal.sub, 'owner-1');
+    if (lastUsedAt && Date.now() - lastUsedAt.getTime() < 60_000) assert.equal(writes.length, 0);
+    else {
+      assert.equal(writes.length, 1);
+      assert.equal(writes[0]?.where?.userId, 'owner-1');
+      assert.equal(writes[0]?.where?.revokedAt, null);
+      assert.ok(Array.isArray(writes[0]?.where?.OR));
+    }
+  }
+});
