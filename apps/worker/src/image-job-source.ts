@@ -18,6 +18,7 @@ export function selectImageJobSource(asset: ImageSourceAsset, kind: EagleMediaJo
     const preview = asset.renditions.find(
       (rendition) =>
         rendition.kind === 'PREVIEW' &&
+        rendition.mimeType.startsWith('image/') &&
         rendition.revision === asset.mediaRevision &&
         rendition.status === 'READY',
     );

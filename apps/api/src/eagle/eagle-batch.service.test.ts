@@ -288,7 +288,15 @@ test('batch trash rejects inside the transaction so partial updates roll back', 
   const service = new EagleService({
     $transaction: async (callback: (transaction: unknown) => Promise<unknown>) => {
       try {
-        return await callback({ eagleAsset: { updateMany: async () => ({ count: 1 }) } });
+        return await callback({
+          eagleAsset: {
+            findMany: async () => [
+              { id: 'asset-1', mediaRevision: 1 },
+              { id: 'asset-2', mediaRevision: 1 },
+            ],
+            updateMany: async () => ({ count: 1 }),
+          },
+        });
       } catch (error) {
         rejectionWasInsideTransaction = true;
         throw error;

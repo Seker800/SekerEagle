@@ -90,3 +90,31 @@ test('palette extraction fails closed when its dependent thumbnail is unavailabl
     /READY_THUMBNAIL_MISSING/,
   );
 });
+
+test('image AI jobs skip video motion previews', () => {
+  const source = selectImageJobSource(
+    {
+      originalObjectKey: 'original.jpg',
+      mimeType: 'image/jpeg',
+      mediaRevision: 1,
+      renditions: [
+        {
+          kind: 'PREVIEW',
+          revision: 1,
+          status: 'READY',
+          storageKey: 'motion.mp4',
+          mimeType: 'video/mp4',
+        },
+        {
+          kind: 'PREVIEW',
+          revision: 1,
+          status: 'READY',
+          storageKey: 'still.webp',
+          mimeType: 'image/webp',
+        },
+      ],
+    },
+    'GENERATE_EMBEDDING',
+  );
+  assert.equal(source.storageKey, 'still.webp');
+});

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
+import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleImageViewer.module.css';
 type ViewerStatus = 'loading' | 'ready' | 'error';
@@ -309,6 +310,7 @@ export function EagleImageViewer({
         onClick={(event) => event.stopPropagation()}
       >
         <div className={styles.stage}>
+          <EagleLivePhotoPlayback sourceUrl={image.motionSrc} posterUrl={image.src} />
           <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
           {status !== 'ready' ? (
             <div className={styles.loadState} role={status === 'error' ? 'alert' : 'status'}>

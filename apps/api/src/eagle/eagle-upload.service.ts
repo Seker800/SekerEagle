@@ -336,6 +336,8 @@ export class EagleUploadService {
               lifecycleStatus: 'PROCESSING',
               mediaErrorCode: null,
               mediaRevision: assetRevision,
+              livePhotoIdentifier: null,
+              livePhotoRole: null,
               rowVersion: { increment: 1 },
             },
           });

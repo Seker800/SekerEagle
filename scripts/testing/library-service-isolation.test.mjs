@@ -899,3 +899,69 @@ test('full photo month index excludes other owners, materials, trash and hidden 
     f.materials.listAssets(f.ownerId, { limit: 10, cursor: index.months[1].cursor }),
   );
 });
+
+test('Live Photo pairs enforce scope, privacy, uniqueness, revision and component lifecycle', async () => {
+  const f = await fixtures();
+  const foreign = await fixtures();
+  const identifier = randomUUID();
+  await prisma.eagleAsset.update({
+    where: { id: f.photo.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+  });
+  const movie = async (ownerId, libraryMode) => {
+    const id = randomUUID();
+    return prisma.eagleAsset.create({
+      data: {
+        id,
+        ownerId,
+        libraryMode,
+        originalName: 'live.mov',
+        displayName: 'live',
+        normalizedDisplayName: 'live',
+        mimeType: 'video/quicktime',
+        format: 'mov',
+        mediaRevision: 1,
+        byteSize: 1,
+        originalObjectKey: `users/${ownerId}/assets/${id}/original.mov`,
+        lifecycleStatus: 'READY',
+        livePhotoIdentifier: identifier,
+        livePhotoRole: 'MOTION',
+        renditions: {
+          create: {
+            kind: 'PREVIEW',
+            variant: 'default',
+            revision: 1,
+            storageKey: `users/${ownerId}/assets/${id}/preview.mp4`,
+            mimeType: 'video/mp4',
+            byteSize: 1,
+            status: 'READY',
+          },
+        },
+      },
+    });
+  };
+  await movie(f.ownerId, 'MATERIAL');
+  await movie(foreign.ownerId, 'PHOTO');
+  const read = () => f.photos.getAsset(f.ownerId, f.photo.id);
+  assert.equal((await read()).livePhotoMotion, undefined);
+  const motion = await movie(f.ownerId, 'PHOTO');
+  assert.equal((await read()).livePhotoMotion.assetId, motion.id);
+  await prisma.eagleAsset.update({ where: { id: motion.id }, data: { isPrivate: true } });
+  assert.equal((await read()).livePhotoMotion, undefined);
+  await prisma.eagleAsset.update({
+    where: { id: motion.id },
+    data: { isPrivate: false, mediaRevision: 2 },
+  });
+  assert.equal((await read()).livePhotoMotion, undefined);
+  await prisma.eagleAsset.update({ where: { id: motion.id }, data: { mediaRevision: 1 } });
+  const duplicate = await movie(f.ownerId, 'PHOTO');
+  assert.equal((await read()).livePhotoMotion, undefined);
+  await prisma.eagleAsset.delete({ where: { id: duplicate.id } });
+  assert.equal((await f.photos.setTrash(f.ownerId, [f.photo.id], false)).affectedAssetCount, 2);
+  assert.equal((await f.photos.setTrash(f.ownerId, [f.photo.id], true)).affectedAssetCount, 2);
+  assert.equal((await read()).livePhotoMotion.assetId, motion.id);
+  assert.equal((await f.photos.setTrash(f.ownerId, [motion.id], false)).affectedAssetCount, 1);
+  assert.equal((await read()).deletedAt, null);
+  assert.equal((await read()).livePhotoMotion, undefined);
+  assert.equal((await f.materials.listAssets(f.ownerId, { limit: 50 })).items.length, 2);
+});

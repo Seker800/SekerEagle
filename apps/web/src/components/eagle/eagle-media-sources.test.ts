@@ -85,3 +85,28 @@ describe('Eagle media sources', () => {
     expect(needsEagleImagePyramid(null, 8_000)).toBe(false);
   });
 });
+
+it('keeps the still preview when a motion rendition comes first and scopes paired playback URLs', async () => {
+  const { getEagleLivePhotoContentUrl, collapseLivePhotoComponents } =
+    await import('./eagle-media-sources');
+  const still = {
+    ...asset,
+    libraryMode: 'PHOTO' as const,
+    renditions: [
+      { id: 'motion', kind: 'PREVIEW', revision: 3, mimeType: 'video/mp4' },
+      ...asset.renditions,
+    ],
+  } as EagleAssetListItem;
+  expect(getEaglePreviewContentUrl(still)).toContain('preview-1');
+  expect(getEagleLivePhotoContentUrl(still)).toBe('/api/photos/assets/asset-1/renditions/motion');
+  const paired = {
+    ...asset,
+    libraryMode: 'PHOTO' as const,
+    livePhotoMotion: { assetId: 'movie', renditionId: 'play', revision: 1 },
+  };
+  expect(getEagleLivePhotoContentUrl(paired)).toBe('/api/photos/assets/movie/renditions/play');
+  const movie = { ...asset, id: 'movie', mimeType: 'video/quicktime' };
+  expect(collapseLivePhotoComponents([paired, movie])).toEqual([paired]);
+  expect(collapseLivePhotoComponents([movie])).toEqual([movie]);
+  expect(getEagleLivePhotoContentUrl(movie)).toBeNull();
+});

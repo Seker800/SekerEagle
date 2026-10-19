@@ -47,6 +47,7 @@ import {
   taskBlocksAssetReady,
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces, FACE_MODEL_VERSION } from './photo-faces';
+import { inspectLivePhotoImage } from './live-photo';
 import { analyzePhotoPixels, readPhotoExif, PHOTO_ANALYSIS_VERSION } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
@@ -300,7 +301,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   }
   if (job.kind === 'ANALYZE_PHOTO_FACES') {
     if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
-    const preview = asset.renditions.find((row) => row.kind === 'PREVIEW');
+    const preview = asset.renditions.find(
+      (row) => row.kind === 'PREVIEW' && row.mimeType.startsWith('image/'),
+    );
     if (!preview) throw new Error('PHOTO_FACE_PREVIEW_NOT_READY');
     assertOwnedKey(asset.ownerId, preview.storageKey);
     const object = await storage.send(
@@ -435,8 +438,13 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
                 ...(await analyzePhotoPixels(source)),
               }
             : null;
-        return { metadata, palette: null, rendered, photoAnalysis };
+        const livePhoto =
+          originalPath && taskBlocksAssetReady(job.kind)
+            ? await inspectLivePhotoImage(originalPath)
+            : null;
+        return { metadata, palette: null, rendered, photoAnalysis, livePhoto };
       },
+      taskBlocksAssetReady(job.kind),
     );
     if (sourceDetails.verifiesOriginalHash) {
       assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
@@ -530,6 +538,32 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         status: 'READY' as const,
       });
     }
+    const livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
+    if (livePhoto?.motion) {
+      const motionKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/motion.mp4`;
+      await storage.send(
+        new PutObjectCommand({
+          Bucket: s3Bucket,
+          Key: motionKey,
+          Body: livePhoto.motion.data,
+          ContentType: 'video/mp4',
+        }),
+      );
+      renditions.push({
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        kind: 'PREVIEW',
+        variant: 'motion',
+        revision: job.assetRevision,
+        storageKey: motionKey,
+        mimeType: 'video/mp4',
+        byteSize: BigInt(livePhoto.motion.data.length),
+        width: livePhoto.motion.width,
+        height: livePhoto.motion.height,
+        status: 'READY',
+      });
+    }
     await prisma.$transaction(async (transaction) => {
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
         where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
@@ -608,6 +642,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           sha256,
           width: processed.metadata.autoOrient.width ?? processed.metadata.width,
           height: processed.metadata.autoOrient.height ?? processed.metadata.height,
+          livePhotoIdentifier: livePhoto?.identifier ?? null,
+          livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
         },
       });
     });
@@ -786,6 +822,8 @@ async function processVideo(
           width: metadata.width,
           height: metadata.height,
           durationMs: metadata.durationMs,
+          livePhotoIdentifier: metadata.livePhotoIdentifier ?? null,
+          livePhotoRole: metadata.livePhotoIdentifier ? 'MOTION' : null,
         },
       });
     });

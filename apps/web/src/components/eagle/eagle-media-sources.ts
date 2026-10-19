@@ -11,8 +11,10 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
     (rendition) => rendition.revision === asset.mediaRevision,
   );
   const selected =
-    currentRenditions.find(({ kind }) => kind === 'PREVIEW') ??
-    currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
+    currentRenditions.find(
+      ({ kind, mimeType }) =>
+        kind === 'PREVIEW' && (isVideoAsset(asset) || !mimeType || mimeType.startsWith('image/')),
+    ) ?? currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
   return selected
     ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind, asset.libraryMode)
     : null;
@@ -70,4 +72,30 @@ export function getEagleVideoContentUrl(asset: EagleAssetListItem): string | nul
   return asset.mimeType === 'video/mp4' && asset.lifecycleStatus === 'READY'
     ? getEagleAssetContentUrl(asset.id, asset.libraryMode)
     : null;
+}
+
+function isVideoAsset(asset: EagleAssetListItem) {
+  return !asset.mimeType.startsWith('image/');
+}
+export function getEagleLivePhotoContentUrl(asset: EagleAssetListItem): string | null {
+  if (!asset.mimeType.startsWith('image/')) return null;
+  const embedded = asset.renditions.find(
+    (row) =>
+      row.kind === 'PREVIEW' &&
+      row.mimeType === 'video/mp4' &&
+      row.revision === asset.mediaRevision,
+  );
+  const motion = embedded ? { assetId: asset.id, renditionId: embedded.id } : asset.livePhotoMotion;
+  return motion
+    ? libraryApiPath(
+        `/api/eagle/assets/${encodeURIComponent(motion.assetId)}/renditions/${encodeURIComponent(motion.renditionId)}`,
+        asset.libraryMode ?? 'MATERIAL',
+      )
+    : null;
+}
+export function collapseLivePhotoComponents(assets: EagleAssetListItem[], sources = assets) {
+  const videos = new Set(
+    sources.flatMap((asset) => (asset.livePhotoMotion ? [asset.livePhotoMotion.assetId] : [])),
+  );
+  return assets.filter((asset) => !videos.has(asset.id));
 }

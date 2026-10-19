@@ -4,7 +4,12 @@ import { t } from '../../i18n';
 import { useEffect, useRef, type ReactNode } from 'react';
 import { IconX } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
-import { getEaglePreviewContentUrl, getEagleVideoContentUrl } from './eagle-media-sources';
+import {
+  getEaglePreviewContentUrl,
+  getEagleVideoContentUrl,
+  getEagleLivePhotoContentUrl,
+} from './eagle-media-sources';
+import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
@@ -81,6 +86,12 @@ export function EagleAssetLightbox({
             (dx < 0 ? navigation.onNext : navigation.onPrevious)();
         }}
       >
+        {!loading && previewUrl && (
+          <EagleLivePhotoPlayback
+            sourceUrl={getEagleLivePhotoContentUrl(asset)}
+            posterUrl={previewUrl}
+          />
+        )}
         {navigation && (
           <button
             type="button"

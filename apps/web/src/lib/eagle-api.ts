@@ -69,6 +69,7 @@ export interface PhotoMetadata {
   perceptualHash: string | null;
 }
 export interface EagleAssetListItem {
+  livePhotoMotion?: { assetId: string; renditionId: string; revision: number };
   chronologicalAt?: string;
   photoMetadata?: PhotoMetadata | null;
   libraryMode?: LibraryMode;
@@ -106,6 +107,7 @@ export interface EagleAsset extends EagleAssetListItem {
 }
 
 export interface EagleAssetUpdate {
+  livePhotoComponent?: boolean;
   chronologicalAt?: string;
   photoMetadata?: PhotoMetadata | null;
   id: string;
@@ -334,11 +336,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     signal?: AbortSignal,
   ) {
     if (!ids.length) return [];
-    return api<
-      Array<
-        Pick<EagleAsset, 'id' | 'lifecycleStatus' | 'mediaErrorCode' | 'updatedAt' | 'renditions'>
-      >
-    >('/eagle/asset-updates', {
+    return api<EagleAssetUpdate[]>('/eagle/asset-updates', {
       method: 'POST',
       body: JSON.stringify({ assetIds: ids }),
       signal,

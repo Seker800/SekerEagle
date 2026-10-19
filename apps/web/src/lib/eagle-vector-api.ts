@@ -77,6 +77,7 @@ export interface EagleVectorAssetPreview {
   renditions: Array<{
     id: string;
     kind?: 'THUMBNAIL' | 'PREVIEW';
+    mimeType?: string;
     revision?: number;
     width: number | null;
     height: number | null;
@@ -140,8 +141,9 @@ export function createEagleVectorApi(libraryMode: LibraryMode = 'MATERIAL') {
 
   const getVectorPreviewUrl = (asset: Pick<EagleVectorAssetPreview, 'id' | 'renditions'>) => {
     const rendition =
-      asset.renditions.find(({ kind }) => kind === 'PREVIEW') ??
-      asset.renditions.find(({ kind }) => kind === 'THUMBNAIL');
+      asset.renditions.find(
+        ({ kind, mimeType }) => kind === 'PREVIEW' && (!mimeType || mimeType.startsWith('image/')),
+      ) ?? asset.renditions.find(({ kind }) => kind === 'THUMBNAIL');
     return rendition
       ? getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind ?? 'THUMBNAIL')
       : null;

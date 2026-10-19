@@ -1,0 +1,42 @@
+.root {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.root .video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #090a0d;
+  pointer-events: auto;
+}
+.root .toggle {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #77603a;
+  border-radius: 7px;
+  background: #1c1a17e6;
+  color: #edc886;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.error {
+  position: absolute;
+  top: 58px;
+  left: 16px;
+  padding: 8px;
+  background: #231b17;
+  color: #efb6a0;
+  border-radius: 6px;
+}

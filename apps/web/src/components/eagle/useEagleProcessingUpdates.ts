@@ -52,7 +52,12 @@ export function useEagleProcessingUpdates(input: {
     const updates = updatesQuery.data;
     if (!updates?.length) return;
     input.assetStore.mergeProcessingUpdates(updates);
-    if (libraryMode === 'PHOTO' && updates.some((row) => row.lifecycleStatus === 'READY'))
+    if (
+      updates.some(
+        (row) =>
+          row.lifecycleStatus === 'READY' && (libraryMode === 'PHOTO' || row.livePhotoComponent),
+      )
+    )
       void queryClient.invalidateQueries({ queryKey: input.assetsQueryKey });
   }, [input.assetStore, input.assetsQueryKey, updatesQuery.data, libraryMode, queryClient]);
 }

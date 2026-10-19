@@ -17,6 +17,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { JwtService } from '@nestjs/jwt';
 import sharp from 'sharp';
+import { createLivePhotoFixtures } from './live-photo-fixtures.mjs';
 import { createCameraFixtures } from './camera-media-fixtures.mjs';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 
@@ -264,7 +265,8 @@ try {
         .catch(() => false),
     'API',
   );
-  const api = async (path, body, method = body ? 'POST' : 'GET') => {
+  const api = async (path, body, method = body ? 'POST' : 'GET', attempt = 0) => {
+    await sleep(200);
     const response = await fetch(`${origin}/api${path}`, {
       method,
       headers: {
@@ -274,6 +276,12 @@ try {
       },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
+    if (response.status === 429 && attempt < 3) {
+      await response.arrayBuffer();
+      const seconds = Number(response.headers.get('retry-after') ?? '2');
+      await sleep(Math.max(1, Math.min(60, seconds || 2)) * 1000);
+      return api(path, body, method, attempt + 1);
+    }
     if (!response.ok)
       throw new Error(`Test API ${path}: ${response.status} ${await response.text()}`);
     return response.status === 204 ? undefined : response.json();
@@ -477,6 +485,98 @@ try {
       }
     }
   }
+  const liveCases = [];
+  if (process.env.PHOTO_WORKBENCH_LIVE === '1') {
+    const fixtures = await createLivePhotoFixtures(
+      join(root, '.omx/test-live-photos/workbench'),
+      source,
+    );
+    // Movie-first imports verify pairing does not depend on upload order.
+    const ordered = [fixtures[1], fixtures[0], fixtures[2], fixtures[3]];
+    for (const mode of ['photos', 'eagle']) {
+      const samples = [];
+      for (const fixture of ordered) {
+        const row = await upload(mode, fixture.bytes, fixture.name, fixture.mimeType);
+        samples.push({ ...fixture, assetId: row.assetId });
+      }
+      await waitFor(
+        async () =>
+          (await db.eagleAsset.count({
+            where: { id: { in: samples.map((row) => row.assetId) }, lifecycleStatus: 'READY' },
+          })) === samples.length,
+        'live photo previews',
+        480,
+      );
+      const [movie, still, embedded, ordinary] = samples;
+      const paired = await api(`/${mode}/assets/${still.assetId}`);
+      assert.equal(paired.livePhotoMotion.assetId, movie.assetId);
+      const ordinaryDetail = await api(`/${mode}/assets/${ordinary.assetId}`);
+      assert.equal(ordinaryDetail.livePhotoMotion, undefined);
+      const embeddedDetail = await api(`/${mode}/assets/${embedded.assetId}`);
+      assert.ok(
+        embeddedDetail.renditions.some(
+          (row) => row.kind === 'PREVIEW' && row.mimeType === 'video/mp4',
+        ),
+      );
+      assert.ok(
+        embeddedDetail.renditions.some(
+          (row) => row.kind === 'PREVIEW' && row.mimeType.startsWith('image/'),
+        ),
+      );
+      const otherMode = mode === 'photos' ? 'eagle' : 'photos';
+      for (const [assetId, renditionId] of [
+        [movie.assetId, paired.livePhotoMotion.renditionId],
+        [
+          embedded.assetId,
+          embeddedDetail.renditions.find((row) => row.mimeType === 'video/mp4').id,
+        ],
+      ]) {
+        const response = await fetch(
+          `${origin}/api/${mode}/assets/${assetId}/renditions/${renditionId}`,
+          { headers: { cookie: `sekereagle_access=${accessToken}`, range: 'bytes=0-31' } },
+        );
+        assert.equal(response.status, 206);
+        assert.equal((await response.arrayBuffer()).byteLength, 32);
+        assert.equal(
+          (
+            await fetch(`${origin}/api/${otherMode}/assets/${assetId}/renditions/${renditionId}`, {
+              headers: { cookie: `sekereagle_access=${accessToken}` },
+            })
+          ).status,
+          404,
+        );
+      }
+      await db.eagleAsset.update({ where: { id: movie.assetId }, data: { isPrivate: true } });
+      assert.equal((await api(`/${mode}/assets/${still.assetId}`)).livePhotoMotion, undefined);
+      assert.equal(
+        (
+          await fetch(
+            `${origin}/api/${mode}/assets/${movie.assetId}/renditions/${paired.livePhotoMotion.renditionId}`,
+            { headers: { cookie: `sekereagle_access=${accessToken}` } },
+          )
+        ).status,
+        404,
+      );
+      await db.eagleAsset.update({ where: { id: movie.assetId }, data: { isPrivate: false } });
+      const trashed = await api(`/${mode}/assets/batch/trash`, { assetIds: [still.assetId] });
+      assert.equal(trashed.affectedAssetCount, 2);
+      const restored = await api(`/${mode}/assets/batch/restore`, { assetIds: [still.assetId] });
+      assert.equal(restored.affectedAssetCount, 2);
+      for (const sample of samples) {
+        const original = await fetch(`${origin}/api/${mode}/assets/${sample.assetId}/original`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        });
+        assert.equal(original.status, 200);
+        assert.equal(
+          createHash('sha256')
+            .update(Buffer.from(await original.arrayBuffer()))
+            .digest('hex'),
+          createHash('sha256').update(sample.bytes).digest('hex'),
+        );
+        liveCases.push({ mode, name: sample.name, assetId: sample.assetId });
+      }
+    }
+  }
   // Synthetic historical import dates make the full-library date rail visible in acceptance.
   // Files without EXIF retain the production fallback: chronologicalAt equals libraryAddedAt.
   const historicalImports = [
@@ -540,6 +640,7 @@ try {
     ownerId: owner.id,
     photos: (await api('/photos/assets?limit=100')).items.length,
     materials: (await api('/eagle/assets?limit=100')).items.length,
+    liveCases,
     cameraCases: cameraCases.map(({ name, mimeType, mode, assetId }) => ({
       name,
       mimeType,

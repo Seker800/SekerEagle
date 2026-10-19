@@ -69,7 +69,12 @@ import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
-import { getEaglePreviewContentUrl, needsEagleImagePyramid } from './eagle-media-sources';
+import {
+  getEaglePreviewContentUrl,
+  getEagleLivePhotoContentUrl,
+  collapseLivePhotoComponents,
+  needsEagleImagePyramid,
+} from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
 import { EagleProcessingPage } from './EagleProcessingPage';
@@ -491,8 +496,8 @@ export function SekerEaglePage({
   const assets = useMemo(
     () =>
       libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH'
-        ? collapsePhotoStacks(loadedAssets, photoStacks)
-        : loadedAssets,
+        ? collapseLivePhotoComponents(collapsePhotoStacks(loadedAssets, photoStacks), loadedAssets)
+        : collapseLivePhotoComponents(loadedAssets),
     [loadedAssets, photoStacks, libraryMode, photoView, libraryView],
   );
   const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
@@ -816,11 +821,22 @@ export function SekerEaglePage({
       selectedIds: selectedAssetIds,
       draggedId: assetId,
     });
+  const originalDownloadComponents = async (selected: EagleAssetListItem[]) => {
+    const originals = new Map(selected.map((asset) => [asset.id, asset]));
+    for (const asset of selected) {
+      const id = asset.livePhotoMotion?.assetId;
+      if (id && !originals.has(id)) originals.set(id, await getEagleAsset(accessToken, id));
+    }
+    return [...originals.values()];
+  };
   const saveSelectedOriginal = () => {
     if (!contextMenuAsset || assetActionPending) return;
     setAssetActionPending('save');
     setAssetActionError(null);
-    void saveOriginalFile(contextMenuAsset).then(
+    const download = contextMenuAsset.livePhotoMotion
+      ? originalDownloadComponents([contextMenuAsset]).then(downloadOriginalFiles)
+      : saveOriginalFile(contextMenuAsset);
+    void download.then(
       () => {
         setAssetActionPending(null);
         setAssetContextMenu(null);
@@ -874,17 +890,19 @@ export function SekerEaglePage({
     if (selectedAssets.length < 2) return;
     setIsBatchDownloading(true);
     setOriginalFileError(null);
-    void downloadOriginalFiles(selectedAssets).then(
-      () => {
-        setAssetContextMenu(null);
-        setIsBatchDownloading(false);
-      },
-      () => {
-        setAssetContextMenu(null);
-        setIsBatchDownloading(false);
-        setOriginalFileError(t('批量下载原文件失败。'));
-      },
-    );
+    void originalDownloadComponents(selectedAssets)
+      .then(downloadOriginalFiles)
+      .then(
+        () => {
+          setAssetContextMenu(null);
+          setIsBatchDownloading(false);
+        },
+        () => {
+          setAssetContextMenu(null);
+          setIsBatchDownloading(false);
+          setOriginalFileError(t('批量下载原文件失败。'));
+        },
+      );
   };
   const openAssetPreview = (asset: EagleAssetListItem) => {
     if (photoStacks.some((stack) => stack.assetIds.includes(asset.id))) {
@@ -898,7 +916,12 @@ export function SekerEaglePage({
     const src = getEaglePreviewContentUrl(asset);
     if (src) {
       preloadEagleImageViewer();
-      imagePreview.setPreviewImage({ src, alt: asset.displayName, assetId: asset.id });
+      imagePreview.setPreviewImage({
+        src,
+        alt: asset.displayName,
+        assetId: asset.id,
+        motionSrc: getEagleLivePhotoContentUrl(asset),
+      });
     }
   };
   useEffect(() => {
@@ -915,12 +938,25 @@ export function SekerEaglePage({
       event.preventDefault();
       const src = getEaglePreviewContentUrl(nextAsset);
       if (src) {
-        imagePreview.setPreviewImage({ src, alt: nextAsset.displayName, assetId: nextAsset.id });
+        imagePreview.setPreviewImage({
+          src,
+          alt: nextAsset.displayName,
+          assetId: nextAsset.id,
+          motionSrc: getEagleLivePhotoContentUrl(nextAsset),
+        });
       }
     };
     window.addEventListener('keydown', handlePreviewNavigation);
     return () => window.removeEventListener('keydown', handlePreviewNavigation);
   }, [assets, imagePreview.previewImage, imagePreview.setPreviewImage]);
+  useEffect(() => {
+    const current = imagePreview.previewImage;
+    if (!current?.assetId) return;
+    const asset = assetsById.get(current.assetId);
+    if (!asset) return;
+    const motionSrc = getEagleLivePhotoContentUrl(asset);
+    if (current.motionSrc !== motionSrc) imagePreview.setPreviewImage({ ...current, motionSrc });
+  }, [assetsById, imagePreview.previewImage, imagePreview.setPreviewImage]);
   const showAssetsForTag = (kind: 'MANUAL' | 'AI', tagId: string) => {
     changeLibraryView('ACTIVE');
     setQuickFilters({
@@ -1599,6 +1635,9 @@ export function SekerEaglePage({
                             className={styles.preview}
                             style={{ height: masonryItem.previewHeight }}
                           >
+                            {getEagleLivePhotoContentUrl(asset) && (
+                              <span className={styles.livePhotoBadge}>{t('实况')}</span>
+                            )}
                             {photoStacks.find((stack) => stack.cover.id === asset.id) && (
                               <span className="photo-stack-count">
                                 ▣{' '}

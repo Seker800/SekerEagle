@@ -1010,3 +1010,16 @@
 .masonry[data-layout='justified'] .preview img {
   object-fit: contain;
 }
+
+.livePhotoBadge {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 2;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  background: #161616bb;
+  color: #f4d09b;
+  pointer-events: none;
+}

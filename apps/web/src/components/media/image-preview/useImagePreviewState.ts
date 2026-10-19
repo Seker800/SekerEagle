@@ -4,6 +4,7 @@ export interface PreviewImage {
   src: string;
   alt: string;
   assetId?: string;
+  motionSrc?: string | null;
 }
 
 export function useImagePreviewState() {

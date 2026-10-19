@@ -1,3 +1,4 @@
+import { normalizeLivePhotoIdentifier } from './live-photo';
 import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -9,7 +10,7 @@ export interface CameraDimensions {
   height: number;
 }
 export interface CameraVideoProbe {
-  format?: { format_name?: string; duration?: string };
+  format?: { format_name?: string; duration?: string; tags?: Record<string, string> };
   streams?: Array<{
     codec_type?: string;
     codec_name?: string;
@@ -96,7 +97,14 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
     ],
     { timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
   );
-  return parseCameraVideoProbe(JSON.parse(stdout) as CameraVideoProbe, mimeType);
+  const probe = JSON.parse(stdout) as CameraVideoProbe;
+  const livePhotoIdentifier = normalizeLivePhotoIdentifier(
+    probe.format?.tags?.['com.apple.quicktime.content.identifier'],
+  );
+  return {
+    ...parseCameraVideoProbe(probe, mimeType),
+    ...(livePhotoIdentifier ? { livePhotoIdentifier } : {}),
+  };
 }
 export async function transcodeCameraVideo(
   inputPath: string,
@@ -180,3 +188,11 @@ export async function readCameraRaw(
     throw new Error('RAW 图片尺寸无效或超出安全限制。');
   return result;
 }
+
+export {
+  normalizeLivePhotoIdentifier,
+  readAppleLivePhotoIdentifier,
+  readMotionPhotoRange,
+  LIVE_PHOTO_MAX_VIDEO_BYTES,
+  LIVE_PHOTO_MAX_DURATION_MS,
+} from './live-photo';

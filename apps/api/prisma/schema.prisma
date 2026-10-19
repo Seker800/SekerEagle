@@ -333,6 +333,8 @@ model EagleAsset {
   isPrivate                      Boolean                        @default(false)
   libraryAddedAt                 DateTime                       @default(now())
   chronologicalAt                DateTime                       @default(now())
+  livePhotoIdentifier            String?
+  livePhotoRole                  String?
   deletedAt                      DateTime?
   purgeAfter                     DateTime?
   createdAt                      DateTime                       @default(now())
@@ -365,6 +367,7 @@ model EagleAsset {
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, deletedAt, libraryAddedAt, id])
   @@index([ownerId, libraryMode, deletedAt, chronologicalAt, id])
+  @@index([ownerId, libraryMode, livePhotoIdentifier, livePhotoRole], map: "EagleAsset_live_photo_pair_idx")
   @@index([ownerId, libraryMode, isPrivate, deletedAt, libraryAddedAt, id])
   @@index([ownerId, libraryMode, deletedAt, rating])
   @@index([ownerId, libraryMode, deletedAt, aspectRatio])

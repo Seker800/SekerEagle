@@ -65,6 +65,7 @@ export async function withProcessableImage<T>(
   mimeType: string,
   storageKey: string,
   operation: (image: Sharp, originalPath?: string) => Promise<T>,
+  retainOriginal = false,
 ): Promise<{ result: T; sha256: string }> {
   const hash = createHash('sha256');
   const hashTap = new Transform({
@@ -73,7 +74,7 @@ export async function withProcessableImage<T>(
       callback(null, chunk);
     },
   });
-  if (!requiresHeifDecode(mimeType, storageKey) && !isCameraRawMime(mimeType)) {
+  if (!requiresHeifDecode(mimeType, storageKey) && !isCameraRawMime(mimeType) && !retainOriginal) {
     const image = sharp({ failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS });
     const resultPromise = operation(image);
     try {
@@ -89,11 +90,12 @@ export async function withProcessableImage<T>(
 
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-'));
   const inputPath = join(directory, 'input.heic');
-  const outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
+  let outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
   try {
     await pipeline(Readable.from(source), hashTap, createWriteStream(inputPath, { flags: 'wx' }));
     if (isCameraRawMime(mimeType)) await readCameraRaw(inputPath, outputPath);
-    else await decodeHeifFile(inputPath, outputPath);
+    else if (requiresHeifDecode(mimeType, storageKey)) await decodeHeifFile(inputPath, outputPath);
+    else outputPath = inputPath;
     const result = await operation(
       sharp(outputPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS }),
       inputPath,

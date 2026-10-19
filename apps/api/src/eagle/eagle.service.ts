@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client';
 import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleImageSearchService, type ImageSearchContext } from './eagle-image-search.service';
+import { resolveLivePhotoMotions } from './live-photo-projection';
 import { createHash } from 'node:crypto';
 import type {
   BatchChangeEagleManualTagsDto,
@@ -246,13 +247,14 @@ export class EagleService {
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
     return {
-      items: page.map(serializeAssetList),
+      items: await this.withLivePhotoMotions(ownerId, page, includePrivate),
       ...(this.libraryMode === 'PHOTO' && !trash
         ? {
             photoStacks: await this.readPhotoStacks(
               ownerId,
               page.map(({ id }) => id),
               queryWhere,
+              includePrivate,
             ),
           }
         : {}),
@@ -279,6 +281,7 @@ export class EagleService {
     ownerId: string,
     assetIds: string[],
     queryWhere: Prisma.EagleAssetWhereInput,
+    includePrivate = false,
     matchIds?: (ids: string[]) => Promise<string[]>,
   ) {
     if (!assetIds.length) return [];
@@ -338,9 +341,10 @@ export class EagleService {
       },
       include: assetListInclude,
     });
+    const coverRows = await this.withLivePhotoMotions(ownerId, covers, includePrivate);
     return stacks.flatMap((stack) => {
-      const cover = covers.find(({ id }) => id === stack.bestAssetId);
-      return cover ? [{ ...stack, cover: serializeAssetList(cover) }] : [];
+      const cover = coverRows.find(({ id }) => id === stack.bestAssetId);
+      return cover ? [{ ...stack, cover }] : [];
     });
   }
 
@@ -442,13 +446,18 @@ export class EagleService {
         ])
       : [0, 0];
     return {
-      items: page.map(({ row }) => serializeAssetList(row)),
+      items: await this.withLivePhotoMotions(
+        ownerId,
+        page.map(({ row }) => row),
+        includePrivate,
+      ),
       ...(this.libraryMode === 'PHOTO' && !trash
         ? {
             photoStacks: await this.readPhotoStacks(
               ownerId,
               page.map(({ row }) => row.id),
               where,
+              includePrivate,
               (ids) =>
                 this.imageSearch!.rank(
                   ownerId,
@@ -485,6 +494,22 @@ export class EagleService {
     };
   }
 
+  private async withLivePhotoMotions(
+    ownerId: string,
+    rows: AssetListRecord[],
+    includePrivate: boolean,
+  ) {
+    const motions = await resolveLivePhotoMotions(
+      this.prisma,
+      { ownerId, libraryMode: this.libraryMode },
+      rows,
+      includePrivate,
+    );
+    return rows.map((row) => ({
+      ...serializeAssetList(row),
+      ...(motions.has(row.id) ? { livePhotoMotion: motions.get(row.id) } : {}),
+    }));
+  }
   async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
     const query = readEagleFilterQuery(input);
     assertFilterMode(query, this.libraryMode);
@@ -519,7 +544,16 @@ export class EagleService {
       include: assetInclude,
     });
     if (!asset) throw new NotFoundException('素材不存在。');
-    return serializeAsset(asset);
+    const motions = await resolveLivePhotoMotions(
+      this.prisma,
+      { ownerId, libraryMode: this.libraryMode },
+      [asset],
+      includePrivate,
+    );
+    return {
+      ...serializeAsset(asset),
+      ...(motions.has(asset.id) ? { livePhotoMotion: motions.get(asset.id) } : {}),
+    };
   }
 
   async updateAsset(
@@ -566,6 +600,7 @@ export class EagleService {
         select: {
           id: true,
           chronologicalAt: true,
+          livePhotoRole: true,
           photoMetadata: true,
           lifecycleStatus: true,
           mediaErrorCode: true,
@@ -586,8 +621,9 @@ export class EagleService {
         },
       })
       .then((rows) =>
-        rows.map((row) => ({
+        rows.map(({ livePhotoRole, ...row }) => ({
           ...row,
+          ...(livePhotoRole ? { livePhotoComponent: true } : {}),
           renditions: row.renditions.map((rendition) => ({
             ...rendition,
             byteSize: Number(rendition.byteSize),
@@ -747,10 +783,32 @@ export class EagleService {
     const ids = [...new Set(assetIds)];
     if (ids.length !== assetIds.length) throw new BadRequestException('素材 ID 不能重复。');
     const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
+      const sources = await transaction.eagleAsset.findMany({
+        where: {
+          ownerId,
+          libraryMode: this.libraryMode,
+          id: { in: ids },
+          deletedAt: restore ? { not: null } : null,
+          purgeAfter: restore ? null : undefined,
+          ...privateVisibilityWhere(includePrivate),
+        },
+        select: { id: true, mediaRevision: true, livePhotoIdentifier: true, livePhotoRole: true },
+      });
+      if (sources.length !== ids.length) throw new NotFoundException('一个或多个素材不存在。');
+      const motions = await resolveLivePhotoMotions(
+        transaction,
+        { ownerId, libraryMode: this.libraryMode },
+        sources,
+        includePrivate,
+        restore,
+      );
+      const resourceIds = [
+        ...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)]),
+      ];
       const result = await transaction.eagleAsset.updateMany({
         where: {
           ownerId,
-          id: { in: ids },
+          id: { in: resourceIds },
           deletedAt: restore ? { not: null } : null,
           purgeAfter: restore ? null : undefined,
           ...privateVisibilityWhere(includePrivate),
@@ -762,7 +820,8 @@ export class EagleService {
           rowVersion: { increment: 1 },
         },
       });
-      if (result.count !== ids.length) throw new NotFoundException('一个或多个素材不存在。');
+      if (result.count !== resourceIds.length)
+        throw new NotFoundException('一个或多个素材不存在。');
       return result.count;
     });
     return { affectedAssetCount };
@@ -1492,7 +1551,12 @@ function serializeAsset(asset: AssetRecord) {
 
 function serializeAssetList(asset: AssetListRecord) {
   const { manualTagLinks, ...record } = asset;
-  const safe = { ...record, originalObjectKey: undefined };
+  const safe = {
+    ...record,
+    originalObjectKey: undefined,
+    livePhotoIdentifier: undefined,
+    livePhotoRole: undefined,
+  };
   return {
     ...safe,
     byteSize: Number(asset.byteSize),

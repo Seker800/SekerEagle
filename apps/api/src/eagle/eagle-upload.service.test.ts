@@ -285,6 +285,8 @@ test('content replacement preserves the logical asset id and advances its media 
 
   assert.equal(result.assetId, 'asset-existing');
   assert.equal(assetWrites[0]?.mediaRevision, 4);
+  assert.equal(assetWrites[0]?.livePhotoIdentifier, null);
+  assert.equal(assetWrites[0]?.livePhotoRole, null);
   assert.equal((jobs[0] as Array<{ assetRevision: number }>)[0]?.assetRevision, 4);
   assert.deepEqual(stateWrites[0]?.retiredObjectKeys, [
     `users/${ownerId}/assets/old/original.jpg`,

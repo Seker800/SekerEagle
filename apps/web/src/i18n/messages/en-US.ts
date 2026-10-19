@@ -1,4 +1,8 @@
 export const enUS = {
+  实况: 'Live',
+  播放实况: 'Play Live Photo',
+  返回静态照片: 'Show still photo',
+  '实况播放失败，请重试。': 'Live Photo playback failed. Please retry.',
   照片日期导航: 'Photo date navigation',
   回到最新照片: 'Back to latest photos',
   重试日期导航: 'Retry date navigation',
