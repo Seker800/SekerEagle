@@ -70,17 +70,9 @@ export function PhotoTimelineRail({
       return { year, top: calendarPosition(`${year}-01`) };
     },
   ).filter(({ top }) => top > 6.5 && top < 93.5);
-  const tickStride = Math.max(1, Math.ceil((latest - earliest + 1) / 1200));
-  const ticks = Array.from(
-    { length: Math.floor((latest - earliest) / tickStride) + 1 },
-    (_, index) => {
-      const ordinal = latest - index * tickStride;
-      return {
-        month: `${Math.floor(ordinal / 12)}-${String((ordinal % 12) + 1).padStart(2, '0')}`,
-        major: ordinal % 12 === 0,
-      };
-    },
-  );
+  const ticks = months
+    .filter((month) => month.count > 0)
+    .map(({ month }) => ({ month, major: month.endsWith('-01') }));
   const influenceAt = (top: number) =>
     hoverPosition === null ? 0 : Math.max(0, 1 - Math.abs(top - hoverPosition) / 8) ** 2;
   const selectHover = (index: number, top = position(index)) => {
