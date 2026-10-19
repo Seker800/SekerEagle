@@ -80,3 +80,47 @@ describe('PhotoTimelineRail', () => {
     expect(onJump).toHaveBeenLastCalledWith(months[2]);
   });
 });
+
+describe('calendar month selection', () => {
+  const sparseMonths = [
+    { month: '2026-10', count: 20, cursor: 'october' },
+    { month: '2026-02', count: 8, cursor: 'february' },
+    { month: '2025-11', count: 9, cursor: 'november' },
+    { month: '2024-03', count: 2, cursor: 'march' },
+    { month: '2023-01', count: 1, cursor: 'january' },
+  ];
+  it('reveals a selectable month grid and jumps with the exact existing month cursor', () => {
+    const onJump = vi.fn();
+    render(<PhotoTimelineRail months={sparseMonths} onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />);
+    const slider = screen.getByRole('slider');
+    fireEvent.focus(slider);
+    const picker = screen.getByRole('navigation', { name: '按年月跳转' });
+    expect(picker.querySelectorAll('button')).toHaveLength(12);
+    const february = screen.getByRole('button', { name: '2026年2月', exact: true });
+    expect(february).toBeEnabled();
+    expect(screen.getByRole('button', { name: '2026年3月', exact: true })).toBeDisabled();
+    fireEvent.click(february);
+    expect(onJump).toHaveBeenCalledExactlyOnceWith(sparseMonths[1]);
+    expect(slider).toHaveAttribute('aria-valuetext', '2026年2月');
+    fireEvent.keyDown(picker, {key: 'Escape'});
+    expect(screen.queryByRole('navigation', { name: '按年月跳转' })).not.toBeInTheDocument();
+  });
+  it('anchors every year to the same calendar boundary despite uneven photo dates', () => {
+    render(<PhotoTimelineRail months={sparseMonths} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+    const positions = ['2026', '2025', '2024'].map(year => parseFloat(screen.getByText(year, {exact: true}).style.top));
+    expect(positions[1] - positions[0]).toBeCloseTo(positions[2] - positions[1], 5);
+    expect(screen.getByText('2026/10')).toHaveStyle({top: '0%'});
+    expect(screen.getByText('2023/01')).toHaveStyle({top: '100%'});
+  });
+  it('keeps the picker open when focus moves from the slider to a month button', () => {
+    render(<PhotoTimelineRail months={sparseMonths} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+    const slider = screen.getByRole('slider');
+    fireEvent.focus(slider);
+    const month = screen.getByRole('button', {name: '2026年2月'});
+    fireEvent.blur(slider, {relatedTarget: month});
+    fireEvent.focus(month);
+    expect(screen.getByRole('navigation', {name: '按年月跳转'})).toBeVisible();
+    fireEvent.blur(month, {relatedTarget: document.body});
+    expect(screen.queryByRole('navigation', {name: '按年月跳转'})).not.toBeInTheDocument();
+  });
+});
