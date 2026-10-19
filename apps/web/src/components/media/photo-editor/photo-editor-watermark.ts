@@ -24,7 +24,13 @@ export function renderPhotoWatermark(
   const frosted = !overlay && edits.watermarkTheme === 'frosted';
   const dark = edits.watermarkTheme === 'black';
   const background = dark ? '#141414' : '#ffffff';
-  const foreground = overlay ? (dark ? '#000000' : '#ffffff') : dark ? '#ffffff' : '#000000';
+  const foreground = overlay
+    ? dark
+      ? '#000000'
+      : '#ffffff'
+    : dark || frosted
+      ? '#ffffff'
+      : '#000000';
   const secondary = foreground;
   if (frosted) {
     paintFrostedWatermarkBackground(source, canvas, createCanvas);
