@@ -132,3 +132,19 @@ describe('buildEagleMasonryLayout', () => {
     expect(performance.now() - startedAt).toBeLessThan(2_000);
   });
 });
+
+it('lays justified rows left to right at equal height without cropping or horizontal overflow', () => {
+  const assets = Array.from({length: 40}, (_, i) => ({id:String(i), width:i % 2 ? 400:800, height:600}));
+  const layout = buildEagleMasonryLayout(assets, 900, {strategy:'justified',targetCardWidth:180});
+  expect(layout.items.map(x=>x.id)).toEqual(assets.map(x=>x.id));
+  const firstRow = layout.items.filter(x=>x.top===0);
+  expect(firstRow.length).toBeGreaterThan(1);
+  expect(new Set(firstRow.map(x=>x.height)).size).toBe(1);
+  expect(firstRow.at(-1)!.left+firstRow.at(-1)!.width).toBeCloseTo(900,5);
+  for (const item of layout.items) {
+    const asset=assets.find(x=>x.id===item.id)!;
+    expect((item.width-2)/item.previewHeight).toBeCloseTo(asset.width/asset.height,5);
+    expect(item.left+item.width).toBeLessThanOrEqual(900.00001);
+    expect(item.height).toBeGreaterThan(0);
+  }
+});
