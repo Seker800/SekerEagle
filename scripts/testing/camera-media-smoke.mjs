@@ -24,6 +24,16 @@ assertSafeRuntimeTarget({
   s3Endpoint: 'http://localhost:9000',
   s3Bucket: 'sekereagle-test',
 });
+// Numerical camera calibration tests require the same native runtime as decoding.
+await run(process.env.CAMERA_RAW_PYTHON || 'python3', [
+  '-m',
+  'unittest',
+  'discover',
+  '-s',
+  'packages/media-core/python',
+  '-p',
+  'test_raw_color.py',
+]);
 const directory = resolve('.omx/test-camera/smoke');
 await rm(directory, { recursive: true, force: true });
 const files = await createCameraFixtures(directory);

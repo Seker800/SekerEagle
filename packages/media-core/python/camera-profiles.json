@@ -1,0 +1,14 @@
+{
+  "license": "CC-BY-SA-3.0",
+  "attribution": "RawSpeed contributors, camera calibration data",
+  "source": "https://github.com/darktable-org/rawspeed/commit/70d3725",
+  "profiles": {
+    "X-E5": {
+      "xyzToCamera": [
+        [11809, -5358, -1141],
+        [-4248, 12164, 2343],
+        [-514, 1097, 5848]
+      ]
+    }
+  }
+}

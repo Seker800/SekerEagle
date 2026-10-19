@@ -3,9 +3,10 @@ import json
 import sys
 from PIL import Image
 import rawpy
+from raw_color import load_raf_profile, camera_rgb_to_srgb
 
 
-def decode_raw(raw, input_limit, output_limit, output_path=None):
+def decode_raw(raw, input_limit, output_limit, output_path=None, profile=None):
     sizes = raw.sizes
     width, height = sizes.width, sizes.height
     if (min(sizes.raw_width, sizes.raw_height, width, height) <= 0
@@ -20,10 +21,17 @@ def decode_raw(raw, input_limit, output_limit, output_path=None):
     if output_path:
         # LibRaw's half-size processing reduces demosaic memory for high-resolution
         # originals. The retained original and its catalog dimensions never shrink.
-        pixels = raw.postprocess(
-            use_camera_wb=True, output_color=rawpy.ColorSpace.sRGB, output_bps=8,
-            no_auto_bright=True, half_size=width * height > output_limit,
-        )
+        params = dict(use_camera_wb=True, no_auto_bright=True,
+                      half_size=width * height > output_limit)
+        if profile:
+            # Linear, white-balanced camera RGB; apply the explicit camera
+            # characterization before encoding sRGB. No gamma before the matrix.
+            pixels = raw.postprocess(**params, output_color=rawpy.ColorSpace.raw,
+                                     output_bps=16, gamma=(1, 1))
+            pixels = camera_rgb_to_srgb(pixels, profile)
+        else:
+            pixels = raw.postprocess(**params, output_color=rawpy.ColorSpace.sRGB,
+                                     output_bps=8)
         decoded_height, decoded_width = pixels.shape[:2]
         if decoded_width * decoded_height > output_limit:
             raise ValueError("RAW output pixel limit exceeded")
@@ -38,7 +46,13 @@ def main():
     output_path = sys.argv[4] if len(sys.argv) == 5 else None
     with rawpy.RawPy() as raw:
         raw.open_file(source)
-        print(json.dumps(decode_raw(raw, input_limit, output_limit, output_path)))
+        # The model header only chooses calibration; LibRaw must still open and
+        # unpack the entire sensor payload before any file is accepted.
+        with open(source, 'rb') as original:
+            profile = load_raf_profile(original.read(108))
+        if raw.rgb_xyz_matrix.any():
+            profile = None
+        print(json.dumps(decode_raw(raw, input_limit, output_limit, output_path, profile)))
 
 
 if __name__ == "__main__":

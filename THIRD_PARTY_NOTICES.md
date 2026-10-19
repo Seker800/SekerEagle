@@ -107,3 +107,12 @@ included with their wheels and any codec libraries when redistributing runtime
 images. No camera firmware, camera profile packs, model weights or private RAW
 photographs are bundled. Tests generate their own Bayer DNG and video patterns.
 Upstream: https://github.com/letmaik/rawpy and https://www.libraw.org/ .
+
+## Camera calibration data
+
+`packages/media-core/python/camera-profiles.json` includes the Fujifilm X-E5
+XYZ-to-camera calibration from the RawSpeed contributors' camera database.
+Source: https://github.com/darktable-org/rawspeed/commit/70d3725 .
+The data is distributed under Creative Commons Attribution-ShareAlike 3.0
+(https://creativecommons.org/licenses/by-sa/3.0/). The data remains separately
+licensed under those terms; no RawSpeed decoder code is included.
