@@ -57,7 +57,7 @@ describe('listEagleAssetUpdates', () => {
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'etag' } }))
       .mockResolvedValueOnce(Response.json({ assetId: 'copy', duplicate: false }))
       .mockResolvedValueOnce(Response.json({ message: 'temporary detail failure' }, { status: 503 }))
-      .mockResolvedValue(Response.json({ id: 'copy', isPrivate: true }));
+      .mockImplementation(async () => Response.json({ id: 'copy', isPrivate: true }));
     const file = new File(['png'], 'edited.png', { type: 'image/png' });
     const options = { duplicatePolicy: 'CREATE_COPY' as const, retry: true };
     await expect(uploadEagleAsset('', file, vi.fn(), options)).rejects.toThrow('temporary detail failure');
