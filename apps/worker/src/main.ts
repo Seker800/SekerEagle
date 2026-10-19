@@ -1,3 +1,4 @@
+import { imageRenditionSpecs, catalogImageDimensions } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
@@ -8,8 +9,6 @@ import {
   CAMERA_MAX_VIDEO_BYTES,
   CAMERA_MAX_IMAGE_BYTES,
   isCameraVideoMime,
-  isCameraRawMime,
-  CAMERA_RAW_EDIT_MAX_SIZE,
 } from '@sekereagle/library-core';
 import {
   probeCameraVideo,
@@ -374,14 +373,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       );
       return;
     }
-    const renditionSpecs = [
-      { kind: 'PREVIEW' as const, variant: 'default', maxSize: 1600 },
-      { kind: 'THUMBNAIL' as const, variant: '256', maxSize: 256 },
-      { kind: 'THUMBNAIL' as const, variant: '512', maxSize: 512 },
-      ...(isCameraRawMime(sourceDetails.mimeType)
-        ? [{ kind: 'PREVIEW' as const, variant: 'edit', maxSize: CAMERA_RAW_EDIT_MAX_SIZE }]
-        : []),
-    ];
+    const renditionSpecs = imageRenditionSpecs(sourceDetails.mimeType);
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
       return;
@@ -424,11 +416,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
                 fit: 'inside',
                 withoutEnlargement: true,
               })
-              .webp(
-                spec.variant === 'edit'
-                  ? { lossless: true }
-                  : { quality: spec.kind === 'THUMBNAIL' ? 78 : 86 },
-              )
+              .webp(spec.encoding)
               .toBuffer({ resolveWithObject: true }),
           });
         }
@@ -641,16 +629,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
           sha256,
-          width:
-            ('originalDimensions' in processed ? processed.originalDimensions?.width : undefined) ??
-            processed.metadata.autoOrient.width ??
-            processed.metadata.width,
-          height:
-            ('originalDimensions' in processed
-              ? processed.originalDimensions?.height
-              : undefined) ??
-            processed.metadata.autoOrient.height ??
-            processed.metadata.height,
+          ...catalogImageDimensions(
+            processed.metadata,
+            'originalDimensions' in processed ? processed.originalDimensions : undefined,
+          ),
           livePhotoIdentifier: livePhoto?.identifier ?? null,
           livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
         },
