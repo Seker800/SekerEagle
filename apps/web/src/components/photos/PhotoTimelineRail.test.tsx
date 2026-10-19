@@ -19,7 +19,7 @@ describe('PhotoTimelineRail', () => {
         onRetry={vi.fn()}
       />,
     );
-    expect(screen.getByText('2026')).toBeInTheDocument();
+    expect(screen.getByText('2026/10')).toBeInTheDocument();
     const track = screen.getByRole('slider', { name: '按年月跳转' });
     vi.spyOn(track, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
     fireEvent.pointerMove(track, { clientY: 350 });
@@ -61,7 +61,9 @@ describe('PhotoTimelineRail', () => {
   });
   it('uses the real photo date range for both endpoints and proportional month positions', () => {
     const onJump = vi.fn();
-    render(<PhotoTimelineRail months={months} onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />);
+    render(
+      <PhotoTimelineRail months={months} onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />,
+    );
     const latest = screen.getByText('2026/10');
     const earliest = screen.getByText('2001/01');
     expect(latest).toHaveAttribute('dateTime', '2026-10');
@@ -77,5 +79,4 @@ describe('PhotoTimelineRail', () => {
     fireEvent.click(slider, { clientY: 1000 });
     expect(onJump).toHaveBeenLastCalledWith(months[2]);
   });
-
 });

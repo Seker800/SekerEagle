@@ -28,7 +28,16 @@ export function PhotoTimelineRail({
     months.findIndex((month) => month.month === currentMonth),
   );
   const selected = Math.min(hovered ?? current, Math.max(0, months.length - 1));
-  const position = (index: number) => (months.length > 1 ? (index / (months.length - 1)) * 100 : 0);
+  const monthNumber = (month: string) => {
+    const [year, number] = month.split('-').map(Number);
+    return year * 12 + number - 1;
+  };
+  const latest = months.length ? monthNumber(months[0].month) : 0;
+  const earliest = months.length ? monthNumber(months[months.length - 1].month) : latest;
+  const position = (index: number) =>
+    latest > earliest
+      ? ((latest - monthNumber(months[index].month)) / (latest - earliest)) * 100
+      : 0;
   const format = (month: PhotoTimelineMonth) =>
     new Intl.DateTimeFormat(getLocale(), {
       year: 'numeric',
@@ -37,12 +46,11 @@ export function PhotoTimelineRail({
     }).format(new Date(`${month.month}-01T00:00:00Z`));
   const indexAt = (y: number, element: HTMLElement) => {
     const rect = element.getBoundingClientRect();
-    return Math.max(
+    const target = Math.max(0, Math.min(100, ((y - rect.top) / Math.max(1, rect.height)) * 100));
+    return months.reduce(
+      (nearest, _, index) =>
+        Math.abs(position(index) - target) < Math.abs(position(nearest) - target) ? index : nearest,
       0,
-      Math.min(
-        months.length - 1,
-        Math.round(((y - rect.top) / Math.max(1, rect.height)) * (months.length - 1)),
-      ),
     );
   };
   const years = months.flatMap((month, index) =>
@@ -52,7 +60,10 @@ export function PhotoTimelineRail({
   );
   const stride = Math.max(1, Math.ceil(years.length / 12));
   const labels = years
-    .filter((_, index) => index % stride === 0)
+    .filter(
+      (year, index) =>
+        index % stride === 0 && position(year.index) > 6.5 && position(year.index) < 93.5,
+    )
     .reduce<typeof years>((visible, year) => {
       const previous = visible.at(-1);
       if (!previous || position(year.index) - position(previous.index) >= 6.5) visible.push(year);
@@ -123,6 +134,16 @@ export function PhotoTimelineRail({
               style={{ top: `${position(index)}%` }}
               aria-hidden="true"
             />
+          ))}
+          {[0, ...(months.length > 1 ? [months.length - 1] : [])].map((index) => (
+            <time
+              key={months[index].month}
+              className={styles.year}
+              dateTime={months[index].month}
+              style={{ top: `${position(index)}%` }}
+            >
+              {months[index].month.replace('-', '/')}
+            </time>
           ))}
           {labels.map(({ year, index }) => (
             <span
