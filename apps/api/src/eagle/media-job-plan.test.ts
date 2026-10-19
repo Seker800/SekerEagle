@@ -146,3 +146,41 @@ function expectJobKinds(
     expected,
   );
 }
+
+test('job pruning does not regenerate durable current-revision media facts', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    {
+      ownerId: 'owner-1',
+      assetId: 'asset-1',
+      assetRevision: 2,
+      width: 8000,
+      height: 6000,
+      completedAiTag: true,
+      renditionsReady: true,
+      paletteReady: true,
+      pyramidReady: true,
+      embeddingReady: true,
+    },
+    [],
+  );
+  assert.deepEqual(jobs, []);
+});
+
+test('missing analysis can depend on ready renditions after rendition job pruning', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    {
+      ownerId: 'owner-1',
+      assetId: 'asset-1',
+      assetRevision: 2,
+      width: 100,
+      height: 100,
+      renditionsReady: true,
+      completedAiTag: true,
+    },
+    [],
+  );
+  expectJobKinds(jobs, [
+    ['EXTRACT_COLOR_PALETTE', null],
+    ['GENERATE_EMBEDDING', null],
+  ]);
+});
