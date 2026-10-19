@@ -3,6 +3,9 @@ export const CAMERA_MAX_IMAGE_BYTES = 250 * 1024 * 1024;
 export const CAMERA_MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
 export const CAMERA_MAX_VIDEO_DURATION_MS = 4 * 3600 * 1000;
 export const CAMERA_MAX_IMAGE_PIXELS = 50_000_000;
+// Sensor payload limit is separate from the bounded RGB derivative budget.
+export const CAMERA_MAX_RAW_PIXELS = 120_000_000;
+export const CAMERA_RAW_EDIT_MAX_SIZE = 6000;
 export type CameraMediaKind = 'image' | 'raw' | 'video';
 export interface CameraMediaFormat {
   extension: string;
@@ -62,7 +65,9 @@ export function normalizeCameraMimeType(fileName: string, mimeType: string): str
   if (declared === '' || declared === 'application/octet-stream' || declared === format.mimeType)
     return format.mimeType;
   const aliases: Record<string, string[]> = {
-    'image/x-adobe-dng': ['image/dng'],
+    'image/x-adobe-dng': ['image/dng', 'image/x-dng', 'image/tiff'],
+    'image/x-fuji-raf': ['image/x-fujifilm-raf'],
+    'image/x-nikon-nef': ['image/nef', 'image/x-nikon-raw'],
     'video/mp4': ['video/x-m4v'],
     'video/x-msvideo': ['video/avi'],
     'application/mxf': ['video/mxf'],

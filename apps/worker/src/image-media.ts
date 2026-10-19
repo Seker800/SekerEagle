@@ -1,5 +1,5 @@
 import { isCameraRawMime, CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
-import { readCameraRaw } from '@sekereagle/media-core';
+import { readCameraRaw, type CameraDimensions } from '@sekereagle/media-core';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
@@ -64,7 +64,11 @@ export async function withProcessableImage<T>(
   source: AsyncIterable<Uint8Array>,
   mimeType: string,
   storageKey: string,
-  operation: (image: Sharp, originalPath?: string) => Promise<T>,
+  operation: (
+    image: Sharp,
+    originalPath?: string,
+    originalDimensions?: CameraDimensions,
+  ) => Promise<T>,
   retainOriginal = false,
 ): Promise<{ result: T; sha256: string }> {
   const hash = createHash('sha256');
@@ -93,12 +97,17 @@ export async function withProcessableImage<T>(
   let outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
   try {
     await pipeline(Readable.from(source), hashTap, createWriteStream(inputPath, { flags: 'wx' }));
-    if (isCameraRawMime(mimeType)) await readCameraRaw(inputPath, outputPath);
-    else if (requiresHeifDecode(mimeType, storageKey)) await decodeHeifFile(inputPath, outputPath);
-    else outputPath = inputPath;
+    const originalDimensions = isCameraRawMime(mimeType)
+      ? await readCameraRaw(inputPath, outputPath)
+      : undefined;
+    if (!originalDimensions) {
+      if (requiresHeifDecode(mimeType, storageKey)) await decodeHeifFile(inputPath, outputPath);
+      else outputPath = inputPath;
+    }
     const result = await operation(
       sharp(outputPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS }),
       inputPath,
+      originalDimensions,
     );
     return { result, sha256: hash.digest('hex') };
   } catch (error) {

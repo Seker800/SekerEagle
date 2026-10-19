@@ -8,6 +8,8 @@ import {
   CAMERA_MAX_VIDEO_BYTES,
   CAMERA_MAX_IMAGE_BYTES,
   isCameraVideoMime,
+  isCameraRawMime,
+  CAMERA_RAW_EDIT_MAX_SIZE,
 } from '@sekereagle/library-core';
 import {
   probeCameraVideo,
@@ -376,6 +378,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       { kind: 'PREVIEW' as const, variant: 'default', maxSize: 1600 },
       { kind: 'THUMBNAIL' as const, variant: '256', maxSize: 256 },
       { kind: 'THUMBNAIL' as const, variant: '512', maxSize: 512 },
+      ...(isCameraRawMime(sourceDetails.mimeType)
+        ? [{ kind: 'PREVIEW' as const, variant: 'edit', maxSize: CAMERA_RAW_EDIT_MAX_SIZE }]
+        : []),
     ];
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
@@ -385,7 +390,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       object.Body as AsyncIterable<Uint8Array>,
       sourceDetails.mimeType,
       sourceDetails.storageKey,
-      async (source, originalPath) => {
+      async (source, originalPath, originalDimensions) => {
         const metadataPromise = source.clone().metadata();
         if (job.kind === 'EXTRACT_COLOR_PALETTE') {
           const [{ data, info }, metadata] = await Promise.all([
@@ -419,7 +424,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
                 fit: 'inside',
                 withoutEnlargement: true,
               })
-              .webp({ quality: spec.kind === 'THUMBNAIL' ? 78 : 86 })
+              .webp(
+                spec.variant === 'edit'
+                  ? { lossless: true }
+                  : { quality: spec.kind === 'THUMBNAIL' ? 78 : 86 },
+              )
               .toBuffer({ resolveWithObject: true }),
           });
         }
@@ -434,7 +443,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           originalPath && taskBlocksAssetReady(job.kind)
             ? await inspectLivePhotoImage(originalPath)
             : null;
-        return { metadata, palette: null, rendered, photoAnalysis, livePhoto };
+        return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
       },
       taskBlocksAssetReady(job.kind),
     );
@@ -632,8 +641,16 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           lifecycleStatus: 'READY',
           mediaErrorCode: null,
           sha256,
-          width: processed.metadata.autoOrient.width ?? processed.metadata.width,
-          height: processed.metadata.autoOrient.height ?? processed.metadata.height,
+          width:
+            ('originalDimensions' in processed ? processed.originalDimensions?.width : undefined) ??
+            processed.metadata.autoOrient.width ??
+            processed.metadata.width,
+          height:
+            ('originalDimensions' in processed
+              ? processed.originalDimensions?.height
+              : undefined) ??
+            processed.metadata.autoOrient.height ??
+            processed.metadata.height,
           livePhotoIdentifier: livePhoto?.identifier ?? null,
           livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
         },

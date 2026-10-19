@@ -3,11 +3,19 @@ import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { CAMERA_MAX_IMAGE_PIXELS, CAMERA_MAX_VIDEO_DURATION_MS } from '@sekereagle/library-core';
+import {
+  CAMERA_MAX_IMAGE_PIXELS,
+  CAMERA_MAX_RAW_PIXELS,
+  CAMERA_MAX_VIDEO_DURATION_MS,
+} from '@sekereagle/library-core';
 const run = promisify(execFile);
 export interface CameraDimensions {
   width: number;
   height: number;
+}
+export interface CameraRawDimensions extends CameraDimensions {
+  decodedWidth?: number;
+  decodedHeight?: number;
 }
 export interface CameraVideoProbe {
   format?: { format_name?: string; duration?: string; tags?: Record<string, string> };
@@ -166,26 +174,41 @@ export async function transcodeCameraVideo(
 export async function readCameraRaw(
   inputPath: string,
   outputPath?: string,
-): Promise<CameraDimensions> {
+): Promise<CameraRawDimensions> {
   const script = join(__dirname, '../python/raw_image.py');
   const { stdout } = await run(
     process.env.CAMERA_RAW_PYTHON?.trim() || 'python3',
-    [script, inputPath, String(CAMERA_MAX_IMAGE_PIXELS), ...(outputPath ? [outputPath] : [])],
+    [
+      script,
+      inputPath,
+      String(CAMERA_MAX_RAW_PIXELS),
+      String(CAMERA_MAX_IMAGE_PIXELS),
+      ...(outputPath ? [outputPath] : []),
+    ],
     {
       timeout: outputPath ? 180_000 : 60_000,
       maxBuffer: 256 * 1024,
       env: { ...process.env, OMP_NUM_THREADS: '1', OPENBLAS_NUM_THREADS: '1' },
     },
   );
-  const result = JSON.parse(stdout) as CameraDimensions;
+  const result = JSON.parse(stdout) as CameraRawDimensions;
   if (
     !Number.isSafeInteger(result.width) ||
     !Number.isSafeInteger(result.height) ||
     result.width <= 0 ||
     result.height <= 0 ||
-    result.width * result.height > CAMERA_MAX_IMAGE_PIXELS
+    result.width * result.height > CAMERA_MAX_RAW_PIXELS
   )
     throw new Error('RAW 图片尺寸无效或超出安全限制。');
+  if (
+    outputPath &&
+    (!Number.isSafeInteger(result.decodedWidth) ||
+      !Number.isSafeInteger(result.decodedHeight) ||
+      result.decodedWidth! <= 0 ||
+      result.decodedHeight! <= 0 ||
+      result.decodedWidth! * result.decodedHeight! > CAMERA_MAX_IMAGE_PIXELS)
+  )
+    throw new Error('RAW 显影尺寸无效或超出安全限制。');
   return result;
 }
 

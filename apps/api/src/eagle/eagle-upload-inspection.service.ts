@@ -115,7 +115,7 @@ async function inspectCameraFile(stream: Readable, mimeType: string) {
     if (error instanceof BadRequestException) throw error;
     throw new BadRequestException(
       raw
-        ? '无法读取该 RAW，请确认文件完整、尺寸不超过 5000 万像素、相机受 LibRaw 支持且已安装 RAW 解码运行环境。'
+        ? '无法读取该 RAW，请确认文件完整、尺寸不超过 1.2 亿像素、相机受 LibRaw 支持且已安装 RAW 解码运行环境。'
         : '无法读取该相机视频，请确认文件完整且容器与编码受支持。',
     );
   } finally {
