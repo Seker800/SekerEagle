@@ -67,10 +67,20 @@ export class PatService {
     const scopes = record.scopes.filter((scope): scope is PatScope =>
       PAT_SCOPES.includes(scope as PatScope),
     );
-    await this.prisma.personalAccessToken.update({
-      where: { id: record.id },
-      data: { lastUsedAt: new Date() },
-    });
+    const now = new Date();
+    const usageCutoff = new Date(now.getTime() - 60_000);
+    if (!record.lastUsedAt || record.lastUsedAt <= usageCutoff) {
+      // Compare again in SQL so concurrent imports cannot stampede the same token row.
+      await this.prisma.personalAccessToken.updateMany({
+        where: {
+          id: record.id,
+          userId: record.userId,
+          revokedAt: null,
+          OR: [{ lastUsedAt: null }, { lastUsedAt: { lte: usageCutoff } }],
+        },
+        data: { lastUsedAt: now },
+      });
+    }
     return {
       sub: record.user.id,
       email: record.user.email,

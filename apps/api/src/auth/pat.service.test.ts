@@ -57,7 +57,7 @@ void test('永久 PAT 可认证并仍从令牌记录推导 owner 身份', async 
             disabledAt: null,
           },
         }),
-      update: () => {
+      updateMany: () => {
         lastUsedUpdated = true;
         return Promise.resolve({});
       },
@@ -91,7 +91,7 @@ void test('永久 PAT 被撤销后仍然拒绝认证', async () => {
           revokedAt: new Date(),
           user: { disabledAt: null },
         }),
-      update: () => {
+      updateMany: () => {
         lastUsedUpdated = true;
         return Promise.resolve({});
       },

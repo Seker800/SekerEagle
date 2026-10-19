@@ -1665,3 +1665,29 @@ test('reconcile reuses pruned durable outputs and repairs completed jobs with mi
     'PENDING',
   );
 });
+
+test('PAT usage updates remain bounded in PostgreSQL while revocation takes effect immediately', async () => {
+  const { PatService } = await import('../../apps/api/dist/auth/pat.service.js');
+  const f = await fixtures();
+  const service = new PatService(prisma);
+  const token = await service.create(f.ownerId, 'isolated import test', ['import:write']);
+  const recentlyUsed = new Date(Date.now() - 30_000);
+  await prisma.personalAccessToken.update({
+    where: { id: token.id },
+    data: { lastUsedAt: recentlyUsed },
+  });
+  assert.equal((await service.authenticate(token.token)).sub, f.ownerId);
+  assert.equal(
+    (
+      await prisma.personalAccessToken.findUniqueOrThrow({ where: { id: token.id } })
+    ).lastUsedAt.getTime(),
+    recentlyUsed.getTime(),
+  );
+  await prisma.personalAccessToken.update({ where: { id: token.id }, data: { lastUsedAt: null } });
+  await Promise.all(Array.from({ length: 8 }, () => service.authenticate(token.token)));
+  assert.ok(
+    (await prisma.personalAccessToken.findUniqueOrThrow({ where: { id: token.id } })).lastUsedAt,
+  );
+  await service.revoke(f.ownerId, token.id);
+  await assert.rejects(() => service.authenticate(token.token), /PAT 无效或已过期/);
+});
