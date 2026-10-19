@@ -6,7 +6,6 @@ import { createEagleProcessingAdminApi } from './eagle-processing-admin-api';
 import { createEaglePrivacyApi } from './eagle-privacy-api';
 import { createPrivacyVisibilityApi } from './privacy-visibility-api';
 import type { LibraryMode } from './library-api-scope';
-import { createImageEdit } from '@sekereagle/library-core';
 
 afterEach(() => vi.restoreAllMocks());
 const factories = [
@@ -23,12 +22,6 @@ for (const factory of factories) {
   });
 }
 const operations = {
-  imageEdit: (mode: LibraryMode) =>
-    createEagleApi(mode).saveEagleImageEdit('', 'asset', {
-      operationId: 'operation',
-      rowVersion: 1,
-      edit: createImageEdit(),
-    }),
   send: (mode: LibraryMode) =>
     createEagleApi(mode).sendEagleAssets('', { assetIds: ['asset'], operationId: 'operation' }),
   location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('', 'asset'),

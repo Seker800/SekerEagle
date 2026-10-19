@@ -10,7 +10,6 @@ import {
   ListPartsCommand,
   S3Client,
   UploadPartCommand,
-  PutObjectCommand,
   type CompletedPart,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -156,12 +155,6 @@ export class ObjectStorageService implements OnModuleDestroy {
         Key: targetKey,
         CopySource: `${this.bucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
       }),
-    );
-  }
-
-  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
-    await this.client.send(
-      new PutObjectCommand({ Bucket: this.bucket, Key: key, Body: body, ContentType: contentType }),
     );
   }
 

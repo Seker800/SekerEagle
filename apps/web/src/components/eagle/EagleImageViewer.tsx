@@ -112,13 +112,11 @@ export function EagleImageViewer({
   image,
   descriptor,
   onLocate,
-  onEdit,
   onClose,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
   onLocate?: (assetId: string) => Promise<void>;
-  onEdit?: () => void;
   onClose: () => void;
 }) {
   const source = useMemo(
@@ -350,11 +348,6 @@ export function EagleImageViewer({
             <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
           <EagleImageCopyButton sourceUrl={image.src} />
-          {onEdit && (
-            <button type="button" onClick={onEdit}>
-              {t('编辑图片')}
-            </button>
-          )}
           <button type="button" onClick={onClose}>
             {' ' + t('关闭') + ' '}
           </button>

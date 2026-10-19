@@ -4,8 +4,7 @@ import {
   getPhotoTimelineMonth,
 } from '../photos/photo-timeline-sections';
 import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
-import { IMAGE_EDIT_MIME_TYPES, isCameraVideoMime } from '@sekereagle/library-core';
-import { EagleImageEditor } from './EagleImageEditor';
+import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
 import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
@@ -247,7 +246,6 @@ export function SekerEaglePage({
   const {
     api: {
       getEagleAsset,
-      saveEagleImageEdit,
       getEagleAssetLocation,
       getEagleTrashAsset,
       getEaglePyramidDescriptor,
@@ -288,19 +286,6 @@ export function SekerEaglePage({
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
-  const [editingImage, setEditingImage] = useState<EagleAssetListItem | null>(null);
-  const canEditImage = (asset: EagleAssetListItem) =>
-    libraryView !== 'TRASH' &&
-    (IMAGE_EDIT_MIME_TYPES as readonly string[]).includes(asset.mimeType) &&
-    asset.lifecycleStatus === 'READY' &&
-    !!asset.width &&
-    !!asset.height &&
-    !!getEaglePreviewContentUrl(asset);
-  const openImageEditor = (asset: EagleAssetListItem) => {
-    if (!canEditImage(asset)) return;
-    setEditingImage(asset);
-    setAssetContextMenu(null);
-  };
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
@@ -471,7 +456,6 @@ export function SekerEaglePage({
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
   const resetAssetPrivacyState = useCallback(() => {
-    setEditingImage(null);
     thumbnailScheduler.clear({ abortActive: true });
     thumbnailLoadService.dispose();
     assetStore.clear();
@@ -1903,11 +1887,6 @@ export function SekerEaglePage({
                 )}
                 <section className={styles.detailSection}>
                   <div className={styles.annotationForm}>
-                    {selectedAssetIds.length === 1 && canEditImage(selectedAsset) && (
-                      <button type="button" onClick={() => openImageEditor(selectedAsset)}>
-                        {t('编辑图片')}
-                      </button>
-                    )}
                     <label>
                       {' ' + t('标题') + ' '}
                       <input
@@ -2264,15 +2243,6 @@ export function SekerEaglePage({
                 {assetActionPending === 'save' ? t('正在准备…') : t('另存为…')}
               </button>
             ) : null}
-            {contextMenuAsset && canEditImage(contextMenuAsset) && (
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => openImageEditor(contextMenuAsset)}
-              >
-                {t('编辑图片')}
-              </button>
-            )}
             {imageClipboardAvailable &&
             contextMenuAsset?.mimeType.startsWith('image/') &&
             getEaglePreviewContentUrl(contextMenuAsset) ? (
@@ -2431,31 +2401,10 @@ export function SekerEaglePage({
         <EagleImageViewer
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
-          onEdit={
-            previewImageAsset && canEditImage(previewImageAsset)
-              ? () => openImageEditor(previewImageAsset)
-              : undefined
-          }
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={imagePreview.closePreview}
         />
       ) : null}
-      {editingImage && (
-        <EagleImageEditor
-          key={`${editingImage.id}:${editingImage.mediaRevision}`}
-          asset={editingImage}
-          previewUrl={getEaglePreviewContentUrl(editingImage)!}
-          onSave={(input) => saveEagleImageEdit(accessToken, editingImage.id, input)}
-          onClose={() => setEditingImage(null)}
-          onSaved={() => {
-            setEditingImage(null);
-            setPreviewAssetId(null);
-            imagePreview.closePreview();
-            setTransferStatus(t('编辑副本已保存，原片保留。'));
-            void queryClient.invalidateQueries({ queryKey: queryKeys.root });
-          }}
-        />
-      )}
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
           fieldOptions={photoFieldOptions}

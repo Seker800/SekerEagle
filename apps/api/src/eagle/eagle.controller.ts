@@ -1,6 +1,4 @@
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
-import { EagleImageEditService } from './eagle-image-edit.service';
-import { SaveImageEditDto } from './eagle-image-edit.dto';
 import { Optional } from '@nestjs/common';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { SendEagleAssetsDto } from './eagle.dto';
@@ -71,19 +69,7 @@ export class EagleController {
     private readonly media: EagleMediaService,
     private readonly privacy: EaglePrivacyService,
     @Optional() private readonly transfers?: EagleLibraryTransferService,
-    @Optional() private readonly imageEdits?: EagleImageEditService,
   ) {}
-
-  @Post('assets/:assetId/edits')
-  @UseGuards(BrowserOriginGuard)
-  saveImageEdit(
-    @CurrentPrincipal() principal: AuthPrincipal,
-    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
-    @Body() input: SaveImageEditDto,
-  ) {
-    if (!this.imageEdits) throw new Error('Image edit service is unavailable');
-    return this.imageEdits.save(principal.sub, assetId, input, principal.canViewPrivate === true);
-  }
 
   @Post('assets/batch/send')
   @UseGuards(BrowserOriginGuard)

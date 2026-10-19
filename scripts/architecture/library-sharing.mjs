@@ -25,7 +25,6 @@ const neutralCore = [
   'eagle-masonry-layout.ts',
   'EagleAssetThumbnail.tsx',
   'EagleImageViewer.tsx',
-  'EagleImageEditor.tsx',
   'EagleAssetLightbox.tsx',
   'EagleLivePhotoPlayback.tsx',
   'EagleLocateAssetButton.tsx',
@@ -41,7 +40,6 @@ const composition = {
     EagleAssetThumbnail: './EagleAssetThumbnail',
     EagleQuickFilterBar: './EagleQuickFilterBar',
     EagleImageViewer: './EagleImageViewer',
-    EagleImageEditor: './EagleImageEditor',
   },
   'apps/web/src/App.tsx': { SekerEaglePage: './components/eagle/SekerEaglePage' },
 };

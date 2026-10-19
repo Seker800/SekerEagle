@@ -30,7 +30,6 @@ const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
 const getEagleAssetLocationMock = vi.fn();
 const sendEagleAssetsMock = vi.fn();
-const saveEagleImageEditMock = vi.fn();
 const getEagleTrashAssetMock = vi.fn();
 const listEagleManualTagsMock = vi.fn();
 const createEagleManualTagMock = vi.fn();
@@ -69,7 +68,6 @@ vi.mock('../../lib/eagle-api', () => ({
   getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
   getEagleAssetLocation: (...args: unknown[]) => getEagleAssetLocationMock(...args),
   sendEagleAssets: (...args: unknown[]) => sendEagleAssetsMock(...args),
-  saveEagleImageEdit: (...args: unknown[]) => saveEagleImageEditMock(...args),
   getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
   listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
   listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
@@ -703,26 +701,6 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('button', { name: '保存素材信息' })).not.toBeInTheDocument();
   });
 
-  it('opens the content editor from details and saves an independent copy', async () => {
-    saveEagleImageEditMock.mockResolvedValue({ assetId: 'edited-copy' });
-    renderPage();
-    await selectAssetAndOpenInspector();
-    fireEvent.click(screen.getByRole('button', { name: '编辑图片' }));
-    const editor = screen.getByRole('dialog', { name: '图片编辑' });
-    fireEvent.load(within(editor).getByAltText('编辑预览'));
-    fireEvent.click(within(editor).getByRole('button', { name: '向右旋转' }));
-    fireEvent.click(within(editor).getByRole('button', { name: '保存副本' }));
-    await waitFor(() =>
-      expect(saveEagleImageEditMock).toHaveBeenCalledWith(
-        'token',
-        'asset-1',
-        expect.objectContaining({ rowVersion: 1, edit: expect.objectContaining({ rotation: 90 }) }),
-      ),
-    );
-    expect(await screen.findByText('编辑副本已保存，原片保留。')).toBeInTheDocument();
-    expect(screen.queryByRole('dialog', { name: '图片编辑' })).not.toBeInTheDocument();
-  });
-
   it('serializes overlapping metadata autosaves with the latest row version', async () => {
     let resolveFirstSave!: (value: typeof asset) => void;
     updateEagleAssetMock
@@ -1262,7 +1240,6 @@ describe('SekerEaglePage', () => {
     const expectedActions = [
       '发送到照片',
       '另存为…',
-      '编辑图片',
       '复制图片',
       '添加标签',
       '删除人工标签',
