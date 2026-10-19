@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhotoEditor } from './PhotoEditor';
+import { composePhoto } from './photo-editor-render';
+import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 import { PHOTO_ADJUSTMENTS } from './photo-adjustment-catalog';
 
 vi.mock('./photo-editor-metadata', () => ({
@@ -21,10 +23,10 @@ vi.mock('./photo-editor-render', () => ({
     target.width = 800;
     target.height = 600;
   },
-  composePhoto: (target: HTMLCanvasElement) => {
+  composePhoto: vi.fn((target: HTMLCanvasElement) => {
     target.width = 800;
     target.height = 600;
-  },
+  }),
   createPhotoRenderer: () => ({
     render: async () => document.createElement('canvas'),
     dispose: vi.fn(),
@@ -200,6 +202,37 @@ describe('photo editor interactions', () => {
     fireEvent(button, new MouseEvent('pointerup', { bubbles: true, button: 0 }));
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-pressed', 'false');
+  });
+  it('compares only filters and adjustments while preserving framing, watermark and history', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '0.5' } });
+    fireEvent.click(screen.getByRole('button', { name: '滤镜' }));
+    fireEvent.click(screen.getByRole('button', { name: '复古' }));
+    fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
+    fireEvent.click(screen.getByRole('button', { name: '1:1' }));
+    fireEvent.click(screen.getByRole('button', { name: '旋转' }));
+    fireEvent.click(screen.getByRole('button', { name: '镜像' }));
+    fireEvent.click(screen.getByRole('button', { name: '水印' }));
+    fireEvent.click(screen.getByRole('button', { name: '摄影信息条' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
+    const edited = vi.mocked(composePhoto).mock.calls.at(-1)![2];
+    const dimensions = screen.getByText(/^[0-9]+ × [0-9]+$/).textContent;
+    fireEvent.click(screen.getByRole('button', { name: '对比原图' }));
+    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toEqual({
+      ...edited,
+      ...Object.fromEntries(PHOTO_ADJUSTMENTS.map(({ key }) => [key, DEFAULT_PHOTO_EDITS[key]])),
+      filter: 'original', filterStrength: 100,
+    }));
+    expect(screen.getByText(/^[0-9]+ × [0-9]+$/)).toHaveTextContent(dimensions!);
+    fireEvent.click(screen.getByRole('button', { name: '返回编辑' }));
+    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![2]).toEqual(edited));
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    expect(screen.getByRole('button', { name: '无水印' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '裁剪' }));
+    fireEvent.click(screen.getByRole('button', { name: '对比原图' }));
+    expect(screen.getByRole('group', { name: '裁剪取景区域' })).toBeInTheDocument();
+    await waitFor(() => expect(vi.mocked(composePhoto).mock.calls.at(-1)![4]).toBe(false));
   });
   it('edits watermark text as one undoable operation and can remove the frame', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
