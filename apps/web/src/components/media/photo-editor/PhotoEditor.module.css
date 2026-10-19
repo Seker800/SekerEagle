@@ -1181,7 +1181,8 @@
   }
 }
 
-.editor:has(.advancedOptions) {
+.editor:has(.advancedOptions),
+.editor:has(.glassControls) {
   --photo-controls-size: 272px;
 }
 .editor:has(.curveGraph) {
