@@ -31,7 +31,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
     const manualTagIds = await this.resolveManualTags(command, transaction);
 
     await transaction.eagleAsset.update({
-      where: { id: command.assetId, libraryMode: 'MATERIAL' },
+      where: { ownerId: command.ownerId, id: command.assetId, libraryMode: 'MATERIAL' },
       data: {
         displayName: command.displayName,
         normalizedDisplayName: command.displayName

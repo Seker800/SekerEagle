@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
@@ -20,6 +21,7 @@ export interface User {
   role: 'USER' | 'ADMIN';
 }
 export function App() {
+  const queryClient = useQueryClient();
   const [libraryMode, setLibraryMode] = useState<LibraryMode>('MATERIAL');
   const modeRef = useRef(libraryMode);
   modeRef.current = libraryMode;
@@ -93,6 +95,8 @@ export function App() {
     try {
       await request('/api/auth/logout', { method: 'POST', body: '{}' });
     } finally {
+      await queryClient.cancelQueries();
+      queryClient.clear();
       setUser(null);
       setPassword('');
       setNotice(noticeAfterLogout);

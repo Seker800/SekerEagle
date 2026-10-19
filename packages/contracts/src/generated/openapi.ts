@@ -2840,11 +2840,30 @@ export interface components {
       /** Format: uuid */
       operationId: string;
     };
-    Object: Record<string, never>;
     CountEagleAssetsDto: {
       query: {
         [key: string]: unknown;
       };
+    };
+    EagleRenditionResponseDto: {
+      id: string;
+      /** @enum {string} */
+      kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
+      revision: number;
+      mimeType: string;
+      byteSize: number;
+      width: number | null;
+      height: number | null;
+    };
+    EagleAssetUpdateResponseDto: {
+      id: string;
+      mediaRevision: number;
+      /** @enum {string} */
+      lifecycleStatus: 'PROCESSING' | 'READY' | 'FAILED';
+      mediaErrorCode: string | null;
+      /** Format: date-time */
+      updatedAt: string;
+      renditions: components['schemas']['EagleRenditionResponseDto'][];
     };
     EagleAssetIdsDto: {
       assetIds: string[];
@@ -2941,6 +2960,7 @@ export interface components {
       size: number;
       contentSha256?: string;
     };
+    Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
     FinishEagleImportItemDto: {
@@ -3312,11 +3332,26 @@ export interface operations {
         cameraModel?: string;
         lensModel?: string;
         gps?: 'WITH' | 'WITHOUT';
-        limit?: components['schemas']['Object'];
+        limit?: number;
         cursor?: string;
         search?: string;
         rating?: number;
         format?: string;
+        /** @description Comma-separated values */
+        formats?: string;
+        /** @description Comma-separated values */
+        manualTagIds?: string;
+        /** @description Comma-separated values */
+        aiTagIds?: string;
+        smartFolderId?: string;
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+        createdFrom?: string;
+        createdTo?: string;
+        color?: string;
+        tagMatch?: 'ANY' | 'ALL';
         privacy?: 'PRIVATE';
         /** @description JSON encoded Eagle filter query */
         rules?: string;
@@ -3369,7 +3404,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
       };
     };
   };
@@ -3386,11 +3423,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
       };
     };
   };
@@ -3733,11 +3772,26 @@ export interface operations {
         cameraModel?: string;
         lensModel?: string;
         gps?: 'WITH' | 'WITHOUT';
-        limit?: components['schemas']['Object'];
+        limit?: number;
         cursor?: string;
         search?: string;
         rating?: number;
         format?: string;
+        /** @description Comma-separated values */
+        formats?: string;
+        /** @description Comma-separated values */
+        manualTagIds?: string;
+        /** @description Comma-separated values */
+        aiTagIds?: string;
+        smartFolderId?: string;
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+        createdFrom?: string;
+        createdTo?: string;
+        color?: string;
+        tagMatch?: 'ANY' | 'ALL';
         privacy?: 'PRIVATE';
         /** @description JSON encoded Eagle filter query */
         rules?: string;
@@ -4636,7 +4690,8 @@ export interface operations {
     parameters: {
       query?: {
         externalLibraryId?: string;
-        status?: string;
+        status?:
+          'DRAFT' | 'PREFLIGHTED' | 'RUNNING' | 'COMPLETED' | 'PARTIAL' | 'FAILED' | 'CANCELLED';
         limit?: components['schemas']['Object'];
         cursor?: string;
       };
@@ -4758,7 +4813,8 @@ export interface operations {
       query?: {
         limit?: components['schemas']['Object'];
         cursor?: string;
-        status?: string;
+        status?:
+          'STAGED' | 'UPLOADING' | 'FINALIZING' | 'IMPORTED' | 'SKIPPED' | 'FAILED' | 'CANCELLED';
       };
       header?: never;
       path: {
@@ -5292,11 +5348,26 @@ export interface operations {
         cameraModel?: string;
         lensModel?: string;
         gps?: 'WITH' | 'WITHOUT';
-        limit?: components['schemas']['Object'];
+        limit?: number;
         cursor?: string;
         search?: string;
         rating?: number;
         format?: string;
+        /** @description Comma-separated values */
+        formats?: string;
+        /** @description Comma-separated values */
+        manualTagIds?: string;
+        /** @description Comma-separated values */
+        aiTagIds?: string;
+        smartFolderId?: string;
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+        createdFrom?: string;
+        createdTo?: string;
+        color?: string;
+        tagMatch?: 'ANY' | 'ALL';
         privacy?: 'PRIVATE';
         /** @description JSON encoded Eagle filter query */
         rules?: string;
@@ -5349,7 +5420,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
       };
     };
   };
@@ -5366,11 +5439,13 @@ export interface operations {
       };
     };
     responses: {
-      201: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
       };
     };
   };
@@ -5713,11 +5788,26 @@ export interface operations {
         cameraModel?: string;
         lensModel?: string;
         gps?: 'WITH' | 'WITHOUT';
-        limit?: components['schemas']['Object'];
+        limit?: number;
         cursor?: string;
         search?: string;
         rating?: number;
         format?: string;
+        /** @description Comma-separated values */
+        formats?: string;
+        /** @description Comma-separated values */
+        manualTagIds?: string;
+        /** @description Comma-separated values */
+        aiTagIds?: string;
+        smartFolderId?: string;
+        minWidth?: number;
+        maxWidth?: number;
+        minHeight?: number;
+        maxHeight?: number;
+        createdFrom?: string;
+        createdTo?: string;
+        color?: string;
+        tagMatch?: 'ANY' | 'ALL';
         privacy?: 'PRIVATE';
         /** @description JSON encoded Eagle filter query */
         rules?: string;

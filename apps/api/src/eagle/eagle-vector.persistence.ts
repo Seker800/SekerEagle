@@ -31,10 +31,12 @@ export async function refreshUnclassifiedSuggestions(
       WITH owner_lock AS MATERIALIZED (
         SELECT pg_advisory_xact_lock(hashtextextended(${`${input.ownerId}:${input.libraryMode ?? 'MATERIAL'}`}, 913421))
       ), eligible AS MATERIALIZED (
-        SELECT asset.id AS "assetId", embedding.id AS "embeddingId", embedding.embedding
+        SELECT asset.id AS "assetId", embedding.id AS "embeddingId", embedding."spaceId", embedding.embedding
         FROM "EagleAsset" asset
         JOIN "EagleAssetEmbedding" embedding
           ON embedding."ownerId" = asset."ownerId" AND embedding."assetId" = asset.id
+         AND embedding."assetRevision" = asset."mediaRevision"
+         AND embedding."libraryMode" = asset."libraryMode"
          AND embedding."isCurrent" = true AND embedding.status = 'READY'
         CROSS JOIN owner_lock
         WHERE asset."ownerId" = ${input.ownerId} AND asset."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
@@ -69,6 +71,7 @@ export async function refreshUnclassifiedSuggestions(
           JOIN "EagleManualTagSemanticConfig" config
             ON config."ownerId" = snapshot."ownerId" AND config."tagId" = snapshot."tagId"
           WHERE snapshot."ownerId" = ${input.ownerId} AND snapshot."libraryMode" = ${input.libraryMode ?? 'MATERIAL'}::"LibraryMode"
+            AND snapshot."spaceId" = eligible."spaceId"
             AND snapshot."isCurrent" = true
             AND snapshot.status = 'ACTIVE'
             AND config."recommendationEnabled" = true
@@ -146,12 +149,17 @@ export async function syncCurrentTagMemberDistances(
       SELECT link."ownerId", link."libraryMode", link."tagId", link."assetId", config."currentSnapshotId",
              nearest.distance, nearest.rank, NOW()
       FROM "EagleAssetManualTag" link
+      JOIN "EagleAsset" asset ON asset.id=link."assetId" AND asset."ownerId"=link."ownerId" AND asset."libraryMode"=link."libraryMode"
       JOIN "EagleManualTagSemanticConfig" config
         ON config."ownerId" = link."ownerId" AND config."tagId" = link."tagId"
        AND config."currentSnapshotId" IS NOT NULL
+      JOIN "EagleTagPrototypeSnapshot" snapshot ON snapshot.id=config."currentSnapshotId" AND snapshot."ownerId"=link."ownerId" AND snapshot."libraryMode"=link."libraryMode"
       JOIN "EagleAssetEmbedding" embedding
         ON embedding."ownerId" = link."ownerId" AND embedding."assetId" = link."assetId"
-       AND embedding."isCurrent" = true AND embedding.status = 'READY'
+       AND embedding."assetRevision" = asset."mediaRevision"
+         AND embedding."spaceId" = snapshot."spaceId"
+         AND embedding."libraryMode" = asset."libraryMode"
+         AND embedding."isCurrent" = true AND embedding.status = 'READY'
       CROSS JOIN LATERAL (
         SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleTagPrototype" prototype

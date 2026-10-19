@@ -1,15 +1,17 @@
+import {
+  getFilterPresentations as getEagleFilterFields,
+  getFilterPresentation as getEagleFilterFieldDefinition,
+  getOperatorLabel,
+} from './eagle-filter-presentation';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { IconMinus, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import {
-  getEagleFilterFields,
   EAGLE_FILTER_MAX_CONDITIONS,
   EAGLE_FILTER_MAX_RULES_PER_CONDITION,
-  EAGLE_FILTER_OPERATOR_LABELS,
   createEagleFilterCondition,
   createEagleFilterRule,
-  getEagleFilterFieldDefinition,
   type EagleFilterCondition,
   type EagleFilterField,
   type EagleFilterQuery,
@@ -238,7 +240,7 @@ function RuleRow({
       >
         {definition.operators.map((operator) => (
           <option key={operator} value={operator}>
-            {EAGLE_FILTER_OPERATOR_LABELS[operator]}
+            {getOperatorLabel(operator)}
           </option>
         ))}
       </select>

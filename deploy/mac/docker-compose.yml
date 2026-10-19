@@ -1,5 +1,11 @@
 name: sekereagle
 
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: '20m'
+    max-file: '3'
+
 x-api-environment: &api-environment
   NODE_ENV: production
   PORT: 3000
@@ -14,8 +20,8 @@ x-api-environment: &api-environment
   S3_PUBLIC_ENDPOINT: http://localhost:8180
   S3_REGION: us-east-1
   S3_BUCKET: sekereagle-assets
-  S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-  S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+  S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+  S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
   S3_CONNECTION_TIMEOUT_MS: ${S3_CONNECTION_TIMEOUT_MS:-3000}
   S3_REQUEST_TIMEOUT_MS: ${S3_REQUEST_TIMEOUT_MS:-12000}
   S3_SOCKET_TIMEOUT_MS: ${S3_SOCKET_TIMEOUT_MS:-10000}
@@ -41,6 +47,7 @@ x-api-environment: &api-environment
 services:
   postgres:
     image: pgvector/pgvector:0.8.6-pg16
+    logging: *bounded-logging
     platform: linux/arm64
     restart: unless-stopped
     shm_size: 512m
@@ -59,6 +66,7 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    logging: *bounded-logging
     platform: linux/arm64
     command: server /data --console-address :9001
     restart: unless-stopped
@@ -68,6 +76,8 @@ services:
       # Hundreds of thousands of small pyramid tiles make the local usage scanner
       # churn filesystem metadata. Asset lifecycle cleanup is application-owned, so
       # slower usage-stat refresh is the safer desktop tradeoff.
+      MINIO_API_STALE_UPLOADS_EXPIRY: 24h
+      MINIO_API_STALE_UPLOADS_CLEANUP_INTERVAL: 1h
       MINIO_SCANNER_SPEED: ${MINIO_SCANNER_SPEED:-slowest}
     volumes:
       - sekereagle_minio:/data
@@ -80,6 +90,7 @@ services:
 
   minio-init:
     image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    logging: *bounded-logging
     platform: linux/arm64
     depends_on:
       minio:
@@ -87,14 +98,16 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    entrypoint: ['/bin/sh', '-c']
-    command:
-      - >-
-        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" &&
-        mc mb --ignore-existing local/sekereagle-assets
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+    volumes:
+      - ./minio-init.sh:/init.sh:ro
+      - ./minio-app-policy.json:/policies/app.json:ro
+    entrypoint: ['/bin/sh', '/init.sh']
     restart: 'no'
 
   migrate:
+    logging: *bounded-logging
     platform: linux/arm64
     build:
       context: ../..
@@ -107,6 +120,7 @@ services:
     restart: 'no'
 
   api:
+    logging: *bounded-logging
     platform: linux/arm64
     build:
       context: ../..
@@ -136,6 +150,7 @@ services:
     mem_limit: 2g
 
   worker:
+    logging: *bounded-logging
     platform: linux/arm64
     build:
       context: ../..
@@ -147,26 +162,39 @@ services:
         condition: service_completed_successfully
       minio-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'node', 'apps/worker/dist/worker-health.js', '--check']
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     stop_grace_period: 30s
     mem_limit: 6g
 
   web:
+    logging: *bounded-logging
     platform: linux/arm64
     build:
       context: ../..
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1/']
+      interval: 10s
+      timeout: 5s
+      retries: 6
     mem_limit: 256m
 
   gateway:
     image: nginx:1.31-alpine
+    logging: *bounded-logging
     platform: linux/arm64
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
       web:
-        condition: service_started
+        condition: service_healthy
     ports:
       - '127.0.0.1:8180:8080'
     volumes:

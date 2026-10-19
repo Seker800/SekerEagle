@@ -28,6 +28,9 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   async runMaintenance(now = new Date()) {
+    await this.imports.reconcileStaleUploadSessions();
+    await this.imports.projectTerminalItemProgress(500);
+    await this.imports.backfillTerminalProgress(500);
     const completedBefore = new Date(now.getTime() - COMPLETED_JOB_RETENTION_MS);
     const completedJobsDeleted = await this.prisma.$executeRaw`
       WITH doomed AS (

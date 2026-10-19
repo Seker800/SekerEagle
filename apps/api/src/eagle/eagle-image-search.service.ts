@@ -7,6 +7,12 @@ import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vecto
 
 export type ImageSearchContext =
   { status: 'READY'; spaceId: string; vector: string } | { status: 'UNAVAILABLE'; spaceId: string };
+export interface ImageSearchPosition {
+  assetId: string;
+  tier: number;
+  similarity: number;
+  libraryAddedAt: string;
+}
 const DEFAULT_REVISION = '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda';
 const CACHE_TTL = 5 * 60 * 1000,
   CACHE_LIMIT = 128;
@@ -54,6 +60,7 @@ export class EagleImageSearchService {
     if (
       !text ||
       !space ||
+      !space.isCurrent ||
       space.model !== EAGLE_EMBEDDING_MODEL ||
       space.revision !== revision ||
       space.dimensions !== EAGLE_EMBEDDING_DIMENSIONS ||
@@ -70,16 +77,16 @@ export class EagleImageSearchService {
       return unavailable;
     }
   }
-  async rank(
+  async rankPage(
     ownerId: string,
     search: string,
     context: ImageSearchContext,
-    offset: number,
+    after: ImageSearchPosition | undefined,
     limit: number,
     includePrivate: boolean,
     trash: boolean,
     allowedAssetIds?: readonly string[],
-  ): Promise<string[]> {
+  ): Promise<ImageSearchPosition[]> {
     if (allowedAssetIds?.length === 0 || limit === 0) return [];
     const normalized = search.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
     const eligibility = allowedAssetIds
@@ -104,7 +111,12 @@ export class EagleImageSearchService {
         AND 1-(embedding.embedding <=> ${context.vector}::vector)>=${threshold}
     `
         : Prisma.empty;
-    const rows = await this.prisma.$queryRaw<Array<{ assetId: string }>>(Prisma.sql`
+    const continuation = after
+      ? Prisma.sql`WHERE (ranked.tier, ranked.similarity, asset."libraryAddedAt", ranked."assetId") < (${after.tier}, ${after.similarity}, ${new Date(after.libraryAddedAt)}, ${after.assetId})`
+      : Prisma.empty;
+    const rows = await this.prisma.$queryRaw<
+      Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
+    >(Prisma.sql`
       WITH candidates("assetId",tier,similarity) AS (
         SELECT asset.id, 3::integer, 1::double precision FROM "EagleAsset" AS asset
         WHERE ${visible} AND (strpos(asset."normalizedDisplayName",${normalized})>0 OR strpos(lower(asset."originalName"),${normalized})>0)
@@ -116,10 +128,11 @@ export class EagleImageSearchService {
         WHERE ${visible} AND strpos(tag."normalizedName",${normalized})>0
         ${semantic}
       ), ranked AS (SELECT "assetId",max(tier) AS tier,max(similarity) AS similarity FROM candidates GROUP BY "assetId")
-      SELECT ranked."assetId" FROM ranked JOIN "EagleAsset" AS asset ON asset.id=ranked."assetId"
+      SELECT ranked."assetId", ranked.tier, ranked.similarity, asset."libraryAddedAt" FROM ranked JOIN "EagleAsset" AS asset ON asset.id=ranked."assetId"
+      ${continuation}
       ORDER BY ranked.tier DESC,ranked.similarity DESC,asset."libraryAddedAt" DESC,ranked."assetId" DESC
-      OFFSET ${offset} LIMIT ${limit}
+      LIMIT ${limit}
     `);
-    return rows.map((row) => row.assetId);
+    return rows.map((row) => ({ ...row, libraryAddedAt: row.libraryAddedAt.toISOString() }));
   }
 }

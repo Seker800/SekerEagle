@@ -1,3 +1,6 @@
+import { recordWorkerHeartbeat } from './worker-health';
+import { ensureCompatibleEmbeddingSpace } from './embedding-space';
+import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
 import sharp from 'sharp';
 import {
@@ -98,6 +101,7 @@ let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
 let stopping = false;
 let activeJobCount = 0;
+let activeTagBuildCount = 0;
 let deletingObjects = false;
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
@@ -136,25 +140,69 @@ async function heartbeat(): Promise<void> {
     create: { workerId, version: workerVersion, startedAt: now, heartbeatAt: now, activeJobCount },
     update: { heartbeatAt: now, activeJobCount },
   });
+  await recordWorkerHeartbeat();
 }
 
+let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   return claimNextMediaJob(prisma, {
     canClaimBackground: canClaimBackgroundForOwner,
+    laneOrder: mediaLaneOrder(claimSequence++),
   });
 }
 
 async function claimTagBuild(): Promise<EagleTagSemanticBuild | null> {
   return prisma.$transaction(async (transaction) => {
     const candidate = await transaction.eagleTagSemanticBuild.findFirst({
-      where: { status: 'PENDING', availableAt: { lte: new Date() } },
+      where: {
+        OR: [
+          { status: 'PENDING', availableAt: { lte: new Date() } },
+          { status: 'PROCESSING', lockedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
+        ],
+      },
       orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
     });
     if (!candidate) return null;
+    const retireCandidate = async (failureCode: string) => {
+      if (!candidate.candidateSnapshotId) return;
+      await transaction.eagleTagPrototypeSnapshot.updateMany({
+        where: {
+          id: candidate.candidateSnapshotId,
+          ownerId: candidate.ownerId,
+          libraryMode: candidate.libraryMode,
+          status: 'BUILDING',
+        },
+        data: { status: 'FAILED', failureCode },
+      });
+    };
+    if (candidate.attempts >= 12) {
+      const exhausted = await transaction.eagleTagSemanticBuild.updateMany({
+        where: {
+          id: candidate.id,
+          status: candidate.status,
+          leaseVersion: candidate.leaseVersion,
+          lockedAt: candidate.lockedAt,
+        },
+        data: {
+          status: 'FAILED',
+          lockedAt: null,
+          completedAt: new Date(),
+          lastError: 'BUILD_ATTEMPTS_EXHAUSTED',
+        },
+      });
+      if (exhausted.count === 1) await retireCandidate('BUILD_ATTEMPTS_EXHAUSTED');
+      return null;
+    }
     const claimed = await transaction.eagleTagSemanticBuild.updateMany({
-      where: { id: candidate.id, status: 'PENDING', leaseVersion: candidate.leaseVersion },
+      where: {
+        id: candidate.id,
+        status: candidate.status,
+        leaseVersion: candidate.leaseVersion,
+        lockedAt: candidate.lockedAt,
+      },
       data: {
         status: 'PROCESSING',
+        candidateSnapshotId: null,
         attempts: { increment: 1 },
         leaseVersion: { increment: 1 },
         lockedAt: new Date(),
@@ -163,6 +211,7 @@ async function claimTagBuild(): Promise<EagleTagSemanticBuild | null> {
       },
     });
     if (claimed.count !== 1) return null;
+    await retireCandidate('BUILD_LEASE_EXPIRED');
     return transaction.eagleTagSemanticBuild.findUnique({ where: { id: candidate.id } });
   });
 }
@@ -294,7 +343,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   if (!asset) {
     await prisma.eagleAssetProcessingJob.updateMany({
       where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        lockedAt: null,
+        lastError: 'ASSET_TRASHED',
+      },
     });
     return;
   }
@@ -1054,9 +1108,8 @@ async function processAiTaggingJob(
 }
 
 async function ensureEmbeddingSpace(): Promise<void> {
-  await prisma.eagleEmbeddingSpace.upsert({
-    where: { id: embeddingSpaceId },
-    create: {
+  await prisma.$transaction((tx) =>
+    ensureCompatibleEmbeddingSpace(tx, {
       id: embeddingSpaceId,
       model: embeddingModel,
       revision: embeddingRevision,
@@ -1064,15 +1117,8 @@ async function ensureEmbeddingSpace(): Promise<void> {
       instructionVersion: 'image-retrieval-v1',
       preprocessingVersion: 'preview-webp-v1',
       normalized: true,
-      isCurrent: true,
-    },
-    update: {
-      model: embeddingModel,
-      revision: embeddingRevision,
-      dimensions: embeddingDimensions,
-      normalized: true,
-    },
-  });
+    }),
+  );
 }
 
 function normalizeAiTagName(value: string): string {
@@ -1106,6 +1152,7 @@ async function createTopSuggestion(
         JOIN "EagleManualTagSemanticConfig" config
           ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
         WHERE embedding."ownerId" = ${ownerId} AND embedding."libraryMode" = ${libraryMode}::"LibraryMode" AND embedding.id = ${embeddingId}
+          AND snapshot."spaceId" = embedding."spaceId"
           AND snapshot."isCurrent" = true AND snapshot.status = 'ACTIVE'
           AND config."recommendationEnabled" = true
         ORDER BY prototype.embedding <=> embedding.embedding ASC
@@ -1166,6 +1213,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
       JOIN "EagleAssetEmbedding" embedding
         ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
        AND embedding."isCurrent" = true AND embedding.status = 'READY'
+       AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
       WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
         AND asset."deletedAt" IS NULL
     `),
@@ -1182,6 +1230,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
     JOIN "EagleAssetEmbedding" embedding
       ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
      AND embedding."isCurrent" = true AND embedding.status = 'READY'
+     AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
     WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
       AND asset."deletedAt" IS NULL
     ORDER BY md5(link."assetId")
@@ -1203,34 +1252,46 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
     },
   );
   const generationId = randomUUID();
-  const snapshot = await prisma.eagleTagPrototypeSnapshot.create({
-    data: {
-      ownerId: build.ownerId,
-      libraryMode: build.libraryMode,
-      tagId: build.tagId,
-      spaceId: space.id,
-      version: (currentSnapshot?.version ?? 0) + 1,
-      generationId,
-      status: 'BUILDING',
-      sourceAssetCount: memberCount,
-      sourceSetDigest: memberStats[0]?.digest ?? createHash('sha256').update('').digest('hex'),
-      algorithm: 'MINIBATCH_SPHERICAL_KMEANS',
-      algorithmVersion: 'v1',
-      algorithmParams: {
-        maxK: 8,
-        minimumRelativeImprovement: 0.12,
-        batchSize: 128,
-        outlierTrimFraction: 0.02,
-        sampleLimit,
-        sampleCount: sample.length,
+  const snapshot = await prisma.$transaction(async (transaction) => {
+    const held = await transaction.eagleTagSemanticBuild.updateMany({
+      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
+      data: { lockedAt: new Date() },
+    });
+    if (held.count !== 1) throw new Error('TAG_BUILD_LEASE_LOST');
+    const versions = await transaction.eagleTagPrototypeSnapshot.aggregate({
+      where: { ownerId: build.ownerId, libraryMode: build.libraryMode, tagId: build.tagId },
+      _max: { version: true },
+    });
+    const row = await transaction.eagleTagPrototypeSnapshot.create({
+      data: {
+        ownerId: build.ownerId,
+        libraryMode: build.libraryMode,
+        tagId: build.tagId,
+        spaceId: space.id,
+        version: (versions._max.version ?? 0) + 1,
+        generationId,
+        status: 'BUILDING',
+        sourceAssetCount: memberCount,
+        sourceSetDigest: memberStats[0]?.digest ?? createHash('sha256').update('').digest('hex'),
+        algorithm: 'MINIBATCH_SPHERICAL_KMEANS',
+        algorithmVersion: 'v1',
+        algorithmParams: {
+          maxK: 8,
+          minimumRelativeImprovement: 0.12,
+          batchSize: 128,
+          outlierTrimFraction: 0.02,
+          sampleLimit,
+          sampleCount: sample.length,
+        },
+        addedMemberCount: Math.max(0, memberCount - (currentSnapshot?.sourceAssetCount ?? 0)),
+        removedMemberCount: Math.max(0, (currentSnapshot?.sourceAssetCount ?? 0) - memberCount),
       },
-      addedMemberCount: Math.max(0, memberCount - (currentSnapshot?.sourceAssetCount ?? 0)),
-      removedMemberCount: Math.max(0, (currentSnapshot?.sourceAssetCount ?? 0) - memberCount),
-    },
-  });
-  await prisma.eagleTagSemanticBuild.update({
-    where: { id: build.id },
-    data: { candidateSnapshotId: snapshot.id },
+    });
+    await transaction.eagleTagSemanticBuild.update({
+      where: { id: build.id },
+      data: { candidateSnapshotId: row.id },
+    });
+    return row;
   });
   for (const prototype of prototypePlan.prototypes) {
     const vector = `[${prototype.embedding.join(',')}]`;
@@ -1259,6 +1320,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
       JOIN "EagleAssetEmbedding" embedding
         ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
        AND embedding."isCurrent" = true AND embedding.status = 'READY'
+       AND embedding."assetRevision"=asset."mediaRevision" AND embedding."spaceId"=${embeddingSpaceId}
       CROSS JOIN LATERAL (
         SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleTagPrototype" prototype
@@ -1321,6 +1383,7 @@ async function recomputeSuggestionGeneration(
         JOIN "EagleManualTagSemanticConfig" config
           ON config."ownerId" = snapshot."ownerId" AND config."libraryMode" = snapshot."libraryMode" AND config."tagId" = snapshot."tagId"
         WHERE snapshot."ownerId" = embedding."ownerId" AND snapshot."libraryMode" = embedding."libraryMode"
+          AND snapshot."spaceId" = embedding."spaceId"
           AND config."recommendationEnabled" = true
           AND (snapshot.status = 'ACTIVE' OR snapshot.id = ${candidateSnapshotId})
           AND (
@@ -1332,7 +1395,8 @@ async function recomputeSuggestionGeneration(
         LIMIT 1
       ) nearest
       WHERE embedding."ownerId" = ${build.ownerId} AND embedding."libraryMode" = ${build.libraryMode} AND embedding."isCurrent" = true
-        AND embedding.status = 'READY' AND asset."deletedAt" IS NULL
+        AND embedding.status = 'READY' AND embedding."assetRevision" = asset."mediaRevision"
+        AND embedding."spaceId" = ${embeddingSpaceId} AND asset."deletedAt" IS NULL
         AND 1 - nearest.distance >= ${minimumScore}
         AND NOT EXISTS (
           SELECT 1 FROM "EagleAssetManualTag" manual
@@ -1341,6 +1405,11 @@ async function recomputeSuggestionGeneration(
     `,
   );
   await prisma.$transaction(async (transaction) => {
+    const held = await transaction.eagleTagSemanticBuild.updateMany({
+      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
+      data: { lockedAt: new Date() },
+    });
+    if (held.count !== 1) throw new Error('TAG_BUILD_LEASE_LOST');
     await transaction.eagleVectorTagSuggestion.updateMany({
       where: {
         ownerId: build.ownerId,
@@ -1396,7 +1465,7 @@ async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown
   const terminal = build.attempts >= 5 || message === 'TAG_RECOMMENDATION_DISABLED';
   const delaySeconds = Math.min(3_600, 2 ** Math.min(build.attempts, 12));
   await prisma.$transaction(async (transaction) => {
-    await transaction.eagleTagSemanticBuild.updateMany({
+    const held = await transaction.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
       data: terminal
         ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
@@ -1407,6 +1476,7 @@ async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown
             lastError: message,
           },
     });
+    if (held.count !== 1) return;
     const persistedBuild = terminal
       ? await transaction.eagleTagSemanticBuild.findUnique({
           where: { id: build.id },
@@ -1567,6 +1637,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
           },
     });
     if (failed.count !== 1) return;
+    if (terminal) await propagateFailedDependencies(transaction);
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
       await transaction.eagleAssetColorAnalysis.upsert({
         where: {
@@ -1697,18 +1768,19 @@ async function poll(): Promise<void> {
         deletingObjects = false;
       });
   }
+  if (!stopping && activeTagBuildCount === 0) {
+    const build = await claimTagBuild();
+    if (build) {
+      activeTagBuildCount++;
+      void processClaimedTagBuild(build).catch(reportLoopError);
+    }
+  }
   if (stopping || activeJobCount >= workerConcurrency) return;
   while (!stopping && activeJobCount < workerConcurrency) {
     const job = await claimJob();
-    if (!job) {
-      const tagBuild = await claimTagBuild();
-      if (!tagBuild) return;
-      activeJobCount += 1;
-      void processClaimedTagBuild(tagBuild);
-      continue;
-    }
+    if (!job) return;
     activeJobCount += 1;
-    void processClaimedJob(job);
+    void processClaimedJob(job).catch(reportLoopError);
   }
 }
 
@@ -1800,6 +1872,7 @@ function defaultWakeSettings(): ProcessingWakeSettings {
 
 async function drainAndScheduleWork(): Promise<void> {
   if (stopping) return;
+  await propagateFailedDependencies(prisma);
   await poll();
   if (!stopping && activeJobCount === 0) {
     wakeScheduler?.scheduleAt(await nextQueueWakeAt());
@@ -1807,6 +1880,15 @@ async function drainAndScheduleWork(): Promise<void> {
 }
 
 async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<void> {
+  const renewal = setInterval(() => {
+    void prisma.eagleTagSemanticBuild
+      .updateMany({
+        where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
+        data: { lockedAt: new Date() },
+      })
+      .catch(reportLoopError);
+  }, 60_000);
+  renewal.unref();
   try {
     await processTagSemanticBuild(build);
     process.stdout.write(
@@ -1817,7 +1899,8 @@ async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<voi
     const message = error instanceof Error ? error.message : 'unknown tag semantic build error';
     process.stderr.write(`failed tag semantic build ${build.id}: ${message}\n`);
   } finally {
-    activeJobCount -= 1;
+    clearInterval(renewal);
+    activeTagBuildCount -= 1;
     wakeScheduler?.wakeNow();
   }
 }
@@ -1883,7 +1966,8 @@ async function stop(signal: string): Promise<void> {
   wakeScheduler?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
-  while (activeJobCount > 0) await new Promise((resolve) => setTimeout(resolve, 100));
+  while (activeJobCount > 0 || activeTagBuildCount > 0 || deletingObjects)
+    await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
   storage.destroy();

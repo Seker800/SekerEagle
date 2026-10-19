@@ -13,27 +13,7 @@ if [[ -z "$uv_bin" ]]; then
   exit 127
 fi
 
-if [[ -f "$repo_root/.env" ]]; then
-  set -a
-  source "$repo_root/.env"
-  set +a
-fi
-
 case "$action" in
-  setup)
-    cd "$service_dir"
-    "$uv_bin" sync --frozen
-    ;;
-  run)
-    cd "$service_dir"
-    exec "$uv_bin" run --frozen uvicorn sekereagle_mlx.app:app --host 0.0.0.0 --port 11435
-    ;;
-  test)
-    cd "$service_dir"
-    exec "$uv_bin" run --frozen pytest
-    ;;
-  *)
-    print -u2 "usage: $0 {setup|run|test}"
-    exit 2
-    ;;
+  setup|run|test) exec python3 "$repo_root/scripts/mlx-process-env.py" "$repo_root" "$uv_bin" "$action" ;;
+  *) print -u2 "usage: $0 {setup|run|test}"; exit 2 ;;
 esac

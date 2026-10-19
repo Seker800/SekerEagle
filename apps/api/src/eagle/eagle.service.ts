@@ -12,7 +12,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
-import { EagleImageSearchService, type ImageSearchContext } from './eagle-image-search.service';
+import {
+  EagleImageSearchService,
+  type ImageSearchContext,
+  type ImageSearchPosition,
+} from './eagle-image-search.service';
 import { resolveLivePhotoMotions } from './live-photo-projection';
 import { createHash } from 'node:crypto';
 import type {
@@ -46,8 +50,26 @@ import {
   syncAssetPrivacyFromManualTags,
 } from './eagle-privacy.service';
 
+const publicPhotoMetadataSelect = Prisma.validator<Prisma.EaglePhotoMetadataSelect>()({
+  capturedAt: true,
+  capturedLocal: true,
+  captureTimeZoneKnown: true,
+  cameraMake: true,
+  cameraModel: true,
+  lensModel: true,
+  focalLength: true,
+  aperture: true,
+  exposureSeconds: true,
+  iso: true,
+  latitude: true,
+  longitude: true,
+  altitude: true,
+  sharpnessScore: true,
+  perceptualHash: true,
+});
+
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
-  photoMetadata: true,
+  photoMetadata: { select: publicPhotoMetadataSelect },
   renditions: {
     where: { status: 'READY' },
     orderBy: [{ revision: 'desc' }, { kind: 'asc' }],
@@ -374,7 +396,7 @@ export class EagleService {
         }),
       )
       .digest('hex');
-    const startOffset = decodeImageSearchCursor(query.cursor, searchKey, {
+    const startPosition = decodeImageSearchCursor(query.cursor, searchKey, {
       ownerId,
       libraryMode: this.libraryMode,
     });
@@ -389,21 +411,22 @@ export class EagleService {
           })
         ).map(({ id }) => id)
       : undefined;
-    const ranked: Array<{ row: AssetListRecord; nextOffset: number }> = [];
-    let offset = startOffset;
+    const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
+    let after = startPosition;
     let exhausted = false;
     const candidateBatchSize = 250;
     while (ranked.length <= query.limit && !exhausted) {
-      const candidateIds = await this.imageSearch!.rank(
+      const candidates = await this.imageSearch!.rankPage(
         ownerId,
         search,
         context,
-        offset,
+        after,
         candidateBatchSize,
         includePrivate,
         trash,
         eligibleAssetIds,
       );
+      const candidateIds = candidates.map((candidate) => candidate.assetId);
       exhausted = candidateIds.length < candidateBatchSize;
       if (!candidateIds.length) break;
       const rows = await this.prisma.eagleAsset.findMany({
@@ -411,12 +434,12 @@ export class EagleService {
         include: assetListInclude,
       });
       const byId = new Map(rows.map((row) => [row.id, row]));
-      for (let index = 0; index < candidateIds.length; index += 1) {
-        const row = byId.get(candidateIds[index]!);
-        if (row) ranked.push({ row, nextOffset: offset + index + 1 });
+      for (const position of candidates) {
+        const row = byId.get(position.assetId);
+        if (row) ranked.push({ row, position });
         if (ranked.length > query.limit) break;
       }
-      offset += candidateIds.length;
+      after = candidates.at(-1);
     }
     const page = ranked.slice(0, query.limit);
     const [colorEligible, colorCompleted] = filterColor
@@ -460,22 +483,22 @@ export class EagleService {
               where,
               includePrivate,
               (ids) =>
-                this.imageSearch!.rank(
+                this.imageSearch!.rankPage(
                   ownerId,
                   search,
                   context,
-                  0,
+                  undefined,
                   ids.length,
                   includePrivate,
                   trash,
                   ids,
-                ),
+                ).then((rows) => rows.map((row) => row.assetId)),
             ),
           }
         : {}),
       nextCursor:
         ranked.length > query.limit && page.length
-          ? encodeImageSearchCursor(searchKey, page.at(-1)!.nextOffset, {
+          ? encodeImageSearchCursor(searchKey, page.at(-1)!.position, {
               ownerId,
               libraryMode: this.libraryMode,
             })
@@ -611,7 +634,8 @@ export class EagleService {
           id: true,
           chronologicalAt: true,
           livePhotoRole: true,
-          photoMetadata: true,
+          photoMetadata: { select: publicPhotoMetadataSelect },
+          mediaRevision: true,
           lifecycleStatus: true,
           mediaErrorCode: true,
           updatedAt: true,
@@ -832,6 +856,28 @@ export class EagleService {
       });
       if (result.count !== resourceIds.length)
         throw new NotFoundException('一个或多个素材不存在。');
+      if (restore) {
+        // Only work skipped while trashed is resumed; completed durable work stays reusable.
+        await transaction.eagleAssetProcessingJob.updateMany({
+          where: {
+            ownerId,
+            libraryMode: this.libraryMode,
+            assetId: { in: resourceIds },
+            status: 'COMPLETED',
+            lastError: 'ASSET_TRASHED',
+            kind: { not: 'PURGE_ASSET' },
+          },
+          data: {
+            status: 'PENDING',
+            attempts: 0,
+            availableAt: new Date(),
+            lockedAt: null,
+            completedAt: null,
+            lastError: null,
+            leaseVersion: { increment: 1 },
+          },
+        });
+      }
       return result.count;
     });
     return { affectedAssetCount };
@@ -988,12 +1034,15 @@ export class EagleService {
         });
         if (updated.count !== 1) await this.throwTagWriteError(transaction, ownerId, tagId);
         if (input.groupId !== undefined) {
-          await transaction.eagleManualTagGroupMembership.deleteMany({
-            where: { ownerId, tagId, libraryMode: this.libraryMode },
-          });
+          if (current.groupId && current.groupId !== input.groupId) {
+            await transaction.eagleManualTagGroupMembership.deleteMany({
+              where: { ownerId, tagId, groupId: current.groupId, libraryMode: this.libraryMode },
+            });
+          }
           if (input.groupId) {
-            await transaction.eagleManualTagGroupMembership.create({
-              data: { ownerId, tagId, groupId: input.groupId, libraryMode: this.libraryMode },
+            await transaction.eagleManualTagGroupMembership.createMany({
+              data: [{ ownerId, tagId, groupId: input.groupId, libraryMode: this.libraryMode }],
+              skipDuplicates: true,
             });
           }
         }
@@ -1581,10 +1630,27 @@ function serializeAsset(asset: AssetRecord) {
 function serializeAssetList(asset: AssetListRecord) {
   const { manualTagLinks, ...record } = asset;
   const safe = {
-    ...record,
-    originalObjectKey: undefined,
-    livePhotoIdentifier: undefined,
-    livePhotoRole: undefined,
+    id: record.id,
+    libraryMode: record.libraryMode,
+    originalName: record.originalName,
+    displayName: record.displayName,
+    mimeType: record.mimeType,
+    format: record.format,
+    width: record.width,
+    height: record.height,
+    durationMs: record.durationMs,
+    lifecycleStatus: record.lifecycleStatus,
+    mediaErrorCode: record.mediaErrorCode,
+    mediaRevision: record.mediaRevision,
+    rowVersion: record.rowVersion,
+    rating: record.rating,
+    isPrivate: record.isPrivate,
+    libraryAddedAt: record.libraryAddedAt,
+    chronologicalAt: record.chronologicalAt,
+    photoMetadata: record.photoMetadata,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt,
+    deletedAt: record.deletedAt,
   };
   return {
     ...safe,
@@ -1680,16 +1746,20 @@ function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {
   return { ownerId, id: { in: [] } };
 }
 
-function encodeImageSearchCursor(query: string, offset: number, scope: LibraryIdentity): string {
-  return `image:${Buffer.from(JSON.stringify({ version: 3, query, offset, ...scope })).toString('base64url')}`;
+function encodeImageSearchCursor(
+  query: string,
+  position: ImageSearchPosition,
+  scope: LibraryIdentity,
+): string {
+  return `image:${Buffer.from(JSON.stringify({ version: 4, query, position, ...scope })).toString('base64url')}`;
 }
 
 function decodeImageSearchCursor(
   cursor: string | undefined,
   query: string,
   scope: LibraryIdentity,
-): number {
-  if (!cursor) return 0;
+): ImageSearchPosition | undefined {
+  if (!cursor) return undefined;
   if (!cursor.startsWith('image:')) throw new BadRequestException('搜索游标无效。');
   try {
     const payload = JSON.parse(Buffer.from(cursor.slice(6), 'base64url').toString('utf8')) as {
@@ -1697,19 +1767,25 @@ function decodeImageSearchCursor(
       ownerId?: unknown;
       libraryMode?: unknown;
       query?: unknown;
-      offset?: unknown;
+      position?: Partial<ImageSearchPosition>;
     };
     if (
-      payload.version !== 3 ||
+      payload.version !== 4 ||
       payload.ownerId !== scope.ownerId ||
       payload.libraryMode !== scope.libraryMode ||
       payload.query !== query ||
-      !Number.isSafeInteger(payload.offset) ||
-      (payload.offset as number) < 0
+      !payload.position ||
+      typeof payload.position.assetId !== 'string' ||
+      !payload.position.assetId ||
+      payload.position.assetId.length > 128 ||
+      !Number.isInteger(payload.position.tier) ||
+      !Number.isFinite(payload.position.similarity) ||
+      typeof payload.position.libraryAddedAt !== 'string' ||
+      !Number.isFinite(Date.parse(payload.position.libraryAddedAt))
     ) {
       throw new Error('invalid semantic cursor');
     }
-    return payload.offset as number;
+    return payload.position as ImageSearchPosition;
   } catch {
     throw new BadRequestException('搜索游标无效。');
   }

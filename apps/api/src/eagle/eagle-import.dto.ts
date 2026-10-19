@@ -1,3 +1,4 @@
+import { EagleImportItemStatus, EagleImportRunStatus } from '@prisma/client';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -6,6 +7,7 @@ import {
   IsBoolean,
   IsDate,
   IsInt,
+  IsEnum,
   IsOptional,
   IsString,
   Matches,
@@ -99,12 +101,18 @@ export class ListEagleImportItemsDto {
   @Max(100)
   limit = 100;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
+  @ApiPropertyOptional({ enum: EagleImportItemStatus })
+  @IsOptional()
+  @IsEnum(EagleImportItemStatus)
+  status?: string;
 }
 
 export class ListEagleImportRunsDto {
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(255) externalLibraryId?: string;
-  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(32) status?: string;
+  @ApiPropertyOptional({ enum: EagleImportRunStatus })
+  @IsOptional()
+  @IsEnum(EagleImportRunStatus)
+  status?: string;
   @ApiPropertyOptional({ maximum: 100 })
   @IsOptional()
   @Type(() => Number)

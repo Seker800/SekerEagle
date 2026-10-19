@@ -21,8 +21,8 @@ REFRESH_TOKEN_TTL_SECONDS=2592000
 S3_ENDPOINT=http://minio:9000
 S3_REGION=us-east-1
 S3_BUCKET=sekereagle-assets
-S3_ACCESS_KEY_ID=compose-only
-S3_SECRET_ACCESS_KEY=compose-only
+S3_ACCESS_KEY_ID=sekereagle-app-${secret(12)}
+S3_SECRET_ACCESS_KEY=${secret(32)}
 MLX_EMBEDDING_TOKEN=${secret(48)}
 MLX_EMBEDDING_REVISION=9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda
 `;

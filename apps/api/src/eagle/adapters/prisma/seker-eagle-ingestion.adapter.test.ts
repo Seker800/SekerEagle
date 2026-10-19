@@ -4,6 +4,7 @@ import { PrismaSekerEagleIngestionAdapter } from './seker-eagle-ingestion.adapte
 
 test('imported manual tags recompute the asset private projection in the metadata transaction', async () => {
   const assetWrites: unknown[] = [];
+  const metadataWrites: Array<{ where: unknown }> = [];
   const transaction = {
     $queryRaw: async () => [],
     eagleAssetManualTagIngestion: {
@@ -14,7 +15,10 @@ test('imported manual tags recompute the asset private projection in the metadat
       findMany: async () => [{ id: 'tag-private', normalizedName: 'private' }],
     },
     eagleAsset: {
-      update: async () => ({}),
+      update: async (query: { where: unknown }) => {
+        metadataWrites.push(query);
+        return {};
+      },
       updateMany: async (input: unknown) => {
         assetWrites.push(input);
         return { count: 1 };
@@ -48,6 +52,11 @@ test('imported manual tags recompute the asset private projection in the metadat
     transaction as never,
   );
 
+  assert.deepEqual(metadataWrites[0]?.where, {
+    id: 'asset-a',
+    ownerId: 'owner-a',
+    libraryMode: 'MATERIAL',
+  });
   assert.equal(assetWrites.length, 2);
   assert.match(JSON.stringify(assetWrites), /marksAssetsPrivate/);
   assert.match(JSON.stringify(assetWrites), /asset-a/);

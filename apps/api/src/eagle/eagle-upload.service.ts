@@ -1,3 +1,5 @@
+import { invalidateMediaRevision } from './invalidate-media-revision';
+import { Prisma } from '@prisma/client';
 import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import {
@@ -241,7 +243,11 @@ export class EagleUploadService {
     const displayName = displayNameFromOriginal(session.originalName);
     let inspection;
     try {
-      inspection = await this.inspection.inspect(session.objectKey, session.mimeType);
+      inspection = await this.inspection.inspect(
+        session.objectKey,
+        session.mimeType,
+        session.uploaderId,
+      );
       if (
         session.eagleState?.expectedContentSha256 &&
         session.eagleState.expectedContentSha256 !== inspection.sha256
@@ -298,6 +304,9 @@ export class EagleUploadService {
         let cleanupObject = false;
         let retiredObjectKeys: string[] = [];
         if (session.eagleState?.replacementAssetId) {
+          await transaction.$queryRaw(
+            Prisma.sql`SELECT id FROM "EagleAsset" WHERE id=${session.eagleState.replacementAssetId} AND "ownerId"=${session.uploaderId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" FOR UPDATE`,
+          );
           const current = await transaction.eagleAsset.findFirst({
             where: {
               id: session.eagleState.replacementAssetId,
@@ -341,6 +350,11 @@ export class EagleUploadService {
               rowVersion: { increment: 1 },
             },
           });
+          await invalidateMediaRevision(
+            transaction,
+            { ownerId: session.uploaderId, libraryMode: this.libraryMode, assetId: current.id },
+            assetRevision,
+          );
           await this.revisionObserver?.onOriginalReplaced(
             transaction,
             { ownerId: session.uploaderId, libraryMode: this.libraryMode },

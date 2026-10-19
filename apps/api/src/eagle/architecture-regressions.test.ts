@@ -38,3 +38,26 @@ test('invalid import statuses fail DTO validation rather than reaching Prisma as
     assert.equal(validateSync(Object.assign(new Type(), { status: 'FAILED' })).length, 0);
   }
 });
+
+test('browser authentication enforces origin checks on every unsafe method by default', async () => {
+  const { AccessAuthGuard } = await import('../auth/access-auth.guard');
+  const { ACCESS_COOKIE_NAME } = await import('../auth/auth.constants');
+  const guard = new AccessAuthGuard(
+    { verifyAccessToken: async () => ({ kind: 'browser', sub: 'owner' }) } as never,
+    {} as never,
+    { readGrant: async () => null } as never,
+    {
+      canActivate: () => {
+        throw new ForbiddenException('untrusted origin');
+      },
+    } as never,
+  );
+  for (const method of ['POST', 'PATCH', 'PUT', 'DELETE']) {
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({ method, headers: {}, cookies: { [ACCESS_COOKIE_NAME]: 'test' } }),
+      }),
+    };
+    await assert.rejects(guard.canActivate(context as never), ForbiddenException);
+  }
+});

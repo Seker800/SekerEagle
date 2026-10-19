@@ -71,3 +71,22 @@ test('requires loopback and configured LAN gateway bindings', () => {
     /expected 192\.168\.31\.139:8180/u,
   );
 });
+
+test('storage credentials are separated from root without rotating existing application secrets', async () => {
+  const { withApplicationStorageCredentials } = await import('./ensure-local-storage-env.mjs');
+  const old =
+    'MINIO_ROOT_USER=root\nMINIO_ROOT_PASSWORD=root-password\nS3_ACCESS_KEY_ID=compose-only\nS3_SECRET_ACCESS_KEY=compose-only\n';
+  const upgraded = withApplicationStorageCredentials(
+    old,
+    () => 'test-app-secret-with-more-than-32-characters',
+  );
+  assert.match(upgraded, /MINIO_ROOT_PASSWORD=root-password/u);
+  assert.match(upgraded, /S3_ACCESS_KEY_ID=sekereagle-app-/u);
+  assert.doesNotMatch(upgraded, /compose-only/u);
+  assert.equal(
+    withApplicationStorageCredentials(upgraded, () => {
+      throw new Error('must reuse');
+    }),
+    upgraded,
+  );
+});

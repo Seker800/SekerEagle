@@ -255,6 +255,7 @@ export class EagleVectorService {
               AND embedding."assetRevision" = asset."mediaRevision"
               AND embedding."isCurrent" = true
               AND embedding.status = 'READY'
+              AND EXISTS (SELECT 1 FROM "EagleEmbeddingSpace" space WHERE space.id=embedding."spaceId" AND space."isCurrent")
           )
       `);
         const createdCount = await transaction.$executeRaw(Prisma.sql`
@@ -267,7 +268,7 @@ export class EagleVectorService {
           'BACKGROUND'::"EagleProcessingLane", asset."mediaRevision",
           ${EMBEDDING_PROCESSOR_VERSION}, dependency.id, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM "EagleAsset" AS asset
-        JOIN LATERAL (
+        LEFT JOIN LATERAL (
           SELECT rendition.id
           FROM "EagleMediaJob" AS rendition
           WHERE rendition."ownerId" = ${ownerId} AND rendition."libraryMode" = ${this.libraryMode}::"LibraryMode"
@@ -289,6 +290,11 @@ export class EagleVectorService {
               AND preview.revision = asset."mediaRevision"
               AND preview.kind = 'PREVIEW'
               AND preview.status = 'READY'
+          )
+          AND NOT EXISTS (
+            SELECT 1 FROM "EagleAssetEmbedding" embedding JOIN "EagleEmbeddingSpace" space ON space.id=embedding."spaceId" AND space."isCurrent"
+            WHERE embedding."assetId"=asset.id AND embedding."ownerId"=asset."ownerId" AND embedding."libraryMode"=asset."libraryMode"
+              AND embedding."assetRevision"=asset."mediaRevision" AND embedding."isCurrent" AND embedding.status='READY'
           )
           AND NOT EXISTS (
             SELECT 1 FROM "EagleMediaJob" AS existing
@@ -326,6 +332,8 @@ export class EagleVectorService {
       const matchesContract =
         payload.status === 'ready' &&
         payload.model === EAGLE_EMBEDDING_MODEL &&
+        payload.revision ===
+          (process.env.MLX_EMBEDDING_REVISION ?? '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda') &&
         payload.dimensions === EAGLE_EMBEDDING_DIMENSIONS &&
         payload.metal === true;
       return {

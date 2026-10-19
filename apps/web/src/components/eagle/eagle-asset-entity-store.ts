@@ -50,6 +50,7 @@ export class EagleAssetEntityStore {
       if (!current) continue;
       this.#entities.set(update.id, {
         ...current,
+        mediaRevision: update.mediaRevision,
         lifecycleStatus: update.lifecycleStatus,
         mediaErrorCode: update.mediaErrorCode,
         updatedAt: update.updatedAt,

@@ -96,6 +96,16 @@ Prisma repositories / MinIO adapters
 - Restore verification containers carry an explicit role label and are removed by inspected immutable ID, including run timeouts. Legacy containers require exact independent identity evidence. Unknown NAS entries are quarantined without traversal or deletion.
 - Every SSH path forces known-host verification and a direct connection. Docker contexts use a source allowlist and exclude private runtime directories at all depths. Legacy conversion is an explicit, documented operation; installation never silently adopts an encrypted state.
 
+## Recovery and security invariants
+
+任务记录是执行历史，当前版本的派生事实才是完成依据。补齐任务必须复用已保留的结果、修复缺事实的 completed job，恢复回收站时续跑明确被回收站跳过的工作。终态依赖失败向下传播；媒体与语义构建分别控制并发，所有构建发布先验证租约。事件通知有 30 秒周期兜底，后台与维护有领取配额。API 上传检查同样受两个模式共用的内存与队列预算约束。
+
+原图替换在资产行锁保护的事务内递增版本并退休旧任务、分析和建议；金字塔回收沿用独立对象 outbox。向量空间身份不可就地改写；不同模型空间不得计算距离，切换空间必须有显式迁移方案。实时搜索使用带 owner、模式和查询条件的排序位置游标，不依赖 offset 或锚点行仍存在。
+
+浏览器认证写方法默认验证 Origin；PAT 未声明 scope 时默认拒绝。刷新令牌按登录 family 旋转、退出按 family 吊销；访问令牌检查 family 是否仍有效。前端退出清空查询缓存并用认证 epoch 阻止旧请求重新写入。
+
+MinIO root 仅用于初始化；API／worker 使用单 bucket 受限身份，bucket 不公开。MLX 子进程只继承明确的模型配置及 token，不 source 应用环境。部署先构建，再停止写入服务、迁移、启动并验证 API／Web／worker 健康；不自动倒退数据库。核验结论和验证范围见 [2026-10-19 架构核验](architecture-audit-2026-10-19.md)。
+
 ## Media memory boundary
 
 - 原图只用于下载、首轮预览生成和需要离线处理的后台切片任务；图库与大图预览不直接解码原图。

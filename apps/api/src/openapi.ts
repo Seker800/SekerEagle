@@ -23,7 +23,12 @@ async function generate(): Promise<void> {
   app.setGlobalPrefix('api');
   const document = SwaggerModule.createDocument(
     app,
-    new DocumentBuilder().setTitle('SekerEagle API').setVersion('0.1.0').build(),
+    new DocumentBuilder()
+      .setTitle('SekerEagle API')
+      .setVersion('0.1.0')
+      .addCookieAuth('sekereagle_access', { type: 'apiKey', in: 'cookie' }, 'cookie')
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'PAT' }, 'bearer')
+      .build(),
   );
   await writeFile(
     resolve(process.cwd(), '../../packages/contracts/openapi.json'),

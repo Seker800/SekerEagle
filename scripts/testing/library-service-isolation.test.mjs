@@ -1395,3 +1395,273 @@ test('purge commits asset deletion and detached upload/capture pointers before r
   assert.ok(removed.includes(f.material.originalObjectKey));
   assert.equal(await prisma.eagleObjectDeletion.findUnique({ where: { id: deletion.id } }), null);
 });
+
+test('editing a primary tag group preserves independent secondary memberships', async () => {
+  const f = await fixtures();
+  const groups = await Promise.all(
+    ['primary', 'secondary', 'destination'].map((name) =>
+      prisma.eagleManualTagGroup.create({
+        data: { ownerId: f.ownerId, name, normalizedName: name },
+      }),
+    ),
+  );
+  const tag = await prisma.eagleManualTag.create({
+    data: {
+      ownerId: f.ownerId,
+      name: 'multi-group',
+      normalizedName: 'multi-group',
+      groupId: groups[0].id,
+    },
+  });
+  await prisma.eagleManualTagGroupMembership.createMany({
+    data: groups.slice(0, 2).map((g) => ({ ownerId: f.ownerId, tagId: tag.id, groupId: g.id })),
+  });
+  await f.materials.updateManualTag(f.ownerId, tag.id, {
+    rowVersion: tag.rowVersion,
+    groupId: groups[2].id,
+  });
+  const memberships = await prisma.eagleManualTagGroupMembership.findMany({
+    where: { ownerId: f.ownerId, tagId: tag.id },
+  });
+  assert.deepEqual(memberships.map((x) => x.groupId).sort(), [groups[1].id, groups[2].id].sort());
+});
+
+test('original replacement invalidation fences stale workers and retires old palette and pyramid facts atomically', async () => {
+  const { invalidateMediaRevision } =
+    await import('../../apps/api/dist/eagle/invalidate-media-revision.js');
+  const f = await fixtures();
+  const color = await prisma.eagleAssetColorAnalysis.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.material.id,
+      assetRevision: 1,
+      processorVersion: 'test',
+      status: 'COMPLETED',
+      isCurrent: true,
+    },
+  });
+  const job = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.material.id,
+      assetRevision: 1,
+      kind: 'GENERATE_EMBEDDING',
+      status: 'PROCESSING',
+    },
+  });
+  const prefix = `users/${f.ownerId}/assets/${f.material.id}/pyramids/1`;
+  await prisma.eagleImagePyramid.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.material.id,
+      revision: 1,
+      processorVersion: 'test',
+      status: 'READY',
+      storagePrefix: prefix,
+      width: 800,
+      height: 600,
+      maxLevel: 10,
+    },
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.eagleAsset.update({ where: { id: f.material.id }, data: { mediaRevision: 2 } });
+    await invalidateMediaRevision(
+      tx,
+      { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: f.material.id },
+      2,
+    );
+  });
+  assert.equal(
+    (await prisma.eagleAssetColorAnalysis.findUnique({ where: { id: color.id } })).isCurrent,
+    false,
+  );
+  assert.equal(
+    (
+      await prisma.eagleAssetProcessingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        data: { status: 'COMPLETED' },
+      })
+    ).count,
+    0,
+  );
+  const outbox = await prisma.eagleObjectDeletion.findFirst({ where: { ownerId: f.ownerId } });
+  assert.deepEqual(outbox.prefixes, [prefix + '/']);
+});
+
+test('dependent jobs converge from pending to failed instead of remaining permanently queued', async () => {
+  const { propagateFailedDependencies } = await import('../../apps/worker/dist/job-recovery.js');
+  const f = await fixtures();
+  const parent = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.photo.id,
+      libraryMode: 'PHOTO',
+      assetRevision: 1,
+      kind: 'GENERATE_RENDITIONS',
+      status: 'FAILED',
+    },
+  });
+  const child = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.photo.id,
+      libraryMode: 'PHOTO',
+      assetRevision: 1,
+      kind: 'EXTRACT_COLOR_PALETTE',
+      dependsOnJobId: parent.id,
+    },
+  });
+  const grandchild = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.photo.id,
+      libraryMode: 'PHOTO',
+      assetRevision: 1,
+      kind: 'GENERATE_EMBEDDING',
+      dependsOnJobId: child.id,
+    },
+  });
+  await propagateFailedDependencies(prisma);
+  for (const id of [child.id, grandchild.id]) {
+    const job = await prisma.eagleAssetProcessingJob.findUnique({ where: { id } });
+    assert.equal(job.status, 'FAILED');
+    assert.equal(job.lastError, 'DEPENDENCY_FAILED');
+  }
+});
+
+test('logout revokes the entire refresh family including a concurrently rotated token and its access JWT', async () => {
+  const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
+  const { JwtService } = await import('@nestjs/jwt');
+  const f = await fixtures();
+  const user = await prisma.user.findUnique({ where: { id: f.ownerId } });
+  const service = new SessionTokenService(
+    prisma,
+    new JwtService({ secret: 'isolated-session-test-secret', signOptions: { expiresIn: 600 } }),
+    { getOrThrow: () => 600 },
+  );
+  const original = await service.createSession(user);
+  const results = await Promise.allSettled([
+    service.refreshSession(original.refreshToken),
+    service.revoke(original.refreshToken),
+  ]);
+  assert.equal(results[1].status, 'fulfilled');
+  const tokens = await prisma.refreshToken.findMany({ where: { userId: f.ownerId } });
+  assert.ok(tokens.every((token) => token.revokedAt !== null));
+  await assert.rejects(service.verifyAccessToken(original.accessToken));
+  if (results[0].status === 'fulfilled') {
+    await assert.rejects(service.refreshSession(results[0].value.refreshToken));
+    await assert.rejects(service.verifyAccessToken(results[0].value.accessToken));
+  }
+  const other = await service.createSession(user);
+  assert.equal((await service.verifyAccessToken(other.accessToken)).sub, f.ownerId);
+});
+
+test('search keyset continues after the anchor is deleted and newer photos are imported', async () => {
+  const { EagleImageSearchService } =
+    await import('../../apps/api/dist/eagle/eagle-image-search.service.js');
+  const f = await fixtures();
+  await prisma.eagleAsset.update({
+    where: { id: f.material.id },
+    data: { libraryAddedAt: new Date('2026-01-03') },
+  });
+  const clones = [];
+  for (const day of [2, 1]) {
+    const { aspectRatio: _computed, ...data } = f.material;
+    void _computed;
+    clones.push(
+      await prisma.eagleAsset.create({
+        data: {
+          ...data,
+          id: randomUUID(),
+          libraryAddedAt: new Date(`2026-01-0${day}`),
+          originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.jpg`,
+        },
+      }),
+    );
+  }
+  const search = new EagleImageSearchService(prisma, {
+    embedText: async () => {
+      throw new Error('offline test');
+    },
+  });
+  const service = new EagleService(prisma, search);
+  const first = await service.listAssets(f.ownerId, { limit: 1, search: 'sample' });
+  assert.equal(first.items[0].id, f.material.id);
+  assert.ok(first.nextCursor);
+  await prisma.eagleAsset.update({ where: { id: f.material.id }, data: { deletedAt: new Date() } });
+  const { aspectRatio: _computed, ...data } = f.material;
+  void _computed;
+  await prisma.eagleAsset.create({
+    data: {
+      ...data,
+      id: randomUUID(),
+      libraryAddedAt: new Date('2026-01-04'),
+      originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.jpg`,
+    },
+  });
+  const second = await service.listAssets(f.ownerId, {
+    limit: 1,
+    search: 'sample',
+    cursor: first.nextCursor,
+  });
+  assert.equal(second.items[0].id, clones[0].id);
+  const third = await service.listAssets(f.ownerId, {
+    limit: 1,
+    search: 'sample',
+    cursor: second.nextCursor,
+  });
+  assert.equal(third.items[0].id, clones[1].id);
+  assert.equal(third.nextCursor, null);
+});
+
+test('reconcile reuses pruned durable outputs and repairs completed jobs with missing facts', async () => {
+  const { EagleProcessingService } =
+    await import('../../apps/api/dist/eagle/eagle-processing.service.js');
+  const f = await fixtures();
+  await prisma.eagleAssetRendition.createMany({
+    data: ['PREVIEW', 'THUMBNAIL'].map((kind) => ({
+      ownerId: f.ownerId,
+      assetId: f.material.id,
+      kind,
+      variant: kind === 'THUMBNAIL' ? '512' : 'default',
+      revision: f.material.mediaRevision,
+      storageKey: `users/${f.ownerId}/assets/${randomUUID()}/preview.webp`,
+      mimeType: 'image/webp',
+      byteSize: 1,
+      width: 1,
+      height: 1,
+      status: 'READY',
+    })),
+  });
+  const service = new EagleProcessingService(prisma);
+  await service.reconcile(f.ownerId);
+  assert.equal(
+    await prisma.eagleAssetProcessingJob.count({
+      where: { assetId: f.material.id, kind: 'GENERATE_RENDITIONS' },
+    }),
+    0,
+  );
+  const color = await prisma.eagleAssetProcessingJob.findFirstOrThrow({
+    where: { assetId: f.material.id, kind: 'EXTRACT_COLOR_PALETTE' },
+  });
+  assert.equal(color.dependsOnJobId, null);
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: color.id },
+    data: { status: 'COMPLETED' },
+  });
+  await service.reconcile(f.ownerId);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: color.id } })).status,
+    'PENDING',
+  );
+  await prisma.eagleAsset.update({ where: { id: f.material.id }, data: { deletedAt: new Date() } });
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: color.id },
+    data: { status: 'COMPLETED', lastError: 'ASSET_TRASHED' },
+  });
+  await f.materials.setTrash(f.ownerId, [f.material.id], true);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: color.id } })).status,
+    'PENDING',
+  );
+});

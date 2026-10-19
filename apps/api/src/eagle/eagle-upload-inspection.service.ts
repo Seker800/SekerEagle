@@ -1,3 +1,4 @@
+import { mediaInspectionBudget } from './media-inspection-budget';
 import {
   CAMERA_MEDIA_FORMATS,
   CAMERA_MAX_IMAGE_BYTES,
@@ -18,11 +19,18 @@ import sharp from 'sharp';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { MAX_EAGLE_IMAGE_INPUT_PIXELS } from './eagle-image-processing-policy';
 
+sharp.cache({ memory: 64 });
+sharp.concurrency(1);
+
 @Injectable()
 export class EagleUploadInspectionService {
   constructor(private readonly storage: ObjectStorageService) {}
 
-  async inspect(objectKey: string, mimeType: string) {
+  inspect(objectKey: string, mimeType: string, ownerId = objectKey) {
+    return mediaInspectionBudget.run(ownerId, () => this.inspectWithinBudget(objectKey, mimeType));
+  }
+
+  private async inspectWithinBudget(objectKey: string, mimeType: string) {
     const object = await this.storage.getObject(objectKey);
     if (!object.Body) throw new NotFoundException('上传后的对象不存在。');
     if (isCameraVideoMime(mimeType) || isCameraRawMime(mimeType)) {

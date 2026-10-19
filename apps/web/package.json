@@ -22,7 +22,8 @@
     "react-dom": "^19.2.0",
     "typescript": "^5.9.3",
     "vite": "^6.0.5",
-    "@sekereagle/library-core": "*"
+    "@sekereagle/library-core": "*",
+    "@sekereagle/contracts": "*"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^7.0.1",

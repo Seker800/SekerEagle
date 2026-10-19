@@ -1,3 +1,4 @@
+import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
 import { Optional } from '@nestjs/common';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { SendEagleAssetsDto } from './eagle.dto';
@@ -95,6 +96,7 @@ export class EagleController {
     return this.eagle.countAssets(principal.sub, input.query, principal.canViewPrivate);
   }
 
+  @ApiOkResponse({ type: [EagleAssetUpdateResponseDto] })
   @Get('asset-updates')
   listAssetUpdates(
     @CurrentPrincipal() principal: AuthPrincipal,
@@ -103,6 +105,7 @@ export class EagleController {
     return this.eagle.listUpdates(principal.sub, query.assetIds, principal.canViewPrivate);
   }
 
+  @ApiOkResponse({ type: [EagleAssetUpdateResponseDto] })
   @Post('asset-updates')
   @UseGuards(BrowserOriginGuard)
   listAssetUpdatesByBody(

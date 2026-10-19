@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { CAMERA_MAX_IMAGE_BYTES, CAMERA_MAX_VIDEO_BYTES } from '@sekereagle/library-core';
+import { resolveEagleMediaType } from '../eagle-media-capability';
 import { isSupportedEagleMedia } from '../../eagle/eagle-media-capability';
 
 export const EAGLE_IMPORT_MANIFEST_VERSION = 2 as const;
@@ -306,7 +308,17 @@ export function validateEagleImportManifestChunk(input: EagleImportManifestChunk
     }
 
     if (item.isDeleted) skippedDeletedItemIds.push(sourceItemId);
-    else if (!isSupportedEagleImportMedia(item)) skippedUnsupportedItemIds.push(sourceItemId);
+    else if (
+      !isSupportedEagleImportMedia(item) ||
+      !Number.isSafeInteger(item.size) ||
+      item.size <= 0 ||
+      item.size >
+        (resolveEagleMediaType({ fileName: item.originalFileName, mimeType: item.mimeType })
+          ?.mediaType === 'video'
+          ? CAMERA_MAX_VIDEO_BYTES
+          : CAMERA_MAX_IMAGE_BYTES)
+    )
+      skippedUnsupportedItemIds.push(sourceItemId);
     else acceptedItemIds.push(sourceItemId);
   }
 

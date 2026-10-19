@@ -54,6 +54,7 @@ export interface MediaJobClaimClient {
 
 interface ClaimMediaJobOptions {
   now?: Date;
+  laneOrder?: readonly EagleProcessingLane[];
   canClaimBackground(
     ownerId: string,
     kind: EagleAssetProcessingJob['kind'],
@@ -68,7 +69,7 @@ export async function claimNextMediaJob(
   const now = options.now ?? new Date();
   const staleBefore = new Date(now.getTime() - STALE_LEASE_MS);
 
-  for (const lane of LANE_ORDER) {
+  for (const lane of options.laneOrder ?? LANE_ORDER) {
     const kindPartitions: Array<ClaimFindManyInput['where']['kind']> =
       lane === 'BACKGROUND' ? [{ not: 'GENERATE_AI_TAGS' }, 'GENERATE_AI_TAGS'] : [undefined];
     for (const kind of kindPartitions) {

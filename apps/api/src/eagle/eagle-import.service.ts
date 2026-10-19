@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  GoneException,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -369,72 +370,14 @@ export class EagleImportService {
     return item;
   }
 
-  async finishItem(ownerId: string, runId: string, itemId: string, assetId: string) {
-    const item = await this.prisma.eagleImportRunItem.findFirst({
-      where: { ownerId, runId, id: itemId, libraryMode: 'MATERIAL' },
-      include: { externalAsset: true },
-    });
-    if (!item) throw new NotFoundException('Eagle 导入项不存在。');
-    if (item.status === 'IMPORTED' && item.assetId === assetId) return serializeItem(item);
-    const asset = await this.prisma.eagleAsset.findFirst({
-      where: { ownerId, id: assetId, libraryMode: 'MATERIAL' },
-      select: { id: true },
-    });
-    if (!asset) throw new NotFoundException('上传后的素材不存在。');
-    await this.prisma.$transaction(async (transaction) => {
-      await applyImportedMetadata(
-        transaction,
-        ownerId,
-        assetId,
-        item,
-        `eagle-library:${item.externalAsset.externalLibraryId}`,
-      );
-      if (
-        item.action === 'CONTENT_REPLACE' &&
-        item.externalAsset.assetId &&
-        item.externalAsset.assetId !== assetId
-      )
-        await transaction.eagleAsset.updateMany({
-          where: { ownerId, id: item.externalAsset.assetId, libraryMode: 'MATERIAL' },
-          data: { deletedAt: new Date() },
-        });
-      await transaction.eagleExternalAsset.update({
-        where: { id: item.externalAssetId, libraryMode: 'MATERIAL' },
-        data: {
-          assetId,
-          metadataHash: item.metadataHash,
-          sourceContentSha256: item.contentSha256,
-          sourceFileModifiedAt: item.sourceFileModifiedAt,
-          sourceByteSize: item.byteSize,
-          sourceImportedAt: item.sourceImportedAt,
-          sourceModifiedAt: item.sourceModifiedAt,
-          lastImportedAt: new Date(),
-          lastSeenAt: new Date(),
-        },
-      });
-      await transaction.eagleImportRunItem.update({
-        where: { id: item.id, libraryMode: 'MATERIAL' },
-        data: {
-          status: 'IMPORTED',
-          assetId,
-          completedAt: new Date(),
-          terminalProgressAppliedAt: new Date(),
-          activeUploadSessionId: null,
-        },
-      });
-      await transaction.eagleImportRun.update({
-        where: { id: runId, libraryMode: 'MATERIAL' },
-        data: {
-          status: 'RUNNING',
-          startedAt: item.completedAt ?? new Date(),
-          importedItemCount: { increment: 1 },
-        },
-      });
-    });
-    await this.convergeRun(ownerId, runId);
-    return this.prisma.eagleImportRunItem
-      .findUniqueOrThrow({ where: { id: itemId, libraryMode: 'MATERIAL' } })
-      .then(serializeItem);
+  finishItem(
+    ..._input: [ownerId: string, runId: string, itemId: string, assetId: string]
+  ): Promise<never> {
+    return Promise.reject(
+      new GoneException(
+        'Legacy import finish is retired; complete the server-bound upload session instead.',
+      ),
+    );
   }
 
   async cancel(ownerId: string, runId: string) {

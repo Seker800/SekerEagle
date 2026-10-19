@@ -6,7 +6,7 @@
 2. 确认 Docker Desktop 至少分配 16 GiB 内存和 8 CPU。
 3. 运行 `npm run env:ensure-vector` 补齐独立的 MLX 本机 token，再运行 `npm run mlx:install-service`。`launchd` 会在登录后启动 Qwen3-VL Embedding 宿主服务并在崩溃后恢复。
 4. 用带认证的 `http://127.0.0.1:11435/health/ready` 检查固定模型 revision、1024 维和 `metal: true`。宿主服务虽为 Docker Desktop 绑定 `0.0.0.0`，但只接受独立随机 bearer token、受限字节和固定输入类型；不接受 URL 或文件路径。
-5. 运行 `npm run deploy:mac:check` 检查实际部署配置，再运行 `npm run deploy:mac`。该入口会根据 `.env` 自动决定是否叠加 LAN Compose 文件，并在更新后验证 gateway 端口和健康状态。
+5. 运行 `npm run deploy:mac:check` 检查实际部署配置，再运行 `npm run deploy:mac`。该入口会根据 `.env` 自动决定是否叠加 LAN Compose 文件；先构建镜像，再停止 gateway／API／worker，执行迁移后启动并验证 API、网页及 worker 心跳。迁移失败保持写入服务停止，修复后重试，不自动回退数据库。
 6. 默认只有 `127.0.0.1:8180` 暴露到宿主机。可信局域网访问可按下节绑定单个内网 IP；PostgreSQL、MinIO、API 和 web 不应有宿主端口。
 7. 用一次性环境变量在 API 容器内创建首个管理员：
 
@@ -131,3 +131,11 @@ curl -fsS http://127.0.0.1:8180/api/health/ready
 ```
 
 模型升级不得覆盖 current 空间。应固定新 revision 和新的 space id，旁路回填、通过真实人工标签黄金集后再切换；旧空间延迟清理。PostgreSQL 备份必须包含 `vector` extension、embedding、prototype、member distance、suggestion 与 provenance 表；恢复后先部署 migration，再恢复数据并重建 HNSW 索引。
+
+## 应用存储身份与上传清理
+
+正常 `npm run deploy:mac` 会在构建前检查 `.env` 的 S3 应用凭据：旧的缺失值、占位值或与 root 相同的值，会原子替换为独立随机凭据；已有有效应用凭据和 MinIO root 凭据保持不变。只读 `deploy:mac:check` 不改配置。MinIO init 创建私有 `sekereagle-assets`，应用策略只授权该 bucket 的对象与 multipart 操作，API／worker 不再获得 root 权限。不要绕过部署入口直接用旧的占位凭据启动新 Compose。
+
+应用将 24 小时未完成的上传标为过期并重试清理；最终失败对象清理成功后会话转为 ABORTED，保留失败原因。MinIO 自身的 stale multipart 清扫显式设置为 24 小时过期、1 小时周期，不对已完成原图设置自动过期。独立验证命令见架构核验记录；不要用现用 bucket 做破坏性权限测试。
+
+MLX 启动脚本只把模型配置和 token 的字面值交给宿主进程，不执行 `.env` 中的 shell 内容。也可以提供权限为 `0600`、非符号链接的独立 `MLX_EMBEDDING_TOKEN_FILE`。更换模型／revision 不能复用旧空间 ID；本轮只提供不兼容时的明确拒绝，不会自动重跑图库或切换空间。

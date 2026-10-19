@@ -76,14 +76,13 @@ export type StoredEagleFilterQuery = EagleFilterQuery | LegacyEagleFilterQuery;
 
 export interface EagleFilterFieldDefinition {
   field: EagleFilterField;
-  label: string;
   libraryModes?: readonly ('MATERIAL' | 'PHOTO')[];
   kind: 'TEXT' | 'SELECT' | 'TAGS' | 'NUMBER' | 'DATE' | 'COLOR';
   operators: readonly EagleFilterOperator[];
   defaultOperator: EagleFilterOperator;
   defaultValue?: EagleFilterValue;
-  options?: readonly { value: string; label: string }[];
-  units?: readonly { value: NonNullable<EagleFilterRule['unit']>; label: string }[];
+  options?: readonly { value: string }[];
+  units?: readonly { value: NonNullable<EagleFilterRule['unit']> }[];
 }
 
 const TEXT_OPERATORS = [
@@ -103,7 +102,6 @@ const DATE_OPERATORS = ['BEFORE', 'AFTER', 'BETWEEN', 'WITHIN_DAYS'] as const;
 export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   ...(['CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
     field,
-    label: field === 'CAMERA_MODEL' ? '相机' : '镜头',
     libraryModes: ['PHOTO'] as const,
     kind: 'TEXT' as const,
     operators: TEXT_OPERATORS,
@@ -112,20 +110,15 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   })),
   {
     field: 'GPS',
-    label: 'GPS',
     libraryModes: ['PHOTO'],
     kind: 'SELECT',
     operators: ['EQUALS'],
     defaultOperator: 'EQUALS',
     defaultValue: 'WITH',
-    options: [
-      { value: 'WITH', label: '有 GPS' },
-      { value: 'WITHOUT', label: '无 GPS' },
-    ],
+    options: [{ value: 'WITH' }, { value: 'WITHOUT' }],
   },
   {
     field: 'PERSON',
-    label: '人物',
     libraryModes: ['PHOTO'],
     kind: 'TEXT',
     operators: ['EQUALS'],
@@ -134,7 +127,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'NAME',
-    label: '名称',
     kind: 'TEXT',
     operators: TEXT_OPERATORS,
     defaultOperator: 'CONTAINS',
@@ -142,18 +134,16 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'FORMAT',
-    label: '格式',
     kind: 'SELECT',
     operators: ['EQUALS', 'NOT_EQUALS'],
     defaultOperator: 'EQUALS',
     defaultValue: 'png',
     options: ['png', 'jpeg', 'webp', 'gif', 'svg', 'pdf', 'mp4', 'mov', 'mp3', 'wav'].map(
-      (value) => ({ value, label: value.toUpperCase() }),
+      (value) => ({ value }),
     ),
   },
   {
     field: 'MANUAL_TAGS',
-    label: '标签',
     kind: 'TAGS',
     operators: SET_OPERATORS,
     defaultOperator: 'ALL_OF',
@@ -161,7 +151,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'AI_TAGS',
-    label: 'AI 标签',
     kind: 'TAGS',
     operators: SET_OPERATORS,
     defaultOperator: 'ALL_OF',
@@ -169,19 +158,14 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'RATING',
-    label: '评分',
     kind: 'SELECT',
     operators: ['EQUALS', 'NOT_EQUALS', 'GTE', 'LTE'],
     defaultOperator: 'EQUALS',
     defaultValue: '5',
-    options: [
-      { value: '0', label: '未评分' },
-      ...[1, 2, 3, 4, 5].map((value) => ({ value: String(value), label: `${value} 星` })),
-    ],
+    options: [{ value: '0' }, ...[1, 2, 3, 4, 5].map((value) => ({ value: String(value) }))],
   },
   {
     field: 'WIDTH',
-    label: '宽度',
     kind: 'NUMBER',
     operators: NUMBER_OPERATORS,
     defaultOperator: 'GT',
@@ -189,7 +173,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'HEIGHT',
-    label: '高度',
     kind: 'NUMBER',
     operators: NUMBER_OPERATORS,
     defaultOperator: 'GT',
@@ -197,47 +180,35 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'FILE_SIZE',
-    label: '大小',
     kind: 'NUMBER',
     operators: NUMBER_OPERATORS,
     defaultOperator: 'GT',
     defaultValue: 1,
-    units: [
-      { value: 'KB', label: 'KB' },
-      { value: 'MB', label: 'MB' },
-      { value: 'GB', label: 'GB' },
-    ],
+    units: [{ value: 'KB' }, { value: 'MB' }, { value: 'GB' }],
   },
   {
     field: 'DURATION',
-    label: '时长',
     kind: 'NUMBER',
     operators: NUMBER_OPERATORS,
     defaultOperator: 'GT',
     defaultValue: 30,
-    units: [
-      { value: 'SECONDS', label: '秒' },
-      { value: 'MINUTES', label: '分钟' },
-      { value: 'HOURS', label: '小时' },
-    ],
+    units: [{ value: 'SECONDS' }, { value: 'MINUTES' }, { value: 'HOURS' }],
   },
   {
     field: 'SHAPE',
-    label: '形状',
     kind: 'SELECT',
     operators: ['EQUALS', 'NOT_EQUALS'],
     defaultOperator: 'EQUALS',
     defaultValue: 'LANDSCAPE',
     options: [
-      { value: 'LANDSCAPE', label: '横向' },
-      { value: 'PORTRAIT', label: '纵向' },
-      { value: 'SQUARE', label: '正方形' },
-      { value: 'PANORAMA', label: '全景' },
+      { value: 'LANDSCAPE' },
+      { value: 'PORTRAIT' },
+      { value: 'SQUARE' },
+      { value: 'PANORAMA' },
     ],
   },
   {
     field: 'COLOR',
-    label: '颜色',
     kind: 'COLOR',
     operators: ['SIMILAR'],
     defaultOperator: 'SIMILAR',
@@ -245,7 +216,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'DESCRIPTION',
-    label: '注释',
     kind: 'TEXT',
     operators: TEXT_OPERATORS,
     defaultOperator: 'CONTAINS',
@@ -253,7 +223,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'SOURCE_URL',
-    label: '链接',
     kind: 'TEXT',
     operators: TEXT_OPERATORS,
     defaultOperator: 'CONTAINS',
@@ -261,7 +230,6 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'ADDED_AT',
-    label: '添加日期',
     kind: 'DATE',
     operators: DATE_OPERATORS,
     defaultOperator: 'AFTER',
@@ -269,36 +237,12 @@ export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
   },
   {
     field: 'MODIFIED_AT',
-    label: '修改日期',
     kind: 'DATE',
     operators: DATE_OPERATORS,
     defaultOperator: 'AFTER',
     defaultValue: '',
   },
 ] as const;
-
-export const EAGLE_FILTER_OPERATOR_LABELS: Readonly<Record<EagleFilterOperator, string>> = {
-  CONTAINS: '包含',
-  NOT_CONTAINS: '不包含',
-  STARTS_WITH: '开头是',
-  ENDS_WITH: '结尾是',
-  EQUALS: '等于',
-  NOT_EQUALS: '不等于',
-  EMPTY: '为空',
-  NOT_EMPTY: '不为空',
-  ANY_OF: '包含任一项',
-  ALL_OF: '全部包含',
-  NONE_OF: '均不包含',
-  GT: '大于',
-  GTE: '大于等于',
-  LT: '小于',
-  LTE: '小于等于',
-  BETWEEN: '介于',
-  BEFORE: '早于',
-  AFTER: '晚于',
-  WITHIN_DAYS: '最近天数',
-  SIMILAR: '相似于',
-};
 
 const FIELD_DEFINITION_BY_NAME = new Map(EAGLE_FILTER_FIELDS.map((entry) => [entry.field, entry]));
 
@@ -444,7 +388,7 @@ function parseRule(value: unknown, conditionIndex: number, ruleIndex: number): E
   const definition = EAGLE_FILTER_FIELDS.find((entry) => entry.field === value.field);
   if (!definition) throw new Error(`第 ${conditionIndex + 1} 组包含不支持的字段。`);
   if (!definition.operators.some((operator) => operator === value.operator))
-    throw new Error(`字段“${definition.label}”的运算符无效。`);
+    throw new Error(`字段“${definition.field}”的运算符无效。`);
   const rule: EagleFilterRule = {
     id: readId(value.id, `rule-${conditionIndex + 1}-${ruleIndex + 1}`),
     field: definition.field,
@@ -453,7 +397,7 @@ function parseRule(value: unknown, conditionIndex: number, ruleIndex: number): E
   if (value.value !== undefined) rule.value = parseValue(value.value);
   if (value.unit !== undefined) {
     if (!definition.units?.some((unit) => unit.value === value.unit))
-      throw new Error(`字段“${definition.label}”的单位无效。`);
+      throw new Error(`字段“${definition.field}”的单位无效。`);
     rule.unit = value.unit as NonNullable<EagleFilterRule['unit']>;
   }
   return rule;

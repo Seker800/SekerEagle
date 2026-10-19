@@ -362,11 +362,7 @@
             "schema": {
               "maximum": 100,
               "default": 30,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -403,6 +399,106 @@
             "schema": {
               "maxLength": 32,
               "type": "string"
+            }
+          },
+          {
+            "name": "formats",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "manualTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aiTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "smartFolderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "color",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ANY", "ALL"]
             }
           },
           {
@@ -471,7 +567,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -495,8 +601,18 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1049,11 +1165,7 @@
             "schema": {
               "maximum": 100,
               "default": 30,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -1090,6 +1202,106 @@
             "schema": {
               "maxLength": 32,
               "type": "string"
+            }
+          },
+          {
+            "name": "formats",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "manualTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aiTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "smartFolderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "color",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ANY", "ALL"]
             }
           },
           {
@@ -2303,7 +2515,16 @@
             "required": false,
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "DRAFT",
+                "PREFLIGHTED",
+                "RUNNING",
+                "COMPLETED",
+                "PARTIAL",
+                "FAILED",
+                "CANCELLED"
+              ]
             }
           },
           {
@@ -2527,7 +2748,16 @@
             "required": false,
             "in": "query",
             "schema": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "STAGED",
+                "UPLOADING",
+                "FINALIZING",
+                "IMPORTED",
+                "SKIPPED",
+                "FAILED",
+                "CANCELLED"
+              ]
             }
           }
         ],
@@ -3162,11 +3392,7 @@
             "schema": {
               "maximum": 100,
               "default": 30,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -3203,6 +3429,106 @@
             "schema": {
               "maxLength": 32,
               "type": "string"
+            }
+          },
+          {
+            "name": "formats",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "manualTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aiTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "smartFolderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "color",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ANY", "ALL"]
             }
           },
           {
@@ -3271,7 +3597,17 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3295,8 +3631,18 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3849,11 +4195,7 @@
             "schema": {
               "maximum": 100,
               "default": 30,
-              "allOf": [
-                {
-                  "$ref": "#/components/schemas/Object"
-                }
-              ]
+              "type": "number"
             }
           },
           {
@@ -3890,6 +4232,106 @@
             "schema": {
               "maxLength": 32,
               "type": "string"
+            }
+          },
+          {
+            "name": "formats",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "manualTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "aiTagIds",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated values",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "smartFolderId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "minWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxWidth",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "minHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "maxHeight",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "createdFrom",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "createdTo",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "color",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tagMatch",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ANY", "ALL"]
             }
           },
           {
@@ -5552,6 +5994,18 @@
   "tags": [],
   "servers": [],
   "components": {
+    "securitySchemes": {
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "sekereagle_access"
+      },
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "PAT",
+        "type": "http"
+      }
+    },
     "schemas": {
       "LoginDto": {
         "type": "object",
@@ -5679,10 +6133,6 @@
         },
         "required": ["assetIds", "operationId"]
       },
-      "Object": {
-        "type": "object",
-        "properties": {}
-      },
       "CountEagleAssetsDto": {
         "type": "object",
         "properties": {
@@ -5692,6 +6142,73 @@
           }
         },
         "required": ["query"]
+      },
+      "EagleRenditionResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["THUMBNAIL", "PREVIEW", "POSTER"]
+          },
+          "revision": {
+            "type": "number"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "byteSize": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": ["id", "kind", "revision", "mimeType", "byteSize", "width", "height"]
+      },
+      "EagleAssetUpdateResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "mediaRevision": {
+            "type": "number"
+          },
+          "lifecycleStatus": {
+            "type": "string",
+            "enum": ["PROCESSING", "READY", "FAILED"]
+          },
+          "mediaErrorCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "renditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EagleRenditionResponseDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "mediaRevision",
+          "lifecycleStatus",
+          "mediaErrorCode",
+          "updatedAt",
+          "renditions"
+        ]
       },
       "EagleAssetIdsDto": {
         "type": "object",
@@ -6053,6 +6570,10 @@
           }
         },
         "required": ["originalName", "mimeType", "size"]
+      },
+      "Object": {
+        "type": "object",
+        "properties": {}
       },
       "CreateEagleImportRunDto": {
         "type": "object",

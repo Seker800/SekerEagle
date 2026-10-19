@@ -25,6 +25,10 @@ export function buildImageProcessingJobs(
     width: number | null;
     height: number | null;
     completedAiTag?: boolean;
+    renditionsReady?: boolean;
+    paletteReady?: boolean;
+    pyramidReady?: boolean;
+    embeddingReady?: boolean;
   },
   renditionJobId: string = randomUUID(),
 ): Prisma.EagleAssetProcessingJobCreateManyInput[] {
@@ -39,6 +43,10 @@ export function buildMissingImageProcessingJobs(
     width: number | null;
     height: number | null;
     completedAiTag?: boolean;
+    renditionsReady?: boolean;
+    paletteReady?: boolean;
+    pyramidReady?: boolean;
+    embeddingReady?: boolean;
   },
   existingJobs: ReadonlyArray<{ id: string; kind: string; processorVersion: string }>,
   newRenditionJobId: string = randomUUID(),
@@ -52,9 +60,10 @@ export function buildMissingImageProcessingJobs(
     ({ kind, processorVersion }) =>
       kind === 'GENERATE_RENDITIONS' && processorVersion === RENDITION_PROCESSOR_VERSION,
   );
-  const renditionJobId = existingRendition?.id ?? newRenditionJobId;
+  const renditionJobId =
+    existingRendition?.id ?? (input.renditionsReady ? null : newRenditionJobId);
   const jobs: Prisma.EagleAssetProcessingJobCreateManyInput[] = [];
-  if (!existingRendition) {
+  if (!existingRendition && !input.renditionsReady) {
     jobs.push({
       id: newRenditionJobId,
       ...common,
@@ -68,7 +77,7 @@ export function buildMissingImageProcessingJobs(
     ({ kind, processorVersion }) =>
       kind === 'EXTRACT_COLOR_PALETTE' && processorVersion === COLOR_THUMBNAIL_PROCESSOR_VERSION,
   );
-  if (!hasPalette) {
+  if (!hasPalette && !input.paletteReady) {
     jobs.push({
       id: randomUUID(),
       ...common,
@@ -82,7 +91,7 @@ export function buildMissingImageProcessingJobs(
     ({ kind, processorVersion }) =>
       kind === 'GENERATE_IMAGE_PYRAMID' && processorVersion === PYRAMID_PROCESSOR_VERSION,
   );
-  if (needsImagePyramid(input.width, input.height) && !hasPyramid) {
+  if (needsImagePyramid(input.width, input.height) && !hasPyramid && !input.pyramidReady) {
     jobs.push({
       id: randomUUID(),
       ...common,
@@ -96,7 +105,7 @@ export function buildMissingImageProcessingJobs(
     ({ kind, processorVersion }) =>
       kind === 'GENERATE_EMBEDDING' && processorVersion === EMBEDDING_PROCESSOR_VERSION,
   );
-  if (!hasEmbedding) {
+  if (!hasEmbedding && !input.embeddingReady) {
     jobs.push({
       id: randomUUID(),
       ...common,

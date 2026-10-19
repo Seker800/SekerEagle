@@ -233,9 +233,14 @@ test('image search preserves the ranked order without resolving AI tags', async 
     } as never,
     {
       prepare: async () => ({ status: 'READY', spaceId: 'space', vector: '[1]' }),
-      rank: async () => {
+      rankPage: async () => {
         rankingQuery = 'direct-images';
-        return ['manual-asset', 'ai-asset'];
+        return ['manual-asset', 'ai-asset'].map((assetId) => ({
+          assetId,
+          tier: 1,
+          similarity: 0.9,
+          libraryAddedAt: '2026-01-01T00:00:00.000Z',
+        }));
       },
     } as never,
   );

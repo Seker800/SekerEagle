@@ -15,7 +15,8 @@ export class PatScopeGuard implements CanActivate {
     ]);
     const principal = context.switchToHttp().getRequest<Request & { user?: AuthPrincipal }>().user;
     if (!principal) throw new ForbiddenException('缺少认证主体。');
-    if (principal.kind === 'browser' || !required?.length) return true;
+    if (principal.kind === 'browser') return true;
+    if (!required?.length) throw new ForbiddenException('PAT route must declare required scopes.');
     if (!required.every((scope) => principal.scopes.includes(scope))) {
       throw new ForbiddenException('PAT 权限不足。');
     }

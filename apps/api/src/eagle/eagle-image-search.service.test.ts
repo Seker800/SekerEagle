@@ -3,6 +3,7 @@ import test from 'node:test';
 import { EagleImageSearchService } from './eagle-image-search.service';
 const space = {
   id: 'qwen3-vl-embedding-2b-1024-v1',
+  isCurrent: true,
   model: 'Qwen/Qwen3-VL-Embedding-2B',
   revision: '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda',
   dimensions: 1024,
@@ -49,21 +50,27 @@ test('ranking queries current image embeddings and never traverses AI tag links'
     {
       $queryRaw: async (query: unknown) => {
         sql = JSON.stringify(query);
-        return [{ assetId: 'one' }];
+        return [
+          { assetId: 'one', tier: 1, similarity: 0.9, libraryAddedAt: new Date('2026-01-01') },
+        ];
       },
     } as never,
     {} as never,
   );
-  const result = await service.rank(
+  const result = await service.rankPage(
     'owner',
     '猫',
     { status: 'READY', spaceId: space.id, vector: '[1,0]' },
-    0,
+    undefined,
     40,
     false,
     false,
   );
-  assert.deepEqual(result, ['one']);
+  assert.deepEqual(
+    result.map((row) => row.assetId),
+    ['one'],
+  );
+  assert.doesNotMatch(sql, /OFFSET/);
   assert.match(sql, /EagleAssetEmbedding/);
   assert.match(sql, /assetRevision/);
   assert.match(sql, /mediaRevision/);

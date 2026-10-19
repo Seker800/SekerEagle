@@ -244,6 +244,8 @@ test('content replacement preserves the logical asset id and advances its media 
     },
   };
   const transaction = {
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
     uploadSession: { updateMany: async () => ({ count: 1 }), update: async () => undefined },
     eagleAsset: {
       findFirst: async () => ({

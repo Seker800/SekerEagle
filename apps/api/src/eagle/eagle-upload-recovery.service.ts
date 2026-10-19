@@ -19,6 +19,7 @@ const RECOVERY_INTERVAL_MS = 60_000;
 @Injectable()
 export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EagleUploadRecoveryService.name);
+  private running = false;
   private timer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -40,6 +41,18 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
   }
 
   async recoverPendingFinalizations(): Promise<void> {
+    if (this.running) return;
+    this.running = true;
+    try {
+      await this.recover();
+    } catch (error) {
+      this.logger.warn(error instanceof Error ? error.message : 'UPLOAD_RECOVERY_FAILED');
+    } finally {
+      this.running = false;
+    }
+  }
+
+  private async recover(): Promise<void> {
     const staleInitiatedCutoff = new Date(Date.now() - RECOVERY_INTERVAL_MS);
     const staleFinalizingCutoff = new Date(Date.now() - 5 * RECOVERY_INTERVAL_MS);
     await this.prisma.uploadSession.updateMany({
@@ -88,6 +101,31 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
         );
       }
     }
+    // Durable terminal markers keep failed cleanup retryable after a process crash.
+    await this.prisma.uploadSession.updateMany({
+      where: {
+        libraryMode: this.libraryMode,
+        status: 'INITIATED',
+        completionParts: { equals: Prisma.DbNull },
+        updatedAt: { lt: new Date(Date.now() - 24 * 60 * 60_000) },
+      },
+      data: {
+        status: 'ABORTED',
+        abortedAt: new Date(),
+        objectCleanupPending: true,
+        lastError: 'UPLOAD_EXPIRED',
+      },
+    });
+    await this.prisma.uploadSession.updateMany({
+      where: {
+        libraryMode: this.libraryMode,
+        status: 'FAILED',
+        finalizationAttempts: { gte: 10 },
+        eagleAssetId: null,
+        objectCleanupPending: false,
+      },
+      data: { objectCleanupPending: true },
+    });
     await this.recoverObjectCleanup();
   }
 
@@ -95,19 +133,30 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
     const sessions = await this.prisma.uploadSession.findMany({
       where: {
         objectCleanupPending: true,
-        status: { in: ['COMPLETED', 'FAILED'] },
+        status: { in: ['COMPLETED', 'FAILED', 'ABORTED'] },
         libraryMode: this.libraryMode,
       },
-      select: { id: true, objectKey: true },
+      select: { id: true, objectKey: true, multipartUploadId: true, status: true },
       orderBy: { updatedAt: 'asc' },
       take: 50,
     });
     for (const session of sessions) {
       try {
+        if (session.status === 'ABORTED')
+          await this.storage
+            .abortMultipartUpload(session.objectKey, session.multipartUploadId)
+            .catch((error) => {
+              if (!(error instanceof Error) || error.name !== 'NoSuchUpload') throw error;
+            });
         await this.storage.deleteObject(session.objectKey);
         await this.prisma.uploadSession.updateMany({
           where: { id: session.id, objectCleanupPending: true, libraryMode: this.libraryMode },
-          data: { objectCleanupPending: false },
+          data: {
+            objectCleanupPending: false,
+            ...(session.status === 'FAILED'
+              ? { status: 'ABORTED' as const, abortedAt: new Date() }
+              : {}),
+          },
         });
       } catch (error) {
         this.logger.warn(

@@ -209,6 +209,7 @@ model User {
 }
 
 model RefreshToken {
+  familyId String @default(uuid())
   id         String    @id @default(uuid())
   tokenHash  String    @unique
   expiresAt  DateTime
@@ -219,6 +220,7 @@ model RefreshToken {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+  @@index([familyId, revokedAt])
 }
 
 model EaglePrivacyPreference {
@@ -274,6 +276,8 @@ model UploadSession {
   finalizationMode      String?
   finalizationJob       UploadFinalizationJob?
   eagleBrowserCapture   EagleBrowserCapture?
+
+  activeImportItems EagleImportRunItem[] @relation("ActiveImportUpload")
 
   @@unique([uploaderId, id])
   @@unique([uploaderId, libraryMode, id])
@@ -586,6 +590,8 @@ model EagleImportRunItem {
   /// The migration uses PostgreSQL column-specific SET NULL so ownerId remains intact.
   asset                     EagleAsset?            @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: SetNull)
 
+  activeUploadSession UploadSession? @relation("ActiveImportUpload", fields: [ownerId, libraryMode, activeUploadSessionId], references: [uploaderId, libraryMode, id], onDelete: SetNull)
+
   @@unique([runId, externalAssetId])
   @@unique([runId, sourceItemId])
   @@unique([ownerId, id])
@@ -780,6 +786,8 @@ model EagleAssetManualTag {
   tag                  EagleManualTag                 @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   ingestionOrigins     EagleAssetManualTagIngestion[]
 
+  acceptedSuggestion EagleVectorTagSuggestion? @relation("AcceptedTagSuggestion", fields: [ownerId, libraryMode, acceptedSuggestionId], references: [ownerId, libraryMode, id], onDelete: SetNull)
+
   @@id([ownerId, assetId, tagId])
   @@unique([ownerId, libraryMode, assetId, tagId])
   @@index([ownerId, libraryMode, tagId, assetId])
@@ -841,6 +849,8 @@ model EagleManualTagSemanticConfig {
   updatedAt             DateTime       @updatedAt
   tag                   EagleManualTag @relation(fields: [ownerId, libraryMode, tagId], references: [ownerId, libraryMode, id], onDelete: Cascade)
 
+  currentSnapshot EagleTagPrototypeSnapshot? @relation("CurrentTagSnapshot", fields: [ownerId, libraryMode, currentSnapshotId], references: [ownerId, libraryMode, id], onDelete: SetNull)
+
   @@id([ownerId, tagId])
   @@unique([ownerId, libraryMode, tagId])
   @@index([ownerId, libraryMode, recommendationEnabled, tagId])
@@ -873,6 +883,8 @@ model EagleTagPrototypeSnapshot {
   memberDistances    EagleTagMemberDistance[]
   suggestions        EagleVectorTagSuggestion[]
   build              EagleTagSemanticBuild?
+
+  currentConfigs EagleManualTagSemanticConfig[] @relation("CurrentTagSnapshot")
 
   @@unique([ownerId, id])
   @@unique([ownerId, tagId, version])
@@ -943,10 +955,14 @@ model EagleVectorTagSuggestion {
   embedding        EagleAssetEmbedding         @relation(fields: [ownerId, libraryMode, embeddingId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   snapshot         EagleTagPrototypeSnapshot   @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Restrict)
 
+  acceptedLinks EagleAssetManualTag[] @relation("AcceptedTagSuggestion")
+
   @@unique([ownerId, id])
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, suggestedTagId, status, score, assetId])
   @@index([ownerId, libraryMode, assetId, status])
+  @@index([ownerId, libraryMode, snapshotId])
+  @@index([ownerId, libraryMode, embeddingId])
   @@index([generationId])
 }
 

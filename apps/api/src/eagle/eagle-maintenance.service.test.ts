@@ -13,6 +13,9 @@ test('maintenance prunes old completed jobs in a bounded batch and retains recen
       },
     } as never,
     {
+      reconcileStaleUploadSessions: async () => ({}),
+      projectTerminalItemProgress: async () => ({}),
+      backfillTerminalProgress: async () => ({}),
       pruneTerminalRuns: async (input: unknown) => {
         importCalls.push(input);
         return 4;

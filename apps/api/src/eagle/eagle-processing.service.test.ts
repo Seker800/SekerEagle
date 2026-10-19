@@ -41,6 +41,7 @@ test('reconciler creates every missing current-version image task', async () => 
       },
     },
     eagleAiAnalysisRun: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   } as never);
 
   const result = await service.reconcile('owner-1');
@@ -91,6 +92,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
       createMany: async ({ data }: { data: unknown[] }) => ({ count: data.length }),
     },
     eagleAiAnalysisRun: { groupBy: async () => [] },
+    $queryRaw: async () => [],
   } as never);
 
   const result = await service.reconcile('owner-1');
@@ -121,6 +123,7 @@ test('reconciler skips an AI job whose completed result survived job pruning', a
         return [{ assetId: 'asset-1', assetRevision: 2 }];
       },
     },
+    $queryRaw: async () => [],
   } as never);
 
   const result = await service.reconcile('owner-1');
@@ -166,6 +169,7 @@ test('retrying a required media task restores the current asset processing lifec
   const service = new EagleProcessingService({
     $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
       work(transaction),
+    $queryRaw: async () => [],
   } as never);
 
   assert.deepEqual(await service.retry('owner-1', 'job-1'), { retried: 1 });
@@ -192,6 +196,7 @@ test('retrying all failed media tasks uses one owner-scoped set operation', asyn
   const service = new EagleProcessingService({
     $transaction: async (work: (value: typeof transaction) => Promise<unknown>) =>
       work(transaction),
+    $queryRaw: async () => [],
   } as never);
 
   assert.deepEqual(await service.retryFailed('owner-1', false), { retried: 1250 });

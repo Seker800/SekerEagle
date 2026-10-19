@@ -1,3 +1,4 @@
+import { BrowserOriginGuard } from './browser-origin.guard';
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import type { Request } from 'express';
 import { LIBRARY_MODE } from '../eagle/library-mode';
@@ -15,6 +16,7 @@ export class AccessAuthGuard implements CanActivate {
     private readonly sessions: SessionTokenService,
     private readonly pats: PatService,
     private readonly privacyVisibility: PrivacyVisibilityService,
+    private readonly browserOrigin: BrowserOriginGuard,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<true> {
@@ -32,6 +34,8 @@ export class AccessAuthGuard implements CanActivate {
     const token = request.cookies?.[ACCESS_COOKIE_NAME] as string | undefined;
     if (!token) throw new UnauthorizedException('缺少登录状态。');
     request.user = await this.sessions.verifyAccessToken(token);
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(request.method))
+      this.browserOrigin.canActivate(context);
     const visibleUntil = await this.privacyVisibility.readGrant(
       request.user.sub,
       request,

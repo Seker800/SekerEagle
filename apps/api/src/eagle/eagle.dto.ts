@@ -35,7 +35,7 @@ export class ListEagleAssetsDto {
   @IsOptional()
   @IsIn(['WITH', 'WITHOUT'])
   gps?: 'WITH' | 'WITHOUT';
-  @ApiPropertyOptional({ maximum: 100, default: 30 })
+  @ApiPropertyOptional({ type: Number, maximum: 100, default: 30 })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
@@ -56,7 +56,7 @@ export class ListEagleAssetsDto {
   @MaxLength(200)
   search?: string;
 
-  @ApiPropertyOptional({ minimum: 1, maximum: 5 })
+  @ApiPropertyOptional({ type: Number, minimum: 1, maximum: 5 })
   @Type(() => Number)
   @IsOptional()
   @IsInt()
@@ -71,6 +71,7 @@ export class ListEagleAssetsDto {
   @MaxLength(32)
   format?: string;
 
+  @ApiPropertyOptional({ type: String, description: 'Comma-separated values' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
   )
@@ -79,6 +80,7 @@ export class ListEagleAssetsDto {
   @IsString({ each: true })
   formats?: string[];
 
+  @ApiPropertyOptional({ type: String, description: 'Comma-separated values' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
   )
@@ -87,6 +89,7 @@ export class ListEagleAssetsDto {
   @IsUUID('4', { each: true })
   manualTagIds?: string[];
 
+  @ApiPropertyOptional({ type: String, description: 'Comma-separated values' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.split(',').filter(Boolean) : undefined,
   )
@@ -95,15 +98,50 @@ export class ListEagleAssetsDto {
   @IsUUID('4', { each: true })
   aiTagIds?: string[];
 
-  @IsOptional() @IsUUID('4') smartFolderId?: string;
-  @Type(() => Number) @IsOptional() @IsInt() @Min(1) minWidth?: number;
-  @Type(() => Number) @IsOptional() @IsInt() @Min(1) maxWidth?: number;
-  @Type(() => Number) @IsOptional() @IsInt() @Min(1) minHeight?: number;
-  @Type(() => Number) @IsOptional() @IsInt() @Min(1) maxHeight?: number;
-  @IsOptional() @IsString() createdFrom?: string;
-  @IsOptional() @IsString() createdTo?: string;
-  @IsOptional() @Matches(COLOR_PATTERN) color?: string;
-  @IsOptional() @IsIn(['ANY', 'ALL']) tagMatch?: 'ANY' | 'ALL';
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsUUID('4')
+  smartFolderId?: string;
+  @ApiPropertyOptional({ type: Number })
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minWidth?: number;
+  @ApiPropertyOptional({ type: Number })
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxWidth?: number;
+  @ApiPropertyOptional({ type: Number })
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minHeight?: number;
+  @ApiPropertyOptional({ type: Number })
+  @Type(() => Number)
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxHeight?: number;
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  createdFrom?: string;
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @IsString()
+  createdTo?: string;
+  @ApiPropertyOptional({ type: String })
+  @IsOptional()
+  @Matches(COLOR_PATTERN)
+  color?: string;
+  @ApiPropertyOptional({ enum: ['ANY', 'ALL'] })
+  @IsOptional()
+  @IsIn(['ANY', 'ALL'])
+  tagMatch?: 'ANY' | 'ALL';
   @ApiPropertyOptional({ enum: ['PRIVATE'] })
   @IsOptional()
   @IsIn(['PRIVATE'])

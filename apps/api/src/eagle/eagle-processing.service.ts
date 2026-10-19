@@ -10,6 +10,7 @@ import type {
 } from './eagle-processing.dto';
 import { COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { buildMissingImageProcessingJobs } from './media-job-plan';
+import { readMediaProcessingFacts } from './media-processing-facts';
 
 @Injectable()
 export class EagleProcessingService {
@@ -157,7 +158,13 @@ export class EagleProcessingService {
       });
       if (!job) return 0;
       const result = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { ownerId, id: job.id, status: 'FAILED', libraryMode: this.libraryMode },
+        where: {
+          ownerId,
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          status: 'FAILED',
+          libraryMode: this.libraryMode,
+        },
         data: retryJobData(),
       });
       if (result.count && job.kind !== 'EXTRACT_COLOR_PALETTE' && job.kind !== 'PURGE_ASSET') {
@@ -260,8 +267,18 @@ export class EagleProcessingService {
           assetRevision: true,
           kind: true,
           processorVersion: true,
+          status: true,
         },
       });
+      const facts = await readMediaProcessingFacts(
+        this.prisma,
+        ownerId,
+        this.libraryMode,
+        assets.map(({ id }) => id),
+      );
+      const factsByRevision = new Map(
+        facts.map((fact) => [`${fact.assetId}:${fact.assetRevision}`, fact]),
+      );
       const completedAiTags = await this.prisma.eagleAiAnalysisRun.groupBy({
         by: ['assetId', 'assetRevision'],
         where: {
@@ -282,7 +299,21 @@ export class EagleProcessingService {
         jobs.push(job);
         existingByAssetRevision.set(key, jobs);
       }
+      const repairIds: string[] = [];
       const missing = assets.flatMap((asset) => {
+        const key = `${asset.id}:${asset.mediaRevision}`;
+        const fact = factsByRevision.get(key);
+        const outputs: Record<string, boolean> = {
+          GENERATE_RENDITIONS: fact?.renditionsReady ?? false,
+          EXTRACT_COLOR_PALETTE: fact?.paletteReady ?? false,
+          GENERATE_IMAGE_PYRAMID: fact?.pyramidReady ?? false,
+          GENERATE_EMBEDDING: fact?.embeddingReady ?? false,
+          GENERATE_AI_TAGS: completedAiTagRevisions.has(key),
+        };
+        const repairsBefore = repairIds.length;
+        for (const job of existingByAssetRevision.get(key) ?? []) {
+          if (job.status === 'COMPLETED' && outputs[job.kind] === false) repairIds.push(job.id);
+        }
         const jobs = buildMissingImageProcessingJobs(
           {
             ownerId,
@@ -290,14 +321,37 @@ export class EagleProcessingService {
             assetRevision: asset.mediaRevision,
             width: asset.width,
             height: asset.height,
+            ...fact,
             completedAiTag: completedAiTagRevisions.has(`${asset.id}:${asset.mediaRevision}`),
           },
           existingByAssetRevision.get(`${asset.id}:${asset.mediaRevision}`) ?? [],
         );
-        if (jobs.length) assetsMissingCount += 1;
+        if (jobs.length || repairIds.length > repairsBefore) assetsMissingCount += 1;
         return jobs;
       });
-      missingCount += missing.length;
+      missingCount += missing.length + repairIds.length;
+      const retryIds = repairIds.slice(0, Math.max(0, creationLimit - created));
+      if (retryIds.length) {
+        const repaired = await this.prisma.eagleAssetProcessingJob.updateMany({
+          where: {
+            id: { in: retryIds },
+            ownerId,
+            libraryMode: this.libraryMode,
+            status: 'COMPLETED',
+            asset: { deletedAt: null },
+          },
+          data: {
+            status: 'PENDING',
+            attempts: 0,
+            availableAt: new Date(),
+            lockedAt: null,
+            completedAt: null,
+            lastError: null,
+            leaseVersion: { increment: 1 },
+          },
+        });
+        created += repaired.count;
+      }
       const creatable = missing.slice(0, Math.max(0, creationLimit - created));
       if (creatable.length) {
         const result = await this.prisma.eagleAssetProcessingJob.createMany({

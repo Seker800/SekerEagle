@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ensureLocalStorageEnvironment } from './ensure-local-storage-env.mjs';
 
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
@@ -123,6 +124,19 @@ async function waitForReady(url, attempts = 30) {
   throw new Error(`${url} did not become ready: ${lastError?.message ?? 'unknown error'}`);
 }
 
+async function waitForServiceHealth(composeFiles, service) {
+  const id = runDocker(composeArgs(composeFiles, ['ps', '-q', service]), { capture: true }).trim();
+  if (!id) throw new Error(`${service} container was not created`);
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const state = runDocker(['inspect', '--format', '{{.State.Health.Status}}', id], {
+      capture: true,
+    }).trim();
+    if (state === 'healthy') return;
+    await delay(2_000);
+  }
+  throw new Error(`${service} did not become healthy`);
+}
+
 async function main() {
   const allowedArgs = new Set(['--preflight']);
   const unknownArgs = process.argv.slice(2).filter((argument) => !allowedArgs.has(argument));
@@ -153,7 +167,21 @@ async function main() {
     return;
   }
 
-  runDocker(composeArgs(composeFiles, ['up', '-d', '--build', '--remove-orphans']));
+  await ensureLocalStorageEnvironment(fileURLToPath(envFile));
+  // Build before pausing writers; schema changes run only after every writer is stopped.
+  runDocker(composeArgs(composeFiles, ['build']));
+  runDocker(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker']));
+  runDocker(
+    composeArgs(composeFiles, [
+      'up',
+      '-d',
+      '--no-build',
+      '--remove-orphans',
+      '--force-recreate',
+      'migrate',
+    ]),
+  );
+  runDocker(composeArgs(composeFiles, ['up', '-d', '--no-build', '--remove-orphans']));
 
   const gatewayContainerId = runDocker(composeArgs(composeFiles, ['ps', '-q', 'gateway']), {
     capture: true,
@@ -171,6 +199,10 @@ async function main() {
     ...(lanAddress ? [`http://${lanAddress}:${gatewayPort}/api/health/ready`] : []),
   ];
   for (const url of healthUrls) await waitForReady(url);
+  await waitForReady(`http://127.0.0.1:${gatewayPort}/`);
+  await Promise.all(
+    ['web', 'worker'].map((service) => waitForServiceHealth(composeFiles, service)),
+  );
 
   runDocker(composeArgs(composeFiles, ['ps']));
   process.stdout.write(`Deployment verified: ${healthUrls.join(', ')}\n`);

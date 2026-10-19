@@ -1,3 +1,4 @@
+import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { t } from '../i18n';
@@ -106,15 +107,11 @@ export interface EagleAsset extends EagleAssetListItem {
   colorAnalysis: EagleColorAnalysis | null;
 }
 
-export interface EagleAssetUpdate {
+type EagleAssetUpdateContract = components['schemas']['EagleAssetUpdateResponseDto'];
+export interface EagleAssetUpdate extends EagleAssetUpdateContract {
   livePhotoComponent?: boolean;
   chronologicalAt?: string;
   photoMetadata?: PhotoMetadata | null;
-  id: string;
-  lifecycleStatus: EagleAssetListItem['lifecycleStatus'];
-  mediaErrorCode: string | null;
-  updatedAt: string;
-  renditions: EagleRendition[];
 }
 
 export interface EagleMediaCapabilities {
