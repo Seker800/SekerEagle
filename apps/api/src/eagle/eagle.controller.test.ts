@@ -53,6 +53,32 @@ test('body-based filter counts require a same-origin browser request', () => {
   assert.deepEqual(guards, [BrowserOriginGuard]);
 });
 
+test('image edits remain browser-only, same-origin and use the authenticated owner', async () => {
+  const handler = controllerMethod('saveImageEdit');
+  assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);
+  let captured: unknown[] = [];
+  const controller = new EagleController(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    undefined,
+    {
+      save: async (...args: unknown[]) => {
+        captured = args;
+        return { assetId: 'copy' };
+      },
+    } as never,
+  );
+  const input = { operationId: 'operation', rowVersion: 1, edit: {} };
+  await controller.saveImageEdit(
+    { sub: 'owner', canViewPrivate: false } as never,
+    'source',
+    input as never,
+  );
+  assert.deepEqual(captured, ['owner', 'source', input, false]);
+});
+
 test('private-tag settings stay browser-only and require same-origin writes', () => {
   assert.equal(
     Reflect.getMetadata(GUARDS_METADATA, controllerMethod('getPrivacySettings')),

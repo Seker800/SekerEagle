@@ -1,5 +1,6 @@
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
+import type { ImageEdit } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 import { t } from '../i18n';
 
@@ -332,6 +333,17 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     input: { assetIds: string[]; operationId: string },
   ) {
     return api<EagleLibraryTransferResult>('/eagle/assets/batch/send', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
+  async function saveEagleImageEdit(
+    _token: string,
+    id: string,
+    input: { operationId: string; rowVersion: number; edit: ImageEdit },
+  ) {
+    return api<{ assetId: string }>(`/eagle/assets/${encodeURIComponent(id)}/edits`, {
       method: 'POST',
       body: JSON.stringify(input),
     });
@@ -706,6 +718,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     getEagleAsset,
     getEagleAssetLocation,
     sendEagleAssets,
+    saveEagleImageEdit,
     getEagleTrashAsset,
     listEagleAssetUpdates,
     listEagleManualTags,
@@ -742,6 +755,7 @@ export const {
   getEagleAsset,
   getEagleAssetLocation,
   sendEagleAssets,
+  saveEagleImageEdit,
   getEagleTrashAsset,
   listEagleAssetUpdates,
   listEagleManualTags,

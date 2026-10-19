@@ -212,6 +212,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/edits': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_saveImageEdit'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/batch/send': {
     parameters: {
       query?: never;
@@ -1502,6 +1518,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['EagleVectorController_reviewBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/edits': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_saveImageEdit'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2835,6 +2867,14 @@ export interface components {
       name: string;
       scopes: ('import:read' | 'import:write' | 'asset:write' | 'capture:write')[];
     };
+    SaveImageEditDto: {
+      /** Format: uuid */
+      operationId: string;
+      rowVersion: number;
+      edit: {
+        [key: string]: unknown;
+      };
+    };
     SendEagleAssetsDto: {
       assetIds: string[];
       /** Format: uuid */
@@ -3280,6 +3320,29 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_saveImageEdit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveImageEditDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -5292,6 +5355,29 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['BatchReviewVectorSuggestionsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_saveImageEdit: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveImageEditDto'];
       };
     };
     responses: {

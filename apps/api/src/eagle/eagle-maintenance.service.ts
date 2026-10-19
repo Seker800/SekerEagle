@@ -50,7 +50,19 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
       keepPerLibrary: 10,
       limit: 100,
     });
-    return { completedJobsDeleted, importRunsDeleted };
+    const abandonedBefore = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1_000);
+    const abandonedImageEdits = await this.prisma.$executeRaw`
+      WITH expired AS (
+        UPDATE "EagleImageEdit" SET status='EXPIRED', "updatedAt"=${now}
+        WHERE id IN (
+          SELECT id FROM "EagleImageEdit" WHERE status='PENDING' AND "updatedAt" < ${abandonedBefore}
+          ORDER BY "updatedAt", id LIMIT 100 FOR UPDATE SKIP LOCKED
+        ) RETURNING id, "ownerId", "libraryMode", "targetKey"
+      )
+      INSERT INTO "EagleObjectDeletion" (id, "ownerId", "libraryMode", "objectKeys", prefixes, "updatedAt")
+      SELECT 'image-edit:' || id, "ownerId", "libraryMode", ARRAY["targetKey"], ARRAY[]::text[], ${now} FROM expired
+    `;
+    return { completedJobsDeleted, importRunsDeleted, abandonedImageEdits };
   }
 
   private async runScheduledMaintenance(): Promise<void> {
@@ -58,7 +70,7 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const result = await this.runMaintenance();
-      if (result.completedJobsDeleted || result.importRunsDeleted) {
+      if (result.completedJobsDeleted || result.importRunsDeleted || result.abandonedImageEdits) {
         this.logger.log(JSON.stringify({ event: 'eagle_maintenance_pruned', ...result }));
       }
     } catch (error) {

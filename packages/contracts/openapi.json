@@ -274,6 +274,42 @@
         "tags": ["DesktopBootstrap"]
       }
     },
+    "/api/eagle/assets/{assetId}/edits": {
+      "post": {
+        "operationId": "EagleController_saveImageEdit",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveImageEditDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/batch/send": {
       "post": {
         "operationId": "EagleController_sendAssets",
@@ -3304,6 +3340,42 @@
         "tags": ["EagleVector"]
       }
     },
+    "/api/photos/assets/{assetId}/edits": {
+      "post": {
+        "operationId": "PhotosController_saveImageEdit",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveImageEditDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
     "/api/photos/assets/batch/send": {
       "post": {
         "operationId": "PhotosController_sendAssets",
@@ -6115,6 +6187,24 @@
           }
         },
         "required": ["name", "scopes"]
+      },
+      "SaveImageEditDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rowVersion": {
+            "type": "number",
+            "minimum": 1
+          },
+          "edit": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "required": ["operationId", "rowVersion", "edit"]
       },
       "SendEagleAssetsDto": {
         "type": "object",

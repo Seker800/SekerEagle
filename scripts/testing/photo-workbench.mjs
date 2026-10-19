@@ -21,6 +21,7 @@ import bcrypt from 'bcrypt';
 import { createLivePhotoFixtures } from './live-photo-fixtures.mjs';
 import { createCameraFixtures } from './camera-media-fixtures.mjs';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+import { createImageEdit } from '../../packages/library-core/dist/index.js';
 
 const root = process.cwd(),
   name = `sekereagle-photo-workbench-${randomUUID().slice(0, 8)}`;
@@ -228,7 +229,7 @@ try {
     env,
   );
   db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
-  const testPassword = randomBytes(24).toString('hex');
+  const testPassword = process.env.PHOTO_WORKBENCH_EDITOR === '1' ? 'ImageEditorTestOnly123!' : randomBytes(24).toString('hex');
   const owner = await db.user.create({
     data: {
       email: 'photo-test@example.invalid',
@@ -453,7 +454,79 @@ try {
   assert.equal(capturedPhoto.photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');
   assert.equal((await api('/photos/assets?limit=20&gps=WITH')).items.length, 1);
   if (basic) {
-    assert.ok(!process.argv.includes('--serve'), 'basic smoke is an automated check only');
+    assert.ok(
+      !process.argv.includes('--serve') || process.env.PHOTO_WORKBENCH_EDITOR === '1',
+      'basic smoke serves only the explicit editor workbench',
+    );
+    if (process.env.PHOTO_WORKBENCH_EDITOR === '1') {
+      for (const [mode, sourceId] of [
+        ['eagle', material.assetId],
+        ['photos', a.assetId],
+      ]) {
+        const sourceDetail = await api(`/${mode}/assets/${sourceId}`);
+        const input = {
+          operationId: randomUUID(),
+          rowVersion: sourceDetail.rowVersion,
+          edit: {
+            ...createImageEdit(),
+            crop: { x: 0.25, y: 0, width: 0.5, height: 1 },
+            rotation: 90,
+            brightness: 1.1,
+          },
+        };
+        const endpoint = `${origin}/api/${mode}/assets/${sourceId}/edits`;
+        const post = (body, requestOrigin = origin) =>
+          fetch(endpoint, {
+            method: 'POST',
+            headers: {
+              origin: requestOrigin,
+              cookie: `sekereagle_access=${accessToken}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify(body),
+          });
+        assert.equal((await post(input, 'https://untrusted.invalid')).status, 403);
+        assert.equal((await post({ ...input, ownerId: owner.id })).status, 400);
+        const edited = await api(`/${mode}/assets/${sourceId}/edits`, input);
+        assert.deepEqual(await api(`/${mode}/assets/${sourceId}/edits`, input), edited);
+        await waitFor(
+          async () =>
+            (await db.eagleAsset.findUniqueOrThrow({ where: { id: edited.assetId } }))
+              .lifecycleStatus === 'READY',
+          'edited copy previews',
+          240,
+        );
+        const copy = await api(`/${mode}/assets/${edited.assetId}`);
+        assert.equal(copy.width, 512);
+        assert.equal(copy.height, 256);
+        if (mode === 'photos') {
+          assert.equal(copy.photoMetadata.cameraModel, 'Test Camera');
+          assert.equal(copy.photoMetadata.capturedAt, '2024-03-01T04:30:00.000Z');
+        }
+        const original = await fetch(`${origin}/api/${mode}/assets/${sourceId}/original`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        });
+        assert.deepEqual(Buffer.from(await original.arrayBuffer()), sharpPhoto);
+        const png = await fetch(`${origin}/api/${mode}/assets/${edited.assetId}/original`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        });
+        const metadata = await sharp(Buffer.from(await png.arrayBuffer())).metadata();
+        assert.equal(metadata.format, 'png');
+        assert.equal(metadata.width, 512);
+        assert.equal(metadata.height, 256);
+      }
+      console.log(
+        'Image editing HTTP, worker previews, EXIF, idempotency and origin checks passed.',
+      );
+      if (process.argv.includes('--serve')) {
+        await writeFile(
+          join(artifacts, 'image-editor-workbench.json'),
+          JSON.stringify({ url: origin }),
+        );
+        console.log(`Editor workbench ready: ${origin}`);
+        await new Promise(() => {});
+      }
+    }
     assert.ok(
       !['PHOTO_WORKBENCH_CAMERA', 'PHOTO_WORKBENCH_LIVE', 'PHOTO_WORKBENCH_SEND'].some(
         (flag) => process.env[flag] === '1',

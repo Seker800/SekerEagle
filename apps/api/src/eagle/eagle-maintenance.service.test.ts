@@ -25,7 +25,11 @@ test('maintenance prunes old completed jobs in a bounded batch and retains recen
 
   const result = await service.runMaintenance(new Date('2026-08-17T00:00:00.000Z'));
 
-  assert.deepEqual(result, { completedJobsDeleted: 123, importRunsDeleted: 4, abandonedImageEdits: 123 });
+  assert.deepEqual(result, {
+    completedJobsDeleted: 123,
+    importRunsDeleted: 4,
+    abandonedImageEdits: 123,
+  });
   assert.match(rawCalls[0]?.sql ?? '', /"status" = 'COMPLETED'/);
   assert.match(rawCalls[0]?.sql ?? '', /LIMIT/);
   assert.equal((rawCalls[0]?.values[0] as Date).toISOString(), '2026-07-18T00:00:00.000Z');

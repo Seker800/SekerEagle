@@ -7,6 +7,11 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
 import { EagleMediaService } from '../../apps/api/dist/eagle/eagle-media.service.js';
 import { EagleUploadService } from '../../apps/api/dist/eagle/eagle-upload.service.js';
+import { EagleImageEditService } from '../../apps/api/dist/eagle/eagle-image-edit.service.js';
+import { EagleMaintenanceService } from '../../apps/api/dist/eagle/eagle-maintenance.service.js';
+import { createImageEdit } from '../../packages/library-core/dist/index.js';
+import { Readable } from 'node:stream';
+import sharp from 'sharp';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL ?? '',
@@ -46,6 +51,152 @@ async function fixtures() {
     photos: new EagleService(prisma, undefined, 'PHOTO'),
   };
 }
+
+test('image editing publishes one independent private copy with tags, jobs and original bytes preserved', async () => {
+  for (const mode of ['MATERIAL', 'PHOTO']) {
+    const f = await fixtures();
+    const sourceId = mode === 'PHOTO' ? f.photo.id : f.material.id;
+    const bytes = await sharp({
+      create: { width: 80, height: 40, channels: 3, background: '#c07840' },
+    })
+      .png()
+      .toBuffer();
+    const source = await prisma.eagleAsset.update({
+      where: { id: sourceId },
+      data: { width: 80, height: 40, mediaRevision: 1, isPrivate: true },
+    });
+    const tag = await prisma.eagleManualTag.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: mode,
+        name: 'private',
+        normalizedName: 'private',
+        marksAssetsPrivate: true,
+      },
+    });
+    await prisma.eagleAssetManualTag.create({
+      data: { ownerId: f.ownerId, libraryMode: mode, assetId: source.id, tagId: tag.id },
+    });
+    const stored = new Map([[source.originalObjectKey, bytes]]);
+    const storage = {
+      getObject: async (key) => ({ Body: Readable.from(stored.get(key)) }),
+      putObject: async (key, value) => {
+        stored.set(key, value);
+      },
+    };
+    const editor = new EagleImageEditService(prisma, storage, mode);
+    const input = {
+      operationId: randomUUID(),
+      rowVersion: source.rowVersion,
+      edit: { ...createImageEdit(), rotation: 90, crop: { x: 0.25, y: 0, width: 0.5, height: 1 } },
+    };
+    await assert.rejects(() => editor.save(f.ownerId, source.id, input, false), NotFoundException);
+    const results = await Promise.all([
+      editor.save(f.ownerId, source.id, input, true),
+      editor.save(f.ownerId, source.id, input, true),
+    ]);
+    assert.deepEqual(results[0], results[1]);
+    const copy = await prisma.eagleAsset.findUniqueOrThrow({
+      where: { id: results[0].assetId },
+      include: { manualTagLinks: true, processingJobs: true },
+    });
+    assert.equal(copy.libraryMode, mode);
+    assert.equal(copy.isPrivate, true);
+    assert.equal(copy.width, 40);
+    assert.equal(copy.height, 40);
+    assert.deepEqual(
+      copy.manualTagLinks.map((link) => link.tagId),
+      [tag.id],
+    );
+    assert.ok(copy.processingJobs.some((job) => job.kind === 'GENERATE_RENDITIONS'));
+    assert.notEqual(copy.originalObjectKey, source.originalObjectKey);
+    assert.deepEqual(stored.get(source.originalObjectKey), bytes);
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: source.id } })).rowVersion,
+      source.rowVersion,
+    );
+    assert.deepEqual(await editor.save(f.ownerId, source.id, input, true), results[0]);
+    await assert.rejects(
+      () =>
+        new EagleImageEditService(prisma, storage, mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO').save(
+          f.ownerId,
+          source.id,
+          input,
+          true,
+        ),
+      NotFoundException,
+    );
+    await assert.rejects(
+      () => editor.save(randomUUID(), source.id, input, true),
+      NotFoundException,
+    );
+  }
+});
+
+test('failed edit storage writes can retry; concurrent source changes cannot publish a stale copy', async () => {
+  const f = await fixtures();
+  const source = await prisma.eagleAsset.update({
+    where: { id: f.material.id },
+    data: { width: 20, height: 10, mediaRevision: 1 },
+  });
+  const bytes = await sharp({ create: { width: 20, height: 10, channels: 3, background: 'blue' } })
+    .png()
+    .toBuffer();
+  let fail = true,
+    modify = false;
+  const keys = [];
+  const storage = {
+    getObject: async () => {
+      if (modify)
+        await prisma.eagleAsset.update({
+          where: { id: source.id },
+          data: { rowVersion: { increment: 1 }, mediaRevision: { increment: 1 } },
+        });
+      return { Body: Readable.from(bytes) };
+    },
+    putObject: async (key) => {
+      keys.push(key);
+      if (fail) throw new Error('storage unavailable');
+    },
+  };
+  const editor = new EagleImageEditService(prisma, storage);
+  const input = {
+    operationId: randomUUID(),
+    rowVersion: source.rowVersion,
+    edit: { ...createImageEdit(), flipX: true },
+  };
+  await assert.rejects(
+    () => editor.save(f.ownerId, source.id, input, false),
+    /storage unavailable/,
+  );
+  fail = false;
+  const copy = await editor.save(f.ownerId, source.id, input, false);
+  assert.equal(keys[0], keys[1]);
+  assert.ok(await prisma.eagleAsset.findUnique({ where: { id: copy.assetId } }));
+  modify = true;
+  const stale = { ...input, operationId: randomUUID() };
+  await assert.rejects(() => editor.save(f.ownerId, source.id, stale, false), /图片已变化/);
+  const operation = await prisma.eagleImageEdit.findUniqueOrThrow({
+    where: { id: stale.operationId },
+  });
+  assert.equal(operation.status, 'PENDING');
+  assert.equal(await prisma.eagleAsset.findUnique({ where: { id: operation.targetId } }), null);
+});
+
+test('abandoned edit plans expire into the durable object deletion outbox without removing completed copies', async () => {
+  const f = await fixtures();
+  const operationId = randomUUID();
+  const targetKey = `users/${f.ownerId}/assets/${randomUUID()}/original.png`;
+  await prisma.eagleImageEdit.create({ data: { id: operationId, ownerId: f.ownerId, libraryMode: 'PHOTO', sourceId: f.photo.id, sourceRowVersion: 1, sourceRevision: 0, recipe: createImageEdit(), targetId: randomUUID(), targetKey, updatedAt: new Date('2020-01-01') } });
+  const maintenance = new EagleMaintenanceService(prisma, { reconcileStaleUploadSessions: async () => {}, projectTerminalItemProgress: async () => {}, backfillTerminalProgress: async () => {}, pruneTerminalRuns: async () => 0 });
+  const result = await maintenance.runMaintenance();
+  assert.ok(result.abandonedImageEdits >= 1);
+  assert.equal((await prisma.eagleImageEdit.findUniqueOrThrow({ where: { id: operationId } })).status, 'EXPIRED');
+  const deletion = await prisma.eagleObjectDeletion.findUniqueOrThrow({ where: { id: `image-edit:${operationId}` } });
+  assert.deepEqual(deletion.objectKeys, [targetKey]);
+  assert.equal(deletion.libraryMode, 'PHOTO');
+  assert.equal((await maintenance.runMaintenance()).abandonedImageEdits, 0);
+});
 
 test('real service lists and ID reads cannot cross libraries or owners', async () => {
   const f = await fixtures();
