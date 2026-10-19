@@ -183,6 +183,11 @@ export interface EagleSmartFolder {
   rowVersion: number;
 }
 
+export interface EagleAssetLocation {
+  assetId: string;
+  cursor: string | null;
+}
+
 export interface EagleAssetFilters {
   personId?: string;
   cameraModel?: string;
@@ -316,6 +321,10 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/trash?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
+  }
+
+  async function getEagleAssetLocation(_token: string, id: string, signal?: AbortSignal) {
+    return api<EagleAssetLocation>(`/eagle/assets/${encodeURIComponent(id)}/location`, { signal });
   }
 
   async function getEagleAsset(_token: string, id: string, signal?: AbortSignal) {
@@ -681,6 +690,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     listEagleAssets,
     listEagleTrash,
     getEagleAsset,
+    getEagleAssetLocation,
     getEagleTrashAsset,
     listEagleAssetUpdates,
     listEagleManualTags,
@@ -715,6 +725,7 @@ export const {
   listEagleAssets,
   listEagleTrash,
   getEagleAsset,
+  getEagleAssetLocation,
   getEagleTrashAsset,
   listEagleAssetUpdates,
   listEagleManualTags,

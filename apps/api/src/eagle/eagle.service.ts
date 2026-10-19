@@ -1,3 +1,4 @@
+import { locateEagleAsset } from './eagle-asset-location';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary, type LibraryIdentity } from './library-mode';
 import {
@@ -524,6 +525,15 @@ export class EagleService {
         },
       }),
     };
+  }
+
+  locateAsset(ownerId: string, assetId: string, includePrivate = false) {
+    return locateEagleAsset(
+      this.prisma,
+      { ownerId, libraryMode: this.libraryMode },
+      assetId,
+      includePrivate,
+    );
   }
 
   async getAsset(

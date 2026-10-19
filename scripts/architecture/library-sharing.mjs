@@ -27,6 +27,8 @@ const neutralCore = [
   'EagleImageViewer.tsx',
   'EagleAssetLightbox.tsx',
   'EagleLivePhotoPlayback.tsx',
+  'EagleLocateAssetButton.tsx',
+  'useEagleAssetLocation.ts',
   'eagle-quick-filter-state.ts',
 ].map((name) => `apps/web/src/components/eagle/${name}`);
 const composition = {

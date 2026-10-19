@@ -5,6 +5,7 @@ import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
 import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
+import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleImageViewer.module.css';
 type ViewerStatus = 'loading' | 'ready' | 'error';
@@ -110,10 +111,12 @@ export function preloadEagleImageViewer(): void {
 export function EagleImageViewer({
   image,
   descriptor,
+  onLocate,
   onClose,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
+  onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
 }) {
   const source = useMemo(
@@ -341,6 +344,9 @@ export function EagleImageViewer({
               value1: descriptor ? t('按需加载高清切片') : t('优化预览'),
             })}
           </span>
+          {onLocate && image.assetId && (
+            <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
+          )}
           <EagleImageCopyButton sourceUrl={image.src} />
           <button type="button" onClick={onClose}>
             {' ' + t('关闭') + ' '}

@@ -468,6 +468,32 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/{assetId}/location": {
+      "get": {
+        "operationId": "EagleController_locateAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/{assetId}": {
       "get": {
         "operationId": "EagleController_getAsset",
@@ -3204,6 +3230,32 @@
         },
         "responses": {
           "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/{assetId}/location": {
+      "get": {
+        "operationId": "PhotosController_locateAsset",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
             "description": ""
           }
         },

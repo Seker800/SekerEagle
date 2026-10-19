@@ -101,6 +101,14 @@ export class EagleController {
     return this.eagle.listUpdates(principal.sub, input.assetIds, principal.canViewPrivate);
   }
 
+  @Get('assets/:assetId/location')
+  locateAsset(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
+  ) {
+    return this.eagle.locateAsset(principal.sub, assetId, principal.canViewPrivate);
+  }
+
   @Get('assets/:assetId')
   getAsset(
     @CurrentPrincipal() principal: AuthPrincipal,

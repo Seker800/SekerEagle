@@ -9,9 +9,11 @@ import { t } from '../../i18n';
 export function PhotoStackLightbox({
   stack,
   onClose,
+  onLocate,
 }: {
   stack: EaglePhotoStack;
   onClose: () => void;
+  onLocate?: (assetId: string) => Promise<void>;
 }) {
   const { ownerId, api } = useLibraryWorkspace();
   const client = useQueryClient();
@@ -47,6 +49,7 @@ export function PhotoStackLightbox({
       asset={displayed ?? stack.cover}
       loading={!displayed}
       onClose={onClose}
+      onLocate={onLocate}
       navigation={{
         index,
         count: stack.assetIds.length,

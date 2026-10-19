@@ -222,6 +222,14 @@ test('real Nest photo routes preserve guards and inject the photo service graph'
       (await fetch(`${base}/api/photos/assets/${f.material.id}`, { headers })).status,
       404,
     );
+    assert.equal((await fetch(`${base}/api/photos/assets/${f.photo.id}/location`)).status, 401);
+    const location = await fetch(`${base}/api/photos/assets/${f.photo.id}/location`, { headers });
+    assert.equal(location.status, 200);
+    assert.equal((await location.json()).assetId, f.photo.id);
+    assert.equal(
+      (await fetch(`${base}/api/eagle/assets/${f.photo.id}/location`, { headers })).status,
+      404,
+    );
     assert.equal((await fetch(`${base}/api/photos/assets`)).status, 401);
     assert.equal((await fetch(`${base}/api/photos/photography/timeline`)).status, 401);
     const timelineResponse = await fetch(`${base}/api/photos/photography/timeline`, { headers });
@@ -964,4 +972,59 @@ test('Live Photo pairs enforce scope, privacy, uniqueness, revision and componen
   assert.equal((await read()).deletedAt, null);
   assert.equal((await read()).livePhotoMotion, undefined);
   assert.equal((await f.materials.listAssets(f.ownerId, { limit: 50 })).items.length, 2);
+});
+
+test('asset location seeks a bounded neighborhood and rejects foreign, private, trash and cross-library targets', async () => {
+  const f = await fixtures();
+  const foreign = await fixtures();
+  for (const [mode, service, target] of [
+    ['MATERIAL', f.materials, f.material],
+    ['PHOTO', f.photos, f.photo],
+  ]) {
+    const base = new Date('2023-03-01T12:00:00Z');
+    await prisma.eagleAsset.update({
+      where: { id: target.id },
+      data: { chronologicalAt: base, libraryAddedAt: base },
+    });
+    await prisma.eagleAsset.createMany({
+      data: Array.from({ length: 90 }, (_, index) => {
+        const id = randomUUID();
+        const date = new Date(base.getTime() + (index < 80 ? index + 1 : -(index + 1)) * 1000);
+        return {
+          id,
+          ownerId: f.ownerId,
+          libraryMode: mode,
+          originalName: 'nearby.jpg',
+          displayName: 'nearby',
+          normalizedDisplayName: 'nearby',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          originalObjectKey: `users/${f.ownerId}/assets/${id}/original.jpg`,
+          chronologicalAt: date,
+          libraryAddedAt: date,
+        };
+      }),
+    });
+    const location = await service.locateAsset(f.ownerId, target.id);
+    assert.equal(location.assetId, target.id);
+    const nearby = await service.listAssets(f.ownerId, { limit: 60, cursor: location.cursor });
+    assert.equal(
+      nearby.items.findIndex((row) => row.id === target.id),
+      20,
+    );
+    assert.equal(nearby.items.length, 31);
+    const other = mode === 'PHOTO' ? f.materials : f.photos;
+    await assert.rejects(() => other.locateAsset(f.ownerId, target.id), NotFoundException);
+    await assert.rejects(() => service.locateAsset(foreign.ownerId, target.id), NotFoundException);
+    await assert.rejects(() => other.listAssets(f.ownerId, { limit: 60, cursor: location.cursor }));
+    await prisma.eagleAsset.update({ where: { id: target.id }, data: { isPrivate: true } });
+    await assert.rejects(() => service.locateAsset(f.ownerId, target.id), NotFoundException);
+    assert.equal((await service.locateAsset(f.ownerId, target.id, true)).assetId, target.id);
+    await prisma.eagleAsset.update({
+      where: { id: target.id },
+      data: { isPrivate: false, deletedAt: new Date() },
+    });
+    await assert.rejects(() => service.locateAsset(f.ownerId, target.id), NotFoundException);
+  }
 });

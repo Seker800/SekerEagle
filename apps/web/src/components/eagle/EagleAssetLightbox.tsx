@@ -10,6 +10,7 @@ import {
   getEagleLivePhotoContentUrl,
 } from './eagle-media-sources';
 import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
+import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleAssetLightbox.module.css';
 interface EagleAssetLightboxProps {
@@ -18,10 +19,12 @@ interface EagleAssetLightboxProps {
   actions?: ReactNode;
   navigation?: { index: number; count: number; onPrevious: () => void; onNext: () => void };
   onClose: () => void;
+  onLocate?: (assetId: string) => Promise<void>;
 }
 export function EagleAssetLightbox({
   asset,
   onClose,
+  onLocate,
   navigation,
   actions,
   loading,
@@ -141,6 +144,7 @@ export function EagleAssetLightbox({
         )}
       </div>
       <footer className={styles.navigation}>
+        {!loading && onLocate && <EagleLocateAssetButton assetId={asset.id} onLocate={onLocate} />}
         {!loading && asset.mimeType.startsWith('image/') && previewUrl && (
           <EagleImageCopyButton sourceUrl={previewUrl} />
         )}

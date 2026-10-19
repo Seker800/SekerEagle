@@ -67,6 +67,7 @@ import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file
 
 import { EagleAssetLightbox } from './EagleAssetLightbox';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
+import { useEagleAssetLocation, useEagleAssetLocationFocus } from './useEagleAssetLocation';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
 import {
@@ -239,6 +240,7 @@ export function SekerEaglePage({
   const {
     api: {
       getEagleAsset,
+      getEagleAssetLocation,
       getEagleTrashAsset,
       getEaglePyramidDescriptor,
       listEagleAssets,
@@ -346,6 +348,52 @@ export function SekerEaglePage({
     !activeFilterCount &&
     !activeSmartFolderId;
   const [timelineCursor, setTimelineCursor] = useState('');
+  const assetLocator = useEagleAssetLocation({
+    getLocation: getEagleAssetLocation,
+    scopeKey: `${storeScope}:${privateVisible}:${privacyRulesRevision}`,
+    onLocated: () => {
+      setSearch('');
+      setQuickFilters(createEmptyEagleQuickFilterState());
+      setActiveSmartFolderId(null);
+      setLibraryView('ACTIVE');
+      setPhotoView('timeline');
+      setTimelineCursor('');
+      setPreviewAssetId(null);
+      imagePreview.closePreview();
+      setAssetContextMenu(null);
+    },
+  });
+  const hasAssetLocation =
+    libraryView === 'ACTIVE' &&
+    !deferredSearch &&
+    !activeFilterCount &&
+    !activeSmartFolderId &&
+    (libraryMode !== 'PHOTO' || photoView === 'timeline');
+  const browserCursor =
+    hasAssetLocation && assetLocator.location
+      ? (assetLocator.location.cursor ?? '')
+      : hasTimelineNavigation
+        ? timelineCursor
+        : '';
+  useEffect(() => {
+    if (
+      search ||
+      activeFilterCount ||
+      activeSmartFolderId ||
+      libraryView !== 'ACTIVE' ||
+      (libraryMode === 'PHOTO' && photoView !== 'timeline')
+    )
+      assetLocator.clearLocation();
+  }, [
+    search,
+    activeFilterCount,
+    activeSmartFolderId,
+    libraryView,
+    libraryMode,
+    photoView,
+    assetLocator.clearLocation,
+  ]);
+
   useEffect(() => {
     setTimelineCursor('');
   }, [
@@ -363,7 +411,7 @@ export function SekerEaglePage({
     privacyRulesRevision,
   );
   const assetFilters: EagleAssetFilters = {
-    cursor: hasTimelineNavigation && timelineCursor ? timelineCursor : undefined,
+    cursor: browserCursor || undefined,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
     rules: activeFilterCount ? filterQuery : undefined,
@@ -393,7 +441,7 @@ export function SekerEaglePage({
           : await listEagleAssets(accessToken, pageFilters, signal);
       return assetStore.normalizePage(page);
     },
-    initialPageParam: hasTimelineNavigation ? timelineCursor : '',
+    initialPageParam: browserCursor,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     enabled: isAssetView && showsAssetControls,
     staleTime: ASSET_LIST_STALE_TIME_MS,
@@ -705,6 +753,7 @@ export function SekerEaglePage({
     setQuickFilters(createEmptyEagleQuickFilterState());
   };
   const changeLibraryView = (view: EagleLibraryView) => {
+    assetLocator.clearLocation();
     setTimelineCursor('');
     setPhotoView('timeline');
     setLibraryView(view);
@@ -904,6 +953,19 @@ export function SekerEaglePage({
         },
       );
   };
+  const locationId = assetLocator.location?.assetId;
+  const locationCoverId =
+    photoStacks.find((stack) => locationId && stack.assetIds.includes(locationId))?.cover.id ??
+    loadedAssets.find((asset) => asset.livePhotoMotion?.assetId === locationId)?.id ??
+    locationId;
+  useEagleAssetLocationFocus({
+    location: assetLocator.location,
+    targetId: locationCoverId,
+    items: masonryLayout.items,
+    viewport: assetViewport,
+    enabled: hasAssetLocation && !assetsQuery.isFetching,
+    onSelect: (id) => selectAsset(id, 'single'),
+  });
   const openAssetPreview = (asset: EagleAssetListItem) => {
     if (photoStacks.some((stack) => stack.assetIds.includes(asset.id))) {
       setPreviewAssetId(asset.id);
@@ -1597,6 +1659,7 @@ export function SekerEaglePage({
                       return (
                         <button
                           key={asset.id}
+                          data-asset-id={asset.id}
                           type="button"
                           className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
                           aria-pressed={isSelected}
@@ -1700,10 +1763,12 @@ export function SekerEaglePage({
                       )?.slice(0, 7);
                     })()}
                     onLatest={() => {
+                      assetLocator.clearLocation();
                       setTimelineCursor('');
                       assetViewport.elementRef.current?.scrollTo({ top: 0 });
                     }}
                     onJump={(month) => {
+                      assetLocator.clearLocation();
                       setTimelineCursor(month.cursor);
                       assetViewport.elementRef.current?.scrollTo({ top: 0 });
                     }}
@@ -2247,17 +2312,23 @@ export function SekerEaglePage({
         <PhotoStackLightbox
           key={previewStack.id}
           stack={previewStack}
+          onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={() => setPreviewAssetId(null)}
         />
       ) : (
         previewAsset && (
-          <EagleAssetLightbox asset={previewAsset} onClose={() => setPreviewAssetId(null)} />
+          <EagleAssetLightbox
+            asset={previewAsset}
+            onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
+            onClose={() => setPreviewAssetId(null)}
+          />
         )
       )}
       {imagePreview.previewImage ? (
         <EagleImageViewer
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
+          onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={imagePreview.closePreview}
         />
       ) : null}

@@ -260,6 +260,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/location': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_locateAsset'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/{assetId}': {
     parameters: {
       query?: never;
@@ -1518,6 +1534,22 @@ export interface paths {
     get: operations['PhotosController_listAssetUpdates'];
     put?: never;
     post: operations['PhotosController_listAssetUpdatesByBody'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/location': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotosController_locateAsset'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3264,6 +3296,25 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_locateAsset: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -5204,6 +5255,25 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_locateAsset: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };

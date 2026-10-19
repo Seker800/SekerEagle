@@ -28,6 +28,7 @@ vi.mock('../media/loading/thumbnailLoadService', () => ({
 
 const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
+const getEagleAssetLocationMock = vi.fn();
 const getEagleTrashAssetMock = vi.fn();
 const listEagleManualTagsMock = vi.fn();
 const createEagleManualTagMock = vi.fn();
@@ -64,6 +65,7 @@ vi.mock('../../lib/eagle-api', () => ({
   countEagleAssets: (...args: unknown[]) => countEagleAssetsMock(...args),
   listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
   getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
+  getEagleAssetLocation: (...args: unknown[]) => getEagleAssetLocationMock(...args),
   getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
   listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
   listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
@@ -388,6 +390,43 @@ describe('SekerEaglePage', () => {
     expect(
       view.client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-b'] }),
     ).not.toHaveLength(0);
+  });
+
+  it('returns from a search preview to the unfiltered dated neighborhood', async () => {
+    getEagleAssetLocationMock.mockResolvedValue({ assetId: asset.id, cursor: 'nearby-cursor' });
+    renderPage();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'owl' } });
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        'token',
+        expect.objectContaining({ search: 'owl' }),
+        expect.anything(),
+      ),
+    );
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
+    const locate = await screen.findByRole('button', { name: '定位到时间线' });
+    expect(
+      locate.compareDocumentPosition(screen.getByRole('button', { name: '复制图片' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(locate);
+    await waitFor(() =>
+      expect(getEagleAssetLocationMock).toHaveBeenCalledWith('', asset.id, expect.any(AbortSignal)),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenLastCalledWith(
+        'token',
+        expect.objectContaining({
+          cursor: 'nearby-cursor',
+          search: undefined,
+          rules: undefined,
+          smartFolderId: undefined,
+        }),
+        expect.anything(),
+      ),
+    );
   });
 
   it('explains when image search falls back to names and manual tags', async () => {

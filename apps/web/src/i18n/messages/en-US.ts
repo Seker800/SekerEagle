@@ -1,4 +1,7 @@
 export const enUS = {
+  定位到时间线: 'Locate in timeline',
+  '正在定位…': 'Locating…',
+  '无法定位这张图片，请重试。': 'Unable to locate this image. Please retry.',
   实况: 'Live',
   播放实况: 'Play Live Photo',
   返回静态照片: 'Show still photo',

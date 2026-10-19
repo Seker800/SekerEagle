@@ -1,0 +1,17 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.root button {
+  cursor: pointer;
+  white-space: nowrap;
+}
+.root button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+.root small {
+  color: #efb6a0;
+  font-size: 12px;
+}
