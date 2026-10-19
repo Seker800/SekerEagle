@@ -59,4 +59,23 @@ describe('PhotoTimelineRail', () => {
     expect(props.onJump).toHaveBeenLastCalledWith(months[0]);
     fireEvent.keyDown(slider, { key: 'Escape' });
   });
+  it('uses the real photo date range for both endpoints and proportional month positions', () => {
+    const onJump = vi.fn();
+    render(<PhotoTimelineRail months={months} onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />);
+    const latest = screen.getByText('2026/10');
+    const earliest = screen.getByText('2001/01');
+    expect(latest).toHaveAttribute('dateTime', '2026-10');
+    expect(earliest).toHaveAttribute('dateTime', '2001-01');
+    expect(latest).toHaveStyle({ top: '0%' });
+    expect(earliest).toHaveStyle({ top: '100%' });
+    const middleYear = screen.getByText('2024');
+    expect(parseFloat(middleYear.style.top)).toBeCloseTo(10.03, 1);
+    const slider = screen.getByRole('slider');
+    vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
+    fireEvent.click(slider, { clientY: 0 });
+    expect(onJump).toHaveBeenLastCalledWith(months[0]);
+    fireEvent.click(slider, { clientY: 1000 });
+    expect(onJump).toHaveBeenLastCalledWith(months[2]);
+  });
+
 });
