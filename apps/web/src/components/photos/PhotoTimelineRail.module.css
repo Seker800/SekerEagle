@@ -30,13 +30,19 @@
 .rail > small {
   font-size: 10px;
 }
-.track {
+.frame {
   position: relative;
   flex: 1;
   width: 100%;
   min-height: 40px;
   cursor: pointer;
   touch-action: none;
+  outline-offset: 2px;
+}
+.track {
+  position: relative;
+  width: 100%;
+  height: 100%;
   outline-offset: 2px;
 }
 .tick,
@@ -64,19 +70,55 @@
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
-.tooltip {
+.calendarYear {
+  pointer-events: auto;
+}
+.monthPicker {
   position: absolute;
-  right: 60px;
+  right: calc(100% - 4px);
+  width: 224px;
   transform: translateY(-50%);
-  padding: 8px 12px;
+  padding: 12px;
   border: 1px solid #6d542c;
-  border-radius: 7px;
+  border-radius: 8px;
   color: #f2d49d;
   background: #24201a;
-  white-space: nowrap;
-  pointer-events: none;
   box-shadow: 0 4px 18px #0008;
+  cursor: default;
+}
+.tooltip {
   font-size: 13px;
+  white-space: nowrap;
+  margin-bottom: 10px;
+}
+.months {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.months button {
+  min-height: 30px;
+  min-width: 0;
+  padding: 4px;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.months button:hover:not(:disabled),
+.months button:focus-visible,
+.months button[data-selected='true'] {
+  color: var(--eagle-accent);
+  border-color: #6d542c;
+  background: #393023;
+}
+.months button:disabled {
+  color: #77716a;
+  cursor: default;
 }
 .tooltip small {
   display: block;
@@ -93,7 +135,7 @@
     right: 10px;
     font-size: 10px;
   }
-  .tooltip {
-    right: 46px;
+  .monthPicker {
+    width: min(224px, calc(100vw - 72px));
   }
 }
