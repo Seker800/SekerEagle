@@ -4,6 +4,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleUploadService } from './eagle-upload.service';
+import { NotFoundException, ConflictException } from '@nestjs/common';
 
 const input = {
   originalName: 'travel-edited.png',
@@ -11,6 +12,19 @@ const input = {
   size: 12,
   duplicatePolicy: 'CREATE_COPY',
 };
+
+test('edited source authorization is checked in its owner and library before allocating storage', async () => {
+  for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+    let predicate: unknown;
+    const service = new EagleUploadService({ eagleAsset: { findFirst: async ({ where }: { where: unknown }) => { predicate = where; return null; } }, uploadSession: { create: async () => ({ id: 'session', size: 12n }) } } as never, { createMultipartUpload: async () => 'multipart' } as never, { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never, {} as never, mode);
+    await assert.rejects(() => service.initiate('owner', { ...input, copySourceAssetId: 'source', copySourceRowVersion: 2 } as InitiateEagleUploadDto), NotFoundException);
+    assert.deepEqual(predicate, { id: 'source', ownerId: 'owner', libraryMode: mode, deletedAt: null, purgeAfter: null, isPrivate: false });
+  }
+});
+test('stale edited-source versions cannot initiate a new copy', async () => {
+  const service = new EagleUploadService({ eagleAsset: { findFirst: async () => ({ rowVersion: 3 }) }, uploadSession: { create: async () => ({ id: 'session', size: 12n }) } } as never, { createMultipartUpload: async () => 'multipart' } as never, { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never, {} as never);
+  await assert.rejects(() => service.initiate('owner', { ...input, copySourceAssetId: 'source', copySourceRowVersion: 2 } as InitiateEagleUploadDto), ConflictException);
+});
 test('edited-photo upload permits explicit copies but rejects owner and replacement injection', () => {
   const options = { whitelist: true, forbidNonWhitelisted: true };
   assert.equal(validateSync(plainToInstance(InitiateEagleUploadDto, input), options).length, 0);
