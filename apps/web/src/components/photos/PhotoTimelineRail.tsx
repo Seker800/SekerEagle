@@ -24,6 +24,11 @@ export function PhotoTimelineRail({
 }: Props) {
   const sliderRef = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<number | null>(null);
+  const [hoverPosition, setHoverPosition] = useState<number | null>(null);
+  const clearHover = () => {
+    setHovered(null);
+    setHoverPosition(null);
+  };
   const current = Math.max(
     0,
     months.findIndex((month) => month.month === currentMonth),
@@ -43,7 +48,6 @@ export function PhotoTimelineRail({
     month: 'long',
     timeZone: 'UTC',
   });
-  const monthFormat = new Intl.DateTimeFormat(getLocale(), { month: 'short', timeZone: 'UTC' });
   const format = (month: PhotoTimelineMonth) =>
     dateFormat.format(new Date(`${month.month}-01T00:00:00Z`));
   const indexAt = (y: number, element: HTMLElement) => {
@@ -66,7 +70,23 @@ export function PhotoTimelineRail({
       return { year, top: calendarPosition(`${year}-01`) };
     },
   ).filter(({ top }) => top > 6.5 && top < 93.5);
-  const pickerYear = months[selected]?.month.slice(0, 4);
+  const tickStride = Math.max(1, Math.ceil((latest - earliest + 1) / 1200));
+  const ticks = Array.from(
+    { length: Math.floor((latest - earliest) / tickStride) + 1 },
+    (_, index) => {
+      const ordinal = latest - index * tickStride;
+      return {
+        month: `${Math.floor(ordinal / 12)}-${String((ordinal % 12) + 1).padStart(2, '0')}`,
+        major: ordinal % 12 === 0,
+      };
+    },
+  );
+  const influenceAt = (top: number) =>
+    hoverPosition === null ? 0 : Math.max(0, 1 - Math.abs(top - hoverPosition) / 8) ** 2;
+  const selectHover = (index: number, top = position(index)) => {
+    setHovered(index);
+    setHoverPosition(top);
+  };
   return (
     <aside className={styles.rail} aria-label={t('照片日期导航')}>
       <button
@@ -91,15 +111,15 @@ export function PhotoTimelineRail({
       ) : months.length > 0 ? (
         <div
           className={styles.frame}
-          onPointerLeave={() => setHovered(null)}
+          onPointerLeave={clearHover}
           onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setHovered(null);
+            if (!event.currentTarget.contains(event.relatedTarget)) clearHover();
           }}
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               event.preventDefault();
               sliderRef.current?.focus();
-              setHovered(null);
+              clearHover();
             }
           }}
         >
@@ -114,11 +134,20 @@ export function PhotoTimelineRail({
             aria-valuemax={months.length - 1}
             aria-valuenow={selected}
             aria-valuetext={format(months[selected])}
-            onPointerMove={(event) => setHovered(indexAt(event.clientY, event.currentTarget))}
-            onFocus={() => setHovered(current)}
+            onPointerMove={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              selectHover(
+                indexAt(event.clientY, event.currentTarget),
+                Math.max(
+                  0,
+                  Math.min(100, ((event.clientY - rect.top) / Math.max(1, rect.height)) * 100),
+                ),
+              );
+            }}
+            onFocus={() => selectHover(current)}
             onClick={(event) => {
               const index = indexAt(event.clientY, event.currentTarget);
-              setHovered(index);
+              selectHover(index);
               onJump(months[index]);
             }}
             onKeyDown={(event) => {
@@ -134,18 +163,29 @@ export function PhotoTimelineRail({
                         : null;
               if (next === null) return;
               event.preventDefault();
-              setHovered(next);
+              selectHover(next);
               onJump(months[next]);
             }}
           >
-            {months.map((month, index) => (
-              <i
-                key={month.month}
-                className={styles.tick}
-                style={{ top: `${position(index)}%` }}
-                aria-hidden="true"
-              />
-            ))}
+            {ticks.map(({ month, major }) => {
+              const top = calendarPosition(month);
+              const influence = influenceAt(top);
+              return (
+                <i
+                  key={month}
+                  className={styles.tick}
+                  data-ruler-month={month}
+                  data-major={major}
+                  style={{
+                    top: `${top}%`,
+                    width: (major ? 10 : 4) + influence * 16,
+                    opacity: 0.45 + influence * 0.55,
+                    transform: `scaleY(${1 + influence})`,
+                  }}
+                  aria-hidden="true"
+                />
+              );
+            })}
             {[0, ...(months.length > 1 ? [months.length - 1] : [])].map((index) => (
               <time
                 key={months[index].month}
@@ -164,10 +204,13 @@ export function PhotoTimelineRail({
                   const index = months.findIndex((month) => month.month.startsWith(`${year}-`));
                   if (index >= 0) {
                     event.stopPropagation();
-                    setHovered(index);
+                    selectHover(index);
                   }
                 }}
-                style={{ top: `${top}%` }}
+                style={{
+                  top: `${top}%`,
+                  opacity: hovered !== null && Math.abs(top - (hoverPosition ?? 0)) < 3 ? 0 : 1,
+                }}
                 aria-hidden="true"
               >
                 {year}
@@ -180,38 +223,15 @@ export function PhotoTimelineRail({
             />
           </div>
           {hovered !== null && (
-            <div
-              className={styles.monthPicker}
-              style={{ top: `clamp(90px, ${position(selected)}%, calc(100% - 90px))` }}
+            <time
+              role="tooltip"
+              dateTime={months[selected].month}
+              className={styles.hoverDate}
+              style={{ top: `${hoverPosition ?? position(selected)}%` }}
             >
-              <div role="tooltip" className={styles.tooltip}>
-                {format(months[selected])}
-                <small>{t('{{value1}} 张照片', { value1: months[selected].count })}</small>
-              </div>
-              <nav className={styles.months} aria-label={t('按年月跳转')}>
-                {Array.from({ length: 12 }, (_, index) => {
-                  const key = `${pickerYear}-${String(index + 1).padStart(2, '0')}`;
-                  const available = months.findIndex((month) => month.month === key);
-                  const date = new Date(`${key}-01T00:00:00Z`);
-                  return (
-                    <button
-                      type="button"
-                      key={key}
-                      aria-label={dateFormat.format(date)}
-                      aria-current={currentMonth === key ? 'date' : undefined}
-                      data-selected={months[selected].month === key}
-                      disabled={available < 0}
-                      onClick={() => {
-                        setHovered(available);
-                        onJump(months[available]);
-                      }}
-                    >
-                      {monthFormat.format(date)}
-                    </button>
-                  );
-                })}
-              </nav>
-            </div>
+              {format(months[selected])}
+              <small>{t('{{value1}} 张照片', { value1: months[selected].count })}</small>
+            </time>
           )}
         </div>
       ) : null}

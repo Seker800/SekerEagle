@@ -398,6 +398,9 @@
   font-size: 12px;
 }
 .assetViewport {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   min-width: 0;
   min-height: 0;
   box-sizing: border-box;
@@ -1006,7 +1009,7 @@
   min-width: 0;
 }
 .horizontalViewport {
-  padding: 12px 4px 16px 12px;
+  padding: 12px 16px 16px 12px;
 }
 .masonry[data-layout='justified'] .assetCard {
   border-radius: 3px;
@@ -1045,4 +1048,20 @@
   flex: 1;
   height: 1px;
   background: var(--eagle-line);
+}
+
+.scrollContent {
+  flex: 1;
+  min-width: 0;
+}
+.timelineNavigation {
+  position: sticky;
+  top: 0;
+  flex: 0 0 62px;
+  min-height: 80px;
+}
+@media (max-width: 600px) {
+  .timelineNavigation {
+    flex-basis: 48px;
+  }
 }

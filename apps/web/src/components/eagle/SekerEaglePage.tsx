@@ -1638,182 +1638,191 @@ export function SekerEaglePage({
                   onClick={clearAssetSelection}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
-                  {assetsQuery.isLoading && (
-                    <div className={styles.emptyState}>{t('正在加载个人素材库…')}</div>
-                  )}
-                  {assetsQuery.isError && (
-                    <div className={styles.emptyState}>
-                      {' ' + t('加载失败：')}
-                      {assetsQuery.error.message}
-                      <button type="button" onClick={() => void assetsQuery.refetch()}>
-                        {' ' + t('重试') + ' '}
-                      </button>
-                    </div>
-                  )}
-                  {!assetsQuery.isLoading && !assetsQuery.isError && assets.length === 0 && (
-                    <div className={styles.emptyState}>
-                      <span className={styles.emptyMark}>
-                        <img src={sekerEagleLogo} alt="" />
-                      </span>
-                      <strong>
-                        {search || activeFilterCount || activeSmartFolderId
-                          ? libraryMode === 'PHOTO'
-                            ? t('没有匹配的照片')
-                            : t('没有匹配的素材')
-                          : libraryView === 'TRASH'
-                            ? t('回收站是空的')
-                            : libraryView === 'PRIVATE'
-                              ? t('暂无隐私素材')
-                              : libraryMode === 'PHOTO'
-                                ? t('暂无照片')
-                                : t('把第一份灵感放进来')}
-                      </strong>
-                      <p>
-                        {search || activeFilterCount || activeSmartFolderId
-                          ? t('尝试其他名称或标签。')
-                          : libraryView === 'TRASH'
-                            ? t('移除的素材会暂时保留在这里。')
-                            : libraryView === 'PRIVATE'
-                              ? t('为素材添加已配置的私密标签。')
-                              : libraryMode === 'PHOTO'
-                                ? t('将照片拖入此处。')
-                                : t('将图片、RAW 或相机视频拖入此处。')}
-                      </p>
-                    </div>
-                  )}
-                  <div
-                    ref={masonryRef}
-                    className={styles.masonry}
-                    data-layout={isPhotoTimeline ? 'justified' : 'masonry'}
-                    style={{ height: masonryLayout.height }}
-                  >
-                    {visibleSections.map((section) => (
-                      <h2
-                        key={section.id}
-                        className={styles.timelineSection}
-                        style={{ top: section.top, height: section.height, width: section.width }}
-                      >
-                        <time dateTime={section.key}>{formatPhotoTimelineMonth(section.key)}</time>
-                      </h2>
-                    ))}
-                    {visibleMasonryItems.map((masonryItem) => {
-                      const asset = assetsById.get(masonryItem.id);
-                      if (!asset) return null;
-                      const isSelected = selectedAssetIds.includes(asset.id);
-                      return (
-                        <button
-                          key={asset.id}
-                          data-asset-id={asset.id}
-                          type="button"
-                          className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
-                          aria-pressed={isSelected}
-                          aria-label={`${asset.displayName}，${asset.format.toUpperCase()}`}
-                          draggable={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
-                          style={
-                            masonryItem
-                              ? {
-                                  height: masonryItem.height,
-                                  transform: `translate3d(${masonryItem.left}px, ${masonryItem.top}px, 0)`,
-                                  width: masonryItem.width,
-                                }
-                              : undefined
-                          }
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleAssetClick(event, asset.id);
-                          }}
-                          onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
-                          onDragStart={(event) => handleAssetDragStart(event, asset.id)}
-                          onDragEnd={() => {
-                            assetDragSession?.end();
-                            dragDepthRef.current = 0;
-                            setIsDragging(false);
-                          }}
-                          onDoubleClick={() => openAssetPreview(asset)}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              selectAsset(asset.id, 'single');
-                              openAssetPreview(asset);
-                            }
-                          }}
-                        >
-                          <span
-                            className={styles.preview}
-                            style={{ height: masonryItem.previewHeight }}
-                          >
-                            {getEagleLivePhotoContentUrl(asset) && (
-                              <span className={styles.livePhotoBadge}>{t('实况')}</span>
-                            )}
-                            {photoStacks.find((stack) => stack.cover.id === asset.id) && (
-                              <span className="photo-stack-count">
-                                ▣{' '}
-                                {
-                                  photoStacks.find((stack) => stack.cover.id === asset.id)!.assetIds
-                                    .length
-                                }
-                              </span>
-                            )}
-                            {isBatchSelection && (
-                              <span className={styles.selectionMark}>
-                                {isSelected && <IconCheck size={13} />}
-                              </span>
-                            )}
-                            <EagleAssetThumbnail
-                              asset={asset}
-                              scheduler={thumbnailScheduler}
-                              loadService={thumbnailLoadService}
-                              order={-masonryItem.top}
-                              displayWidth={Math.ceil(masonryItem.width)}
-                            />
-                            {asset.lifecycleStatus !== 'READY' && (
-                              <span className={styles.processing}>
-                                {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
-                              </span>
-                            )}
-                            {asset.isPrivate && (
-                              <span
-                                className={styles.privateMark}
-                                title={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
-                              >
-                                <IconLock size={12} />
-                              </span>
-                            )}
-                          </span>
+                  <div className={styles.scrollContent}>
+                    {assetsQuery.isLoading && (
+                      <div className={styles.emptyState}>{t('正在加载个人素材库…')}</div>
+                    )}
+                    {assetsQuery.isError && (
+                      <div className={styles.emptyState}>
+                        {' ' + t('加载失败：')}
+                        {assetsQuery.error.message}
+                        <button type="button" onClick={() => void assetsQuery.refetch()}>
+                          {' ' + t('重试') + ' '}
                         </button>
-                      );
-                    })}
+                      </div>
+                    )}
+                    {!assetsQuery.isLoading && !assetsQuery.isError && assets.length === 0 && (
+                      <div className={styles.emptyState}>
+                        <span className={styles.emptyMark}>
+                          <img src={sekerEagleLogo} alt="" />
+                        </span>
+                        <strong>
+                          {search || activeFilterCount || activeSmartFolderId
+                            ? libraryMode === 'PHOTO'
+                              ? t('没有匹配的照片')
+                              : t('没有匹配的素材')
+                            : libraryView === 'TRASH'
+                              ? t('回收站是空的')
+                              : libraryView === 'PRIVATE'
+                                ? t('暂无隐私素材')
+                                : libraryMode === 'PHOTO'
+                                  ? t('暂无照片')
+                                  : t('把第一份灵感放进来')}
+                        </strong>
+                        <p>
+                          {search || activeFilterCount || activeSmartFolderId
+                            ? t('尝试其他名称或标签。')
+                            : libraryView === 'TRASH'
+                              ? t('移除的素材会暂时保留在这里。')
+                              : libraryView === 'PRIVATE'
+                                ? t('为素材添加已配置的私密标签。')
+                                : libraryMode === 'PHOTO'
+                                  ? t('将照片拖入此处。')
+                                  : t('将图片、RAW 或相机视频拖入此处。')}
+                        </p>
+                      </div>
+                    )}
+                    <div
+                      ref={masonryRef}
+                      className={styles.masonry}
+                      data-layout={isPhotoTimeline ? 'justified' : 'masonry'}
+                      style={{ height: masonryLayout.height }}
+                    >
+                      {visibleSections.map((section) => (
+                        <h2
+                          key={section.id}
+                          className={styles.timelineSection}
+                          style={{ top: section.top, height: section.height, width: section.width }}
+                        >
+                          <time dateTime={section.key}>
+                            {formatPhotoTimelineMonth(section.key)}
+                          </time>
+                        </h2>
+                      ))}
+                      {visibleMasonryItems.map((masonryItem) => {
+                        const asset = assetsById.get(masonryItem.id);
+                        if (!asset) return null;
+                        const isSelected = selectedAssetIds.includes(asset.id);
+                        return (
+                          <button
+                            key={asset.id}
+                            data-asset-id={asset.id}
+                            type="button"
+                            className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
+                            aria-pressed={isSelected}
+                            aria-label={`${asset.displayName}，${asset.format.toUpperCase()}`}
+                            draggable={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
+                            style={
+                              masonryItem
+                                ? {
+                                    height: masonryItem.height,
+                                    transform: `translate3d(${masonryItem.left}px, ${masonryItem.top}px, 0)`,
+                                    width: masonryItem.width,
+                                  }
+                                : undefined
+                            }
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleAssetClick(event, asset.id);
+                            }}
+                            onContextMenu={(event) => handleAssetContextMenu(event, asset.id)}
+                            onDragStart={(event) => handleAssetDragStart(event, asset.id)}
+                            onDragEnd={() => {
+                              assetDragSession?.end();
+                              dragDepthRef.current = 0;
+                              setIsDragging(false);
+                            }}
+                            onDoubleClick={() => openAssetPreview(asset)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                selectAsset(asset.id, 'single');
+                                openAssetPreview(asset);
+                              }
+                            }}
+                          >
+                            <span
+                              className={styles.preview}
+                              style={{ height: masonryItem.previewHeight }}
+                            >
+                              {getEagleLivePhotoContentUrl(asset) && (
+                                <span className={styles.livePhotoBadge}>{t('实况')}</span>
+                              )}
+                              {photoStacks.find((stack) => stack.cover.id === asset.id) && (
+                                <span className="photo-stack-count">
+                                  ▣{' '}
+                                  {
+                                    photoStacks.find((stack) => stack.cover.id === asset.id)!
+                                      .assetIds.length
+                                  }
+                                </span>
+                              )}
+                              {isBatchSelection && (
+                                <span className={styles.selectionMark}>
+                                  {isSelected && <IconCheck size={13} />}
+                                </span>
+                              )}
+                              <EagleAssetThumbnail
+                                asset={asset}
+                                scheduler={thumbnailScheduler}
+                                loadService={thumbnailLoadService}
+                                order={-masonryItem.top}
+                                displayWidth={Math.ceil(masonryItem.width)}
+                              />
+                              {asset.lifecycleStatus !== 'READY' && (
+                                <span className={styles.processing}>
+                                  {asset.lifecycleStatus === 'FAILED' ? t('处理失败') : t('处理中')}
+                                </span>
+                              )}
+                              {asset.isPrivate && (
+                                <span
+                                  className={styles.privateMark}
+                                  title={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
+                                >
+                                  <IconLock size={12} />
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div ref={pageSentinelRef} className={styles.pageSentinel} aria-hidden="true" />
+                    {assetsQuery.isFetchingNextPage && (
+                      <div className={styles.pageLoading}>{t('正在加载更多素材…')}</div>
+                    )}
                   </div>
-                  <div ref={pageSentinelRef} className={styles.pageSentinel} aria-hidden="true" />
-                  {assetsQuery.isFetchingNextPage && (
-                    <div className={styles.pageLoading}>{t('正在加载更多素材…')}</div>
+                  {hasTimelineNavigation && (
+                    <div
+                      className={styles.timelineNavigation}
+                      style={{ height: Math.max(80, viewportHeight - 28) }}
+                    >
+                      <PhotoTimelineRail
+                        months={timelineIndex.data?.months ?? []}
+                        loading={timelineIndex.isLoading}
+                        error={timelineIndex.isError}
+                        onRetry={() => void timelineIndex.refetch()}
+                        currentMonth={(() => {
+                          const first = visibleMasonryItems.find(
+                            (item) => item.top + item.height > scrollTop,
+                          );
+                          const asset = first ? assetsById.get(first.id) : undefined;
+                          return asset ? getPhotoTimelineMonth(asset) : undefined;
+                        })()}
+                        onLatest={() => {
+                          assetLocator.clearLocation();
+                          setTimelineCursor('');
+                          assetViewport.elementRef.current?.scrollTo({ top: 0 });
+                        }}
+                        onJump={(month) => {
+                          assetLocator.clearLocation();
+                          setTimelineCursor(month.cursor);
+                          assetViewport.elementRef.current?.scrollTo({ top: 0 });
+                        }}
+                      />
+                    </div>
                   )}
                 </div>
-                {hasTimelineNavigation && (
-                  <PhotoTimelineRail
-                    months={timelineIndex.data?.months ?? []}
-                    loading={timelineIndex.isLoading}
-                    error={timelineIndex.isError}
-                    onRetry={() => void timelineIndex.refetch()}
-                    currentMonth={(() => {
-                      const first = visibleMasonryItems.find(
-                        (item) => item.top + item.height > scrollTop,
-                      );
-                      const asset = first ? assetsById.get(first.id) : undefined;
-                      return asset ? getPhotoTimelineMonth(asset) : undefined;
-                    })()}
-                    onLatest={() => {
-                      assetLocator.clearLocation();
-                      setTimelineCursor('');
-                      assetViewport.elementRef.current?.scrollTo({ top: 0 });
-                    }}
-                    onJump={(month) => {
-                      assetLocator.clearLocation();
-                      setTimelineCursor(month.cursor);
-                      assetViewport.elementRef.current?.scrollTo({ top: 0 });
-                    }}
-                  />
-                )}
               </div>
             </>
           )}

@@ -81,11 +81,12 @@ describe('PhotoTimelineRail', () => {
   });
 });
 
-
 it('renders calendar month ruler marks and magnifies only the ticks near the pointer without a popup', () => {
-  render(<PhotoTimelineRail months={months} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+  render(
+    <PhotoTimelineRail months={months} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />,
+  );
   const slider = screen.getByRole('slider');
-  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({top: 100, height: 500} as DOMRect);
+  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
   const marks = slider.querySelectorAll('[data-ruler-month]');
   expect(marks.length).toBe(310);
   const major = slider.querySelector('[data-ruler-month="2025-01"]')!;
@@ -93,7 +94,9 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   expect(major).toHaveAttribute('data-major', 'true');
   expect(minor).toHaveAttribute('data-major', 'false');
   const restingWidth = parseFloat((major as HTMLElement).style.width);
-  fireEvent.pointerMove(slider, {clientY: 100 + parseFloat((major as HTMLElement).style.top) * 5});
+  fireEvent.pointerMove(slider, {
+    clientY: 100 + parseFloat((major as HTMLElement).style.top) * 5,
+  });
   expect(parseFloat((major as HTMLElement).style.width)).toBeGreaterThan(restingWidth);
   expect(screen.getByRole('tooltip')).toHaveTextContent(/年.*月/);
   expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
@@ -102,10 +105,21 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   expect((major as HTMLElement).style.width).toBe(`${restingWidth}px`);
 });
 it('keeps calendar year labels equally spaced with uneven photo dates', () => {
-  render(<PhotoTimelineRail months={[
-    {month:'2026-10',count:1,cursor:'new'}, {month:'2025-11',count:1,cursor:'middle'},
-    {month:'2024-03',count:1,cursor:'older'}, {month:'2023-01',count:1,cursor:'old'},
-  ]} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
-  const positions = ['2026','2025','2024'].map(year => parseFloat(screen.getByText(year).style.top));
-  expect(positions[1]-positions[0]).toBeCloseTo(positions[2]-positions[1]);
+  render(
+    <PhotoTimelineRail
+      months={[
+        { month: '2026-10', count: 1, cursor: 'new' },
+        { month: '2025-11', count: 1, cursor: 'middle' },
+        { month: '2024-03', count: 1, cursor: 'older' },
+        { month: '2023-01', count: 1, cursor: 'old' },
+      ]}
+      onJump={vi.fn()}
+      onLatest={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
+  const positions = ['2026', '2025', '2024'].map((year) =>
+    parseFloat(screen.getByText(year).style.top),
+  );
+  expect(positions[1] - positions[0]).toBeCloseTo(positions[2] - positions[1]);
 });
