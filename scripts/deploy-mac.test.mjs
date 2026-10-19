@@ -90,3 +90,39 @@ test('storage credentials are separated from root without rotating existing appl
     upgraded,
   );
 });
+
+test('migration completion is verified before writers can restart', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  const files = selectComposeFiles('');
+  const calls = [];
+  deployCompose(files, (args) => {
+    calls.push(args);
+    if (args[0] === 'wait') return '0\n';
+    if (args.includes('-q')) return 'migration-container\n';
+    return '';
+  });
+  assert.ok(
+    calls.findIndex((args) => args[0] === 'wait') <
+      calls.findIndex((args) => args.includes('up') && !args.includes('migrate')),
+  );
+});
+test('failed or unobservable migration never reaches service startup', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  for (const exitCode of ['1\n', '', 'unexpected']) {
+    const calls = [];
+    assert.throws(
+      () =>
+        deployCompose(selectComposeFiles(''), (args) => {
+          calls.push(args);
+          if (args[0] === 'wait') return exitCode;
+          if (args.includes('-q')) return 'migration-container\n';
+          return '';
+        }),
+      /Migration/,
+    );
+    assert.equal(
+      calls.some((args) => args.includes('up') && !args.includes('migrate')),
+      false,
+    );
+  }
+});
