@@ -2,7 +2,7 @@ import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { describe, expect, it } from 'vitest';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
-import { WATERMARK_TEMPLATES, photoWatermarkLayout } from './photo-watermark-model';
+import { WATERMARK_TEMPLATES, photoWatermarkLayout, findWatermark } from './photo-watermark-model';
 import { drawPhoto } from './photo-editor-render';
 import { formatPhotoMetadata } from './photo-editor-metadata';
 
@@ -149,11 +149,12 @@ describe('distinct and flat watermark layouts', () => {
     expect(new Set(WATERMARK_TEMPLATES.map((template) => template.style)).size).toBe(
       WATERMARK_TEMPLATES.length,
     );
-    for (const id of ['instant-print', 'cinema-bars', 'postcard', 'blueprint'])
+    for (const id of ['header-footer', 'color-block', 'corner-grid', 'editorial-panel'])
       expect(WATERMARK_TEMPLATES.some((template) => template.id === id)).toBe(true);
-    const signatures = WATERMARK_TEMPLATES.map((template) => {
-      const layout = photoWatermarkLayout(1200, 800, template);
-      return [layout.width, layout.height, layout.x, layout.y].join(':');
+    expect(WATERMARK_TEMPLATES.map(template=>template.style)).not.toEqual(expect.arrayContaining(['instant','film','cinema','postcard','blueprint']));
+    const signatures=WATERMARK_TEMPLATES.map(template=>{
+      const result=renderPhotoWatermark(asHTML(source()),{...DEFAULT_PHOTO_EDITS,watermark:template.id,watermarkText:'Mountain light',watermarkShowTime:true},{camera:'Nikon D80',parameters:'24mm · f/4 · 1/125s · ISO 200',capturedAt:'2026.10.19'},create) as unknown as Canvas;
+      return result.toBuffer('image/png').toString('base64');
     });
     expect(new Set(signatures).size).toBe(WATERMARK_TEMPLATES.length);
   });
@@ -211,4 +212,19 @@ describe('distinct and flat watermark layouts', () => {
       }
     }
   });
+});
+
+it('resolves consolidated legacy layouts to canonical templates', () => {
+  for (const [oldId, id] of Object.entries({
+    'standard-right': 'standard-left',
+    'classic-strip': 'photo-strip',
+    'classic-frame': 'frame-minimal',
+    'photo-poster': 'frame-minimal',
+    'frame-poster': 'frame-minimal',
+    'film-dark': 'header-footer',
+    'sport-rail': 'photo-side',
+    'sport-tag': 'standard-left',
+  }))
+    expect(findWatermark(oldId)?.id).toBe(id);
+  expect(findWatermark('unknown')).toBeUndefined();
 });
