@@ -1,5 +1,5 @@
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 import { WATERMARK_TEMPLATES, photoWatermarkLayout, findWatermark } from './photo-watermark-model';
@@ -243,4 +243,41 @@ it('resolves consolidated legacy layouts to canonical templates', () => {
   }))
     expect(findWatermark(oldId)?.id).toBe(id);
   expect(findWatermark('unknown')).toBeUndefined();
+});
+
+
+describe('watermark typography and content hierarchy', () => {
+  function capture(id: string, align: 'left' | 'right' = 'left') {
+    const photo = createCanvas(1600, 1000);
+    const drawn: { text: string; size: number }[] = [];
+    renderPhotoWatermark(asHTML(photo), {
+      ...DEFAULT_PHOTO_EDITS, watermark: id, watermarkText: 'Mountain light',
+      watermarkShowTime: true, watermarkAlign: align,
+    }, { camera: 'FUJIFILM X-E5', parameters: '35mm · f/2.8 · 1/250s · ISO 400', capturedAt: '2026.10.19' }, () => {
+      const canvas = createCanvas(1, 1);
+      const context = canvas.getContext('2d');
+      const original = context.fillText.bind(context);
+      vi.spyOn(context, 'fillText').mockImplementation((text, x, y) => {
+        drawn.push({ text, size: Number(context.font.match(/([\d.]+)px/)?.[1]) });
+        original(text, x, y);
+      });
+      return asHTML(canvas);
+    });
+    return drawn;
+  }
+  it('uses a compact photographic footer and keeps parameters readable', () => {
+    const layout = photoWatermarkLayout(1600, 1000, findWatermark('photo-strip')!);
+    expect(layout.panel.height).toBeLessThanOrEqual(160);
+    const parameters = capture('photo-strip').find(({ text }) => text.includes('35mm'))!;
+    expect(parameters.size).toBeGreaterThanOrEqual(25);
+  });
+  it('retains camera, signature, parameters and date as distinct side-rail information', () => {
+    const texts = capture('photo-side').map(({ text }) => text);
+    for (const text of ['Mountain light', 'FUJIFILM X-E5', '2026.10.19'])
+      expect(texts).toContain(text);
+    expect(texts.some((text) => text.includes('35mm'))).toBe(true);
+  });
+  it('keeps the date visible for a right-aligned signature', () => {
+    expect(capture('standard-left', 'right').map(({ text }) => text)).toContain('2026.10.19');
+  });
 });
