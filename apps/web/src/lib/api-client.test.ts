@@ -103,3 +103,24 @@ describe('browser session recovery', () => {
     ]);
   });
 });
+
+it('logout waits for an in-flight refresh and fences its protected retry', async () => {
+  let release!: () => void;
+  const pending = new Promise<void>(resolve => {release=resolve;});
+  const calls: string[]=[];
+  vi.spyOn(globalThis,'fetch').mockImplementation(async input=>{
+    const path=typeof input==='string'?input: input instanceof URL?input.pathname:input.url;
+    calls.push(path);
+    if(path==='/api/auth/refresh'){await pending;return jsonResponse({});}
+    if(path==='/api/auth/logout')return jsonResponse({});
+    return jsonResponse({},401);
+  });
+  const protectedResult=request('/api/eagle/assets').catch(error=>error);
+  await vi.waitFor(()=>expect(calls).toContain('/api/auth/refresh'));
+  const logout=request('/api/auth/logout',{method:'POST',body:'{}'});
+  expect(calls).not.toContain('/api/auth/logout');
+  release();
+  await logout;
+  expect((await protectedResult).name).toBe('AbortError');
+  expect(calls).toEqual(['/api/eagle/assets','/api/auth/refresh','/api/auth/logout']);
+});
