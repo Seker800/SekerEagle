@@ -401,11 +401,15 @@ describe('photo editor interactions', () => {
     fireEvent.change(screen.getByRole('textbox', { name: '签名文字' }), {
       target: { value: 'My photo' },
     });
+    fireEvent.change(screen.getByRole('textbox', { name: '网站地址' }), {
+      target: { value: 'PHOTO.EXAMPLE.COM' },
+    });
     fireEvent.click(screen.getByRole('button', { name: '完成' }));
     expect(screen.queryByRole('dialog', { name: '水印设置' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
     expect(screen.getByRole('textbox', { name: '签名文字' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: '网站地址' })).toHaveValue('WWW.SEKER.WANG');
     fireEvent.keyDown(screen.getByRole('textbox', { name: '签名文字' }), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '水印设置' })).not.toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();

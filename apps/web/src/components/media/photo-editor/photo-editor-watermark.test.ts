@@ -359,21 +359,71 @@ it('keeps watermark text inside the output without collisions at maximum size', 
   }
 });
 
-
 it('composes an editable auxiliary website in every layout and respects its switch', () => {
   for (const template of WATERMARK_TEMPLATES) {
     for (const enabled of [true, false]) {
       const drawn: string[] = [];
-      renderPhotoWatermark(asHTML(createCanvas(1600, 1000)), {
-        ...DEFAULT_PHOTO_EDITS, watermark: template.id,
-        watermarkWebsite: 'PHOTO.EXAMPLE.COM', watermarkShowWebsite: enabled,
-      }, {}, () => {
-        const canvas = createCanvas(1, 1), context = canvas.getContext('2d');
-        vi.spyOn(context, 'fillText').mockImplementation((text) => { drawn.push(text); });
-        return asHTML(canvas);
-      });
+      renderPhotoWatermark(
+        asHTML(createCanvas(1600, 1000)),
+        {
+          ...DEFAULT_PHOTO_EDITS,
+          watermark: template.id,
+          watermarkWebsite: 'PHOTO.EXAMPLE.COM',
+          watermarkShowWebsite: enabled,
+        },
+        {},
+        () => {
+          const canvas = createCanvas(1, 1),
+            context = canvas.getContext('2d');
+          vi.spyOn(context, 'fillText').mockImplementation((text) => {
+            drawn.push(text);
+          });
+          return asHTML(canvas);
+        },
+      );
       expect(drawn.includes('PHOTO.EXAMPLE.COM'), template.id).toBe(enabled);
       expect(drawn).not.toContain('WWW.SEKER.WANG');
     }
   }
+});
+
+it('never invents a title, shows detected capture time by default and respects manual overrides', () => {
+  const capture = (patch: Partial<typeof DEFAULT_PHOTO_EDITS>, metadata = {}) => {
+    const texts: string[] = [];
+    renderPhotoWatermark(
+      asHTML(createCanvas(1600, 1000)),
+      { ...DEFAULT_PHOTO_EDITS, watermark: 'photo-strip', ...patch },
+      metadata,
+      () => {
+        const canvas = createCanvas(1, 1);
+        vi.spyOn(canvas.getContext('2d'), 'fillText').mockImplementation((text) => {
+          texts.push(text);
+        });
+        return asHTML(canvas);
+      },
+    );
+    return texts;
+  };
+  expect(capture({})).toEqual(['WWW.SEKER.WANG']);
+  const metadata = {
+    camera: 'FUJIFILM X-E5',
+    parameters: '35mm · f/2.8',
+    capturedAt: '2026.10.19 10:30',
+  };
+  expect(capture({}, metadata)).toContain(metadata.capturedAt);
+  expect(capture({ watermarkShowTime: false }, metadata)).not.toContain(metadata.capturedAt);
+  const texts = capture(
+    {
+      watermarkCamera: 'Nikon Z5',
+      watermarkParameters: '50mm · f/2',
+      watermarkCapturedAt: '2026.10.18',
+    },
+    metadata,
+  );
+  for (const value of ['Nikon Z5', '50mm · f/2', '2026.10.18']) expect(texts).toContain(value);
+  const cleared = capture(
+    { watermarkCamera: '', watermarkParameters: '', watermarkCapturedAt: '' },
+    metadata,
+  );
+  expect(cleared).toEqual(['WWW.SEKER.WANG']);
 });

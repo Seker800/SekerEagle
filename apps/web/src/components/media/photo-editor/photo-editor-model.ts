@@ -37,7 +37,11 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermarkAlign: 'left' | 'center' | 'right';
   watermarkTheme: 'white' | 'black';
   watermarkText: string;
-  watermarkCamera: string;
+  watermarkCamera: string | null;
+  watermarkParameters: string | null;
+  watermarkCapturedAt: string | null;
+  watermarkWebsite: string;
+  watermarkShowWebsite: boolean;
   watermarkShowTime: boolean;
   watermarkShowParameters: boolean;
   watermarkOpacity: number;
@@ -79,8 +83,12 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermarkAlign: 'left',
   watermarkTheme: 'white',
   watermarkText: '',
-  watermarkCamera: '',
-  watermarkShowTime: false,
+  watermarkCamera: null,
+  watermarkParameters: null,
+  watermarkCapturedAt: null,
+  watermarkWebsite: 'WWW.SEKER.WANG',
+  watermarkShowWebsite: true,
+  watermarkShowTime: true,
   watermarkShowParameters: true,
   watermarkOpacity: 90,
   watermarkScale: 100,

@@ -14,7 +14,7 @@ export const ORDERED_WATERMARK_TEMPLATES = WATERMARK_CATEGORIES.flatMap((categor
 /** Category shortcuts navigate one continuous strip; navigation never changes the selected layout. */
 export function useWatermarkNavigation(watermark: string) {
   const [group, setGroup] = useState<WatermarkCategory>(
-    findWatermark(watermark)?.category ?? 'photo',
+    findWatermark(watermark)?.category ?? 'landscape',
   );
   const viewportRef = useRef<HTMLDivElement>(null);
   const categoryRef = useRef<HTMLButtonElement>(null);
@@ -26,7 +26,7 @@ export function useWatermarkNavigation(watermark: string) {
   };
   useEffect(() => {
     manual.current = false;
-    setGroup(findWatermark(watermark)?.category ?? 'photo');
+    setGroup(findWatermark(watermark)?.category ?? 'landscape');
     templates.current
       .get(findWatermark(watermark)?.id ?? 'none')
       ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });

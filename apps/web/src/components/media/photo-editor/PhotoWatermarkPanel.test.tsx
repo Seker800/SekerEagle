@@ -130,11 +130,12 @@ it('merges signature alignment into controls instead of separate layouts', () =>
   expect(onChange).toHaveBeenCalledWith({ watermark: 'standard-left', watermarkAlign: 'left' });
 });
 
-
 it('lets every watermark toggle a website and edit its text without applying a cancelled draft', () => {
   const { props, view, onChange } = setup();
   for (const template of WATERMARK_TEMPLATES) {
-    view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: template.id }} />);
+    view.rerender(
+      <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: template.id }} />,
+    );
     fireEvent.click(screen.getByRole('button', { name: '网站地址' }));
     expect(onChange).toHaveBeenLastCalledWith({ watermarkShowWebsite: false });
   }
@@ -143,10 +144,61 @@ it('lets every watermark toggle a website and edit its text without applying a c
   expect(input).toHaveValue('WWW.SEKER.WANG');
   fireEvent.change(input, { target: { value: 'PHOTO.EXAMPLE.COM' } });
   fireEvent.click(screen.getByRole('button', { name: '取消' }));
-  expect(onChange).not.toHaveBeenCalledWith(expect.objectContaining({ watermarkWebsite: 'PHOTO.EXAMPLE.COM' }));
+  expect(onChange).not.toHaveBeenCalledWith(
+    expect.objectContaining({ watermarkWebsite: 'PHOTO.EXAMPLE.COM' }),
+  );
   fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
   expect(screen.getByRole('textbox', { name: '网站地址' })).toHaveValue('WWW.SEKER.WANG');
-  fireEvent.change(screen.getByRole('textbox', { name: '网站地址' }), { target: { value: 'PHOTO.EXAMPLE.COM' } });
+  fireEvent.change(screen.getByRole('textbox', { name: '网站地址' }), {
+    target: { value: 'PHOTO.EXAMPLE.COM' },
+  });
   fireEvent.click(screen.getByRole('button', { name: '完成' }));
-  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ watermarkWebsite: 'PHOTO.EXAMPLE.COM' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ watermarkWebsite: 'PHOTO.EXAMPLE.COM' }),
+  );
+});
+
+it('prefills detected metadata for editing and allows blank overrides or manual entries', () => {
+  const { props, view, onChange } = setup();
+  view.rerender(
+    <PhotoWatermarkPanel
+      {...props}
+      edits={{ ...props.edits, watermark: 'photo-strip' }}
+      metadata={{
+        camera: 'FUJIFILM X-E5',
+        parameters: '35mm · f/2.8',
+        capturedAt: '2026.10.19 10:30',
+      }}
+    />,
+  );
+  expect(screen.getByRole('button', { name: '拍摄时间' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('FUJIFILM X-E5');
+  expect(screen.getByRole('textbox', { name: '拍摄参数' })).toHaveValue('35mm · f/2.8');
+  expect(screen.getByRole('textbox', { name: '拍摄时间' })).toHaveValue('2026.10.19 10:30');
+  for (const name of ['显示机型', '拍摄参数', '拍摄时间'])
+    fireEvent.change(screen.getByRole('textbox', { name }), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      watermarkCamera: '',
+      watermarkParameters: '',
+      watermarkCapturedAt: '',
+    }),
+  );
+  view.rerender(
+    <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip' }} />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('');
+  fireEvent.change(screen.getByRole('textbox', { name: '显示机型' }), {
+    target: { value: 'Nikon Z5' },
+  });
+  fireEvent.change(screen.getByRole('textbox', { name: '拍摄时间' }), {
+    target: { value: '2026.10.18' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(onChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ watermarkCamera: 'Nikon Z5', watermarkCapturedAt: '2026.10.18' }),
+  );
 });

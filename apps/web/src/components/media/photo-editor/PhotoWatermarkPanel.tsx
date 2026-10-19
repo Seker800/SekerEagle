@@ -56,8 +56,14 @@ function WatermarkSettingsEditor({
   onApply: (patch: Partial<PhotoEdits>) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState(edits);
-  const change = (patch: Partial<PhotoEdits>) => setDraft((current) => ({ ...current, ...patch }));
+  const [draft, setDraft] = useState(() => ({
+    ...edits,
+    watermarkCamera: edits.watermarkCamera ?? metadata.camera ?? '',
+    watermarkParameters: edits.watermarkParameters ?? metadata.parameters ?? '',
+    watermarkCapturedAt: edits.watermarkCapturedAt ?? metadata.capturedAt ?? '',
+  }));
+  const change = (patch: Partial<typeof draft>) =>
+    setDraft((current) => ({ ...current, ...patch }));
   return (
     <div
       className={styles.watermarkSettingsBackdrop}
@@ -109,8 +115,37 @@ function WatermarkSettingsEditor({
             type="text"
             maxLength={64}
             value={draft.watermarkCamera}
-            placeholder={metadata.camera || t('留空使用照片相机信息')}
+            placeholder={t('输入相机或手机型号')}
             onChange={(event) => change({ watermarkCamera: event.target.value })}
+          />
+        </label>
+        <label>
+          {t('拍摄参数')}
+          <input
+            type="text"
+            maxLength={200}
+            value={draft.watermarkParameters}
+            placeholder={t('输入焦距、光圈、快门和 ISO')}
+            onChange={(event) => change({ watermarkParameters: event.target.value })}
+          />
+        </label>
+        <label>
+          {t('拍摄时间')}
+          <input
+            type="text"
+            maxLength={64}
+            value={draft.watermarkCapturedAt}
+            placeholder={t('输入拍摄时间')}
+            onChange={(event) => change({ watermarkCapturedAt: event.target.value })}
+          />
+        </label>
+        <label>
+          {t('网站地址')}
+          <input
+            type="text"
+            maxLength={128}
+            value={draft.watermarkWebsite}
+            onChange={(event) => change({ watermarkWebsite: event.target.value })}
           />
         </label>
         <p className={styles.hint}>{t('仅修改水印显示文字，不改写照片拍摄信息。')}</p>
@@ -151,6 +186,9 @@ function WatermarkSettingsEditor({
               onApply({
                 watermarkText: draft.watermarkText,
                 watermarkCamera: draft.watermarkCamera,
+                watermarkParameters: draft.watermarkParameters,
+                watermarkCapturedAt: draft.watermarkCapturedAt,
+                watermarkWebsite: draft.watermarkWebsite,
                 watermarkScale: draft.watermarkScale,
                 watermarkOpacity: draft.watermarkOpacity,
               });
@@ -236,8 +274,12 @@ export function PhotoWatermarkPanel({
           <button
             type="button"
             aria-pressed={edits.watermarkShowParameters}
-            disabled={disabled || !metadata.parameters}
-            title={!metadata.parameters ? t('照片没有拍摄参数信息') : t('拍摄参数')}
+            disabled={disabled || !(edits.watermarkParameters ?? metadata.parameters)?.trim()}
+            title={
+              !(edits.watermarkParameters ?? metadata.parameters)?.trim()
+                ? t('照片没有拍摄参数信息')
+                : t('拍摄参数')
+            }
             onClick={() => onChange({ watermarkShowParameters: !edits.watermarkShowParameters })}
           >
             {t('拍摄参数')}
@@ -260,12 +302,26 @@ export function PhotoWatermarkPanel({
               <Icon size={16} />
             </button>
           ))}
+        {selected && (
+          <button
+            type="button"
+            aria-pressed={edits.watermarkShowWebsite}
+            disabled={disabled}
+            onClick={() => onChange({ watermarkShowWebsite: !edits.watermarkShowWebsite })}
+          >
+            {t('网站地址')}
+          </button>
+        )}
         {selected?.time && (
           <button
             type="button"
             aria-pressed={edits.watermarkShowTime}
-            disabled={disabled || !metadata.capturedAt}
-            title={!metadata.capturedAt ? t('照片没有拍摄时间信息') : t('拍摄时间')}
+            disabled={disabled || !(edits.watermarkCapturedAt ?? metadata.capturedAt)?.trim()}
+            title={
+              !(edits.watermarkCapturedAt ?? metadata.capturedAt)?.trim()
+                ? t('照片没有拍摄时间信息')
+                : t('拍摄时间')
+            }
             onClick={() => onChange({ watermarkShowTime: !edits.watermarkShowTime })}
           >
             {t('拍摄时间')}

@@ -1,4 +1,3 @@
-import { t } from '../../../i18n';
 import type { PhotoEdits } from './photo-editor-model';
 import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
 import { paintWatermark } from './photo-watermark-layouts';
@@ -32,17 +31,23 @@ export function renderPhotoWatermark(
   context.drawImage(source, layout.x, layout.y);
   context.save();
   context.globalAlpha = Math.max(0, Math.min(100, edits.watermarkOpacity)) / 100;
-  const camera = edits.watermarkCamera.trim() || metadata.camera || '';
+  const camera = (edits.watermarkCamera ?? metadata.camera ?? '').trim();
   paintWatermark({
     context,
     layout,
     template,
     edits,
     metadata,
-    title: edits.watermarkText.trim() || camera || t('摄影作品'),
+    title: edits.watermarkText.trim() || camera,
     camera,
-    details: edits.watermarkShowParameters ? metadata.parameters || '' : '',
-    time: edits.watermarkShowTime && template.time ? metadata.capturedAt || '' : '',
+    details: edits.watermarkShowParameters
+      ? (edits.watermarkParameters ?? metadata.parameters ?? '').trim()
+      : '',
+    time:
+      edits.watermarkShowTime && template.time
+        ? (edits.watermarkCapturedAt ?? metadata.capturedAt ?? '').trim()
+        : '',
+    website: edits.watermarkShowWebsite ? edits.watermarkWebsite.trim() : '',
     foreground,
     secondary,
     size: Math.max(

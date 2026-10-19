@@ -15,6 +15,7 @@ export interface WatermarkDrawing {
   camera: string;
   details: string;
   time: string;
+  website: string;
   foreground: string;
   secondary: string;
   size: number;
@@ -64,38 +65,44 @@ export function rule(
   c.lineTo(x2, y2);
   c.stroke();
 }
-export function paragraph(
+interface TextLine {
+  value: string;
+  size: number;
+  family?: string;
+  weight?: number;
+  color?: string;
+}
+
+/** Fit a real content group inside its own rectangle, collapsing absent metadata. */
+export function textBlock(
   d: WatermarkDrawing,
-  value: string,
-  x: number,
-  y: number,
-  width: number,
-  size: number,
-  lines: number,
-  family = 'system-ui, sans-serif',
+  lines: readonly TextLine[],
+  box: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    align?: CanvasTextAlign;
+    vertical?: 'start' | 'center' | 'end';
+  },
 ) {
-  const c = d.context;
-  c.font = `400 ${Math.max(0.5, size)}px ${family}`;
-  const chars = Array.from(value.slice(0, 200));
-  let line = '',
-    lineIndex = 0;
-  for (let i = 0; i < chars.length; i++) {
-    const next = line + chars[i];
-    if (c.measureText(next).width > width && line) {
-      label(
-        d,
-        lineIndex === lines - 1 ? line + chars.slice(i).join('') : line,
-        x,
-        y + lineIndex * size * 1.5,
-        size,
-        width,
-        'left',
-        400,
-        family,
-      );
-      if (++lineIndex >= lines) return;
-      line = chars[i];
-    } else line = next;
+  const visible = lines.filter((line) => line.value.trim());
+  if (!visible.length || box.width <= 0 || box.height <= 0) return;
+  const naturalHeight = visible.reduce((height, line) => height + line.size * 1.4, 0);
+  const scale = Math.min(1, box.height / naturalHeight);
+  const height = naturalHeight * scale;
+  let y =
+    box.y +
+    (box.vertical === 'start'
+      ? 0
+      : box.vertical === 'end'
+        ? box.height - height
+        : (box.height - height) / 2);
+  const align = box.align ?? 'left';
+  const x = box.x + (align === 'center' ? box.width / 2 : align === 'right' ? box.width : 0);
+  for (const line of visible) {
+    const size = line.size * scale;
+    label(d, line.value, x, y + size, size, box.width, align, line.weight, line.family, line.color);
+    y += size * 1.4;
   }
-  if (line) label(d, line, x, y + lineIndex * size * 1.5, size, width, 'left', 400, family);
 }

@@ -1,270 +1,275 @@
-import { label, paragraph, rule, type WatermarkDrawing } from './photo-watermark-drawing';
+import { label, textBlock, rule, type WatermarkDrawing } from './photo-watermark-drawing';
 import { watermarkAlignment, type WatermarkStyle } from './photo-watermark-model';
 
 type Painter = (drawing: WatermarkDrawing) => void;
-const font = 'system-ui, sans-serif';
-/** Each painter corresponds to a different information structure in sekerwatermark references. */
+const sans = '"Helvetica Neue", Arial, "PingFang SC", sans-serif';
+const serif = 'Georgia, "Songti SC", serif';
+const mono = '"SFMono-Regular", Consolas, monospace';
+const fields = (d: WatermarkDrawing) => d.details.split(/\s*[·|]\s*/).filter(Boolean);
+const secondary = (d: WatermarkDrawing, value: string, size = d.size * 0.58) => ({
+  value,
+  size,
+  family: sans,
+  color: d.secondary,
+});
+const heading = (d: WatermarkDrawing, value = d.title, size = d.size * 0.9) => ({
+  value,
+  size,
+  family: sans,
+  weight: 500,
+});
+
+const website = (d: WatermarkDrawing) => secondary(d, d.website, d.size * 0.44);
+
+/** Layouts share a type scale; empty lines collapse instead of leaving placeholder gaps. */
 const painters: Record<WatermarkStyle, Painter> = {
   strip(d) {
     const { layout: l, size: s } = d,
       p = l.panel,
-      pad = l.photoWidth * 0.04,
-      y = p.y + p.height * 0.48;
-    label(d, d.title, p.x + pad, y, s * 0.9, p.width * 0.44, 'left', 600);
-    label(
+      pad = l.photoWidth * 0.04;
+    textBlock(d, [heading(d), secondary(d, d.camera === d.title ? '' : d.camera), website(d)], {
+      x: pad,
+      y: p.y,
+      width: p.width * 0.43,
+      height: p.height,
+    });
+    textBlock(
       d,
-      d.camera === d.title ? '' : d.camera,
-      p.x + pad,
-      y + s * 0.8,
-      s * 0.43,
-      p.width * 0.44,
-      'left',
-      400,
-      font,
-      d.secondary,
-    );
-    label(d, d.details, p.x + p.width - pad, y, s * 0.52, p.width * 0.46, 'right', 500);
-    label(
-      d,
-      d.time,
-      p.x + p.width - pad,
-      y + s * 0.8,
-      s * 0.43,
-      p.width * 0.46,
-      'right',
-      400,
-      font,
-      d.secondary,
+      [
+        { value: d.details, size: s * 0.62, family: mono, weight: 500 },
+        secondary(d, d.time, s * 0.5),
+      ],
+      { x: p.width * 0.5, y: p.y, width: p.width * 0.5 - pad, height: p.height, align: 'right' },
     );
   },
   side(d) {
-    const { layout: l, size: s } = d,
-      p = l.panel,
-      c = d.context;
+    const { layout: l, size: s, context: c } = d,
+      p = l.panel;
+    // A portrait rail keeps all typography off the photo, with two independent groups.
     c.save();
-    c.translate(p.x + p.width * 0.55, p.y + p.height / 2);
-    c.rotate(Math.PI / 2);
-    label(
+    c.translate(p.x + p.width / 2, p.height / 2);
+    c.rotate(-Math.PI / 2);
+    const railWidth = p.height * 0.88,
+      railHeight = p.width * 0.8;
+    textBlock(
       d,
-      [d.title, d.details, d.time].filter(Boolean).join('   |   '),
-      0,
-      0,
-      Math.min(s * 0.6, p.width * 0.24),
-      p.height * 0.86,
-      'center',
-      500,
+      [heading(d, d.title, s * 0.78), secondary(d, d.camera === d.title ? '' : d.camera, s * 0.5)],
+      { x: -railWidth / 2, y: -railHeight / 2, width: railWidth * 0.42, height: railHeight },
+    );
+    textBlock(
+      d,
+      [
+        { value: fields(d).join('  /  '), size: s * 0.6, family: mono, weight: 500 },
+        secondary(d, d.time, s * 0.48),
+        website(d),
+      ],
+      { x: 0, y: -railHeight / 2, width: railWidth / 2, height: railHeight, align: 'right' },
     );
     c.restore();
   },
   overlay(d) {
-    const { layout: l, size: s } = d,
-      align = watermarkAlignment(d.edits.watermark, d.edits.watermarkAlign);
-    const pad = l.photoWidth * 0.045,
-      x = align === 'left' ? pad : align === 'right' ? l.width - pad : l.width / 2;
-    const y = l.height - Math.max(s * 0.9, l.photoHeight * 0.055);
-    label(d, d.title, x, y - s * 0.9, s, l.width - pad * 2, align, 500);
-    label(d, d.details, x, y, s * 0.45, l.width - pad * 2, align, 400, font, d.secondary);
-    if (align !== 'right')
-      label(d, d.time, l.width - pad, y, s * 0.45, l.width * 0.25, 'right', 400, font, d.secondary);
+    const { layout: l, size: s } = d;
+    const align = watermarkAlignment(d.edits.watermark, d.edits.watermarkAlign);
+    const pad = Math.min(l.photoWidth * 0.045, l.photoHeight * 0.1);
+    const height = Math.min(s * 4.1, l.height - pad * 2);
+    textBlock(
+      d,
+      [
+        { value: d.title, size: s, family: serif },
+        secondary(d, d.details, s * 0.58),
+        secondary(d, d.time, s * 0.48),
+        website(d),
+      ],
+      {
+        x: pad,
+        y: l.height - pad - height,
+        width: l.width - pad * 2,
+        height,
+        align,
+        vertical: 'end',
+      },
+    );
   },
   cornerGrid(d) {
-    const { layout: l, size: s } = d,
-      pad = l.photoWidth * 0.04,
-      top = pad + s * 0.55,
-      bottom = l.height - pad;
-    label(d, d.camera || d.title, pad, top, s * 0.72, l.width * 0.56, 'left', 600);
+    const { layout: l, size: s } = d;
+    const pad = Math.min(l.photoWidth * 0.04, l.photoHeight * 0.08);
     label(
       d,
-      d.title === d.camera ? '' : d.title,
+      d.camera || d.title,
       pad,
-      bottom - s * 0.9,
-      s * 0.6,
-      l.width * 0.43,
+      pad + s * 0.72,
+      s * 0.72,
+      l.width - pad * 2,
       'left',
       500,
+      sans,
     );
-    label(d, d.time, pad, bottom, s * 0.43, l.width * 0.43, 'left', 400, font, d.secondary);
-    const fields = d.details.split(/\s*[·|]\s*/).filter(Boolean);
-    fields.slice(0, 4).forEach((field, index) => {
-      const col = index % 2,
-        row = Math.floor(index / 2),
-        x = l.width - pad - (1 - col) * l.width * 0.17;
-      label(d, field, x, bottom - (1 - row) * s * 1.05, s * 0.49, l.width * 0.16, 'right', 500);
-    });
+    const height = Math.min(s * 3.5, l.height * 0.34);
+    textBlock(
+      d,
+      [
+        heading(d, d.title === d.camera ? '' : d.title, s * 0.72),
+        secondary(d, d.time, s * 0.53),
+        website(d),
+      ],
+      { x: pad, y: l.height - pad - height, width: l.width * 0.45 - pad, height, vertical: 'end' },
+    );
+    const parts = fields(d);
+    textBlock(
+      d,
+      [
+        { value: parts.slice(0, 2).join('  /  '), size: s * 0.6, family: mono },
+        { value: parts.slice(2).join('  /  '), size: s * 0.54, family: mono, color: d.secondary },
+      ],
+      {
+        x: l.width * 0.5,
+        y: l.height - pad - height,
+        width: l.width * 0.5 - pad,
+        height,
+        align: 'right',
+        vertical: 'end',
+      },
+    );
   },
   colorBlock(d) {
-    const { layout: l, size: s } = d,
-      c = d.context,
-      pad = l.photoWidth * 0.04,
-      w = l.width - pad * 2;
-    const h = Math.min(l.photoWidth * 0.105, l.photoHeight * 0.22),
-      x = pad,
+    const { layout: l, size: s, context: c } = d;
+    const pad = Math.min(l.photoWidth * 0.04, l.photoHeight * 0.06);
+    const w = l.width - pad * 2,
+      h = Math.min(l.photoWidth * 0.082, l.photoHeight * 0.25);
+    const x = pad,
       y = l.height - pad - h,
-      split = w * 0.34,
-      fs = Math.min(s, h * 0.31);
+      split = w * 0.3;
     c.save();
     c.globalAlpha = 1;
-    c.fillStyle = '#c73531';
+    c.fillStyle = '#b9342e';
     c.fillRect(x, y, split, h);
     c.fillStyle = '#ffffff';
     c.fillRect(x + split, y, w - split, h);
     c.restore();
-    label(
+    textBlock(
       d,
-      d.title,
-      x + split * 0.08,
-      y + h * 0.59,
-      fs * 0.82,
-      split * 0.84,
-      'left',
-      600,
-      font,
-      '#ffffff',
+      [
+        { value: d.title, size: s * 0.76, family: sans, weight: 500, color: '#ffffff' },
+        { ...website(d), color: '#ffffff' },
+      ],
+      {
+        x: x + w * 0.025,
+        y,
+        width: split - w * 0.05,
+        height: h,
+      },
     );
-    label(
+    textBlock(
       d,
-      d.details,
-      x + w - w * 0.025,
-      y + h * 0.43,
-      fs * 0.6,
-      (w - split) * 0.92,
-      'right',
-      600,
-      font,
-      '#202020',
-    );
-    label(
-      d,
-      d.time,
-      x + w - w * 0.025,
-      y + h * 0.74,
-      fs * 0.5,
-      (w - split) * 0.92,
-      'right',
-      400,
-      font,
-      '#777777',
+      [
+        { value: d.details, size: s * 0.56, family: mono, color: '#202020' },
+        { value: d.time, size: s * 0.46, family: sans, color: '#777777' },
+      ],
+      { x: x + split + w * 0.025, y, width: w - split - w * 0.05, height: h, align: 'right' },
     );
   },
   frame(d) {
     const { layout: l, size: s } = d,
-      p = l.panel,
-      x = l.width / 2,
-      y = p.y + p.height * 0.43;
-    label(d, d.title, x, y, s * 0.95, l.photoWidth * 0.88, 'center', 600);
-    label(
+      p = l.panel;
+    textBlock(
       d,
-      [d.camera === d.title ? '' : d.camera, d.details].filter(Boolean).join(' · '),
-      x,
-      y + s * 0.95,
-      s * 0.44,
-      l.photoWidth * 0.88,
-      'center',
-      400,
-      font,
-      d.secondary,
-    );
-    label(
-      d,
-      d.time,
-      x,
-      y + s * 1.8,
-      s * 0.38,
-      l.photoWidth * 0.88,
-      'center',
-      400,
-      font,
-      d.secondary,
+      [
+        { value: d.title, size: s * 1.05, family: serif },
+        secondary(
+          d,
+          [d.camera === d.title ? '' : d.camera, d.details].filter(Boolean).join('  ·  '),
+        ),
+        secondary(d, d.time, s * 0.48),
+        website(d),
+      ],
+      {
+        x: l.x + l.photoWidth * 0.06,
+        y: p.y,
+        width: l.photoWidth * 0.88,
+        height: p.height - l.y * 0.35,
+        align: 'center',
+      },
     );
   },
   headerFooter(d) {
     const { layout: l, size: s } = d,
-      pad = l.photoWidth * 0.045,
-      top = l.y * 0.61,
-      bottom = l.y + l.photoHeight + l.panel.height * 0.48;
-    label(d, d.camera || d.title, l.x + pad, top, s * 0.64, l.photoWidth * 0.55, 'left', 600);
-    label(
+      pad = l.photoWidth * 0.04;
+    const x = l.x + pad,
+      width = l.photoWidth - pad * 2;
+    textBlock(d, [heading(d, d.camera || d.title, s * 0.65)], {
+      x,
+      y: 0,
+      width: width * 0.6,
+      height: l.y,
+    });
+    textBlock(d, [secondary(d, d.time, s * 0.52)], {
+      x: x + width * 0.62,
+      y: 0,
+      width: width * 0.38,
+      height: l.y,
+      align: 'right',
+    });
+    const parts = fields(d);
+    textBlock(d, [heading(d, d.title === d.camera ? '' : d.title, s * 0.85), website(d)], {
+      x,
+      y: l.panel.y,
+      width: width * 0.42,
+      height: l.panel.height,
+    });
+    textBlock(
       d,
-      d.time,
-      l.x + l.photoWidth - pad,
-      top,
-      s * 0.42,
-      l.photoWidth * 0.32,
-      'right',
-      400,
-      font,
-      d.secondary,
-    );
-    label(
-      d,
-      d.title === d.camera ? '' : d.title,
-      l.x + pad,
-      bottom,
-      s * 0.86,
-      l.photoWidth * 0.43,
-      'left',
-      500,
-    );
-    const parts = d.details.split(/\s*[·|]\s*/).filter(Boolean);
-    label(
-      d,
-      parts[0] || '',
-      l.x + l.photoWidth - pad,
-      bottom - s * 0.2,
-      s * 0.6,
-      l.photoWidth * 0.42,
-      'right',
-      600,
-    );
-    label(
-      d,
-      parts.slice(1).join('  ·  '),
-      l.x + l.photoWidth - pad,
-      bottom + s * 0.7,
-      s * 0.45,
-      l.photoWidth * 0.42,
-      'right',
-      400,
-      font,
-      d.secondary,
+      [
+        { value: parts[0] || '', size: s * 0.75, family: mono, weight: 500 },
+        { value: parts.slice(1).join('  /  '), size: s * 0.56, family: mono, color: d.secondary },
+      ],
+      {
+        x: x + width * 0.46,
+        y: l.panel.y,
+        width: width * 0.54,
+        height: l.panel.height,
+        align: 'right',
+      },
     );
   },
   editorial(d) {
     const { layout: l, size: s } = d,
-      p = l.panel,
-      pad = l.photoWidth * 0.05,
+      p = l.panel;
+    const pad = l.photoWidth * 0.035,
       x = p.x + pad,
-      w = p.width - pad * 1.7;
-    paragraph(d, d.title, x, p.y + p.height * 0.28, w, s * 1.05, 3);
-    rule(d, x, p.y + p.height * 0.52, x + w * 0.4, p.y + p.height * 0.52, d.secondary, 0.75);
-    label(
+      width = p.width - pad * 2;
+    const camera = d.camera === d.title ? '' : d.camera;
+    const titleHeight = Math.min(s * 4, p.height * 0.4);
+    textBlock(
       d,
-      d.camera === d.title ? '' : d.camera,
-      x,
-      p.y + p.height * 0.65,
-      s * 0.52,
-      w,
-      'left',
-      600,
+      [{ value: d.title, size: s * 0.92, family: serif }, secondary(d, camera, s * 0.5)],
+      { x, y: p.y + pad, width, height: titleHeight, vertical: 'start' },
     );
-    const fields = d.details.split(/\s*[·|]\s*/).filter(Boolean);
-    fields
-      .slice(0, 4)
-      .forEach((field, index) =>
-        label(
-          d,
-          field,
-          x,
-          p.y + p.height * 0.72 + index * s * 0.8,
-          s * 0.43,
-          w,
-          'left',
-          400,
-          font,
-          d.secondary,
-        ),
-      );
-    label(d, d.time, x, p.y + p.height - s * 0.4, s * 0.38, w, 'left', 400, font, d.secondary);
+    const bottomHeight = Math.min(p.height * 0.48, s * 7);
+    const bottom = p.y + p.height - pad;
+    rule(
+      d,
+      x,
+      bottom - bottomHeight,
+      x + width,
+      bottom - bottomHeight,
+      d.secondary,
+      l.photoWidth * 0.0005,
+    );
+    textBlock(
+      d,
+      [
+        ...fields(d).map((value) => ({ value, size: s * 0.56, family: mono })),
+        secondary(d, d.time, s * 0.48),
+        website(d),
+      ],
+      {
+        x,
+        y: bottom - bottomHeight + s * 0.5,
+        width,
+        height: bottomHeight - s * 0.5,
+        vertical: 'end',
+      },
+    );
   },
 };
 export function paintWatermark(drawing: WatermarkDrawing) {

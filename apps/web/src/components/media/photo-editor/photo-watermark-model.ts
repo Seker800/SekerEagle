@@ -1,6 +1,6 @@
 import { t } from '../../../i18n';
 
-export type WatermarkCategory = 'photo' | 'standard' | 'frame' | 'creative';
+export type WatermarkCategory = 'landscape' | 'portrait' | 'universal';
 export type WatermarkStyle =
   | 'strip'
   | 'side'
@@ -29,7 +29,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'photo-strip',
     label: t('摄影信息条'),
-    category: 'photo',
+    category: 'landscape',
     style: 'strip',
     time: true,
     theme: true,
@@ -38,7 +38,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'photo-side',
     label: t('纵向参数栏'),
-    category: 'photo',
+    category: 'portrait',
     style: 'side',
     time: true,
     theme: true,
@@ -47,7 +47,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'standard-left',
     label: t('平面签名'),
-    category: 'standard',
+    category: 'universal',
     style: 'overlay',
     time: true,
     theme: true,
@@ -58,7 +58,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'corner-grid',
     label: t('四角信息'),
-    category: 'standard',
+    category: 'universal',
     style: 'cornerGrid',
     time: true,
     theme: true,
@@ -68,7 +68,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'color-block',
     label: t('色块信息条'),
-    category: 'standard',
+    category: 'landscape',
     style: 'colorBlock',
     time: true,
     theme: false,
@@ -78,7 +78,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'frame-minimal',
     label: t('居中留白'),
-    category: 'frame',
+    category: 'universal',
     style: 'frame',
     time: true,
     theme: true,
@@ -87,7 +87,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'header-footer',
     label: t('上下分区'),
-    category: 'frame',
+    category: 'landscape',
     style: 'headerFooter',
     time: true,
     theme: true,
@@ -96,7 +96,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'editorial-panel',
     label: t('左侧题签'),
-    category: 'creative',
+    category: 'portrait',
     style: 'editorial',
     time: true,
     theme: true,
@@ -104,10 +104,9 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   },
 ];
 export const WATERMARK_CATEGORIES: readonly { id: WatermarkCategory; label: string }[] = [
-  { id: 'photo', label: t('摄影') },
-  { id: 'standard', label: t('叠印') },
-  { id: 'frame', label: t('留白') },
-  { id: 'creative', label: t('侧版') },
+  { id: 'landscape', label: t('适合横图') },
+  { id: 'portrait', label: t('适合竖图') },
+  { id: 'universal', label: t('横竖通用') },
 ];
 export interface PhotoMetadata {
   camera?: string;
@@ -140,14 +139,14 @@ export function watermarkAlignment(id: string, alignment: WatermarkAlignment): W
 /** All borders are outside the original photo; never resize or cover pixels to fit a frame. */
 export function photoWatermarkLayout(width: number, height: number, template: WatermarkTemplate) {
   const geometry: Record<WatermarkStyle, readonly [number, number, number, number]> = {
-    strip: [0, 0, 0.12, 0],
-    side: [0, 0.11, 0, 0],
+    strip: [0, 0, 0.09, 0],
+    side: [0, 0.065, 0, 0],
     overlay: [0, 0, 0, 0],
     cornerGrid: [0, 0, 0, 0],
     colorBlock: [0, 0, 0, 0],
-    frame: [0.055, 0.055, 0.2, 0.055],
-    headerFooter: [0.12, 0.03, 0.15, 0.03],
-    editorial: [0.04, 0.04, 0.04, 0.32],
+    frame: [0.05, 0.05, 0.16, 0.05],
+    headerFooter: [0.075, 0, 0.105, 0],
+    editorial: [0.035, 0.035, 0.035, 0.28],
   };
   const [top, right, bottom, left] = geometry[template.style].map((value) =>
     Math.round(value * width),
