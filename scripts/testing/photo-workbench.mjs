@@ -375,12 +375,13 @@ try {
     })
     .jpeg({ quality: 90 })
     .toBuffer();
-  async function upload(mode, bytes, fileName, mimeType = 'image/jpeg') {
+  async function upload(mode, bytes, fileName, mimeType = 'image/jpeg', options = {}) {
     const session = await api(`/${mode}/uploads`, {
       originalName: fileName,
       mimeType,
       size: bytes.length,
       contentSha256: createHash('sha256').update(bytes).digest('hex'),
+      ...options,
     });
     const { uploadUrl } = await api(`/${mode}/uploads/${session.id}/parts/1`, {});
     const response = await fetch(uploadUrl, { method: 'PUT', body: bytes });
@@ -453,6 +454,60 @@ try {
   assert.equal(capturedPhoto.photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');
   assert.equal((await api('/photos/assets?limit=20&gps=WITH')).items.length, 1);
   if (basic) {
+    if (process.env.PHOTO_WORKBENCH_EDITED_COPY === '1') {
+      const editedBytes = await sharp(sharpPhoto)
+        .extract({ left: 128, top: 0, width: 256, height: 512 })
+        .rotate(90)
+        .png()
+        .toBuffer();
+      for (const [mode, sourceId] of [
+        ['eagle', material.assetId],
+        ['photos', a.assetId],
+      ]) {
+        const detail = await api(`/${mode}/assets/${sourceId}`);
+        const copied = await upload(mode, editedBytes, 'editor-output.png', 'image/png', {
+          duplicatePolicy: 'CREATE_COPY',
+          copySourceAssetId: sourceId,
+          copySourceRowVersion: detail.rowVersion,
+        });
+        assert.notEqual(copied.assetId, sourceId);
+        await waitFor(
+          async () =>
+            (await db.eagleAsset.findUniqueOrThrow({ where: { id: copied.assetId } }))
+              .lifecycleStatus === 'READY',
+          'edited copy processing',
+          240,
+        );
+        const copy = await api(`/${mode}/assets/${copied.assetId}`);
+        assert.equal(copy.width, 512);
+        assert.equal(copy.height, 256);
+        const original = await fetch(`${origin}/api/${mode}/assets/${sourceId}/original`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        });
+        assert.deepEqual(Buffer.from(await original.arrayBuffer()), sharpPhoto);
+        const other = mode === 'photos' ? 'eagle' : 'photos';
+        const denied = await fetch(`${origin}/api/${other}/uploads`, {
+          method: 'POST',
+          headers: {
+            cookie: `sekereagle_access=${accessToken}`,
+            origin,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            originalName: 'edited.png',
+            mimeType: 'image/png',
+            size: editedBytes.length,
+            duplicatePolicy: 'CREATE_COPY',
+            copySourceAssetId: sourceId,
+            copySourceRowVersion: detail.rowVersion,
+          }),
+        });
+        assert.equal(denied.status, 404);
+      }
+      console.log(
+        'Existing editor copy HTTP upload, original preservation, previews and mode boundaries passed.',
+      );
+    }
     assert.ok(!process.argv.includes('--serve'), 'basic smoke is an automated check only');
     assert.ok(
       !['PHOTO_WORKBENCH_CAMERA', 'PHOTO_WORKBENCH_LIVE', 'PHOTO_WORKBENCH_SEND'].some(
