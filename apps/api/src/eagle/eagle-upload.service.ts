@@ -25,6 +25,25 @@ import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleUploadInspectionService } from './eagle-upload-inspection.service';
 import { normalizeEagleUploadOriginalName } from './eagle-upload-policy';
 import { buildImageProcessingJobs } from './media-job-plan';
+import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
+
+async function loadEditedCopySource(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+  libraryMode: LibraryMode,
+  sourceId: string,
+  rowVersion: number | null | undefined,
+) {
+  await transaction.$queryRaw`SELECT id FROM "EagleAsset" WHERE id=${sourceId} AND "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" FOR UPDATE`;
+  const source = await transaction.eagleAsset.findFirst({
+    where: { id: sourceId, ownerId, libraryMode, deletedAt: null, purgeAfter: null },
+    include: { annotation: true, manualTagLinks: true },
+  });
+  if (!source) throw new NotFoundException('原照片不存在。');
+  if (source.rowVersion !== rowVersion)
+    throw new ConflictException('原照片已变化，请重新打开编辑器。');
+  return source;
+}
 
 @Injectable()
 export class EagleUploadService {
@@ -43,7 +62,28 @@ export class EagleUploadService {
     return choosePartSize(size);
   }
 
-  async initiate(ownerId: string, input: InitiateEagleUploadDto) {
+  async initiate(ownerId: string, input: InitiateEagleUploadDto, includePrivate = false) {
+    if (input.copySourceAssetId || input.copySourceRowVersion !== undefined) {
+      if (
+        !input.copySourceAssetId ||
+        !input.copySourceRowVersion ||
+        input.duplicatePolicy !== 'CREATE_COPY'
+      )
+        throw new BadRequestException('编辑副本缺少有效来源声明。');
+      const source = await this.prisma.eagleAsset.findFirst({
+        where: {
+          id: input.copySourceAssetId,
+          ownerId,
+          libraryMode: this.libraryMode,
+          deletedAt: null,
+          purgeAfter: null,
+          ...(includePrivate ? {} : { isPrivate: false }),
+        },
+      });
+      if (!source) throw new NotFoundException('原照片不存在。');
+      if (source.rowVersion !== input.copySourceRowVersion)
+        throw new ConflictException('原照片已变化，请重新打开编辑器。');
+    }
     const originalName = normalizeEagleUploadOriginalName(input.originalName);
     const { mimeType } = this.mediaCapabilities.assertUploadAllowed({
       fileName: originalName,
@@ -66,6 +106,8 @@ export class EagleUploadService {
               owner: { connect: { id: ownerId } },
               expectedContentSha256: input.contentSha256?.toLowerCase(),
               duplicatePolicy: input.duplicatePolicy ?? 'SKIP',
+              copySourceAssetId: input.copySourceAssetId,
+              copySourceRowVersion: input.copySourceRowVersion,
             },
           },
           libraryMode: this.libraryMode,
@@ -279,6 +321,18 @@ export class EagleUploadService {
     }
     try {
       const finalized = await this.prisma.$transaction(async (transaction) => {
+        const copySourceId = session.eagleState?.copySourceAssetId;
+        let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
+        if (copySourceId) {
+          await lockOwnerPrivacyProjection(transaction, session.uploaderId, this.libraryMode);
+          copySource = await loadEditedCopySource(
+            transaction,
+            session.uploaderId,
+            this.libraryMode,
+            copySourceId,
+            session.eagleState?.copySourceRowVersion,
+          );
+        }
         const claimed = await transaction.uploadSession.updateMany({
           where: {
             id: session.id,
@@ -409,8 +463,37 @@ export class EagleUploadService {
                 durationMs: inspection.durationMs,
                 mediaRevision: assetRevision,
                 libraryMode: this.libraryMode,
+                ...(copySource
+                  ? {
+                      rating: copySource.rating,
+                      isPrivate: copySource.isPrivate,
+                    }
+                  : {}),
               },
             });
+            if (copySource) {
+              if (copySource.annotation)
+                await transaction.eagleAssetAnnotation.create({
+                  data: {
+                    ownerId: session.uploaderId,
+                    libraryMode: this.libraryMode,
+                    assetId,
+                    description: copySource.annotation.description,
+                    sourceUrl: copySource.annotation.sourceUrl,
+                  },
+                });
+              if (copySource.manualTagLinks.length)
+                await transaction.eagleAssetManualTag.createMany({
+                  data: copySource.manualTagLinks.map((link) => ({
+                    ownerId: session.uploaderId,
+                    libraryMode: this.libraryMode,
+                    assetId,
+                    tagId: link.tagId,
+                    assignedByUser: true,
+                    assignmentProvenance: 'USER_ASSIGNED',
+                  })),
+                });
+            }
             if (browserCapture) {
               await transaction.eagleAssetAnnotation.create({
                 data: {

@@ -312,6 +312,8 @@ model EagleUploadSessionState {
   duplicatePolicy       String        @default("SKIP")
   assetId               String?
   replacementAssetId    String?
+  copySourceAssetId     String?
+  copySourceRowVersion  Int?
   expectedContentSha256 String?
   retiredObjectKeys     String[]      @default([])
   supersededAt          DateTime?

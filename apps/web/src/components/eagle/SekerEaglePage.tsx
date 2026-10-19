@@ -2406,6 +2406,9 @@ export function SekerEaglePage({
           onSavePhoto={async (file) => {
             const result = await uploadEagleAsset(accessToken, file, () => undefined, {
               duplicatePolicy: 'CREATE_COPY',
+              copySourceAssetId: previewImageAsset?.id,
+              copySourceRowVersion: previewImageAsset?.rowVersion,
+              retry: true,
             });
             await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
             return { id: result.asset.id, name: file.name };

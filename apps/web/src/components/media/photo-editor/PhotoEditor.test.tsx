@@ -63,12 +63,16 @@ describe('photo editor interactions', () => {
     const galleryNavigation = vi.fn();
     window.addEventListener('keydown', galleryNavigation);
     try {
-      render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+      render(
+        <PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />,
+      );
       const exposure = screen.getByRole('slider', { name: '曝光' });
       await waitFor(() => expect(exposure).toBeEnabled());
       fireEvent.keyDown(exposure, { key: 'ArrowRight' });
       expect(galleryNavigation).not.toHaveBeenCalled();
-    } finally { window.removeEventListener('keydown', galleryNavigation); }
+    } finally {
+      window.removeEventListener('keydown', galleryNavigation);
+    }
   });
   it('supports free and fixed framing, resize handles, undo, reset and extra aspect ratios', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);

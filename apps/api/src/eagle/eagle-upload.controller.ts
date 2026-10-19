@@ -38,7 +38,7 @@ export class EagleUploadController {
   @Post()
   @UseGuards(BrowserOrPatOriginGuard)
   initiate(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: InitiateEagleUploadDto) {
-    return this.uploads.initiate(principal.sub, input);
+    return this.uploads.initiate(principal.sub, input, principal.canViewPrivate === true);
   }
 
   @Get(':uploadSessionId')

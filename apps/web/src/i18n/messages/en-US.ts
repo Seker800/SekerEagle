@@ -1,4 +1,5 @@
 export const enUS = {
+  '原照片已变化，请重新打开编辑器。': 'The original photo changed. Please reopen the editor.',
   GPS: 'GPS location',
   包含: 'Contains',
   不包含: 'Does not contain',

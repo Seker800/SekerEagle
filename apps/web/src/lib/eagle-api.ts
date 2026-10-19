@@ -257,6 +257,17 @@ export type EagleSmartFolderFilters = Omit<
   tagMatch?: 'ANY' | 'ALL';
 };
 export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
+  // Retain only explicitly retryable editor uploads, scoped to this API factory and File identity.
+  const editorUploads = new WeakMap<
+    File,
+    {
+      sessionId: string;
+      partSize: number;
+      parts: Array<{ partNumber: number; etag: string }>;
+      completedAssetId?: string;
+      declaration: string;
+    }
+  >();
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetchWithBrowserSession(libraryApiPath(`/api${path}`, libraryMode), {
       ...init,
@@ -621,29 +632,53 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     _token: string,
     file: File,
     onProgress: (value: { percent: number }) => void,
-    options?: { duplicatePolicy: 'CREATE_COPY' },
+    options?: {
+      duplicatePolicy: 'CREATE_COPY';
+      copySourceAssetId?: string;
+      copySourceRowVersion?: number;
+      retry?: boolean;
+    },
   ) {
-    const session = await api<{
-      id: string;
-      partSize: number;
-    }>('/eagle/uploads', {
-      method: 'POST',
-      body: JSON.stringify({
-        originalName: file.name,
-        mimeType:
-          normalizeCameraMimeType(file.name, file.type) ??
-          (file.type || 'application/octet-stream'),
-        size: file.size,
-        ...(options ? { duplicatePolicy: options.duplicatePolicy } : {}),
-      }),
+    const declaration = JSON.stringify({
+      duplicatePolicy: options?.duplicatePolicy,
+      copySourceAssetId: options?.copySourceAssetId,
+      copySourceRowVersion: options?.copySourceRowVersion,
     });
-    const parts: Array<{
-      partNumber: number;
-      etag: string;
-    }> = [];
+    let retained = options?.retry ? editorUploads.get(file) : undefined;
+    if (retained && retained.declaration !== declaration)
+      throw new Error(t('原照片已变化，请重新打开编辑器。'));
+    if (retained?.completedAssetId)
+      return { duplicate: false, asset: await getEagleAsset('', retained.completedAssetId) };
+    const session = retained
+      ? { id: retained.sessionId, partSize: retained.partSize }
+      : await api<{
+          id: string;
+          partSize: number;
+        }>('/eagle/uploads', {
+          method: 'POST',
+          body: JSON.stringify({
+            originalName: file.name,
+            mimeType:
+              normalizeCameraMimeType(file.name, file.type) ??
+              (file.type || 'application/octet-stream'),
+            size: file.size,
+            ...(options ? { duplicatePolicy: options.duplicatePolicy } : {}),
+            ...(options?.copySourceAssetId
+              ? {
+                  copySourceAssetId: options.copySourceAssetId,
+                  copySourceRowVersion: options.copySourceRowVersion,
+                }
+              : {}),
+          }),
+        });
+    if (options?.retry && !retained) {
+      retained = { sessionId: session.id, partSize: session.partSize, parts: [], declaration };
+      editorUploads.set(file, retained);
+    }
+    const parts = retained?.parts ?? [];
     try {
       const count = Math.ceil(file.size / session.partSize);
-      for (let index = 0; index < count; index += 1) {
+      for (let index = parts.length; index < count; index += 1) {
         const partNumber = index + 1;
         const { uploadUrl } = await api<{
           uploadUrl: string;
@@ -674,11 +709,13 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         method: 'POST',
         body: JSON.stringify({ parts }),
       });
+      if (retained) retained.completedAssetId = completed.assetId;
       return { duplicate: completed.duplicate, asset: await getEagleAsset('', completed.assetId) };
     } catch (error) {
-      await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}' }).catch(
-        () => undefined,
-      );
+      if (!options?.retry)
+        await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}' }).catch(
+          () => undefined,
+        );
       throw error;
     }
   }

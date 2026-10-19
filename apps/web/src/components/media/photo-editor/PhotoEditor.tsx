@@ -96,12 +96,14 @@ export function PhotoEditor({
     paintedSequence = useRef(0);
   const sliderStartRef = useRef<PhotoEdits | null>(null);
   const fixedCropRatioRef = useRef<Exclude<CropRatio, 'free'>>('original');
+  const pendingSaveRef = useRef<{ key: string; file: File } | null>(null);
   if (edits.cropRatio !== 'free') fixedCropRatioRef.current = edits.cropRatio;
 
   function update(patch: Partial<PhotoEdits>, record = true) {
     if ((Object.keys(patch) as (keyof PhotoEdits)[]).every((key) => edits[key] === patch[key]))
       return;
     setSaved(false);
+    pendingSaveRef.current = null;
     setHistory((current) => ({
       past: record ? [...current.past, current.current].slice(-50) : current.past,
       current: { ...current.current, ...patch },
@@ -333,17 +335,23 @@ export function PhotoEditor({
     setBusy(true);
     setError('');
     try {
-      const result = await rendererRef.current.render(sourceCanvas(loaded), edits);
-      const output = document.createElement('canvas');
-      composePhoto(output, result, edits, metadata);
-      const blob = await new Promise<Blob>((resolve, reject) =>
-        output.toBlob(
-          (value) => (value ? resolve(value) : reject(new Error('ENCODE_FAILED'))),
-          'image/png',
-        ),
-      );
-      const file = new File([blob], editedPhotoName(name), { type: 'image/png' });
+      const saveKey = JSON.stringify({ source, edits, metadata });
+      let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
+      if (!file) {
+        const result = await rendererRef.current.render(sourceCanvas(loaded), edits);
+        const output = document.createElement('canvas');
+        composePhoto(output, result, edits, metadata);
+        const blob = await new Promise<Blob>((resolve, reject) =>
+          output.toBlob(
+            (value) => (value ? resolve(value) : reject(new Error('ENCODE_FAILED'))),
+            'image/png',
+          ),
+        );
+        file = new File([blob], editedPhotoName(name), { type: 'image/png' });
+        pendingSaveRef.current = { key: saveKey, file };
+      }
       const savedPhoto = await onSave(file);
+      pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
       setSaved(true);
     } catch {
@@ -428,6 +436,7 @@ export function PhotoEditor({
       role="dialog"
       aria-modal="true"
       aria-label={t('编辑照片')}
+      onKeyDown={(event) => event.stopPropagation()}
     >
       <header className={styles.header} inert={confirmClose}>
         <button

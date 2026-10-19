@@ -16,14 +16,59 @@ const input = {
 test('edited source authorization is checked in its owner and library before allocating storage', async () => {
   for (const mode of ['MATERIAL', 'PHOTO'] as const) {
     let predicate: unknown;
-    const service = new EagleUploadService({ eagleAsset: { findFirst: async ({ where }: { where: unknown }) => { predicate = where; return null; } }, uploadSession: { create: async () => ({ id: 'session', size: 12n }) } } as never, { createMultipartUpload: async () => 'multipart' } as never, { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never, {} as never, mode);
-    await assert.rejects(() => service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', { ...input, copySourceAssetId: 'source', copySourceRowVersion: 2 } as InitiateEagleUploadDto), NotFoundException);
-    assert.deepEqual(predicate, { id: 'source', ownerId: '5a1fd7d1-fd57-4e42-83f7-55425ca8704a', libraryMode: mode, deletedAt: null, purgeAfter: null, isPrivate: false });
+    const service = new EagleUploadService(
+      {
+        eagleAsset: {
+          findFirst: async ({ where }: { where: unknown }) => {
+            predicate = where;
+            return null;
+          },
+        },
+        uploadSession: { create: async () => ({ id: 'session', size: 12n }) },
+      } as never,
+      { createMultipartUpload: async () => 'multipart' } as never,
+      { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never,
+      {} as never,
+      mode,
+    );
+    await assert.rejects(
+      () =>
+        service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', {
+          ...input,
+          copySourceAssetId: 'source',
+          copySourceRowVersion: 2,
+        } as InitiateEagleUploadDto),
+      NotFoundException,
+    );
+    assert.deepEqual(predicate, {
+      id: 'source',
+      ownerId: '5a1fd7d1-fd57-4e42-83f7-55425ca8704a',
+      libraryMode: mode,
+      deletedAt: null,
+      purgeAfter: null,
+      isPrivate: false,
+    });
   }
 });
 test('stale edited-source versions cannot initiate a new copy', async () => {
-  const service = new EagleUploadService({ eagleAsset: { findFirst: async () => ({ rowVersion: 3 }) }, uploadSession: { create: async () => ({ id: 'session', size: 12n }) } } as never, { createMultipartUpload: async () => 'multipart' } as never, { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never, {} as never);
-  await assert.rejects(() => service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', { ...input, copySourceAssetId: 'source', copySourceRowVersion: 2 } as InitiateEagleUploadDto), ConflictException);
+  const service = new EagleUploadService(
+    {
+      eagleAsset: { findFirst: async () => ({ rowVersion: 3 }) },
+      uploadSession: { create: async () => ({ id: 'session', size: 12n }) },
+    } as never,
+    { createMultipartUpload: async () => 'multipart' } as never,
+    { assertUploadAllowed: () => ({ mimeType: 'image/png' }) } as never,
+    {} as never,
+  );
+  await assert.rejects(
+    () =>
+      service.initiate('5a1fd7d1-fd57-4e42-83f7-55425ca8704a', {
+        ...input,
+        copySourceAssetId: 'source',
+        copySourceRowVersion: 2,
+      } as InitiateEagleUploadDto),
+    ConflictException,
+  );
 });
 test('edited-photo upload permits explicit copies but rejects owner and replacement injection', () => {
   const options = { whitelist: true, forbidNonWhitelisted: true };
@@ -99,4 +144,20 @@ test('ordinary uploads retain the previous skip-duplicate behavior', async () =>
     size: input.size,
   });
   assert.equal(policy, 'SKIP');
+});
+
+test('edited source IDs and versions form a validated declaration without client privacy flags', () => {
+  const options = { whitelist: true, forbidNonWhitelisted: true };
+  for (const invalid of [
+    { copySourceAssetId: 'bad', copySourceRowVersion: 1 },
+    { copySourceAssetId: '5a1fd7d1-fd57-4e42-83f7-55425ca8704a' },
+    { copySourceRowVersion: 1 },
+    { copySourceAssetId: '5a1fd7d1-fd57-4e42-83f7-55425ca8704a', copySourceRowVersion: 0 },
+    { isPrivate: true },
+  ]) {
+    assert.ok(
+      validateSync(plainToInstance(InitiateEagleUploadDto, { ...input, ...invalid }), options)
+        .length,
+    );
+  }
 });

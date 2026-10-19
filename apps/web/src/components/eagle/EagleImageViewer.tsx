@@ -127,7 +127,11 @@ export function EagleImageViewer({
   editSource?: string;
   onSavePhoto?: (file: File) => Promise<SavedPhoto>;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState<{
+    source: string;
+    name: string;
+    onSave: (file: File) => Promise<SavedPhoto>;
+  } | null>(null);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -357,7 +361,12 @@ export function EagleImageViewer({
           )}
           <EagleImageCopyButton sourceUrl={image.src} />
           {editSource && onSavePhoto && (
-            <button type="button" onClick={() => setEditing(true)}>
+            <button
+              type="button"
+              onClick={() =>
+                setEditing({ source: editSource, name: image.alt, onSave: onSavePhoto })
+              }
+            >
               {t('编辑照片')}
             </button>
           )}
@@ -366,15 +375,15 @@ export function EagleImageViewer({
           </button>
         </footer>
       </section>
-      {editing && editSource && onSavePhoto && (
+      {editing && (
         <Suspense fallback={<div role="status">{t('正在读取照片…')}</div>}>
           <div onClick={(event) => event.stopPropagation()}>
             <PhotoEditor
-              key={editSource}
-              source={editSource}
-              name={image.alt}
-              onSave={onSavePhoto}
-              onClose={() => setEditing(false)}
+              key={editing.source}
+              source={editing.source}
+              name={editing.name}
+              onSave={editing.onSave}
+              onClose={() => setEditing(null)}
             />
           </div>
         </Suspense>

@@ -9,6 +9,8 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
+  ValidateIf,
   Matches,
   Max,
   MaxLength,
@@ -45,6 +47,23 @@ export class InitiateEagleUploadDto {
   @IsOptional()
   @IsIn(['SKIP', 'CREATE_COPY'])
   duplicatePolicy?: 'SKIP' | 'CREATE_COPY';
+
+  @ApiPropertyOptional({ format: 'uuid' })
+  @ValidateIf(
+    (input: InitiateEagleUploadDto) =>
+      input.copySourceAssetId !== undefined || input.copySourceRowVersion !== undefined,
+  )
+  @IsUUID('4')
+  copySourceAssetId?: string;
+
+  @ApiPropertyOptional({ minimum: 1 })
+  @ValidateIf(
+    (input: InitiateEagleUploadDto) =>
+      input.copySourceAssetId !== undefined || input.copySourceRowVersion !== undefined,
+  )
+  @IsInt()
+  @Min(1)
+  copySourceRowVersion?: number;
 }
 
 export class CompleteUploadPartDto {

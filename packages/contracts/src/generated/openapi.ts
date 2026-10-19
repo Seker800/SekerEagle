@@ -2964,6 +2964,9 @@ export interface components {
        * @enum {string}
        */
       duplicatePolicy: 'SKIP' | 'CREATE_COPY';
+      /** Format: uuid */
+      copySourceAssetId?: string;
+      copySourceRowVersion?: number;
     };
     Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;

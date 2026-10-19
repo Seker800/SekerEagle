@@ -47,6 +47,138 @@ async function fixtures() {
   };
 }
 
+test('existing editor copies retain private tags and metadata atomically in their source library', async () => {
+  for (const mode of ['MATERIAL', 'PHOTO']) {
+    const f = await fixtures();
+    const id = mode === 'PHOTO' ? f.photo.id : f.material.id;
+    const source = await prisma.eagleAsset.update({
+      where: { id },
+      data: { isPrivate: true, rating: 4 },
+    });
+    const tag = await prisma.eagleManualTag.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: mode,
+        name: 'private',
+        normalizedName: 'private',
+        marksAssetsPrivate: true,
+      },
+    });
+    await prisma.eagleAssetManualTag.create({
+      data: { ownerId: f.ownerId, libraryMode: mode, assetId: id, tagId: tag.id },
+    });
+    await prisma.eagleAssetAnnotation.create({
+      data: { ownerId: f.ownerId, libraryMode: mode, assetId: id, description: 'keep description' },
+    });
+    const storage = {
+      createMultipartUpload: async () => randomUUID(),
+      completeMultipartUpload: async () => {},
+      headObject: async () => ({ ContentLength: 12 }),
+      abortMultipartUpload: async () => {},
+    };
+    const capabilities = { assertUploadAllowed: () => ({ mimeType: 'image/png' }) };
+    const inspection = {
+      inspect: async () => ({
+        sha256: randomUUID().replaceAll('-', '').repeat(2),
+        format: 'png',
+        width: 20,
+        height: 10,
+        durationMs: null,
+      }),
+    };
+    const service = new EagleUploadService(prisma, storage, capabilities, inspection, mode);
+    const input = {
+      originalName: 'edited.png',
+      mimeType: 'image/png',
+      size: 12,
+      duplicatePolicy: 'CREATE_COPY',
+      copySourceAssetId: id,
+      copySourceRowVersion: source.rowVersion,
+    };
+    await assert.rejects(() => service.initiate(f.ownerId, input), NotFoundException);
+    await assert.rejects(() => service.initiate(randomUUID(), input, true), NotFoundException);
+    await assert.rejects(
+      () =>
+        new EagleUploadService(
+          prisma,
+          storage,
+          capabilities,
+          inspection,
+          mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO',
+        ).initiate(f.ownerId, input, true),
+      NotFoundException,
+    );
+    const session = await service.initiate(f.ownerId, input, true);
+    const result = await service.complete(f.ownerId, session.id, {
+      parts: [{ partNumber: 1, etag: 'part' }],
+    });
+    const copy = await prisma.eagleAsset.findUniqueOrThrow({
+      where: { id: result.assetId },
+      include: { annotation: true, manualTagLinks: true, processingJobs: true },
+    });
+    assert.notEqual(copy.id, source.id);
+    assert.equal(copy.libraryMode, mode);
+    assert.equal(copy.isPrivate, true);
+    assert.equal(copy.rating, 4);
+    assert.equal(copy.annotation.description, 'keep description');
+    assert.deepEqual(
+      copy.manualTagLinks.map((link) => link.tagId),
+      [tag.id],
+    );
+    assert.ok(copy.processingJobs.some((job) => job.kind === 'GENERATE_RENDITIONS'));
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).rowVersion,
+      source.rowVersion,
+    );
+    const replay = await service.complete(f.ownerId, session.id, {
+      parts: [{ partNumber: 1, etag: 'part' }],
+    });
+    assert.equal(replay.assetId, copy.id);
+  }
+});
+
+test('source changes during an existing editor upload roll back copy publication', async () => {
+  const f = await fixtures();
+  const service = new EagleUploadService(
+    prisma,
+    {
+      createMultipartUpload: async () => randomUUID(),
+      completeMultipartUpload: async () => {},
+      headObject: async () => ({ ContentLength: 12 }),
+    },
+    { assertUploadAllowed: () => ({ mimeType: 'image/png' }) },
+    {
+      inspect: async () => ({
+        sha256: 'e'.repeat(64),
+        format: 'png',
+        width: 20,
+        height: 10,
+        durationMs: null,
+      }),
+    },
+  );
+  const session = await service.initiate(f.ownerId, {
+    originalName: 'edited.png',
+    mimeType: 'image/png',
+    size: 12,
+    duplicatePolicy: 'CREATE_COPY',
+    copySourceAssetId: f.material.id,
+    copySourceRowVersion: 1,
+  });
+  await prisma.eagleAsset.update({
+    where: { id: f.material.id },
+    data: { rowVersion: { increment: 1 } },
+  });
+  await assert.rejects(
+    () => service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] }),
+    /原照片已变化/,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    1,
+  );
+});
+
 test('real service lists and ID reads cannot cross libraries or owners', async () => {
   const f = await fixtures();
   assert.deepEqual(

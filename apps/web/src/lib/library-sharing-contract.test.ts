@@ -59,3 +59,38 @@ for (const [name, execute] of Object.entries(operations)) {
     expect(results[1]).toEqual(results[0]);
   });
 }
+
+it.each(['MATERIAL', 'PHOTO'] as const)(
+  'edited copies bind source declarations and upload sessions to %s',
+  async (mode) => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(Response.json({ message: 'stop after declaration' }, { status: 400 }));
+    await expect(
+      createEagleApi(mode).uploadEagleAsset(
+        '',
+        new File(['png'], 'edited.png', { type: 'image/png' }),
+        vi.fn(),
+        {
+          duplicatePolicy: 'CREATE_COPY',
+          copySourceAssetId: 'source',
+          copySourceRowVersion: 4,
+          retry: true,
+        },
+      ),
+    ).rejects.toThrow('stop after declaration');
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/${mode === 'PHOTO' ? 'photos' : 'eagle'}/uploads`,
+    );
+    const rawBody = fetchMock.mock.calls[0]?.[1]?.body;
+    if (typeof rawBody !== 'string') throw new Error('Expected a JSON request body');
+    const body = JSON.parse(rawBody);
+    expect(body).toMatchObject({
+      duplicatePolicy: 'CREATE_COPY',
+      copySourceAssetId: 'source',
+      copySourceRowVersion: 4,
+    });
+    expect(body).not.toHaveProperty('ownerId');
+    expect(body).not.toHaveProperty('retry');
+  },
+);

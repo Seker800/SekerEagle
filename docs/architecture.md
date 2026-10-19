@@ -31,6 +31,12 @@ SekerEagle 是独立的多用户图片管理系统，提供业务数据完全分
 
 ## Shared library architecture gate
 
+### Existing photo editor integration
+
+沿用现有 `media/photo-editor/PhotoEditor` 的调整、滤镜、裁剪、水印和 Worker 渲染，不建立第二套编辑器。显式编辑是原图按需读取的例外：仅 JPG／PNG／WebP、最多 4800 万像素，预览缩至最长边 1280，原图保持不变；普通图库与查看器继续只读取派生媒体。该浏览器全尺寸编辑路径尚不承诺手机内存表现，细节见 `docs/photo-editor.md`。
+
+保存复用当前模式的认证分片上传，以 `CREATE_COPY` 创建独立资源。上传声明冻结来源 ID 与版本，由服务端验证 owner、模式和私密访问；发布事务锁定私密投影与源资源，复核版本后继承人工标签、私密状态、评分及说明。不复制 AI／人脸／照片组；来源声明保留至会话清理，以便源删除后明确拒绝发布，不产生源模式归属关联。失败重试复用同一输出文件与上传会话，确认完成后只重试读取结果。编辑器打开时冻结原图和保存回调，避免后台刷新改变本次编辑的目标。
+
 素材与照片的通用页面、瀑布流、缩略图、查看器、上传与编辑流程使用同一装配入口；API 的照片通用 Controller 只继承素材 Controller，不覆盖方法，服务从同一 provider 注册表装配。`npm run architecture:check` 在 CI 最前执行，`npm test` 同时运行分叉反例、API 方法／服务身份和客户端请求契约检查。摄影扩展保留在工作区组合层与摄影模块中。规则、允许差异和变更流程见 [共用逻辑门禁](library-sharing-gate.md)。
 
 ## Viewer location navigation

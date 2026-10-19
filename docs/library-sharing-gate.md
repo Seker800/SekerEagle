@@ -18,6 +18,8 @@
 
 ## 门禁如何工作
 
+照片编辑沿用既有 `PhotoEditor` 与 Worker、共用上传客户端及 `EagleUploadService`；两模式只绑定路由与查询键。来源声明、私密继承和重试均进入既有上传实现，不新增照片专属保存 Controller 或并行编辑器。原编辑器的布局与像素算法保持一份。
+
 `npm run architecture:check` 只读源码，以 TypeScript AST 检查：
 
 - App 只装配一个共用工作区；共用瀑布流、缩略图、筛选栏、查看器及上传／编辑 hooks 各有一个装配点，不能直接放入按模式判断的分支。

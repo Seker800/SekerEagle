@@ -6572,6 +6572,14 @@
             "type": "string",
             "enum": ["SKIP", "CREATE_COPY"],
             "default": "SKIP"
+          },
+          "copySourceAssetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "copySourceRowVersion": {
+            "type": "number",
+            "minimum": 1
           }
         },
         "required": ["originalName", "mimeType", "size"]

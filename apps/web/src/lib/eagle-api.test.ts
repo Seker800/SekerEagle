@@ -51,19 +51,35 @@ describe('listEagleAssetUpdates', () => {
 
   it('retries an edited copy detail read without uploading or creating another copy', async () => {
     vi.stubGlobal('window', { location: { origin: 'http://localhost:8180' } });
-    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(Response.json({ id: 'edit-session', partSize: 10 }))
-      .mockResolvedValueOnce(Response.json({ uploadUrl: 'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test' }))
+      .mockResolvedValueOnce(
+        Response.json({
+          uploadUrl: 'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test',
+        }),
+      )
       .mockResolvedValueOnce(new Response(null, { status: 200, headers: { etag: 'etag' } }))
       .mockResolvedValueOnce(Response.json({ assetId: 'copy', duplicate: false }))
-      .mockResolvedValueOnce(Response.json({ message: 'temporary detail failure' }, { status: 503 }))
+      .mockResolvedValueOnce(
+        Response.json({ message: 'temporary detail failure' }, { status: 503 }),
+      )
       .mockImplementation(async () => Response.json({ id: 'copy', isPrivate: true }));
     const file = new File(['png'], 'edited.png', { type: 'image/png' });
     const options = { duplicatePolicy: 'CREATE_COPY' as const, retry: true };
-    await expect(uploadEagleAsset('', file, vi.fn(), options)).rejects.toThrow('temporary detail failure');
+    await expect(uploadEagleAsset('', file, vi.fn(), options)).rejects.toThrow(
+      'temporary detail failure',
+    );
     const result = await uploadEagleAsset('', file, vi.fn(), options);
     expect(result.asset.id).toBe('copy');
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['/api/eagle/uploads', '/api/eagle/uploads/edit-session/parts/1', 'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test', '/api/eagle/uploads/edit-session/complete', '/api/eagle/assets/copy', '/api/eagle/assets/copy']);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+      '/api/eagle/uploads',
+      '/api/eagle/uploads/edit-session/parts/1',
+      'http://localhost:8180/sekereagle-assets/edit-part?X-Amz-Signature=test',
+      '/api/eagle/uploads/edit-session/complete',
+      '/api/eagle/assets/copy',
+      '/api/eagle/assets/copy',
+    ]);
   });
 
   it('uploads object parts through the current LAN gateway without browser credentials', async () => {
