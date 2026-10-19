@@ -1,4 +1,4 @@
-import { t, type MessageId } from '../../../i18n';
+import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
 
 import {
@@ -53,22 +53,31 @@ export interface PhotoAdjustmentOption {
   axisLabel?: string;
 }
 
-const BAND_LABELS: MessageId[] = ['红色', '橙色', '黄色', '绿色', '青色', '蓝色', '紫色', '洋红'];
-const AXIS_LABELS: MessageId[] = ['色相', '饱和度', '明度'];
-const CHANNEL_LABELS: MessageId[] = ['主曲线', '红色', '绿色', '蓝色'];
-const POINT_LABELS: MessageId[] = ['黑场', '暗部', '中间调', '亮部', '白场'];
-const ZONE_LABELS: MessageId[] = ['阴影', '中间调', '高光'];
+const BAND_LABELS = [
+  t('红色'),
+  t('橙色'),
+  t('黄色'),
+  t('绿色'),
+  t('青色'),
+  t('蓝色'),
+  t('紫色'),
+  t('洋红'),
+];
+const AXIS_LABELS = [t('色相'), t('饱和度'), t('明度')];
+const CHANNEL_LABELS = [t('主曲线'), t('红色'), t('绿色'), t('蓝色')];
+const POINT_LABELS = [t('黑场'), t('暗部'), t('中间调'), t('亮部'), t('白场')];
+const ZONE_LABELS = [t('阴影'), t('中间调'), t('高光')];
 export const ADVANCED_ADJUSTMENTS: readonly PhotoAdjustmentOption[] = [
   ...HSL_BANDS.flatMap((band, i) =>
     HSL_AXES.map((axis, j) => ({
       id: hslKey(band, axis),
       key: hslKey(band, axis),
       group: 'hsl' as const,
-      label: `${t(BAND_LABELS[i])} · ${t(AXIS_LABELS[j])}`,
+      label: `${BAND_LABELS[i]} · ${AXIS_LABELS[j]}`,
       family: band,
-      familyLabel: t(BAND_LABELS[i]),
+      familyLabel: BAND_LABELS[i],
       familyColor: `hsl(${HSL_CENTERS[i]} 70% 55%)`,
-      axisLabel: t(AXIS_LABELS[j]),
+      axisLabel: AXIS_LABELS[j],
     })),
   ),
   ...CURVE_CHANNELS.flatMap((channel, i) =>
@@ -76,10 +85,10 @@ export const ADVANCED_ADJUSTMENTS: readonly PhotoAdjustmentOption[] = [
       id: curveKey(channel, point),
       key: curveKey(channel, point),
       group: 'curves' as const,
-      label: `${t(CHANNEL_LABELS[i])} · ${t(POINT_LABELS[point])}`,
+      label: `${CHANNEL_LABELS[i]} · ${POINT_LABELS[point]}`,
       family: channel,
-      familyLabel: t(CHANNEL_LABELS[i]),
-      axisLabel: t(POINT_LABELS[point]),
+      familyLabel: CHANNEL_LABELS[i],
+      axisLabel: POINT_LABELS[point],
       min: -point * 25,
       max: 100 - point * 25,
     })),
@@ -89,10 +98,10 @@ export const ADVANCED_ADJUSTMENTS: readonly PhotoAdjustmentOption[] = [
       id: gradeKey(zone, axis),
       key: gradeKey(zone, axis),
       group: 'grading' as const,
-      label: `${t(ZONE_LABELS[i])} · ${t(AXIS_LABELS[j])}`,
+      label: `${ZONE_LABELS[i]} · ${AXIS_LABELS[j]}`,
       family: zone,
-      familyLabel: t(ZONE_LABELS[i]),
-      axisLabel: t(AXIS_LABELS[j]),
+      familyLabel: ZONE_LABELS[i],
+      axisLabel: AXIS_LABELS[j],
       min: axis === 'Luminance' ? -100 : 0,
       max: axis === 'Hue' ? 360 : 100,
       unit: axis === 'Hue' ? '°' : undefined,

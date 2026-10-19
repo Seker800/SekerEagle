@@ -1124,7 +1124,7 @@ export const enUS = {
   对比度: 'Contrast',
   饱和度: 'Saturation',
   中间调: 'Midtones',
-  HSL: 'HSL',
+  HSL: 'HSL mixer',
   曲线: 'Curves',
   色彩分级: 'Color grading',
   主曲线: 'Master curve',
