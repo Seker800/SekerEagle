@@ -163,7 +163,23 @@ enum EagleImportItemAction {
   SKIP_UNSUPPORTED
 }
 
+model EagleLibraryTransfer {
+  id String @id
+  ownerId String
+  sourceMode LibraryMode
+  targetMode LibraryMode
+  sourceIds String[]
+  plan Json
+  status String @default("PENDING")
+  result Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  @@index([ownerId, sourceMode, status, updatedAt])
+}
+
 model User {
+  libraryTransfers EagleLibraryTransfer[]
   photoPeople EaglePhotoPerson[]
   photoGroups EaglePhotoGroup[]
   id                       String                    @id @default(uuid())
