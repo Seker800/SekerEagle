@@ -6,10 +6,20 @@ import './styles.css';
 
 const queryClient = new QueryClient();
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>,
-);
+const root = createRoot(document.getElementById('root')!);
+if (import.meta.env.DEV && window.location.pathname === '/dev/photo-editor') {
+  void import('./components/media/photo-editor/PhotoEditorLab').then(({ PhotoEditorLab }) => {
+    root.render(
+      <StrictMode>
+        <PhotoEditorLab />
+      </StrictMode>,
+    );
+  });
+} else
+  root.render(
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </StrictMode>,
+  );

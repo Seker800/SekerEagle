@@ -6,6 +6,29 @@ describe('listEagleAssetUpdates', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+  it('creates edited-photo copies without sending owner or replacement fields', async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(Response.json({ message: 'stop at initiation' }, { status: 400 }));
+    await expect(
+      uploadEagleAsset('', new File(['png'], 'photo-edited.png', { type: 'image/png' }), vi.fn(), {
+        duplicatePolicy: 'CREATE_COPY',
+      }),
+    ).rejects.toThrow('stop at initiation');
+    expect(fetchMock.mock.calls[0]).toEqual([
+      '/api/eagle/uploads',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          originalName: 'photo-edited.png',
+          mimeType: 'image/png',
+          size: 3,
+          duplicatePolicy: 'CREATE_COPY',
+        }),
+      }),
+    ]);
+    expect(fetchMock.mock.calls).toHaveLength(1);
+  });
 
   it('sends asset ids in a bounded POST body instead of an expanding URL', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(

@@ -2959,6 +2959,11 @@ export interface components {
       mimeType: string;
       size: number;
       contentSha256?: string;
+      /**
+       * @default SKIP
+       * @enum {string}
+       */
+      duplicatePolicy: 'SKIP' | 'CREATE_COPY';
     };
     Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;

@@ -6567,6 +6567,11 @@
           "contentSha256": {
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "duplicatePolicy": {
+            "type": "string",
+            "enum": ["SKIP", "CREATE_COPY"],
+            "default": "SKIP"
           }
         },
         "required": ["originalName", "mimeType", "size"]

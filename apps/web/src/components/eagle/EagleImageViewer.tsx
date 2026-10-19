@@ -1,6 +1,6 @@
 import { t } from '../../i18n';
 import { IconRefresh } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
@@ -8,6 +8,10 @@ import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleImageViewer.module.css';
+import type { SavedPhoto } from '../media/photo-editor/photo-editor-save';
+const PhotoEditor = lazy(() =>
+  import('../media/photo-editor/PhotoEditor').then((module) => ({ default: module.PhotoEditor })),
+);
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = {
@@ -113,12 +117,17 @@ export function EagleImageViewer({
   descriptor,
   onLocate,
   onClose,
+  editSource,
+  onSavePhoto,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
+  editSource?: string;
+  onSavePhoto?: (file: File) => Promise<SavedPhoto>;
 }) {
+  const [editing, setEditing] = useState(false);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -187,8 +196,7 @@ export function EagleImageViewer({
           maxImageCacheCount: 64,
           imageLoaderLimit: 4,
           showNavigationControl: false,
-          showNavigator: true,
-          navigatorAutoFade: true,
+          showNavigator: false,
           animationTime: DIRECT_INTERACTION_ANIMATION_SECONDS,
           blendTime: 0,
           // Electron's WebGL drawer can miss its first texture commit until the viewport changes.
@@ -348,11 +356,29 @@ export function EagleImageViewer({
             <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
           <EagleImageCopyButton sourceUrl={image.src} />
+          {editSource && onSavePhoto && (
+            <button type="button" onClick={() => setEditing(true)}>
+              {t('编辑照片')}
+            </button>
+          )}
           <button type="button" onClick={onClose}>
             {' ' + t('关闭') + ' '}
           </button>
         </footer>
       </section>
+      {editing && editSource && onSavePhoto && (
+        <Suspense fallback={<div role="status">{t('正在读取照片…')}</div>}>
+          <div onClick={(event) => event.stopPropagation()}>
+            <PhotoEditor
+              key={editSource}
+              source={editSource}
+              name={image.alt}
+              onSave={onSavePhoto}
+              onClose={() => setEditing(false)}
+            />
+          </div>
+        </Suspense>
+      )}
     </div>
   );
 }

@@ -1,0 +1,101 @@
+.lab {
+  max-width: 1100px;
+  margin: auto;
+  padding: 60px 28px;
+  color: #eeeff1;
+}
+.lab header {
+  margin-bottom: 28px;
+}
+.eyebrow {
+  letter-spacing: 3px;
+  color: #e8b26c;
+  font-size: 12px;
+}
+.lab h1 {
+  font-size: 30px;
+  margin: 18px 0;
+}
+.lab p {
+  color: #a1a4aa;
+  line-height: 1.8;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding-bottom: 35px;
+  border-bottom: 1px solid #303237;
+}
+.actions label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.actions input {
+  max-width: 100%;
+}
+.actions button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 9px;
+  background: #e8b26c;
+  color: #21180c;
+  cursor: pointer;
+}
+.lab section {
+  margin-top: 36px;
+}
+.lab h2 {
+  font-size: 18px;
+  font-weight: 500;
+}
+.album {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+.card {
+  padding: 0;
+  background: #1b1c1f;
+  color: #c6c8cd;
+  border: 1px solid #303237;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  text-align: left;
+}
+.card img {
+  display: block;
+  width: 100%;
+  height: 180px;
+  object-fit: contain;
+  background: #101113;
+}
+.card span {
+  display: block;
+  padding: 14px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.lab footer {
+  margin-top: 35px;
+  color: #858b96;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.lab a {
+  color: #bdb1a0;
+}
+@media (max-width: 600px) {
+  .lab {
+    padding: 30px 18px;
+  }
+  .album {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,6 +6,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsInt,
+  IsIn,
   IsOptional,
   IsString,
   Matches,
@@ -39,6 +40,11 @@ export class InitiateEagleUploadDto {
   @IsOptional()
   @Matches(/^[a-fA-F0-9]{64}$/)
   contentSha256?: string;
+
+  @ApiPropertyOptional({ enum: ['SKIP', 'CREATE_COPY'], default: 'SKIP' })
+  @IsOptional()
+  @IsIn(['SKIP', 'CREATE_COPY'])
+  duplicatePolicy?: 'SKIP' | 'CREATE_COPY';
 }
 
 export class CompleteUploadPartDto {

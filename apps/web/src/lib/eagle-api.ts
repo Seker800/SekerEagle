@@ -621,6 +621,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     _token: string,
     file: File,
     onProgress: (value: { percent: number }) => void,
+    options?: { duplicatePolicy: 'CREATE_COPY' },
   ) {
     const session = await api<{
       id: string;
@@ -633,6 +634,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
           normalizeCameraMimeType(file.name, file.type) ??
           (file.type || 'application/octet-stream'),
         size: file.size,
+        ...(options ? { duplicatePolicy: options.duplicatePolicy } : {}),
       }),
     });
     const parts: Array<{

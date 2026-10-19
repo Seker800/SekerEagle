@@ -1,0 +1,335 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconBan, IconPencil, IconX } from '@tabler/icons-react';
+import { t } from '../../../i18n';
+import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
+import { drawPhoto } from './photo-editor-render';
+import { renderPhotoWatermark } from './photo-editor-watermark';
+import {
+  findWatermark,
+  WATERMARK_CATEGORIES,
+  WATERMARK_TEMPLATES,
+  type PhotoMetadata,
+  type WatermarkCategory,
+} from './photo-watermark-model';
+import styles from './PhotoEditor.module.css';
+import { ScrollableToolRow } from './ScrollableToolRow';
+
+function WatermarkPreview({
+  source,
+  edits,
+  metadata,
+  id,
+}: {
+  source: HTMLCanvasElement | null;
+  edits: PhotoEdits;
+  metadata: PhotoMetadata;
+  id: string;
+}) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!canvas.current || !source) return;
+    const result = renderPhotoWatermark(source, { ...edits, watermark: id }, metadata);
+    canvas.current.width = result.width;
+    canvas.current.height = result.height;
+    canvas.current.getContext('2d')?.drawImage(result, 0, 0);
+  }, [source, edits, metadata, id]);
+  return <canvas ref={canvas} className={styles.watermarkThumbnail} aria-hidden="true" />;
+}
+
+function WatermarkSettingsEditor({
+  edits,
+  source,
+  metadata,
+  onApply,
+  onClose,
+}: {
+  edits: PhotoEdits;
+  source: HTMLCanvasElement | null;
+  metadata: PhotoMetadata;
+  onApply: (patch: Partial<PhotoEdits>) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState(edits);
+  const change = (patch: Partial<PhotoEdits>) => setDraft((current) => ({ ...current, ...patch }));
+  return (
+    <div
+      className={styles.watermarkSettingsBackdrop}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        className={styles.watermarkSettings}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('水印设置')}
+        data-watermark-settings
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            onClose();
+          }
+        }}
+      >
+        <div className={styles.watermarkSettingsHeading}>
+          <strong>{t('水印设置')}</strong>
+          <button type="button" aria-label={t('关闭水印设置')} onClick={onClose}>
+            <IconX size={18} />
+          </button>
+        </div>
+        <div className={styles.watermarkSettingsPreview}>
+          <WatermarkPreview
+            source={source}
+            edits={draft}
+            metadata={metadata}
+            id={draft.watermark}
+          />
+        </div>
+        <label>
+          {t('签名文字')}
+          <input
+            autoFocus
+            type="text"
+            maxLength={64}
+            value={draft.watermarkText}
+            placeholder={t('输入署名或一句话')}
+            onChange={(event) => change({ watermarkText: event.target.value })}
+          />
+        </label>
+        <label>
+          {t('显示机型')}
+          <input
+            type="text"
+            maxLength={64}
+            value={draft.watermarkCamera}
+            placeholder={metadata.camera || t('留空使用照片相机信息')}
+            onChange={(event) => change({ watermarkCamera: event.target.value })}
+          />
+        </label>
+        <p className={styles.hint}>{t('仅修改水印显示文字，不改写照片拍摄信息。')}</p>
+        <label>
+          {t('文字大小')}
+          <output>{draft.watermarkScale}%</output>
+          <input
+            type="range"
+            min={60}
+            max={160}
+            step={1}
+            value={draft.watermarkScale}
+            aria-label={t('文字大小')}
+            onChange={(event) => change({ watermarkScale: Number(event.target.value) })}
+          />
+        </label>
+        <label>
+          {t('文字不透明度')}
+          <output>{draft.watermarkOpacity}%</output>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={draft.watermarkOpacity}
+            aria-label={t('文字不透明度')}
+            onChange={(event) => change({ watermarkOpacity: Number(event.target.value) })}
+          />
+        </label>
+        <div className={styles.watermarkSettingsActions}>
+          <button type="button" onClick={onClose}>
+            {t('取消')}
+          </button>
+          <button
+            type="button"
+            className={styles.watermarkApply}
+            onClick={() => {
+              onApply({
+                watermarkText: draft.watermarkText,
+                watermarkCamera: draft.watermarkCamera,
+                watermarkScale: draft.watermarkScale,
+                watermarkOpacity: draft.watermarkOpacity,
+              });
+              onClose();
+            }}
+          >
+            {t('完成')}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+export function PhotoWatermarkPanel({
+  edits,
+  metadata,
+  source,
+  disabled,
+  metadataLoading,
+  onChange,
+}: {
+  edits: PhotoEdits;
+  metadata: PhotoMetadata;
+  source: HTMLCanvasElement | null;
+  disabled: boolean;
+  metadataLoading: boolean;
+  onChange: (patch: Partial<PhotoEdits>) => void;
+}) {
+  const [group, setGroup] = useState<WatermarkCategory>('photo');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const selected = findWatermark(edits.watermark);
+  const { rotation, flip, cropRatio, cropZoom, cropAspect, cropX, cropY } = edits;
+  const selectedRef = useRef<HTMLButtonElement>(null);
+  const settingsButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (selected) setGroup(selected.category);
+  }, [selected]);
+  useEffect(() => {
+    selectedRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [edits.watermark, group]);
+  const thumbnail = useMemo(() => {
+    if (!source) return null;
+    const oriented = document.createElement('canvas');
+    drawPhoto(oriented, source, {
+      ...DEFAULT_PHOTO_EDITS,
+      rotation,
+      flip,
+      cropRatio,
+      cropZoom,
+      cropAspect,
+      cropX,
+      cropY,
+    });
+    const small = document.createElement('canvas');
+    const scale = Math.min(1, 240 / Math.max(oriented.width, oriented.height));
+    small.width = Math.max(1, Math.round(oriented.width * scale));
+    small.height = Math.max(1, Math.round(oriented.height * scale));
+    small.getContext('2d')?.drawImage(oriented, 0, 0, small.width, small.height);
+    return small;
+  }, [source, rotation, flip, cropRatio, cropZoom, cropAspect, cropX, cropY]);
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    settingsButton.current?.focus();
+  };
+  return (
+    <>
+      <ScrollableToolRow className={styles.watermarkCapabilities} label={t('水印设置')}>
+        {selected?.theme && (
+          <>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkTheme === 'white'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkTheme: 'white' })}
+            >
+              {selected.style === 'overlay' ? t('白字') : t('白底')}
+            </button>
+            <button
+              type="button"
+              aria-pressed={edits.watermarkTheme === 'black'}
+              disabled={disabled}
+              onClick={() => onChange({ watermarkTheme: 'black' })}
+            >
+              {selected.style === 'overlay' ? t('黑字') : t('黑底')}
+            </button>
+          </>
+        )}
+        {selected && (
+          <button
+            type="button"
+            aria-pressed={edits.watermarkShowParameters}
+            disabled={disabled || !metadata.parameters}
+            title={!metadata.parameters ? t('照片没有拍摄参数信息') : t('拍摄参数')}
+            onClick={() => onChange({ watermarkShowParameters: !edits.watermarkShowParameters })}
+          >
+            {t('拍摄参数')}
+          </button>
+        )}
+        {selected?.time && (
+          <button
+            type="button"
+            aria-pressed={edits.watermarkShowTime}
+            disabled={disabled || !metadata.capturedAt}
+            title={!metadata.capturedAt ? t('照片没有拍摄时间信息') : t('拍摄时间')}
+            onClick={() => onChange({ watermarkShowTime: !edits.watermarkShowTime })}
+          >
+            {t('拍摄时间')}
+          </button>
+        )}
+        {selected && (
+          <button
+            ref={settingsButton}
+            type="button"
+            aria-label={t('编辑水印文字')}
+            disabled={disabled}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <IconPencil size={14} />
+            {t('编辑文字')}
+          </button>
+        )}
+      </ScrollableToolRow>
+      <ScrollableToolRow className={styles.watermarkCategories} label={t('水印分类')}>
+        {WATERMARK_CATEGORIES.map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            disabled={disabled}
+            aria-pressed={group === item.id}
+            onClick={() => setGroup(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </ScrollableToolRow>
+      <ScrollableToolRow className={styles.watermarkOptions} label={t('水印模板')}>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-pressed={edits.watermark === 'none'}
+          onClick={() => onChange({ watermark: 'none' })}
+        >
+          <IconBan size={28} />
+          <span>{t('无水印')}</span>
+        </button>
+        {WATERMARK_TEMPLATES.filter((item) => item.category === group).map((template) => (
+          <button
+            key={template.id}
+            type="button"
+            ref={selected?.id === template.id ? selectedRef : undefined}
+            disabled={disabled}
+            aria-pressed={edits.watermark === template.id}
+            aria-label={template.label}
+            onClick={() =>
+              onChange({
+                watermark: template.id,
+                watermarkTheme: template.theme ? edits.watermarkTheme : 'black',
+                watermarkShowTime: template.time && edits.watermarkShowTime,
+              })
+            }
+          >
+            <WatermarkPreview
+              source={thumbnail}
+              edits={edits}
+              metadata={metadata}
+              id={template.id}
+            />
+            <span>{template.label}</span>
+          </button>
+        ))}
+      </ScrollableToolRow>
+      {metadataLoading && (
+        <span className={styles.watermarkMetadataStatus} role="status">
+          {t('正在读取拍摄信息…')}
+        </span>
+      )}
+      {settingsOpen && (
+        <WatermarkSettingsEditor
+          edits={edits}
+          source={thumbnail}
+          metadata={metadata}
+          onApply={onChange}
+          onClose={closeSettings}
+        />
+      )}
+    </>
+  );
+}

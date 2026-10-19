@@ -246,6 +246,8 @@ export function SekerEaglePage({
   const {
     api: {
       getEagleAsset,
+      getEagleAssetContentUrl,
+      uploadEagleAsset,
       getEagleAssetLocation,
       getEagleTrashAsset,
       getEaglePyramidDescriptor,
@@ -2401,6 +2403,20 @@ export function SekerEaglePage({
         <EagleImageViewer
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
+          onSavePhoto={async (file) => {
+            const result = await uploadEagleAsset(accessToken, file, () => undefined, {
+              duplicatePolicy: 'CREATE_COPY',
+            });
+            await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
+            return { id: result.asset.id, name: file.name };
+          }}
+          editSource={
+            libraryView !== 'TRASH' &&
+            previewImageAsset &&
+            ['image/jpeg', 'image/png', 'image/webp'].includes(previewImageAsset.mimeType)
+              ? getEagleAssetContentUrl(previewImageAsset.id)
+              : undefined
+          }
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={imagePreview.closePreview}
         />
