@@ -27,3 +27,14 @@ test('generic browser MIME is normalized by catalog without accepting conflictin
   assert.equal(normalizeCameraMimeType('image.dng', 'image/jpeg'), null);
   assert.equal(normalizeCameraMimeType('script.exe', 'application/octet-stream'), null);
 });
+
+test('accepts camera MIME aliases while retaining content validation and rejecting unrelated images', () => {
+  for (const [file, mime, expected] of [
+    ['photo.dng', 'image/tiff', 'image/x-adobe-dng'],
+    ['photo.DNG', 'image/x-dng', 'image/x-adobe-dng'],
+    ['photo.RAF', 'image/x-fujifilm-raf', 'image/x-fuji-raf'],
+    ['photo.NEF', 'image/x-nikon-raw', 'image/x-nikon-nef'],
+  ]) assert.equal(normalizeCameraMimeType(file!, mime!), expected);
+  assert.equal(normalizeCameraMimeType('photo.raf', 'image/jpeg'), null);
+  assert.equal(normalizeCameraMimeType('photo.nef', 'image/png'), null);
+});

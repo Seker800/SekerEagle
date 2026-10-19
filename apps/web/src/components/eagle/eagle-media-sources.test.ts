@@ -4,6 +4,7 @@ import {
   createEagleTileSource,
   createEaglePreviewTileSource,
   getEaglePreviewContentUrl,
+  getEagleEditContentUrl,
   needsEagleImagePyramid,
 } from './eagle-media-sources';
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
@@ -109,4 +110,18 @@ it('keeps the still preview when a motion rendition comes first and scopes paire
   expect(collapseLivePhotoComponents([paired, movie])).toEqual([paired]);
   expect(collapseLivePhotoComponents([movie])).toEqual([movie]);
   expect(getEagleLivePhotoContentUrl(movie)).toBeNull();
+});
+
+it('edits camera RAW from a current dedicated derivative, never from the sensor original', () => {
+  const raw = { ...asset, libraryMode: 'PHOTO', mimeType: 'image/x-adobe-dng', renditions: [
+    { id: 'edit-old', kind: 'PREVIEW', variant: 'edit', revision: 2, mimeType: 'image/webp' },
+    { id: 'edit-current', kind: 'PREVIEW', variant: 'edit', revision: 3, mimeType: 'image/webp' },
+    { id: 'preview-current', kind: 'PREVIEW', variant: 'default', revision: 3, mimeType: 'image/webp' },
+  ] } as EagleAssetListItem;
+  expect(getEagleEditContentUrl(raw)).toBe('/api/photos/assets/asset-1/renditions/edit-current');
+  expect(getEaglePreviewContentUrl(raw)).toBe('/api/photos/assets/asset-1/renditions/preview-current');
+  expect(getEagleEditContentUrl({ ...raw, renditions: [] })).toBeNull();
+  expect(getEagleEditContentUrl({ ...raw, renditions: raw.renditions.slice(0, 1) })).toBeNull();
+  expect(getEagleEditContentUrl({ ...asset, lifecycleStatus: 'READY' })).toBe('/api/eagle/assets/asset-1/content');
+  expect(getEagleEditContentUrl({ ...raw, lifecycleStatus: 'FAILED' })).toBeNull();
 });
