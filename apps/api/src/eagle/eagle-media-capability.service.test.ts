@@ -18,6 +18,7 @@ test('publishes frozen camera capabilities with separate image and video budgets
   assert.equal(capabilities.images.maxBytes, 250 * 1024 * 1024);
   assert.equal(capabilities.videos.maxBytes, 2 * 1024 * 1024 * 1024);
   assert.equal(capabilities.images.maxPixels, MAX_EAGLE_IMAGE_INPUT_PIXELS);
+  assert.equal(capabilities.images.maxRawPixels, 120_000_000);
 });
 
 test('accepts the supported media matrix including AVIF', () => {

@@ -39,3 +39,9 @@ test('accepts camera MIME aliases while retaining content validation and rejecti
   assert.equal(normalizeCameraMimeType('photo.raf', 'image/jpeg'), null);
   assert.equal(normalizeCameraMimeType('photo.nef', 'image/png'), null);
 });
+
+test('HEIC and HEIF container MIME aliases are consistent with content inspection', () => {
+  assert.equal(normalizeCameraMimeType('camera.heif', 'image/heic'), 'image/heif');
+  assert.equal(normalizeCameraMimeType('camera.heic', 'image/heif'), 'image/heic');
+  assert.equal(normalizeCameraMimeType('camera.heic', 'image/jpeg'), null);
+});
