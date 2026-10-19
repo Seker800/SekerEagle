@@ -577,6 +577,83 @@ try {
       }
     }
   }
+  const sendCases = [];
+  if (process.env.PHOTO_WORKBENCH_SEND === '1') {
+    const sample = liveCases.find((row) => row.mode === 'eagle' && row.name === 'apple-live.jpg');
+    if (!sample) throw new Error('Sending smoke requires PHOTO_WORKBENCH_LIVE=1');
+    const input = { operationId: randomUUID(), assetIds: [sample.assetId] };
+    const original = await api(`/eagle/assets/${sample.assetId}`);
+    const existingPhoto = liveCases.find(
+      (row) => row.mode === 'photos' && row.name === 'apple-live.jpg',
+    );
+    await api('/photos/assets/batch/trash', { assetIds: [existingPhoto.assetId] });
+    const result = await api('/eagle/assets/batch/send', input);
+    assert.equal(result.targetMode, 'PHOTO');
+    assert.equal(result.componentCount, 2);
+    assert.deepEqual(await api('/eagle/assets/batch/send', input), result);
+    assert.equal(
+      (
+        await fetch(`${origin}/api/eagle/assets/${sample.assetId}`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        })
+      ).status,
+      404,
+    );
+    for (const row of result.assets) {
+      const before = await fetch(`${origin}/api/eagle/assets/${row.sourceId}/original`, {
+        headers: { cookie: `sekereagle_access=${accessToken}` },
+      });
+      const after = await fetch(`${origin}/api/photos/assets/${row.assetId}/original`, {
+        headers: { cookie: `sekereagle_access=${accessToken}` },
+      });
+      assert.equal(after.status, 200);
+      assert.equal(
+        createHash('sha256')
+          .update(Buffer.from(await before.arrayBuffer()))
+          .digest('hex'),
+        createHash('sha256')
+          .update(Buffer.from(await after.arrayBuffer()))
+          .digest('hex'),
+      );
+    }
+    await waitFor(
+      async () =>
+        (await db.eagleAsset.count({
+          where: { id: { in: result.assets.map((row) => row.assetId) }, lifecycleStatus: 'READY' },
+        })) === result.assets.length,
+      'sent live photo previews',
+      480,
+    );
+    const targetId = result.assets.find((row) => row.sourceId === sample.assetId).assetId;
+    const target = await api(`/photos/assets/${targetId}`);
+    assert.equal(
+      target.livePhotoMotion.assetId,
+      result.assets.find((row) => row.sourceId !== sample.assetId).assetId,
+    );
+    assert.equal(target.displayName, original.displayName);
+    sendCases.push(result);
+    const reverse = await api('/photos/assets/batch/send', {
+      operationId: randomUUID(),
+      assetIds: [targetId],
+    });
+    assert.equal(reverse.targetMode, 'MATERIAL');
+    assert.equal(reverse.componentCount, 2);
+    await waitFor(
+      async () =>
+        (await db.eagleAsset.count({
+          where: { id: { in: reverse.assets.map((row) => row.assetId) }, lifecycleStatus: 'READY' },
+        })) === reverse.assets.length,
+      'reverse sent live photo previews',
+      480,
+    );
+    const materialTargetId = reverse.assets.find((row) => row.sourceId === targetId).assetId;
+    const materialTarget = await api(`/eagle/assets/${materialTargetId}`);
+    assert.equal(
+      materialTarget.livePhotoMotion.assetId,
+      reverse.assets.find((row) => row.sourceId !== targetId).assetId,
+    );
+    sendCases.push(reverse);
+  }
   // Synthetic historical import dates make the full-library date rail visible in acceptance.
   // Files without EXIF retain the production fallback: chronologicalAt equals libraryAddedAt.
   const historicalImports = [
@@ -641,6 +718,7 @@ try {
     photos: (await api('/photos/assets?limit=100')).items.length,
     materials: (await api('/eagle/assets?limit=100')).items.length,
     liveCases,
+    sendCases,
     cameraCases: cameraCases.map(({ name, mimeType, mode, assetId }) => ({
       name,
       mimeType,

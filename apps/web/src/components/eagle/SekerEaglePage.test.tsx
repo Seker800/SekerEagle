@@ -29,6 +29,7 @@ vi.mock('../media/loading/thumbnailLoadService', () => ({
 const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
 const getEagleAssetLocationMock = vi.fn();
+const sendEagleAssetsMock = vi.fn();
 const getEagleTrashAssetMock = vi.fn();
 const listEagleManualTagsMock = vi.fn();
 const createEagleManualTagMock = vi.fn();
@@ -66,6 +67,7 @@ vi.mock('../../lib/eagle-api', () => ({
   listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
   getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
   getEagleAssetLocation: (...args: unknown[]) => getEagleAssetLocationMock(...args),
+  sendEagleAssets: (...args: unknown[]) => sendEagleAssetsMock(...args),
   getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
   listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
   listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
@@ -390,6 +392,33 @@ describe('SekerEaglePage', () => {
     expect(
       view.client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-b'] }),
     ).not.toHaveLength(0);
+  });
+
+  it('offers sending from the single-selection context menu and removes the sent source', async () => {
+    sendEagleAssetsMock.mockImplementation(async () => {
+      listEagleAssetsMock.mockResolvedValue({ items: [], nextCursor: null });
+      return {
+        targetMode: 'PHOTO',
+        movedCount: 1,
+        componentCount: 1,
+        assets: [{ sourceId: asset.id, assetId: 'new-photo' }],
+      };
+    });
+    renderPage();
+    fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '发送到照片' }));
+    await waitFor(() =>
+      expect(sendEagleAssetsMock).toHaveBeenCalledWith('', {
+        assetIds: [asset.id],
+        operationId: expect.any(String),
+      }),
+    );
+    expect(
+      await screen.findByText('已发送 1 项，原图片已移入当前图库回收站。'),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument(),
+    );
   });
 
   it('returns from a search preview to the unfiltered dated neighborhood', async () => {
@@ -1208,7 +1237,14 @@ describe('SekerEaglePage', () => {
     };
     renderPage();
 
-    const expectedActions = ['另存为…', '复制图片', '添加标签', '删除人工标签', '删除所选素材'];
+    const expectedActions = [
+      '发送到照片',
+      '另存为…',
+      '复制图片',
+      '添加标签',
+      '删除人工标签',
+      '删除所选素材',
+    ];
     const card = await screen.findByRole('button', { name: /Owl Reference/ });
     expect(fireEvent.contextMenu(card, { clientX: 180, clientY: 120 })).toBe(false);
     const thumbnailMenu = screen.getByRole('menu', { name: '素材操作' });

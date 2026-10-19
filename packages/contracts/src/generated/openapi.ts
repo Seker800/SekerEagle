@@ -196,6 +196,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/batch/send': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_sendAssets'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/media-capabilities': {
     parameters: {
       query?: never;
@@ -1470,6 +1486,22 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations['EagleVectorController_reviewBatch'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/batch/send': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_sendAssets'];
     delete?: never;
     options?: never;
     head?: never;
@@ -2787,6 +2819,11 @@ export interface components {
       name: string;
       scopes: ('import:read' | 'import:write' | 'asset:write' | 'capture:write')[];
     };
+    SendEagleAssetsDto: {
+      assetIds: string[];
+      /** Format: uuid */
+      operationId: string;
+    };
     Object: Record<string, never>;
     CountEagleAssetsDto: {
       query: {
@@ -3190,6 +3227,27 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_sendAssets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendEagleAssetsDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -5145,6 +5203,27 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['BatchReviewVectorSuggestionsDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_sendAssets: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SendEagleAssetsDto'];
       };
     };
     responses: {

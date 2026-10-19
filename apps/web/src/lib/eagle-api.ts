@@ -183,6 +183,13 @@ export interface EagleSmartFolder {
   rowVersion: number;
 }
 
+export interface EagleLibraryTransferResult {
+  targetMode: LibraryMode;
+  movedCount: number;
+  componentCount: number;
+  assets: Array<{ sourceId: string; assetId: string }>;
+}
+
 export interface EagleAssetLocation {
   assetId: string;
   cursor: string | null;
@@ -321,6 +328,16 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   ): Promise<EagleAssetPage> {
     const result = await api<EagleAssetPage>(`/eagle/trash?${assetQuery(filters)}`, { signal });
     return { ...result, items: result.items.map(normalizeAsset) };
+  }
+
+  async function sendEagleAssets(
+    _token: string,
+    input: { assetIds: string[]; operationId: string },
+  ) {
+    return api<EagleLibraryTransferResult>('/eagle/assets/batch/send', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   }
 
   async function getEagleAssetLocation(_token: string, id: string, signal?: AbortSignal) {
@@ -691,6 +708,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     listEagleTrash,
     getEagleAsset,
     getEagleAssetLocation,
+    sendEagleAssets,
     getEagleTrashAsset,
     listEagleAssetUpdates,
     listEagleManualTags,
@@ -726,6 +744,7 @@ export const {
   listEagleTrash,
   getEagleAsset,
   getEagleAssetLocation,
+  sendEagleAssets,
   getEagleTrashAsset,
   listEagleAssetUpdates,
   listEagleManualTags,

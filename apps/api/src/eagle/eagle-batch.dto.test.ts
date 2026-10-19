@@ -36,3 +36,21 @@ test('batch manual tag changes still reject more than 1000 assets', async () => 
     true,
   );
 });
+
+test('sending requires an idempotency key and rejects client-supplied owner or destination', async () => {
+  const { SendEagleAssetsDto } = await import('./eagle.dto');
+  const dto = Object.assign(new SendEagleAssetsDto(), {
+    assetIds: createAssetIds(1),
+    operationId: createAssetIds(1)[0],
+  });
+  assert.equal((await validate(dto, { whitelist: true, forbidNonWhitelisted: true })).length, 0);
+  const invalid = Object.assign(new SendEagleAssetsDto(), {
+    assetIds: createAssetIds(1),
+    ownerId: 'foreign',
+    targetMode: 'PHOTO',
+  });
+  const errors = await validate(invalid, { whitelist: true, forbidNonWhitelisted: true });
+  assert.ok(errors.some((error) => error.property === 'operationId'));
+  assert.ok(errors.some((error) => error.property === 'ownerId'));
+  assert.ok(errors.some((error) => error.property === 'targetMode'));
+});

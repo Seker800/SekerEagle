@@ -1028,3 +1028,228 @@ test('asset location seeks a bounded neighborhood and rejects foreign, private, 
     await assert.rejects(() => service.locateAsset(f.ownerId, target.id), NotFoundException);
   }
 });
+
+test('explicit sending creates independent targets, preserves privacy, removes sources and retries idempotently', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  const copies = [];
+  const storage = {
+    copyObject: async (source, target) => copies.push([source, target]),
+    headObject: async () => ({ ContentLength: 1 }),
+  };
+  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  const tag = await f.materials.createManualTag(f.ownerId, { name: 'source-only' });
+  await f.materials.replaceAssetTags(f.ownerId, f.material.id, [tag.id]);
+  await prisma.eagleAsset.update({ where: { id: f.material.id }, data: { isPrivate: true } });
+  const input = { operationId: randomUUID(), assetIds: [f.material.id] };
+  await assert.rejects(() => sender.send(f.ownerId, input, false), NotFoundException);
+  await assert.rejects(() => sender.send(randomUUID(), input, true), NotFoundException);
+  await assert.rejects(
+    () =>
+      sender.send(
+        f.ownerId,
+        { operationId: randomUUID(), assetIds: [f.material.id, f.photo.id] },
+        true,
+      ),
+    NotFoundException,
+  );
+  assert.equal(copies.length, 0);
+  const result = await sender.send(f.ownerId, input, true);
+  assert.equal(result.targetMode, 'PHOTO');
+  assert.equal(result.movedCount, 1);
+  const targetId = result.assets[0].assetId;
+  const source = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } });
+  const target = await prisma.eagleAsset.findUniqueOrThrow({
+    where: { id: targetId },
+    include: { manualTagLinks: true, processingJobs: true },
+  });
+  assert.equal(source.libraryMode, 'MATERIAL');
+  assert.ok(source.deletedAt);
+  assert.equal(target.libraryMode, 'PHOTO');
+  assert.equal(target.isPrivate, true);
+  assert.equal(target.manualTagLinks.length, 0);
+  assert.notEqual(target.originalObjectKey, source.originalObjectKey);
+  assert.ok(
+    target.processingJobs.every((job) => job.libraryMode === 'PHOTO' && job.assetRevision === 1),
+  );
+  assert.deepEqual(await sender.send(f.ownerId, input, true), result);
+  assert.equal(copies.length, 1);
+  await assert.rejects(
+    () => new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(f.ownerId, input, true),
+    NotFoundException,
+  );
+});
+
+test('failed sends leave all sources active and retry the durable plan without duplicate targets', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  const second = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      originalName: 'second.jpg',
+      displayName: 'second',
+      normalizedDisplayName: 'second',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1,
+      originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.jpg`,
+      lifecycleStatus: 'READY',
+    },
+  });
+  let failed = true;
+  let calls = 0;
+  const storage = {
+    copyObject: async () => {
+      if (++calls === 2 && failed) throw new Error('temporary storage failure');
+    },
+    headObject: async () => ({ ContentLength: 1 }),
+  };
+  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  const input = { operationId: randomUUID(), assetIds: [f.material.id, second.id] };
+  await assert.rejects(() => sender.send(f.ownerId, input, false), /temporary/);
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', deletedAt: null },
+    }),
+    2,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO' } }),
+    1,
+  );
+  const pending = await prisma.eagleLibraryTransfer.findUniqueOrThrow({
+    where: { id: input.operationId },
+  });
+  assert.equal(pending.status, 'PENDING');
+  failed = false;
+  const [a, b] = await Promise.all([
+    sender.send(f.ownerId, input, false),
+    sender.send(f.ownerId, input, false),
+  ]);
+  assert.deepEqual(a, b);
+  assert.equal(new Set(a.assets.map((row) => row.assetId)).size, 2);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO' } }),
+    3,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', deletedAt: null },
+    }),
+    0,
+  );
+  assert.deepEqual(
+    pending.plan.map((row) => row.targetId).sort(),
+    a.assets.map((row) => row.assetId).sort(),
+  );
+});
+
+test('sending an Apple Live Photo to materials moves both originals and keeps their jobs in the target mode', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  const identifier = randomUUID();
+  await prisma.eagleAsset.update({
+    where: { id: f.photo.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+  });
+  const movie = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'pair.mov',
+      displayName: 'pair',
+      normalizedDisplayName: 'pair',
+      mimeType: 'video/quicktime',
+      format: 'mov',
+      byteSize: 1,
+      mediaRevision: 1,
+      originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.mov`,
+      lifecycleStatus: 'READY',
+      livePhotoIdentifier: identifier,
+      livePhotoRole: 'MOTION',
+    },
+  });
+  await prisma.eagleAssetRendition.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: movie.id,
+      kind: 'PREVIEW',
+      revision: 1,
+      storageKey: `users/${f.ownerId}/assets/${movie.id}/preview.mp4`,
+      mimeType: 'video/mp4',
+      byteSize: 1,
+      status: 'READY',
+    },
+  });
+  const storage = { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) };
+  const result = await new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(
+    f.ownerId,
+    { operationId: randomUUID(), assetIds: [f.photo.id] },
+    false,
+  );
+  assert.equal(result.targetMode, 'MATERIAL');
+  assert.equal(result.componentCount, 2);
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { ownerId: f.ownerId, libraryMode: 'PHOTO', deletedAt: null },
+    }),
+    0,
+  );
+  const targetIds = result.assets.map((row) => row.assetId);
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { id: { in: targetIds }, libraryMode: 'MATERIAL', mediaRevision: 1 },
+    }),
+    2,
+  );
+  const jobs = await prisma.eagleAssetProcessingJob.findMany({
+    where: { assetId: { in: targetIds } },
+  });
+  assert.ok(jobs.some((job) => job.processorVersion === 'camera-video-preview-v2'));
+  assert.ok(jobs.every((job) => job.libraryMode === 'MATERIAL'));
+});
+
+test('concurrent source edits or conflicting sends never publish duplicate targets or remove changed originals', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  let copies = 0;
+  const input = { operationId: randomUUID(), assetIds: [f.material.id] };
+  const storage = {
+    copyObject: async () => {
+      copies++;
+      await prisma.eagleAsset.update({
+        where: { id: f.material.id },
+        data: { rowVersion: { increment: 1 } },
+      });
+    },
+    headObject: async () => ({ ContentLength: 1 }),
+  };
+  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  await assert.rejects(() => sender.send(f.ownerId, input, false), /变化/);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt,
+    null,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO' } }),
+    1,
+  );
+  await assert.rejects(() => sender.send(f.ownerId, input, false), /变化/);
+  assert.equal(copies, 1);
+  storage.copyObject = async () => {};
+  const results = await Promise.allSettled([
+    sender.send(f.ownerId, { operationId: randomUUID(), assetIds: [f.material.id] }, false),
+    sender.send(f.ownerId, { operationId: randomUUID(), assetIds: [f.material.id] }, false),
+  ]);
+  assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO' } }),
+    2,
+  );
+});

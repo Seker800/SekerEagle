@@ -1,3 +1,4 @@
+import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
 import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
@@ -299,6 +300,7 @@ export function SekerEaglePage({
   const [isBatchDownloading, setIsBatchDownloading] = useState(false);
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
+  const [transferStatus, setTransferStatus] = useState<string | null>(null);
   const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const [editorTitle, setEditorTitle] = useState('');
@@ -311,6 +313,7 @@ export function SekerEaglePage({
   }, [thumbnailSize, preferencesKey]);
   useEffect(() => {
     setOriginalFileError(null);
+    setTransferStatus(null);
     setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
   }, [ownerId, libraryMode]);
@@ -550,6 +553,10 @@ export function SekerEaglePage({
   );
   const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
+  const selectedTransferAssets = selectedAssetIds.flatMap((id) => {
+    const asset = assetsById.get(id);
+    return asset ? [asset] : [];
+  });
   const contextMenuAsset =
     selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
   const imageClipboardAvailable = canCopyImageToClipboard();
@@ -1515,6 +1522,11 @@ export function SekerEaglePage({
                     {t('图片内容搜索暂不可用，当前仅匹配名称和人工标签。')}
                   </div>
                 )}
+              {transferStatus && (
+                <div className={styles.statusBar} role="status">
+                  {transferStatus}
+                </div>
+              )}
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
                   {uploadStatus}
@@ -2158,6 +2170,30 @@ export function SekerEaglePage({
               {selectedAssetIds.length}
               {' ' + t('项')}
             </div>
+            {libraryView !== 'TRASH' &&
+              selectedTransferAssets.length === selectedAssetIds.length &&
+              selectedTransferAssets.every((asset) => asset.mimeType.startsWith('image/')) && (
+                <EagleSendAssetsMenuItem
+                  key={`${storeScope}:${[...selectedAssetIds].sort().join(',')}`}
+                  assetIds={selectedAssetIds}
+                  ownerId={ownerId}
+                  label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
+                  disabled={selectedTransferAssets.some(
+                    (asset) => asset.lifecycleStatus !== 'READY',
+                  )}
+                  onSent={(result) => {
+                    setAssetContextMenu(null);
+                    setSelectedAssetIds([]);
+                    setSelectedAssetId(null);
+                    setIsBatchSelection(false);
+                    setTransferStatus(
+                      t('已发送 {{value1}} 项，原图片已移入当前图库回收站。', {
+                        value1: result.movedCount,
+                      }),
+                    );
+                  }}
+                />
+              )}
             {contextMenuAsset && libraryView !== 'TRASH' ? (
               <button
                 type="button"

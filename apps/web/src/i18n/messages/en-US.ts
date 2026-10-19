@@ -1,4 +1,10 @@
 export const enUS = {
+  发送到素材: 'Send to Materials',
+  发送到照片: 'Send to Photos',
+  '正在发送…': 'Sending…',
+  '发送失败，请重试。': 'Sending failed. Please retry.',
+  '已发送 {{value1}} 项，原图片已移入当前图库回收站。':
+    'Sent {{value1}} items. Originals are now in this library’s trash.',
   定位到时间线: 'Locate in timeline',
   '正在定位…': 'Locating…',
   '无法定位这张图片，请重试。': 'Unable to locate this image. Please retry.',

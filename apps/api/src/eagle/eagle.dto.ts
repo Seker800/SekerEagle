@@ -171,6 +171,12 @@ export class EagleAssetIdsDto {
   assetIds!: string[];
 }
 
+export class SendEagleAssetsDto extends EagleAssetIdsDto {
+  @ApiProperty({ format: 'uuid' })
+  @IsUUID('4')
+  operationId!: string;
+}
+
 export class ListEagleAssetUpdatesDto {
   @Transform(({ value }: { value: unknown }) => String(value).split(',').filter(Boolean))
   @IsArray()

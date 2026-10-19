@@ -1,5 +1,6 @@
 import {
   AbortMultipartUploadCommand,
+  CopyObjectCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
@@ -145,6 +146,16 @@ export class ObjectStorageService implements OnModuleDestroy {
         throw new ServiceUnavailableException('对象存储暂时不可用，请稍后重试。');
       throw error;
     }
+  }
+
+  async copyObject(sourceKey: string, targetKey: string): Promise<void> {
+    await this.client.send(
+      new CopyObjectCommand({
+        Bucket: this.bucket,
+        Key: targetKey,
+        CopySource: `${this.bucket}/${sourceKey.split('/').map(encodeURIComponent).join('/')}`,
+      }),
+    );
   }
 
   async deleteObject(key: string): Promise<void> {

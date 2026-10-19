@@ -262,6 +262,33 @@
         "tags": ["DesktopBootstrap"]
       }
     },
+    "/api/eagle/assets/batch/send": {
+      "post": {
+        "operationId": "EagleController_sendAssets",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendEagleAssetsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/media-capabilities": {
       "get": {
         "operationId": "EagleController_getMediaCapabilities",
@@ -3035,6 +3062,33 @@
         "tags": ["EagleVector"]
       }
     },
+    "/api/photos/assets/batch/send": {
+      "post": {
+        "operationId": "PhotosController_sendAssets",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendEagleAssetsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
     "/api/photos/media-capabilities": {
       "get": {
         "operationId": "PhotosController_getMediaCapabilities",
@@ -5595,6 +5649,23 @@
           }
         },
         "required": ["name", "scopes"]
+      },
+      "SendEagleAssetsDto": {
+        "type": "object",
+        "properties": {
+          "assetIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operationId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": ["assetIds", "operationId"]
       },
       "Object": {
         "type": "object",

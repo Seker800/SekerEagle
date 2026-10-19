@@ -1,3 +1,6 @@
+import { Optional } from '@nestjs/common';
+import { EagleLibraryTransferService } from './eagle-library-transfer.service';
+import { SendEagleAssetsDto } from './eagle.dto';
 import {
   Body,
   Controller,
@@ -64,7 +67,15 @@ export class EagleController {
     private readonly eagle: EagleService,
     private readonly media: EagleMediaService,
     private readonly privacy: EaglePrivacyService,
+    @Optional() private readonly transfers?: EagleLibraryTransferService,
   ) {}
+
+  @Post('assets/batch/send')
+  @UseGuards(BrowserOriginGuard)
+  sendAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: SendEagleAssetsDto) {
+    if (!this.transfers) throw new Error('Library transfer service is unavailable');
+    return this.transfers.send(principal.sub, input, principal.canViewPrivate === true);
+  }
 
   @Get('media-capabilities')
   getMediaCapabilities() {

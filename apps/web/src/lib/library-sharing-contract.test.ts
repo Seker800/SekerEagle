@@ -22,6 +22,8 @@ for (const factory of factories) {
   });
 }
 const operations = {
+  send: (mode: LibraryMode) =>
+    createEagleApi(mode).sendEagleAssets('', { assetIds: ['asset'], operationId: 'operation' }),
   location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('', 'asset'),
   list: (mode: LibraryMode) =>
     createEagleApi(mode).listEagleAssets('', { limit: 20, search: 'cat' }),

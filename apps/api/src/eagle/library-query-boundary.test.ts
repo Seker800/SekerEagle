@@ -4,6 +4,20 @@ import { join } from 'node:path';
 import test from 'node:test';
 import ts from 'typescript';
 
+function hasLibraryScope(receiver: string, predicate: string) {
+  return (
+    /libraryMode|inLibrary\(/.test(predicate) ||
+    (receiver.endsWith('.eagleLibraryTransfer') &&
+      /sourceMode/.test(predicate) &&
+      /ownerId/.test(predicate))
+  );
+}
+test('transfer operation scope never exempts ordinary asset queries or omits the owner', () => {
+  assert.equal(hasLibraryScope('tx.eagleLibraryTransfer', '{ ownerId, sourceMode }'), true);
+  assert.equal(hasLibraryScope('tx.eagleLibraryTransfer', '{ sourceMode }'), false);
+  assert.equal(hasLibraryScope('tx.eagleAsset', '{ ownerId, sourceMode }'), false);
+});
+
 // A security tripwire for fluent/newline Prisma calls as well as ordinary calls.
 // Runtime database tests remain authoritative about owner and mode behavior.
 test('library service ORM predicates always declare a library scope', () => {
@@ -29,7 +43,7 @@ test('library service ORM predicates always declare a library scope', () => {
             const where = args.properties.find(
               (property) => property.name?.getText(ast) === 'where',
             );
-            if (where && !/libraryMode|inLibrary\(/.test(where.getText(ast)))
+            if (where && !hasLibraryScope(receiver, where.getText(ast)))
               violations.push(
                 `${file}:${ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1}`,
               );
