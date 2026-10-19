@@ -1,6 +1,7 @@
 import { createCanvas, loadImage, type Canvas } from '@napi-rs/canvas';
 import { describe, expect, it, vi } from 'vitest';
 import { renderPhotoWatermark } from './photo-editor-watermark';
+import { paintFrostedWatermarkBackground } from './photo-watermark-background';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 import { WATERMARK_TEMPLATES, photoWatermarkLayout, findWatermark } from './photo-watermark-model';
 import { drawPhoto } from './photo-editor-render';
@@ -427,7 +428,7 @@ it('never invents a title, shows detected capture time by default and respects m
 
 it('draws every watermark with one regular sans font, solid black or white and no effects', () => {
   for (const template of WATERMARK_TEMPLATES) {
-    for (const theme of ['black', 'white'] as const) {
+    for (const theme of ['black', 'white', 'frosted'] as const) {
       const draws: {
         font: string;
         color: unknown;
@@ -467,6 +468,8 @@ it('draws every watermark with one regular sans font, solid black or white and n
       for (const draw of draws) {
         expect(draw.font, template.id).toMatch(/^400 [\d.]+px system-ui, sans-serif$/);
         expect(['#000000', '#ffffff'], template.id).toContain(draw.color);
+        if (theme === 'frosted' && !template.overlay)
+          expect(draw.color, template.id).toBe('#ffffff');
         expect(draw.alpha, template.id).toBe(1);
         expect(draw.shadow, template.id).toBe(0);
         expect(draw.filter, template.id).toBe('none');
@@ -548,4 +551,23 @@ it('renders a blurred photo-colored background while preserving every source pix
       again.toBuffer('image/png').equals((output as unknown as Canvas).toBuffer('image/png')),
     ).toBe(true);
   }
+});
+
+it('keeps dark glass readable while retaining local image shapes instead of averaging them', () => {
+  const photo = createCanvas(512, 256);
+  const context = photo.getContext('2d');
+  context.fillStyle = '#000000';
+  context.fillRect(0, 0, 512, 256);
+  context.fillStyle = '#ffffff';
+  for (let x = 0; x < 512; x += 64) context.fillRect(x, 0, 32, 256);
+  const output = asHTML(createCanvas(512, 256));
+  paintFrostedWatermarkBackground(asHTML(photo), output, create);
+  const light = pixel(output, 80, 128)[0];
+  const dark = pixel(output, 112, 128)[0];
+  expect(light).toBeLessThanOrEqual(116);
+  expect(light - dark).toBeGreaterThan(95);
+  const edge = pixel(output, 95, 128)[0];
+  expect(edge).toBeGreaterThan(dark + 10);
+  expect(edge).toBeLessThan(light - 10);
+  expect(pixel(output, 80, 128)[3]).toBe(255);
 });
