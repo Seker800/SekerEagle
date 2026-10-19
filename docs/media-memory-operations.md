@@ -13,7 +13,7 @@ PostgreSQL 容器显式分配 512 MiB `/dev/shm`，用于图库查询的排序�
 - 超过 4096px 或 1600 万像素的静态图片生成 512px Deep Zoom WebP 切片。
 - 代表色从 512px 以内的 THUMBNAIL 提取，不再次读取原图。
 - Sharp cache 为 64 MiB、concurrency 为 1；OpenSeadragon cache 为 64 tiles、loader limit 为 4。
-- React Query 的筛选页只保存 ID；同一 owner 的素材实体按挂载引用共享，最后一个消费者卸载时立即释放。
+- React Query 的筛选页只保存 ID；同一 owner＋模式的资源实体按挂载引用共享，最后一个消费者卸载时立即释放。
 - 桌面冷缓存只消费一条上游流：先有界分块落盘、校验并原子提交，再从本地文件服务；不使用 `Response.body.tee()`。
 - 本地 MinIO 的 namespace scanner 默认为 `slowest`，避免数十万小瓦片反复扫描形成高 CPU 和可回收 slab；代价是容量统计更新较慢。
 
@@ -21,9 +21,9 @@ PostgreSQL 容器显式分配 512 MiB `/dev/shm`，用于图库查询的排序�
 
 ## 部署与回填
 
-1. 使用 `npm run db:migrate:deploy` 部署 additive migration；命令会先执行安全目标检查。
-2. 发布 API、worker 与 web。旧 PREVIEW/THUMBNAIL 仍可回退使用，因此组件可滚动升级。
-3. 在“处理任务”页面执行一次“补齐任务”。每轮最多创建 500 个任务，可重复执行，任务唯一键保证幂等。
+1. 先在隔离环境验证迁移及媒体链路，再通过 `npm run deploy:mac` 执行正式发布；该入口先构建、停止写入服务，再等待迁移退出码为 0 后启动。代码／测试任务不会自动执行此步骤。
+2. 不因 migration 是 additive 或存在旧预览回退而假定可以混跑任意版本。独立执行 migration 时，必须先通过安全目标检查并停掉 API／worker 写入。
+3. 在“处理任务”页执行“补齐任务”：每轮最多新建／重排合计 500 个任务，可重复执行。核验以当前版本的 READY 派生事实为准，正常任务日志被裁剪不会触发全库重做；它不逐对象 HEAD 检查物理文件。
 4. 先观察 INTERACTIVE 队列完成，再允许 NIGHT/ALWAYS 模式处理代表色和金字塔后台队列。
 5. 观察 `eagle_media_source_selected`：代表色任务必须显示 `THUMBNAIL`；观察 `eagle_media_job_completed` 的 RSS 字段定位峰值。
 

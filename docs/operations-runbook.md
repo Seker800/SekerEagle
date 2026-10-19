@@ -117,7 +117,7 @@ AI 标签是否已完成，以同一 owner、素材、素材版本和处理器�
 ## 图片向量与人工标签建议
 
 - 图片向量运行状态和队列控制位于“待处理 → 处理任务”；参与推荐标签及向量中心配置位于“设置 → 人工标签推荐”；建议审核和遗漏分类分别位于“待处理 → 推荐审核 / 待分类”。标签默认全部关闭；只有用户显式开启并点击“生成中心”后才参与人工标签建议。
-- “扫描缺失向量”每次最多扫描 500 张尚无当前处理任务的图片，可重复执行；图片导入和普通图库不会等待 MLX。
+- “扫描缺失向量”针对当前账号／模式执行集合式对账：补建缺失任务、重排已完成但无当前空间有效向量的任务，复用仍有效的结果；该入口没有 500 张分页上限，不要与“补齐任务”的单轮 500 个预算混淆。请求返回不代表推理完成，进度仍在处理队列查看。
 - 处理时段、暂停和恢复继续使用素材处理的系统级队列设置。新导入的交互式预览优先于向量历史回填。
 - 标签中心刷新采用旁路代际。构建失败时继续使用旧中心；关闭标签会使其未审核建议失效，但不会删除中心、人工标签或审核历史。
 - 当前宿主日志在 `.runtime/mlx-embedding.log` 和 `.runtime/mlx-embedding.error.log`；不得记录 bearer token、图片内容或向量。
@@ -130,7 +130,7 @@ docker compose --env-file .env -f deploy/mac/docker-compose.yml ps
 curl -fsS http://127.0.0.1:8180/api/health/ready
 ```
 
-模型升级不得覆盖 current 空间。应固定新 revision 和新的 space id，旁路回填、通过真实人工标签黄金集后再切换；旧空间延迟清理。PostgreSQL 备份必须包含 `vector` extension、embedding、prototype、member distance、suggestion 与 provenance 表；恢复后先部署 migration，再恢复数据并重建 HNSW 索引。
+模型升级不得覆盖 current 空间。旁路回填、黄金集评估与原子切换是后续迁移方案，当前没有可直接执行的空间升级命令；仅改 revision／space id 环境变量会明确拒绝不兼容空间，不会自动回填。正式模型迁移需单独设计和验证。PostgreSQL 备份必须包含 `vector` extension、embedding、prototype、member distance、suggestion 与 provenance 表；恢复后先部署 migration，再恢复数据并重建 HNSW 索引。
 
 ## 应用存储身份与上传清理
 

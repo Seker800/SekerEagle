@@ -5,11 +5,11 @@
 
 ## 十分钟了解项目
 
-SekerEagle 是独立、自托管、多用户隔离的个人素材库。PostgreSQL 保存业务事实，MinIO
+SekerEagle 是独立、自托管、多用户隔离的图片管理系统，素材与照片业务隔离、底层实现共用。PostgreSQL 保存业务事实，MinIO
 保存对象，NestJS API 承载业务规则，可重试 worker 生成缩略图、预览、颜色和切片等派生
 资源。React Web、Eagle 导入器和浏览器采集插件只通过同源 gateway 访问 API。Apple
 Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量和人工标签建议；也可以
-通过本机 Ollama 的 Qwen3-VL 8B Instruct 生成具体名词标签。两类 AI 能力默认都不运行。
+通过本机 Ollama 的 Qwen3-VL 8B Instruct 生成具体名词标签。图片向量是否生成受处理队列和宿主模型可用性控制；8B 打标由独立开关控制，普通图片语义搜索只依赖 2B。
 
 当前项目处于 `0.1.x` 早期公开阶段。macOS + Apple Silicon 是完整验证路径；Linux/x64
 尚不在完整支持矩阵内。API 和数据模型在次版本中仍可能变化，生产升级前必须备份。
@@ -76,11 +76,14 @@ npm run env:create
 
 ```sh
 npm run ci:check
-npm run mlx:test
+npm run test:worker-leases
+npm run contracts:check
+npm run test:library-integration
+SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
 ```
 
 `ci:check` 已覆盖 lint、typecheck、unit test、build、格式检查和开源准备检查。只改非 MLX
-组件时可以先运行受影响 workspace 的测试缩短反馈周期，但合并里程碑前仍要运行完整门禁。
+组件时可以先运行受影响 workspace 的测试缩短反馈周期，但合并里程碑前仍要运行对应完整门禁。真实数据库与 MinIO 测试创建临时隔离资源，不接触现用实例；MLX 改动另在受支持宿主运行 `npm run mlx:test`。覆盖范围、额外依赖与未验证项见 [测试覆盖与执行](testing.md)。
 
 常见命令：
 
@@ -97,7 +100,7 @@ npm run performance:media-memory
 
 提交类型使用中文：`新增`、`修复`、`重构`、`清理`、`文档`。贡献者按
 [`CONTRIBUTING.md`](../CONTRIBUTING.md) 使用 DCO sign-off。维护流程可以创建本地提交，
-但不应自动 push。
+提交与 push 按用户授权及 AGENTS 执行；本项目已允许 agent 自主提交与 push。
 
 ## Schema、API 与生成文件
 
@@ -105,10 +108,10 @@ npm run performance:media-memory
 
 1. 先确认目标数据库通过 `npm run db:guard`。
 2. schema 与 migration 一起提交；不要修改已经发布的 migration。
-3. migration 尽量 additive，保证旧 API、worker 和 Web 可以按文档顺序滚动升级。
+3. migration 尽量 additive，但不能由此推断任意旧版本都兼容。使用标准部署入口，先构建，再停止 gateway／API／worker，等待 migration 成功后启动；失败不恢复写入，不自动降级数据库。
 4. 补 schema contract、owner 隔离和受影响服务测试。
 
-修改 Controller、DTO 或 OpenAPI 装饰器后运行 `npm run contracts:check`。以下文件是生成物，
+修改 Controller、DTO 或 OpenAPI 装饰器后先运行 `npm run contracts:generate`，审查并提交生成差异，再用 `npm run contracts:check` 检查漂移。以下文件是生成物，
 不应手工维护：
 
 - `packages/contracts/openapi.json`

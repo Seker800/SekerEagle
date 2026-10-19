@@ -24,7 +24,9 @@ Apache-2.0，`services/mlx-embedding` 是 GPL-3.0-only。
 npm ci
 npm run db:generate
 npm run ci:check
-npm run oss:check
+npm run test:worker-leases
+npm run contracts:check
+npm run test:library-integration
 ```
 
 修改 MLX sidecar 时还应运行：
@@ -40,3 +42,5 @@ npm run oss:check
 
 贡献采用 Developer Certificate of Origin 方式。请在 commit 中使用 `git commit -s` 添加
 `Signed-off-by`，表示你有权提交该贡献并允许项目按对应许可证分发。
+
+测试按变更风险选择；隔离资源、安全目标检查、Docker 权限验证、模型测试与当前覆盖边界见 [测试覆盖与执行](docs/testing.md)。生成契约有预期差异时先运行 `contracts:generate` 并审查提交，再检查漂移。

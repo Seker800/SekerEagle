@@ -387,6 +387,9 @@ English translations can be added incrementally without blocking the English pro
 npm ci
 npm run db:generate
 npm run ci:check
+npm run test:worker-leases
+npm run contracts:check
+npm run test:library-integration
 ./scripts/mlx-embedding-host.sh test
 npm run oss:check
 ```
@@ -426,3 +429,5 @@ Except for `services/mlx-embedding`, repository code is released under the
 `mlx-embeddings`, that service is released separately under
 [GPL-3.0-only](services/mlx-embedding/LICENSE). See
 [third-party notices](THIRD_PARTY_NOTICES.md) for component and model attribution.
+
+See [Testing coverage and execution](docs/testing.md) for CI gates, isolated integration tests, and verification limits.

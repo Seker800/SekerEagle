@@ -126,3 +126,40 @@ test('failed or unobservable migration never reaches service startup', async () 
     );
   }
 });
+
+test('missing or ambiguous migration identity never starts services', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  for (const identity of ['', 'one\ntwo']) {
+    const calls = [];
+    assert.throws(
+      () =>
+        deployCompose(selectComposeFiles(''), (args) => {
+          calls.push(args);
+          return args.includes('-q') ? identity : '';
+        }),
+      /Migration container/,
+    );
+    assert.equal(
+      calls.some((args) => args[0] === 'wait'),
+      false,
+    );
+    assert.equal(
+      calls.some((args) => args.includes('up') && !args.includes('migrate')),
+      false,
+    );
+  }
+});
+test('build failure preserves running writers and does not attempt migration', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  const calls = [];
+  assert.throws(
+    () =>
+      deployCompose(selectComposeFiles(''), (args) => {
+        calls.push(args);
+        throw new Error('build failed');
+      }),
+    /build failed/,
+  );
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes('build'));
+});

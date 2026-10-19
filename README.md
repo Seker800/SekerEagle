@@ -346,6 +346,9 @@ flowchart LR
 npm ci
 npm run db:generate
 npm run ci:check
+npm run test:worker-leases
+npm run contracts:check
+npm run test:library-integration
 ./scripts/mlx-embedding-host.sh test
 npm run oss:check
 ```
@@ -380,3 +383,5 @@ pgvector、MinIO、Sharp、OpenSeadragon，以及可选的 Python/MLX sidecar。
 GPLv3 的 `mlx-embeddings`，`services/mlx-embedding` 单独按
 [GPL-3.0-only](services/mlx-embedding/LICENSE) 发布。第三方组件与模型说明见
 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。
+
+测试执行入口、CI 覆盖与限制见 [测试覆盖与执行](docs/testing.md)。

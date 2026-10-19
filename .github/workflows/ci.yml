@@ -19,11 +19,14 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm run ci:check
+      - run: npm run test:worker-leases
       - run: npm run contracts:check
       - name: Verify restricted storage credentials and private bucket
         run: SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
       - name: Verify real database isolation, migrations and full restore
         run: npm run test:library-integration
+      - name: Verify HTTP login and dual-mode media pipeline
+        run: PHOTO_WORKBENCH_BASIC=1 npm run test:photo-smoke
       - name: Install camera media test runtime
         run: |
           sudo apt-get update

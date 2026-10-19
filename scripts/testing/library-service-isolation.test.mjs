@@ -1691,3 +1691,82 @@ test('PAT usage updates remain bounded in PostgreSQL while revocation takes effe
   await service.revoke(f.ownerId, token.id);
   await assert.rejects(() => service.authenticate(token.token), /PAT 无效或已过期/);
 });
+
+test('concurrent semantic builders reclaim stale leases and cannot publish through an old lease', async () => {
+  const { claimNextTagBuild, holdTagBuildLease } =
+    await import('../../apps/worker/dist/tag-build-lease.js');
+  const f = await fixtures();
+  const tag = await f.photos.createManualTag(f.ownerId, { name: 'lease-test' });
+  const space = await prisma.eagleEmbeddingSpace.create({
+    data: {
+      id: randomUUID(),
+      model: 'isolated-model',
+      revision: 'test-revision',
+      dimensions: 1024,
+      instructionVersion: 'test',
+      preprocessingVersion: 'test',
+      normalized: true,
+      isCurrent: false,
+    },
+  });
+  const build = await prisma.eagleTagSemanticBuild.create({
+    data: { ownerId: f.ownerId, libraryMode: 'PHOTO', tagId: tag.id },
+  });
+  const now = new Date(Date.now() + 1000);
+  const claims = await Promise.all([
+    claimNextTagBuild(prisma, now),
+    claimNextTagBuild(prisma, now),
+  ]);
+  const active = claims.filter(Boolean);
+  assert.equal(active.length, 1);
+  assert.equal(active[0].id, build.id);
+  assert.equal(await claimNextTagBuild(prisma, new Date(now.getTime() + 60_000)), null);
+  const snapshot = await prisma.eagleTagPrototypeSnapshot.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      tagId: tag.id,
+      spaceId: space.id,
+      version: 1,
+      generationId: randomUUID(),
+      sourceAssetCount: 0,
+      sourceSetDigest: 'test',
+      algorithm: 'test',
+      algorithmVersion: 'test',
+      algorithmParams: {},
+    },
+  });
+  await prisma.eagleTagSemanticBuild.update({
+    where: { id: build.id },
+    data: { candidateSnapshotId: snapshot.id },
+  });
+  const reclaimed = await claimNextTagBuild(prisma, new Date(now.getTime() + 11 * 60_000));
+  assert.equal(reclaimed.leaseVersion, active[0].leaseVersion + 1);
+  assert.equal(reclaimed.candidateSnapshotId, null);
+  assert.equal(
+    (await prisma.eagleTagPrototypeSnapshot.findUniqueOrThrow({ where: { id: snapshot.id } }))
+      .status,
+    'FAILED',
+  );
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.eagleAsset.update({ where: { id: f.photo.id }, data: { rating: 5 } });
+      await holdTagBuildLease(tx, active[0]);
+    }),
+    /TAG_BUILD_LEASE_LOST/,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.photo.id } })).rating,
+    null,
+  );
+  await prisma.$transaction((tx) => holdTagBuildLease(tx, reclaimed));
+  await prisma.eagleTagSemanticBuild.update({
+    where: { id: build.id },
+    data: { status: 'PROCESSING', attempts: 12, lockedAt: new Date(0) },
+  });
+  assert.equal(await claimNextTagBuild(prisma, now), null);
+  assert.equal(
+    (await prisma.eagleTagSemanticBuild.findUniqueOrThrow({ where: { id: build.id } })).status,
+    'FAILED',
+  );
+});

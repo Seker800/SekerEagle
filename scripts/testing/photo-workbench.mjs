@@ -17,6 +17,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { JwtService } from '@nestjs/jwt';
 import sharp from 'sharp';
+import bcrypt from 'bcrypt';
 import { createLivePhotoFixtures } from './live-photo-fixtures.mjs';
 import { createCameraFixtures } from './camera-media-fixtures.mjs';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
@@ -111,10 +112,11 @@ try {
   const apiPort = reservation.address().port;
   await new Promise((resolve) => reservation.close(resolve));
   let accessToken = '';
+  let browserCookies = [];
   gateway = createServer(async (req, res) => {
     if (req.url === '/__test/login') {
       res.writeHead(302, {
-        'set-cookie': `sekereagle_access=${accessToken}; HttpOnly; SameSite=Strict; Path=/api`,
+        'set-cookie': browserCookies,
         location: '/',
       });
       res.end();
@@ -226,14 +228,15 @@ try {
     env,
   );
   db = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  const testPassword = randomBytes(24).toString('hex');
   const owner = await db.user.create({
     data: {
       email: 'photo-test@example.invalid',
-      passwordHash: 'unusable-test-only',
+      passwordHash: await bcrypt.hash(testPassword, 12),
       role: 'ADMIN',
     },
   });
-  accessToken = await new JwtService({ secret: env.JWT_ACCESS_SECRET }).signAsync(
+  const legacyAccessToken = await new JwtService({ secret: env.JWT_ACCESS_SECRET }).signAsync(
     {
       sub: owner.id,
       email: owner.email,
@@ -258,13 +261,35 @@ try {
   child('apps/api/dist/main.js', env, 'api');
   await waitFor(
     async () =>
-      fetch(`${origin}/api/photos/assets`, {
-        headers: { cookie: `sekereagle_access=${accessToken}` },
-      })
+      fetch(`${origin}/api/health/ready`)
         .then((x) => x.ok)
         .catch(() => false),
-    'API',
+    'API readiness',
   );
+  const rejected = await fetch(`${origin}/api/photos/assets`, {
+    headers: { cookie: `sekereagle_access=${legacyAccessToken}` },
+  });
+  assert.equal(rejected.status, 401, 'signed tokens without a session family are rejected');
+  const deniedLogin = await fetch(`${origin}/api/auth/login`, {
+    method: 'POST',
+    headers: { origin: 'http://untrusted.invalid', 'content-type': 'application/json' },
+    body: JSON.stringify({ email: owner.email, password: testPassword }),
+  });
+  assert.equal(deniedLogin.status, 403, 'login rejects an untrusted browser origin');
+  const login = await fetch(`${origin}/api/auth/login`, {
+    method: 'POST',
+    headers: { origin, 'content-type': 'application/json' },
+    body: JSON.stringify({ email: owner.email, password: testPassword }),
+  });
+  assert.equal(login.status, 201, 'real HTTP login creates a session');
+  browserCookies = login.headers.getSetCookie();
+  assert.equal(browserCookies.length, 2);
+  accessToken = browserCookies
+    .find((cookie) => cookie.startsWith('sekereagle_access='))
+    ?.split(';')[0]
+    .slice('sekereagle_access='.length);
+  assert.ok(accessToken, 'login writes an access cookie');
+  assert.ok(browserCookies.some((cookie) => cookie.startsWith('sekereagle_refresh=')));
   const api = async (path, body, method = body ? 'POST' : 'GET', attempt = 0) => {
     await sleep(200);
     const response = await fetch(`${origin}/api${path}`, {
@@ -289,19 +314,36 @@ try {
   const photoDirectory = join(root, '.omx/test-photos');
   await mkdir(photoDirectory, { recursive: true });
   const samplePath = join(photoDirectory, 'astronaut.png');
-  let source = await readFile(samplePath).catch(() => null);
-  if (!source) {
-    const response = await fetch(
-      'https://raw.githubusercontent.com/scikit-image/scikit-image/v0.24.0/skimage/data/astronaut.png',
+  const basic = process.env.PHOTO_WORKBENCH_BASIC === '1';
+  let source;
+  if (basic) {
+    // Deterministic local fixture keeps the HTTP/metadata CI independent of downloads and face models.
+    const pixels = Buffer.alloc(512 * 512 * 3);
+    for (let y = 0; y < 512; y++)
+      for (let x = 0; x < 512; x++) {
+        const i = (y * 512 + x) * 3;
+        pixels[i] = x % 256;
+        pixels[i + 1] = y % 256;
+        pixels[i + 2] = (x ^ y) % 256;
+      }
+    source = await sharp(pixels, { raw: { width: 512, height: 512, channels: 3 } })
+      .png()
+      .toBuffer();
+  } else {
+    source = await readFile(samplePath).catch(() => null);
+    if (!source) {
+      const response = await fetch(
+        'https://raw.githubusercontent.com/scikit-image/scikit-image/v0.24.0/skimage/data/astronaut.png',
+      );
+      if (!response.ok) throw new Error('Public test photo download failed');
+      source = Buffer.from(await response.arrayBuffer());
+      await writeFile(samplePath, source);
+    }
+    assert.equal(
+      createHash('sha256').update(source).digest('hex'),
+      '88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5',
     );
-    if (!response.ok) throw new Error('Public test photo download failed');
-    source = Buffer.from(await response.arrayBuffer());
-    await writeFile(samplePath, source);
   }
-  assert.equal(
-    createHash('sha256').update(source).digest('hex'),
-    '88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5',
-  );
   const sharpPhoto = await sharp(source)
     .withExif({
       IFD0: { Make: 'Synthetic Test', Model: 'Test Camera' },
@@ -410,6 +452,20 @@ try {
   assert.equal(capturedPhoto.photoMetadata.cameraModel, 'Test Camera');
   assert.equal(capturedPhoto.photoMetadata.capturedAt, '2024-03-01T04:30:01.000Z');
   assert.equal((await api('/photos/assets?limit=20&gps=WITH')).items.length, 1);
+  if (basic) {
+    assert.ok(!process.argv.includes('--serve'), 'basic smoke is an automated check only');
+    assert.ok(
+      !['PHOTO_WORKBENCH_CAMERA', 'PHOTO_WORKBENCH_LIVE', 'PHOTO_WORKBENCH_SEND'].some(
+        (flag) => process.env[flag] === '1',
+      ),
+      'basic smoke cannot silently skip requested extended checks',
+    );
+    console.log(
+      'Photo basic smoke passed: HTTP session, origin denial, uploads, previews, metadata and mode isolation.',
+    );
+    await cleanup();
+    process.exit(0);
+  }
   const faceScan = await api('/photos/photography/people/scan', {});
   assert.ok(faceScan.queued >= 4);
   await waitFor(

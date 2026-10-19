@@ -1,3 +1,4 @@
+import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
@@ -148,71 +149,6 @@ async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   return claimNextMediaJob(prisma, {
     canClaimBackground: canClaimBackgroundForOwner,
     laneOrder: mediaLaneOrder(claimSequence++),
-  });
-}
-
-async function claimTagBuild(): Promise<EagleTagSemanticBuild | null> {
-  return prisma.$transaction(async (transaction) => {
-    const candidate = await transaction.eagleTagSemanticBuild.findFirst({
-      where: {
-        OR: [
-          { status: 'PENDING', availableAt: { lte: new Date() } },
-          { status: 'PROCESSING', lockedAt: { lt: new Date(Date.now() - 10 * 60_000) } },
-        ],
-      },
-      orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
-    });
-    if (!candidate) return null;
-    const retireCandidate = async (failureCode: string) => {
-      if (!candidate.candidateSnapshotId) return;
-      await transaction.eagleTagPrototypeSnapshot.updateMany({
-        where: {
-          id: candidate.candidateSnapshotId,
-          ownerId: candidate.ownerId,
-          libraryMode: candidate.libraryMode,
-          status: 'BUILDING',
-        },
-        data: { status: 'FAILED', failureCode },
-      });
-    };
-    if (candidate.attempts >= 12) {
-      const exhausted = await transaction.eagleTagSemanticBuild.updateMany({
-        where: {
-          id: candidate.id,
-          status: candidate.status,
-          leaseVersion: candidate.leaseVersion,
-          lockedAt: candidate.lockedAt,
-        },
-        data: {
-          status: 'FAILED',
-          lockedAt: null,
-          completedAt: new Date(),
-          lastError: 'BUILD_ATTEMPTS_EXHAUSTED',
-        },
-      });
-      if (exhausted.count === 1) await retireCandidate('BUILD_ATTEMPTS_EXHAUSTED');
-      return null;
-    }
-    const claimed = await transaction.eagleTagSemanticBuild.updateMany({
-      where: {
-        id: candidate.id,
-        status: candidate.status,
-        leaseVersion: candidate.leaseVersion,
-        lockedAt: candidate.lockedAt,
-      },
-      data: {
-        status: 'PROCESSING',
-        candidateSnapshotId: null,
-        attempts: { increment: 1 },
-        leaseVersion: { increment: 1 },
-        lockedAt: new Date(),
-        startedAt: candidate.startedAt ?? new Date(),
-        lastError: null,
-      },
-    });
-    if (claimed.count !== 1) return null;
-    await retireCandidate('BUILD_LEASE_EXPIRED');
-    return transaction.eagleTagSemanticBuild.findUnique({ where: { id: candidate.id } });
   });
 }
 
@@ -1253,11 +1189,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
   );
   const generationId = randomUUID();
   const snapshot = await prisma.$transaction(async (transaction) => {
-    const held = await transaction.eagleTagSemanticBuild.updateMany({
-      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: { lockedAt: new Date() },
-    });
-    if (held.count !== 1) throw new Error('TAG_BUILD_LEASE_LOST');
+    await holdTagBuildLease(transaction, build);
     const versions = await transaction.eagleTagPrototypeSnapshot.aggregate({
       where: { ownerId: build.ownerId, libraryMode: build.libraryMode, tagId: build.tagId },
       _max: { version: true },
@@ -1405,11 +1337,7 @@ async function recomputeSuggestionGeneration(
     `,
   );
   await prisma.$transaction(async (transaction) => {
-    const held = await transaction.eagleTagSemanticBuild.updateMany({
-      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: { lockedAt: new Date() },
-    });
-    if (held.count !== 1) throw new Error('TAG_BUILD_LEASE_LOST');
+    await holdTagBuildLease(transaction, build);
     await transaction.eagleVectorTagSuggestion.updateMany({
       where: {
         ownerId: build.ownerId,
@@ -1769,7 +1697,7 @@ async function poll(): Promise<void> {
       });
   }
   if (!stopping && activeTagBuildCount === 0) {
-    const build = await claimTagBuild();
+    const build = await claimNextTagBuild(prisma);
     if (build) {
       activeTagBuildCount++;
       void processClaimedTagBuild(build).catch(reportLoopError);

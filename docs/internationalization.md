@@ -45,3 +45,7 @@ locale。连接设置页面继续保持离线可用，不依赖服务端语言�
 API 可返回 `{ code, message }`。Web 根据稳定 `code` 本地化已知错误：中文模式保留服务端
 详细消息，英文模式不会直接展示未结构化的中文 `message`，而是使用错误码翻译或英文
 通用回退。新增用户可见错误码时，应同步更新 `apps/web/src/lib/api-error.ts` 和两份词典。
+
+## 共享筛选展示
+
+`eagle-filter-core` 仅保留稳定字段、运算符、选项值与规则，不保存中英文 UI 标签。Web 的 `eagle-filter-presentation.ts` 从 i18n 消息映射组装字段、选项与单位展示；摄影字段仍扩展同一规则编辑器。人物名称等用户输入不翻译。新增字段同时补两种语言及 presentation 回归，避免英文界面退回中文。

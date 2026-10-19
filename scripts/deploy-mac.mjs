@@ -137,6 +137,31 @@ async function waitForServiceHealth(composeFiles, service) {
   throw new Error(`${service} did not become healthy`);
 }
 
+export function deployCompose(composeFiles, execute = runDocker) {
+  // Build before pausing writers; schema changes run only after every writer is stopped.
+  execute(composeArgs(composeFiles, ['build']));
+  execute(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker']));
+  execute(
+    composeArgs(composeFiles, [
+      'up',
+      '-d',
+      '--no-build',
+      '--remove-orphans',
+      '--force-recreate',
+      'migrate',
+    ]),
+  );
+  const migrationId = execute(composeArgs(composeFiles, ['ps', '-a', '-q', 'migrate']), {
+    capture: true,
+  }).trim();
+  if (!migrationId || migrationId.includes('\n'))
+    throw new Error('Migration container identity is unavailable');
+  const exitCode = execute(['wait', migrationId], { capture: true }).trim();
+  if (exitCode !== '0')
+    throw new Error('Migration did not complete successfully; writers remain stopped');
+  execute(composeArgs(composeFiles, ['up', '-d', '--no-build', '--remove-orphans']));
+}
+
 async function main() {
   const allowedArgs = new Set(['--preflight']);
   const unknownArgs = process.argv.slice(2).filter((argument) => !allowedArgs.has(argument));
@@ -168,20 +193,7 @@ async function main() {
   }
 
   await ensureLocalStorageEnvironment(fileURLToPath(envFile));
-  // Build before pausing writers; schema changes run only after every writer is stopped.
-  runDocker(composeArgs(composeFiles, ['build']));
-  runDocker(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker']));
-  runDocker(
-    composeArgs(composeFiles, [
-      'up',
-      '-d',
-      '--no-build',
-      '--remove-orphans',
-      '--force-recreate',
-      'migrate',
-    ]),
-  );
-  runDocker(composeArgs(composeFiles, ['up', '-d', '--no-build', '--remove-orphans']));
+  deployCompose(composeFiles);
 
   const gatewayContainerId = runDocker(composeArgs(composeFiles, ['ps', '-q', 'gateway']), {
     capture: true,
