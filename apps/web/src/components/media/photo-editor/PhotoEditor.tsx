@@ -35,6 +35,7 @@ import {
 } from './photo-adjustment-catalog';
 import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
 import { PhotoCropViewport } from './PhotoCropViewport';
+import { PhotoToolPanel } from './PhotoToolPanel';
 import { PhotoCropPanel } from './PhotoCropPanel';
 import { ScrollableToolRow } from './ScrollableToolRow';
 import { readPhotoMetadata } from './photo-editor-metadata';
@@ -365,6 +366,7 @@ export function PhotoEditor({
     max = 100,
     step = 1,
     unit?: string,
+    options: { compact?: boolean; disabled?: boolean } = {},
   ) {
     return (
       <PhotoAdjustmentControl
@@ -375,8 +377,8 @@ export function PhotoEditor({
         max={max}
         step={step}
         unit={unit}
-        compact={tab === 'adjust'}
-        disabled={busy || !loaded}
+        compact={options.compact ?? tab === 'adjust'}
+        disabled={busy || !loaded || options.disabled === true}
         onStart={() => {
           sliderStartRef.current ??= edits;
         }}
@@ -563,7 +565,7 @@ export function PhotoEditor({
           </div>
         )}
         <div className={styles.stageBottom}>
-          {tab !== 'adjust' && compareControl}
+          {tab === 'watermark' && compareControl}
           <span className={styles.renderState} role="status">
             {rendering ? t('正在更新…') : saved ? t('已保存到相册') : ''}
           </span>
@@ -608,9 +610,22 @@ export function PhotoEditor({
             />
           )}
           {tab === 'filters' && (
-            <>
-              <div className={styles.sectionTitle}>
-                <strong>{t('照片滤镜')}</strong>
+            <PhotoToolPanel
+              inspector={
+                <>
+                  <div className={styles.parameterRow}>
+                    {compareControl}
+                    {slider(t('滤镜强度'), 'filterStrength', 0, 100, 1, undefined, {
+                      compact: true,
+                      disabled: edits.filter === 'original',
+                    })}
+                  </div>
+                  <p className={styles.parameterHint}>{t('滤镜强度')}</p>
+                </>
+              }
+            >
+              <div className={styles.adjustmentCategoryRow}>
+                <span className={styles.panelHeading}>{t('照片滤镜')}</span>
               </div>
               <ScrollableToolRow className={styles.filters} label={t('照片滤镜')}>
                 {FILTERS.map(({ id, label }) => (
@@ -626,8 +641,7 @@ export function PhotoEditor({
                   </button>
                 ))}
               </ScrollableToolRow>
-              {edits.filter !== 'original' && slider(t('滤镜强度'), 'filterStrength', 0, 100)}
-            </>
+            </PhotoToolPanel>
           )}
           {tab === 'watermark' && (
             <PhotoWatermarkPanel
@@ -641,6 +655,7 @@ export function PhotoEditor({
           )}
           {tab === 'crop' && (
             <PhotoCropPanel
+              compareControl={compareControl}
               edits={edits}
               width={loaded?.naturalWidth ?? 1}
               height={loaded?.naturalHeight ?? 1}

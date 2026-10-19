@@ -134,7 +134,7 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '黑白' }));
     expect(screen.getByRole('slider', { name: '滤镜强度' })).toHaveValue('42');
     fireEvent.click(screen.getByRole('button', { name: '原图' }));
-    expect(screen.queryByRole('slider', { name: '滤镜强度' })).not.toBeInTheDocument();
+    expect(screen.getByRole('slider', { name: '滤镜强度' })).toBeDisabled();
   });
   it('reopens a full-resolution framed photo larger than the old 24 megapixel limit', async () => {
     class FramedImage {
@@ -552,7 +552,6 @@ describe('photo editor interactions', () => {
   });
 });
 
-
 it('keeps filter strength above its thumbnails in the common tool inspector', async () => {
   render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
@@ -562,7 +561,9 @@ it('keeps filter strength above its thumbnails in the common tool inspector', as
   fireEvent.click(screen.getByRole('button', { name: '复古' }));
   expect(strength).toBeEnabled();
   const thumbnails = screen.getByRole('group', { name: '照片滤镜' });
-  expect(strength.compareDocumentPosition(thumbnails) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(
+    strength.compareDocumentPosition(thumbnails) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getAllByRole('button', { name: '对比原图' })).toHaveLength(1);
   fireEvent.change(strength, { target: { value: '45' } });
   fireEvent.click(screen.getByRole('button', { name: '调整' }));

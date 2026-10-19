@@ -11,6 +11,7 @@ import {
 } from './photo-adjustment-catalog';
 import styles from './PhotoEditor.module.css';
 import { PhotoAdvancedAdjustments } from './PhotoAdvancedAdjustments';
+import { PhotoToolPanel } from './PhotoToolPanel';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 export function PhotoAdjustmentsPanel({
@@ -79,7 +80,38 @@ export function PhotoAdjustmentsPanel({
     buttons.current.get(selected.id)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [selected.id]);
   return (
-    <div className={styles.adjustmentsPanel}>
+    <PhotoToolPanel
+      inspector={
+        <>
+          <div className={styles.parameterRow}>
+            {compareControl}
+            {directAxes ? (
+              <div className={styles.axisControls} role="group" aria-label={selected.familyLabel}>
+                {options
+                  .filter((option) => option.family === selected.family)
+                  .map((option) => (
+                    <div className={styles.axisControl} key={option.id}>
+                      <button
+                        type="button"
+                        className={styles.axisLabel}
+                        disabled={disabled}
+                        title={t('双击重置此项')}
+                        onDoubleClick={() => onResetOption(option)}
+                      >
+                        {option.axisLabel}
+                      </button>
+                      {renderControl(option)}
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              renderControl(selected)
+            )}
+          </div>
+          <p className={styles.parameterHint}>{t('双击归零 · 方向键微调 · Shift 加速')}</p>
+        </>
+      }
+    >
       <div className={styles.adjustmentCategoryRow}>
         <ScrollableToolRow className={styles.adjustmentGroups} label={t('调整分类')}>
           {ADJUSTMENT_GROUPS.map((item) => (
@@ -161,34 +193,6 @@ export function PhotoAdjustmentsPanel({
           ))}
         </ScrollableToolRow>
       )}
-      <div className={styles.parameterInspector}>
-        <div className={styles.parameterRow}>
-          {compareControl}
-          {directAxes ? (
-            <div className={styles.axisControls} role="group" aria-label={selected.familyLabel}>
-              {options
-                .filter((option) => option.family === selected.family)
-                .map((option) => (
-                  <div className={styles.axisControl} key={option.id}>
-                    <button
-                      type="button"
-                      className={styles.axisLabel}
-                      disabled={disabled}
-                      title={t('双击重置此项')}
-                      onDoubleClick={() => onResetOption(option)}
-                    >
-                      {option.axisLabel}
-                    </button>
-                    {renderControl(option)}
-                  </div>
-                ))}
-            </div>
-          ) : (
-            renderControl(selected)
-          )}
-        </div>
-        <p className={styles.parameterHint}>{t('双击归零 · 方向键微调 · Shift 加速')}</p>
-      </div>
-    </div>
+    </PhotoToolPanel>
   );
 }

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconCrop, IconFlipHorizontal, IconRotateClockwise } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import { CROP_RATIO_PAIRS, photoCrop, type CropRatio, type PhotoEdits } from './photo-editor-model';
 import { cropRectPatch } from './photo-editor-crop-geometry';
+import { PhotoToolPanel } from './PhotoToolPanel';
 import { ScrollableToolRow } from './ScrollableToolRow';
 import styles from './PhotoEditor.module.css';
 
@@ -14,11 +15,13 @@ function RatioShape({ aspect }: { aspect: number }) {
 
 export function PhotoCropPanel({
   edits,
+  compareControl,
   width,
   height,
   onChange,
 }: {
   edits: PhotoEdits;
+  compareControl: ReactNode;
   width: number;
   height: number;
   onChange: (patch: Partial<PhotoEdits>) => void;
@@ -49,19 +52,47 @@ export function PhotoCropPanel({
     );
   };
   return (
-    <div className={styles.cropPanel}>
-      <div className={styles.sectionTitle}>
-        <strong>{t('构图')}</strong>
-        <button
-          type="button"
-          onClick={() =>
-            onChange({ ...CENTERED_CROP, cropRatio: 'free', rotation: 0, flip: false })
-          }
-        >
-          {t('重置裁剪')}
-        </button>
-      </div>
-      <div className={styles.cropToolbar}>
+    <PhotoToolPanel
+      inspector={
+        <>
+          <div className={styles.parameterRow}>
+            {compareControl}
+            <div className={styles.cropActions}>
+              <div className={styles.cropTransforms}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    onChange({ rotation: (edits.rotation + 90) % 360, ...CENTERED_CROP })
+                  }
+                >
+                  <IconRotateClockwise size={17} />
+                  {t('旋转')}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={edits.flip}
+                  onClick={() => onChange({ flip: !edits.flip })}
+                >
+                  <IconFlipHorizontal size={17} />
+                  {t('镜像')}
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  onChange({ ...CENTERED_CROP, cropRatio: 'free', rotation: 0, flip: false })
+                }
+              >
+                {t('重置裁剪')}
+              </button>
+            </div>
+          </div>
+          <p className={styles.parameterHint}>{t('拖动四角或边缘调整范围，拖动框内移动裁剪框')}</p>
+        </>
+      }
+    >
+      <div className={styles.adjustmentCategoryRow}>
+        <span className={styles.panelHeading}>{t('裁剪比例')}</span>
         <div className={styles.cropOrientation} role="group" aria-label={t('比例方向')}>
           {[false, true].map((value) => (
             <button
@@ -77,23 +108,6 @@ export function PhotoCropPanel({
               {value ? t('纵向') : t('横向')}
             </button>
           ))}
-        </div>
-        <div className={styles.cropTransforms}>
-          <button
-            type="button"
-            onClick={() => onChange({ rotation: (edits.rotation + 90) % 360, ...CENTERED_CROP })}
-          >
-            <IconRotateClockwise size={17} />
-            {t('旋转')}
-          </button>
-          <button
-            type="button"
-            aria-pressed={edits.flip}
-            onClick={() => onChange({ flip: !edits.flip })}
-          >
-            <IconFlipHorizontal size={17} />
-            {t('镜像')}
-          </button>
         </div>
       </div>
       <ScrollableToolRow className={styles.cropRatios} label={t('裁剪比例')}>
@@ -137,7 +151,6 @@ export function PhotoCropPanel({
           );
         })}
       </ScrollableToolRow>
-      <p className={styles.hint}>{t('拖动四角或边缘调整范围，拖动框内移动裁剪框')}</p>
-    </div>
+    </PhotoToolPanel>
   );
 }

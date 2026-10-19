@@ -254,21 +254,12 @@
   top: 50%;
   cursor: ew-resize;
 }
-.cropPanel {
-  max-width: 640px;
-  margin: 0 auto;
-}
-.cropControls .sectionTitle {
-  min-height: 30px;
-  margin-bottom: 5px;
-  border: 0;
-}
-.cropToolbar {
+.cropActions {
   display: flex;
+  flex: 1;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin-bottom: 6px;
 }
 .cropOrientation,
 .cropTransforms {
@@ -310,6 +301,7 @@
 }
 .cropRatios {
   display: flex;
+  justify-content: safe center;
   gap: 7px;
   padding: 4px 2px 7px;
   scroll-snap-type: x proximity;
@@ -532,9 +524,10 @@
 }
 .filters {
   display: flex;
+  justify-content: safe center;
   gap: 10px;
-  padding: 5px 2px 8px;
-  margin-bottom: 8px;
+  padding: 5px 2px;
+  margin-bottom: 0;
   scroll-snap-type: x proximity;
 }
 .editor .filters button {
@@ -612,7 +605,7 @@
 .note {
   display: none;
 }
-.adjustmentsPanel {
+.toolPanel {
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -736,7 +729,6 @@
   white-space: nowrap;
 }
 .parameterInspector {
-  order: -1;
   flex-shrink: 0;
   width: 700px;
   max-width: 100%;
@@ -1080,7 +1072,7 @@
   .adjustmentControls {
     overflow-y: auto;
   }
-  .adjustmentsPanel {
+  .toolPanel {
     height: auto;
   }
   .adjustmentOptions {
@@ -1155,14 +1147,14 @@
   .controls {
     overflow-y: auto;
   }
-  .adjustmentsPanel {
+  .toolPanel {
     height: auto;
   }
   .adjustmentOptions {
     min-height: 40px;
     overflow-x: auto;
   }
-  .adjustmentsPanel .sectionTitle,
+  .toolPanel .sectionTitle,
   .parameterHint,
   .stageTop {
     display: none;
@@ -1293,5 +1285,19 @@
   stroke: #080808;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.panelHeading {
+  color: var(--photo-muted);
+  font-size: 13px;
+  padding-left: 24px;
+}
+.toolScrollViewport[data-anchor-navigation] {
+  justify-content: flex-start;
+}
+.toolScrollTail {
+  flex: 0 0 auto;
+  height: 1px;
   pointer-events: none;
 }

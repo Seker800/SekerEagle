@@ -357,6 +357,7 @@ export function PhotoWatermarkPanel({
       <ScrollableToolRow
         className={styles.watermarkOptions}
         label={t('水印模板')}
+        anchorSelector="[data-category-start]"
         viewportRef={navigation.viewportRef}
         onScroll={navigation.followScroll}
         onNavigate={navigation.beginNavigation}

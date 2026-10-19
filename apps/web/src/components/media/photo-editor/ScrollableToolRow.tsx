@@ -11,6 +11,7 @@ export function ScrollableToolRow({
   viewportRef,
   onScroll,
   onNavigate,
+  anchorSelector,
 }: {
   children: ReactNode;
   className: string;
@@ -18,15 +19,26 @@ export function ScrollableToolRow({
   viewportRef?: RefObject<HTMLDivElement | null>;
   onScroll?: (viewport: HTMLDivElement) => void;
   onNavigate?: () => void;
+  anchorSelector?: string;
 }) {
   const localViewport = useRef<HTMLDivElement>(null);
   const viewport = viewportRef ?? localViewport;
   const drag = useRef({ x: 0, left: 0, active: false, moved: false });
+  const [trailingSpace, setTrailingSpace] = useState(0);
   const [edges, setEdges] = useState({ left: false, right: false });
   useEffect(() => {
     const element = viewport.current;
     if (!element) return;
     const measure = () => {
+      if (anchorSelector) {
+        const anchor = Array.from(element.querySelectorAll<HTMLElement>(anchorSelector)).at(-1);
+        const last = Array.from(element.querySelectorAll<HTMLElement>(':scope > button')).at(-1);
+        if (anchor && last) {
+          const remaining =
+            last.getBoundingClientRect().right - anchor.getBoundingClientRect().left;
+          setTrailingSpace(Math.max(0, element.clientWidth - remaining));
+        }
+      }
       const left = element.scrollLeft > 1;
       const right = element.scrollLeft + element.clientWidth < element.scrollWidth - 1;
       setEdges((current) =>
@@ -55,7 +67,7 @@ export function ScrollableToolRow({
       element.removeEventListener('scroll', measure);
       element.removeEventListener('wheel', wheel);
     };
-  }, [children, onNavigate, viewport]);
+  }, [children, onNavigate, viewport, anchorSelector]);
   const page = (direction: number) => {
     onNavigate?.();
     const element = viewport.current;
@@ -79,6 +91,7 @@ export function ScrollableToolRow({
         role="group"
         aria-label={label}
         tabIndex={0}
+        data-anchor-navigation={anchorSelector ? true : undefined}
         onScroll={(event) => onScroll?.(event.currentTarget)}
         className={`${className} ${styles.toolScrollViewport}`}
         onKeyDown={(event) => {
@@ -129,6 +142,13 @@ export function ScrollableToolRow({
         }}
       >
         {children}
+        {anchorSelector && (
+          <span
+            className={styles.toolScrollTail}
+            aria-hidden="true"
+            style={{ flexBasis: trailingSpace }}
+          />
+        )}
       </div>
       <button
         type="button"
