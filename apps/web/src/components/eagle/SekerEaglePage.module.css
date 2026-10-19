@@ -304,6 +304,10 @@
   background: transparent;
   font-size: 13px;
 }
+/* The adjacent accessible clear button owns clearing in every browser. */
+.searchBox input::-webkit-search-cancel-button {
+  display: none;
+}
 .searchBox button {
   padding: 0;
   border: 0;
