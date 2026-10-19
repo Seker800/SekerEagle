@@ -75,3 +75,28 @@ describe('useEagleMasonryLayout', () => {
     expect(screen.getByLabelText('瀑布流卡片宽度')).toHaveTextContent(stableWidth ?? '');
   });
 });
+
+it('recomputes section positions when section metadata changes without changing assets or width', () => {
+  const assets = [
+    { id: 'one', width: 800, height: 600 },
+    { id: 'two', width: 800, height: 600 },
+  ];
+  function SectionsHarness() {
+    const [split, setSplit] = useState(false);
+    const sectionKeys = new Map([
+      ['one', 'first'],
+      ['two', split ? 'second' : 'first'],
+    ]);
+    const { layout } = useEagleMasonryLayout(assets, { strategy: 'justified', sectionKeys });
+    return (
+      <>
+        <button onClick={() => setSplit(true)}>split</button>
+        <output>{layout.sections.length}</output>
+      </>
+    );
+  }
+  render(<SectionsHarness />);
+  expect(screen.getByRole('status')).toHaveTextContent('1');
+  fireEvent.click(screen.getByRole('button', { name: 'split' }));
+  expect(screen.getByRole('status')).toHaveTextContent('2');
+});

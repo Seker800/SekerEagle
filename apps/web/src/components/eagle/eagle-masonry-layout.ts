@@ -17,7 +17,17 @@ export interface EagleMasonryItem {
   previewHeight: number;
 }
 
+export interface EagleMasonrySection {
+  id: string;
+  key: string;
+  column: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface EagleMasonryLayout {
+  sections: EagleMasonrySection[];
   columns: number;
   height: number;
   items: EagleMasonryItem[];
@@ -34,6 +44,7 @@ const CARD_BORDER_HEIGHT = 2;
 export interface EagleMasonryLayoutOptions {
   strategy?: 'masonry' | 'justified';
   targetCardWidth?: number;
+  sectionKeys?: ReadonlyMap<string, string>;
 }
 
 export function buildEagleMasonryLayout(
@@ -42,7 +53,12 @@ export function buildEagleMasonryLayout(
   options: EagleMasonryLayoutOptions = {},
 ): EagleMasonryLayout {
   if (options.strategy === 'justified')
-    return buildJustifiedLayout(assets, containerWidth, options.targetCardWidth ?? 210);
+    return buildJustifiedLayout(
+      assets,
+      containerWidth,
+      options.targetCardWidth ?? 210,
+      options.sectionKeys,
+    );
   const safeWidth = Math.max(1, containerWidth);
   const compact = safeWidth < 560;
   const gap = compact ? COMPACT_GAP : DESKTOP_GAP;
@@ -85,6 +101,7 @@ export function buildEagleMasonryLayout(
 
   return {
     columns,
+    sections: [],
     height: items.length ? Math.max(...layout.columnHeights) - gap : 0,
     items,
   };
@@ -120,7 +137,7 @@ export function useEagleMasonryLayout(
     containerRef,
     layout: useMemo(
       () => buildEagleMasonryLayout(assets, containerWidth, options),
-      [assets, containerWidth, options.targetCardWidth, options.strategy],
+      [assets, containerWidth, options.targetCardWidth, options.strategy, options.sectionKeys],
     ),
   };
 }
@@ -129,11 +146,14 @@ function buildJustifiedLayout(
   assets: EagleMasonryAsset[],
   width: number,
   target: number,
+  sectionKeys?: ReadonlyMap<string, string>,
 ): EagleMasonryLayout {
   const safeWidth = Math.max(3, width);
   const targetHeight = Math.max(60, Math.min(360, target));
   const gap = 4;
   const items: EagleMasonryItem[] = [];
+  const sections: EagleMasonrySection[] = [];
+  let previousSection: string | undefined;
   let row: Array<{ asset: EagleMasonryAsset; ratio: number }> = [];
   let ratios = 0,
     top = 0,
@@ -162,6 +182,16 @@ function buildJustifiedLayout(
     ratios = 0;
   };
   for (const asset of assets) {
+    const key = sectionKeys?.get(asset.id);
+    if (key !== previousSection) {
+      flush(true);
+      if (key !== undefined) {
+        const height = 52;
+        sections.push({ id: `section:${asset.id}`, key, column: 0, top, width: safeWidth, height });
+        top += height;
+      }
+      previousSection = key;
+    }
     const rawRatio = asset.width && asset.height ? asset.width / asset.height : 4 / 3;
     const ratio = Number.isFinite(rawRatio) && rawRatio > 0 ? rawRatio : 4 / 3;
     row.push({ asset, ratio });
@@ -169,5 +199,5 @@ function buildJustifiedLayout(
     if (ratios * targetHeight + 2 * row.length + gap * (row.length - 1) >= safeWidth) flush(false);
   }
   flush(true);
-  return { items, columns, height: items.length ? top - gap : 0 };
+  return { items, sections, columns, height: items.length ? top - gap : 0 };
 }

@@ -1,3 +1,8 @@
+import {
+  createPhotoTimelineSectionKeys,
+  formatPhotoTimelineMonth,
+  getPhotoTimelineMonth,
+} from '../photos/photo-timeline-sections';
 import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
 import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
@@ -632,9 +637,14 @@ export function SekerEaglePage({
       ),
     [selectedManualTagSummaries],
   );
+  const timelineSectionKeys = useMemo(
+    () => (isPhotoTimeline && !deferredSearch ? createPhotoTimelineSectionKeys(assets) : undefined),
+    [assets, isPhotoTimeline, deferredSearch],
+  );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
     strategy: isPhotoTimeline ? 'justified' : 'masonry',
+    sectionKeys: timelineSectionKeys,
   });
   const masonryViewportIndex = useMemo(
     () => buildMasonryViewportIndex(masonryLayout.items),
@@ -648,6 +658,19 @@ export function SekerEaglePage({
         overscan: Math.max(1200, viewportHeight * 2),
       }),
     [masonryViewportIndex, scrollTop, viewportHeight],
+  );
+  const sectionViewportIndex = useMemo(
+    () => buildMasonryViewportIndex(masonryLayout.sections),
+    [masonryLayout.sections],
+  );
+  const visibleSections = useMemo(
+    () =>
+      selectVisibleMasonryItemsFromIndex(sectionViewportIndex, {
+        scrollTop,
+        viewportHeight,
+        overscan: Math.max(1200, viewportHeight * 2),
+      }),
+    [sectionViewportIndex, scrollTop, viewportHeight],
   );
   const observedAssets = useMemo(() => {
     const observedIds = new Set(visibleMasonryItems.map((item) => item.id));
@@ -1664,6 +1687,15 @@ export function SekerEaglePage({
                     data-layout={isPhotoTimeline ? 'justified' : 'masonry'}
                     style={{ height: masonryLayout.height }}
                   >
+                    {visibleSections.map((section) => (
+                      <h2
+                        key={section.id}
+                        className={styles.timelineSection}
+                        style={{ top: section.top, height: section.height, width: section.width }}
+                      >
+                        <time dateTime={section.key}>{formatPhotoTimelineMonth(section.key)}</time>
+                      </h2>
+                    ))}
                     {visibleMasonryItems.map((masonryItem) => {
                       const asset = assetsById.get(masonryItem.id);
                       if (!asset) return null;
@@ -1768,11 +1800,7 @@ export function SekerEaglePage({
                         (item) => item.top + item.height > scrollTop,
                       );
                       const asset = first ? assetsById.get(first.id) : undefined;
-                      return (
-                        asset?.chronologicalAt ??
-                        asset?.photoMetadata?.capturedAt ??
-                        asset?.libraryAddedAt
-                      )?.slice(0, 7);
+                      return asset ? getPhotoTimelineMonth(asset) : undefined;
                     })()}
                     onLatest={() => {
                       assetLocator.clearLocation();

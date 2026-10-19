@@ -182,40 +182,64 @@ it('keeps justified empty, narrow and partial rows finite and within the viewpor
 });
 
 it('reserves full-width section headings and starts a new row at each section boundary', () => {
-  const assets = ['october-a', 'october-b', 'march', 'previous-year'].map(id => ({id, width: 800, height: 600}));
+  const assets = ['october-a', 'october-b', 'march', 'previous-year'].map((id) => ({
+    id,
+    width: 800,
+    height: 600,
+  }));
   const sectionKeys = new Map([
-    ['october-a', '2026-10'], ['october-b', '2026-10'], ['march', '2026-03'], ['previous-year', '2025-12'],
+    ['october-a', '2026-10'],
+    ['october-b', '2026-10'],
+    ['march', '2026-03'],
+    ['previous-year', '2025-12'],
   ]);
-  const layout = buildEagleMasonryLayout(assets, 900, {strategy: 'justified', sectionKeys});
-  expect(layout.sections.map(section => section.key)).toEqual(['2026-10', '2026-03', '2025-12']);
+  const layout = buildEagleMasonryLayout(assets, 900, { strategy: 'justified', sectionKeys });
+  expect(layout.sections.map((section) => section.key)).toEqual(['2026-10', '2026-03', '2025-12']);
   expect(layout.items[0].top).toBe(layout.sections[0].top + layout.sections[0].height);
   expect(layout.items[1].top).toBe(layout.items[0].top);
   for (let index = 1; index < layout.sections.length; index++) {
     const heading = layout.sections[index];
-    const next = layout.items.find(item => sectionKeys.get(item.id) === heading.key)!;
+    const next = layout.items.find((item) => sectionKeys.get(item.id) === heading.key)!;
     expect(next.left).toBe(0);
     expect(next.top).toBe(heading.top + heading.height);
-    const previous = layout.items.filter(item => item.top < heading.top);
-    expect(previous.every(item => item.top + item.height <= heading.top)).toBe(true);
+    const previous = layout.items.filter((item) => item.top < heading.top);
+    expect(previous.every((item) => item.top + item.height <= heading.top)).toBe(true);
   }
   expect(layout.height).toBeGreaterThan(layout.items.at(-1)!.top);
 });
 
 it('keeps a month continuous when the next page adds more photos and virtualizes its heading', () => {
-  const assets = Array.from({length: 500}, (_, index) => ({id: `item-${index}`, width: 800, height: 600}));
-  const sectionKeys = new Map(assets.map(asset => [asset.id, '2026-10']));
-  const first = buildEagleMasonryLayout(assets.slice(0, 20), 900, {strategy: 'justified', sectionKeys});
-  const all = buildEagleMasonryLayout(assets, 900, {strategy: 'justified', sectionKeys});
+  const assets = Array.from({ length: 500 }, (_, index) => ({
+    id: `item-${index}`,
+    width: 800,
+    height: 600,
+  }));
+  const sectionKeys = new Map(assets.map((asset) => [asset.id, '2026-10']));
+  const first = buildEagleMasonryLayout(assets.slice(0, 20), 900, {
+    strategy: 'justified',
+    sectionKeys,
+  });
+  const all = buildEagleMasonryLayout(assets, 900, { strategy: 'justified', sectionKeys });
   expect(first.sections).toHaveLength(1);
   expect(all.sections).toHaveLength(1);
   const index = buildMasonryViewportIndex(all.sections);
-  expect(selectVisibleMasonryItemsFromIndex(index, {scrollTop: 0, viewportHeight: 600, overscan: 100})).toHaveLength(1);
-  expect(selectVisibleMasonryItemsFromIndex(index, {scrollTop: 10_000, viewportHeight: 600, overscan: 100})).toHaveLength(0);
+  expect(
+    selectVisibleMasonryItemsFromIndex(index, { scrollTop: 0, viewportHeight: 600, overscan: 100 }),
+  ).toHaveLength(1);
+  expect(
+    selectVisibleMasonryItemsFromIndex(index, {
+      scrollTop: 10_000,
+      viewportHeight: 600,
+      overscan: 100,
+    }),
+  ).toHaveLength(0);
 });
 
 it('does not add headings or change the existing material layout without section metadata', () => {
-  const asset = {id: 'one', width: 800, height: 600};
+  const asset = { id: 'one', width: 800, height: 600 };
   expect(buildEagleMasonryLayout([asset], 900).sections).toEqual([]);
-  expect(buildEagleMasonryLayout([asset], 900, {strategy: 'justified'}).sections).toEqual([]);
-  expect(buildEagleMasonryLayout([], 900, {strategy: 'justified', sectionKeys: new Map()}).sections).toEqual([]);
+  expect(buildEagleMasonryLayout([asset], 900, { strategy: 'justified' }).sections).toEqual([]);
+  expect(
+    buildEagleMasonryLayout([], 900, { strategy: 'justified', sectionKeys: new Map() }).sections,
+  ).toEqual([]);
 });
