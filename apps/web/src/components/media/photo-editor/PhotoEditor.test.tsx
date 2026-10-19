@@ -236,7 +236,7 @@ describe('photo editor interactions', () => {
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: 'HSL' }));
     fireEvent.click(screen.getByRole('button', { name: '蓝色' }));
-    fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
+    expect(screen.getAllByRole('slider')).toHaveLength(3);
     const hsl = screen.getByRole('slider', { name: '蓝色 · 饱和度' });
     fireEvent.change(hsl, { target: { value: '-50' } });
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
@@ -251,7 +251,7 @@ describe('photo editor interactions', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: '色彩分级' }));
     fireEvent.click(screen.getByRole('button', { name: '阴影' }));
-    fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
+    expect(screen.getAllByRole('slider')).toHaveLength(3);
     fireEvent.change(screen.getByRole('slider', { name: '阴影 · 饱和度' }), {
       target: { value: '40' },
     });
@@ -276,6 +276,38 @@ describe('photo editor interactions', () => {
     expect(screen.getByRole('slider', { name: '阴影 · 饱和度' })).toHaveValue('0');
     fireEvent.click(screen.getByRole('button', { name: 'HSL' }));
     expect(screen.getByRole('slider', { name: '蓝色 · 饱和度' })).toHaveValue('0');
+  });
+  it('shows three direct controls for every HSL color and grading zone and retains independent values', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    for (const [category, families] of [
+      ['HSL', ['红色', '橙色', '黄色', '绿色', '青色', '蓝色', '紫色', '洋红']],
+      ['色彩分级', ['阴影', '中间调', '高光']],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: category }));
+      for (const family of families) {
+        fireEvent.click(screen.getByRole('button', { name: family, exact: true }));
+        expect(screen.getAllByRole('slider')).toHaveLength(3);
+        expect(screen.queryByRole('group', { name: '调整维度' })).not.toBeInTheDocument();
+        for (const [index, axis] of ['色相', '饱和度', '明度'].entries()) {
+          const label = `${family} · ${axis}`;
+          fireEvent.change(screen.getByRole('slider', { name: label }), {
+            target: { value: String((index + 1) * 10) },
+          });
+          expect(screen.getByRole('spinbutton', { name: `${label}数值` })).toHaveValue((index + 1) * 10);
+        }
+      }
+      fireEvent.click(screen.getByRole('button', { name: families[0], exact: true }));
+      for (const [index, axis] of ['色相', '饱和度', '明度'].entries()) {
+        expect(screen.getByRole('slider', { name: `${families[0]} · ${axis}` })).toHaveValue(String((index + 1) * 10));
+      }
+      fireEvent.doubleClick(screen.getByRole('slider', { name: `${families[0]} · 色相` }));
+      expect(screen.getByRole('slider', { name: `${families[0]} · 色相` })).toHaveValue('0');
+      expect(screen.getByRole('slider', { name: `${families[0]} · 饱和度` })).toHaveValue('20');
+    }
+    fireEvent.click(screen.getByRole('button', { name: '平衡', exact: true }));
+    expect(screen.getAllByRole('slider')).toHaveLength(1);
+    expect(screen.getByRole('slider', { name: '分级平衡' })).toBeEnabled();
   });
   it('records a complete curve drag as one undo step and ignores other pointers', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
