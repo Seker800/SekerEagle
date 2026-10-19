@@ -202,3 +202,29 @@ it('prefills detected metadata for editing and allows blank overrides or manual 
     expect.objectContaining({ watermarkCamera: 'Nikon Z5', watermarkCapturedAt: '2026.10.18' }),
   );
 });
+
+
+it('keeps untouched fields automatic when metadata arrives while the text editor is open', () => {
+  const { props, view, onChange } = setup();
+  const edits = { ...props.edits, watermark: 'photo-strip' };
+  view.rerender(<PhotoWatermarkPanel {...props} edits={edits} metadataLoading />);
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('');
+  view.rerender(<PhotoWatermarkPanel {...props} edits={edits} metadata={{ camera: 'NIKON D80', parameters: '135mm · f/5.6', capturedAt: '2010.07.31' }} />);
+  expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('NIKON D80');
+  expect(screen.getByRole('textbox', { name: '拍摄参数' })).toHaveValue('135mm · f/5.6');
+  fireEvent.change(screen.getByRole('textbox', { name: '签名文字' }), { target: { value: 'Signature' } });
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ watermarkText: 'Signature', watermarkCamera: null, watermarkParameters: null, watermarkCapturedAt: null }));
+});
+
+it('can restore detected information after an empty or custom override without clearing the signature or website', () => {
+  const { props, view, onChange } = setup();
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'color-block', watermarkText: 'Signature', watermarkCamera: '', watermarkWebsite: 'WWW.SEKER.WANG' }} metadata={{ camera: 'NIKON D80' }} />);
+  fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
+  fireEvent.click(screen.getByRole('button', { name: '恢复照片信息' }));
+  expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('NIKON D80');
+  expect(screen.getByRole('textbox', { name: '签名文字' })).toHaveValue('Signature');
+  fireEvent.click(screen.getByRole('button', { name: '完成' }));
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ watermarkCamera: null, watermarkText: 'Signature', watermarkWebsite: 'WWW.SEKER.WANG' }));
+});
