@@ -570,3 +570,17 @@ it('keeps filter strength above its thumbnails in the common tool inspector', as
   fireEvent.click(screen.getByRole('button', { name: '滤镜' }));
   expect(screen.getByRole('slider', { name: '滤镜强度' })).toHaveValue('45');
 });
+
+
+it('undoes and redoes the frosted watermark background as one ordinary edit', async () => {
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '水印' }));
+  fireEvent.click(screen.getByRole('button', { name: '居中留白' }));
+  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  expect(screen.getByRole('button', { name: '白底' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '重做' }));
+  expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute('aria-pressed', 'true');
+});

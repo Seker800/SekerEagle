@@ -277,3 +277,17 @@ it('offers exactly camera, parameters, time and website, without a signature or 
   expect(DEFAULT_PHOTO_EDITS).not.toHaveProperty('watermarkText');
   expect(DEFAULT_PHOTO_EDITS).not.toHaveProperty('watermarkScale');
 });
+
+
+it('offers frosted backgrounds for framed layouts and normalizes the theme for text overlays', () => {
+  const { props, view, onChange } = setup();
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip' }} />);
+  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  expect(onChange).toHaveBeenLastCalledWith({ watermarkTheme: 'frosted' });
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip', watermarkTheme: 'frosted' }} />);
+  expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '简洁叠印' }));
+  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ watermark: 'standard-left', watermarkTheme: 'white' }));
+  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'standard-left' }} />);
+  expect(screen.queryByRole('button', { name: '毛玻璃底' })).not.toBeInTheDocument();
+});
