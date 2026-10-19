@@ -93,19 +93,9 @@ function WatermarkSettingsEditor({
           />
         </div>
         <label>
-          {t('签名文字')}
-          <input
-            autoFocus
-            type="text"
-            maxLength={64}
-            value={draft.watermarkText}
-            placeholder={t('输入署名或一句话')}
-            onChange={(event) => change({ watermarkText: event.target.value })}
-          />
-        </label>
-        <label>
           {t('显示机型')}
           <input
+            autoFocus
             type="text"
             maxLength={64}
             value={draft.watermarkCamera ?? metadata.camera ?? ''}
@@ -152,19 +142,6 @@ function WatermarkSettingsEditor({
           {t('恢复照片信息')}
         </button>
         <p className={styles.hint}>{t('仅修改水印显示文字，不改写照片拍摄信息。')}</p>
-        <label>
-          {t('文字大小')}
-          <output>{draft.watermarkScale}%</output>
-          <input
-            type="range"
-            min={60}
-            max={160}
-            step={1}
-            value={draft.watermarkScale}
-            aria-label={t('文字大小')}
-            onChange={(event) => change({ watermarkScale: Number(event.target.value) })}
-          />
-        </label>
         <div className={styles.watermarkSettingsActions}>
           <button type="button" onClick={onClose}>
             {t('取消')}
@@ -174,12 +151,10 @@ function WatermarkSettingsEditor({
             className={styles.watermarkApply}
             onClick={() => {
               onApply({
-                watermarkText: draft.watermarkText,
                 watermarkCamera: draft.watermarkCamera,
                 watermarkParameters: draft.watermarkParameters,
                 watermarkCapturedAt: draft.watermarkCapturedAt,
                 watermarkWebsite: draft.watermarkWebsite,
-                watermarkScale: draft.watermarkScale,
               });
               onClose();
             }}

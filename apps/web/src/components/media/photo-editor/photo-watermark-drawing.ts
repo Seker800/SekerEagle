@@ -11,7 +11,6 @@ export interface WatermarkDrawing {
   template: WatermarkTemplate;
   edits: PhotoEdits;
   metadata: PhotoMetadata;
-  title: string;
   camera: string;
   details: string;
   time: string;

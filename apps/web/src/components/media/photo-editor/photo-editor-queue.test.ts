@@ -103,7 +103,7 @@ describe('bounded photo preview worker', () => {
       await renderer.render(photo, {
         ...DEFAULT_PHOTO_EDITS,
         watermark: 'photo-strip',
-        watermarkText: 'Signature',
+        watermarkCamera: 'Nikon Z5',
       }),
     ).toBe(result);
     expect(worker.requests).toHaveLength(1);

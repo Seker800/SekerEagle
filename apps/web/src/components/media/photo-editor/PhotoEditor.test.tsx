@@ -398,7 +398,7 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: '水印' }));
     fireEvent.click(screen.getByRole('button', { name: '摄影信息条' }));
     fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
-    fireEvent.change(screen.getByRole('textbox', { name: '签名文字' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: '显示机型' }), {
       target: { value: 'My photo' },
     });
     fireEvent.change(screen.getByRole('textbox', { name: '网站地址' }), {
@@ -408,9 +408,9 @@ describe('photo editor interactions', () => {
     expect(screen.queryByRole('dialog', { name: '水印设置' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '撤销' }));
     fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
-    expect(screen.getByRole('textbox', { name: '签名文字' })).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('Nikon D80');
     expect(screen.getByRole('textbox', { name: '网站地址' })).toHaveValue('WWW.SEKER.WANG');
-    fireEvent.keyDown(screen.getByRole('textbox', { name: '签名文字' }), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByRole('textbox', { name: '显示机型' }), { key: 'Escape' });
     expect(screen.queryByRole('dialog', { name: '水印设置' })).not.toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '无水印' }));

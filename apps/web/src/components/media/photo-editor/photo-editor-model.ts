@@ -36,7 +36,6 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermark: string;
   watermarkAlign: 'left' | 'center' | 'right';
   watermarkTheme: 'white' | 'black';
-  watermarkText: string;
   watermarkCamera: string | null;
   watermarkParameters: string | null;
   watermarkCapturedAt: string | null;
@@ -44,7 +43,6 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermarkShowWebsite: boolean;
   watermarkShowTime: boolean;
   watermarkShowParameters: boolean;
-  watermarkScale: number;
   filter: PhotoFilter;
   filterStrength: number;
   rotation: number;
@@ -81,7 +79,6 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermark: 'none',
   watermarkAlign: 'left',
   watermarkTheme: 'white',
-  watermarkText: '',
   watermarkCamera: null,
   watermarkParameters: null,
   watermarkCapturedAt: null,
@@ -89,7 +86,6 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermarkShowWebsite: true,
   watermarkShowTime: true,
   watermarkShowParameters: true,
-  watermarkScale: 100,
   filter: 'original',
   filterStrength: 100,
   rotation: 0,

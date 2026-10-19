@@ -46,7 +46,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   },
   {
     id: 'standard-left',
-    label: t('平面签名'),
+    label: t('简洁叠印'),
     category: 'universal',
     style: 'overlay',
     time: true,
@@ -95,7 +95,7 @@ export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   },
   {
     id: 'editorial-panel',
-    label: t('左侧题签'),
+    label: t('侧栏信息'),
     category: 'portrait',
     style: 'editorial',
     time: true,

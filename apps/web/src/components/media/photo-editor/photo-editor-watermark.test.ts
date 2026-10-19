@@ -31,7 +31,6 @@ describe('real canvas watermark composition', () => {
       const edits = {
         ...DEFAULT_PHOTO_EDITS,
         watermark: template.id,
-        watermarkText: 'Photo by Seker',
       };
       const composed = renderPhotoWatermark(
         asHTML(photo),
@@ -160,7 +159,7 @@ describe('distinct and flat watermark layouts', () => {
         {
           ...DEFAULT_PHOTO_EDITS,
           watermark: template.id,
-          watermarkText: 'Mountain light',
+
           watermarkShowTime: true,
         },
         {
@@ -219,7 +218,7 @@ describe('distinct and flat watermark layouts', () => {
             {
               ...DEFAULT_PHOTO_EDITS,
               watermark: template.id,
-              watermarkText: '长标题 '.repeat(100),
+              watermarkCamera: 'Long camera model '.repeat(100),
             },
             {},
             create,
@@ -254,7 +253,7 @@ describe('watermark typography and content hierarchy', () => {
       {
         ...DEFAULT_PHOTO_EDITS,
         watermark: id,
-        watermarkText: 'Mountain light',
+
         watermarkShowTime: true,
         watermarkAlign: align,
       },
@@ -282,10 +281,9 @@ describe('watermark typography and content hierarchy', () => {
     const parameters = capture('photo-strip').find(({ text }) => text.includes('35mm'))!;
     expect(parameters.size).toBeGreaterThanOrEqual(25);
   });
-  it('retains camera, signature, parameters and date as distinct side-rail information', () => {
+  it('retains camera, parameters and date as distinct side-rail information', () => {
     const texts = capture('photo-side').map(({ text }) => text);
-    for (const text of ['Mountain light', 'FUJIFILM X-E5', '2026.10.19'])
-      expect(texts).toContain(text);
+    for (const text of ['FUJIFILM X-E5', '2026.10.19']) expect(texts).toContain(text);
     expect(texts.some((text) => text.includes('35mm'))).toBe(true);
   });
   it('keeps the date visible for a right-aligned signature', () => {
@@ -293,7 +291,7 @@ describe('watermark typography and content hierarchy', () => {
   });
 });
 
-it('keeps watermark text inside the output without collisions at maximum size', () => {
+it('keeps watermark text inside the output without collisions with fixed template sizes', () => {
   for (const [width, height] of [
     [1600, 1000],
     [1000, 1500],
@@ -306,8 +304,7 @@ it('keeps watermark text inside the output without collisions at maximum size', 
         {
           ...DEFAULT_PHOTO_EDITS,
           watermark: template.id,
-          watermarkText: '山间的光 Mountain light',
-          watermarkScale: 160,
+
           watermarkShowTime: true,
         },
         {
@@ -445,7 +442,6 @@ it('draws every watermark with one regular sans font, solid black or white and n
           ...DEFAULT_PHOTO_EDITS,
           watermark: template.id,
           watermarkTheme: theme,
-          watermarkText: 'NIKON D80',
         },
         { parameters: '135mm · f/5.6 · 1/500s · ISO 125', capturedAt: '2026.10.19' },
         () => {
@@ -480,7 +476,7 @@ it('draws every watermark with one regular sans font, solid black or white and n
   }
 });
 
-it('keeps the detected camera in every layout when a separate signature is present', () => {
+it('keeps the detected camera in every layout with only camera, parameters, time and website', () => {
   for (const template of WATERMARK_TEMPLATES) {
     const texts: string[] = [];
     renderPhotoWatermark(
@@ -488,7 +484,6 @@ it('keeps the detected camera in every layout when a separate signature is prese
       {
         ...DEFAULT_PHOTO_EDITS,
         watermark: template.id,
-        watermarkText: 'Signature',
       },
       { camera: 'NIKON D80', parameters: '135mm · f/5.6' },
       () => {
@@ -503,8 +498,19 @@ it('keeps the detected camera in every layout when a separate signature is prese
       texts.some((text) => text.includes('NIKON D80')),
       template.id,
     ).toBe(true);
+  }
+});
+
+it('ignores signature and font-size remnants from an existing edit session in every template', () => {
+  for (const template of WATERMARK_TEMPLATES) {
+    const photo = asHTML(source());
+    const edits = { ...DEFAULT_PHOTO_EDITS, watermark: template.id };
+    const legacy = { ...edits, watermarkText: 'Legacy signature', watermarkScale: 160 };
+    const metadata = { camera: 'NIKON D80', parameters: '135mm · f/5.6', capturedAt: '2010.07.31' };
+    const original = renderPhotoWatermark(photo, edits, metadata, create) as unknown as Canvas;
+    const withLegacy = renderPhotoWatermark(photo, legacy, metadata, create) as unknown as Canvas;
     expect(
-      texts.some((text) => text.includes('Signature')),
+      withLegacy.toBuffer('image/png').equals(original.toBuffer('image/png')),
       template.id,
     ).toBe(true);
   }

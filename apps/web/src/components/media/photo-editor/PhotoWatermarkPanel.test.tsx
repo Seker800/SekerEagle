@@ -122,7 +122,7 @@ it('merges signature alignment into controls instead of separate layouts', () =>
     <PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'standard-right' }} />,
   );
   expect(screen.getByRole('button', { name: '右对齐' })).toHaveAttribute('aria-pressed', 'true');
-  expect(within(row).getByRole('button', { name: '平面签名' })).toHaveAttribute(
+  expect(within(row).getByRole('button', { name: '简洁叠印' })).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -218,13 +218,13 @@ it('keeps untouched fields automatic when metadata arrives while the text editor
   );
   expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('NIKON D80');
   expect(screen.getByRole('textbox', { name: '拍摄参数' })).toHaveValue('135mm · f/5.6');
-  fireEvent.change(screen.getByRole('textbox', { name: '签名文字' }), {
-    target: { value: 'Signature' },
+  fireEvent.change(screen.getByRole('textbox', { name: '网站地址' }), {
+    target: { value: 'PHOTO.EXAMPLE.COM' },
   });
   fireEvent.click(screen.getByRole('button', { name: '完成' }));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
-      watermarkText: 'Signature',
+      watermarkWebsite: 'PHOTO.EXAMPLE.COM',
       watermarkCamera: null,
       watermarkParameters: null,
       watermarkCapturedAt: null,
@@ -232,7 +232,7 @@ it('keeps untouched fields automatic when metadata arrives while the text editor
   );
 });
 
-it('can restore detected information after an empty or custom override without clearing the signature or website', () => {
+it('can restore detected information after an empty or custom override without clearing the website', () => {
   const { props, view, onChange } = setup();
   view.rerender(
     <PhotoWatermarkPanel
@@ -240,7 +240,7 @@ it('can restore detected information after an empty or custom override without c
       edits={{
         ...props.edits,
         watermark: 'color-block',
-        watermarkText: 'Signature',
+
         watermarkCamera: '',
         watermarkWebsite: 'WWW.SEKER.WANG',
       }}
@@ -250,21 +250,26 @@ it('can restore detected information after an empty or custom override without c
   fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
   fireEvent.click(screen.getByRole('button', { name: '恢复照片信息' }));
   expect(screen.getByRole('textbox', { name: '显示机型' })).toHaveValue('NIKON D80');
-  expect(screen.getByRole('textbox', { name: '签名文字' })).toHaveValue('Signature');
+  expect(screen.getByRole('textbox', { name: '网站地址' })).toHaveValue('WWW.SEKER.WANG');
   fireEvent.click(screen.getByRole('button', { name: '完成' }));
   expect(onChange).toHaveBeenLastCalledWith(
     expect.objectContaining({
       watermarkCamera: null,
-      watermarkText: 'Signature',
+
       watermarkWebsite: 'WWW.SEKER.WANG',
     }),
   );
 });
 
-
 it('offers exactly camera, parameters, time and website, without a signature or size slider', () => {
   const { props, view } = setup();
-  view.rerender(<PhotoWatermarkPanel {...props} edits={{ ...props.edits, watermark: 'photo-strip' }} metadata={{ camera: 'NIKON D80' }} />);
+  view.rerender(
+    <PhotoWatermarkPanel
+      {...props}
+      edits={{ ...props.edits, watermark: 'photo-strip' }}
+      metadata={{ camera: 'NIKON D80' }}
+    />,
+  );
   fireEvent.click(screen.getByRole('button', { name: '编辑水印文字' }));
   expect(screen.getAllByRole('textbox')).toHaveLength(4);
   expect(screen.queryByRole('textbox', { name: '签名文字' })).not.toBeInTheDocument();

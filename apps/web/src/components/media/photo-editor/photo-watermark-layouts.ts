@@ -8,7 +8,7 @@ const secondary = (d: WatermarkDrawing, value: string, size = d.size * 0.58) => 
   size,
   color: d.secondary,
 });
-const heading = (d: WatermarkDrawing, value = d.title, size = d.size * 0.9) => ({
+const heading = (d: WatermarkDrawing, value = d.camera, size = d.size * 0.9) => ({
   value,
   size,
 });
@@ -21,7 +21,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     const { layout: l, size: s } = d,
       p = l.panel,
       pad = l.photoWidth * 0.04;
-    textBlock(d, [heading(d), secondary(d, d.camera === d.title ? '' : d.camera), website(d)], {
+    textBlock(d, [heading(d), website(d)], {
       x: pad,
       y: p.y,
       width: p.width * 0.43,
@@ -44,11 +44,12 @@ const painters: Record<WatermarkStyle, Painter> = {
     c.rotate(-Math.PI / 2);
     const railWidth = p.height * 0.88,
       railHeight = p.width * 0.8;
-    textBlock(
-      d,
-      [heading(d, d.title, s * 0.78), secondary(d, d.camera === d.title ? '' : d.camera, s * 0.5)],
-      { x: -railWidth / 2, y: -railHeight / 2, width: railWidth * 0.42, height: railHeight },
-    );
+    textBlock(d, [heading(d, d.camera, s * 0.78)], {
+      x: -railWidth / 2,
+      y: -railHeight / 2,
+      width: railWidth * 0.42,
+      height: railHeight,
+    });
     textBlock(
       d,
       [
@@ -68,8 +69,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s },
-        secondary(d, d.camera === d.title ? '' : d.camera),
+        { value: d.camera, size: s },
         secondary(d, d.details, s * 0.58),
         secondary(d, d.time, s * 0.48),
         website(d),
@@ -87,17 +87,15 @@ const painters: Record<WatermarkStyle, Painter> = {
   cornerGrid(d) {
     const { layout: l, size: s } = d;
     const pad = Math.min(l.photoWidth * 0.04, l.photoHeight * 0.08);
-    label(d, d.camera || d.title, pad, pad + s * 0.72, s * 0.72, l.width - pad * 2, 'left');
+    label(d, d.camera, pad, pad + s * 0.72, s * 0.72, l.width - pad * 2, 'left');
     const height = Math.min(s * 3.5, l.height * 0.34);
-    textBlock(
-      d,
-      [
-        heading(d, d.title === d.camera ? '' : d.title, s * 0.72),
-        secondary(d, d.time, s * 0.53),
-        website(d),
-      ],
-      { x: pad, y: l.height - pad - height, width: l.width * 0.45 - pad, height, vertical: 'end' },
-    );
+    textBlock(d, [secondary(d, d.time, s * 0.53), website(d)], {
+      x: pad,
+      y: l.height - pad - height,
+      width: l.width * 0.45 - pad,
+      height,
+      vertical: 'end',
+    });
     const parts = fields(d);
     textBlock(
       d,
@@ -133,8 +131,7 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s * 0.76, color: '#ffffff' },
-        { value: d.camera === d.title ? '' : d.camera, size: s * 0.5, color: '#ffffff' },
+        { value: d.camera, size: s * 0.76, color: '#ffffff' },
         { ...website(d), color: '#ffffff' },
       ],
       {
@@ -159,11 +156,8 @@ const painters: Record<WatermarkStyle, Painter> = {
     textBlock(
       d,
       [
-        { value: d.title, size: s * 1.05 },
-        secondary(
-          d,
-          [d.camera === d.title ? '' : d.camera, d.details].filter(Boolean).join('  ·  '),
-        ),
+        { value: d.camera, size: s * 1.05 },
+        secondary(d, d.details),
         secondary(d, d.time, s * 0.48),
         website(d),
       ],
@@ -181,7 +175,7 @@ const painters: Record<WatermarkStyle, Painter> = {
       pad = l.photoWidth * 0.04;
     const x = l.x + pad,
       width = l.photoWidth - pad * 2;
-    textBlock(d, [heading(d, d.camera || d.title, s * 0.65)], {
+    textBlock(d, [heading(d, d.camera, s * 0.65)], {
       x,
       y: 0,
       width: width * 0.6,
@@ -195,7 +189,7 @@ const painters: Record<WatermarkStyle, Painter> = {
       align: 'right',
     });
     const parts = fields(d);
-    textBlock(d, [heading(d, d.title === d.camera ? '' : d.title, s * 0.85), website(d)], {
+    textBlock(d, [website(d)], {
       x,
       y: l.panel.y,
       width: width * 0.42,
@@ -222,9 +216,8 @@ const painters: Record<WatermarkStyle, Painter> = {
     const pad = l.photoWidth * 0.035,
       x = p.x + pad,
       width = p.width - pad * 2;
-    const camera = d.camera === d.title ? '' : d.camera;
     const titleHeight = Math.min(s * 4, p.height * 0.4);
-    textBlock(d, [{ value: d.title, size: s * 0.92 }, secondary(d, camera, s * 0.5)], {
+    textBlock(d, [{ value: d.camera, size: s * 0.92 }], {
       x,
       y: p.y + pad,
       width,

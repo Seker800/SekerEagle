@@ -38,7 +38,6 @@ export function renderPhotoWatermark(
     template,
     edits,
     metadata,
-    title: edits.watermarkText.trim() || camera,
     camera,
     details: edits.watermarkShowParameters
       ? (edits.watermarkParameters ?? metadata.parameters ?? '').trim()
@@ -50,10 +49,7 @@ export function renderPhotoWatermark(
     website: edits.watermarkShowWebsite ? edits.watermarkWebsite.trim() : '',
     foreground,
     secondary,
-    size: Math.max(
-      1,
-      source.width * 0.028 * Math.max(0.6, Math.min(1.6, edits.watermarkScale / 100)),
-    ),
+    size: Math.max(1, source.width * 0.028),
   });
   context.restore();
   return canvas;
