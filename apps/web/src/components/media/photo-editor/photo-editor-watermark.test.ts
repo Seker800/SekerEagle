@@ -571,3 +571,32 @@ it('keeps dark glass readable while retaining local image shapes instead of aver
   expect(edge).toBeLessThan(light - 10);
   expect(pixel(output, 80, 128)[3]).toBe(255);
 });
+
+it('applies independent glass controls to the shared compositor with exact zero and full darkness endpoints', () => {
+  const photo = source();
+  const base = {
+    ...DEFAULT_PHOTO_EDITS,
+    watermark: 'frame-minimal',
+    watermarkTheme: 'frosted' as const,
+    watermarkWebsite: '',
+    watermarkBlur: 0,
+    watermarkDarkness: 0,
+  };
+  const clear = renderPhotoWatermark(asHTML(photo), base, {}, create);
+  const black = renderPhotoWatermark(
+    asHTML(photo),
+    { ...base, watermarkDarkness: 100 },
+    {},
+    create,
+  );
+  expect(pixel(clear, 0, 0)).toEqual([204, 102, 34, 255]);
+  expect(pixel(black, 0, 0)).toEqual([0, 0, 0, 255]);
+  const layout = photoWatermarkLayout(photo.width, photo.height, findWatermark(base.watermark)!);
+  expect(pixel(black, layout.x + 3, layout.y + 3)).toEqual([204, 102, 34, 255]);
+  const blurred = renderPhotoWatermark(asHTML(photo), { ...base, watermarkBlur: 100 }, {}, create);
+  expect(
+    (blurred as unknown as Canvas)
+      .toBuffer('image/png')
+      .equals((clear as unknown as Canvas).toBuffer('image/png')),
+  ).toBe(false);
+});

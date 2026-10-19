@@ -583,3 +583,35 @@ it('undoes and redoes the frosted watermark background as one ordinary edit', as
   fireEvent.click(screen.getByRole('button', { name: '重做' }));
   expect(screen.getByRole('button', { name: '毛玻璃底' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+it('adjusts glass blur and darkness independently with grouped undo, reset and retained values', async () => {
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '水印' }));
+  fireEvent.click(screen.getByRole('button', { name: '居中留白' }));
+  expect(screen.queryByRole('slider', { name: '模糊度' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  const blur = screen.getByRole('slider', { name: '模糊度' });
+  const darkness = screen.getByRole('slider', { name: '黑度' });
+  expect(blur).toHaveValue('20');
+  expect(darkness).toHaveValue('55');
+  fireEvent.pointerDown(blur);
+  fireEvent.change(blur, { target: { value: '30' } });
+  fireEvent.change(blur, { target: { value: '45' } });
+  fireEvent.pointerUp(blur);
+  fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+  expect(blur).toHaveValue('20');
+  fireEvent.click(screen.getByRole('button', { name: '重做' }));
+  expect(blur).toHaveValue('45');
+  fireEvent.change(darkness, { target: { value: '75' } });
+  expect(blur).toHaveValue('45');
+  expect(darkness).toHaveValue('75');
+  fireEvent.doubleClick(darkness);
+  expect(darkness).toHaveValue('55');
+  fireEvent.click(screen.getByRole('button', { name: '白底' }));
+  expect(screen.queryByRole('slider', { name: '模糊度' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '毛玻璃底' }));
+  expect(screen.getByRole('slider', { name: '模糊度' })).toHaveValue('45');
+  fireEvent.click(screen.getByRole('button', { name: '简洁叠印' }));
+  expect(screen.queryByRole('slider', { name: '黑度' })).not.toBeInTheDocument();
+});
