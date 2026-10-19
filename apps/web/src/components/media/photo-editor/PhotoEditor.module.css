@@ -775,6 +775,27 @@
   flex: 1;
   min-width: 0;
 }
+.axisControls {
+  flex: 1;
+  min-width: 0;
+}
+.axisControl {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+}
+.editor .axisLabel {
+  flex-shrink: 0;
+  width: 48px;
+  padding: 0;
+  color: var(--photo-muted);
+  font-size: 12px;
+}
+.axisControl > .slider {
+  flex: 1;
+  min-width: 0;
+}
 .slider[data-compact='true'] {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 64px;
@@ -1169,7 +1190,7 @@
 }
 
 .editor:has(.advancedOptions) {
-  --photo-controls-size: 228px;
+  --photo-controls-size: 272px;
 }
 .editor:has(.curveGraph) {
   --photo-controls-size: 308px;

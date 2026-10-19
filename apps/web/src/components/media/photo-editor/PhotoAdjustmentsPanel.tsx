@@ -73,6 +73,7 @@ export function PhotoAdjustmentsPanel({
         });
     });
   };
+  const directAxes = group === 'hsl' || group === 'grading';
   const selected = options.find((option) => option.id === selection[group]) ?? options[0];
   useEffect(() => {
     buttons.current.get(selected.id)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
@@ -163,7 +164,28 @@ export function PhotoAdjustmentsPanel({
       <div className={styles.parameterInspector}>
         <div className={styles.parameterRow}>
           {compareControl}
-          {renderControl(selected)}
+          {directAxes ? (
+            <div className={styles.axisControls} role="group" aria-label={selected.familyLabel}>
+              {options
+                .filter((option) => option.family === selected.family)
+                .map((option) => (
+                  <div className={styles.axisControl} key={option.id}>
+                    <button
+                      type="button"
+                      className={styles.axisLabel}
+                      disabled={disabled}
+                      title={t('双击重置此项')}
+                      onDoubleClick={() => onResetOption(option)}
+                    >
+                      {option.axisLabel}
+                    </button>
+                    {renderControl(option)}
+                  </div>
+                ))}
+            </div>
+          ) : (
+            renderControl(selected)
+          )}
         </div>
         <p className={styles.parameterHint}>{t('双击归零 · 方向键微调 · Shift 加速')}</p>
       </div>

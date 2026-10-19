@@ -144,25 +144,27 @@ export function PhotoAdvancedAdjustments({
           ))}
         </svg>
       )}
-      <div className={styles.advancedAxes} role="group" aria-label={t('调整维度')}>
-        {axes.map((option) => (
-          <button
-            key={option.id}
-            type="button"
-            aria-pressed={selected.id === option.id}
-            disabled={disabled}
-            onClick={() => onSelect(option)}
-            aria-label={option.axisLabel}
-            title={option.label}
-          >
-            <span>{option.axisLabel}</span>
-            <small>
-              {edits[option.key] > 0 ? '+' : ''}
-              {edits[option.key]}
-            </small>
-          </button>
-        ))}
-      </div>
+      {group === 'curves' && (
+        <div className={styles.advancedAxes} role="group" aria-label={t('调整维度')}>
+          {axes.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              aria-pressed={selected.id === option.id}
+              disabled={disabled}
+              onClick={() => onSelect(option)}
+              aria-label={option.axisLabel}
+              title={option.label}
+            >
+              <span>{option.axisLabel}</span>
+              <small>
+                {edits[option.key] > 0 ? '+' : ''}
+                {edits[option.key]}
+              </small>
+            </button>
+          ))}
+        </div>
+      )}
       {lut && <p className={styles.parameterHint}>{t('拖动节点或使用滑杆调整曲线')}</p>}
     </div>
   );
