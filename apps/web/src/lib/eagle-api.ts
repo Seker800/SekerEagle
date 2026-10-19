@@ -122,6 +122,7 @@ export interface EagleMediaCapabilities {
     extensions: string[];
     maxBytes: number;
     maxPixels: number;
+    maxRawPixels?: number;
   };
   videos: {
     mimeTypes: string[];

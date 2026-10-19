@@ -12,6 +12,9 @@ export class EagleImageMediaCapabilityDto {
 
   @ApiProperty({ example: 50_000_000 })
   maxPixels!: number;
+
+  @ApiProperty({ example: 120_000_000 })
+  maxRawPixels!: number;
 }
 
 export class EagleVideoMediaCapabilityDto {

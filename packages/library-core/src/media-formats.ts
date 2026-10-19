@@ -72,6 +72,8 @@ export function normalizeCameraMimeType(fileName: string, mimeType: string): str
     'video/x-msvideo': ['video/avi'],
     'application/mxf': ['video/mxf'],
     'image/tiff': ['image/x-tiff'],
+    'image/heif': ['image/heic'],
+    'image/heic': ['image/heif'],
   };
   return aliases[format.mimeType]?.includes(declared) ? format.mimeType : null;
 }
