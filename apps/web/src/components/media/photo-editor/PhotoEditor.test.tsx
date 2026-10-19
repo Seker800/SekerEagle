@@ -238,6 +238,26 @@ describe('photo editor interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'HSL' }));
     expect(screen.getByRole('slider', { name: '蓝色 · 饱和度' })).toHaveValue('0');
   });
+  it('records a complete curve drag as one undo step and ignores other pointers', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '曲线' }));
+    const graph=screen.getByRole('img', {name:'曲线编辑'});
+    vi.spyOn(graph,'getBoundingClientRect').mockReturnValue({left:0,top:0,width:256,height:100,right:256,bottom:100,x:0,y:0,toJSON:()=>({})});
+    Object.defineProperty(graph,'setPointerCapture',{value:vi.fn()});
+    const pointer=(type:string,y:number,id=1)=>{
+      const event=new MouseEvent(type,{bubbles:true,clientX:128,clientY:y,button:0});
+      Object.defineProperties(event,{pointerId:{value:id},pointerType:{value:'touch'}});
+      fireEvent(graph,event);
+    };
+    pointer('pointerdown',50);pointer('pointermove',30);pointer('pointerup',30,2);pointer('pointermove',20);pointer('pointerup',20);
+    expect(screen.getByRole('slider',{name:'主曲线 · 中间调'})).toHaveValue('30');
+    fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+    expect(screen.getByRole('slider',{name:'主曲线 · 中间调'})).toHaveValue('0');
+    expect(screen.getByRole('button',{name:'撤销'})).toBeDisabled();
+    fireEvent.click(screen.getByRole('button',{name:'重做'}));
+    expect(screen.getByRole('slider',{name:'主曲线 · 中间调'})).toHaveValue('30');
+  });
   it('supports press-and-hold original comparison and restores editing on release', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
