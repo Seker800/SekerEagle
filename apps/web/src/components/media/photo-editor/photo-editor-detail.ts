@@ -97,7 +97,7 @@ export function applyPhotoDetail(
       width,
       height,
       Math.max(1, Math.round(edge * 0.0006)),
-      clamp(edits.sharpen / 100) * 0.8,
+      clamp(edits.sharpen / 100, -1, 1) * 0.8,
     );
   if (edits.clarity)
     unsharp(
@@ -105,7 +105,7 @@ export function applyPhotoDetail(
       width,
       height,
       Math.max(2, Math.round(edge * 0.008)),
-      clamp(edits.clarity / 100) * 0.55,
+      clamp(edits.clarity / 100, -1, 1) * 0.55,
     );
   const grain = clamp(edits.grain / 100) * 0.12;
   const vignette = clamp(edits.vignette / 100, -1, 1);

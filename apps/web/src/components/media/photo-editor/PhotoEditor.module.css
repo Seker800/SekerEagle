@@ -153,17 +153,6 @@
 .imageArea.cropImageArea {
   padding: 20px;
 }
-.cropModes {
-  display: flex;
-  gap: 8px;
-  margin: 6px 0;
-}
-.editor .cropModes button {
-  border: 1px solid var(--photo-line);
-  min-height: 34px;
-  padding: 5px 16px;
-  border-radius: 18px;
-}
 .editor .cropHandle {
   position: absolute;
   z-index: 1;
@@ -227,47 +216,98 @@
   top: 50%;
   cursor: ew-resize;
 }
+.cropPanel {
+  max-width: 640px;
+  margin: 0 auto;
+}
+.cropControls .sectionTitle {
+  min-height: 30px;
+  margin-bottom: 5px;
+  border: 0;
+}
 .cropToolbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
-.cropToolbar > button {
-  flex: 0 0 auto;
-  border-color: var(--photo-line);
+.cropOrientation,
+.cropTransforms {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.cropToolbar .ratioLabel {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  gap: 3px;
+.cropOrientation {
+  border: 1px solid var(--photo-line);
+  border-radius: 8px;
+  padding: 2px;
 }
-.cropToolbar .ratioLabel select {
-  width: 100%;
-  min-height: 34px;
-  padding: 4px 8px;
-}
-.cropToolbar + .slider {
-  margin-bottom: 0;
-}
-.cropControls .sectionTitle {
+.editor .cropOrientation button {
   min-height: 28px;
-  margin-bottom: 2px;
+  padding: 3px 10px;
+  border-radius: 5px;
+  color: var(--photo-muted);
 }
-.cropControls .cropToolbar {
-  margin-bottom: 4px;
+.editor .cropOrientation button[aria-pressed='true'] {
+  background: #ffffff14;
+  color: var(--photo-text);
 }
-.cropControls .adjustmentHeading {
-  margin-bottom: 2px;
+.orientationIcon {
+  width: 15px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
 }
-.cropControls .precisionRow input,
-.editor .cropControls .precisionRow button {
-  min-height: 36px;
+.orientationIcon[data-portrait='true'] {
+  width: 10px;
+  height: 15px;
+}
+.editor .cropTransforms button {
+  padding: 4px 7px;
+  color: var(--photo-muted);
+}
+.editor .cropTransforms button[aria-pressed='true'] {
+  color: var(--photo-accent);
+}
+.cropRatios {
+  display: flex;
+  gap: 7px;
+  padding: 4px 2px 7px;
+  scroll-snap-type: x proximity;
+}
+.editor .cropRatios > button {
+  flex-direction: column;
+  flex: 0 0 60px;
+  min-height: 68px;
+  padding: 5px 3px;
+  gap: 5px;
+  border: 1px solid var(--photo-line);
+  border-radius: 9px;
+  color: var(--photo-muted);
+  font-size: 11px;
+  scroll-snap-align: start;
+}
+.editor .cropRatios > button[aria-pressed='true'] {
+  color: var(--photo-accent);
+  border-color: var(--photo-accent);
+  background: #e8b26c12;
+}
+.ratioPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 30px;
+}
+.ratioPreview > span {
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
 }
 .cropControls .hint {
-  margin: 4px 0;
-  font-size: 10px;
+  margin: 4px 0 0;
+  text-align: center;
+  font-size: 11px;
 }
 .cropFrame span {
   position: absolute;
@@ -453,27 +493,44 @@
   min-height: 36px;
 }
 .filters {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 9px;
-  margin-bottom: 30px;
+  display: flex;
+  gap: 10px;
+  padding: 5px 2px 8px;
+  margin-bottom: 8px;
+  scroll-snap-type: x proximity;
 }
-.filters button {
+.editor .filters button {
+  flex: 0 0 64px;
   flex-direction: column;
   position: relative;
-  border-color: var(--photo-line);
+  gap: 6px;
+  padding: 0 0 5px;
+  border-radius: 7px;
+  color: var(--photo-muted);
+  font-size: 11px;
+  scroll-snap-align: start;
+}
+.editor .filters button[aria-pressed='true'] {
+  color: var(--photo-accent);
 }
 .filters svg {
   position: absolute;
-  right: 7px;
-  bottom: 12px;
+  right: 5px;
+  top: 5px;
+  color: white;
+  background: #0008;
+  border-radius: 50%;
 }
 .swatch {
   display: block;
-  width: 100%;
-  height: 55px;
-  border-radius: 5px;
+  width: 60px;
+  height: 60px;
+  border: 2px solid transparent;
+  border-radius: 7px;
   background: linear-gradient(150deg, #a7c3d3 10%, #71847e 48%, #344a40 49%, #b9ad89 80%);
+}
+.filters button[aria-pressed='true'] .swatch {
+  border-color: var(--photo-accent);
 }
 .swatch[data-filter='vintage'] {
   filter: sepia(0.6);
@@ -1000,14 +1057,6 @@
   .note {
     display: none;
   }
-  .filters {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 7px;
-    margin-bottom: 12px;
-  }
-  .swatch {
-    height: 32px;
-  }
   .renderState {
     display: none;
   }
@@ -1075,8 +1124,5 @@
   .precisionRow input,
   .editor .precisionRow button {
     min-height: 28px;
-  }
-  .filters {
-    grid-template-columns: 1fr 1fr;
   }
 }

@@ -58,8 +58,8 @@ export const PHOTO_ADJUSTMENTS: readonly PhotoAdjustmentOption[] = [
   { id: 'temperature', label: t('色温'), group: 'color', key: 'temperature' },
   { id: 'tint', label: t('色调'), group: 'color', key: 'tint' },
   { id: 'fade', label: t('褪色'), group: 'color', key: 'fade', min: 0 },
-  { id: 'sharpen', label: t('锐化'), group: 'detail', key: 'sharpen', min: 0 },
-  { id: 'clarity', label: t('清晰度'), group: 'detail', key: 'clarity', min: 0 },
+  { id: 'sharpen', label: t('锐化'), group: 'detail', key: 'sharpen' },
+  { id: 'clarity', label: t('清晰度'), group: 'detail', key: 'clarity' },
   { id: 'grain', label: t('颗粒'), group: 'detail', key: 'grain', min: 0 },
   { id: 'vignette', label: t('晕影'), group: 'detail', key: 'vignette' },
 ];

@@ -6,9 +6,7 @@ import {
   IconCheck,
   IconCrop,
   IconDeviceFloppy,
-  IconFlipHorizontal,
   IconPhoto,
-  IconRotateClockwise,
   IconX,
   IconFrame,
 } from '@tabler/icons-react';
@@ -17,10 +15,8 @@ import {
   DEFAULT_PHOTO_EDITS,
   hasPhotoEdits,
   photoCrop,
-  FIXED_CROP_RATIOS,
   type PhotoEdits,
   type PhotoFilter,
-  type CropRatio,
 } from './photo-editor-model';
 import {
   createPhotoRenderer,
@@ -35,7 +31,8 @@ import { PhotoAdjustmentsPanel } from './PhotoAdjustmentsPanel';
 import { PHOTO_ADJUSTMENTS, type ActiveAdjustmentKey } from './photo-adjustment-catalog';
 import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
 import { PhotoCropViewport } from './PhotoCropViewport';
-import { cropRectPatch } from './photo-editor-crop-geometry';
+import { PhotoCropPanel } from './PhotoCropPanel';
+import { ScrollableToolRow } from './ScrollableToolRow';
 import { readPhotoMetadata } from './photo-editor-metadata';
 import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
 
@@ -95,9 +92,7 @@ export function PhotoEditor({
   const renderSequence = useRef(0),
     paintedSequence = useRef(0);
   const sliderStartRef = useRef<PhotoEdits | null>(null);
-  const fixedCropRatioRef = useRef<Exclude<CropRatio, 'free'>>('original');
   const pendingSaveRef = useRef<{ key: string; file: File } | null>(null);
-  if (edits.cropRatio !== 'free') fixedCropRatioRef.current = edits.cropRatio;
 
   function update(patch: Partial<PhotoEdits>, record = true) {
     if ((Object.keys(patch) as (keyof PhotoEdits)[]).every((key) => edits[key] === patch[key]))
@@ -623,7 +618,7 @@ export function PhotoEditor({
               <div className={styles.sectionTitle}>
                 <strong>{t('照片滤镜')}</strong>
               </div>
-              <div className={styles.filters}>
+              <ScrollableToolRow className={styles.filters} label={t('照片滤镜')}>
                 {FILTERS.map(({ id, label }) => (
                   <button
                     type="button"
@@ -636,7 +631,7 @@ export function PhotoEditor({
                     {edits.filter === id && <IconCheck size={14} />}
                   </button>
                 ))}
-              </div>
+              </ScrollableToolRow>
               {edits.filter !== 'original' && slider(t('滤镜强度'), 'filterStrength', 0, 100)}
             </>
           )}
@@ -651,118 +646,13 @@ export function PhotoEditor({
             />
           )}
           {tab === 'crop' && (
-            <>
-              <div className={styles.sectionTitle}>
-                <strong>{t('构图')}</strong>
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({
-                      rotation: 0,
-                      flip: false,
-                      cropRatio: 'original',
-                      cropZoom: 1,
-                      cropAspect: 0,
-                      cropX: 0.5,
-                      cropY: 0.5,
-                    })
-                  }
-                >
-                  {t('重置裁剪')}
-                </button>
-              </div>
-              <div className={styles.cropModes} role="group" aria-label={t('裁剪模式')}>
-                <button
-                  type="button"
-                  aria-pressed={edits.cropRatio === 'free'}
-                  onClick={() => {
-                    if (!loaded || edits.cropRatio === 'free') return;
-                    const region = photoCrop(
-                      loaded.naturalWidth,
-                      loaded.naturalHeight,
-                      edits,
-                      false,
-                    );
-                    update({
-                      cropRatio: 'free',
-                      ...cropRectPatch(
-                        loaded.naturalWidth,
-                        loaded.naturalHeight,
-                        { ...edits, cropRatio: 'free' },
-                        region,
-                      ),
-                    });
-                  }}
-                >
-                  {t('自由')}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={edits.cropRatio !== 'free'}
-                  onClick={() => {
-                    if (edits.cropRatio !== 'free') return;
-                    update({
-                      cropRatio: fixedCropRatioRef.current,
-                      cropZoom: 1,
-                      cropX: 0.5,
-                      cropY: 0.5,
-                    });
-                  }}
-                >
-                  {t('固定比例')}
-                </button>
-              </div>
-              <div className={styles.cropToolbar}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    update({
-                      rotation: (edits.rotation + 90) % 360,
-                      cropZoom: 1,
-                      cropAspect: 0,
-                      cropX: 0.5,
-                      cropY: 0.5,
-                    })
-                  }
-                >
-                  <IconRotateClockwise size={18} />
-                  {t('旋转')}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={edits.flip}
-                  onClick={() => update({ flip: !edits.flip })}
-                >
-                  <IconFlipHorizontal size={18} />
-                  {t('镜像')}
-                </button>
-                {edits.cropRatio !== 'free' && (
-                  <label className={styles.ratioLabel}>
-                    {t('裁剪比例')}
-                    <select
-                      value={edits.cropRatio}
-                      onChange={(event) =>
-                        update({
-                          cropRatio: event.target.value as CropRatio,
-                          cropZoom: 1,
-                          cropAspect: 0,
-                          cropX: 0.5,
-                          cropY: 0.5,
-                        })
-                      }
-                    >
-                      {FIXED_CROP_RATIOS.map((ratio) => (
-                        <option value={ratio} key={ratio}>
-                          {ratio === 'original' ? t('原始比例') : ratio}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-              </div>
-              <p className={styles.hint}>{t('拖动四角或边缘调整范围，拖动框内移动裁剪框')}</p>
-            </>
-          )}{' '}
+            <PhotoCropPanel
+              edits={edits}
+              width={loaded?.naturalWidth ?? 1}
+              height={loaded?.naturalHeight ?? 1}
+              onChange={update}
+            />
+          )}
         </fieldset>
         <p className={styles.note}>{t('保留原图，修改后的照片以“已编辑”后缀保存到相册。')}</p>
       </aside>

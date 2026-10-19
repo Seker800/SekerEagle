@@ -979,6 +979,7 @@ export const enUS = {
     'Missed backups run when the computer is available again. The library is temporarily unavailable during backup.',
   自由: 'Free',
   固定比例: 'Fixed ratio',
+  比例方向: 'Ratio orientation',
   裁剪模式: 'Crop mode',
   裁剪左上角: 'Top-left crop corner',
   裁剪上边: 'Top crop edge',

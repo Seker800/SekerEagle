@@ -1,17 +1,14 @@
 export type PhotoFilter = 'original' | 'vintage' | 'oceanic' | 'monochrome';
-export const FIXED_CROP_RATIOS = [
-  'original',
-  '1:1',
-  '4:3',
-  '3:4',
-  '3:2',
-  '2:3',
-  '5:4',
-  '4:5',
-  '16:9',
-  '9:16',
-  '21:9',
+// Each pair shares one visual preset, with an explicit landscape / portrait choice.
+export const CROP_RATIO_PAIRS = [
+  ['1:1', '1:1'],
+  ['4:3', '3:4'],
+  ['3:2', '2:3'],
+  ['5:4', '4:5'],
+  ['16:9', '9:16'],
+  ['21:9', '9:21'],
 ] as const;
+export const FIXED_CROP_RATIOS = ['original', ...new Set(CROP_RATIO_PAIRS.flat())] as const;
 export type CropRatio = 'free' | (typeof FIXED_CROP_RATIOS)[number];
 export interface PhotoEdits {
   exposure: number;
@@ -81,7 +78,7 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   filterStrength: 100,
   rotation: 0,
   flip: false,
-  cropRatio: 'original',
+  cropRatio: 'free',
   cropZoom: 1,
   cropAspect: 0,
   cropX: 0.5,
