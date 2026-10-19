@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconAdjustments,
   IconArrowBackUp,
@@ -65,7 +65,7 @@ export function PhotoEditor({
     current: { ...DEFAULT_PHOTO_EDITS },
     future: [],
   });
-  const edits = history.current;
+  const edits = useMemo(() => ({ ...DEFAULT_PHOTO_EDITS, ...history.current }), [history.current]);
   const [tab, setTab] = useState<Tab>('adjust');
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type PointerEvent } from 'react';
 import { t } from '../../../i18n';
 import type { PhotoEdits } from './photo-editor-model';
 import type { PhotoAdjustmentOption, AdvancedAdjustmentGroup } from './photo-adjustment-catalog';
@@ -52,8 +52,8 @@ export function PhotoAdvancedAdjustments({
   const axes = options.filter((o) => o.family === selected.family);
   const channel = selected.family as CurveChannel;
   const lut = group === 'curves' ? photoCurveLut(edits, channel) : null;
-  const end = () => {
-    if (!drag.current) return;
+  const end = (event: PointerEvent<SVGSVGElement>) => {
+    if (!drag.current || drag.current.pointer !== event.pointerId) return;
     drag.current = null;
     onCommit();
   };
