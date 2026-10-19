@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IconBan, IconPencil, IconX } from '@tabler/icons-react';
+import {
+  IconBan,
+  IconPencil,
+  IconX,
+  IconAlignLeft,
+  IconAlignCenter,
+  IconAlignRight,
+} from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import { DEFAULT_PHOTO_EDITS, type PhotoEdits } from './photo-editor-model';
 import { drawPhoto } from './photo-editor-render';
@@ -231,6 +238,23 @@ export function PhotoWatermarkPanel({
             {t('拍摄参数')}
           </button>
         )}
+        {selected?.alignment &&
+          [
+            { id: 'left' as const, label: t('左对齐'), Icon: IconAlignLeft },
+            { id: 'center' as const, label: t('居中'), Icon: IconAlignCenter },
+            { id: 'right' as const, label: t('右对齐'), Icon: IconAlignRight },
+          ].map(({ id, label, Icon }) => (
+            <button
+              type="button"
+              key={id}
+              aria-label={label}
+              aria-pressed={watermarkAlignment(edits.watermark, edits.watermarkAlign) === id}
+              disabled={disabled}
+              onClick={() => onChange({ watermark: selected.id, watermarkAlign: id })}
+            >
+              <Icon size={16} />
+            </button>
+          ))}
         {selected?.time && (
           <button
             type="button"
@@ -297,7 +321,7 @@ export function PhotoWatermarkPanel({
               undefined
             }
             disabled={disabled}
-            aria-pressed={edits.watermark === template.id}
+            aria-pressed={selected?.id === template.id}
             aria-label={template.label}
             onClick={() =>
               onChange({

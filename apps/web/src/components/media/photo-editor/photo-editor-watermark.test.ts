@@ -146,35 +146,68 @@ describe('photographic metadata whitelist', () => {
 describe('distinct and flat watermark layouts', () => {
   it('consolidates alignment variants into no more than nine structurally different layouts', () => {
     expect(WATERMARK_TEMPLATES.length).toBeLessThanOrEqual(9);
-    expect(new Set(WATERMARK_TEMPLATES.map(template=>template.style)).size).toBe(WATERMARK_TEMPLATES.length);
-    for(const id of ['instant-print','cinema-bars','postcard','blueprint'])
-      expect(WATERMARK_TEMPLATES.some(template=>template.id===id)).toBe(true);
-    const signatures=WATERMARK_TEMPLATES.map(template=>{
-      const layout=photoWatermarkLayout(1200,800,template);
-      return [layout.width,layout.height,layout.x,layout.y].join(':');
+    expect(new Set(WATERMARK_TEMPLATES.map((template) => template.style)).size).toBe(
+      WATERMARK_TEMPLATES.length,
+    );
+    for (const id of ['instant-print', 'cinema-bars', 'postcard', 'blueprint'])
+      expect(WATERMARK_TEMPLATES.some((template) => template.id === id)).toBe(true);
+    const signatures = WATERMARK_TEMPLATES.map((template) => {
+      const layout = photoWatermarkLayout(1200, 800, template);
+      return [layout.width, layout.height, layout.x, layout.y].join(':');
     });
     expect(new Set(signatures).size).toBe(WATERMARK_TEMPLATES.length);
   });
   it('never applies shadows to any watermark text, including overlays', () => {
-    const shadowWrites: number[]=[];
-    const factory=()=>{
-      const canvas=createCanvas(1,1),context=canvas.getContext('2d');
-      for(const key of ['shadowBlur','shadowOffsetX','shadowOffsetY'])
-        Object.defineProperty(context,key,{configurable:true,set:(value:number)=>{if(value)shadowWrites.push(value);},get:()=>0});
+    const shadowWrites: number[] = [];
+    const factory = () => {
+      const canvas = createCanvas(1, 1),
+        context = canvas.getContext('2d');
+      for (const key of ['shadowBlur', 'shadowOffsetX', 'shadowOffsetY'])
+        Object.defineProperty(context, key, {
+          configurable: true,
+          set: (value: number) => {
+            if (value) shadowWrites.push(value);
+          },
+          get: () => 0,
+        });
       return asHTML(canvas);
     };
-    for(const template of WATERMARK_TEMPLATES)
-      renderPhotoWatermark(asHTML(source()),{...DEFAULT_PHOTO_EDITS,watermark:template.id},{camera:'Nikon D80'},factory);
+    for (const template of WATERMARK_TEMPLATES)
+      renderPhotoWatermark(
+        asHTML(source()),
+        { ...DEFAULT_PHOTO_EDITS, watermark: template.id },
+        { camera: 'Nikon D80' },
+        factory,
+      );
     expect(shadowWrites).toEqual([]);
   });
   it('keeps source photo geometry intact for portrait, panorama, transparent and tiny inputs', () => {
-    for(const [width,height] of [[1,1],[80,240],[720,80]]) {
-      const photo=createCanvas(width,height);photo.getContext('2d').fillStyle='#4477aa';photo.getContext('2d').fillRect(0,0,width,height);
-      for(const template of WATERMARK_TEMPLATES) {
-        const layout=photoWatermarkLayout(width,height,template);
-        expect(layout.x).toBeGreaterThanOrEqual(0);expect(layout.y).toBeGreaterThanOrEqual(0);
-        expect(layout.x+width).toBeLessThanOrEqual(layout.width);expect(layout.y+height).toBeLessThanOrEqual(layout.height);
-        expect(()=>renderPhotoWatermark(asHTML(photo),{...DEFAULT_PHOTO_EDITS,watermark:template.id,watermarkText:'长标题 '.repeat(100)},{},create)).not.toThrow();
+    for (const [width, height] of [
+      [1, 1],
+      [80, 240],
+      [720, 80],
+    ]) {
+      const photo = createCanvas(width, height);
+      photo.getContext('2d').fillStyle = '#4477aa';
+      photo.getContext('2d').fillRect(0, 0, width, height);
+      for (const template of WATERMARK_TEMPLATES) {
+        const layout = photoWatermarkLayout(width, height, template);
+        expect(layout.x).toBeGreaterThanOrEqual(0);
+        expect(layout.y).toBeGreaterThanOrEqual(0);
+        expect(layout.x + width).toBeLessThanOrEqual(layout.width);
+        expect(layout.y + height).toBeLessThanOrEqual(layout.height);
+        expect(() =>
+          renderPhotoWatermark(
+            asHTML(photo),
+            {
+              ...DEFAULT_PHOTO_EDITS,
+              watermark: template.id,
+              watermarkText: '长标题 '.repeat(100),
+            },
+            {},
+            create,
+          ),
+        ).not.toThrow();
       }
     }
   });

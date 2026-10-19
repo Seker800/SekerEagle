@@ -34,6 +34,7 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   grain: number;
   vignette: number;
   watermark: string;
+  watermarkAlign: 'left' | 'center' | 'right';
   watermarkTheme: 'white' | 'black';
   watermarkText: string;
   watermarkCamera: string;
@@ -75,6 +76,7 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   grain: 0,
   vignette: 0,
   watermark: 'none',
+  watermarkAlign: 'left',
   watermarkTheme: 'white',
   watermarkText: '',
   watermarkCamera: '',

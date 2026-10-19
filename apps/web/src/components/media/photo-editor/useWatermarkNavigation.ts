@@ -27,7 +27,9 @@ export function useWatermarkNavigation(watermark: string) {
   useEffect(() => {
     manual.current = false;
     setGroup(findWatermark(watermark)?.category ?? 'photo');
-    templates.current.get(watermark)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    templates.current
+      .get(findWatermark(watermark)?.id ?? 'none')
+      ?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }, [watermark]);
   useEffect(() => {
     categoryRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });

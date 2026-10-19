@@ -1,152 +1,110 @@
 import { t } from '../../../i18n';
 
-export type WatermarkCategory = 'photo' | 'standard' | 'classic' | 'film' | 'sport' | 'frame';
-export type WatermarkStyle = 'strip' | 'side' | 'overlay' | 'frame' | 'dark' | 'poster' | 'film';
+export type WatermarkCategory = 'photo' | 'standard' | 'frame' | 'film' | 'creative';
+export type WatermarkStyle =
+  | 'strip'
+  | 'editorial'
+  | 'overlay'
+  | 'gallery'
+  | 'instant'
+  | 'film'
+  | 'cinema'
+  | 'postcard'
+  | 'blueprint';
+export type WatermarkAlignment = 'left' | 'center' | 'right';
 export interface WatermarkTemplate {
   id: string;
   label: string;
   category: WatermarkCategory;
   style: WatermarkStyle;
-  align: 'left' | 'center' | 'right';
   time: boolean;
   theme: boolean;
-  accent?: boolean;
-  wide?: boolean;
+  alignment?: boolean;
 }
 
-// Browser-native templates based on sekerwatermark's seven layout archetypes.
-// No Android classes, OEM binaries, branded logos or extracted fonts are required.
+// One entry per composition. Alignment and theme are controls, never duplicate templates.
 export const WATERMARK_TEMPLATES: readonly WatermarkTemplate[] = [
   {
     id: 'photo-strip',
     label: t('摄影信息条'),
     category: 'photo',
     style: 'strip',
-    align: 'left',
     time: true,
     theme: true,
-    accent: true,
+    alignment: true,
   },
   {
     id: 'photo-side',
-    label: t('摄影侧栏'),
+    label: t('杂志侧栏'),
     category: 'photo',
-    style: 'side',
-    align: 'center',
+    style: 'editorial',
     time: true,
     theme: true,
-  },
-  {
-    id: 'photo-poster',
-    label: t('摄影留白'),
-    category: 'photo',
-    style: 'poster',
-    align: 'center',
-    time: true,
-    theme: true,
-    accent: true,
   },
   {
     id: 'standard-left',
-    label: t('左下签名'),
+    label: t('平面签名'),
     category: 'standard',
     style: 'overlay',
-    align: 'left',
+    time: true,
+    theme: true,
+    alignment: true,
+  },
+  {
+    id: 'frame-minimal',
+    label: t('展签相框'),
+    category: 'frame',
+    style: 'gallery',
     time: true,
     theme: true,
   },
   {
-    id: 'standard-right',
-    label: t('右下签名'),
-    category: 'standard',
-    style: 'overlay',
-    align: 'right',
+    id: 'instant-print',
+    label: t('拍立得'),
+    category: 'frame',
+    style: 'instant',
     time: true,
     theme: true,
-  },
-  {
-    id: 'classic-strip',
-    label: t('经典信息条'),
-    category: 'classic',
-    style: 'strip',
-    align: 'center',
-    time: true,
-    theme: true,
-  },
-  {
-    id: 'classic-frame',
-    label: t('经典宽框'),
-    category: 'classic',
-    style: 'frame',
-    align: 'left',
-    time: true,
-    theme: true,
-    wide: true,
   },
   {
     id: 'film-perforated',
     label: t('胶片齿孔'),
     category: 'film',
     style: 'film',
-    align: 'left',
     time: true,
     theme: false,
   },
   {
-    id: 'film-dark',
-    label: t('暗调胶片'),
+    id: 'cinema-bars',
+    label: t('电影画幅'),
     category: 'film',
-    style: 'dark',
-    align: 'center',
+    style: 'cinema',
     time: true,
     theme: false,
   },
   {
-    id: 'sport-tag',
-    label: t('运动标记'),
-    category: 'sport',
-    style: 'overlay',
-    align: 'left',
-    time: false,
+    id: 'postcard',
+    label: t('明信片'),
+    category: 'creative',
+    style: 'postcard',
+    time: true,
     theme: false,
-    accent: true,
   },
   {
-    id: 'sport-rail',
-    label: t('运动侧框'),
-    category: 'sport',
-    style: 'side',
-    align: 'center',
-    time: false,
-    theme: true,
-    accent: true,
-  },
-  {
-    id: 'frame-minimal',
-    label: t('极简相框'),
-    category: 'frame',
-    style: 'frame',
-    align: 'center',
+    id: 'blueprint',
+    label: t('技术图纸'),
+    category: 'creative',
+    style: 'blueprint',
     time: true,
-    theme: true,
-  },
-  {
-    id: 'frame-poster',
-    label: t('海报相框'),
-    category: 'frame',
-    style: 'poster',
-    align: 'left',
-    time: true,
-    theme: true,
+    theme: false,
   },
 ];
 export const WATERMARK_CATEGORIES: readonly { id: WatermarkCategory; label: string }[] = [
   { id: 'photo', label: t('摄影') },
-  { id: 'standard', label: t('标准') },
-  { id: 'classic', label: t('经典') },
-  { id: 'film', label: t('胶片') },
-  { id: 'sport', label: t('运动') },
+  { id: 'standard', label: t('签名') },
   { id: 'frame', label: t('相框') },
+  { id: 'film', label: t('胶片') },
+  { id: 'creative', label: t('创意') },
 ];
 export interface PhotoMetadata {
   camera?: string;
@@ -154,39 +112,59 @@ export interface PhotoMetadata {
   capturedAt?: string;
 }
 
+const LEGACY_WATERMARKS: Record<string, string> = {
+  'photo-poster': 'instant-print',
+  'standard-right': 'standard-left',
+  'classic-strip': 'photo-strip',
+  'classic-frame': 'frame-minimal',
+  'film-dark': 'film-perforated',
+  'sport-tag': 'standard-left',
+  'sport-rail': 'photo-side',
+  'frame-poster': 'instant-print',
+};
 export function findWatermark(id: string): WatermarkTemplate | undefined {
-  return WATERMARK_TEMPLATES.find((template) => template.id === id);
+  return WATERMARK_TEMPLATES.find((template) => template.id === (LEGACY_WATERMARKS[id] ?? id));
+}
+export function watermarkAlignment(id: string, alignment: WatermarkAlignment): WatermarkAlignment {
+  return id === 'standard-right' ? 'right' : alignment;
 }
 
+/** All borders are outside the original photo; never resize or cover pixels to fit a frame. */
 export function photoWatermarkLayout(width: number, height: number, template: WatermarkTemplate) {
-  // Expand the canvas rather than resampling the original photo to fit the frame.
-  if (template.style === 'overlay')
-    return { width, height, x: 0, y: 0, photoWidth: width, photoHeight: height, caption: 0 };
-  const margin = Math.round(
-    width *
-      (template.style === 'frame'
-        ? template.wide
-          ? 0.08
-          : 0.04
-        : template.style === 'poster'
-          ? 0.08
-          : template.style === 'film'
-            ? 0.025
-            : 0.03),
+  const geometry: Record<WatermarkStyle, readonly [number, number, number, number]> = {
+    // top / right / bottom / left, relative to photo width
+    strip: [0.025, 0.025, 0.15, 0.025],
+    editorial: [0.04, 0.4, 0.04, 0.04],
+    overlay: [0, 0, 0, 0],
+    gallery: [0.12, 0.12, 0.28, 0.12],
+    instant: [0.055, 0.055, 0.34, 0.055],
+    film: [0.065, 0.04, 0.12, 0.04],
+    cinema: [0.11, 0, 0.14, 0],
+    postcard: [0.055, 0.52, 0.055, 0.055],
+    blueprint: [0.095, 0.075, 0.095, 0.075],
+  };
+  const [top, right, bottom, left] = geometry[template.style].map((value) =>
+    Math.round(value * width),
   );
-  const caption = Math.max(
+  const outputWidth = Math.max(1, width + left + right);
+  const outputHeight = Math.max(
     1,
-    Math.round(
-      width * (template.style === 'poster' ? 0.22 : template.style === 'side' ? 0.17 : 0.13),
-    ),
+    height + top + bottom,
+    template.style === 'editorial' || template.style === 'postcard' ? Math.round(width * 0.6) : 0,
   );
+  const x = left,
+    y = top + Math.floor((outputHeight - height - top - bottom) / 2);
+  const side = template.style === 'editorial' || template.style === 'postcard';
   return {
-    width: width + margin * 2 + (template.style === 'side' ? caption : 0),
-    height: height + margin * 2 + (template.style === 'side' ? 0 : caption),
-    x: margin,
-    y: margin,
+    width: outputWidth,
+    height: outputHeight,
+    x,
+    y,
     photoWidth: width,
     photoHeight: height,
-    caption,
+    caption: side ? right : bottom,
+    panel: side
+      ? { x: x + width, y: top, width: right, height: outputHeight - top - bottom }
+      : { x, y: y + height, width, height: outputHeight - y - height },
   };
 }
