@@ -152,6 +152,21 @@ describe('photo editor interactions', () => {
     await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
+  it('keeps tone, color and detail in one continuous tool strip', async () => {
+    render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+    await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+    const strip = screen.getByRole('group', { name: '调整选项' });
+    for (const label of ['曝光', '饱和度', '锐化']) {
+      expect(strip).toContainElement(screen.getByRole('button', { name: label }));
+    }
+    fireEvent.click(screen.getByRole('button', { name: '锐化' }));
+    expect(screen.getByRole('slider', { name: '锐化' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '细节', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(strip).toContainElement(screen.getByRole('button', { name: '曝光' }));
+    fireEvent.click(screen.getByRole('button', { name: '饱和度' }));
+    expect(screen.getByRole('slider', { name: '饱和度' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '色彩', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  });
   it('keeps existing adjustments when switching categories and remembers each selected parameter', async () => {
     render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
     const exposure = screen.getByRole('slider', { name: '曝光' });
