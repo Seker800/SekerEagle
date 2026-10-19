@@ -35,6 +35,7 @@ export function App() {
   const [connectionUnavailable, setConnectionUnavailable] = useState(false);
   const [checkingConnection, setCheckingConnection] = useState(false);
   const checkInFlight = useRef(false);
+  const sessionEpoch = useRef(0);
   const mounted = useRef(false);
   const [privacyVisibility, setPrivacyVisibility] = useState<PrivacyVisibilityState>(
     DEFAULT_PRIVACY_VISIBILITY,
@@ -43,15 +44,22 @@ export function App() {
   const checkSession = useCallback(async () => {
     if (checkInFlight.current) return;
     checkInFlight.current = true;
+    const epoch = sessionEpoch.current;
     setCheckingConnection(true);
     try {
       const { user: current } = await request<{ user: User }>('/api/auth/me');
-      if (mounted.current) {
-        setUser(current);
+      if (mounted.current && epoch === sessionEpoch.current) {
+        setUser((previous) =>
+          previous?.id === current.id &&
+          previous.email === current.email &&
+          previous.role === current.role
+            ? previous
+            : current,
+        );
         setConnectionUnavailable(false);
       }
     } catch (cause) {
-      if (mounted.current) {
+      if (mounted.current && epoch === sessionEpoch.current) {
         if (
           cause instanceof ApiError &&
           (cause.status === 401 || (cause.status === 403 && cause.code !== 'ORIGIN_REJECTED'))
@@ -64,7 +72,7 @@ export function App() {
       }
     } finally {
       checkInFlight.current = false;
-      if (mounted.current) {
+      if (mounted.current && epoch === sessionEpoch.current) {
         setLoading(false);
         setCheckingConnection(false);
       }
@@ -125,6 +133,7 @@ export function App() {
   }, [privacyVisibility.enabled, privacyVisibility.expiresAt]);
   async function login(event: FormEvent) {
     event.preventDefault();
+    sessionEpoch.current++;
     setError('');
     setNotice('');
     try {
@@ -141,12 +150,15 @@ export function App() {
     }
   }
   async function logout(noticeAfterLogout = '') {
+    sessionEpoch.current++;
     try {
       await request('/api/auth/logout', { method: 'POST', body: '{}' });
     } finally {
       await queryClient.cancelQueries();
       queryClient.clear();
       setUser(null);
+      setConnectionUnavailable(false);
+      setCheckingConnection(false);
       setPassword('');
       setNotice(noticeAfterLogout);
     }
