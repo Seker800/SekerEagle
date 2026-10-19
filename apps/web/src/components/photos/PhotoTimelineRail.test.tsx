@@ -88,9 +88,10 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   const slider = screen.getByRole('slider');
   vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
   const marks = slider.querySelectorAll('[data-ruler-month]');
-  expect(marks.length).toBe(310);
-  const major = slider.querySelector('[data-ruler-month="2025-01"]')!;
-  const minor = slider.querySelector('[data-ruler-month="2025-02"]')!;
+  expect(marks.length).toBe(months.length);
+  expect(slider.querySelector('[data-ruler-month="2025-01"]')).toBeNull();
+  const major = slider.querySelector('[data-ruler-month="2001-01"]')!;
+  const minor = slider.querySelector('[data-ruler-month="2024-03"]')!;
   expect(major).toHaveAttribute('data-major', 'true');
   expect(minor).toHaveAttribute('data-major', 'false');
   const restingWidth = parseFloat((major as HTMLElement).style.width);
