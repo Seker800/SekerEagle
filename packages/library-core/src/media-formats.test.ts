@@ -34,7 +34,8 @@ test('accepts camera MIME aliases while retaining content validation and rejecti
     ['photo.DNG', 'image/x-dng', 'image/x-adobe-dng'],
     ['photo.RAF', 'image/x-fujifilm-raf', 'image/x-fuji-raf'],
     ['photo.NEF', 'image/x-nikon-raw', 'image/x-nikon-nef'],
-  ]) assert.equal(normalizeCameraMimeType(file!, mime!), expected);
+  ])
+    assert.equal(normalizeCameraMimeType(file!, mime!), expected);
   assert.equal(normalizeCameraMimeType('photo.raf', 'image/jpeg'), null);
   assert.equal(normalizeCameraMimeType('photo.nef', 'image/png'), null);
 });

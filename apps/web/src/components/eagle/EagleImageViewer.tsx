@@ -118,6 +118,7 @@ export function EagleImageViewer({
   onLocate,
   onClose,
   editSource,
+  editLabel,
   onSavePhoto,
 }: {
   image: PreviewImage;
@@ -125,6 +126,7 @@ export function EagleImageViewer({
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
   editSource?: string;
+  editLabel?: string;
   onSavePhoto?: (file: File) => Promise<SavedPhoto>;
 }) {
   const [editing, setEditing] = useState<{
@@ -367,7 +369,7 @@ export function EagleImageViewer({
                 setEditing({ source: editSource, name: image.alt, onSave: onSavePhoto })
               }
             >
-              {t('编辑照片')}
+              {editLabel ?? t('编辑照片')}
             </button>
           )}
           <button type="button" onClick={onClose}>

@@ -4,7 +4,7 @@ import {
   getPhotoTimelineMonth,
 } from '../photos/photo-timeline-sections';
 import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
-import { isCameraVideoMime } from '@sekereagle/library-core';
+import { isCameraVideoMime, isCameraRawMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
 import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
@@ -78,6 +78,7 @@ import { useEagleAssetViewport } from './eagle-asset-viewport';
 import { EagleAssetThumbnail } from './EagleAssetThumbnail';
 import {
   getEaglePreviewContentUrl,
+  getEagleEditContentUrl,
   getEagleLivePhotoContentUrl,
   collapseLivePhotoComponents,
   needsEagleImagePyramid,
@@ -2413,11 +2414,14 @@ export function SekerEaglePage({
             await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
             return { id: result.asset.id, name: file.name };
           }}
+          editLabel={
+            previewImageAsset && isCameraRawMime(previewImageAsset.mimeType)
+              ? t('编辑 RAW 显影副本')
+              : undefined
+          }
           editSource={
-            libraryView !== 'TRASH' &&
-            previewImageAsset &&
-            ['image/jpeg', 'image/png', 'image/webp'].includes(previewImageAsset.mimeType)
-              ? getEagleAssetContentUrl(previewImageAsset.id)
+            libraryView !== 'TRASH' && previewImageAsset
+              ? (getEagleEditContentUrl(previewImageAsset) ?? undefined)
               : undefined
           }
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}

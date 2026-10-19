@@ -76,6 +76,7 @@ const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
     select: {
       id: true,
       kind: true,
+      variant: true,
       revision: true,
       mimeType: true,
       byteSize: true,

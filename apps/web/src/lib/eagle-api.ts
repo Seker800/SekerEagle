@@ -15,6 +15,7 @@ import { resolveObjectUploadUrl } from './object-upload-url';
 
 export interface EagleRendition {
   id: string;
+  variant?: string;
   kind: 'THUMBNAIL' | 'PREVIEW' | 'POSTER';
   revision: number;
   mimeType: string;

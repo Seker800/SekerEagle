@@ -1,3 +1,4 @@
+import { isCameraRawMime } from '@sekereagle/library-core';
 import { libraryApiPath } from '../../lib/library-api-scope';
 import { getEagleAssetContentUrl, getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { type EagleAssetListItem, type EaglePyramidDescriptor } from '../../lib/eagle-api';
@@ -12,12 +13,30 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
   );
   const selected =
     currentRenditions.find(
-      ({ kind, mimeType }) =>
-        kind === 'PREVIEW' && (isVideoAsset(asset) || !mimeType || mimeType.startsWith('image/')),
+      ({ kind, mimeType, variant }) =>
+        variant !== 'edit' &&
+        kind === 'PREVIEW' &&
+        (isVideoAsset(asset) || !mimeType || mimeType.startsWith('image/')),
     ) ?? currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
   return selected
     ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind, asset.libraryMode)
     : null;
+}
+
+/** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB. */
+export function getEagleEditContentUrl(asset: EagleAssetListItem): string | null {
+  if (asset.lifecycleStatus !== 'READY') return null;
+  if (['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))
+    return getEagleAssetContentUrl(asset.id, asset.libraryMode);
+  if (!isCameraRawMime(asset.mimeType)) return null;
+  const edit = asset.renditions.find(
+    (row) =>
+      row.revision === asset.mediaRevision &&
+      row.kind === 'PREVIEW' &&
+      row.variant === 'edit' &&
+      row.mimeType === 'image/webp',
+  );
+  return edit ? getEagleRenditionContentUrl(asset.id, edit.id, edit.kind, asset.libraryMode) : null;
 }
 
 export function createEagleTileSource(descriptor: EaglePyramidDescriptor) {
