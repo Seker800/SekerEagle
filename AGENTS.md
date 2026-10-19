@@ -2,6 +2,8 @@
 
 ## 产品边界
 
+- 开始产品设计或代码修改前，先读 `docs/architecture.md` 的 North star；素材／照片双模式的确定边界与执行计划分别见该文档和 `docs/photo-management-plan.md`。
+- 素材与照片采用导入托管、业务完全隔离的双模式；不得引入双重归属、跨模式转换或群晖外部目录图库，亦不得仅用前端过滤实现隔离。
 - 本仓库是独立的 SekerEagle，不依赖 SekerChat 运行时、数据库、MinIO、Cookie 或 secrets。
 - SekerChat 是完全受保护的外部系统。不得从本仓库连接、迁移、修改或删除 SekerChat 数据。
 - 所有用户资源必须由认证主体推导 ownerId；DTO 不接受 ownerId。

@@ -34,6 +34,7 @@ import {
   type EaglePrivacyTagOption,
 } from '../../lib/eagle-privacy-api';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
+import { BackupPanel } from './BackupPanel';
 interface PersonalAccessToken {
   id: string;
   name: string;
@@ -80,7 +81,7 @@ const tokenPurposes = {
     scopes: ['import:read', 'import:write', 'asset:write'],
   },
 } as const;
-type AccountSection = 'PRIVACY' | 'CONNECTIONS' | 'SECURITY';
+type AccountSection = 'PRIVACY' | 'CONNECTIONS' | 'SECURITY' | 'BACKUP';
 const ACCOUNT_SECTIONS: ReadonlyArray<{ id: AccountSection; label: string }> = [
   { id: 'PRIVACY', label: t('隐私') },
   { id: 'CONNECTIONS', label: t('连接') },
@@ -131,16 +132,19 @@ export function AccountHome({
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
   const desktopCache = getDesktopCacheBridge();
+  const sections =
+    user.role === 'ADMIN'
+      ? [...ACCOUNT_SECTIONS, { id: 'BACKUP' as const, label: t('备份') }]
+      : ACCOUNT_SECTIONS;
   function handleSectionKeyDown(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     let nextIndex: number | null = null;
-    if (event.key === 'ArrowRight') nextIndex = (index + 1) % ACCOUNT_SECTIONS.length;
-    if (event.key === 'ArrowLeft')
-      nextIndex = (index - 1 + ACCOUNT_SECTIONS.length) % ACCOUNT_SECTIONS.length;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % sections.length;
+    if (event.key === 'ArrowLeft') nextIndex = (index - 1 + sections.length) % sections.length;
     if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = ACCOUNT_SECTIONS.length - 1;
+    if (event.key === 'End') nextIndex = sections.length - 1;
     if (nextIndex === null) return;
     event.preventDefault();
-    const section = ACCOUNT_SECTIONS[nextIndex];
+    const section = sections[nextIndex];
     setActiveSection(section.id);
     document.getElementById(`account-tab-${section.id.toLowerCase()}`)?.focus();
   }
@@ -333,7 +337,7 @@ export function AccountHome({
       </header>
 
       <nav className="account-section-tabs" role="tablist" aria-label={t('账号设置分类')}>
-        {ACCOUNT_SECTIONS.map((section, index) => {
+        {sections.map((section, index) => {
           const isActive = activeSection === section.id;
           return (
             <button
@@ -359,6 +363,7 @@ export function AccountHome({
         role="tabpanel"
         aria-labelledby={`account-tab-${activeSection.toLowerCase()}`}
       >
+        {activeSection === 'BACKUP' && user.role === 'ADMIN' ? <BackupPanel /> : null}
         {activeSection === 'PRIVACY' ? (
           <section className="account-panel privacy-panel" id="privacy">
             <div className="panel-heading">

@@ -24,6 +24,8 @@ The API dynamically accepts a loopback or private-IP browser request only when i
 
 An unavailable server opens the packaged connection manager without depending on web assets. Resume, network recovery, and main-frame failures re-run connection resolution. Switching origins invalidates authentication snapshots and short-lived cache authorization leases before reloading the same web UI.
 
+When no endpoint is available, the connection page shows a focused recovery message and retries saved connections every five seconds, as well as when the network comes online. It opens the library automatically after a successful retry. Address diagnostics and cache maintenance remain available in expandable settings. The shared web client distinguishes a temporary connection failure from a rejected browser session: it keeps retrying the former without showing the login form, and shows login only after the refresh session is rejected.
+
 An unavailable or corrupt cache falls back to the normal authenticated network path. Interrupted writes and pending invalidations recover from SQLite without scanning the full media tree. The utility process is restarted at most three times per minute; repeated crashes leave caching disabled while browsing continues online.
 
 The web shell (`index.html`) is always revalidated, while content-hashed assets are immutable for one year. This prevents an installed desktop client from remaining pinned to an old UI after the server is upgraded without sacrificing static-asset efficiency.

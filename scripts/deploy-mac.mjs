@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
-import { readFile } from 'node:fs/promises';
+import { readFile, statfs } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { resolve } from 'node:path';
@@ -70,6 +70,14 @@ export function expectedGatewayBindings(lanAddress) {
   ];
 }
 
+export function assertBuildSpace(availableBytes) {
+  if (!Number.isFinite(availableBytes) || availableBytes < 24 * 1024 ** 3) {
+    throw new Error(
+      'Deployment requires at least 24 GiB of free host disk space before building; free space and retry',
+    );
+  }
+}
+
 export function assertGatewayBindings(portBindings, lanAddress) {
   const actualBindings = portBindings['8080/tcp'] ?? [];
   for (const expected of expectedGatewayBindings(lanAddress)) {
@@ -129,6 +137,9 @@ async function main() {
   if (unknownArgs.length > 0) {
     throw new Error(`Unknown argument: ${unknownArgs.join(', ')}`);
   }
+
+  const disk = await statfs(root);
+  assertBuildSpace(disk.bavail * disk.bsize);
 
   const env = parseEnv(await readFile(envFile, 'utf8'));
   const lanAddress = env.get('SEKEREAGLE_GATEWAY_LAN_ADDRESS')?.trim() ?? '';

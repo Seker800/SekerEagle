@@ -1,11 +1,12 @@
 import { t } from './i18n';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { request } from './lib/api-client';
+import { ApiError } from './lib/api-error';
 import {
   DEFAULT_PRIVACY_VISIBILITY,
   getPrivacyVisibility,
@@ -23,18 +24,66 @@ export function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
+  const [connectionUnavailable, setConnectionUnavailable] = useState(false);
+  const [checkingConnection, setCheckingConnection] = useState(false);
+  const checkInFlight = useRef(false);
+  const mounted = useRef(false);
   const [privacyVisibility, setPrivacyVisibility] = useState<PrivacyVisibilityState>(
     DEFAULT_PRIVACY_VISIBILITY,
   );
   const [privacyRulesRevision, setPrivacyRulesRevision] = useState(0);
-  useEffect(() => {
-    request<{
-      user: User;
-    }>('/api/auth/me')
-      .then(({ user: current }) => setUser(current))
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
+  const checkSession = useCallback(async () => {
+    if (checkInFlight.current) return;
+    checkInFlight.current = true;
+    setCheckingConnection(true);
+    try {
+      const { user: current } = await request<{ user: User }>('/api/auth/me');
+      if (mounted.current) {
+        setUser(current);
+        setConnectionUnavailable(false);
+      }
+    } catch (cause) {
+      if (mounted.current) {
+        if (
+          cause instanceof ApiError &&
+          (cause.status === 401 || (cause.status === 403 && cause.code !== 'ORIGIN_REJECTED'))
+        ) {
+          setUser(null);
+          setConnectionUnavailable(false);
+        } else {
+          setConnectionUnavailable(true);
+        }
+      }
+    } finally {
+      checkInFlight.current = false;
+      if (mounted.current) {
+        setLoading(false);
+        setCheckingConnection(false);
+      }
+    }
   }, []);
+  useEffect(() => {
+    mounted.current = true;
+    void checkSession();
+    return () => {
+      mounted.current = false;
+    };
+  }, [checkSession]);
+  useEffect(() => {
+    const timer =
+      connectionUnavailable || user
+        ? window.setInterval(() => void checkSession(), connectionUnavailable ? 5000 : 30000)
+        : null;
+    const onOnline = () => void checkSession();
+    window.addEventListener('online', onOnline);
+    const onOffline = () => setConnectionUnavailable(true);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, [checkSession, connectionUnavailable, user]);
   useEffect(() => {
     if (!user) {
       setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
@@ -90,6 +139,26 @@ export function App() {
         {connectionButton}
         <img src={sekerEagleLogo} alt="" />
         <span>{t('正在连接 SekerEagle…')}</span>
+      </main>
+    );
+  }
+  if (connectionUnavailable) {
+    return (
+      <main className="auth-shell auth-offline-shell">
+        {connectionButton}
+        <section className="auth-card auth-offline-card" role="status">
+          <img src={sekerEagleLogo} alt="" />
+          <h1>{t('无法连接素材库')}</h1>
+          <p>{t('正在自动重试，网络恢复后会继续打开图库。')}</p>
+          <button
+            className="primary-button"
+            type="button"
+            disabled={checkingConnection}
+            onClick={() => void checkSession()}
+          >
+            {checkingConnection ? t('正在重试…') : t('立即重试')}
+          </button>
+        </section>
       </main>
     );
   }

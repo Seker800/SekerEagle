@@ -112,7 +112,11 @@ services:
       context: ../..
       dockerfile: apps/api/Dockerfile
     restart: unless-stopped
-    environment: *api-environment
+    environment:
+      <<: *api-environment
+      SEKEREAGLE_BACKUP_STATUS_FILE: /backup-status/status.json
+    volumes:
+      - ../../.runtime/backup-status:/backup-status:ro
     depends_on:
       migrate:
         condition: service_completed_successfully

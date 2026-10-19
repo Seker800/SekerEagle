@@ -208,6 +208,18 @@ if (hasSingleInstanceLock)
       void recoverConnection(owner);
     });
     lockDownSession(currentSession);
+    ipcMain.handle('desktop:refresh-session', async (event) => {
+      assertTrustedIpcSender(event);
+      const response = await currentBrowserSession().refreshSession();
+      const body: unknown = response.ok ? null : await response.json().catch(() => null);
+      return {
+        status: response.status,
+        code:
+          body && typeof body === 'object' && 'code' in body && typeof body.code === 'string'
+            ? body.code
+            : null,
+      };
+    });
     registerCacheIpc(owner, settings);
     registerConnectionIpc(owner);
     registerClipboardIpc();
@@ -455,6 +467,12 @@ function registerConnectionIpc(owner: AuthenticatedOwner): void {
   ipcMain.handle('desktop:test-connections', async (event, input: unknown) => {
     assertConnectionPageSender(event);
     return currentConnectionService().test(input);
+  });
+  ipcMain.handle('desktop:retry-connections', async (event) => {
+    assertConnectionPageSender(event);
+    const snapshot = await currentConnectionService().retry();
+    if (snapshot.active) setTimeout(() => void applyConnection(snapshot, owner), 0).unref();
+    return snapshot;
   });
   ipcMain.handle('desktop:save-connections', async (event, input: unknown) => {
     assertConnectionPageSender(event);

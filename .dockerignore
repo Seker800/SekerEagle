@@ -1,8 +1,29 @@
-.git
-.github
-**/dist
+# Only runtime build inputs belong in a Docker context. Never include backup
+# archives, recovery passwords, local model caches or packaged desktop releases.
+**
+!package.json
+!package-lock.json
+!tsconfig.base.json
+!apps/
+!apps/api/
+!apps/api/**
+!apps/worker/
+!apps/worker/**
+!apps/web/
+!apps/web/**
+!packages/
+!packages/**
+!scripts/
+!scripts/**
+!deploy/
+!deploy/**
 **/node_modules
+**/dist
+**/coverage
 **/.env*
-!.env.example
-coverage
-.omx
+**/.local
+**/.runtime
+**/.venv
+**/.cache
+**/__pycache__
+**/release

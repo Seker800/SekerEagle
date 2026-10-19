@@ -3,10 +3,22 @@ const REFRESH_PATH = '/api/auth/refresh';
 const NON_REFRESHABLE_PATHS = new Set(['/api/auth/login', REFRESH_PATH]);
 let refreshInFlight: Promise<void> | undefined;
 async function refreshBrowserSession(): Promise<void> {
-  refreshInFlight ??= fetch(REFRESH_PATH, {
-    method: 'POST',
-    credentials: 'include',
-  })
+  const desktop = (
+    globalThis as {
+      sekerDesktop?: { refreshSession?: () => Promise<{ status: number; code: string | null }> };
+    }
+  ).sekerDesktop;
+  refreshInFlight ??= (
+    desktop?.refreshSession
+      ? desktop.refreshSession().then(
+          ({ status, code }) =>
+            new Response(status === 204 ? null : JSON.stringify({ code }), {
+              status,
+              headers: { 'content-type': 'application/json' },
+            }),
+        )
+      : fetch(REFRESH_PATH, { method: 'POST', credentials: 'include' })
+  )
     .then(async (response) => {
       if (!response.ok) throw await errorFromResponse(response, '刷新登录状态失败（{{value1}}）');
     })

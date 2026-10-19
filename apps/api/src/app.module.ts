@@ -8,6 +8,7 @@ import { EagleModule } from './eagle/eagle.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
+import { BackupController } from './backup/backup.controller';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { StorageModule } from './storage/storage.module';
     EagleModule,
     HealthModule,
   ],
+  controllers: [BackupController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

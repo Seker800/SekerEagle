@@ -25,6 +25,7 @@ export type DesktopMediaRequest =
     };
 export interface SekerDesktopBridge {
   readonly version: 1;
+  refreshSession?(): Promise<{ status: number; code: string | null }>;
   createMediaUrl(media: DesktopMediaRequest): string;
   getCacheStatus?(): Promise<DesktopCacheStatus>;
   setCacheLimitGiB?(limitGiB: number): Promise<void>;
