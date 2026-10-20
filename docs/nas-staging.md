@@ -9,6 +9,7 @@
 - 独立 Compose 项目 `sekereagle-nas-staging`，数据库 `sekereagle_test`，对象桶 `sekereagle-assets`；卷使用项目作用域，不复用 Mac 卷或群晖备份目录。
 - 仅网关发布到群晖局域网地址的 8181 端口；数据库、MinIO、API 不发布端口。签名上传的主机名与网关保持一致。
 - 应用镜像在 Mac 构建为 `linux/amd64`；群晖只载入并运行，不在 NAS 编译。标签固定到源代码提交。
+- MinIO 与 mc 的旧版官方容器仓库已拒绝下载；NAS 使用 `deploy/nas` 的 Dockerfile 从官方对应版本的固定 commit 构建，附带许可证和来源标签，使用 AMD64 v1 指令集及非 root 用户。构建命令分别为 `docker build --platform linux/amd64 -f deploy/nas/minio.Dockerfile -t sekereagle/minio:nas-20250422 .` 与 `docker build --platform linux/amd64 -f deploy/nas/mc.Dockerfile -t sekereagle/mc:nas-20250416 .`。不改用第三方镜像，也不升级存储数据格式。
 - 后台 worker 默认不启动，避免备份中的队列突然重跑。恢复和校验完成后，单独审查队列与 Mac 推理服务路由，再启用 `processing` profile。初始阶段可验证浏览、筛选、原有媒体、登录；新增照片的派生处理、AI 与编辑成片处理尚未验收。
 - 不挂载私人 LUT。LUT 仍保存在用户浏览器内，不随图库迁移。
 

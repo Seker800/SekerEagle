@@ -29,6 +29,15 @@ export function createNasStagingCompose(base, { revision }) {
   services.postgres.mem_limit = '1536m';
   services.postgres.shm_size = '256m';
   services.minio.mem_limit = '1g';
+  services.minio.image = 'sekereagle/minio:nas-20250422';
+  services.minio.healthcheck.test = [
+    'CMD',
+    'wget',
+    '-q',
+    '--spider',
+    'http://localhost:9000/minio/health/live',
+  ];
+  services['minio-init'].image = 'sekereagle/mc:nas-20250416';
   for (const name of ['api', 'worker', 'migrate']) {
     const env = services[name].environment;
     env.DATABASE_URL = env.DATABASE_URL.replace('/sekereagle?', '/sekereagle_test?');

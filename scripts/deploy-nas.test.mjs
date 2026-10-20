@@ -70,7 +70,10 @@ test('NAS storage does not depend on removed vendor registry images', async () =
   assert.equal(result.services['minio-init'].image, 'sekereagle/mc:nas-20250416');
   assert.equal(result.services.minio.healthcheck.test[1], 'wget');
   for (const name of ['minio', 'mc']) {
-    const dockerfile = await readFile(new URL(`../deploy/nas/${name}.Dockerfile`, import.meta.url), 'utf8');
+    const dockerfile = await readFile(
+      new URL(`../deploy/nas/${name}.Dockerfile`, import.meta.url),
+      'utf8',
+    );
     assert.match(dockerfile, /git fetch --depth=1 origin [a-f0-9]{40}/u);
     assert.match(dockerfile, /CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1/u);
     assert.match(dockerfile, /USER 1000:1000/u);
