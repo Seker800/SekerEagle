@@ -30,7 +30,12 @@ it('preserves navigation content state when the compact drawer is closed and reo
       scopeKey="owner:mode"
       activeKey="all"
     >
-      {dismiss => <><Contents /><button onClick={dismiss}>navigate</button></>}
+      {(dismiss) => (
+        <>
+          <Contents />
+          <button onClick={dismiss}>navigate</button>
+        </>
+      )}
     </EagleLibraryNavigation>,
   );
   try {

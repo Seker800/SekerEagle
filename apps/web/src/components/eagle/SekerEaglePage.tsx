@@ -1120,143 +1120,155 @@ export function SekerEaglePage({
           activeKey={`${libraryView}:${photoView}:${activeSmartFolderId}`}
           scopeKey={storeScope}
         >
-          <button
-            data-navigation-destination
-            className={
-              libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
-                ? styles.navActive
-                : undefined
-            }
-            type="button"
-            onClick={() => {
-              changeLibraryView('ACTIVE');
-              setPhotoView('timeline');
-            }}
-          >
-            <IconPhoto size={17} />
-            {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
-            {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{displayedAssetCount}</span>}
-          </button>
-          {libraryMode === 'PHOTO' &&
-            (['map', 'people'] as const).map((view) => (
+          {(closeNavigation) => (
+            <>
               <button
                 data-navigation-destination
-                key={view}
-                type="button"
                 className={
-                  libraryView === 'ACTIVE' && photoView === view && !activeSmartFolderId
+                  libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
                     ? styles.navActive
                     : undefined
                 }
+                type="button"
                 onClick={() => {
                   changeLibraryView('ACTIVE');
-                  setPhotoView(view);
+                  setPhotoView('timeline');
                 }}
               >
-                {view === 'map' ? <IconMapPin size={17} /> : <IconUsers size={17} />}
-                {view === 'map' ? t('地图') : t('人物')}
+                <IconPhoto size={17} />
+                {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
+                {libraryView === 'ACTIVE' && !activeSmartFolderId && (
+                  <span>{displayedAssetCount}</span>
+                )}
               </button>
-            ))}
-          {privateVisible && (
-            <button
-              data-navigation-destination
-              className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
-              type="button"
-              onClick={() => changeLibraryView('PRIVATE')}
-              aria-label={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
-            >
-              <IconLock size={17} />
-              {' ' + (libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')) + ' '}
-              {libraryView === 'PRIVATE' && <span>{loadedAssets.length}</span>}
-            </button>
+              {libraryMode === 'PHOTO' &&
+                (['map', 'people'] as const).map((view) => (
+                  <button
+                    data-navigation-destination
+                    key={view}
+                    type="button"
+                    className={
+                      libraryView === 'ACTIVE' && photoView === view && !activeSmartFolderId
+                        ? styles.navActive
+                        : undefined
+                    }
+                    onClick={() => {
+                      changeLibraryView('ACTIVE');
+                      setPhotoView(view);
+                    }}
+                  >
+                    {view === 'map' ? <IconMapPin size={17} /> : <IconUsers size={17} />}
+                    {view === 'map' ? t('地图') : t('人物')}
+                  </button>
+                ))}
+              {privateVisible && (
+                <button
+                  data-navigation-destination
+                  className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
+                  type="button"
+                  onClick={() => changeLibraryView('PRIVATE')}
+                  aria-label={libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')}
+                >
+                  <IconLock size={17} />
+                  {' ' + (libraryMode === 'PHOTO' ? t('隐私照片') : t('隐私素材')) + ' '}
+                  {libraryView === 'PRIVATE' && <span>{loadedAssets.length}</span>}
+                </button>
+              )}
+              <div className={`${styles.navSection} ${styles.smartFolderSection}`}>
+                <div className={styles.sectionLabel}>
+                  {' ' + t('智能文件夹') + ' '}
+                  <button
+                    data-navigation-destination
+                    type="button"
+                    aria-label={t('新建智能文件夹')}
+                    onClick={() => {
+                      setEditingSmartFolder(null);
+                      setIsSmartFolderDialogOpen(true);
+                    }}
+                  >
+                    <IconPlus size={15} />
+                  </button>
+                </div>
+                <EagleSmartFolderTree
+                  folders={smartFolders}
+                  activeFolderId={activeSmartFolderId}
+                  busy={updateSmartFolderMutation.isPending || moveSmartFolderMutation.isPending}
+                  onSelect={(folder) => {
+                    closeNavigation();
+                    applySmartFolder(folder);
+                  }}
+                  onMove={(folder, input) => moveSmartFolderMutation.mutate({ folder, input })}
+                  onChangeColor={(folder, color) =>
+                    updateSmartFolderMutation.mutate({ folder, changes: { color } })
+                  }
+                  onEdit={(folder) => {
+                    closeNavigation();
+                    setEditingSmartFolder(folder);
+                    setIsSmartFolderDialogOpen(true);
+                  }}
+                />
+                {smartFoldersQuery.isError && (
+                  <button
+                    data-navigation-destination
+                    className={styles.navError}
+                    type="button"
+                    onClick={() => void smartFoldersQuery.refetch()}
+                  >
+                    <IconRefresh size={15} />
+                    {' ' + t('加载失败，重试') + ' '}
+                  </button>
+                )}
+                {!smartFoldersQuery.isLoading &&
+                  !smartFoldersQuery.isError &&
+                  smartFolders.length === 0 && (
+                    <span className={styles.navEmpty}>{t('尚未创建')}</span>
+                  )}
+              </div>
+              <div className={styles.navSection}>
+                <button
+                  data-navigation-destination
+                  type="button"
+                  className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
+                  aria-label={t('标签')}
+                  onClick={() => changeLibraryView('MANUAL_TAGS')}
+                >
+                  <IconTags size={17} />
+                  {' ' + t('标签')}
+                </button>
+                <button
+                  data-navigation-destination
+                  type="button"
+                  className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
+                  aria-label={`${t('待处理')} ${pendingWorkCount}`}
+                  onClick={() => changeLibraryView('VECTOR_REVIEW')}
+                >
+                  <IconCheck size={17} />
+                  {' ' + t('待处理')}
+                  <span>{pendingWorkCount}</span>
+                </button>
+                <button
+                  data-navigation-destination
+                  type="button"
+                  className={workspaceSection === 'SETTINGS' ? styles.navActive : undefined}
+                  aria-label={t('设置')}
+                  onClick={() => changeLibraryView(accountView ? 'ACCOUNT' : 'VECTOR_TAGS')}
+                >
+                  <IconSettings size={17} />
+                  {' ' + t('设置')}
+                </button>
+              </div>
+              <button
+                data-navigation-destination
+                className={libraryView === 'TRASH' ? styles.navActive : undefined}
+                type="button"
+                aria-label={t('回收站')}
+                onClick={() => changeLibraryView('TRASH')}
+              >
+                <IconTrash size={17} />
+                {' ' + t('回收站') + ' '}
+              </button>
+            </>
           )}
-          <div className={`${styles.navSection} ${styles.smartFolderSection}`}>
-            <div className={styles.sectionLabel}>
-              {' ' + t('智能文件夹') + ' '}
-              <button
-                data-navigation-destination
-                type="button"
-                aria-label={t('新建智能文件夹')}
-                onClick={() => {
-                  setEditingSmartFolder(null);
-                  setIsSmartFolderDialogOpen(true);
-                }}
-              >
-                <IconPlus size={15} />
-              </button>
-            </div>
-            <EagleSmartFolderTree
-              folders={smartFolders}
-              activeFolderId={activeSmartFolderId}
-              busy={updateSmartFolderMutation.isPending || moveSmartFolderMutation.isPending}
-              onSelect={applySmartFolder}
-              onMove={(folder, input) => moveSmartFolderMutation.mutate({ folder, input })}
-              onChangeColor={(folder, color) =>
-                updateSmartFolderMutation.mutate({ folder, changes: { color } })
-              }
-              onEdit={(folder) => {
-                setEditingSmartFolder(folder);
-                setIsSmartFolderDialogOpen(true);
-              }}
-            />
-            {smartFoldersQuery.isError && (
-              <button
-                data-navigation-destination
-                className={styles.navError}
-                type="button"
-                onClick={() => void smartFoldersQuery.refetch()}
-              >
-                <IconRefresh size={15} />
-                {' ' + t('加载失败，重试') + ' '}
-              </button>
-            )}
-            {!smartFoldersQuery.isLoading &&
-              !smartFoldersQuery.isError &&
-              smartFolders.length === 0 && <span className={styles.navEmpty}>{t('尚未创建')}</span>}
-          </div>
-          <div className={styles.navSection}>
-            <button
-              data-navigation-destination
-              type="button"
-              className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
-              aria-label={t('标签')}
-              onClick={() => changeLibraryView('MANUAL_TAGS')}
-            >
-              <IconTags size={17} />
-              {' ' + t('标签')}
-            </button>
-            <button
-              data-navigation-destination
-              type="button"
-              className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
-              aria-label={`${t('待处理')} ${pendingWorkCount}`}
-              onClick={() => changeLibraryView('VECTOR_REVIEW')}
-            >
-              <IconCheck size={17} />
-              {' ' + t('待处理')}
-              <span>{pendingWorkCount}</span>
-            </button>
-            <button
-              data-navigation-destination
-              type="button"
-              className={workspaceSection === 'SETTINGS' ? styles.navActive : undefined}
-              aria-label={t('设置')}
-              onClick={() => changeLibraryView(accountView ? 'ACCOUNT' : 'VECTOR_TAGS')}
-            >
-              <IconSettings size={17} />
-              {' ' + t('设置')}
-            </button>
-          </div>
-          <button
-            data-navigation-destination
-            className={libraryView === 'TRASH' ? styles.navActive : undefined}
-            type="button"
-            aria-label={t('回收站')}
-            onClick={() => changeLibraryView('TRASH')}
-          >
-            <IconTrash size={17} />
-            {' ' + t('回收站') + ' '}
-          </button>
         </EagleLibraryNavigation>
 
         <section

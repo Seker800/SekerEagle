@@ -2518,8 +2518,12 @@ describe('SekerEaglePage', () => {
       removeEventListener() {},
     }));
     const show = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+    const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
     HTMLDialogElement.prototype.showModal = function () {
       this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.open = false;
     };
     const view = renderPage();
     try {
@@ -2534,6 +2538,8 @@ describe('SekerEaglePage', () => {
       view.unmount();
       if (show) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', show);
       else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+      if (close) Object.defineProperty(HTMLDialogElement.prototype, 'close', close);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
       vi.unstubAllGlobals();
     }
   });

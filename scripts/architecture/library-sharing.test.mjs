@@ -153,8 +153,8 @@ test('rejects photo-only overlays inside the shared card', () => {
     page,
     (s) =>
       s.replace(
-        '{isBatchSelection && (',
-        "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{isBatchSelection && (",
+        '{(selectionMode || isBatchSelection) && (',
+        "{libraryMode === 'PHOTO' && <time>2024-01-01</time>}\n{(selectionMode || isBatchSelection) && (",
       ),
     'shared-card',
   );

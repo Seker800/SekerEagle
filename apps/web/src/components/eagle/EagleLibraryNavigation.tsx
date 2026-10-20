@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -28,7 +29,7 @@ export function EagleLibraryNavigation({
   activeKey,
   scopeKey,
 }: {
-  children: ReactNode;
+  children: ReactNode | ((dismiss: () => void) => ReactNode);
   header: ReactNode;
   label: string;
   className: string;
@@ -41,6 +42,7 @@ export function EagleLibraryNavigation({
   const trigger = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useEffect(close, [activeKey, scopeKey, compact, close]);
+  const content = typeof children === 'function' ? children(close) : children;
   return (
     <nav className={`${className} ${styles.navigation}`} aria-label={label}>
       <div className={headerClassName}>
@@ -59,25 +61,30 @@ export function EagleLibraryNavigation({
         )}
       </div>
       {compact ? (
-        open && (
-          <NavigationDrawer label={label} onClose={close} onClosed={() => trigger.current?.focus()}>
-            {children}
-          </NavigationDrawer>
-        )
+        <NavigationDrawer
+          open={open}
+          label={label}
+          onClose={close}
+          onClosed={() => trigger.current?.focus()}
+        >
+          {content}
+        </NavigationDrawer>
       ) : (
         <div className={styles.content} data-navigation-content>
-          {children}
+          {content}
         </div>
       )}
     </nav>
   );
 }
 function NavigationDrawer({
+  open,
   children,
   label,
   onClose,
   onClosed,
 }: {
+  open: boolean;
   children: ReactNode;
   label: string;
   onClose: () => void;
@@ -86,10 +93,15 @@ function NavigationDrawer({
   const dialog = useRef<HTMLDialogElement>(null);
   const returnFocus = useRef(onClosed);
   returnFocus.current = onClosed;
-  useEffect(() => {
-    dialog.current?.showModal();
-    return () => returnFocus.current();
-  }, []);
+  useLayoutEffect(() => {
+    const element = dialog.current;
+    if (!element) return;
+    if (open && !element.open) element.showModal();
+    else if (!open && element.open) {
+      element.close();
+      returnFocus.current();
+    }
+  }, [open]);
   return (
     <dialog
       ref={dialog}

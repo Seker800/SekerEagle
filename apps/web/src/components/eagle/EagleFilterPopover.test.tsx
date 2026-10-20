@@ -52,7 +52,9 @@ it('keeps a tall popover below its trigger without borrowing space from above an
     312,
   );
   viewport.height = 400;
-  act(() => { viewport.dispatchEvent(new Event('resize')); });
+  act(() => {
+    viewport.dispatchEvent(new Event('resize'));
+  });
   expect(parseFloat(floating.style.top) + parseFloat(floating.style.maxHeight)).toBeLessThanOrEqual(
     392,
   );
