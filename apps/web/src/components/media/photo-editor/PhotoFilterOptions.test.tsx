@@ -1,13 +1,23 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { PhotoFilterOptions } from './PhotoFilterOptions';
 const repository = vi.hoisted(() => ({
   listPhotoLuts: vi.fn(async () => [{ id: 'personal', name: '个人 LUT', size: 2 }]),
   importPhotoLut: vi.fn(async () => ({ id: 'new', name: '新 LUT', size: 2 })),
 }));
 vi.mock('./photo-lut-storage', () => repository);
+beforeEach(() =>
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  ),
+);
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
 it('lists local LUTs beside built-ins and imports multiple files without selecting or uploading them', async () => {
@@ -31,4 +41,23 @@ it('reports a failed import and keeps the existing local library usable', async 
   });
   await screen.findByRole('alert');
   expect(screen.getByRole('button', { name: '个人 LUT' })).toBeEnabled();
+});
+
+it('opens the picker, ignores cancellation and rejects oversized batches before reading files', async () => {
+  render(<PhotoFilterOptions selected="original" disabled={false} onChange={vi.fn()} />);
+  const input = screen.getByLabelText('导入 LUT');
+  const click = vi.spyOn(input, 'click').mockImplementation(() => {});
+  fireEvent.click(screen.getByRole('button', { name: '导入 LUT' }));
+  expect(click).toHaveBeenCalledOnce();
+  fireEvent.change(input, { target: { files: [] } });
+  expect(repository.importPhotoLut).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { files: Array(129).fill(new File(['x'], 'one.cube')) } });
+  expect(await screen.findByRole('alert')).toHaveTextContent('128');
+  expect(repository.importPhotoLut).not.toHaveBeenCalled();
+});
+
+it('reports a local library read failure', async () => {
+  repository.listPhotoLuts.mockRejectedValueOnce(new Error('blocked'));
+  render(<PhotoFilterOptions selected="original" disabled={false} onChange={vi.fn()} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('本地滤镜读取失败');
 });

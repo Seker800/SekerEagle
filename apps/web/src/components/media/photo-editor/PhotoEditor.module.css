@@ -1181,6 +1181,9 @@
   }
 }
 
+.editor:has(.filters) {
+  --photo-controls-size: 224px;
+}
 .editor:has(.advancedOptions) {
   --photo-controls-size: 272px;
 }

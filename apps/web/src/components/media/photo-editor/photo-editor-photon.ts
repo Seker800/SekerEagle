@@ -7,12 +7,14 @@ import { applyPhotoDetail } from './photo-editor-detail';
 import { applyPhotoColorMixer } from './photo-editor-color-mixer';
 import { applyPhotoDenoise } from './photo-editor-denoise';
 import { applyPhotoDehaze } from './photo-editor-dehaze';
+import { applyPhotoLut, type PhotoLut } from './photo-lut';
 
 export function processPhotoPixels(
   pixels: Uint8Array,
   width: number,
   height: number,
   edits: PhotoEdits,
+  lut?: PhotoLut,
 ): Uint8Array {
   let image: photon.PhotonImage | undefined;
   try {
@@ -28,13 +30,29 @@ export function processPhotoPixels(
     );
     if (!edits.gamma && (edits.filter === 'original' || edits.filterStrength === 0))
       return applyPhotoDetail(adjusted, width, height, edits);
+    const personal = edits.filter.startsWith('lut:') && edits.filterStrength > 0;
+    if (personal && !lut) throw new Error('LUT_NOT_FOUND');
+    if (personal && !edits.gamma)
+      return applyPhotoDetail(
+        applyPhotoLut(adjusted, lut!, edits.filterStrength),
+        width,
+        height,
+        edits,
+      );
     image = new photon.PhotonImage(adjusted, width, height);
     if (edits.gamma) {
       const gamma = 2 ** ((edits.gamma / 100) * MIDTONE_GAMMA_STOPS);
       photon.gamma_correction(image, gamma, gamma, gamma);
     }
     const beforeFilter = image.get_raw_pixels();
-    if (edits.filter !== 'original') {
+    if (personal)
+      return applyPhotoDetail(
+        applyPhotoLut(beforeFilter, lut!, edits.filterStrength),
+        width,
+        height,
+        edits,
+      );
+    if (edits.filter !== 'original' && edits.filterStrength > 0) {
       if (edits.filter === 'monochrome') photon.grayscale(image);
       else photon.filter(image, edits.filter);
     }

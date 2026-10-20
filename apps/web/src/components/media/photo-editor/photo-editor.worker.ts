@@ -2,6 +2,7 @@ import init from '@silvia-odwyer/photon/photon_rs.js';
 import wasmUrl from '@silvia-odwyer/photon/photon_rs_bg.wasm?url';
 import type { PhotoEdits } from './photo-editor-model';
 import { processPhotoPixels } from './photo-editor-photon';
+import type { PhotoLut } from './photo-lut';
 
 // Preview and saved pixels share the documented tone implementation + Photon presets.
 // See docs/photo-editor.md for sources and application-specific calibration.
@@ -12,14 +13,15 @@ interface RenderRequest {
   width: number;
   height: number;
   edits: PhotoEdits;
+  lut?: PhotoLut;
 }
 self.onmessage = (event: MessageEvent<RenderRequest>) => {
   void render(event.data);
 };
-async function render({ id, pixels, width, height, edits }: RenderRequest) {
+async function render({ id, pixels, width, height, edits, lut }: RenderRequest) {
   try {
     await ready;
-    const output = processPhotoPixels(pixels, width, height, edits);
+    const output = processPhotoPixels(pixels, width, height, edits, lut);
     self.postMessage(
       { id, pixels: output, width, height },
       { transfer: [output.buffer as ArrayBuffer] },

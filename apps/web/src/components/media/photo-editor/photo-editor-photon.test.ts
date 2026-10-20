@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { initSync } from '@silvia-odwyer/photon/photon_rs.js';
+import { parseCubeLut, applyPhotoLut } from './photo-lut';
 import { processPhotoPixels } from './photo-editor-photon';
 import { DEFAULT_PHOTO_EDITS, photoCrop } from './photo-editor-model';
 
@@ -118,4 +119,28 @@ describe('preview and export crop coordinates', () => {
       height: 3000,
     });
   });
+});
+
+it('applies imported LUTs after gamma and adjustments, preserves alpha and rejects missing tables', () => {
+  const lut = parseCubeLut(
+    'LUT_3D_SIZE 2\n' +
+      Array.from({ length: 8 }, (_, i) =>
+        [i & 1, (i >> 1) & 1, (i >> 2) & 1].map((v) => 1 - v).join(' '),
+      ).join('\n'),
+  );
+  const pixels = new Uint8Array([70, 130, 190, 83]);
+  const adjusted = { ...DEFAULT_PHOTO_EDITS, exposure: 0.15, gamma: 12 };
+  const baseline = processPhotoPixels(pixels, 1, 1, adjusted);
+  expect(
+    processPhotoPixels(pixels, 1, 1, { ...adjusted, filter: 'lut:test', filterStrength: 65 }, lut),
+  ).toEqual(applyPhotoLut(baseline, lut, 65));
+  expect(
+    processPhotoPixels(pixels, 1, 1, { ...DEFAULT_PHOTO_EDITS, filter: 'lut:test' }, lut),
+  ).toEqual(applyPhotoLut(pixels, lut, 100));
+  expect(
+    processPhotoPixels(pixels, 1, 1, { ...adjusted, filter: 'lut:test', filterStrength: 0 }),
+  ).toEqual(baseline);
+  expect(() => processPhotoPixels(pixels, 1, 1, { ...adjusted, filter: 'lut:test' })).toThrow(
+    'LUT_NOT_FOUND',
+  );
 });

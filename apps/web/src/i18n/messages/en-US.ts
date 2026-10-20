@@ -1188,5 +1188,12 @@ export const enUS = {
   '输入焦距、光圈、快门和 ISO': 'Enter focal length, aperture, shutter speed and ISO',
   输入拍摄时间: 'Enter capture date and time',
   恢复照片信息: 'Restore photo metadata',
+  '导入 LUT': 'Import LUT',
+  '正在导入 LUT': 'Importing LUTs',
+  本地滤镜读取失败: 'Could not read local filters',
+  '一次最多导入 128 个 LUT': 'Import up to 128 LUTs at a time',
+  '部分 LUT 导入失败：{{value1}}': 'Some LUTs could not be imported: {{value1}}',
+  '已导入 {{value1}} 个 LUT，仅保存在此浏览器':
+    'Imported {{value1}} LUTs, stored only in this browser',
   毛玻璃底: 'Frosted glass',
 } as const;

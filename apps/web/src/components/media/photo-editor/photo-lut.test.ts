@@ -49,7 +49,9 @@ describe('portable personal LUTs', () => {
     );
     expect(() => parsePngLut(pixels, 63, 64)).toThrow();
     pixels[3] = 0;
-    expect(() => parsePngLut(pixels, 64, 64)).toThrow();
+    expect(
+      applyPhotoLut(new Uint8Array([25, 120, 213, 80]), parsePngLut(pixels, 64, 64), 100),
+    ).toEqual(new Uint8Array([25, 120, 213, 80]));
   });
 });
 export { cube };

@@ -1,3 +1,5 @@
+import { loadPhotoLut } from './photo-lut-storage';
+import type { PhotoLut } from './photo-lut';
 import { photoCrop, type PhotoEdits } from './photo-editor-model';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import type { PhotoMetadata } from './photo-watermark-model';
@@ -69,6 +71,7 @@ export function createPhotoRenderer() {
     type: 'module',
   });
   let sequence = 0;
+  let personalLut: { id: string; table: Promise<PhotoLut> } | null = null;
   interface Job {
     id: number;
     source: HTMLCanvasElement;
@@ -86,26 +89,43 @@ export function createPhotoRenderer() {
     const job = queued;
     queued = null;
     active = job;
-    try {
-      const context = job.source.getContext('2d');
-      if (!context) throw new Error('CANVAS_UNAVAILABLE');
-      const pixels = context.getImageData(0, 0, job.source.width, job.source.height).data;
-      worker.postMessage(
-        {
-          id: job.id,
-          pixels: new Uint8Array(pixels.buffer),
-          width: job.source.width,
-          height: job.source.height,
-          edits: job.edits,
-        },
-        [pixels.buffer],
-      );
-    } catch (error) {
+    const rejectJob = (error: unknown) => {
+      if (active !== job) return;
       active = null;
       job.reject(error instanceof Error ? error : new Error('PHOTO_RENDER_FAILED'));
       next();
-    }
+    };
+    const send = (lut?: PhotoLut) => {
+      if (stopped || active !== job) return;
+      try {
+        const context = job.source.getContext('2d');
+        if (!context) throw new Error('CANVAS_UNAVAILABLE');
+        const pixels = context.getImageData(0, 0, job.source.width, job.source.height).data;
+        worker.postMessage(
+          {
+            id: job.id,
+            pixels: new Uint8Array(pixels.buffer),
+            width: job.source.width,
+            height: job.source.height,
+            edits: job.edits,
+            lut,
+          },
+          [pixels.buffer],
+        );
+      } catch (error) {
+        rejectJob(error);
+      }
+    };
+    if (job.edits.filter.startsWith('lut:') && job.edits.filterStrength > 0) {
+      const id = job.edits.filter.slice(4);
+      if (personalLut?.id !== id) personalLut = { id, table: loadPhotoLut(id) };
+      void personalLut.table.then(send).catch((error: unknown) => {
+        if (personalLut?.id === id) personalLut = null;
+        rejectJob(error);
+      });
+    } else send();
   }
+
   const fail = () => {
     stopped = true;
     active?.reject(new Error('PHOTO_RENDER_FAILED'));
@@ -113,6 +133,7 @@ export function createPhotoRenderer() {
     active = null;
     queued = null;
     cached = null;
+    personalLut = null;
   };
   worker.onerror = fail;
   worker.onmessage = ({ data }: MessageEvent<WorkerResult>) => {

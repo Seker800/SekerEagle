@@ -3,7 +3,6 @@ import {
   IconAdjustments,
   IconArrowBackUp,
   IconArrowForwardUp,
-  IconCheck,
   IconCrop,
   IconDeviceFloppy,
   IconPhoto,
@@ -16,7 +15,6 @@ import {
   hasPhotoEdits,
   photoCrop,
   type PhotoEdits,
-  type PhotoFilter,
 } from './photo-editor-model';
 import {
   createPhotoRenderer,
@@ -37,18 +35,12 @@ import { PhotoWatermarkPanel } from './PhotoWatermarkPanel';
 import { PhotoCropViewport } from './PhotoCropViewport';
 import { PhotoToolPanel } from './PhotoToolPanel';
 import { PhotoCropPanel } from './PhotoCropPanel';
-import { ScrollableToolRow } from './ScrollableToolRow';
+import { PhotoFilterOptions } from './PhotoFilterOptions';
 import { readPhotoMetadata } from './photo-editor-metadata';
 import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
 
 type Tab = 'adjust' | 'filters' | 'crop' | 'watermark';
 type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] };
-const FILTERS: { id: PhotoFilter; label: string }[] = [
-  { id: 'original', label: t('原图') },
-  { id: 'vintage', label: t('复古') },
-  { id: 'oceanic', label: t('清冷') },
-  { id: 'monochrome', label: t('黑白') },
-];
 
 export function PhotoEditor({
   source,
@@ -624,23 +616,11 @@ export function PhotoEditor({
                 </>
               }
             >
-              <div className={styles.adjustmentCategoryRow}>
-                <span className={styles.panelHeading}>{t('照片滤镜')}</span>
-              </div>
-              <ScrollableToolRow className={styles.filters} label={t('照片滤镜')}>
-                {FILTERS.map(({ id, label }) => (
-                  <button
-                    type="button"
-                    key={id}
-                    aria-pressed={edits.filter === id}
-                    onClick={() => update({ filter: id })}
-                  >
-                    <span className={styles.swatch} data-filter={id} />
-                    <span>{label}</span>
-                    {edits.filter === id && <IconCheck size={14} />}
-                  </button>
-                ))}
-              </ScrollableToolRow>
+              <PhotoFilterOptions
+                selected={edits.filter}
+                disabled={!loaded || busy}
+                onChange={(filter) => update({ filter })}
+              />
             </PhotoToolPanel>
           )}
           {tab === 'watermark' && (

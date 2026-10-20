@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadPhotoLut } from './photo-lut-storage';
 import { createPhotoRenderer } from './photo-editor-render';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
+
+vi.mock('./photo-lut-storage', () => ({ loadPhotoLut: vi.fn() }));
 
 interface Request {
   id: number;
@@ -138,4 +141,28 @@ describe('bounded photo preview worker', () => {
       'PHOTO_RENDER_FAILED',
     );
   });
+});
+
+it('loads the selected personal LUT into the same Worker request and fails when unavailable', async () => {
+  const table = { size: 2, data: new Float32Array(24), domainMin: [0, 0, 0], domainMax: [1, 1, 1] };
+  vi.mocked(loadPhotoLut).mockResolvedValueOnce(table as Awaited<ReturnType<typeof loadPhotoLut>>);
+  const renderer = createPhotoRenderer();
+  const source = document.createElement('canvas');
+  source.width = 1;
+  source.height = 1;
+  const pending = renderer.render(source, { ...DEFAULT_PHOTO_EDITS, filter: 'lut:private' });
+  await vi.waitFor(() => expect(worker.requests).toHaveLength(1));
+  expect(worker.requests[0]).toMatchObject({ lut: table, edits: { filter: 'lut:private' } });
+  worker.reply(0);
+  await pending;
+  vi.mocked(loadPhotoLut).mockRejectedValueOnce(new Error('LUT_NOT_FOUND'));
+  await expect(
+    renderer.render(source, { ...DEFAULT_PHOTO_EDITS, filter: 'lut:missing' }),
+  ).rejects.toThrow('LUT_NOT_FOUND');
+  vi.mocked(loadPhotoLut).mockResolvedValueOnce(table as Awaited<ReturnType<typeof loadPhotoLut>>);
+  const retried = renderer.render(source, { ...DEFAULT_PHOTO_EDITS, filter: 'lut:missing' });
+  await vi.waitFor(() => expect(worker.requests).toHaveLength(2));
+  worker.reply(1);
+  await retried;
+  renderer.dispose();
 });

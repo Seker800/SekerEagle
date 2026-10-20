@@ -1,5 +1,5 @@
 import { DEFAULT_ADVANCED_EDITS, type AdvancedKey } from './photo-editor-advanced-model';
-export type PhotoFilter = 'original' | 'vintage' | 'oceanic' | 'monochrome';
+export type PhotoFilter = 'original' | 'vintage' | 'oceanic' | 'monochrome' | `lut:${string}`;
 // Each pair shares one visual preset, with an explicit landscape / portrait choice.
 export const CROP_RATIO_PAIRS = [
   ['1:1', '1:1'],
