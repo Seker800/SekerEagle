@@ -153,6 +153,17 @@ class LifecycleTests(unittest.TestCase):
             self.assertFalse(sensitive.exists())
             self.assertEqual(state["status"], "succeeded")
 
+    def test_recovery_removes_secret_input_even_when_service_restart_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sensitive = root / "input"
+            sensitive.mkdir()
+            (sensitive / "runtime.env").write_text("synthetic test secret")
+            with patch.object(backup, "PRIVATE", root), patch.object(backup, "INPUT", sensitive), patch.object(backup, "run"), patch.object(backup, "restore_services", side_effect=RuntimeError("restart failed")):
+                with self.assertRaisesRegex(RuntimeError, "restart failed"):
+                    backup.recover({"pausedServices": ["api"]})
+            self.assertFalse(sensitive.exists())
+
 
 class PartialGenerationTests(unittest.TestCase):
     generation = test_plain_nas.PlainNasTests.generation
