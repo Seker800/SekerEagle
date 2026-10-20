@@ -714,7 +714,9 @@ export function SekerEaglePage({
   }, [assetsById, selectedAssetId, selectedAssetIds, visibleMasonryItems]);
   const processingStackMembers = useMemo(() => {
     const visibleIds = new Set(observedAssets.map(({ id }) => id));
-    return photoStacks.filter(({ cover }) => visibleIds.has(cover.id)).flatMap((stack) => stack.processingAssetIds ?? []);
+    return photoStacks
+      .filter(({ cover }) => visibleIds.has(cover.id))
+      .flatMap((stack) => stack.processingAssetIds ?? []);
   }, [observedAssets, photoStacks]);
   useEagleProcessingUpdates({
     additionalProcessingAssetIds: processingStackMembers,

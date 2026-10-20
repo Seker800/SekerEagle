@@ -2311,3 +2311,51 @@ test('published photo edits inherit timeline and capture data, join their source
     0,
   );
 });
+
+test('edited-photo grouping never crosses ownership, library or privacy boundaries', async () => {
+  const { PhotoRevisionObserver } =
+    await import('../../apps/api/dist/photos/photo-revision.observer.js');
+  const f = await fixtures(),
+    foreign = await fixtures();
+  const target = await prisma.eagleAsset.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'edited.png',
+      displayName: 'edited',
+      normalizedDisplayName: 'edited',
+      mimeType: 'image/png',
+      format: 'png',
+      byteSize: 1,
+      sha256: 'b'.repeat(64),
+      originalObjectKey: `users/${f.ownerId}/assets/${randomUUID()}/original.png`,
+      isPrivate: true,
+    },
+  });
+  const observer = new PhotoRevisionObserver();
+  const observe = (sourceAssetId) =>
+    prisma.$transaction(async (tx) => {
+      const scope = { ownerId: f.ownerId, libraryMode: 'PHOTO' };
+      await observer.beforeEditedCopy(tx, scope);
+      await observer.onEditedCopyCreated(tx, scope, {
+        sourceAssetId,
+        assetId: target.id,
+        mediaRevision: target.mediaRevision,
+      });
+    });
+  for (const source of [foreign.photo.id, f.material.id]) {
+    await assert.rejects(() => observe(source), /PHOTO_EDIT_SOURCE_UNAVAILABLE/);
+    assert.equal(await prisma.eaglePhotoMetadata.count({ where: { assetId: target.id } }), 0);
+  }
+  await observe(f.photo.id);
+  assert.equal(
+    await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId } }),
+    0,
+    'public original cannot be folded into a private edited group',
+  );
+  assert.equal(
+    (await prisma.eaglePhotoMetadata.findUniqueOrThrow({ where: { assetId: target.id } }))
+      .captureMetadataInherited,
+    true,
+  );
+});

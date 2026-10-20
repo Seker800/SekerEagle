@@ -9,7 +9,10 @@ export function PhotoMetadataDetails({ metadata }: { metadata?: PhotoMetadata | 
       <dl>
         <dt>{t('拍摄时间')}</dt>
         <dd>
-          {metadata.capturedLocal?.replace('T', ' ') ?? (metadata.captureMetadataInherited ? t('未知拍摄时间，沿用原片时间线') : t('未知拍摄时间，按导入时间排列'))}
+          {metadata.capturedLocal?.replace('T', ' ') ??
+            (metadata.captureMetadataInherited
+              ? t('未知拍摄时间，沿用原片时间线')
+              : t('未知拍摄时间，按导入时间排列'))}
           {metadata.capturedAt && !metadata.captureTimeZoneKnown ? ` · ${t('时区未知')}` : ''}
         </dd>
         <dt>{t('相机')}</dt>

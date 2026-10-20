@@ -9,11 +9,11 @@ test('rendering edited pixels preserves inherited capture data and the original 
     ...normalizePhotoExif({ Model: 'X-Pro3', DateTimeOriginal: '2020:05:10 09:30:00' }),
     captureMetadataInherited: true,
   };
-  let written: any;
-  let time: any;
+  let written: Record<string, unknown> = {};
+  let time: unknown;
   const tx = {
     eaglePhotoMetadata: {
-      findFirst: async ({ where }: any) => {
+      findFirst: async ({ where }: { where: unknown }) => {
         assert.deepEqual(where, {
           ownerId: 'owner',
           libraryMode: 'PHOTO',
@@ -22,12 +22,12 @@ test('rendering edited pixels preserves inherited capture data and the original 
         });
         return inherited;
       },
-      upsert: async ({ create }: any) => {
+      upsert: async ({ create }: { create: Record<string, unknown> }) => {
         written = create;
       },
     },
     eagleAsset: {
-      updateMany: async ({ data }: any) => {
+      updateMany: async ({ data }: { data: { chronologicalAt: unknown } }) => {
         time = data.chronologicalAt;
       },
     },
@@ -45,9 +45,11 @@ test('rendering edited pixels preserves inherited capture data and the original 
     2,
   );
   assert.equal(written.cameraModel, 'X-Pro3');
+  assert.ok(written.capturedAt instanceof Date);
   assert.equal(written.capturedAt.toISOString(), capturedAt.toISOString());
   assert.equal(written.sharpnessScore, 8);
   assert.equal(written.perceptualHash, 'new-hash');
   assert.equal(written.captureMetadataInherited, true);
+  assert.ok(time instanceof Date);
   assert.equal(time.toISOString(), capturedAt.toISOString());
 });

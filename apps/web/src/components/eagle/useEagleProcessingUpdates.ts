@@ -13,8 +13,16 @@ export function getEagleProcessingPollInterval(
 }
 
 /** Folded collections can contain unfinished items outside the rendered cover or loaded page. */
-export function getEagleProcessingAssetIds(assets: readonly EagleAssetListItem[], additional: readonly string[] = []) {
-  return [...new Set([...assets.filter((item) => item.lifecycleStatus === 'PROCESSING').map((item) => item.id), ...additional])].slice(0, 100);
+export function getEagleProcessingAssetIds(
+  assets: readonly EagleAssetListItem[],
+  additional: readonly string[] = [],
+) {
+  return [
+    ...new Set([
+      ...assets.filter((item) => item.lifecycleStatus === 'PROCESSING').map((item) => item.id),
+      ...additional,
+    ]),
+  ].slice(0, 100);
 }
 
 export function useEagleProcessingUpdates(input: {
