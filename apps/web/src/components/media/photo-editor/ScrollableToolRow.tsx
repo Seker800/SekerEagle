@@ -23,6 +23,8 @@ export function ScrollableToolRow({
 }) {
   const localViewport = useRef<HTMLDivElement>(null);
   const viewport = viewportRef ?? localViewport;
+  const navigateRef = useRef(onNavigate);
+  navigateRef.current = onNavigate;
   const drag = useRef({ x: 0, left: 0, active: false, moved: false });
   const [trailingSpace, setTrailingSpace] = useState(0);
   const [edges, setEdges] = useState({ left: false, right: false });
@@ -46,7 +48,7 @@ export function ScrollableToolRow({
       );
     };
     const wheel = (event: WheelEvent) => {
-      if (!event.ctrlKey) onNavigate?.();
+      if (!event.ctrlKey) navigateRef.current?.();
       if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
       const end = element.scrollWidth - element.clientWidth;
       if (end <= 1 || (event.deltaY < 0 ? element.scrollLeft <= 0 : element.scrollLeft >= end - 1))
@@ -58,16 +60,25 @@ export function ScrollableToolRow({
     };
     const observer = new ResizeObserver(measure);
     observer.observe(element);
-    for (const child of element.children) observer.observe(child);
+    const observeChildren = () => {
+      observer.disconnect();
+      observer.observe(element);
+      for (const child of element.children) observer.observe(child);
+      measure();
+    };
+    const mutations = new MutationObserver(observeChildren);
+    mutations.observe(element, { childList: true, subtree: true });
+    observeChildren();
     element.addEventListener('scroll', measure);
     element.addEventListener('wheel', wheel, { passive: false });
     measure();
     return () => {
+      mutations.disconnect();
       observer.disconnect();
       element.removeEventListener('scroll', measure);
       element.removeEventListener('wheel', wheel);
     };
-  }, [children, onNavigate, viewport, anchorSelector]);
+  }, [viewport, anchorSelector]);
   const page = (direction: number) => {
     onNavigate?.();
     const element = viewport.current;

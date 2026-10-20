@@ -87,8 +87,8 @@ export function PhotoEditor({
   const [areaSize, setAreaSize] = useState({ width: 640, height: 480 });
   const rendererRef = useRef<ReturnType<typeof createPhotoRenderer> | null>(null);
   const previewRef = useRef<HTMLCanvasElement | null>(null);
-  const latestRef = useRef({ edits, busy, saved, onClose });
-  latestRef.current = { edits, busy, saved, onClose };
+  const latestRef = useRef({ edits, busy, saved, onClose, confirmClose });
+  latestRef.current = { edits, busy, saved, onClose, confirmClose };
   const viewRef = useRef({ source, compare, tab });
   viewRef.current = { source, compare, tab };
   const renderSequence = useRef(0),
@@ -163,6 +163,10 @@ export function PhotoEditor({
         event.preventDefault();
         event.stopImmediatePropagation();
         const current = latestRef.current;
+        if (current.confirmClose) {
+          setConfirmClose(false);
+          return;
+        }
         if (!current.busy) {
           if (hasPhotoEdits(current.edits) && !current.saved) setConfirmClose(true);
           else current.onClose();
