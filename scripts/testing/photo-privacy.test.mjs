@@ -1,3 +1,5 @@
+import { performance } from 'node:perf_hooks';
+import { log } from 'node:console';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -346,6 +348,24 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
       true,
     );
+    const currentRules = await (await fetch(settingsUrl, { headers: auth })).json();
+    const savedRules = await fetch(settingsUrl, {
+      method: 'PUT',
+      headers: auth,
+      body: JSON.stringify({ tagIds: currentRules.tagIds, expectedTagIds: currentRules.tagIds }),
+    });
+    assert.equal(savedRules.status, 200);
+    assert.deepEqual(await savedRules.json(), currentRules);
+    assert.equal(
+      (
+        await fetch(`${base}/api/eagle/privacy-settings`, {
+          method: 'PUT',
+          headers: auth,
+          body: JSON.stringify({ tagIds: currentRules.tagIds, expectedTagIds: [] }),
+        })
+      ).status,
+      404,
+    );
     const url = `${base}/api/photos/photography/people/${f.person.id}/privacy`;
     const body = { marksAssetsPrivate: true, rowVersion: 1 };
     const patch = async (headers, payload = body, path = url) => {
@@ -556,7 +576,7 @@ if (process.env.PHOTO_PRIVACY_BENCH === '1') {
     });
     const start = performance.now();
     await f.rule(true, false);
-    console.log(
+    log(
       `Photo privacy projection, ${count + 3} assets: ${Math.round(performance.now() - start)}ms`,
     );
     assert.equal((await f.marked()).isPrivate, true);

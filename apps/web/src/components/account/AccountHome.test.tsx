@@ -354,41 +354,42 @@ describe('administrator backup entry', () => {
     expect(screen.getByText('备份清理待重试，已成功发布的副本仍然有效。')).toBeVisible();
     expect(screen.getByText('发现未知备份目录，已隔离保留，请管理员检查。')).toBeVisible();
   });
-});
 
-it('关闭隐私显示时收起并清除已加载的敏感标签选项', async () => {
-  const tag = {
-    id: '00000000-0000-4000-8000-000000000001',
-    name: '隐私测试标签',
-    color: null,
-    pinyin: '',
-    pinyinInitials: '',
-  };
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
-      const path = String(input);
-      if (path === '/api/eagle/tags') return jsonResponse([tag]);
-      if (path === '/api/eagle/privacy-settings') return jsonResponse({ tagIds: [tag.id] });
-      if (path === '/api/tokens') return jsonResponse([]);
-      throw new Error(`Unexpected request: ${path}`);
-    }),
-  );
-  const props = { user, onPasswordChanged: vi.fn(), onLogout: vi.fn() };
-  const view = render(
-    <AccountHome
-      {...props}
-      privacyVisibility={{ enabled: true, durationHours: 3, expiresAt: '2099-01-01' }}
-    />,
-  );
-  fireEvent.click(screen.getByRole('button', { name: '管理私密标签' }));
-  expect(await screen.findByText(tag.name)).toBeInTheDocument();
-  view.rerender(
-    <AccountHome
-      {...props}
-      privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }}
-    />,
-  );
-  await waitFor(() => expect(screen.queryByText(tag.name)).not.toBeInTheDocument());
-  expect(screen.getByText('开启显示隐私内容后，可管理全部私密标签。')).toBeInTheDocument();
+  it('关闭隐私显示时收起并清除已加载的敏感标签选项', async () => {
+    const tag = {
+      id: '00000000-0000-4000-8000-000000000001',
+      name: '隐私测试标签',
+      color: null,
+      pinyin: '',
+      pinyinInitials: '',
+    };
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const path =
+          typeof input === 'string' ? input : input instanceof URL ? input.pathname : input.url;
+        if (path === '/api/eagle/tags') return jsonResponse([tag]);
+        if (path === '/api/eagle/privacy-settings') return jsonResponse({ tagIds: [tag.id] });
+        if (path === '/api/tokens') return jsonResponse([]);
+        throw new Error(`Unexpected request: ${path}`);
+      }),
+    );
+    const props = { user, onPasswordChanged: vi.fn(), onLogout: vi.fn() };
+    const view = render(
+      <AccountHome
+        {...props}
+        privacyVisibility={{ enabled: true, durationHours: 3, expiresAt: '2099-01-01' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: '管理私密标签' }));
+    expect(await screen.findByText(tag.name)).toBeInTheDocument();
+    view.rerender(
+      <AccountHome
+        {...props}
+        privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByText(tag.name)).not.toBeInTheDocument());
+    expect(screen.getByText('开启显示隐私内容后，可管理全部私密标签。')).toBeInTheDocument();
+  });
 });

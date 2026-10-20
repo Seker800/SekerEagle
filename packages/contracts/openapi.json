@@ -1061,7 +1061,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
                 }
               }
             }
@@ -1093,7 +1093,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
                 }
               }
             }
@@ -4158,7 +4158,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
                 }
               }
             }
@@ -4190,7 +4190,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UpdateEaglePrivacySettingsDto"
+                  "$ref": "#/components/schemas/EaglePrivacySettingsDto"
                 }
               }
             }
@@ -6865,7 +6865,7 @@
         },
         "required": ["rowVersion"]
       },
-      "UpdateEaglePrivacySettingsDto": {
+      "EaglePrivacySettingsDto": {
         "type": "object",
         "properties": {
           "tagIds": {
@@ -6877,6 +6877,27 @@
           }
         },
         "required": ["tagIds"]
+      },
+      "UpdateEaglePrivacySettingsDto": {
+        "type": "object",
+        "properties": {
+          "tagIds": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "expectedTagIds": {
+            "maxItems": 1000,
+            "description": "打开编辑器时读取的私密标签快照；变化时返回 409。",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["tagIds", "expectedTagIds"]
       },
       "CreateManualTagDto": {
         "type": "object",

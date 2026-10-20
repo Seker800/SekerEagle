@@ -3147,8 +3147,13 @@ export interface components {
       description?: Record<string, never> | null;
       sourceUrl?: Record<string, never> | null;
     };
+    EaglePrivacySettingsDto: {
+      tagIds: string[];
+    };
     UpdateEaglePrivacySettingsDto: {
       tagIds: string[];
+      /** @description 打开编辑器时读取的私密标签快照；变化时返回 409。 */
+      expectedTagIds: string[];
     };
     CreateManualTagDto: {
       name: string;
@@ -4034,7 +4039,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['UpdateEaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EaglePrivacySettingsDto'];
         };
       };
     };
@@ -4057,7 +4062,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['UpdateEaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EaglePrivacySettingsDto'];
         };
       };
     };
@@ -6094,7 +6099,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['UpdateEaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EaglePrivacySettingsDto'];
         };
       };
     };
@@ -6117,7 +6122,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['UpdateEaglePrivacySettingsDto'];
+          'application/json': components['schemas']['EaglePrivacySettingsDto'];
         };
       };
     };
