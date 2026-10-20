@@ -15,6 +15,7 @@ import {
   transcodeCameraVideo,
   CAMERA_VIDEO_INPUT_OPTIONS,
 } from '@sekereagle/media-core';
+import { persistPhotoAnalysis } from './photo-analysis-persistence';
 import { groupAnalyzedPhoto } from './photo-grouping';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -54,7 +55,7 @@ import {
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces, FACE_MODEL_VERSION } from './photo-faces';
 import { inspectLivePhotoImage } from './live-photo';
-import { analyzePhotoPixels, readPhotoExif, PHOTO_ANALYSIS_VERSION } from './photo-analysis';
+import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
@@ -558,6 +559,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       });
     }
     await prisma.$transaction(async (transaction) => {
+      // Group decisions and publication use one lock order: group, then asset/projections.
+      if (asset.libraryMode === 'PHOTO')
+        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${asset.ownerId}`}))`;
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
         where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
         data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
@@ -599,27 +603,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         });
       }
       if ('photoAnalysis' in processed && processed.photoAnalysis) {
-        const metadata = {
-          ...processed.photoAnalysis,
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetRevision: job.assetRevision,
-          processorVersion: PHOTO_ANALYSIS_VERSION,
-        };
-        await transaction.eaglePhotoMetadata.upsert({
-          where: { assetId: asset.id },
-          create: { ...metadata, assetId: asset.id },
-          update: { ...metadata, analyzedAt: new Date() },
-        });
-        await transaction.eagleAsset.updateMany({
-          where: {
-            id: asset.id,
-            ownerId: asset.ownerId,
-            libraryMode: 'PHOTO',
-            mediaRevision: job.assetRevision,
-          },
-          data: { chronologicalAt: metadata.capturedAt ?? asset.libraryAddedAt },
-        });
+        await persistPhotoAnalysis(transaction, asset, processed.photoAnalysis, job.assetRevision);
         await groupAnalyzedPhoto(transaction, asset.ownerId, asset.id);
       }
       await transaction.eagleAsset.updateMany({

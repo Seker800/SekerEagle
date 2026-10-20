@@ -14,6 +14,13 @@ export interface LibraryIdentity {
 
 export const LIBRARY_REVISION_OBSERVER = Symbol('SEKEREAGLE_LIBRARY_REVISION_OBSERVER');
 export interface LibraryRevisionObserver {
+  /** Acquire extension locks before the shared service locks source assets. */
+  beforeEditedCopy?(transaction: Prisma.TransactionClient, scope: LibraryIdentity): Promise<void>;
+  onEditedCopyCreated?(
+    transaction: Prisma.TransactionClient,
+    scope: LibraryIdentity,
+    copy: { sourceAssetId: string; assetId: string; mediaRevision: number },
+  ): Promise<void>;
   onOriginalReplaced(
     transaction: Prisma.TransactionClient,
     scope: LibraryIdentity,

@@ -151,6 +151,11 @@ function StackThumbnail({
       >
         {src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <IconPhoto size={20} />}
         <span className={styles.number}>{index + 1}</span>
+        {asset?.photoMetadata && (
+          <span className={styles.version}>
+            {asset.photoMetadata.captureMetadataInherited ? t('已编辑') : t('原片')}
+          </span>
+        )}
         {best && (
           <span className={styles.best} aria-label={t('当前主图')}>
             <IconStarFilled size={11} />

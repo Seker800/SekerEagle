@@ -58,6 +58,17 @@
   font-size: 9px;
   line-height: 14px;
 }
+.version {
+  position: absolute;
+  bottom: 2px;
+  right: 3px;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: #000b;
+  color: #fff;
+  font-size: 9px;
+  line-height: 14px;
+}
 .best {
   position: absolute;
   right: 3px;

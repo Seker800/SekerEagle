@@ -346,7 +346,16 @@ export class EagleService {
         members: {
           where: { ownerId, libraryMode: 'PHOTO', asset: inLibrary('PHOTO', queryWhere) },
           orderBy: { assetId: 'asc' },
-          select: { assetId: true },
+          select: {
+            assetId: true,
+            asset: {
+              select: {
+                lifecycleStatus: true,
+                createdAt: true,
+                photoMetadata: { select: { captureMetadataInherited: true } },
+              },
+            },
+          },
         },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -370,9 +379,20 @@ export class EagleService {
         id: group.id,
         bestSelectedByUser: group.bestSelectedByUser,
         assetIds: group.members.map(({ assetId }) => assetId),
-        bestAssetId: group.members.some(({ assetId }) => assetId === group.bestAssetId)
-          ? group.bestAssetId!
-          : group.members[0]!.assetId,
+        bestAssetId: (
+          group.members.find(
+            ({ assetId, asset }) =>
+              assetId === group.bestAssetId && asset.lifecycleStatus === 'READY',
+          ) ??
+          group.members
+            .filter(
+              ({ asset }) =>
+                asset.lifecycleStatus === 'READY' && asset.photoMetadata?.captureMetadataInherited,
+            )
+            .sort((a, b) => b.asset.createdAt.getTime() - a.asset.createdAt.getTime())[0] ??
+          group.members.find(({ asset }) => asset.lifecycleStatus === 'READY') ??
+          group.members[0]!
+        ).assetId,
       }));
     if (!stacks.length) return [];
     const covers = await this.prisma.eagleAsset.findMany({

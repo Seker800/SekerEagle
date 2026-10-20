@@ -1,3 +1,5 @@
+import { EagleStackBadge } from './EagleStackBadge';
+import { EagleSortSummary } from './EagleSortSummary';
 import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
@@ -1398,35 +1400,44 @@ export function SekerEaglePage({
           ) : (
             <>
               <div className={styles.toolbar}>
-                <div className={styles.titleBlock}>
-                  <h1 id="eagle-library-title">
-                    {libraryView === 'TRASH'
-                      ? t('回收站')
-                      : libraryView === 'PRIVATE'
-                        ? libraryMode === 'PHOTO'
-                          ? t('隐私照片')
-                          : t('隐私素材')
-                        : (activeSmartFolder?.name ??
-                          (libraryMode === 'PHOTO'
-                            ? photoView === 'map'
-                              ? t('地图')
-                              : photoView === 'people'
-                                ? t('人物')
-                                : t('照片时间线')
-                            : t('全部素材')))}
-                  </h1>
-                  {showsAssetControls && (
-                    <span>
-                      {displayedAssetCount}
-                      {' ' + t('项')}
-                    </span>
-                  )}
-                  {privateVisible && privacyVisibility?.expiresAt ? (
-                    <span className={styles.privacyStatus}>
-                      <IconLock size={12} />
-                      {' ' + t('隐私内容已显示') + ' '}
-                    </span>
-                  ) : null}
+                <div className={styles.heading}>
+                  <div className={styles.titleBlock}>
+                    <h1 id="eagle-library-title">
+                      {libraryView === 'TRASH'
+                        ? t('回收站')
+                        : libraryView === 'PRIVATE'
+                          ? libraryMode === 'PHOTO'
+                            ? t('隐私照片')
+                            : t('隐私素材')
+                          : (activeSmartFolder?.name ??
+                            (libraryMode === 'PHOTO'
+                              ? photoView === 'map'
+                                ? t('地图')
+                                : photoView === 'people'
+                                  ? t('人物')
+                                  : t('照片时间线')
+                              : t('全部素材')))}
+                    </h1>
+                    {showsAssetControls && (
+                      <span>
+                        {displayedAssetCount}
+                        {' ' + t('项')}
+                      </span>
+                    )}
+                    {privateVisible && privacyVisibility?.expiresAt ? (
+                      <span className={styles.privacyStatus}>
+                        <IconLock size={12} />
+                        {' ' + t('隐私内容已显示') + ' '}
+                      </span>
+                    ) : null}
+                  </div>
+                  {showsAssetControls &&
+                    !search &&
+                    !activeFilterCount &&
+                    !activeSmartFolderId &&
+                    libraryView !== 'TRASH' && (
+                      <EagleSortSummary dateKind={libraryMode === 'PHOTO' ? 'capture' : 'added'} />
+                    )}
                 </div>
                 {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
                 {showsAssetControls && (
@@ -1762,6 +1773,7 @@ export function SekerEaglePage({
                         const asset = assetsById.get(masonryItem.id);
                         if (!asset) return null;
                         const isSelected = selectedAssetIds.includes(asset.id);
+                        const stack = photoStacks.find((entry) => entry.cover.id === asset.id);
                         return (
                           <button
                             key={asset.id}
@@ -1769,7 +1781,7 @@ export function SekerEaglePage({
                             type="button"
                             className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
                             aria-pressed={isSelected}
-                            aria-label={`${asset.displayName}，${asset.format.toUpperCase()}`}
+                            aria-label={`${asset.displayName}，${asset.format.toUpperCase()}${stack ? `，${t('照片组，共 {{value1}} 张', { value1: stack.assetIds.length })}` : ''}`}
                             draggable={Boolean(desktopAssetDragBridge) && libraryView !== 'TRASH'}
                             style={
                               masonryItem
@@ -1812,15 +1824,7 @@ export function SekerEaglePage({
                               {getEagleLivePhotoContentUrl(asset) && (
                                 <span className={styles.livePhotoBadge}>{t('实况')}</span>
                               )}
-                              {photoStacks.find((stack) => stack.cover.id === asset.id) && (
-                                <span className="photo-stack-count">
-                                  ▣{' '}
-                                  {
-                                    photoStacks.find((stack) => stack.cover.id === asset.id)!
-                                      .assetIds.length
-                                  }
-                                </span>
-                              )}
+                              <EagleStackBadge count={stack?.assetIds.length ?? 0} />
                               {(selectionMode || isBatchSelection) && (
                                 <span className={styles.selectionMark}>
                                   {isSelected && <IconCheck size={13} />}
@@ -2228,7 +2232,7 @@ export function SekerEaglePage({
                     </div>
                     <div>
                       <dt>{t('添加时间')}</dt>
-                      <dd>{new Date(selectedAsset.createdAt).toLocaleDateString(getLocale())}</dd>
+                      <dd>{new Date(selectedAsset.libraryAddedAt).toLocaleString(getLocale())}</dd>
                     </div>
                     <div>
                       <dt>{t('更新时间')}</dt>

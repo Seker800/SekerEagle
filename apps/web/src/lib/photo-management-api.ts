@@ -15,7 +15,7 @@ export interface PhotoPerson {
 }
 export interface PhotoGroup {
   id: string;
-  kind: 'BURST' | 'SIMILAR' | 'MANUAL';
+  kind: 'BURST' | 'SIMILAR' | 'MANUAL' | 'EDITED';
   bestAssetId: string | null;
   bestSelectedByUser: boolean;
   members: Array<{ asset: EagleAssetListItem }>;

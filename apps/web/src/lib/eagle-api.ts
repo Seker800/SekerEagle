@@ -55,6 +55,7 @@ export interface EagleColorAnalysis {
 }
 
 export interface PhotoMetadata {
+  captureMetadataInherited?: boolean;
   capturedAt: string | null;
   capturedLocal: string | null;
   captureTimeZoneKnown: boolean;

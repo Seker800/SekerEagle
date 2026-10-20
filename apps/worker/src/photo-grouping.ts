@@ -36,7 +36,15 @@ export async function groupAnalyzedPhoto(
         libraryMode: 'PHOTO',
         members: { some: { assetId: { in: suggestion.assetIds } } },
       },
-      include: { members: { select: { assetId: true } } },
+      include: {
+        members: { select: { assetId: true } },
+        bestAsset: {
+          select: {
+            deletedAt: true,
+            photoMetadata: { select: { captureMetadataInherited: true } },
+          },
+        },
+      },
     });
     // Dismissed suggestions and manual membership are durable user decisions.
     if (groups.some((group) => group.dismissed || group.kind === 'MANUAL') || groups.length > 1)
@@ -57,7 +65,13 @@ export async function groupAnalyzedPhoto(
         })),
         skipDuplicates: true,
       });
-      if (!existing.bestSelectedByUser)
+      if (
+        !existing.bestSelectedByUser &&
+        !(
+          existing.bestAsset?.deletedAt === null &&
+          existing.bestAsset.photoMetadata?.captureMetadataInherited
+        )
+      )
         await tx.eaglePhotoGroup.updateMany({
           where: { ownerId, libraryMode: 'PHOTO', id: existing.id },
           data: { bestAssetId: suggestion.bestAssetId },

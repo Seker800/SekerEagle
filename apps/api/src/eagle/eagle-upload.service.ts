@@ -332,6 +332,10 @@ export class EagleUploadService {
         let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
         if (copySourceId) {
           await lockOwnerPrivacyProjection(transaction, session.uploaderId, this.libraryMode);
+          await this.revisionObserver?.beforeEditedCopy?.(transaction, {
+            ownerId: session.uploaderId,
+            libraryMode: this.libraryMode,
+          });
           copySource = await loadEditedCopySource(
             transaction,
             session.uploaderId,
@@ -537,6 +541,13 @@ export class EagleUploadService {
                     assignmentProvenance: 'USER_ASSIGNED',
                   })),
                 });
+            }
+            if (copySource && copySourceId) {
+              await this.revisionObserver?.onEditedCopyCreated?.(
+                transaction,
+                { ownerId: session.uploaderId, libraryMode: this.libraryMode },
+                { sourceAssetId: copySourceId, assetId, mediaRevision: assetRevision },
+              );
             }
             if (browserCapture) {
               await transaction.eagleAssetAnnotation.create({

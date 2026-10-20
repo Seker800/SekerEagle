@@ -1,0 +1,16 @@
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: 3px 0 0;
+  color: var(--eagle-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.summary > span {
+  white-space: nowrap;
+}
+.summary small {
+  font-size: inherit;
+  opacity: 0.72;
+}

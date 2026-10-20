@@ -1,4 +1,10 @@
 export const enUS = {
+  '照片组，共 {{value1}} 张': 'Photo group, {{value1}} photos',
+  '拍摄时间 · 最新优先': 'Capture time · Newest first',
+  '添加时间 · 最新优先': 'Date added · Newest first',
+  无拍摄时间时使用添加时间: 'Uses date added when capture time is missing',
+  原片: 'Original',
+
   '参数已复制，可返回图库多选后套用。':
     'Settings copied. Select photos in the library to apply them.',
   '编辑会话已失效，请重新打开。': 'The edit session expired. Please reopen it.',

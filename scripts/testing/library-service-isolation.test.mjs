@@ -2201,24 +2201,73 @@ test('expiry racing an object copy fences publication and keeps the original vis
 });
 
 test('published photo edits inherit timeline and capture data, join their source group and prefer the newest copy', async () => {
-  const { PhotoRevisionObserver } = await import('../../apps/api/dist/photos/photo-revision.observer.js');
+  const { PhotoRevisionObserver } =
+    await import('../../apps/api/dist/photos/photo-revision.observer.js');
   const f = await fixtures();
   const originalDate = new Date('2020-05-10T09:30:00Z');
-  await prisma.eagleAsset.update({ where: { id: f.photo.id }, data: { chronologicalAt: originalDate } });
-  await prisma.eaglePhotoMetadata.create({ data: {
-    ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.photo.id, assetRevision: 1,
-    processorVersion: 'test', capturedAt: originalDate, capturedLocal: '2020-05-10T09:30:00',
-    cameraModel: 'X-Pro3', lensModel: 'XF 35mm', iso: 400, sharpnessScore: 99, perceptualHash: 'old-hash',
-  } });
-  const storage = { createMultipartUpload: async () => randomUUID(), completeMultipartUpload: async () => {}, headObject: async () => ({ ContentLength: 12 }) };
-  const service = new EagleUploadService(prisma, storage, { assertUploadAllowed: () => ({ mimeType: 'image/png' }) }, {
-    inspect: async () => ({ sha256: randomUUID().replaceAll('-', '').repeat(2), format: 'png', width: 20, height: 10, durationMs: null }),
-  }, 'PHOTO', new PhotoRevisionObserver());
+  await prisma.eagleAsset.update({
+    where: { id: f.photo.id },
+    data: { chronologicalAt: originalDate },
+  });
+  await prisma.eaglePhotoMetadata.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.photo.id,
+      assetRevision: f.photo.mediaRevision,
+      processorVersion: 'test',
+      capturedAt: originalDate,
+      capturedLocal: '2020-05-10T09:30:00',
+      cameraModel: 'X-Pro3',
+      lensModel: 'XF 35mm',
+      iso: 400,
+      sharpnessScore: 99,
+      perceptualHash: 'old-hash',
+    },
+  });
+  const storage = {
+    createMultipartUpload: async () => randomUUID(),
+    completeMultipartUpload: async () => {},
+    headObject: async () => ({ ContentLength: 12 }),
+  };
+  const service = new EagleUploadService(
+    prisma,
+    storage,
+    { assertUploadAllowed: () => ({ mimeType: 'image/png' }) },
+    {
+      inspect: async () => ({
+        sha256: randomUUID().replaceAll('-', '').repeat(2),
+        format: 'png',
+        width: 20,
+        height: 10,
+        durationMs: null,
+      }),
+    },
+    'PHOTO',
+    new PhotoRevisionObserver(),
+  );
   const publish = async () => {
-    const session = await service.initiate(f.ownerId, { originalName: 'edited.png', mimeType: 'image/png', size: 12, duplicatePolicy: 'CREATE_COPY', copySourceAssetId: f.photo.id, copySourceRowVersion: 1, editRecipe: { version: 1, edits: DEFAULT_PHOTO_EDITS } });
-    const result = await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
-    assert.equal((await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] })).assetId, result.assetId);
-    return prisma.eagleAsset.findUniqueOrThrow({ where: { id: result.assetId }, include: { photoMetadata: true } });
+    const session = await service.initiate(f.ownerId, {
+      originalName: 'edited.png',
+      mimeType: 'image/png',
+      size: 12,
+      duplicatePolicy: 'CREATE_COPY',
+      copySourceAssetId: f.photo.id,
+      copySourceRowVersion: 1,
+      editRecipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
+    });
+    const result = await service.complete(f.ownerId, session.id, {
+      parts: [{ partNumber: 1, etag: 'part' }],
+    });
+    assert.equal(
+      (await service.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] }))
+        .assetId,
+      result.assetId,
+    );
+    return prisma.eagleAsset.findUniqueOrThrow({
+      where: { id: result.assetId },
+      include: { photoMetadata: true },
+    });
   };
   const first = await publish();
   assert.equal(first.chronologicalAt.toISOString(), originalDate.toISOString());
@@ -2228,11 +2277,17 @@ test('published photo edits inherit timeline and capture data, join their source
   assert.equal(first.photoMetadata.cameraModel, 'X-Pro3');
   assert.equal(first.photoMetadata.sharpnessScore, null);
   assert.equal(first.photoMetadata.perceptualHash, null);
-  let group = await prisma.eaglePhotoGroup.findFirstOrThrow({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO', dismissed: false }, include: { members: true } });
-  assert.deepEqual(group.members.map(m => m.assetId).sort(), [f.photo.id, first.id].sort());
+  let group = await prisma.eaglePhotoGroup.findFirstOrThrow({
+    where: { ownerId: f.ownerId, libraryMode: 'PHOTO', dismissed: false },
+    include: { members: true },
+  });
+  assert.deepEqual(group.members.map((m) => m.assetId).sort(), [f.photo.id, first.id].sort());
   assert.equal(group.bestAssetId, first.id);
   const second = await publish();
-  group = await prisma.eaglePhotoGroup.findUniqueOrThrow({ where: { id: group.id }, include: { members: true } });
+  group = await prisma.eaglePhotoGroup.findUniqueOrThrow({
+    where: { id: group.id },
+    include: { members: true },
+  });
   assert.equal(group.members.length, 3);
   assert.equal(group.bestAssetId, second.id);
   // In-flight copies never hide the original behind a processing-only cover.
@@ -2241,9 +2296,18 @@ test('published photo edits inherit timeline and capture data, join their source
   await prisma.eagleAsset.update({ where: { id: second.id }, data: { lifecycleStatus: 'READY' } });
   page = await f.photos.listAssets(f.ownerId, { limit: 50 }, { includePrivate: false });
   assert.equal(page.photoStacks[0].cover.id, second.id);
-  await prisma.eaglePhotoGroup.update({ where: { id: group.id }, data: { bestAssetId: f.photo.id, bestSelectedByUser: true } });
+  await prisma.eaglePhotoGroup.update({
+    where: { id: group.id },
+    data: { bestAssetId: f.photo.id, bestSelectedByUser: true },
+  });
   await publish();
-  assert.equal((await prisma.eaglePhotoGroup.findUniqueOrThrow({ where: { id: group.id } })).bestAssetId, f.photo.id);
+  assert.equal(
+    (await prisma.eaglePhotoGroup.findUniqueOrThrow({ where: { id: group.id } })).bestAssetId,
+    f.photo.id,
+  );
   assert.equal(await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId } }), 1);
-  assert.equal(await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }), 0);
+  assert.equal(
+    await prisma.eaglePhotoGroup.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    0,
+  );
 });

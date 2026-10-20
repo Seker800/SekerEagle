@@ -1269,6 +1269,7 @@ model EaglePhotoMetadata {
   capturedAt DateTime?
   capturedLocal String?
   captureTimeZoneKnown Boolean @default(false)
+  captureMetadataInherited Boolean @default(false)
   cameraMake String?
   cameraModel String?
   lensModel String?

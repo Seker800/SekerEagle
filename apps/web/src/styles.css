@@ -1201,18 +1201,6 @@ select:focus-visible {
   margin: 8px 8px 8px 0;
 }
 
-.photo-stack-count {
-  z-index: 2;
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  padding: 4px 7px;
-  border-radius: 5px;
-  color: white;
-  background: #000a;
-  font-size: 12px;
-}
-
 .auth-offline-shell {
   display: grid;
   place-items: center;

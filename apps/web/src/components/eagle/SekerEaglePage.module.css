@@ -252,6 +252,9 @@
   gap: 10px;
   background: #18191c;
 }
+.heading {
+  min-width: 0;
+}
 .titleBlock {
   min-width: 130px;
   display: flex;
