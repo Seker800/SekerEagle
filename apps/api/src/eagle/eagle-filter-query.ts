@@ -58,6 +58,19 @@ function buildConditionWhere(condition: EagleFilterCondition): Prisma.EagleAsset
 
 function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
   switch (rule.field) {
+    case 'CITY': {
+      const named = {
+        photoLocation: {
+          is: {
+            name:
+              rule.operator === 'NOT_EMPTY' || rule.operator === 'EMPTY'
+                ? { not: '' }
+                : textFilter(rule.operator, readString(rule)),
+          },
+        },
+      };
+      return rule.operator === 'EMPTY' ? { NOT: named } : named;
+    }
     case 'CAMERA_MODEL':
     case 'LENS_MODEL': {
       const field = rule.field === 'CAMERA_MODEL' ? 'cameraModel' : 'lensModel';

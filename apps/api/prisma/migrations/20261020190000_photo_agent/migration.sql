@@ -85,8 +85,17 @@ ALTER TABLE "EaglePhotoLocation" ADD CONSTRAINT "EaglePhotoLocation_ownerId_libr
 ALTER TABLE "EaglePhotoAgentTask" ADD CONSTRAINT "photo_agent_task_mode" CHECK ("libraryMode"='PHOTO'), ADD CONSTRAINT "photo_agent_task_kind" CHECK (kind IN ('CITY','NON_PHOTO')), ADD CONSTRAINT "photo_agent_task_status" CHECK (status IN ('OPEN','CANCELLED'));
 ALTER TABLE "EaglePhotoAgentSuggestion" ADD CONSTRAINT "photo_agent_suggestion_mode" CHECK ("libraryMode"='PHOTO'), ADD CONSTRAINT "photo_agent_suggestion_kind" CHECK (kind IN ('CITY','NON_PHOTO')), ADD CONSTRAINT "photo_agent_suggestion_status" CHECK (status IN ('PENDING','ACCEPTED','REJECTED','UNDONE'));
 ALTER TABLE "EaglePhotoLocation" ADD CONSTRAINT "photo_location_mode" CHECK ("libraryMode"='PHOTO'), ADD CONSTRAINT "photo_location_coordinates" CHECK (latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180), ADD CONSTRAINT "photo_location_source" CHECK (source IN ('INFERRED','MANUAL'));
-CREATE TRIGGER "photo_agent_task_mode_immutable" BEFORE UPDATE OF "libraryMode" ON "EaglePhotoAgentTask" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
-CREATE TRIGGER "photo_agent_suggestion_mode_immutable" BEFORE UPDATE OF "libraryMode" ON "EaglePhotoAgentSuggestion" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
-CREATE TRIGGER "photo_location_mode_immutable" BEFORE UPDATE OF "libraryMode" ON "EaglePhotoLocation" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EaglePhotoAgentTask" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EaglePhotoAgentSuggestion" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EaglePhotoLocation" FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();
 
+CREATE FUNCTION invalidate_photo_location_revision() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW."mediaRevision" IS DISTINCT FROM OLD."mediaRevision" THEN
+    DELETE FROM "EaglePhotoLocation" WHERE "assetId"=NEW.id AND "ownerId"=NEW."ownerId" AND "libraryMode"=NEW."libraryMode";
+  END IF;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER photo_location_revision BEFORE UPDATE OF "mediaRevision" ON "EagleAsset" FOR EACH ROW EXECUTE FUNCTION invalidate_photo_location_revision();
 COMMIT;

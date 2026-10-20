@@ -181,6 +181,7 @@ test('asset listing only loads relations required by gallery cards', async () =>
 
   assert.deepEqual(Object.keys(include ?? {}).sort(), [
     'manualTagLinks',
+    'photoLocation',
     'photoMetadata',
     'renditions',
   ]);

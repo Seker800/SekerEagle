@@ -75,8 +75,20 @@ const publicPhotoMetadataSelect = Prisma.validator<Prisma.EaglePhotoMetadataSele
   perceptualHash: true,
 });
 
+const publicPhotoLocationSelect = {
+  assetRevision: true,
+  cityId: true,
+  name: true,
+  country: true,
+  region: true,
+  latitude: true,
+  longitude: true,
+  source: true,
+} satisfies Prisma.EaglePhotoLocationSelect;
+
 const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   photoMetadata: { select: publicPhotoMetadataSelect },
+  photoLocation: { select: publicPhotoLocationSelect },
   renditions: {
     where: { status: 'READY' },
     orderBy: [{ revision: 'desc' }, { kind: 'asc' }],
@@ -688,6 +700,7 @@ export class EagleService {
           chronologicalAt: true,
           livePhotoRole: true,
           photoMetadata: { select: publicPhotoMetadataSelect },
+          photoLocation: { select: publicPhotoLocationSelect },
           mediaRevision: true,
           lifecycleStatus: true,
           mediaErrorCode: true,
@@ -711,6 +724,8 @@ export class EagleService {
       .then((rows) =>
         rows.map(({ livePhotoRole, ...row }) => ({
           ...row,
+          photoLocation:
+            row.photoLocation?.assetRevision === row.mediaRevision ? row.photoLocation : null,
           ...(livePhotoRole ? { livePhotoComponent: true } : {}),
           renditions: row.renditions.map((rendition) => ({
             ...rendition,
@@ -1675,6 +1690,8 @@ function serializeAssetList(asset: AssetListRecord) {
     libraryAddedAt: record.libraryAddedAt,
     chronologicalAt: record.chronologicalAt,
     photoMetadata: record.photoMetadata,
+    photoLocation:
+      record.photoLocation?.assetRevision === record.mediaRevision ? record.photoLocation : null,
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
     deletedAt: record.deletedAt,

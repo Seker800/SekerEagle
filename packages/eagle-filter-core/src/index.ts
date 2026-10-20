@@ -3,6 +3,7 @@ export const EAGLE_FILTER_MAX_CONDITIONS = 30;
 export const EAGLE_FILTER_MAX_RULES_PER_CONDITION = 30;
 
 export type EagleFilterField =
+  | 'CITY'
   | 'CAMERA_MODEL'
   | 'LENS_MODEL'
   | 'GPS'
@@ -100,7 +101,7 @@ const SET_OPERATORS = ['ANY_OF', 'ALL_OF', 'NONE_OF', 'EMPTY', 'NOT_EMPTY'] as c
 const DATE_OPERATORS = ['BEFORE', 'AFTER', 'BETWEEN', 'WITHIN_DAYS'] as const;
 
 export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
-  ...(['CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
+  ...(['CITY', 'CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
     field,
     libraryModes: ['PHOTO'] as const,
     kind: 'TEXT' as const,

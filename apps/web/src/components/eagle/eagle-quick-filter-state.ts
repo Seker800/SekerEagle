@@ -11,7 +11,7 @@ export type EagleQuickTagMatch = 'ANY' | 'ALL';
 export type EagleQuickRangeField = 'WIDTH' | 'HEIGHT' | 'FILE_SIZE' | 'DURATION';
 export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT';
 export type EagleQuickTextField =
-  'NAME' | 'DESCRIPTION' | 'SOURCE_URL' | 'CAMERA_MODEL' | 'LENS_MODEL';
+  'NAME' | 'DESCRIPTION' | 'SOURCE_URL' | 'CITY' | 'CAMERA_MODEL' | 'LENS_MODEL';
 export interface EagleQuickNumberRange {
   min: string;
   max: string;
@@ -43,6 +43,7 @@ export const DEFAULT_EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[]
   'FORMAT',
 ];
 export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, string> = {
+  CITY: t('城市（已确认补充）'),
   CAMERA_MODEL: t('相机'),
   LENS_MODEL: t('镜头'),
   GPS: 'GPS',
@@ -65,6 +66,7 @@ export const EAGLE_QUICK_FILTER_FIELD_LABELS: Record<EagleQuickFilterField, stri
 };
 export const EAGLE_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
   ...DEFAULT_EAGLE_QUICK_FILTER_FIELDS,
+  'CITY',
   'CAMERA_MODEL',
   'LENS_MODEL',
   'GPS',
@@ -128,6 +130,7 @@ export function isEagleQuickFilterActive(
       const range = state.dates[field];
       return Boolean(range?.from || range?.to);
     }
+    case 'CITY':
     case 'CAMERA_MODEL':
     case 'LENS_MODEL':
     case 'NAME':
@@ -184,6 +187,7 @@ export function summarizeEagleQuickFilter(
       if (!range) return undefined;
       return range.from && range.to ? `${range.from}–${range.to}` : range.from || range.to;
     }
+    case 'CITY':
     case 'CAMERA_MODEL':
     case 'LENS_MODEL':
     case 'NAME':
@@ -226,6 +230,7 @@ export function clearEagleQuickFilter(
       delete dates[field];
       return { ...state, dates };
     }
+    case 'CITY':
     case 'CAMERA_MODEL':
     case 'LENS_MODEL':
     case 'NAME':
@@ -288,6 +293,7 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     'NAME',
     'DESCRIPTION',
     'SOURCE_URL',
+    'CITY',
     'CAMERA_MODEL',
     'LENS_MODEL',
   ] as const) {

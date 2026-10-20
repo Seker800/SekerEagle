@@ -63,6 +63,7 @@ interface EagleQuickFilterBarProps {
 }
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
 const PHOTO_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
+  'CITY',
   'CAMERA_MODEL',
   'LENS_MODEL',
   'MANUAL_TAGS',
@@ -90,6 +91,7 @@ const COLOR_OPTIONS = [
   '#171717',
 ];
 const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
+  CITY: IconMapPin,
   CAMERA_MODEL: IconCamera,
   LENS_MODEL: IconAperture,
   GPS: IconMapPin,
@@ -360,6 +362,7 @@ function renderFieldControl(
           ))}
         </select>
       );
+    case 'CITY':
     case 'CAMERA_MODEL':
     case 'LENS_MODEL':
       return (

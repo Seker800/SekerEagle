@@ -22,15 +22,18 @@ export function PhotoMap({
   const points = useMemo(
     () =>
       assets.flatMap((asset) => {
-        const latitude = asset.photoMetadata?.latitude,
-          longitude = asset.photoMetadata?.longitude;
+        const raw = asset.photoMetadata?.latitude != null && asset.photoMetadata?.longitude != null;
+        const supplemental =
+          asset.photoLocation?.assetRevision === asset.mediaRevision ? asset.photoLocation : null;
+        const latitude = raw ? asset.photoMetadata?.latitude : supplemental?.latitude,
+          longitude = raw ? asset.photoMetadata?.longitude : supplemental?.longitude;
         return typeof latitude === 'number' &&
           Number.isFinite(latitude) &&
           Math.abs(latitude) <= 90 &&
           typeof longitude === 'number' &&
           Number.isFinite(longitude) &&
           Math.abs(longitude) <= 180
-          ? [{ asset, coordinate: [latitude, longitude] as L.LatLngTuple }]
+          ? [{ asset, cityLevel: !raw, coordinate: [latitude, longitude] as L.LatLngTuple }]
           : [];
       }),
     [assets],
@@ -121,11 +124,13 @@ export function PhotoMap({
     const accent = container.current
       ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#d69b48'
       : '#d69b48';
-    for (const { asset, coordinate } of points) {
+    for (const { asset, coordinate, cityLevel } of points) {
       const label = document.createElement('button');
       label.type = 'button';
       label.className = styles.photoLink;
-      label.textContent = asset.displayName;
+      label.textContent = cityLevel
+        ? `${asset.displayName} · ${asset.photoLocation?.name} · ${t('城市级位置，非拍摄坐标')}`
+        : asset.displayName;
       label.onclick = () => onOpenRef.current(asset);
       L.circleMarker(coordinate, {
         pane: 'photoLocations',
@@ -133,7 +138,8 @@ export function PhotoMap({
         color: accent,
         weight: 2,
         fillColor: accent,
-        fillOpacity: 0.85,
+        fillOpacity: cityLevel ? 0.15 : 0.85,
+        ...(cityLevel ? { dashArray: '4 4', radius: 12 } : {}),
       })
         .addTo(markers)
         .bindPopup(label);

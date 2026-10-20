@@ -72,10 +72,21 @@ export interface PhotoMetadata {
   sharpnessScore: number | null;
   perceptualHash: string | null;
 }
+export interface PhotoLocation {
+  assetRevision: number;
+  cityId: string;
+  name: string;
+  country: string;
+  region: string;
+  latitude: number;
+  longitude: number;
+  source: 'INFERRED' | 'MANUAL';
+}
 export interface EagleAssetListItem {
   livePhotoMotion?: { assetId: string; renditionId: string; revision: number };
   chronologicalAt?: string;
   photoMetadata?: PhotoMetadata | null;
+  photoLocation?: PhotoLocation | null;
   libraryMode?: LibraryMode;
   id: string;
   originalName: string;
@@ -115,6 +126,7 @@ export interface EagleAssetUpdate extends EagleAssetUpdateContract {
   livePhotoComponent?: boolean;
   chronologicalAt?: string;
   photoMetadata?: PhotoMetadata | null;
+  photoLocation?: PhotoLocation | null;
 }
 
 export interface EagleMediaCapabilities {

@@ -1968,7 +1968,10 @@ export function SekerEaglePage({
                   </section>
                 )}
                 {libraryMode === 'PHOTO' && (
-                  <PhotoMetadataDetails metadata={selectedAsset.photoMetadata} />
+                  <PhotoMetadataDetails
+                    metadata={selectedAsset.photoMetadata}
+                    location={selectedAsset.photoLocation}
+                  />
                 )}
                 {isSelectedAssetReadOnly && (
                   <p className={styles.saveFeedback}>{t('回收站中的素材信息为只读。')}</p>

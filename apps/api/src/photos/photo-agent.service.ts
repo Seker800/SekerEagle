@@ -47,6 +47,7 @@ type Photo = Prisma.EagleAssetGetPayload<{ select: typeof select }>;
 const json = (value: unknown) => JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue;
 const serialize = (a: Photo) => ({
   ...a,
+  photoMetadata: a.photoMetadata?.assetRevision === a.mediaRevision ? a.photoMetadata : null,
   photoLocation: a.photoLocation?.assetRevision === a.mediaRevision ? a.photoLocation : null,
   previewId: a.renditions.find((r) => r.revision === a.mediaRevision)?.id ?? null,
   filenameSignals: filenameSignals(a.originalName, a.mimeType),

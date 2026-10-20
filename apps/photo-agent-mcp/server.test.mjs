@@ -20,7 +20,7 @@ test('real MCP discovery and calls expose only scoped reads and proposals', asyn
     token: 'test-only',
     fetch: async (url, init) => {
       calls.push({ url, init });
-      return new Response(JSON.stringify({ items: [] }), {
+      return new globalThis.Response(JSON.stringify({ items: [] }), {
         headers: { 'content-type': 'application/json' },
       });
     },

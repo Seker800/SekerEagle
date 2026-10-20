@@ -187,3 +187,15 @@ test('rejects common controller subclasses outside the known module', () => {
   );
   assert.ok(checkLibrarySharing(sources).some((e) => e.rule === 'inherited-controllers'));
 });
+
+test('photo organization remains a photography provider and cannot replace common services', () => {
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        '    PhotoAgentService,',
+        '    PhotoAgentService,\n    { provide: EagleService, useClass: PhotoAgentService },',
+      ),
+    'shared-providers',
+  );
+});

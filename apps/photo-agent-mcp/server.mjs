@@ -1,3 +1,4 @@
+import { URLSearchParams } from 'node:url';
 import { Buffer } from 'node:buffer';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -92,7 +93,7 @@ export function createPhotoAgentServer({ baseUrl, token, fetch: fetcher = fetch 
         annotations: {
           readOnlyHint,
           destructiveHint: false,
-          idempotentHint: true,
+          idempotentHint: name !== 'photo_task_create',
           openWorldHint: false,
         },
       },
