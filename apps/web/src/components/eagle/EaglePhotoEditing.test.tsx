@@ -250,3 +250,16 @@ it('does not let a revoked scope save a draft or export after switching mode', a
   );
   expect(state.saveRecipe).not.toHaveBeenCalled();
 });
+
+
+it('freezes a current bounded preview separately from its original export source in either mode', () => {
+  const {wrapper} = harness();
+  const {result} = renderHook(() => useEaglePhotoEditing({accessToken:'',ownerId:'owner',scopeKey:'scope'}), {wrapper});
+  act(() => result.current.open({...asset,width:6000,height:4000,renditions:[
+    {id:'old',kind:'PREVIEW',revision:1},
+    {id:'small',kind:'PREVIEW',revision:2,mimeType:'image/webp',width:1600,height:1067},
+  ]} as EagleAssetListItem));
+  expect(result.current.session?.source).toContain('/source/content');
+  expect(result.current.session?.previewSource).toContain('/renditions/small');
+  expect(result.current.session?.sourceSize).toEqual({width:6000,height:4000});
+});

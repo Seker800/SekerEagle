@@ -1,16 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PhotoEditor } from './PhotoEditor';
-import { composePhoto } from './photo-editor-render';
+import { readPhotoMetadata } from './photo-editor-metadata';
+import { composePhoto, sourceCanvas } from './photo-editor-render';
 import { DEFAULT_PHOTO_EDITS } from './photo-editor-model';
 import { PHOTO_ADJUSTMENTS } from './photo-adjustment-catalog';
 
 vi.mock('./photo-editor-metadata', () => ({
-  readPhotoMetadata: async () => ({
+  readPhotoMetadata: vi.fn(async () => ({
     camera: 'Nikon D80',
     parameters: '24mm · f/4',
     capturedAt: '2026.10.19 10:30',
-  }),
+  })),
 }));
 vi.mock('./photo-editor-watermark', () => ({
   renderPhotoWatermark: (source: HTMLCanvasElement) => source,
@@ -18,7 +19,7 @@ vi.mock('./photo-editor-watermark', () => ({
 
 vi.mock('./photo-editor-render', () => ({
   MAX_PHOTO_PIXELS: 48_000_000,
-  sourceCanvas: () => Object.assign(document.createElement('canvas'), { width: 800, height: 600 }),
+  sourceCanvas: vi.fn(() => Object.assign(document.createElement('canvas'), { width: 800, height: 600 })),
   drawPhoto: (target: HTMLCanvasElement) => {
     target.width = 800;
     target.height = 600;
@@ -778,4 +779,59 @@ it('persists a return to the initial settings while an earlier autosave is in fl
   expect(onDraftChange).toHaveBeenLastCalledWith(
     expect.objectContaining({ edits: expect.objectContaining({ exposure: 0 }) }),
   );
+});
+
+
+it('opens only the small preview, preserves export dimensions and loads the original only when saving', async () => {
+  const requests: string[] = [];
+  vi.stubGlobal('Image', class {
+    naturalWidth = 800;
+    naturalHeight = 600;
+    onload: (() => void) | null = null;
+    set src(value: string) {
+      if (!value) return;
+      requests.push(value);
+      if (value === '/original.jpg') { this.naturalWidth = 6000; this.naturalHeight = 4500; }
+      queueMicrotask(() => this.onload?.());
+    }
+  });
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['png'])));
+  vi.mocked(readPhotoMetadata).mockClear();
+  vi.mocked(sourceCanvas).mockClear();
+  const save = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({id:'saved',name:'saved.png'});
+  render(<PhotoEditor source="/original.jpg" previewSource="/preview.webp" sourceSize={{width:6000,height:4500}} initialMetadata={{camera:'Nikon Z5'}} name="Photo.jpg" onClose={vi.fn()} onSave={save} />);
+  const button = screen.getByRole('button', {name:'保存到相册'});
+  await waitFor(() => expect(button).toBeEnabled());
+  expect(requests).toEqual(['/preview.webp']);
+  expect(readPhotoMetadata).not.toHaveBeenCalled();
+  expect(screen.getByText('6000 × 4500')).toBeInTheDocument();
+  fireEvent.click(button);
+  await waitFor(() => expect(save).toHaveBeenCalledOnce());
+  expect(requests).toEqual(['/preview.webp','/original.jpg']);
+  expect(vi.mocked(sourceCanvas).mock.calls.at(-1)?.[0].naturalWidth).toBe(6000);
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
+  expect(requests).toEqual(['/preview.webp','/original.jpg']);
+  expect(save.mock.calls[1][0]).toBe(save.mock.calls[0][0]);
+});
+
+it('never silently exports a small preview when the original cannot be loaded', async () => {
+  vi.stubGlobal('Image', class {
+    naturalWidth = 800;
+    naturalHeight = 600;
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    set src(value: string) {
+      if (value) queueMicrotask(() => value === '/preview.webp' ? this.onload?.() : this.onerror?.());
+    }
+  });
+  const save = vi.fn();
+  render(<PhotoEditor source="/original.jpg" previewSource="/preview.webp" sourceSize={{width:6000,height:4500}} name="Photo.jpg" onClose={vi.fn()} onSave={save} />);
+  const button = screen.getByRole('button', {name:'保存到相册'});
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('照片保存失败'));
+  expect(save).not.toHaveBeenCalled();
+  expect(button).toBeEnabled();
 });
