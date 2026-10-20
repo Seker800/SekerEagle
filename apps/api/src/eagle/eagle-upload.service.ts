@@ -446,6 +446,26 @@ export class EagleUploadService {
             cleanupObject = true;
           } else {
             const assetDisplayName = browserCapture?.displayName ?? displayName;
+            const editedTag = copySource
+              ? await transaction.eagleManualTag.upsert({
+                  where: {
+                    ownerId_libraryMode_normalizedName: {
+                      ownerId: session.uploaderId,
+                      libraryMode: this.libraryMode,
+                      normalizedName: '已编辑',
+                    },
+                    libraryMode: this.libraryMode,
+                  },
+                  create: {
+                    ownerId: session.uploaderId,
+                    libraryMode: this.libraryMode,
+                    name: '已编辑',
+                    normalizedName: '已编辑',
+                  },
+                  update: {},
+                  select: { id: true, marksAssetsPrivate: true },
+                })
+              : null;
             await transaction.eagleAsset.create({
               data: {
                 id: assetId,
@@ -466,7 +486,7 @@ export class EagleUploadService {
                 ...(copySource
                   ? {
                       rating: copySource.rating,
-                      isPrivate: copySource.isPrivate,
+                      isPrivate: copySource.isPrivate || (editedTag?.marksAssetsPrivate ?? false),
                     }
                   : {}),
               },
@@ -482,13 +502,15 @@ export class EagleUploadService {
                     sourceUrl: copySource.annotation.sourceUrl,
                   },
                 });
-              if (copySource.manualTagLinks.length)
+              const tagIds = new Set(copySource.manualTagLinks.map((link) => link.tagId));
+              if (editedTag) tagIds.add(editedTag.id);
+              if (tagIds.size)
                 await transaction.eagleAssetManualTag.createMany({
-                  data: copySource.manualTagLinks.map((link) => ({
+                  data: [...tagIds].map((tagId) => ({
                     ownerId: session.uploaderId,
                     libraryMode: this.libraryMode,
                     assetId,
-                    tagId: link.tagId,
+                    tagId,
                     assignedByUser: true,
                     assignmentProvenance: 'USER_ASSIGNED',
                   })),

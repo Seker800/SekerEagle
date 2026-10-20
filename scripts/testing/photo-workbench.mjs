@@ -491,6 +491,10 @@ try {
           240,
         );
         const copy = await api(`/${mode}/assets/${copied.assetId}`);
+        assert.ok(
+          copy.manualTags.some((tag) => tag.name === '已编辑'),
+          'saved edits must be filterable by their edited tag',
+        );
         assert.equal(copy.width, 512);
         assert.equal(copy.height, 256);
         const original = await fetch(`${origin}/api/${mode}/assets/${sourceId}/original`, {

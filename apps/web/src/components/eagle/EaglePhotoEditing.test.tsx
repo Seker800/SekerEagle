@@ -97,6 +97,9 @@ describe('shared library photo editing', () => {
     });
     expect(session.name).toBe('Original');
     expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'MATERIAL', 'assets'] });
+    expect(refresh).toHaveBeenCalledWith({
+      queryKey: ['eagle', 'owner', 'MATERIAL', 'manual-tags'],
+    });
     view.rerender({ scopeKey: 'owner:PHOTO' });
     expect(view.result.current.session).toBeNull();
   });
@@ -117,6 +120,7 @@ describe('shared library photo editing', () => {
     state.upload.mockResolvedValue({ asset: { id: 'copy' } });
     await result.current.session!.onSave(new File(['png'], 'output.png'));
     expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets'] });
+    expect(refresh).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner', 'PHOTO', 'manual-tags'] });
     act(() => result.current.close());
     expect(result.current.session).toBeNull();
   });

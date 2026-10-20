@@ -88,7 +88,7 @@ export function useEaglePhotoEditing({
     const sourceId = asset.id,
       sourceVersion = asset.rowVersion;
     const upload = api.uploadEagleAsset;
-    const queryKey = createEagleQueryKeys(ownerId, libraryMode).assets;
+    const keys = createEagleQueryKeys(ownerId, libraryMode);
     setSession({
       scopeKey,
       source,
@@ -102,7 +102,9 @@ export function useEaglePhotoEditing({
           retry: true,
         });
         // A refresh error must not turn a completed upload into a duplicate save.
-        void client.invalidateQueries({ queryKey }).catch(() => undefined);
+        for (const queryKey of [keys.assets, keys.manualTags]) {
+          void client.invalidateQueries({ queryKey }).catch(() => undefined);
+        }
         return { id: result.asset.id, name: file.name };
       },
     });

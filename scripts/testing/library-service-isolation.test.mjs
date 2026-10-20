@@ -147,6 +147,16 @@ test('existing editor copies retain private tags and metadata atomically in thei
     const editedTag = copy.manualTagLinks.find((link) => link.tag.name === '已编辑').tag;
     assert.equal(editedTag.libraryMode, mode);
     assert.equal(editedTag.ownerId, f.ownerId);
+    const library = mode === 'PHOTO' ? f.photos : f.materials;
+    const filtered = await library.listAssets(
+      f.ownerId,
+      { limit: 50, manualTagIds: [editedTag.id], privacy: 'PRIVATE' },
+      { includePrivate: true },
+    );
+    assert.deepEqual(
+      filtered.items.map((item) => item.id),
+      [copy.id],
+    );
     assert.equal(
       await prisma.eagleAssetManualTag.count({ where: { assetId: id, tagId: editedTag.id } }),
       0,

@@ -221,7 +221,8 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
             count: async () => 1,
             updateMany: async () => ({ count: 1 }),
           },
-          $transaction: async (callback: any) => callback(tx),
+          $transaction: async (callback: (transaction: typeof tx) => Promise<unknown>) =>
+            callback(tx),
         } as never,
         { headObject: async () => ({ ContentLength: 12 }) } as never,
         {} as never,
