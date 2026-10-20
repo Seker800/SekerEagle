@@ -116,6 +116,7 @@ try {
       '--test',
       'scripts/testing/library-isolation.test.mjs',
       'scripts/testing/library-service-isolation.test.mjs',
+      'scripts/testing/photo-agent.test.mjs',
     ],
     {
       env,
