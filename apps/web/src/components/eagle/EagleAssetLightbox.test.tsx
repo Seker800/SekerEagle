@@ -158,3 +158,21 @@ it('does not fall back to a MOV original when its playback copy is not ready', (
   );
   expect(screen.queryByLabelText('播放 Portrait video')).not.toBeInTheDocument();
 });
+
+it('edits the displayed group member rather than a cover or neighboring photo', () => {
+  const onEdit = vi.fn();
+  const view = render(
+    <EagleAssetLightbox
+      asset={imageAsset}
+      onEdit={onEdit}
+      onClose={vi.fn()}
+      navigation={{ index: 1, count: 3, onPrevious: vi.fn(), onNext: vi.fn() }}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '编辑照片' }));
+  expect(onEdit).toHaveBeenCalledWith(imageAsset);
+  view.rerender(
+    <EagleAssetLightbox asset={imageAsset} loading onEdit={onEdit} onClose={vi.fn()} />,
+  );
+  expect(screen.queryByRole('button', { name: '编辑照片' })).toBeNull();
+});

@@ -362,6 +362,18 @@ export function PhotoEditor({
       setBusy(false);
     }
   }
+  async function openSavedPhoto() {
+    if (!onOpenSaved || busy) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onOpenSaved(savedId);
+    } catch {
+      setError(t('定位失败，请重试'));
+    } finally {
+      setBusy(false);
+    }
+  }
   function slider(
     label: string,
     key: ActiveAdjustmentKey | 'filterStrength',
@@ -578,20 +590,7 @@ export function PhotoEditor({
         <div className={styles.saveNotice} role="status">
           {t('已保存到相册')} · {savedName}
           {onOpenSaved && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await onOpenSaved(savedId);
-                } catch {
-                  setError(t('定位失败，请重试'));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
+            <button type="button" disabled={busy} onClick={() => void openSavedPhoto()}>
               {t('查看已保存照片')}
             </button>
           )}

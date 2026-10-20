@@ -617,3 +617,30 @@ it('uses managed photo metadata when the editable RAW rendition has no original 
     }),
   );
 });
+
+it('can retry locating a saved copy without uploading the image again', async () => {
+  const save = vi.fn().mockResolvedValue({ id: 'copy', name: 'output.png' });
+  const locate = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue(undefined);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+    callback(new Blob(['png'], { type: 'image/png' })),
+  );
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      onClose={vi.fn()}
+      onSave={save}
+      onOpenSaved={locate}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  fireEvent.click(await screen.findByRole('button', { name: '查看已保存照片' }));
+  await screen.findByText('定位失败，请重试');
+  await waitFor(() => expect(screen.getByRole('button', { name: '查看已保存照片' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: '查看已保存照片' }));
+  await waitFor(() => expect(locate).toHaveBeenCalledTimes(2));
+  expect(locate).toHaveBeenLastCalledWith('copy');
+  expect(save).toHaveBeenCalledOnce();
+});

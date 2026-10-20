@@ -1260,6 +1260,7 @@ describe('SekerEaglePage', () => {
 
     const expectedActions = [
       '发送到照片',
+      '编辑照片',
       '另存为…',
       '复制图片',
       '添加标签',
