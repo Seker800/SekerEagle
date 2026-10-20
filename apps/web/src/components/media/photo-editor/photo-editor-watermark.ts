@@ -33,7 +33,7 @@ export function renderPhotoWatermark(
       : '#000000';
   const secondary = foreground;
   if (frosted) {
-    paintFrostedWatermarkBackground(source, canvas, createCanvas, edits);
+    paintFrostedWatermarkBackground(source, canvas, createCanvas);
     context.clearRect(layout.x, layout.y, source.width, source.height);
   } else if (!overlay) {
     context.fillStyle = background;

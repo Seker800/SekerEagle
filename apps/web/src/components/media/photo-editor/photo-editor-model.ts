@@ -36,8 +36,6 @@ export interface PhotoEdits extends Record<AdvancedKey, number> {
   watermark: string;
   watermarkAlign: 'left' | 'center' | 'right';
   watermarkTheme: 'white' | 'black' | 'frosted';
-  watermarkBlur: number;
-  watermarkDarkness: number;
   watermarkCamera: string | null;
   watermarkParameters: string | null;
   watermarkCapturedAt: string | null;
@@ -81,8 +79,6 @@ export const DEFAULT_PHOTO_EDITS: PhotoEdits = {
   watermark: 'none',
   watermarkAlign: 'left',
   watermarkTheme: 'white',
-  watermarkBlur: 20,
-  watermarkDarkness: 55,
   watermarkCamera: null,
   watermarkParameters: null,
   watermarkCapturedAt: null,

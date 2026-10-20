@@ -361,7 +361,7 @@ export function PhotoEditor({
   }
   function slider(
     label: string,
-    key: ActiveAdjustmentKey | 'filterStrength' | 'watermarkBlur' | 'watermarkDarkness',
+    key: ActiveAdjustmentKey | 'filterStrength',
     min = -100,
     max = 100,
     step = 1,
@@ -372,7 +372,7 @@ export function PhotoEditor({
       <PhotoAdjustmentControl
         key={key}
         label={label}
-        value={edits[key] ?? DEFAULT_PHOTO_EDITS[key]}
+        value={edits[key]}
         min={min}
         max={max}
         step={step}
@@ -644,27 +644,14 @@ export function PhotoEditor({
             </PhotoToolPanel>
           )}
           {tab === 'watermark' && (
-            <PhotoToolPanel
-              inspector={
-                edits.watermarkTheme === 'frosted' &&
-                findWatermark(edits.watermark)?.theme &&
-                !findWatermark(edits.watermark)?.overlay && (
-                  <div className={`${styles.parameterRow} ${styles.glassControls}`}>
-                    {slider(t('模糊度'), 'watermarkBlur', 0, 100, 1, '%')}
-                    {slider(t('黑度'), 'watermarkDarkness', 0, 100, 1, '%')}
-                  </div>
-                )
-              }
-            >
-              <PhotoWatermarkPanel
-                edits={edits}
-                metadata={metadata}
-                source={watermarkSource}
-                disabled={!loaded || busy}
-                metadataLoading={metadataLoading}
-                onChange={update}
-              />
-            </PhotoToolPanel>
+            <PhotoWatermarkPanel
+              edits={edits}
+              metadata={metadata}
+              source={watermarkSource}
+              disabled={!loaded || busy}
+              metadataLoading={metadataLoading}
+              onChange={update}
+            />
           )}
           {tab === 'crop' && (
             <PhotoCropPanel
