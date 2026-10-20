@@ -102,3 +102,18 @@ test('package preparation creates private new credentials and never overwrites a
     await rm(temporary, { recursive: true, force: true });
   }
 });
+
+
+test('explicit NAS search connection requires dedicated credentials and cannot enable background inference', async () => {
+  const overlay = yaml.load(await readFile(new URL('../deploy/nas/search-inference.yml', import.meta.url), 'utf8'));
+  assert.deepEqual(Object.keys(overlay), ['services']);
+  assert.deepEqual(Object.keys(overlay.services), ['api']);
+  assert.deepEqual(Object.keys(overlay.services.api), ['environment']);
+  const env = overlay.services.api.environment;
+  assert.deepEqual(Object.keys(env).sort(), ['MLX_EMBEDDING_TOKEN', 'MLX_EMBEDDING_URL']);
+  assert.match(env.MLX_EMBEDDING_URL, /^\$\{NAS_SEARCH_EMBEDDING_URL:\?/u);
+  assert.match(env.MLX_EMBEDDING_TOKEN, /^\$\{NAS_SEARCH_EMBEDDING_TOKEN:\?/u);
+  const defaults = await render();
+  assert.equal(defaults.services.worker.environment.MLX_EMBEDDING_URL, 'http://127.0.0.1:11435');
+  assert.deepEqual(defaults.services.worker.profiles, ['processing']);
+});
