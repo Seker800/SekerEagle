@@ -64,6 +64,19 @@ test('NAS package only accepts immutable source revisions and bounded memory', a
   assert.equal(result.services.web.healthcheck.test.at(-1), 'http://127.0.0.1:8080/');
 });
 
+test('NAS storage does not depend on removed vendor registry images', async () => {
+  const result = await render();
+  assert.equal(result.services.minio.image, 'sekereagle/minio:nas-20250422');
+  assert.equal(result.services['minio-init'].image, 'sekereagle/mc:nas-20250416');
+  assert.equal(result.services.minio.healthcheck.test[1], 'wget');
+  for (const name of ['minio', 'mc']) {
+    const dockerfile = await readFile(new URL(`../deploy/nas/${name}.Dockerfile`, import.meta.url), 'utf8');
+    assert.match(dockerfile, /git fetch --depth=1 origin [a-f0-9]{40}/u);
+    assert.match(dockerfile, /CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOAMD64=v1/u);
+    assert.match(dockerfile, /USER 1000:1000/u);
+  }
+});
+
 test('package preparation creates private new credentials and never overwrites an install', async () => {
   const { prepareNasPackage, createNasGateway } = await import('./deploy-nas.mjs');
   const temporary = await mkdtemp(join(tmpdir(), 'eagle-nas-'));
