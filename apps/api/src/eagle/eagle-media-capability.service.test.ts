@@ -156,14 +156,42 @@ test('accepts browser-generic camera RAW, TIFF and camera video MIME declaration
   );
 });
 
-
 test('accepts exact decimal file limits and the NAS large-file samples', () => {
   for (const fileName of ['photo.jpg', 'capture.raf', 'scan.tif']) {
-    assert.equal(service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_000 }).mediaType, 'image');
-    assert.throws(() => service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_001 }), /500 MB/);
+    assert.equal(
+      service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_000 }).mediaType,
+      'image',
+    );
+    assert.throws(
+      () => service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_001 }),
+      /500 MB/,
+    );
   }
-  assert.equal(service.assertUploadAllowed({ fileName: 'clip.mp4', mimeType: 'video/mp4', size: 5_000_000_000 }).mediaType, 'video');
-  assert.throws(() => service.assertUploadAllowed({ fileName: 'clip.mp4', mimeType: 'video/mp4', size: 5_000_000_001 }), /5 GB/);
-  for (const size of [295238048, 441007614]) assert.equal(service.assertUploadAllowed({fileName:'scan.tif',mimeType:'image/tiff',size}).mediaType,'image');
-  for (const size of [2365794893, 4010397244]) assert.equal(service.assertUploadAllowed({fileName:'clip.mp4',mimeType:'video/mp4',size}).mediaType,'video');
+  assert.equal(
+    service.assertUploadAllowed({
+      fileName: 'clip.mp4',
+      mimeType: 'video/mp4',
+      size: 5_000_000_000,
+    }).mediaType,
+    'video',
+  );
+  assert.throws(
+    () =>
+      service.assertUploadAllowed({
+        fileName: 'clip.mp4',
+        mimeType: 'video/mp4',
+        size: 5_000_000_001,
+      }),
+    /5 GB/,
+  );
+  for (const size of [295238048, 441007614])
+    assert.equal(
+      service.assertUploadAllowed({ fileName: 'scan.tif', mimeType: 'image/tiff', size }).mediaType,
+      'image',
+    );
+  for (const size of [2365794893, 4010397244])
+    assert.equal(
+      service.assertUploadAllowed({ fileName: 'clip.mp4', mimeType: 'video/mp4', size }).mediaType,
+      'video',
+    );
 });
