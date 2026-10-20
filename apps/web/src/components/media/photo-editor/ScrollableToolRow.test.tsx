@@ -133,3 +133,17 @@ it('reserves trailing space so the final category can align to the start even on
   expect(row.lastElementChild).toHaveAttribute('aria-hidden', 'true');
   expect(row.lastElementChild).toHaveStyle({ flexBasis: '600px' });
 });
+
+it('keeps observers stable while slider children and navigation callbacks change', () => {
+  let observers = 0;
+  vi.stubGlobal('ResizeObserver', class {
+    constructor() { observers++; }
+    observe() {}
+    disconnect() {}
+  });
+  const draw = (value: number) => <ScrollableToolRow className="tools" label="stable" onNavigate={() => {}}><button>{value}</button></ScrollableToolRow>;
+  const view = render(draw(0));
+  view.rerender(draw(1));
+  view.rerender(draw(2));
+  expect(observers).toBe(1);
+});

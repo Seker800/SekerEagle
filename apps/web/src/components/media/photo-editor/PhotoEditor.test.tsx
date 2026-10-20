@@ -644,3 +644,16 @@ it('can retry locating a saved copy without uploading the image again', async ()
   expect(locate).toHaveBeenLastCalledWith('copy');
   expect(save).toHaveBeenCalledOnce();
 });
+
+it('dismisses the discard confirmation with Escape without closing the editor', async () => {
+  const close = vi.fn();
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={close} onSave={vi.fn()} />);
+  const exposure = screen.getByRole('slider', { name: '曝光' });
+  await waitFor(() => expect(exposure).toBeEnabled());
+  fireEvent.change(exposure, { target: { value: '20' } });
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: 'Escape' });
+  expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  expect(close).not.toHaveBeenCalled();
+});
