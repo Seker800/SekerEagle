@@ -1,5 +1,6 @@
 import { BackupController } from './backup/backup.controller';
-import { Module } from '@nestjs/common';
+import { securityResponse } from './security-response';
+import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule, minutes, seconds } from '@nestjs/throttler';
@@ -28,4 +29,8 @@ import { StorageModule } from './storage/storage.module';
   controllers: [BackupController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(securityResponse).forRoutes('*path');
+  }
+}

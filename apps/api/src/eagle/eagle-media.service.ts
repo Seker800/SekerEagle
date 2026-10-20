@@ -254,7 +254,7 @@ export class EagleMediaService {
       notModified: false,
       stream: object.Body as unknown as Readable,
       fileName,
-      mimeType: object.ContentType ?? fallbackMimeType,
+      mimeType: fallbackMimeType,
       contentLength: object.ContentLength,
       contentRange: object.ContentRange,
       fullSize: options?.fullSize ?? BigInt(object.ContentLength ?? 0),

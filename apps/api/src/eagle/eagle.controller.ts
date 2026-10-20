@@ -611,10 +611,14 @@ function applyMediaHeaders(
   },
   cacheControl: string,
 ): void {
-  response.setHeader('Content-Type', media.mimeType);
+  const safeInline = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'video/mp4']);
+  const mimeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(media.mimeType)
+    ? media.mimeType : 'application/octet-stream';
+  response.setHeader('Content-Type', mimeType);
+  response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader(
     'Content-Disposition',
-    `inline; filename*=UTF-8''${encodeURIComponent(media.fileName)}`,
+    `${safeInline.has(mimeType) ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(media.fileName)}`,
   );
   response.setHeader('Cache-Control', cacheControl);
   response.vary('Authorization');
