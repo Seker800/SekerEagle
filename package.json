@@ -58,7 +58,8 @@
     "backup:now": "python3 scripts/backup/backup.py --run",
     "backup:migrate": "python3 scripts/backup/backup.py --migrate",
     "backup:test": "python3 -m unittest discover -s scripts/backup -p 'test_*.py'",
-    "test:worker-leases": "npm run test:leases --workspace @sekereagle/worker"
+    "test:worker-leases": "npm run test:leases --workspace @sekereagle/worker",
+    "security:audit": "npm audit --omit=dev --audit-level=high"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -7,6 +7,9 @@ on:
 permissions:
   contents: read
 
+env:
+  SCARF_ANALYTICS: "false"
+
 jobs:
   check:
     runs-on: ubuntu-24.04-arm
@@ -17,6 +20,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run security:audit
       - run: npm run db:generate
       - run: npm run ci:check
       - run: npm run test:worker-leases
