@@ -150,11 +150,11 @@ export function photoWatermarkLayout(width: number, height: number, template: Wa
   };
   const edges = geometry[template.style];
   const vertical = edges[0] + edges[2];
-  // Keep the existing portrait scale, but stop panorama width from inflating decoration.
+  // Base every template on the photo short edge, preserving the existing portrait scale.
   // Outside top + bottom borders occupy at most 20% of the finished image height.
   const referenceWidth = Math.min(
     width,
-    height * 1.5,
+    height,
     vertical > 0 ? (height * 0.25) / vertical : Infinity,
   );
   const [top, right, bottom, left] = edges.map((value) => Math.round(value * referenceWidth));
