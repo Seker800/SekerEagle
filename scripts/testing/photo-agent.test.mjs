@@ -353,3 +353,18 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
     await app.close();
   }
 });
+
+test('re-extracted GPS evidence invalidates a pending city proposal even without a media revision change',async()=>{
+ const f=await fixture(),t=await f.task(),p=await f.proposal(t);
+ await prisma.eaglePhotoMetadata.update({where:{assetId:f.b.id},data:{longitude:100,analyzedAt:new Date(Date.now()+1000)}});
+ await assert.rejects(f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false),/证据|变化/);
+ assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),0);
+});
+test('clock corrections require an explicit camera scope and accepted replay remains safe after expiry',async()=>{
+ const f=await fixture(),t=await f.task();
+ await assert.rejects(f.service.infer(f.ownerId,t.id,{cities:[city],offsetSeconds:420},false),/相机/);
+ const p=await f.proposal(t);await f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false);
+ await prisma.eaglePhotoAgentTask.update({where:{id:t.id},data:{expiresAt:new Date(0)}});
+ assert.equal((await f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false)).status,'ACCEPTED');
+ assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),1);
+});
