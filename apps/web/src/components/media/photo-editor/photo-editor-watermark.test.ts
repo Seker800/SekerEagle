@@ -564,39 +564,31 @@ it('keeps dark glass readable while retaining local image shapes instead of aver
   paintFrostedWatermarkBackground(asHTML(photo), output, create);
   const light = pixel(output, 80, 128)[0];
   const dark = pixel(output, 112, 128)[0];
-  expect(light).toBeLessThanOrEqual(116);
-  expect(light - dark).toBeGreaterThan(95);
+  expect(light).toBeLessThanOrEqual(51);
+  expect(light - dark).toBeGreaterThan(25);
   const edge = pixel(output, 95, 128)[0];
-  expect(edge).toBeGreaterThan(dark + 10);
-  expect(edge).toBeLessThan(light - 10);
+  expect(edge).toBeGreaterThan(dark + 2);
+  expect(edge).toBeLessThan(light - 2);
   expect(pixel(output, 80, 128)[3]).toBe(255);
 });
 
-it('applies independent glass controls to the shared compositor with exact zero and full darkness endpoints', () => {
-  const photo = source();
-  const base = {
+it('uses the fixed dark glass preset and ignores obsolete slider values in existing sessions', () => {
+  const photo = createCanvas(512, 256);
+  photo.getContext('2d').fillStyle = '#ffffff';
+  photo.getContext('2d').fillRect(0, 0, 512, 256);
+  const edits = {
     ...DEFAULT_PHOTO_EDITS,
     watermark: 'frame-minimal',
     watermarkTheme: 'frosted' as const,
     watermarkWebsite: '',
-    watermarkBlur: 0,
-    watermarkDarkness: 0,
   };
-  const clear = renderPhotoWatermark(asHTML(photo), base, {}, create);
-  const black = renderPhotoWatermark(
-    asHTML(photo),
-    { ...base, watermarkDarkness: 100 },
-    {},
-    create,
-  );
-  expect(pixel(clear, 0, 0)).toEqual([204, 102, 34, 255]);
-  expect(pixel(black, 0, 0)).toEqual([0, 0, 0, 255]);
-  const layout = photoWatermarkLayout(photo.width, photo.height, findWatermark(base.watermark)!);
-  expect(pixel(black, layout.x + 3, layout.y + 3)).toEqual([204, 102, 34, 255]);
-  const blurred = renderPhotoWatermark(asHTML(photo), { ...base, watermarkBlur: 100 }, {}, create);
+  const output = renderPhotoWatermark(asHTML(photo), edits, {}, create);
+  expect(pixel(output, 0, 0)).toEqual([51, 51, 51, 255]);
+  const legacy = { ...edits, watermarkBlur: 0, watermarkDarkness: 0 };
+  const restored = renderPhotoWatermark(asHTML(photo), legacy, {}, create);
   expect(
-    (blurred as unknown as Canvas)
+    (restored as unknown as Canvas)
       .toBuffer('image/png')
-      .equals((clear as unknown as Canvas).toBuffer('image/png')),
-  ).toBe(false);
+      .equals((output as unknown as Canvas).toBuffer('image/png')),
+  ).toBe(true);
 });
