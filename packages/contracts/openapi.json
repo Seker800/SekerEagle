@@ -325,6 +325,66 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/{assetId}/edit-recipe": {
+      "get": {
+        "operationId": "EagleController_getEditRecipe",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      },
+      "put": {
+        "operationId": "EagleController_saveEditRecipe",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveEagleEditRecipeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets": {
       "get": {
         "operationId": "EagleController_listAssets",
@@ -3362,6 +3422,66 @@
         "tags": ["eagle", "photos"]
       }
     },
+    "/api/photos/assets/{assetId}/edit-recipe": {
+      "get": {
+        "operationId": "PhotosController_getEditRecipe",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      },
+      "put": {
+        "operationId": "PhotosController_saveEditRecipe",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveEagleEditRecipeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
     "/api/photos/assets": {
       "get": {
         "operationId": "PhotosController_listAssets",
@@ -6225,6 +6345,19 @@
         },
         "required": ["version", "images", "videos"]
       },
+      "SaveEagleEditRecipeDto": {
+        "type": "object",
+        "properties": {
+          "mediaRevision": {
+            "type": "number",
+            "minimum": 1
+          },
+          "recipe": {
+            "type": "object"
+          }
+        },
+        "required": ["mediaRevision", "recipe"]
+      },
       "CountEagleAssetsDto": {
         "type": "object",
         "properties": {
@@ -6667,6 +6800,9 @@
             "type": "string",
             "enum": ["SKIP", "CREATE_COPY"],
             "default": "SKIP"
+          },
+          "editRecipe": {
+            "type": "object"
           },
           "copySourceAssetId": {
             "type": "string",

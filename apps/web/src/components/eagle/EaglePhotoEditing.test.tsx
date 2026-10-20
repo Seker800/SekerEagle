@@ -1,3 +1,4 @@
+import { DEFAULT_PHOTO_EDITS } from '@sekereagle/library-core';
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -13,11 +14,19 @@ import {
 const state = vi.hoisted(() => ({
   mode: 'MATERIAL' as 'MATERIAL' | 'PHOTO',
   upload: vi.fn(),
+  getRecipe: vi.fn(),
+  saveRecipe: vi.fn(),
+  getAsset: vi.fn(),
 }));
 vi.mock('../../lib/library-workspace', () => ({
   useLibraryWorkspace: () => ({
     libraryMode: state.mode,
-    api: { uploadEagleAsset: state.upload },
+    api: {
+      uploadEagleAsset: state.upload,
+      getEagleEditRecipe: state.getRecipe,
+      saveEagleEditRecipe: state.saveRecipe,
+      getEagleAsset: state.getAsset,
+    },
   }),
 }));
 vi.mock('../media/photo-editor/PhotoEditor', () => ({
@@ -53,6 +62,9 @@ function harness() {
 beforeEach(() => {
   state.mode = 'MATERIAL';
   state.upload.mockReset();
+  state.getRecipe.mockReset().mockResolvedValue(null);
+  state.saveRecipe.mockReset().mockResolvedValue({ saved: true });
+  state.getAsset.mockReset().mockResolvedValue(asset);
 });
 describe('shared library photo editing', () => {
   it('keeps unsupported, deleted and processing resources out of the edit flow', () => {
@@ -184,4 +196,57 @@ describe('shared library photo editing', () => {
     expect(locate).toHaveBeenCalledWith('copy');
     expect(locate.mock.invocationCallOrder[0]).toBeLessThan(close.mock.invocationCallOrder[0]);
   });
+});
+
+it('restores a saved copy from its original, autosaves there, and freezes its recipe on export', async () => {
+  const { wrapper } = harness();
+  const { result } = renderHook(
+    () => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey: 'scope' }),
+    { wrapper },
+  );
+  const edits = { ...DEFAULT_PHOTO_EDITS, exposure: 25 };
+  state.getRecipe.mockResolvedValue({
+    recipe: { version: 1, edits },
+    baseAssetId: 'source',
+    baseMediaRevision: 2,
+  });
+  const restored = await result.current.resolveSession({
+    ...asset,
+    id: 'copy',
+    displayName: 'Flattened copy',
+  });
+  expect(restored.source).toContain('/source/');
+  expect(restored.initialEdits).toEqual(edits);
+  await restored.onDraftChange!({ version: 1, edits });
+  expect(state.saveRecipe).toHaveBeenCalledWith('source', 2, { version: 1, edits });
+  state.upload.mockResolvedValue({ asset: { id: 'second-copy' } });
+  await restored.onSave(new File(['png'], 'edited.png'), { version: 1, edits });
+  expect(state.upload).toHaveBeenLastCalledWith(
+    '',
+    expect.any(File),
+    expect.any(Function),
+    expect.objectContaining({
+      copySourceAssetId: 'source',
+      copySourceRowVersion: 7,
+      editRecipe: { version: 1, edits },
+    }),
+  );
+  state.getAsset.mockResolvedValue({ ...asset, mediaRevision: 3 });
+  await expect(result.current.resolveSession({ ...asset, id: 'copy' })).rejects.toThrow(
+    '原照片内容已变化',
+  );
+});
+it('does not let a revoked scope save a draft or export after switching mode', async () => {
+  const { wrapper } = harness();
+  const view = renderHook(
+    ({ scopeKey }) => useEaglePhotoEditing({ accessToken: '', ownerId: 'owner', scopeKey }),
+    { wrapper, initialProps: { scopeKey: 'old' } },
+  );
+  act(() => view.result.current.open(asset));
+  const old = view.result.current.session!;
+  view.rerender({ scopeKey: 'new' });
+  await expect(old.onDraftChange!({ version: 1, edits: DEFAULT_PHOTO_EDITS })).rejects.toThrow(
+    '编辑会话已失效',
+  );
+  expect(state.saveRecipe).not.toHaveBeenCalled();
 });

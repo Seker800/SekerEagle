@@ -1,3 +1,4 @@
+import type { PhotoEditRecipe } from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
@@ -638,6 +639,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       duplicatePolicy: 'CREATE_COPY';
       copySourceAssetId?: string;
       copySourceRowVersion?: number;
+      editRecipe?: PhotoEditRecipe;
       retry?: boolean;
     },
   ) {
@@ -645,6 +647,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       duplicatePolicy: options?.duplicatePolicy,
       copySourceAssetId: options?.copySourceAssetId,
       copySourceRowVersion: options?.copySourceRowVersion,
+      editRecipe: options?.editRecipe,
     });
     let retained = options?.retry ? editorUploads.get(file) : undefined;
     if (retained && retained.declaration !== declaration)
@@ -669,6 +672,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
               ? {
                   copySourceAssetId: options.copySourceAssetId,
                   copySourceRowVersion: options.copySourceRowVersion,
+                  editRecipe: options.editRecipe,
                 }
               : {}),
           }),
@@ -740,7 +744,24 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   ) {
     return resolveEagleRenditionUrl(assetId, renditionId, renditionKind, mode);
   }
+  function getEagleEditRecipe(assetId: string) {
+    return api<{
+      entry: {
+        recipe: PhotoEditRecipe;
+        baseAssetId: string | null;
+        baseMediaRevision: number;
+      } | null;
+    }>(`/eagle/assets/${encodeURIComponent(assetId)}/edit-recipe`).then((value) => value.entry);
+  }
+  function saveEagleEditRecipe(assetId: string, mediaRevision: number, recipe: PhotoEditRecipe) {
+    return api<{ saved: boolean }>(`/eagle/assets/${encodeURIComponent(assetId)}/edit-recipe`, {
+      method: 'PUT',
+      body: JSON.stringify({ mediaRevision, recipe }),
+    });
+  }
   return {
+    getEagleEditRecipe,
+    saveEagleEditRecipe,
     getEagleMediaCapabilities,
     listEagleAssets,
     listEagleTrash,
@@ -777,6 +798,8 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
   };
 }
 export const {
+  getEagleEditRecipe,
+  saveEagleEditRecipe,
   getEagleMediaCapabilities,
   listEagleAssets,
   listEagleTrash,

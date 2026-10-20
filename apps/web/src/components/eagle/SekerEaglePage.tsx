@@ -1,3 +1,4 @@
+import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
@@ -326,11 +327,14 @@ export function SekerEaglePage({
   const [editorDescription, setEditorDescription] = useState('');
   const [editorSourceUrl, setEditorSourceUrl] = useState('');
   const imagePreview = useImagePreviewState();
+  const editingScope = `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
   const photoEditing = useEaglePhotoEditing({
     accessToken,
     ownerId,
-    scopeKey: `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
+    scopeKey: editingScope,
   });
+  const [batchEditIds, setBatchEditIds] = useState<string[] | null>(null);
+  useEffect(() => setBatchEditIds(null), [editingScope]);
   const openPhotoEditor = (asset: EagleAssetListItem) => {
     setAssetContextMenu(null);
     photoEditing.open(asset);
@@ -1593,6 +1597,11 @@ export function SekerEaglePage({
                     const bounds = event.currentTarget.getBoundingClientRect();
                     openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
                   }}
+                  onBatchEdit={
+                    photoEditing.clipboard
+                      ? () => setBatchEditIds([...selectedAssetIds])
+                      : undefined
+                  }
                   onPreview={
                     selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
                       ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
@@ -2461,6 +2470,15 @@ export function SekerEaglePage({
           onClose={imagePreview.closePreview}
         />
       ) : null}
+      {batchEditIds && photoEditing.clipboard && (
+        <EagleBatchPhotoEdit
+          key={editingScope}
+          assetIds={batchEditIds}
+          recipe={photoEditing.clipboard}
+          resolveSession={photoEditing.resolveSession}
+          onClose={() => setBatchEditIds(null)}
+        />
+      )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}
         onClose={photoEditing.close}

@@ -1,4 +1,30 @@
 export const enUS = {
+  '参数已复制，可返回图库多选后套用。':
+    'Settings copied. Select photos in the library to apply them.',
+  '编辑会话已失效，请重新打开。': 'The edit session expired. Please reopen it.',
+  '原照片内容已变化，无法恢复编辑参数。':
+    'The original photo changed. The edits cannot be restored.',
+  '此照片暂不支持编辑。': 'This photo cannot be edited yet.',
+  '草稿保存失败，请重试。': 'Draft save failed. Please retry.',
+  复制编辑参数: 'Copy edit settings',
+  '关闭编辑器？': 'Close editor?',
+  '关闭后保留编辑草稿，原图不会改变。':
+    'Your edit draft will be kept. The original stays unchanged.',
+  保留草稿并关闭: 'Keep draft and close',
+  套用编辑参数: 'Apply edit settings',
+  批量套用编辑参数: 'Apply edit settings in batch',
+  '照片 {{value1}}': 'Photo {{value1}}',
+  '使用每张照片自己的拍摄信息，保存为独立副本。':
+    'Use each photo’s own metadata and save independent copies.',
+  套用内容: 'Settings to apply',
+  裁剪与旋转: 'Crop and rotation',
+  '已完成 {{value1}} / {{value2}}': 'Completed {{value1}} / {{value2}}',
+  '正在处理…': 'Processing…',
+  等待处理: 'Pending',
+  停止后续处理: 'Stop after current photo',
+  继续未完成项: 'Continue unfinished photos',
+  开始套用: 'Start applying',
+
   图片操作: 'Image actions',
   照片组缩略图: 'Photo group thumbnails',
   向左滚动照片组: 'Scroll photo group left',

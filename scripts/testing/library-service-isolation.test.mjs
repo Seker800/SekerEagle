@@ -1,3 +1,8 @@
+import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
+import {
+  readEagleEditRecipe,
+  saveEagleEditRecipe,
+} from '../../apps/api/dist/eagle/eagle-edit-recipe.js';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
@@ -88,6 +93,7 @@ test('existing editor copies retain private tags and metadata atomically in thei
     };
     const service = new EagleUploadService(prisma, storage, capabilities, inspection, mode);
     const input = {
+      editRecipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, exposure: 25 } },
       originalName: 'edited.png',
       mimeType: 'image/png',
       size: 12,
@@ -121,6 +127,45 @@ test('existing editor copies retain private tags and metadata atomically in thei
       },
     });
     assert.notEqual(copy.id, source.id);
+    const savedRecipe = await readEagleEditRecipe(prisma, f.ownerId, mode, copy.id, true);
+    assert.equal(savedRecipe.recipe.edits.exposure, 25);
+    assert.equal(savedRecipe.baseAssetId, source.id);
+    assert.equal(savedRecipe.baseMediaRevision, source.mediaRevision);
+    await saveEagleEditRecipe(
+      prisma,
+      f.ownerId,
+      mode,
+      source.id,
+      {
+        mediaRevision: source.mediaRevision,
+        recipe: { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, contrast: 12 } },
+      },
+      true,
+    );
+    assert.equal(
+      (await readEagleEditRecipe(prisma, f.ownerId, mode, source.id, true)).recipe.edits.contrast,
+      12,
+    );
+    await assert.rejects(
+      () => readEagleEditRecipe(prisma, randomUUID(), mode, copy.id, true),
+      NotFoundException,
+    );
+    await assert.rejects(
+      () =>
+        readEagleEditRecipe(
+          prisma,
+          f.ownerId,
+          mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO',
+          copy.id,
+          true,
+        ),
+      NotFoundException,
+    );
+    await assert.rejects(
+      () => readEagleEditRecipe(prisma, f.ownerId, mode, copy.id, false),
+      NotFoundException,
+    );
+
     assert.equal(copy.libraryMode, mode);
     assert.equal(copy.isPrivate, true);
     assert.equal(copy.rating, 4);

@@ -80,6 +80,8 @@ const downloadOriginalFilesMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
 vi.mock('../../lib/eagle-api', () => ({
+  getEagleEditRecipe: async () => null,
+  saveEagleEditRecipe: async () => ({ saved: true }),
   getEagleAssetContentUrl: (assetId: string) => `/api/eagle/assets/${assetId}/content`,
   getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
     `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,
@@ -2437,6 +2439,7 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: '编辑照片' }));
     await screen.findByRole('dialog', { name: '编辑照片' });
+    await waitFor(() => expect(editorPropsMock.current).not.toBeNull());
     const opened = editorPropsMock.current!;
     expect(opened.source).toBe('/api/eagle/assets/asset-1/content');
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();

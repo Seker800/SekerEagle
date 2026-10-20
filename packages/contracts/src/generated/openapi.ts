@@ -244,6 +244,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/edit-recipe': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_getEditRecipe'];
+    put: operations['EagleController_saveEditRecipe'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets': {
     parameters: {
       query?: never;
@@ -1533,6 +1549,22 @@ export interface paths {
     };
     get: operations['PhotosController_getMediaCapabilities'];
     put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/edit-recipe': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotosController_getEditRecipe'];
+    put: operations['PhotosController_saveEditRecipe'];
     post?: never;
     delete?: never;
     options?: never;
@@ -2890,6 +2922,10 @@ export interface components {
       images: components['schemas']['EagleImageMediaCapabilityDto'];
       videos: components['schemas']['EagleVideoMediaCapabilityDto'];
     };
+    SaveEagleEditRecipeDto: {
+      mediaRevision: number;
+      recipe: Record<string, never>;
+    };
     CountEagleAssetsDto: {
       query: {
         [key: string]: unknown;
@@ -3015,6 +3051,7 @@ export interface components {
        * @enum {string}
        */
       duplicatePolicy: 'SKIP' | 'CREATE_COPY';
+      editRecipe?: Record<string, never>;
       /** Format: uuid */
       copySourceAssetId?: string;
       copySourceRowVersion?: number;
@@ -3383,6 +3420,48 @@ export interface operations {
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
         };
+      };
+    };
+  };
+  EagleController_getEditRecipe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_saveEditRecipe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveEagleEditRecipeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -5401,6 +5480,48 @@ export interface operations {
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
         };
+      };
+    };
+  };
+  PhotosController_getEditRecipe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_saveEditRecipe: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SaveEagleEditRecipeDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

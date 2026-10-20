@@ -1,3 +1,4 @@
+import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
 import { Optional } from '@nestjs/common';
@@ -85,6 +86,24 @@ export class EagleController {
     return this.mediaCapabilities.getCapabilities();
   }
 
+  @Get('assets/:assetId/edit-recipe')
+  getEditRecipe(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', ParseUUIDPipe) id: string,
+  ) {
+    return this.eagle
+      .getEditRecipe(principal.sub, id, principal.canViewPrivate)
+      .then((entry) => ({ entry }));
+  }
+  @Put('assets/:assetId/edit-recipe')
+  @UseGuards(BrowserOriginGuard)
+  saveEditRecipe(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', ParseUUIDPipe) id: string,
+    @Body() input: SaveEagleEditRecipeDto,
+  ) {
+    return this.eagle.saveEditRecipe(principal.sub, id, input, principal.canViewPrivate);
+  }
   @Get('assets')
   listAssets(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: ListEagleAssetsDto) {
     return this.eagle.listAssets(principal.sub, query, {

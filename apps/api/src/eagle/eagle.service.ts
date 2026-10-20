@@ -1,3 +1,8 @@
+import {
+  readEagleEditRecipe,
+  saveEagleEditRecipe,
+  type SaveEagleEditRecipeDto,
+} from './eagle-edit-recipe';
 import { locateEagleAsset } from './eagle-asset-location';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary, type LibraryIdentity } from './library-mode';
@@ -118,6 +123,24 @@ export class EagleService {
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
+  getEditRecipe(ownerId: string, assetId: string, includePrivate = false) {
+    return readEagleEditRecipe(this.prisma, ownerId, this.libraryMode, assetId, includePrivate);
+  }
+  saveEditRecipe(
+    ownerId: string,
+    assetId: string,
+    input: SaveEagleEditRecipeDto,
+    includePrivate = false,
+  ) {
+    return saveEagleEditRecipe(
+      this.prisma,
+      ownerId,
+      this.libraryMode,
+      assetId,
+      input,
+      includePrivate,
+    );
+  }
   async listAssets(ownerId: string, query: ListEagleAssetsDto, options: AssetListOptions = {}) {
     const { trash = false, includePrivate = false } = options;
     const smartFolder = query.smartFolderId

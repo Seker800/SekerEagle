@@ -314,6 +314,7 @@ model EagleUploadSessionState {
   assetId               String?
   replacementAssetId    String?
   copySourceAssetId     String?
+  copyRecipeJson        Json?
   copySourceRowVersion  Int?
   expectedContentSha256 String?
   retiredObjectKeys     String[]      @default([])
@@ -374,6 +375,7 @@ model EagleAsset {
   uploadSessions                 UploadSession[]
   uploadSessionStates            EagleUploadSessionState[]
   replacementUploadSessionStates EagleUploadSessionState[]      @relation("EagleReplacementUpload")
+  editRecipe                     EagleAssetEditRecipe?
   annotation                     EagleAssetAnnotation?
   externalSource                 EagleExternalAsset?
   importRunItems                 EagleImportRunItem[]
@@ -1367,4 +1369,18 @@ model EagleObjectDeletion {
   updatedAt    DateTime    @updatedAt
 
   @@index([status, availableAt])
+}
+
+model EagleAssetEditRecipe {
+  assetId String @id
+  ownerId String
+  libraryMode LibraryMode
+  assetRevision Int
+  baseAssetId String?
+  baseMediaRevision Int
+  recipe Json
+  updatedAt DateTime @updatedAt
+  asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@unique([ownerId,libraryMode,assetId])
+  @@index([ownerId,libraryMode,baseAssetId])
 }

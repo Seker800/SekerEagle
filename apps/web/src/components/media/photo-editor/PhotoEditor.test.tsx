@@ -691,3 +691,34 @@ it('rejects an oversized bordered output before allocating a full-resolution can
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('水印后的图片超过'));
   expect(screen.getByRole('button', { name: '保存到相册' })).toBeDisabled();
 });
+
+it('restores initial edits, autosaves a draft and copies the current recipe', async () => {
+  const onDraftChange = vi.fn().mockResolvedValue({ saved: true }),
+    onCopyEdits = vi.fn();
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      initialEdits={{ ...DEFAULT_PHOTO_EDITS, exposure: 0.24 }}
+      onDraftChange={onDraftChange}
+      onCopyEdits={onCopyEdits}
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+    />,
+  );
+  const exposure = screen.getByRole('slider', { name: '曝光' });
+  await waitFor(() => expect(exposure).toBeEnabled());
+  expect(exposure).toHaveValue('0.24');
+  fireEvent.change(exposure, { target: { value: '0.35' } });
+  await waitFor(
+    () =>
+      expect(onDraftChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({ version: 1, edits: expect.objectContaining({ exposure: 0.35 }) }),
+      ),
+    { timeout: 2000 },
+  );
+  fireEvent.click(screen.getByRole('button', { name: '复制编辑参数' }));
+  expect(onCopyEdits).toHaveBeenCalledWith(
+    expect.objectContaining({ edits: expect.objectContaining({ exposure: 0.35 }) }),
+  );
+});

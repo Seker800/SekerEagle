@@ -1,3 +1,4 @@
+import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 /* global setTimeout, clearTimeout, console */
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -477,12 +478,26 @@ try {
         ['photos', a.assetId],
       ]) {
         const detail = await api(`/${mode}/assets/${sourceId}`);
+        const editRecipe = { version: 1, edits: { ...DEFAULT_PHOTO_EDITS, exposure: 0.25 } };
+        await api(
+          `/${mode}/assets/${sourceId}/edit-recipe`,
+          { mediaRevision: detail.mediaRevision, recipe: editRecipe },
+          'PUT',
+        );
+        assert.equal(
+          (await api(`/${mode}/assets/${sourceId}/edit-recipe`)).entry.recipe.edits.exposure,
+          0.25,
+        );
         const copied = await upload(mode, editedBytes, 'editor-output.png', 'image/png', {
+          editRecipe,
           duplicatePolicy: 'CREATE_COPY',
           copySourceAssetId: sourceId,
           copySourceRowVersion: detail.rowVersion,
         });
         assert.notEqual(copied.assetId, sourceId);
+        const frozen = (await api(`/${mode}/assets/${copied.assetId}/edit-recipe`)).entry;
+        assert.equal(frozen.baseAssetId, sourceId);
+        assert.equal(frozen.recipe.edits.exposure, 0.25);
         await waitFor(
           async () =>
             (await db.eagleAsset.findUniqueOrThrow({ where: { id: copied.assetId } }))
@@ -524,7 +539,6 @@ try {
         'Existing editor copy HTTP upload, original preservation, previews and mode boundaries passed.',
       );
     }
-    assert.ok(!process.argv.includes('--serve'), 'basic smoke is an automated check only');
   }
   let people, groups;
   if (!basic) {
@@ -876,6 +890,19 @@ try {
     console.log(
       'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',
     );
+    if (process.argv.includes('--serve')) {
+      const result = {
+        pid: process.pid,
+        origin,
+        loginUrl: `${origin}/__test/login`,
+        containers,
+        ownerId: owner.id,
+        basic: true,
+      };
+      await writeFile(join(artifacts, 'photo-workbench.json'), JSON.stringify(result, null, 2));
+      console.log(JSON.stringify({ origin, loginUrl: result.loginUrl, basic: true }));
+      await new Promise(() => {});
+    }
     await cleanup();
     process.exit(0);
   }

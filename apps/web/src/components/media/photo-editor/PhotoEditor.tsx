@@ -1,3 +1,5 @@
+import { renderEditedPhotoFile } from './photo-editor-export';
+import type { PhotoEditRecipe } from '@sekereagle/library-core';
 import { ApiError } from '../../../lib/api-error';
 import { withinPhotoOutputBudget } from './photo-editor-limits';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -25,7 +27,7 @@ import {
   sourceCanvas,
 } from './photo-editor-render';
 import styles from './PhotoEditor.module.css';
-import { editedPhotoName, type SavedPhoto } from './photo-editor-save';
+import { type SavedPhoto } from './photo-editor-save';
 import { PhotoAdjustmentControl } from './PhotoAdjustmentControl';
 import { PhotoAdjustmentsPanel } from './PhotoAdjustmentsPanel';
 import {
@@ -50,21 +52,46 @@ export function PhotoEditor({
   onClose,
   onSave,
   initialMetadata,
+  initialEdits,
+  onDraftChange,
+  onCopyEdits,
   onOpenSaved,
 }: {
   source: string;
   name: string;
   initialMetadata?: PhotoMetadata;
+  initialEdits?: PhotoEdits;
+  onDraftChange?: (recipe: PhotoEditRecipe) => Promise<unknown>;
+  onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onOpenSaved?: (assetId: string) => Promise<void>;
   onClose: () => void;
-  onSave: (file: File) => Promise<SavedPhoto>;
+  onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
 }) {
   const [history, setHistory] = useState<History>({
     past: [],
-    current: { ...DEFAULT_PHOTO_EDITS },
+    current: { ...DEFAULT_PHOTO_EDITS, ...initialEdits },
     future: [],
   });
   const edits = useMemo(() => ({ ...DEFAULT_PHOTO_EDITS, ...history.current }), [history.current]);
+  const [copied, setCopied] = useState(false);
+  const [draftStatus, setDraftStatus] = useState('');
+  const draftQueue = useRef(Promise.resolve());
+  const latestDraft = useRef(onDraftChange);
+  latestDraft.current = onDraftChange;
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const timer = setTimeout(() => {
+      setDraftStatus(t('正在自动保存…'));
+      draftQueue.current = draftQueue.current
+        .catch(() => undefined)
+        .then(() => latestDraft.current?.({ version: 1, edits }))
+        .then(
+          () => setDraftStatus(t('已自动保存')),
+          () => setDraftStatus(t('草稿保存失败，请重试。')),
+        );
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [edits, onDraftChange]);
   const [tab, setTab] = useState<Tab>('adjust');
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -359,19 +386,10 @@ export function PhotoEditor({
       const saveKey = JSON.stringify({ source, edits, metadata });
       let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
       if (!file) {
-        const result = await rendererRef.current.render(sourceCanvas(loaded), edits);
-        const output = document.createElement('canvas');
-        composePhoto(output, result, edits, metadata);
-        const blob = await new Promise<Blob>((resolve, reject) =>
-          output.toBlob(
-            (value) => (value ? resolve(value) : reject(new Error('ENCODE_FAILED'))),
-            'image/png',
-          ),
-        );
-        file = new File([blob], editedPhotoName(name), { type: 'image/png' });
+        file = await renderEditedPhotoFile(loaded, edits, metadata, rendererRef.current, name);
         pendingSaveRef.current = { key: saveKey, file };
       }
-      const savedPhoto = await onSave(file);
+      const savedPhoto = await onSave(file, { version: 1, edits });
       pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
       setSavedId(savedPhoto.id);
@@ -509,7 +527,22 @@ export function PhotoEditor({
         <div className={styles.title}>
           <strong>{t('编辑照片')}</strong>
           <span>{name}</span>
+          {onDraftChange && <small role="status">{draftStatus}</small>}
         </div>
+        {onCopyEdits && (
+          <button
+            type="button"
+            disabled={busy || !loaded}
+            title={t('复制编辑参数')}
+            aria-label={t('复制编辑参数')}
+            onClick={() => {
+              onCopyEdits({ version: 1, edits });
+              setCopied(true);
+            }}
+          >
+            <IconAdjustments size={20} />
+          </button>
+        )}
         <button
           type="button"
           className={styles.exportButton}
@@ -616,7 +649,13 @@ export function PhotoEditor({
         <div className={styles.stageBottom}>
           {tab === 'watermark' && compareControl}
           <span className={styles.renderState} role="status">
-            {rendering ? t('正在更新…') : saved ? t('已保存到相册') : ''}
+            {rendering
+              ? t('正在更新…')
+              : copied
+                ? t('参数已复制，可返回图库多选后套用。')
+                : saved
+                  ? t('已保存到相册')
+                  : ''}
           </span>
         </div>
       </main>
@@ -731,15 +770,35 @@ export function PhotoEditor({
             className={styles.confirm}
             role="alertdialog"
             aria-modal="true"
-            aria-label={t('放弃未保存的修改？')}
+            aria-label={onDraftChange ? t('关闭编辑器？') : t('放弃未保存的修改？')}
           >
-            <h2>{t('放弃未保存的修改？')}</h2>
-            <p>{t('原图不会改变，关闭后本次调整将丢失。')}</p>
+            <h2>{onDraftChange ? t('关闭编辑器？') : t('放弃未保存的修改？')}</h2>
+            <p>
+              {onDraftChange
+                ? t('关闭后保留编辑草稿，原图不会改变。')
+                : t('原图不会改变，关闭后本次调整将丢失。')}
+            </p>
             <button type="button" autoFocus onClick={() => setConfirmClose(false)}>
               {t('继续编辑')}
             </button>
-            <button type="button" onClick={onClose}>
-              {t('放弃修改')}
+            <button
+              type="button"
+              onClick={() => {
+                void (async () => {
+                  if (onDraftChange) {
+                    try {
+                      await draftQueue.current;
+                      await onDraftChange({ version: 1, edits });
+                    } catch {
+                      setDraftStatus(t('草稿保存失败，请重试。'));
+                      return;
+                    }
+                  }
+                  onClose();
+                })();
+              }}
+            >
+              {onDraftChange ? t('保留草稿并关闭') : t('放弃修改')}
             </button>
           </section>
         </div>

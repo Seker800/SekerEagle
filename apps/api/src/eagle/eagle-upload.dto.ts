@@ -5,6 +5,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsObject,
   IsInt,
   IsIn,
   IsOptional,
@@ -47,6 +48,11 @@ export class InitiateEagleUploadDto {
   @IsOptional()
   @IsIn(['SKIP', 'CREATE_COPY'])
   duplicatePolicy?: 'SKIP' | 'CREATE_COPY';
+
+  @ApiPropertyOptional({ type: Object })
+  @IsOptional()
+  @IsObject()
+  editRecipe?: object;
 
   @ApiPropertyOptional({ format: 'uuid' })
   @ValidateIf(

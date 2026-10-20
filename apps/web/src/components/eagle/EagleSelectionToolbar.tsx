@@ -8,12 +8,14 @@ export function EagleSelectionToolbar({
   onToggle,
   onActions,
   onPreview,
+  onBatchEdit,
 }: {
   selecting: boolean;
   count: number;
   onToggle: () => void;
   onActions: (event: MouseEvent<HTMLButtonElement>) => void;
   onPreview?: () => void;
+  onBatchEdit?: () => void;
 }) {
   return (
     <div className={styles.root} role="toolbar" aria-label={t('图片选择')}>
@@ -32,6 +34,11 @@ export function EagleSelectionToolbar({
         <button type="button" aria-label={t('查看所选图片')} onClick={onPreview}>
           <IconPhoto size={17} />
           {t('查看大图')}
+        </button>
+      )}
+      {onBatchEdit && (
+        <button type="button" disabled={!count} onClick={onBatchEdit}>
+          {t('套用编辑参数')}
         </button>
       )}
       <button type="button" disabled={!count} aria-haspopup="menu" onClick={onActions}>

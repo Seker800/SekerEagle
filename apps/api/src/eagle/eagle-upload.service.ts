@@ -1,3 +1,4 @@
+import { validatedEditRecipe } from './eagle-edit-recipe';
 import { invalidateMediaRevision } from './invalidate-media-revision';
 import { Prisma } from '@prisma/client';
 import { isCameraVideoMime } from '@sekereagle/library-core';
@@ -63,6 +64,9 @@ export class EagleUploadService {
   }
 
   async initiate(ownerId: string, input: InitiateEagleUploadDto, includePrivate = false) {
+    if (input.editRecipe && !input.copySourceAssetId)
+      throw new BadRequestException('编辑参数必须关联原照片。');
+    const editRecipe = input.editRecipe ? validatedEditRecipe(input.editRecipe) : undefined;
     if (input.copySourceAssetId || input.copySourceRowVersion !== undefined) {
       if (
         !input.copySourceAssetId ||
@@ -108,6 +112,9 @@ export class EagleUploadService {
               duplicatePolicy: input.duplicatePolicy ?? 'SKIP',
               copySourceAssetId: input.copySourceAssetId,
               copySourceRowVersion: input.copySourceRowVersion,
+              ...(editRecipe
+                ? { copyRecipeJson: editRecipe as unknown as Prisma.InputJsonValue }
+                : {}),
             },
           },
           libraryMode: this.libraryMode,
@@ -492,6 +499,21 @@ export class EagleUploadService {
               },
             });
             if (copySource) {
+              if (session.eagleState?.copyRecipeJson) {
+                await transaction.eagleAssetEditRecipe.create({
+                  data: {
+                    assetId,
+                    ownerId: session.uploaderId,
+                    libraryMode: this.libraryMode,
+                    assetRevision,
+                    baseAssetId: copySourceId,
+                    baseMediaRevision: copySource.mediaRevision,
+                    recipe: validatedEditRecipe(
+                      session.eagleState.copyRecipeJson,
+                    ) as unknown as Prisma.InputJsonValue,
+                  },
+                });
+              }
               if (copySource.annotation)
                 await transaction.eagleAssetAnnotation.create({
                   data: {
