@@ -48,6 +48,7 @@ const imageAsset: EagleAssetListItem = {
 };
 
 const { copyImageMock } = vi.hoisted(() => ({ copyImageMock: vi.fn() }));
+vi.mock('openseadragon', () => ({ default: () => ({ addHandler() {}, destroy() {}, open() {} }) }));
 vi.mock('../../lib/image-clipboard', () => ({ copyImageToClipboard: copyImageMock }));
 
 describe('EagleAssetLightbox', () => {
@@ -58,7 +59,7 @@ describe('EagleAssetLightbox', () => {
     expect(copyImageMock).toHaveBeenLastCalledWith(
       '/api/eagle/assets/image-1/renditions/preview-1',
     );
-    expect(fireEvent.contextMenu(screen.getByRole('img'))).toBe(true);
+    expect(fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'))).toBe(true);
     view.rerender(
       <EagleAssetLightbox asset={{ ...imageAsset, id: 'image-2' }} onClose={vi.fn()} />,
     );
@@ -85,21 +86,20 @@ describe('EagleAssetLightbox', () => {
     const onClose = vi.fn();
     render(<EagleAssetLightbox asset={imageAsset} onClose={onClose} />);
 
-    const dialog = screen.getByRole('dialog', { name: '素材大图预览' });
-    const image = screen.getByRole('img', { name: 'Reference image' });
-    expect(image).toHaveAttribute('src', '/api/eagle/assets/image-1/renditions/preview-1');
-    expect(dialog).toHaveTextContent('Esc 关闭');
+    const dialog = screen.getByRole('dialog', { name: 'Reference image' });
+    const image = screen.getByTestId('eagle-image-viewer');
+    expect(dialog).toHaveTextContent('PNG · 1080 × 1920');
 
     fireEvent.click(image);
     expect(onClose).not.toHaveBeenCalled();
-    fireEvent.click(image.parentElement!);
+    fireEvent.click(dialog.parentElement!);
     fireEvent.keyDown(dialog, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: '关闭大图预览' }));
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(onClose).toHaveBeenCalledTimes(3);
   });
 });
 
-it('supports keyboard and touch navigation without closing a photo stack', () => {
+it('supports keyboard and button navigation without closing a photo stack', () => {
   const onNext = vi.fn(),
     onPrevious = vi.fn(),
     onClose = vi.fn();
@@ -115,9 +115,7 @@ it('supports keyboard and touch navigation without closing a photo stack', () =>
   fireEvent.keyDown(dialog, { key: 'ArrowLeft' });
   expect(onNext).toHaveBeenCalledTimes(1);
   expect(onPrevious).toHaveBeenCalledTimes(1);
-  const image = screen.getByRole('img');
-  fireEvent.touchStart(image, { touches: [{ clientX: 200, clientY: 100 }] });
-  fireEvent.touchEnd(image, { changedTouches: [{ clientX: 50, clientY: 100 }] });
+  fireEvent.click(screen.getByRole('button', { name: '下一张' }));
   expect(onNext).toHaveBeenCalledTimes(2);
   expect(onClose).not.toHaveBeenCalled();
 });

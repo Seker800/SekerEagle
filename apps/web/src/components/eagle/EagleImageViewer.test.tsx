@@ -12,6 +12,7 @@ const {
   getBoundsMock,
   getCenterMock,
   getZoomMock,
+  goHomeMock,
   handlers,
   openMock,
   openSeadragonMock,
@@ -43,6 +44,7 @@ const {
   const hoistedPointFromPixelMock = vi.fn(() => ({ x: 0.3, y: 0.7 }));
   const hoistedZoomByMock = vi.fn();
   const hoistedZoomToMock = vi.fn();
+  const hoistedGoHomeMock = vi.fn();
   const hoistedViewer = {
     addHandler: vi.fn((name: string, handler: (event?: unknown) => void) =>
       hoistedHandlers.set(name, handler),
@@ -52,6 +54,7 @@ const {
     forceRedraw: hoistedForceRedrawMock,
     open: hoistedOpenMock,
     viewport: {
+      goHome: hoistedGoHomeMock,
       applyConstraints: hoistedApplyConstraintsMock,
       deltaPointsFromPixels: vi.fn((point: unknown) => point),
       getCenter: hoistedGetCenterMock,
@@ -75,6 +78,7 @@ const {
     getBoundsMock: hoistedGetBoundsMock,
     getCenterMock: hoistedGetCenterMock,
     getZoomMock: hoistedGetZoomMock,
+    goHomeMock: hoistedGoHomeMock,
     handlers: hoistedHandlers,
     openMock: hoistedOpenMock,
     openSeadragonMock: vi.fn(() => hoistedViewer),
@@ -339,4 +343,11 @@ describe('EagleImageViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: '重新加载' }));
     expect(openMock).toHaveBeenCalledWith({ type: 'image', url: image.src });
   });
+});
+
+it('fits the whole photo again after rotating or resizing the viewport', async () => {
+  render(<EagleImageViewer image={{ src: '/preview.jpg', alt: 'Photo' }} onClose={vi.fn()} />);
+  await waitFor(() => expect(handlers.has('after-resize')).toBe(true));
+  act(() => handlers.get('after-resize')?.());
+  await waitFor(() => expect(goHomeMock).toHaveBeenCalledWith(true));
 });

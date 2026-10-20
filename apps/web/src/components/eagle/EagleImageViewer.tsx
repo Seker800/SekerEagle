@@ -1,6 +1,7 @@
+import { EagleViewerShell, type EagleViewerNavigation } from './EagleViewerShell';
 import { t } from '../../i18n';
-import { IconChevronLeft, IconChevronRight, IconRefresh } from '@tabler/icons-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconAdjustments, IconRefresh } from '@tabler/icons-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
@@ -43,6 +44,7 @@ interface ViewerClickEvent {
   quick: boolean;
 }
 interface ViewerViewport {
+  goHome(immediately?: boolean): void;
   applyConstraints(immediately?: boolean): void;
   deltaPointsFromPixels(point: ViewerPoint): ViewerPoint;
   getCenter(current?: boolean): ViewerPoint;
@@ -57,7 +59,7 @@ interface ViewerWorldItem {
   getBounds(): ViewerRect;
 }
 interface ViewerHandle {
-  addHandler(name: 'open' | 'open-failed', handler: () => void): void;
+  addHandler(name: 'open' | 'open-failed' | 'after-resize', handler: () => void): void;
   addHandler(name: 'canvas-click', handler: (event: ViewerClickEvent) => void): void;
   addHandler(name: 'canvas-drag', handler: (event: ViewerDragEvent) => void): void;
   addHandler(name: 'canvas-drag-end', handler: (event: ViewerDragEndEvent) => void): void;
@@ -116,6 +118,12 @@ export function EagleImageViewer({
   onEdit,
   editLabel,
   navigation,
+  subtitle,
+  collection,
+  actions,
+  loading = false,
+  error,
+  onRetry,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
@@ -123,38 +131,14 @@ export function EagleImageViewer({
   onClose: () => void;
   onEdit?: () => void;
   editLabel?: string;
-  navigation?: {
-    previous?: () => void;
-    next?: () => void;
-    position: { current: number; total: number };
-  };
+  navigation?: EagleViewerNavigation;
+  subtitle?: string;
+  collection?: ReactNode;
+  actions?: ReactNode;
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
 }) {
-  useEffect(() => {
-    if (!navigation) return;
-    const keydown = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.metaKey ||
-        (event.target instanceof HTMLElement &&
-          event.target.closest('input, textarea, select, [contenteditable="true"]'))
-      )
-        return;
-      const navigate =
-        event.key === 'ArrowLeft'
-          ? navigation.previous
-          : event.key === 'ArrowRight'
-            ? navigation.next
-            : undefined;
-      if (navigate) {
-        event.preventDefault();
-        navigate();
-      }
-    };
-    window.addEventListener('keydown', keydown);
-    return () => window.removeEventListener('keydown', keydown);
-  }, [navigation]);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -213,6 +197,7 @@ export function EagleImageViewer({
     const element = viewerElementRef.current;
     if (!element) return undefined;
     let cancelled = false;
+    let resizeFrame = 0;
     void loadOpenSeadragon()
       .then(({ default: OpenSeadragon }) => {
         if (cancelled) return;
@@ -265,6 +250,12 @@ export function EagleImageViewer({
           viewer.forceRedraw();
           setStatus('ready');
         });
+        viewer.addHandler('after-resize', () => {
+          cancelAnimationFrame(resizeFrame);
+          resizeFrame = requestAnimationFrame(() => {
+            if (!cancelled) viewer.viewport.goHome(true);
+          });
+        });
         viewer.addHandler('open-failed', () => {
           openedSourceKeyRef.current = '';
           setStatus('error');
@@ -305,6 +296,7 @@ export function EagleImageViewer({
       });
     return () => {
       cancelled = true;
+      cancelAnimationFrame(resizeFrame);
       if (sourceOpenTimerRef.current !== undefined) clearTimeout(sourceOpenTimerRef.current);
       viewerRef.current?.destroy();
       viewerRef.current = undefined;
@@ -338,88 +330,56 @@ export function EagleImageViewer({
     setStatus('loading');
     viewer.open(sourceRef.current);
   };
+  const displayStatus = error ? 'error' : loading ? 'loading' : status;
   return (
-    <div className={styles.backdrop} role="presentation" onClick={onClose}>
-      <section
-        className={styles.dialog}
-        role="dialog"
-        aria-modal="true"
-        aria-label={image.alt}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className={styles.stage}>
-          <EagleLivePhotoPlayback sourceUrl={image.motionSrc} posterUrl={image.src} />
-          <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
-          {navigation && (
-            <nav className={styles.navigation} aria-label={t('图片切换')}>
-              <button
-                type="button"
-                aria-label={t('上一张')}
-                disabled={!navigation.previous}
-                onClick={navigation.previous}
-              >
-                <IconChevronLeft size={22} />
-              </button>
-              <span aria-live="polite" aria-atomic="true">
-                {navigation.position.current} / {navigation.position.total}
-              </span>
-              <button
-                type="button"
-                aria-label={t('下一张')}
-                disabled={!navigation.next}
-                onClick={navigation.next}
-              >
-                <IconChevronRight size={22} />
-              </button>
-            </nav>
+    <EagleViewerShell
+      title={loading ? t('正在加载…') : image.alt}
+      subtitle={loading ? undefined : subtitle}
+      navigation={navigation}
+      onClose={onClose}
+      collection={collection}
+      actions={
+        <>
+          {!loading && !error && onLocate && image.assetId && (
+            <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
-          {status !== 'ready' ? (
-            <div className={styles.loadState} role={status === 'error' ? 'alert' : 'status'}>
-              {status === 'loading' ? (
-                <>
-                  <div className={styles.progress} aria-hidden="true">
-                    <span />
-                  </div>
-                  <strong>{t('正在加载大图…')}</strong>
-                </>
-              ) : (
-                <>
-                  <strong>{t('图片加载失败')}</strong>
-                  <span>{t('请检查网络后重试')}</span>
-                  <button type="button" onClick={retry}>
-                    <IconRefresh size={16} />
-                    {' ' + t('重新加载') + ' '}
-                  </button>
-                </>
-              )}
-            </div>
-          ) : null}
-        </div>
-        <footer>
-          <div className={styles.information}>
-            <strong title={image.alt}>{image.alt}</strong>
-            <span className={styles.hint}>
-              {t('滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · {{value1}}', {
-                value1: descriptor ? t('按需加载高清切片') : t('优化预览'),
-              })}
-            </span>
-          </div>
-          <div className={styles.actions}>
-            {onLocate && image.assetId && (
-              <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
-            )}
-            <EagleImageCopyButton sourceUrl={image.src} />
-            {onEdit && (
-              <button type="button" onClick={onEdit}>
-                {editLabel ?? t('编辑照片')}
-              </button>
-            )}
-            <button type="button" onClick={onClose}>
-              {' ' + t('关闭') + ' '}
+          {!loading && !error && <EagleImageCopyButton sourceUrl={image.src} />}
+          {!loading && !error && onEdit && (
+            <button type="button" data-viewer-primary onClick={onEdit}>
+              <IconAdjustments size={17} />
+              {editLabel ?? t('编辑照片')}
             </button>
-          </div>
-        </footer>
-      </section>
-    </div>
+          )}
+          {actions}
+        </>
+      }
+    >
+      <EagleLivePhotoPlayback
+        sourceUrl={loading ? undefined : image.motionSrc}
+        posterUrl={image.src}
+      />
+      <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
+      {displayStatus !== 'ready' ? (
+        <div className={styles.loadState} role={displayStatus === 'error' ? 'alert' : 'status'}>
+          {displayStatus === 'loading' ? (
+            <>
+              <div className={styles.progress} aria-hidden="true">
+                <span />
+              </div>
+              <strong>{t('正在加载大图…')}</strong>
+            </>
+          ) : (
+            <>
+              <strong>{t('图片加载失败')}</strong>
+              <span>{error ?? t('请检查网络后重试')}</span>
+              <button type="button" onClick={onRetry ?? retry}>
+                <IconRefresh size={16} />
+                {' ' + t('重新加载') + ' '}
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+    </EagleViewerShell>
   );
 }

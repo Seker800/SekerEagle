@@ -1,65 +1,12 @@
-.backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+.content {
   display: grid;
-  grid-template-rows: 58px minmax(0, 1fr) auto;
-  outline: 0;
-  color: #f1f2f4;
-  background: rgb(7 8 10 / 96%);
-  backdrop-filter: blur(14px);
-}
-.backdrop header {
-  padding: 0 20px;
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.backdrop header div {
+  place-items: center;
+  width: 100%;
+  height: 100%;
   min-width: 0;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.backdrop header strong {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14px;
-}
-.backdrop header span {
-  color: #777d86;
-  font-size: 11px;
-}
-.backdrop button {
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  color: #aeb3bb;
-  background: transparent;
-  cursor: pointer;
-}
-.backdrop button:hover {
-  color: #fff;
-  background: rgb(255 255 255 / 7%);
-}
-.stage {
   min-height: 0;
-  padding: 22px;
-  display: grid;
-  place-items: center;
-  overflow: hidden;
-}
-.stage img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  box-shadow: 0 18px 70px rgb(0 0 0 / 44%);
+  color: #848991;
+  font-size: 13px;
 }
 .videoPlayer {
   width: 100%;
@@ -68,48 +15,4 @@
   min-height: 0;
   display: block;
   object-fit: contain;
-  box-shadow: 0 18px 70px rgb(0 0 0 / 44%);
-}
-.backdrop footer {
-  display: grid;
-  place-items: center;
-  color: #666c75;
-  font-size: 10px;
-}
-
-.stage {
-  position: relative;
-}
-.stage .previous,
-.stage .next {
-  position: absolute;
-  top: 50%;
-  z-index: 1;
-  font-size: 36px;
-  background: rgb(0 0 0 / 40%);
-}
-.previous {
-  left: 12px;
-}
-.next {
-  right: 12px;
-}
-.backdrop footer {
-  min-height: 38px;
-}
-.backdrop .navigation {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  flex-wrap: wrap;
-  padding: 10px;
-}
-.navigation button {
-  width: auto;
-  min-width: 70px;
-  padding: 0 10px;
-}
-.navigation button:disabled {
-  opacity: 0.4;
-  cursor: default;
 }

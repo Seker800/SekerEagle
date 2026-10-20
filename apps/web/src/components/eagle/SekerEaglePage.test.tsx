@@ -1551,7 +1551,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.doubleClick(card);
     expect(screen.getByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
-    expect(screen.getByText(/滚轮缩放/)).toBeInTheDocument();
+    expect(screen.getByRole('toolbar', { name: '图片操作' })).toBeInTheDocument();
     expect(screen.getByTestId('eagle-image-viewer')).toBeInTheDocument();
     await waitFor(() =>
       expect(openSeadragonMock).toHaveBeenCalledWith(

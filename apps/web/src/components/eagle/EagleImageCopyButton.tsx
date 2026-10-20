@@ -51,7 +51,9 @@ function ImageCopyAction({ sourceUrl }: { sourceUrl: string }) {
         onClick={() => void copy()}
       >
         <IconCopy size={16} />
-        {status === 'pending' ? t('正在复制…') : t('复制图片')}
+        <span data-viewer-secondary-label>
+          {status === 'pending' ? t('正在复制…') : t('复制图片')}
+        </span>
       </button>
       {status === 'copied' && <small role="status">{t('已复制')}</small>}
       {status === 'error' && <small role="alert">{error}</small>}

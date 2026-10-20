@@ -1,3 +1,4 @@
+import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
 import { EagleImportButton } from './EagleImportButton';
@@ -2445,6 +2446,7 @@ export function SekerEaglePage({
       {imagePreview.previewImage ? (
         <EagleImageViewer
           image={imagePreview.previewImage}
+          subtitle={previewImageAsset ? eagleViewerMetadata(previewImageAsset) : undefined}
           navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}
           editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}

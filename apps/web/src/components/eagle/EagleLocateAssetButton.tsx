@@ -43,7 +43,9 @@ function LocateAction({
         onClick={() => void locate()}
       >
         <IconTimeline size={16} />
-        {status === 'pending' ? t('正在定位…') : t('定位到时间线')}
+        <span data-viewer-secondary-label>
+          {status === 'pending' ? t('正在定位…') : t('定位到时间线')}
+        </span>
       </button>
       {status === 'error' && <small role="alert">{t('无法定位这张图片，请重试。')}</small>}
     </div>

@@ -1,3 +1,6 @@
+import { IconStar, IconStarFilled, IconLayersSubtract } from '@tabler/icons-react';
+import { PhotoStackFilmstrip, stackAssetKey } from './PhotoStackFilmstrip';
+import { needsEagleImagePyramid } from '../eagle/eagle-media-sources';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -23,13 +26,23 @@ export function PhotoStackLightbox({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const index = Math.max(0, stack.assetIds.indexOf(assetId));
-  const currentId = stack.assetIds[index];
+  const currentId = stack.assetIds[index] ?? stack.cover.id;
   const asset = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'stack-asset', currentId],
+    queryKey: stackAssetKey(ownerId, currentId),
     queryFn: () => api.getEagleAsset('', currentId),
     enabled: currentId !== stack.cover.id,
   });
   const displayed = currentId === stack.cover.id ? stack.cover : asset.data;
+  const pyramid = useQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'pyramid', currentId],
+    queryFn: ({ signal }) => api.getEaglePyramidDescriptor('', currentId, signal),
+    enabled: !!displayed && needsEagleImagePyramid(displayed.width, displayed.height),
+    retry: false,
+  });
+  const select = (id: string) => {
+    setError(null);
+    setAssetId(id);
+  };
   const move = (delta: number) => {
     setError(null);
     setAssetId(stack.assetIds[(index + delta + stack.assetIds.length) % stack.assetIds.length]);
@@ -50,6 +63,10 @@ export function PhotoStackLightbox({
     <EagleAssetLightbox
       asset={displayed ?? stack.cover}
       loading={!displayed}
+      loadError={asset.error?.message}
+      onRetry={() => void asset.refetch()}
+      descriptor={pyramid.data}
+      collection={<PhotoStackFilmstrip stack={stack} selectedId={currentId} onSelect={select} />}
       onClose={onClose}
       onLocate={onLocate}
       onEdit={onEdit}
@@ -61,16 +78,25 @@ export function PhotoStackLightbox({
       }}
       actions={
         <>
-          <span>{stack.bestAssetId === currentId ? t('当前主图') : ''}</span>
           <button
             type="button"
+            aria-label={t('设为主图')}
             disabled={pending || !displayed || stack.bestAssetId === currentId}
             onClick={() => void changeCover()}
           >
-            {t('设为主图')}
+            {stack.bestAssetId === currentId ? (
+              <IconStarFilled size={16} />
+            ) : (
+              <IconStar size={16} />
+            )}
+            <span data-viewer-compact-label>
+              {stack.bestAssetId === currentId ? t('当前主图') : t('设为主图')}
+            </span>
           </button>
           <button
             type="button"
+            aria-label={t('取消分组')}
+            title={t('取消分组')}
             disabled={pending}
             onClick={() => {
               setPending(true);
@@ -86,9 +112,9 @@ export function PhotoStackLightbox({
                 .finally(() => setPending(false));
             }}
           >
-            {t('取消分组')}
+            <IconLayersSubtract size={18} />
           </button>
-          {(error || asset.error) && <span role="alert">{error ?? asset.error?.message}</span>}
+          {error && <span role="alert">{error}</span>}
         </>
       }
     />

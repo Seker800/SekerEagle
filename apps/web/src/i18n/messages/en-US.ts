@@ -1,4 +1,10 @@
 export const enUS = {
+  图片操作: 'Image actions',
+  照片组缩略图: 'Photo group thumbnails',
+  向左滚动照片组: 'Scroll photo group left',
+  向右滚动照片组: 'Scroll photo group right',
+  '查看第 {{value1}} 张照片': 'View photo {{value1}}',
+
   '原照片已变化，请重新打开编辑器。': 'The original photo changed. Please reopen the editor.',
   GPS: 'GPS location',
   包含: 'Contains',
