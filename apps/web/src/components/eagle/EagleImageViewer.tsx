@@ -341,24 +341,28 @@ export function EagleImageViewer({
           ) : null}
         </div>
         <footer>
-          <strong>{image.alt}</strong>
-          <span>
-            {t('滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · {{value1}}', {
-              value1: descriptor ? t('按需加载高清切片') : t('优化预览'),
-            })}
-          </span>
-          {onLocate && image.assetId && (
-            <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
-          )}
-          <EagleImageCopyButton sourceUrl={image.src} />
-          {onEdit && (
-            <button type="button" onClick={onEdit}>
-              {editLabel ?? t('编辑照片')}
+          <div className={styles.information}>
+            <strong title={image.alt}>{image.alt}</strong>
+            <span className={styles.hint}>
+              {t('滚轮缩放 · 拖拽移动 · 右键使用浏览器菜单 · {{value1}}', {
+                value1: descriptor ? t('按需加载高清切片') : t('优化预览'),
+              })}
+            </span>
+          </div>
+          <div className={styles.actions}>
+            {onLocate && image.assetId && (
+              <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
+            )}
+            <EagleImageCopyButton sourceUrl={image.src} />
+            {onEdit && (
+              <button type="button" onClick={onEdit}>
+                {editLabel ?? t('编辑照片')}
+              </button>
+            )}
+            <button type="button" onClick={onClose}>
+              {' ' + t('关闭') + ' '}
             </button>
-          )}
-          <button type="button" onClick={onClose}>
-            {' ' + t('关闭') + ' '}
-          </button>
+          </div>
         </footer>
       </section>
     </div>
