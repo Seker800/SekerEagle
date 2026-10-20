@@ -102,12 +102,11 @@ export async function persistPhotoFaces(
         deletedAt: null,
       },
     });
-    if (!current) return;
     const claimed = await tx.eagleAssetProcessingJob.updateMany({
       where: { id: job.id, leaseVersion: job.leaseVersion, status: 'PROCESSING' },
       data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
     });
-    if (claimed.count !== 1) return;
+    if (claimed.count !== 1 || !current) return;
     await tx.eaglePhotoFace.updateMany({
       where: {
         ownerId: job.ownerId,

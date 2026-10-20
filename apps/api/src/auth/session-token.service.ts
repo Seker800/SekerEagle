@@ -53,12 +53,12 @@ export class SessionTokenService {
       where: { tokenHash },
       include: { user: true },
     });
-    if (!stored || stored.revokedAt || stored.expiresAt <= new Date()) {
+    if (!stored || stored.expiresAt <= new Date()) {
       throw new UnauthorizedException(`${REFRESH_COOKIE_NAME} 无效或已过期。`);
     }
     if (stored.user.disabledAt) throw new ForbiddenException('该账号已停用。');
 
-    return this.prisma.$transaction(async (tx) => {
+    const session = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${stored.familyId}, 7432))`,
       );
@@ -66,9 +66,18 @@ export class SessionTokenService {
         where: { id: stored.id, revokedAt: null, expiresAt: { gt: new Date() } },
         data: { revokedAt: new Date(), lastUsedAt: new Date() },
       });
-      if (rotated.count !== 1) throw new UnauthorizedException('刷新令牌已被使用。');
+      if (rotated.count !== 1) {
+        // Commit revocation before rejecting: throwing here would roll it back.
+        await tx.refreshToken.updateMany({
+          where: { userId: stored.userId, familyId: stored.familyId, revokedAt: null },
+          data: { revokedAt: new Date(), lastUsedAt: new Date() },
+        });
+        return null;
+      }
       return this.createSession(stored.user, stored.familyId, tx);
     });
+    if (!session) throw new UnauthorizedException('刷新令牌已被使用，请重新登录。');
+    return session;
   }
 
   async revoke(refreshToken: string | undefined): Promise<void> {

@@ -107,6 +107,8 @@ function runDocker(args, options = {}) {
   const result = spawnSync('docker', args, {
     cwd: root,
     encoding: 'utf8',
+    timeout: options.timeoutMs ?? 120_000,
+    killSignal: 'SIGKILL',
     stdio: options.capture ? ['ignore', 'pipe', 'inherit'] : 'inherit',
   });
 
@@ -147,7 +149,7 @@ async function waitForServiceHealth(composeFiles, service) {
 
 export function deployCompose(composeFiles, execute = runDocker) {
   // Build before pausing writers; schema changes run only after every writer is stopped.
-  execute(composeArgs(composeFiles, ['build']));
+  execute(composeArgs(composeFiles, ['build']), { timeoutMs: 30 * 60_000 });
   execute(composeArgs(composeFiles, ['stop', 'gateway', 'api', 'worker']));
   execute(
     composeArgs(composeFiles, [
@@ -164,9 +166,27 @@ export function deployCompose(composeFiles, execute = runDocker) {
   }).trim();
   if (!migrationId || migrationId.includes('\n'))
     throw new Error('Migration container identity is unavailable');
-  const exitCode = execute(['wait', migrationId], { capture: true }).trim();
-  if (exitCode !== '0')
-    throw new Error('Migration did not complete successfully; writers remain stopped');
+  try {
+    const exitCode = execute(['wait', migrationId], {
+      capture: true,
+      timeoutMs: 10 * 60_000,
+    }).trim();
+    if (exitCode !== '0') throw new Error('Migration failed');
+  } catch (cause) {
+    // Killing the Docker CLI alone does not terminate the migration itself.
+    try {
+      execute(['stop', '--time', '10', migrationId], { timeoutMs: 30_000 });
+    } catch {
+      throw new Error(
+        'Migration termination could not be confirmed; writers remain stopped. Inspect the migration container before recovery.',
+        { cause },
+      );
+    }
+    throw new Error(
+      'Migration did not complete successfully; writers remain stopped. Inspect migration logs and resolve its database state before rerunning deployment.',
+      { cause },
+    );
+  }
   execute(composeArgs(composeFiles, ['up', '-d', '--no-build', '--remove-orphans']));
 }
 

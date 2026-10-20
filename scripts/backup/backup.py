@@ -897,6 +897,8 @@ def recover(state):
             restore_services(state)
         cleanup_restore_container()
         cleanup_attempt(state)
+        # The export process is stopped and this recovery owns the run lock.
+        shutil.rmtree(INPUT, ignore_errors=True)
         # A crash after durable publication must not turn success into failure.
         if state.get("status") != "succeeded":
             state.update(
