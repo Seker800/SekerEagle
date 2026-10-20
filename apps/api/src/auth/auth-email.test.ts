@@ -203,7 +203,7 @@ void test('所有新密码入口按 UTF-8 拒绝 bcrypt 会截断的密码', asy
       [ResetPasswordDto, { newPassword: password }],
       [ChangePasswordDto, { currentPassword: 'current-password', newPassword: password }],
     ] as const) {
-      assert.ok((await validate(plainToInstance(Type, data))).length > 0);
+      assert.ok((await validate(plainToInstance(Type as new () => object, data))).length > 0);
     }
     const service = new PasswordService({} as never);
     await assert.rejects(service.createUser('owner@example.com', password, UserRole.USER), /72/);
