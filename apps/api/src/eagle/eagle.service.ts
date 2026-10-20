@@ -379,6 +379,7 @@ export class EagleService {
         id: group.id,
         bestSelectedByUser: group.bestSelectedByUser,
         assetIds: group.members.map(({ assetId }) => assetId),
+        processingAssetIds: group.members.filter(({ asset }) => asset.lifecycleStatus === 'PROCESSING').map(({ assetId }) => assetId),
         bestAssetId: (
           group.members.find(
             ({ assetId, asset }) =>

@@ -12,9 +12,15 @@ export function getEagleProcessingPollInterval(
   return successfulSyncs < 3 ? 10_000 : 30_000;
 }
 
+/** Folded collections can contain unfinished items outside the rendered cover or loaded page. */
+export function getEagleProcessingAssetIds(assets: readonly EagleAssetListItem[], additional: readonly string[] = []) {
+  return [...new Set([...assets.filter((item) => item.lifecycleStatus === 'PROCESSING').map((item) => item.id), ...additional])].slice(0, 100);
+}
+
 export function useEagleProcessingUpdates(input: {
   accessToken: string;
   assets: EagleAssetListItem[];
+  additionalProcessingAssetIds?: string[];
   enabled: boolean;
   assetStore: EagleAssetEntityStore;
   assetsQueryKey: QueryKey;
@@ -35,9 +41,8 @@ export function useEagleProcessingUpdates(input: {
     return () => document.removeEventListener('visibilitychange', updateVisibility);
   }, []);
   const processingAssetIds = useMemo(
-    () =>
-      input.assets.filter((item) => item.lifecycleStatus === 'PROCESSING').map((item) => item.id),
-    [input.assets],
+    () => getEagleProcessingAssetIds(input.assets, input.additionalProcessingAssetIds),
+    [input.assets, input.additionalProcessingAssetIds],
   );
   const updatesQuery = useQuery({
     queryKey: input.updatesQueryKey(processingAssetIds),
