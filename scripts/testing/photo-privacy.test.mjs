@@ -380,3 +380,120 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
     await app.close();
   }
 });
+
+async function replacePrivacyFixture(f, assetId) {
+  const { EagleUploadService } = await import('../../apps/api/dist/eagle/eagle-upload.service.js');
+  const { PhotoRevisionObserver } =
+    await import('../../apps/api/dist/photos/photo-revision.observer.js');
+  const session = await prisma.uploadSession.create({
+    data: {
+      uploaderId: f.ownerId,
+      libraryMode: 'PHOTO',
+      status: 'ASSEMBLED',
+      originalName: 'replacement.jpg',
+      mimeType: 'image/jpeg',
+      size: 1,
+      objectKey: `test/${randomUUID()}`,
+      multipartUploadId: 'isolated-test',
+      completionParts: [{ PartNumber: 1, ETag: 'part' }],
+      eagleState: { create: { duplicatePolicy: 'CREATE_COPY', replacementAssetId: assetId } },
+    },
+  });
+  const upload = new EagleUploadService(
+    prisma,
+    { headObject: async () => ({ ContentLength: 1 }) },
+    {},
+    {
+      inspect: async () => ({
+        sha256: 'a'.repeat(64),
+        format: 'jpg',
+        width: 10,
+        height: 10,
+        durationMs: null,
+      }),
+    },
+    'PHOTO',
+    new PhotoRevisionObserver(),
+  );
+  return upload.complete(f.ownerId, session.id, { parts: [{ partNumber: 1, etag: 'part' }] });
+}
+for (const replacedRole of ['STILL', 'MOTION']) {
+  test(`替换 ${replacedRole} 后，对端实况组件在全量重算后仍受保护`, async () => {
+    const f = await fixture(),
+      identifier = randomUUID();
+    await prisma.eagleAsset.update({
+      where: { id: f.a.id },
+      data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+    });
+    const motion = await f.add({
+      livePhotoIdentifier: identifier,
+      livePhotoRole: 'MOTION',
+      mimeType: 'video/quicktime',
+    });
+    if (replacedRole === 'STILL') await f.rule(true);
+    else {
+      const tagId = await prisma.$transaction((tx) => inheritedPrivacyTag(tx, f.ownerId, 'PHOTO'));
+      await prisma.eagleAssetManualTag.create({
+        data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: motion.id, tagId },
+      });
+      await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, undefined, 'PHOTO'));
+    }
+    await replacePrivacyFixture(f, replacedRole === 'STILL' ? f.a.id : motion.id);
+    await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, undefined, 'PHOTO'));
+    for (const id of [f.a.id, motion.id])
+      assert.equal(
+        (await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).isPrivate,
+        true,
+        `component ${id} lost its privacy after ${replacedRole} replacement`,
+      );
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.publicAsset.id } })).isPrivate,
+      false,
+    );
+  });
+}
+test('过期标签设置草稿不能静默取消新创建的继承私密保护', async () => {
+  const f = await fixture(),
+    loaded = await f.tags.getSettings(f.ownerId);
+  const tagId = await prisma.$transaction((tx) => inheritedPrivacyTag(tx, f.ownerId, 'PHOTO'));
+  await prisma.eagleAssetManualTag.create({
+    data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.b.id, tagId },
+  });
+  await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, undefined, 'PHOTO'));
+  await assert.rejects(
+    f.tags.updateSettings(f.ownerId, { tagIds: loaded.tagIds, expectedTagIds: loaded.tagIds }),
+    /变化/,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
+    true,
+  );
+});
+
+if (process.env.PHOTO_PRIVACY_BENCH === '1') {
+  test('一万二千张实况组件的全量人物隐私投影在默认事务预算内完成', async () => {
+    const f = await fixture();
+    const identifiers = Array.from({ length: 6000 }, () => randomUUID());
+    await prisma.eagleAsset.createMany({
+      data: Array.from({ length: 12000 }, (_, i) => ({
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        originalName: 'scale.jpg',
+        displayName: 'scale',
+        normalizedDisplayName: 'scale',
+        mimeType: 'image/jpeg',
+        format: 'jpg',
+        byteSize: 1,
+        originalObjectKey: `test/${randomUUID()}`,
+        lifecycleStatus: 'READY',
+        livePhotoIdentifier: identifiers[Math.floor(i / 2)],
+        livePhotoRole: i % 2 ? 'MOTION' : 'STILL',
+      })),
+    });
+    const start = performance.now();
+    await f.rule(true, false);
+    console.log(
+      `Photo privacy projection, 12003 assets: ${Math.round(performance.now() - start)}ms`,
+    );
+  });
+}

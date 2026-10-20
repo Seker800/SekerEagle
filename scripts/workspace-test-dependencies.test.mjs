@@ -30,3 +30,22 @@ test('library integration builds media-core before API and worker on a clean che
       command.indexOf('--workspace @sekereagle/api'),
   );
 });
+
+test('backend persistence types resolve without generated workspace dist files', async () => {
+  const { default: ts } = await import('typescript');
+  const { resolve } = await import('node:path');
+  const host = {
+    ...ts.sys,
+    fileExists: (path) => !/library-persistence\/dist\//.test(path) && ts.sys.fileExists(path),
+  };
+  const resolution = ts.resolveModuleName(
+    '@sekereagle/library-persistence',
+    resolve('apps/api/src/eagle/eagle-privacy.service.ts'),
+    { moduleResolution: ts.ModuleResolutionKind.Node10 },
+    host,
+  );
+  assert.ok(
+    resolution.resolvedModule?.resolvedFileName.endsWith('.ts'),
+    'clean checkout must resolve persistence types before build',
+  );
+});

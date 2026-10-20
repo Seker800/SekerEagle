@@ -3,26 +3,31 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { PhotoCollections } from './PhotoCollections';
 import { PhotoPrivatePeopleSettings } from './PhotoPrivatePeopleSettings';
-const mocks = vi.hoisted(() => ({ list: vi.fn(), privacy: vi.fn(), clear: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  list: vi.fn(),
+  privacy: vi.fn(),
+  rename: vi.fn(),
+  clear: vi.fn(),
+}));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
   updatePhotoPersonPrivacy: mocks.privacy,
   scanPhotoPeople: vi.fn(),
-  renamePhotoPerson: vi.fn(),
+  renamePhotoPerson: mocks.rename,
   mergePhotoPeople: vi.fn(),
   splitPhotoFace: vi.fn(),
 }));
 vi.mock('../../lib/media-resolver', () => ({
   getDesktopCacheBridge: () => ({ clearCache: mocks.clear }),
 }));
-function wrapper(node: React.ReactNode) {
-  return render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
-      {node}
-    </QueryClientProvider>,
-  );
+vi.mock('../../lib/library-workspace', () => ({
+  useLibraryWorkspace: () => ({ ownerId: 'owner', api: {} }),
+}));
+function wrapper(
+  node: React.ReactNode,
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+) {
+  return render(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,4 +100,27 @@ it('关闭隐私显示时不读取私密人物设置，开启后可解除规则'
     ),
   );
   expect(changed).toHaveBeenCalledOnce();
+});
+
+it('人物改名后使旧的照片私密原因缓存失效', async () => {
+  const client = new QueryClient();
+  const key = ['eagle', 'owner', 'PHOTO', 'asset-detail', 'photo'];
+  client.setQueryData(key, {
+    privacyReasons: [{ kind: 'PERSON', id: 'person', name: '测试人物' }],
+  });
+  mocks.rename.mockResolvedValue({});
+  wrapper(
+    <PhotoCollections
+      includePrivate
+      onPrivacyRulesChange={vi.fn()}
+      onOpen={vi.fn()}
+      onPerson={vi.fn()}
+    />,
+    client,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: '测试人物' }));
+  fireEvent.change(screen.getByLabelText('人物名称'), { target: { value: '新名字' } });
+  fireEvent.click(screen.getByRole('button', { name: '保存' }));
+  await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith('person', '新名字'));
+  await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
 });
