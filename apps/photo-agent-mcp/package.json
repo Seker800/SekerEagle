@@ -6,7 +6,7 @@
   "license": "Apache-2.0",
   "scripts": {
     "start": "node main.mjs",
-    "test": "node --test *.test.mjs",
+    "test": "node --experimental-test-coverage --test-coverage-include=server.mjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test *.test.mjs",
     "typecheck": "node --check main.mjs && node --check server.mjs",
     "build": "node --check main.mjs && node --check server.mjs"
   },
