@@ -62,6 +62,12 @@ interface EagleQuickFilterBarProps {
   onChange: (value: EagleQuickFilterState) => void;
 }
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
+const PHOTO_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
+  'CAMERA_MODEL',
+  'LENS_MODEL',
+  'MANUAL_TAGS',
+  'FORMAT',
+];
 const FORMAT_OPTIONS = ['png', 'jpeg', 'webp', 'gif', 'svg', 'pdf', 'mp4', 'mov', 'mp3', 'wav'];
 const SHAPE_OPTIONS = [
   { value: 'LANDSCAPE', label: t('横向') },
@@ -104,7 +110,11 @@ const FIELD_ICONS: Record<EagleQuickFilterField, Icon> = {
   ADDED_AT: IconCalendar,
   MODIFIED_AT: IconCalendar,
 };
-export function EagleQuickFilterBar({
+export function EagleQuickFilterBar(props: EagleQuickFilterBarProps) {
+  const { ownerId, libraryMode } = useLibraryWorkspace();
+  return <ScopedQuickFilterBar key={`${ownerId}:${libraryMode}`} {...props} />;
+}
+function ScopedQuickFilterBar({
   fieldOptions,
   value,
   manualTags,
@@ -120,8 +130,10 @@ export function EagleQuickFilterBar({
   const [openField, setOpenField] = useState<EagleQuickFilterField | 'MANAGER' | null>(null);
   const pinnedKey =
     libraryMode === 'PHOTO' ? `${QUICK_FILTER_FIELDS_KEY}.PHOTO` : QUICK_FILTER_FIELDS_KEY;
+  const defaultFields =
+    libraryMode === 'PHOTO' ? PHOTO_QUICK_FILTER_FIELDS : DEFAULT_EAGLE_QUICK_FILTER_FIELDS;
   const [pinnedFields, setPinnedFields] = useState<EagleQuickFilterField[]>(() =>
-    readPinnedFields(pinnedKey),
+    readPinnedFields(pinnedKey, defaultFields),
   );
   const activeCount = countActiveEagleQuickFilters(value);
   const visibleFields = [
@@ -150,7 +162,11 @@ export function EagleQuickFilterBar({
   };
   const updatePinnedFields = (fields: EagleQuickFilterField[]) => {
     setPinnedFields(fields);
-    window.localStorage.setItem(pinnedKey, JSON.stringify(fields));
+    try {
+      window.localStorage.setItem(pinnedKey, JSON.stringify(fields));
+    } catch {
+      // Keep the toolbar usable when browser storage is unavailable.
+    }
   };
   return (
     <div
@@ -829,10 +845,13 @@ function FilterManager({
 function toggleValue(values: string[], value: string): string[] {
   return values.includes(value) ? values.filter((entry) => entry !== value) : [...values, value];
 }
-function readPinnedFields(key = QUICK_FILTER_FIELDS_KEY): EagleQuickFilterField[] {
+function readPinnedFields(
+  key: string,
+  defaults: readonly EagleQuickFilterField[],
+): EagleQuickFilterField[] {
   try {
     const parsed: unknown = JSON.parse(window.localStorage.getItem(key) ?? 'null');
-    if (!Array.isArray(parsed)) return [...DEFAULT_EAGLE_QUICK_FILTER_FIELDS];
+    if (!Array.isArray(parsed)) return [...defaults];
     const valid = parsed.filter(
       (field): field is EagleQuickFilterField =>
         typeof field === 'string' &&
@@ -840,6 +859,6 @@ function readPinnedFields(key = QUICK_FILTER_FIELDS_KEY): EagleQuickFilterField[
     );
     return [...new Set(valid)];
   } catch {
-    return [...DEFAULT_EAGLE_QUICK_FILTER_FIELDS];
+    return [...defaults];
   }
 }

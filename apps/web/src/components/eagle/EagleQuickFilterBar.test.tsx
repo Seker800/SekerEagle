@@ -197,6 +197,7 @@ it('photo fields are managed and cleared in the existing filter toolbar', () => 
   }
   render(<PhotoBar />);
   fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  fireEvent.click(screen.getByRole('button', { name: '取消固定 相机' }));
   fireEvent.click(screen.getByRole('button', { name: '固定 相机' }));
   fireEvent.click(screen.getByRole('button', { name: '关闭筛选器管理' }));
   fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
