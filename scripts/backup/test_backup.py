@@ -287,6 +287,7 @@ class RecoveryTests(unittest.TestCase):
         with (
             tempfile.TemporaryDirectory() as directory,
             patch.object(backup, "PRIVATE", Path(directory)),
+            patch.object(backup, "INPUT", Path(directory) / "input"),
             patch.object(backup, "cleanup_restore_container"),
             patch.object(backup, "run"),
             patch.object(backup, "restore_services", side_effect=resumed) as restore,

@@ -171,3 +171,26 @@ test('build failure preserves running writers and does not attempt migration', a
   assert.equal(calls.length, 1);
   assert.ok(calls[0].includes('build'));
 });
+
+test('migration waits have a deadline, terminate only their migration container and leave writers stopped', async () => {
+  const { deployCompose } = await import('./deploy-mac.mjs');
+  const calls = [];
+  assert.throws(
+    () =>
+      deployCompose(selectComposeFiles(''), (args, options = {}) => {
+        calls.push({ args, options });
+        if (args.includes('-q')) return 'migration-container';
+        if (args[0] === 'wait') {
+          assert.ok(options.timeoutMs > 0);
+          throw new Error('migration deadline exceeded');
+        }
+        return '';
+      }),
+    /writers remain stopped/,
+  );
+  assert.ok(calls.some(({ args }) => args[0] === 'stop' && args.at(-1) === 'migration-container'));
+  assert.equal(
+    calls.some(({ args }) => args.includes('up') && !args.includes('migrate')),
+    false,
+  );
+});

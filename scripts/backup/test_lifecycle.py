@@ -131,7 +131,7 @@ class LifecycleTests(unittest.TestCase):
             backup, "PRIVATE", Path(directory)
         ), patch.object(backup, "run"), patch.object(
             backup, "cleanup_restore_container"
-        ) as cleanup, patch.object(
+        ) as cleanup, patch.object(backup, "INPUT", Path(directory) / "input"), patch.object(
             backup, "remote", return_value=b"{}"
         ) as remote, patch.object(
             backup, "save_state"
@@ -140,6 +140,18 @@ class LifecycleTests(unittest.TestCase):
         cleanup.assert_called_once()
         remote.assert_called_once_with("discard", "a" * 32)
         self.assertNotIn("attemptGeneration", state)
+
+    def test_recovery_removes_local_secret_input_but_keeps_completed_backup_state(self):
+        state = {"status": "succeeded"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sensitive = root / "input"
+            sensitive.mkdir()
+            (sensitive / "runtime.env").write_text("synthetic test secret")
+            with patch.object(backup, "PRIVATE", root), patch.object(backup, "INPUT", sensitive), patch.object(backup, "run"), patch.object(backup, "cleanup_restore_container"), patch.object(backup, "cleanup_attempt"), patch.object(backup, "save_state"):
+                self.assertTrue(backup.recover(state))
+            self.assertFalse(sensitive.exists())
+            self.assertEqual(state["status"], "succeeded")
 
 
 class PartialGenerationTests(unittest.TestCase):
