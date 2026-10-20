@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import yaml from 'js-yaml';
 
 const origin = 'http://192.168.31.146:8181';
+const canonicalOrigin = 'http://localhost:8181';
 const project = 'sekereagle-nas-staging';
 
 export function createNasStagingCompose(base, { revision }) {
@@ -41,8 +42,8 @@ export function createNasStagingCompose(base, { revision }) {
   for (const name of ['api', 'worker', 'migrate']) {
     const env = services[name].environment;
     env.DATABASE_URL = env.DATABASE_URL.replace('/sekereagle?', '/sekereagle_test?');
-    env.CANONICAL_ORIGIN = origin;
-    env.S3_PUBLIC_ENDPOINT = origin;
+    env.CANONICAL_ORIGIN = canonicalOrigin;
+    env.S3_PUBLIC_ENDPOINT = canonicalOrigin;
     env.BROWSER_TRUSTED_ORIGINS = '';
     env.ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS = 'false';
     // No restored queue may silently call inference on the production Mac.
@@ -69,7 +70,7 @@ export function createNasGateway(source) {
   const marker = 'proxy_set_header Host localhost:8180;';
   if (source.split(marker).length !== 2) throw new Error('Upload gateway host contract changed');
   return source
-    .replace(marker, 'proxy_set_header Host 192.168.31.146:8181;')
+    .replace(marker, 'proxy_set_header Host localhost:8181;')
     .replace('loopback identity', 'canonical identity');
 }
 
