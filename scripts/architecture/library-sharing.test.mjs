@@ -159,3 +159,14 @@ test('rejects photo-only overlays inside the shared card', () => {
     'shared-card',
   );
 });
+
+test('rejects generic rendering guarded by mode aliases and alias chains', () => {
+  for (const declarations of ["const photoFlag = libraryMode === 'PHOTO';", "const photo = libraryMode; const photoFlag = photo === 'PHOTO';", "const first = libraryMode !== 'MATERIAL'; const photoFlag = first;"]) {
+    rejectsMutation(page, s => s.replace('  return (\n    <main', `  ${declarations}\n  return (\n    <main`).replace(/<EagleAssetThumbnail\b[\s\S]*?\/>/, thumbnail => `{photoFlag && ${thumbnail}}`), 'shared-composition');
+  }
+});
+test('rejects common controller subclasses outside the known module', () => {
+  const sources = new Map(baseline);
+  sources.set('apps/api/src/photos/extra.controller.ts', 'class ExtraController extends EagleController { listAssets() { return []; } }');
+  assert.ok(checkLibrarySharing(sources).some(e => e.rule === 'inherited-controllers'));
+});
