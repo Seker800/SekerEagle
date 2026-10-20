@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import yaml from 'js-yaml';
 
-const base = yaml.load(await readFile(new URL('../deploy/mac/docker-compose.yml', import.meta.url), 'utf8'));
+const base = yaml.load(
+  await readFile(new URL('../deploy/mac/docker-compose.yml', import.meta.url), 'utf8'),
+);
 
 async function render(options = {}) {
   const { createNasStagingCompose } = await import('./deploy-nas.mjs');
@@ -41,7 +45,9 @@ test('NAS uses matching signed upload host and no Mac runtime mounts', async () 
   assert.equal(result.services.api.volumes, undefined);
   assert.deepEqual(result.services.worker.profiles, ['processing']);
   const { createNasGateway } = await import('./deploy-nas.mjs');
-  const gateway = createNasGateway(await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8'));
+  const gateway = createNasGateway(
+    await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8'),
+  );
   assert.match(gateway, /proxy_set_header Host 192\.168\.31\.146:8181;/u);
   assert.doesNotMatch(gateway, /localhost:8180/u);
 });
@@ -56,4 +62,27 @@ test('NAS package only accepts immutable source revisions and bounded memory', a
   assert.equal(result.services.api.mem_limit, '1g');
   assert.equal(result.services.minio.mem_limit, '1g');
   assert.equal(result.services.web.healthcheck.test.at(-1), 'http://127.0.0.1:8080/');
+});
+
+test('package preparation creates private new credentials and never overwrites an install', async () => {
+  const { prepareNasPackage, createNasGateway } = await import('./deploy-nas.mjs');
+  const temporary = await mkdtemp(join(tmpdir(), 'eagle-nas-'));
+  try {
+    const first = join(temporary, 'first');
+    const second = join(temporary, 'second');
+    await prepareNasPackage(first, 'f8e4864739a9');
+    await prepareNasPackage(second, 'f8e4864739a9');
+    const env = await readFile(join(first, '.env'), 'utf8');
+    assert.notEqual(env, await readFile(join(second, '.env'), 'utf8'));
+    assert.equal((await stat(first)).mode & 0o777, 0o700);
+    assert.equal((await stat(join(first, '.env'))).mode & 0o777, 0o600);
+    assert.equal((await stat(join(first, 'nginx.conf'))).mode & 0o777, 0o644);
+    const rendered = yaml.load(await readFile(join(first, 'compose.yml'), 'utf8'));
+    assert.equal(rendered.services.api.environment.CANONICAL_ORIGIN, 'http://192.168.31.146:8181');
+    await assert.rejects(prepareNasPackage(first, 'f8e4864739a9'), /EEXIST/u);
+    assert.equal(await readFile(join(first, '.env'), 'utf8'), env);
+    assert.throws(() => createNasGateway('unexpected gateway'), /contract changed/u);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
 });
