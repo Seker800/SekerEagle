@@ -35,3 +35,15 @@
 2026-10-20 已再次只读校验全量备份：644206 个对象及部署文件的 SHA256 全部通过，没有重写原备份证据。独立测试数据库已还原并完成 35 个迁移；对象存储恢复由独立后台容器执行，最终完成状态须以恢复退出码、最终数量与实际访问验证为准。
 
 原 SSH 用户能读取备份，但无 Docker socket 权限，且不能免密 sudo。本次通过用户已登录的 DSM 管理界面创建禁用自动触发的一次性 root 任务，由用户自行完成密码验证后，将 Docker socket 的组设为现有 administrators 组；socket 保持 0660，不向普通用户开放。已验证 SSH 能操作 Docker。Container Manager 重启可能重置 socket 组，需要重新由管理员授权；这不等于为 SSH 配置免密 sudo。
+
+## 显式接通图片内容搜索
+
+初始隔离配置把模型地址设为 API 容器自身的 loopback，NAS 内没有 MLX 服务，因此内容搜索会正常降级到名称／人工标签。这不意味着恢复的图片向量损坏。模型仍运行在 Mac；先从 NAS API 容器验证模型鉴权、固定模型修订、1024 维和真实文字嵌入，再接通交互搜索。Mac 关机或模型离线时仍会降级。
+
+仅把 `deploy/nas/search-inference.yml` 复制到既有测试安装目录。在该目录权限 0600 的 `.env` 中单独设置 `NAS_SEARCH_EMBEDDING_URL` 和 `NAS_SEARCH_EMBEDDING_TOKEN`；token 从已验证的 SekerEagle MLX 服务安全传入，不打印、不提交，不替换数据库、存储或测试 worker 的独立凭据。无凭据时 Compose 插值必须拒绝启动。
+
+核对 owner marker 和基础配置后，在测试目录执行 `docker compose --env-file .env -f compose.yml -f search-inference.yml config --quiet`，再执行相同文件组合的 `up -d --no-deps api`。仅重建 API，沿用已部署镜像，不运行 migration、不更新 web、不启用 processing profile。后续维护 API 也必须带此覆盖文件，避免回到隔离地址；重新执行安装目录生成器不是更新已有安装的方式。取消连接时只以基础配置重建 API，并移除专用搜索凭据。
+
+接通后验证：无模型凭据被拒绝、有凭据文字嵌入成功、向量空间一致、共用图片搜索服务返回 READY 并对现有图片产生语义命中、浏览器入口仍健康。不要为消除降级提示而关闭身份校验、重算全库向量或顺便启动 8B／worker。
+
+2026-10-21 实测：对象恢复任务最终输出 `Restored 644206 Eagle objects.`。搜索故障由初始隔离地址的 `ECONNREFUSED` 引起；现有 68450 条 MATERIAL／READY 图片向量与模型空间一致。显式覆盖仅把 API 文字搜索接到 Mac 局域网的 SekerEagle MLX 服务，其他服务配置不变。NAS 到模型无凭据请求返回 401，有凭据真实文字请求返回 HTTP 200、1024 维归一化向量；共用搜索服务返回 READY、前五项均为语义命中，浏览器搜索「蓝天白云下的山川」显示山川图片且无降级提示。Mac 仍承担模型推理，不能据此宣称 NAS 能脱离 Mac 运行内容搜索。

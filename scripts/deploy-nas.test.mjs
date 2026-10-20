@@ -103,9 +103,10 @@ test('package preparation creates private new credentials and never overwrites a
   }
 });
 
-
 test('explicit NAS search connection requires dedicated credentials and cannot enable background inference', async () => {
-  const overlay = yaml.load(await readFile(new URL('../deploy/nas/search-inference.yml', import.meta.url), 'utf8'));
+  const overlay = yaml.load(
+    await readFile(new URL('../deploy/nas/search-inference.yml', import.meta.url), 'utf8'),
+  );
   assert.deepEqual(Object.keys(overlay), ['services']);
   assert.deepEqual(Object.keys(overlay.services), ['api']);
   assert.deepEqual(Object.keys(overlay.services.api), ['environment']);

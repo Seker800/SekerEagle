@@ -1,0 +1,6 @@
+# Optional: connect interactive text search only. Background processing stays isolated.
+services:
+  api:
+    environment:
+      MLX_EMBEDDING_URL: ${NAS_SEARCH_EMBEDDING_URL:?Set NAS_SEARCH_EMBEDDING_URL}
+      MLX_EMBEDDING_TOKEN: ${NAS_SEARCH_EMBEDDING_TOKEN:?Set NAS_SEARCH_EMBEDDING_TOKEN}
