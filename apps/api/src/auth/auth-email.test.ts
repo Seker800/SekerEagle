@@ -5,7 +5,7 @@ import { validate } from 'class-validator';
 import { UserRole, type User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import type { PrismaService } from '../prisma/prisma.service';
-import { ChangePasswordDto, LoginDto } from './dto';
+import { ChangePasswordDto, LoginDto, CreateUserDto, ResetPasswordDto } from './dto';
 import { PasswordService } from './password.service';
 
 void test('登录契约接受并规范化邮箱，拒绝旧用户名格式', async () => {
@@ -194,4 +194,23 @@ void test('当前密码错误时不修改账号', async () => {
     /当前密码错误/,
   );
   assert.equal(transactionStarted, false);
+});
+
+void test('所有新密码入口按 UTF-8 拒绝 bcrypt 会截断的密码', async () => {
+  for (const password of ['a'.repeat(73), '中'.repeat(25), '😀'.repeat(19)]) {
+    for (const [Type, data] of [
+      [CreateUserDto, { email: 'owner@example.com', password }],
+      [ResetPasswordDto, { newPassword: password }],
+      [ChangePasswordDto, { currentPassword: 'current-password', newPassword: password }],
+    ] as const) {
+      assert.ok((await validate(plainToInstance(Type, data))).length > 0);
+    }
+    const service = new PasswordService({} as never);
+    await assert.rejects(service.createUser('owner@example.com', password, UserRole.USER), /72/);
+    await assert.rejects(service.resetPassword('owner', password), /72/);
+    await assert.rejects(service.changePassword('owner', 'current-password', password), /72/);
+  }
+  for (const password of ['a'.repeat(72), '中'.repeat(24), '😀'.repeat(18)]) {
+    assert.equal((await validate(plainToInstance(ResetPasswordDto, { newPassword: password }))).length, 0);
+  }
 });

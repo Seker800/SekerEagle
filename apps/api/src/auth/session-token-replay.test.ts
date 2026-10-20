@@ -56,3 +56,26 @@ for (const preRevoked of [true, false])
     assert.ok(rows[1]!.revokedAt, 'revocation must commit, not roll back with the rejection');
     assert.equal(rows[2]!.revokedAt, null, 'other device family remains active');
   });
+
+test('refresh cannot upgrade an old password session to a new auth version', async () => {
+  let issued = false;
+  const stored = {
+    id: 'old', userId: 'owner', familyId: 'family', revokedAt: null,
+    expiresAt: new Date(Date.now() + 60000), authVersion: 2,
+    user: { id: 'owner', disabledAt: null, authVersion: 3 },
+  };
+  const db = {
+    refreshToken: {
+      findUnique: async () => stored,
+      updateMany: async () => ({ count: 1 }),
+      create: async () => { issued = true; },
+    },
+    $executeRaw: async () => 1,
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  const service = new SessionTokenService(db as never,
+    { signAsync: async () => 'access' } as never,
+    { getOrThrow: () => 900 } as never);
+  await assert.rejects(service.refreshSession('old-password-refresh'), /登录状态已失效/);
+  assert.equal(issued, false);
+});

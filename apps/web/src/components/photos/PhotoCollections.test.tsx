@@ -124,3 +124,15 @@ it('人物改名后使旧的照片私密原因缓存失效', async () => {
   await waitFor(() => expect(mocks.rename).toHaveBeenCalledWith('person', '新名字'));
   await waitFor(() => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
 });
+
+it('人物目录可以加载第二页且保留第一页', async () => {
+  mocks.list.mockImplementation(async (after?: string) => ({
+    runtimeConfigured: true,
+    nextCursor: after ? null : 'person',
+    people: [{ id: after ? 'person-201' : 'person', name: after ? '第二页人物' : '测试人物', rowVersion: 1, marksAssetsPrivate: false, faces: [] }],
+  }));
+  wrapper(<PhotoCollections includePrivate onPrivacyRulesChange={vi.fn()} onOpen={vi.fn()} onPerson={vi.fn()} />);
+  fireEvent.click(await screen.findByRole('button', { name: '加载更多人物' }));
+  expect(await screen.findByRole('button', { name: '第二页人物' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '测试人物' })).toBeInTheDocument();
+});
