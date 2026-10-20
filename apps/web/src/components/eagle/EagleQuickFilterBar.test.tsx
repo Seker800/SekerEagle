@@ -204,3 +204,17 @@ it('photo fields are managed and cleared in the existing filter toolbar', () => 
   expect(screen.getByRole('button', { name: '相机筛选' })).toBeInTheDocument();
   expect(screen.getAllByRole('toolbar', { name: '快捷筛选' })).toHaveLength(1);
 });
+
+
+it('renders filter panels outside the scrolling toolbar, keeps inside pointers open and restores focus on Escape', () => {
+  renderBar();
+  const trigger = screen.getByRole('button', { name: '标签筛选' });
+  fireEvent.click(trigger);
+  const panel = screen.getByRole('dialog', { name: '标签筛选' });
+  expect(screen.getByRole('toolbar', { name: '快捷筛选' })).not.toContainElement(panel);
+  fireEvent.pointerDown(panel);
+  expect(panel).toBeInTheDocument();
+  fireEvent.keyDown(panel, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: '标签筛选' })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});

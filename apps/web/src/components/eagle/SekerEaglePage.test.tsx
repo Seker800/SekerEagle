@@ -2466,4 +2466,62 @@ describe('SekerEaglePage', () => {
       expect(screen.queryByRole('dialog', { name: '编辑照片' })).not.toBeInTheDocument(),
     );
   });
+  it('offers explicit touch selection and opens the shared management menu without modifiers', async () => {
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }], nextCursor: null });
+    renderPage();
+    const first = await screen.findByRole('button', { name: /Owl Reference/ });
+    const second = screen.getByRole('button', { name: /Second Asset/ });
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
+    fireEvent.click(first);
+    fireEvent.click(second);
+    expect(first).toHaveAttribute('aria-pressed', 'true');
+    expect(second).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '操作' }));
+    const menu = screen.getByRole('menu', { name: '素材操作' });
+    expect(menu).toHaveTextContent('已选择 2 项');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: '删除所选素材' }));
+    await waitFor(() => expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1', 'asset-2']));
+  });
+  it('provides a file picker that can import the same file again after completion', async () => {
+    renderPage();
+    const input = screen.getByLabelText('选择导入文件');
+    const file = new File(['synthetic'], 'camera.NEF', { type: 'application/octet-stream' });
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(uploadEagleAssetMock).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(uploadEagleAssetMock).toHaveBeenCalledTimes(2));
+    expect(input).toHaveAttribute('multiple');
+    expect(input).toHaveAttribute('accept', expect.stringContaining('.nef'));
+  });
+  it('provides previous and next buttons for ordinary previews using the same gallery order', async () => {
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }], nextCursor: null });
+    renderPage();
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
+    expect(await screen.findByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '上一张' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: '下一张' }));
+    expect(await screen.findByRole('dialog', { name: 'Second Asset' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下一张' })).toBeDisabled();
+  });
+
+  it('keeps the mode switch visible and exposes the existing navigation through a narrow-screen drawer', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const show = HTMLDialogElement.prototype.showModal;
+    HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+    const view = renderPage();
+    try {
+      const toggle = screen.getByRole('button', { name: '打开导航' });
+      expect(screen.queryByRole('button', { name: '回收站' })).not.toBeInTheDocument();
+      fireEvent.click(toggle);
+      const drawer = screen.getByRole('dialog', { name: '素材库导航' });
+      fireEvent.click(within(drawer).getByRole('button', { name: '回收站' }));
+      await screen.findByRole('heading', { name: '回收站' });
+      expect(screen.queryByRole('dialog', { name: '素材库导航' })).not.toBeInTheDocument();
+    } finally {
+      view.unmount();
+      HTMLDialogElement.prototype.showModal = show;
+      vi.unstubAllGlobals();
+    }
+  });
+
 });
