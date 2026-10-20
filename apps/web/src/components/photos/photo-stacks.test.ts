@@ -27,3 +27,11 @@ describe('photo stacks', () => {
     ).toEqual(['one', 'other']);
   });
 });
+
+it('keeps a group at its timeline anchor when the selected cover changes', () => {
+  const cover = { ...asset('edited'), chronologicalAt: '2020-05-01T00:00:00Z' };
+  const stack = { id: 'group', assetIds: ['source', 'edited'], cover, timelineAt: '2020-05-02T00:00:00Z' } as EaglePhotoStack;
+  const [displayed] = collapsePhotoStacks([asset('source')], [stack]);
+  expect(displayed.chronologicalAt).toBe(stack.timelineAt);
+  expect(cover.chronologicalAt).toBe('2020-05-01T00:00:00Z');
+});
