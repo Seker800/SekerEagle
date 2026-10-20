@@ -92,12 +92,10 @@
 }
 
 .popover {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 7px);
-  left: 0;
-  width: 310px;
-  max-height: min(520px, calc(100dvh - 150px));
+  width: 100%;
+  max-height: inherit;
+  display: flex;
+  flex-direction: column;
   border: 1px solid #3a3d43;
   border-radius: 11px;
   overflow: hidden;
@@ -512,5 +510,32 @@
     position: sticky;
     right: 0;
     background: #151619;
+  }
+}
+
+.floatingPanel {
+  --eagle-accent: #d69b48;
+  position: fixed;
+  z-index: 60;
+  outline: none;
+}
+.floatingPanel .popover {
+  box-sizing: border-box;
+  width: 100%;
+}
+.popover > header {
+  flex-shrink: 0;
+}
+.popoverBody {
+  min-height: 0;
+  overflow-y: auto;
+}
+@media (pointer: coarse), (max-width: 720px) {
+  .entry > button {
+    min-height: 44px;
+  }
+  .popover header button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

@@ -1,3 +1,4 @@
+import { EagleFilterPopover } from './EagleFilterPopover';
 import { getEagleFilterFields } from '@sekereagle/eagle-filter-core';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
@@ -114,6 +115,8 @@ export function EagleQuickFilterBar({
   const { libraryMode } = useLibraryWorkspace();
   const availableFields = getEagleFilterFields(libraryMode).map(({ field }) => field);
   const rootRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLElement | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const [openField, setOpenField] = useState<EagleQuickFilterField | 'MANAGER' | null>(null);
   const pinnedKey =
     libraryMode === 'PHOTO' ? `${QUICK_FILTER_FIELDS_KEY}.PHOTO` : QUICK_FILTER_FIELDS_KEY;
@@ -132,7 +135,11 @@ export function EagleQuickFilterBar({
   ];
   useEffect(() => {
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpenField(null);
+      if (
+        !rootRef.current?.contains(event.target as Node) &&
+        !panelRef.current?.contains(event.target as Node)
+      )
+        setOpenField(null);
     };
     window.addEventListener('pointerdown', closeOnOutsidePointer);
     return () => window.removeEventListener('pointerdown', closeOnOutsidePointer);
@@ -167,7 +174,8 @@ export function EagleQuickFilterBar({
                   value2: summary ? `，${summary}` : '',
                 })}
                 aria-expanded={openField === field}
-                onClick={() => {
+                onClick={(event) => {
+                  anchorRef.current = event.currentTarget;
                   if (field === 'AI_TAGS' && openField !== field) onRequestAiTags?.();
                   setOpenField((current) => (current === field ? null : field));
                 }}
@@ -181,15 +189,21 @@ export function EagleQuickFilterBar({
                 {summary ? <small>{summary}</small> : null}
               </button>
               {openField === field ? (
-                <FieldPopover
-                  field={field}
-                  options={fieldOptions?.[field]}
-                  value={value}
-                  manualTags={manualTags}
-                  aiTags={aiTags}
-                  onChange={onChange}
+                <EagleFilterPopover
+                  anchor={anchorRef}
+                  panelRef={panelRef}
                   onClose={() => setOpenField(null)}
-                />
+                >
+                  <FieldPopover
+                    field={field}
+                    options={fieldOptions?.[field]}
+                    value={value}
+                    manualTags={manualTags}
+                    aiTags={aiTags}
+                    onChange={onChange}
+                    onClose={() => setOpenField(null)}
+                  />
+                </EagleFilterPopover>
               ) : null}
             </div>
           );
@@ -201,17 +215,27 @@ export function EagleQuickFilterBar({
             className={styles.addField}
             aria-label={t('添加筛选器')}
             aria-expanded={openField === 'MANAGER'}
-            onClick={() => setOpenField((current) => (current === 'MANAGER' ? null : 'MANAGER'))}
+            onClick={(event) => {
+              anchorRef.current = event.currentTarget;
+              setOpenField((current) => (current === 'MANAGER' ? null : 'MANAGER'));
+            }}
           >
             <IconPlus size={18} aria-hidden="true" />
           </button>
           {openField === 'MANAGER' ? (
-            <FilterManager
-              availableFields={availableFields}
-              pinnedFields={pinnedFields}
-              onChange={updatePinnedFields}
+            <EagleFilterPopover
+              anchor={anchorRef}
+              panelRef={panelRef}
+              width={360}
               onClose={() => setOpenField(null)}
-            />
+            >
+              <FilterManager
+                availableFields={availableFields}
+                pinnedFields={pinnedFields}
+                onChange={updatePinnedFields}
+                onClose={() => setOpenField(null)}
+              />
+            </EagleFilterPopover>
           ) : null}
         </div>
       </div>

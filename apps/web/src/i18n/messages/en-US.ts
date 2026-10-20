@@ -1204,4 +1204,15 @@ export const enUS = {
     'The bordered image exceeds editor limits. Crop the photo or choose an overlay watermark.',
   '原照片或保存条件已变化，请关闭后重新打开编辑器。':
     'The original photo or save conditions changed. Close and reopen the editor.',
+  打开导航: 'Open navigation',
+  关闭导航: 'Close navigation',
+  选择导入文件: 'Choose files to import',
+  导入: 'Import',
+  图片选择: 'Image selection',
+  取消选择: 'Cancel selection',
+  点选要管理的图片: 'Tap images to manage',
+  '已选择 {{value1}} 项': '{{value1}} items selected',
+  操作: 'Actions',
+  查看所选图片: 'View selected image',
+  图片切换: 'Image navigation',
 } as const;

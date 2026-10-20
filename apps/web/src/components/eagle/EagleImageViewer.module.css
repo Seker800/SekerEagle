@@ -164,3 +164,32 @@
     font-size: 13px;
   }
 }
+
+.navigation {
+  position: absolute;
+  z-index: 2;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgb(17 23 34 / 90%);
+  color: #dbe4f0;
+}
+.dialog .navigation button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+}
+.navigation button:disabled {
+  opacity: 0.35;
+}
+.navigation span {
+  min-width: 60px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

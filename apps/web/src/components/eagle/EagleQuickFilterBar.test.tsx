@@ -205,7 +205,6 @@ it('photo fields are managed and cleared in the existing filter toolbar', () => 
   expect(screen.getAllByRole('toolbar', { name: '快捷筛选' })).toHaveLength(1);
 });
 
-
 it('renders filter panels outside the scrolling toolbar, keeps inside pointers open and restores focus on Escape', () => {
   renderBar();
   const trigger = screen.getByRole('button', { name: '标签筛选' });

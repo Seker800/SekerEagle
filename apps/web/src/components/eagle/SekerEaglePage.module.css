@@ -71,7 +71,7 @@
   color: var(--eagle-text);
   background: rgb(255 255 255 / 4%);
 }
-.sidebar > button > span,
+.sidebar [data-navigation-content] > button > span,
 .navSection > button > span {
   margin-left: auto;
   color: #737982;
@@ -960,7 +960,7 @@
 @media (max-width: 720px) {
   .workspace {
     grid-template-columns: minmax(0, 1fr) clamp(180px, 38vw, 240px);
-    grid-template-rows: 44px minmax(0, 1fr);
+    grid-template-rows: 52px minmax(0, 1fr);
   }
   .workspaceWide {
     grid-template-columns: minmax(0, 1fr);
@@ -971,11 +971,10 @@
     border-right: 0;
     border-bottom: 1px solid var(--eagle-line);
   }
-  .sidebar > :not(.sidebarHeader) {
-    display: none;
-  }
   .sidebarHeader {
-    width: min(100%, 220px);
+    width: 100%;
+    height: 52px;
+    gap: 8px;
     margin: 0;
     padding: 0;
     border-bottom: 0;
@@ -1063,5 +1062,34 @@
 @media (max-width: 600px) {
   .timelineNavigation {
     flex-basis: 48px;
+  }
+}
+
+.contextMenu {
+  left: var(--menu-x);
+  top: var(--menu-y);
+  max-height: calc(100dvh - 16px);
+  overflow-y: auto;
+}
+@media (max-width: 720px) {
+  .contextMenu {
+    inset: auto 8px max(8px, env(safe-area-inset-bottom));
+    width: auto;
+    max-height: 70dvh;
+  }
+  .contextMenu button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+  .toolbar button {
+    min-height: 44px;
+  }
+}
+@media (pointer: coarse) {
+  .assetCard {
+    touch-action: manipulation;
+  }
+  .contextMenu button {
+    min-height: 44px;
   }
 }

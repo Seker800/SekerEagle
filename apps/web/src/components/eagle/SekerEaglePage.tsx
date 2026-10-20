@@ -1,3 +1,7 @@
+import { EagleLibraryNavigation } from './EagleLibraryNavigation';
+import { EagleImportButton } from './EagleImportButton';
+import { EagleSelectionToolbar } from './EagleSelectionToolbar';
+import { useEaglePreviewNavigation } from './useEaglePreviewNavigation';
 import {
   createPhotoTimelineSectionKeys,
   formatPhotoTimelineMonth,
@@ -24,6 +28,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
   type DragEvent,
   type MouseEvent,
   type ReactNode,
@@ -294,6 +299,7 @@ export function SekerEaglePage({
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
   const [isBatchSelection, setIsBatchSelection] = useState(false);
+  const [selectionMode, setSelectionMode] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
@@ -480,6 +486,7 @@ export function SekerEaglePage({
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
     setIsBatchSelection(false);
+    setSelectionMode(false);
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
     void queryClient.resetQueries({ queryKey: queryKeys.root });
@@ -523,6 +530,7 @@ export function SekerEaglePage({
       setSelectedAssetIds([]);
       setSelectedAssetId(null);
       setIsBatchSelection(false);
+      setSelectionMode(false);
       setAssetContextMenu(null);
       selectionAnchorIdRef.current = null;
     },
@@ -807,6 +815,7 @@ export function SekerEaglePage({
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
     setIsBatchSelection(false);
+    setSelectionMode(false);
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
     resetFilters();
@@ -819,6 +828,7 @@ export function SekerEaglePage({
     setSelectedAssetId(null);
     setSelectedAssetIds([]);
     setIsBatchSelection(false);
+    setSelectionMode(false);
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
   };
@@ -840,12 +850,13 @@ export function SekerEaglePage({
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
     setIsBatchSelection(false);
+    setSelectionMode(false);
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
   }, []);
   useEffect(() => {
     if (tagPicker) return undefined;
-    if (!isBatchSelection && !assetContextMenu) return undefined;
+    if (!selectionMode && !isBatchSelection && !assetContextMenu) return undefined;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
@@ -854,12 +865,12 @@ export function SekerEaglePage({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [assetContextMenu, clearAssetSelection, isBatchSelection, tagPicker]);
+  }, [assetContextMenu, clearAssetSelection, isBatchSelection, selectionMode, tagPicker]);
   const handleAssetClick = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     setAssetContextMenu(null);
     const gesture: EagleSelectionGesture = event.shiftKey
       ? 'range'
-      : event.ctrlKey || event.metaKey
+      : selectionMode || event.ctrlKey || event.metaKey
         ? 'toggle'
         : 'single';
     selectAsset(assetId, gesture);
@@ -1032,31 +1043,11 @@ export function SekerEaglePage({
       });
     }
   };
-  useEffect(() => {
-    const currentPreview = imagePreview.previewImage;
-    if (!currentPreview) return undefined;
-    const imageAssets = assets.filter((asset) => asset.mimeType.startsWith('image/'));
-    const currentIndex = imageAssets.findIndex((asset) => asset.id === currentPreview.assetId);
-    if (currentIndex === -1) return undefined;
-    const handlePreviewNavigation = (event: KeyboardEvent) => {
-      const direction = event.key === 'ArrowLeft' ? -1 : event.key === 'ArrowRight' ? 1 : 0;
-      if (!direction) return;
-      const nextAsset = imageAssets[currentIndex + direction];
-      if (!nextAsset) return;
-      event.preventDefault();
-      const src = getEaglePreviewContentUrl(nextAsset);
-      if (src) {
-        imagePreview.setPreviewImage({
-          src,
-          alt: nextAsset.displayName,
-          assetId: nextAsset.id,
-          motionSrc: getEagleLivePhotoContentUrl(nextAsset),
-        });
-      }
-    };
-    window.addEventListener('keydown', handlePreviewNavigation);
-    return () => window.removeEventListener('keydown', handlePreviewNavigation);
-  }, [assets, imagePreview.previewImage, imagePreview.setPreviewImage]);
+  const previewNavigation = useEaglePreviewNavigation(
+    assets,
+    imagePreview.previewImage,
+    imagePreview.setPreviewImage,
+  );
   useEffect(() => {
     const current = imagePreview.previewImage;
     if (!current?.assetId) return;
@@ -1121,12 +1112,16 @@ export function SekerEaglePage({
       onDrop={handleDrop}
     >
       <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
-        <nav
+        <EagleLibraryNavigation
           className={styles.sidebar}
-          aria-label={libraryMode === 'PHOTO' ? t('照片库导航') : t('素材库导航')}
+          headerClassName={styles.sidebarHeader}
+          header={modeSwitcher}
+          label={libraryMode === 'PHOTO' ? t('照片库导航') : t('素材库导航')}
+          activeKey={`${libraryView}:${photoView}:${activeSmartFolderId}`}
+          scopeKey={storeScope}
         >
-          <div className={styles.sidebarHeader}>{modeSwitcher}</div>
           <button
+            data-navigation-destination
             className={
               libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
                 ? styles.navActive
@@ -1145,6 +1140,7 @@ export function SekerEaglePage({
           {libraryMode === 'PHOTO' &&
             (['map', 'people'] as const).map((view) => (
               <button
+                data-navigation-destination
                 key={view}
                 type="button"
                 className={
@@ -1163,6 +1159,7 @@ export function SekerEaglePage({
             ))}
           {privateVisible && (
             <button
+              data-navigation-destination
               className={libraryView === 'PRIVATE' ? styles.navActive : undefined}
               type="button"
               onClick={() => changeLibraryView('PRIVATE')}
@@ -1177,6 +1174,7 @@ export function SekerEaglePage({
             <div className={styles.sectionLabel}>
               {' ' + t('智能文件夹') + ' '}
               <button
+                data-navigation-destination
                 type="button"
                 aria-label={t('新建智能文件夹')}
                 onClick={() => {
@@ -1203,6 +1201,7 @@ export function SekerEaglePage({
             />
             {smartFoldersQuery.isError && (
               <button
+                data-navigation-destination
                 className={styles.navError}
                 type="button"
                 onClick={() => void smartFoldersQuery.refetch()}
@@ -1217,6 +1216,7 @@ export function SekerEaglePage({
           </div>
           <div className={styles.navSection}>
             <button
+              data-navigation-destination
               type="button"
               className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
               aria-label={t('标签')}
@@ -1226,6 +1226,7 @@ export function SekerEaglePage({
               {' ' + t('标签')}
             </button>
             <button
+              data-navigation-destination
               type="button"
               className={workspaceSection === 'PENDING' ? styles.navActive : undefined}
               aria-label={`${t('待处理')} ${pendingWorkCount}`}
@@ -1236,6 +1237,7 @@ export function SekerEaglePage({
               <span>{pendingWorkCount}</span>
             </button>
             <button
+              data-navigation-destination
               type="button"
               className={workspaceSection === 'SETTINGS' ? styles.navActive : undefined}
               aria-label={t('设置')}
@@ -1246,6 +1248,7 @@ export function SekerEaglePage({
             </button>
           </div>
           <button
+            data-navigation-destination
             className={libraryView === 'TRASH' ? styles.navActive : undefined}
             type="button"
             aria-label={t('回收站')}
@@ -1254,7 +1257,7 @@ export function SekerEaglePage({
             <IconTrash size={17} />
             {' ' + t('回收站') + ' '}
           </button>
-        </nav>
+        </EagleLibraryNavigation>
 
         <section
           className={`${styles.library} ${workspaceSection === 'SETTINGS' ? styles.settingsLibrary : ''}`}
@@ -1408,6 +1411,7 @@ export function SekerEaglePage({
                     </span>
                   ) : null}
                 </div>
+                {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
                 {showsAssetControls && (
                   <>
                     <label className={styles.searchBox}>
@@ -1566,6 +1570,22 @@ export function SekerEaglePage({
                 <div className={styles.statusBar} role="status">
                   {transferStatus}
                 </div>
+              )}
+              {showsAssetControls && photoView === 'timeline' && (
+                <EagleSelectionToolbar
+                  selecting={selectionMode}
+                  count={selectedAssetIds.length}
+                  onToggle={() => (selectionMode ? clearAssetSelection() : setSelectionMode(true))}
+                  onActions={(event) => {
+                    const bounds = event.currentTarget.getBoundingClientRect();
+                    openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
+                  }}
+                  onPreview={
+                    selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
+                      ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
+                      : undefined
+                  }
+                />
               )}
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
@@ -1749,12 +1769,17 @@ export function SekerEaglePage({
                               dragDepthRef.current = 0;
                               setIsDragging(false);
                             }}
-                            onDoubleClick={() => openAssetPreview(asset)}
+                            onDoubleClick={() => {
+                              if (!selectionMode) openAssetPreview(asset);
+                            }}
                             onKeyDown={(event) => {
                               if (event.key === 'Enter' || event.key === ' ') {
                                 event.preventDefault();
-                                selectAsset(asset.id, 'single');
-                                openAssetPreview(asset);
+                                if (selectionMode) selectAsset(asset.id, 'toggle');
+                                else {
+                                  selectAsset(asset.id, 'single');
+                                  openAssetPreview(asset);
+                                }
                               }
                             }}
                           >
@@ -1774,7 +1799,7 @@ export function SekerEaglePage({
                                   }
                                 </span>
                               )}
-                              {isBatchSelection && (
+                              {(selectionMode || isBatchSelection) && (
                                 <span className={styles.selectionMark}>
                                   {isSelected && <IconCheck size={13} />}
                                 </span>
@@ -2222,7 +2247,12 @@ export function SekerEaglePage({
             className={styles.contextMenu}
             role="menu"
             aria-label={t('素材操作')}
-            style={{ left: assetContextMenu.x, top: assetContextMenu.y }}
+            style={
+              {
+                '--menu-x': `${assetContextMenu.x}px`,
+                '--menu-y': `${assetContextMenu.y}px`,
+              } as CSSProperties
+            }
           >
             <div className={styles.contextMenuTitle}>
               {t('已选择') + ' '}
@@ -2245,6 +2275,7 @@ export function SekerEaglePage({
                     setSelectedAssetIds([]);
                     setSelectedAssetId(null);
                     setIsBatchSelection(false);
+                    setSelectionMode(false);
                     setTransferStatus(
                       t('已发送 {{value1}} 项，原图片已移入当前图库回收站。', {
                         value1: result.movedCount,
@@ -2431,6 +2462,7 @@ export function SekerEaglePage({
       {imagePreview.previewImage ? (
         <EagleImageViewer
           image={imagePreview.previewImage}
+          navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}
           editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}
           onEdit={

@@ -1,0 +1,58 @@
+.content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 2px;
+  overflow-y: auto;
+}
+.navigation .toggle {
+  width: 44px;
+  min-height: 44px;
+  flex: 0 0 44px;
+  justify-content: center;
+}
+.drawer {
+  box-sizing: border-box;
+  position: fixed;
+  inset: max(8px, env(safe-area-inset-top)) auto max(8px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+  margin: 0;
+  width: min(320px, calc(100vw - 16px));
+  height: auto;
+  max-height: calc(100dvh - 16px);
+  padding: 12px;
+  border: 1px solid var(--eagle-line);
+  border-radius: 12px;
+  color: var(--eagle-text);
+  background: var(--eagle-panel);
+}
+.drawer[open] {
+  display: flex;
+  flex-direction: column;
+}
+.drawer::backdrop {
+  background: rgb(0 0 0 / 58%);
+}
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  font-size: 14px;
+}
+.drawer .heading button {
+  width: 44px;
+  min-height: 44px;
+  justify-content: center;
+}
+@media (max-width: 720px) {
+  .content {
+    gap: 4px;
+  }
+  .drawer .content button {
+    min-height: 44px;
+    font-size: 14px;
+  }
+}

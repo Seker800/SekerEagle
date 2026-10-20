@@ -1,5 +1,5 @@
 import { t } from '../../i18n';
-import { IconRefresh } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
@@ -115,6 +115,7 @@ export function EagleImageViewer({
   onClose,
   onEdit,
   editLabel,
+  navigation,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
@@ -122,7 +123,38 @@ export function EagleImageViewer({
   onClose: () => void;
   onEdit?: () => void;
   editLabel?: string;
+  navigation?: {
+    previous?: () => void;
+    next?: () => void;
+    position: { current: number; total: number };
+  };
 }) {
+  useEffect(() => {
+    if (!navigation) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.altKey ||
+        event.metaKey ||
+        (event.target instanceof HTMLElement &&
+          event.target.closest('input, textarea, select, [contenteditable="true"]'))
+      )
+        return;
+      const navigate =
+        event.key === 'ArrowLeft'
+          ? navigation.previous
+          : event.key === 'ArrowRight'
+            ? navigation.next
+            : undefined;
+      if (navigate) {
+        event.preventDefault();
+        navigate();
+      }
+    };
+    window.addEventListener('keydown', keydown);
+    return () => window.removeEventListener('keydown', keydown);
+  }, [navigation]);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -318,6 +350,29 @@ export function EagleImageViewer({
         <div className={styles.stage}>
           <EagleLivePhotoPlayback sourceUrl={image.motionSrc} posterUrl={image.src} />
           <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
+          {navigation && (
+            <nav className={styles.navigation} aria-label={t('图片切换')}>
+              <button
+                type="button"
+                aria-label={t('上一张')}
+                disabled={!navigation.previous}
+                onClick={navigation.previous}
+              >
+                <IconChevronLeft size={22} />
+              </button>
+              <span aria-live="polite" aria-atomic="true">
+                {navigation.position.current} / {navigation.position.total}
+              </span>
+              <button
+                type="button"
+                aria-label={t('下一张')}
+                disabled={!navigation.next}
+                onClick={navigation.next}
+              >
+                <IconChevronRight size={22} />
+              </button>
+            </nav>
+          )}
           {status !== 'ready' ? (
             <div className={styles.loadState} role={status === 'error' ? 'alert' : 'status'}>
               {status === 'loading' ? (

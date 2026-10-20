@@ -1,0 +1,47 @@
+.root {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--eagle-line);
+}
+.root button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 8px;
+  color: var(--eagle-text);
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+}
+.root button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.root button[aria-pressed='true'],
+.root button:hover:not(:disabled) {
+  background: rgb(214 155 72 / 14%);
+}
+.count {
+  flex: 1;
+  min-width: 0;
+  color: var(--eagle-muted);
+  font-size: 12px;
+}
+@media (pointer: coarse), (max-width: 720px) {
+  .root button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .root {
+    padding: 2px 8px;
+    gap: 2px;
+  }
+}
