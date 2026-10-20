@@ -65,3 +65,13 @@ test('date range comparisons use instants rather than ISO string ordering across
     /范围/,
   );
 });
+
+test('agent previews use the same safe media disposition as browser previews', async () => {
+  const headers = new Map<string, string>();
+  const controller = new PhotoAgentController({ preview: async () => 'rendition' } as never, {
+    getRendition: async () => ({stream: (await import('node:stream')).Readable.from('test'), fileName: 'untrusted.svg', mimeType: 'image/svg+xml'}),
+  } as never);
+  const file = await controller.preview({sub: 'owner', canViewPrivate: false} as never, 'asset', {setHeader: (name: string, value: string) => headers.set(name, value)} as never);
+  assert.ok(file.getHeaders().disposition?.startsWith('attachment'));
+  assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
+});
