@@ -4,7 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { MAX_EAGLE_IMAGE_INPUT_PIXELS } from './eagle-image-processing-policy';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 
-const MEDIA_MAX_BYTES = 250 * 1024 * 1024;
+const MEDIA_MAX_BYTES = 500_000_000;
 const service = new EagleMediaCapabilityService();
 
 test('publishes frozen camera capabilities with separate image and video budgets', () => {
@@ -84,8 +84,8 @@ test('publishes frozen camera capabilities with separate image and video budgets
     'application/mxf',
     'video/mpeg',
   ]);
-  assert.equal(capabilities.images.maxBytes, 250 * 1024 * 1024);
-  assert.equal(capabilities.videos.maxBytes, 2 * 1024 * 1024 * 1024);
+  assert.equal(capabilities.images.maxBytes, 500_000_000);
+  assert.equal(capabilities.videos.maxBytes, 5_000_000_000);
   assert.equal(capabilities.images.maxPixels, MAX_EAGLE_IMAGE_INPUT_PIXELS);
   assert.equal(capabilities.images.maxRawPixels, 120_000_000);
 });
@@ -116,7 +116,7 @@ test('rejects mismatches, unsupported media, oversized files, and unsafe sizes',
     { fileName: 'document.pdf', mimeType: 'application/pdf', size: 1 },
     { fileName: 'movie.mkv', mimeType: 'video/x-matroska', size: 1 },
     { fileName: 'large.png', mimeType: 'image/png', size: MEDIA_MAX_BYTES + 1 },
-    { fileName: 'large.mp4', mimeType: 'video/mp4', size: 2 * 1024 * 1024 * 1024 + 1 },
+    { fileName: 'large.mp4', mimeType: 'video/mp4', size: 5_000_000_000 + 1 },
     { fileName: 'empty.png', mimeType: 'image/png', size: 0 },
     { fileName: 'fraction.png', mimeType: 'image/png', size: 1.5 },
   ];
@@ -154,4 +154,16 @@ test('accepts browser-generic camera RAW, TIFF and camera video MIME declaration
       service.assertUploadAllowed({ fileName: 'capture.dng', mimeType: 'video/mp4', size: 2048 }),
     BadRequestException,
   );
+});
+
+
+test('accepts exact decimal file limits and the NAS large-file samples', () => {
+  for (const fileName of ['photo.jpg', 'capture.raf', 'scan.tif']) {
+    assert.equal(service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_000 }).mediaType, 'image');
+    assert.throws(() => service.assertUploadAllowed({ fileName, mimeType: '', size: 500_000_001 }), /500 MB/);
+  }
+  assert.equal(service.assertUploadAllowed({ fileName: 'clip.mp4', mimeType: 'video/mp4', size: 5_000_000_000 }).mediaType, 'video');
+  assert.throws(() => service.assertUploadAllowed({ fileName: 'clip.mp4', mimeType: 'video/mp4', size: 5_000_000_001 }), /5 GB/);
+  for (const size of [295238048, 441007614]) assert.equal(service.assertUploadAllowed({fileName:'scan.tif',mimeType:'image/tiff',size}).mediaType,'image');
+  for (const size of [2365794893, 4010397244]) assert.equal(service.assertUploadAllowed({fileName:'clip.mp4',mimeType:'video/mp4',size}).mediaType,'video');
 });
