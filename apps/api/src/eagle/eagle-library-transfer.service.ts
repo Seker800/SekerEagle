@@ -14,6 +14,7 @@ import { assertOwnedObjectKey } from '../storage/object-key';
 import { LIBRARY_MODE } from './library-mode';
 import { buildImageProcessingJobs } from './media-job-plan';
 import { resolveLivePhotoMotions } from './live-photo-projection';
+import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
 import type { SendEagleAssetsDto } from './eagle.dto';
 
 interface TransferItem {
@@ -46,6 +47,25 @@ export class EagleLibraryTransferService {
       deletedAt: null,
       ...(includePrivate ? {} : { isPrivate: false }),
     };
+  }
+  private async targetPrivacyTag(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    libraryMode: LibraryMode,
+  ): Promise<string> {
+    // Never change a public tag with a colliding name: that would classify unrelated assets.
+    for (let suffix = 0; suffix < 100; suffix++) {
+      const name = suffix ? `跨库私密 ${suffix + 1}` : '跨库私密';
+      const tag = await tx.eagleManualTag.upsert({
+        where: {
+          ownerId_libraryMode_normalizedName: { ownerId, libraryMode, normalizedName: name },
+        },
+        update: {},
+        create: { ownerId, libraryMode, name, normalizedName: name, marksAssetsPrivate: true },
+      });
+      if (tag.marksAssetsPrivate) return tag.id;
+    }
+    throw new ConflictException('无法创建目标私密标签，请调整标签名称后重试。');
   }
   private checkOperation(operation: EagleLibraryTransfer, ownerId: string, ids: string[]) {
     if (operation.ownerId !== ownerId || operation.sourceMode !== this.sourceMode)
@@ -169,6 +189,9 @@ export class EagleLibraryTransferService {
         });
         if (currentOperation.status === 'COMPLETED')
           return currentOperation.result as unknown as LibraryTransferResult;
+        // Match tag mutation lock order before taking asset row locks.
+        for (const mode of ['MATERIAL', 'PHOTO'] as const)
+          await lockOwnerPrivacyProjection(tx, ownerId, mode);
         const sourceIds = items.map((item) => item.sourceId).sort();
         await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${sourceIds}::text[]) ORDER BY id FOR UPDATE`;
         const sources = await tx.eagleAsset.findMany({
@@ -208,6 +231,12 @@ export class EagleLibraryTransferService {
               lifecycleStatus: 'PROCESSING',
             },
           });
+          if (source.isPrivate) {
+            const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);
+            await tx.eagleAssetManualTag.create({
+              data: { ownerId, libraryMode: targetMode, assetId: item.targetId, tagId },
+            });
+          }
           if (source.annotation)
             await tx.eagleAssetAnnotation.create({
               data: {

@@ -7,10 +7,18 @@ test('unauthorized or mixed source IDs fail before any object copy or operation 
   let copied = 0;
   const db = {
     eagleLibraryTransfer: { findUnique: async () => null },
-    eagleAsset: { findMany: async ({ where }: { where: unknown }) => {
-      assert.deepEqual(where, { ownerId: 'owner', libraryMode: 'PHOTO', id: { in: ['foreign'] }, deletedAt: null, isPrivate: false });
-      return [];
-    } },
+    eagleAsset: {
+      findMany: async ({ where }: { where: unknown }) => {
+        assert.deepEqual(where, {
+          ownerId: 'owner',
+          libraryMode: 'PHOTO',
+          id: { in: ['foreign'] },
+          deletedAt: null,
+          isPrivate: false,
+        });
+        return [];
+      },
+    },
   } as never;
   const storage = {
     copyObject: async () => {

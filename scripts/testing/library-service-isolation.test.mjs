@@ -1202,12 +1202,16 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   assert.equal(target.isPrivate, true);
   assert.equal(target.manualTagLinks.length, 1);
   assert.notEqual(target.manualTagLinks[0].tagId, tag.id);
-  const { EaglePrivacyService } = await import('../../apps/api/dist/eagle/eagle-privacy.service.js');
+  const { EaglePrivacyService } =
+    await import('../../apps/api/dist/eagle/eagle-privacy.service.js');
   const privacy = new EaglePrivacyService(prisma, 'PHOTO');
   const settings = await privacy.getSettings(f.ownerId);
   assert.ok(settings.tagIds.includes(target.manualTagLinks[0].tagId));
   await privacy.updateSettings(f.ownerId, settings);
-  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } })).isPrivate, true);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } })).isPrivate,
+    true,
+  );
   assert.notEqual(target.originalObjectKey, source.originalObjectKey);
   assert.ok(
     target.processingJobs.every((job) => job.libraryMode === 'PHOTO' && job.assetRevision === 1),

@@ -53,7 +53,7 @@ export class SessionTokenService {
       where: { tokenHash },
       include: { user: true },
     });
-    if (!stored || stored.expiresAt <= new Date()) {
+    if (!stored || (!stored.revokedAt && stored.expiresAt <= new Date())) {
       throw new UnauthorizedException(`${REFRESH_COOKIE_NAME} 无效或已过期。`);
     }
     if (stored.user.disabledAt) throw new ForbiddenException('该账号已停用。');
