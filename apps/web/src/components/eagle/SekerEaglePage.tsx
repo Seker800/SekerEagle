@@ -1,3 +1,4 @@
+import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
 import { EagleSortSummary } from './EagleSortSummary';
 import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
@@ -294,7 +295,7 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people'>('timeline');
+  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'agent'>('timeline');
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
@@ -373,7 +374,8 @@ export function SekerEaglePage({
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const photoFieldOptions = usePhotoFilterOptions(privateVisible);
-  const showsAssetControls = libraryMode !== 'PHOTO' || photoView !== 'people';
+  const showsAssetControls =
+    libraryMode !== 'PHOTO' || (photoView !== 'people' && photoView !== 'agent');
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
   const isPhotoTimeline =
@@ -1156,7 +1158,7 @@ export function SekerEaglePage({
                 )}
               </button>
               {libraryMode === 'PHOTO' &&
-                (['map', 'people'] as const).map((view) => (
+                (['map', 'people', 'agent'] as const).map((view) => (
                   <button
                     data-navigation-destination
                     key={view}
@@ -1172,7 +1174,7 @@ export function SekerEaglePage({
                     }}
                   >
                     {view === 'map' ? <IconMapPin size={17} /> : <IconUsers size={17} />}
-                    {view === 'map' ? t('地图') : t('人物')}
+                    {view === 'map' ? t('地图') : view === 'people' ? t('人物') : t('智能整理')}
                   </button>
                 ))}
               {privateVisible && (
@@ -1671,6 +1673,12 @@ export function SekerEaglePage({
                     )?.message
                   }
                 </div>
+              )}
+              {libraryMode === 'PHOTO' && photoView === 'agent' && (
+                <PhotoAgentReview
+                  key={`${ownerId}:${privateVisible}`}
+                  includePrivate={privateVisible}
+                />
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections

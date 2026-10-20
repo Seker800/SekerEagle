@@ -1,4 +1,52 @@
 export const enUS = {
+  已取消: 'Cancelled',
+  已拒绝: 'Rejected',
+
+  智能整理: 'Smart organization',
+  'Agent 提交建议后在这里审核。原始 GPS 和原文件保持不变，接受的城市仅表示城市级位置。':
+    'Review Agent proposals here. Original GPS and files are preserved. Accepted cities indicate city-level locations only.',
+  开始日期: 'Start date',
+  结束日期: 'End date',
+  整理类型: 'Organization type',
+  城市定位: 'City location',
+  非照片清理: 'Non-photo cleanup',
+  创建整理任务: 'Create task',
+  '一次任务最多 200 张。创建后交给已连接的 Agent 分析，不会自动修改照片。':
+    'Up to 200 photos per task. Ask your connected Agent to analyze it; creating a task does not change photos.',
+  载入更多任务: 'Load more tasks',
+  查看建议: 'Review suggestions',
+  任务编号: 'Task ID',
+  '任务已取消或过期，不能应用新建议；已应用项目仍可撤销。':
+    'This task is cancelled or expired. New suggestions cannot be applied; applied changes can still be undone.',
+  接受所选建议: 'Accept selected suggestions',
+  拒绝所选建议: 'Reject selected suggestions',
+  取消任务: 'Cancel task',
+  '尚无建议。请让 Agent 读取此任务、查看照片并提交建议。':
+    'No suggestions yet. Ask your Agent to read this task, inspect photos and submit proposals.',
+  城市级推断: 'City-level inference',
+  建议移入照片回收站: 'Proposed move to photo trash',
+  查看参考照片: 'View evidence photos',
+  '此项依据当前照片画面和文件名，请核对后决定。':
+    'This proposal is based on the photo and its filename. Review before deciding.',
+  选择此建议: 'Select suggestion',
+  修改城市: 'Edit city',
+  城市标识: 'City ID',
+  城市名称: 'City name',
+  国家: 'Country',
+  省份或地区: 'Region',
+  城市代表纬度: 'City representative latitude',
+  城市代表经度: 'City representative longitude',
+  接受建议: 'Accept suggestion',
+  拒绝建议: 'Reject suggestion',
+  撤销本项操作: 'Undo this change',
+  '照片整理 Agent': 'Photo organization Agent',
+  已应用: 'Applied',
+  '城市级位置，非拍摄坐标': 'City-level location, not capture coordinates',
+  已确认推断定位: 'Confirmed inferred location',
+  人工补充定位: 'Manually entered location',
+  '范围超过 200 张，请缩小日期范围。': 'Over 200 photos. Narrow the date range.',
+  '城市（已确认补充）': 'City (confirmed supplemental)',
+
   拍摄信息继承自原片: 'Capture information inherited from the original',
   '未知拍摄时间，沿用原片时间线': 'Capture time unknown; keeps the original timeline position',
 

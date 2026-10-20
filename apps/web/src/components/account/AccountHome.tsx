@@ -64,6 +64,11 @@ const statusLabels = {
   revoked: t('已撤销'),
 } as const;
 const tokenPurposes = {
+  photoAgent: {
+    label: t('照片整理 Agent'),
+    defaultName: t('照片整理 Agent'),
+    scopes: ['photo:read', 'photo:suggest'],
+  },
   capture: {
     label: t('SekerEagle 灵感采集'),
     defaultName: t('SekerEagle 灵感采集'),
