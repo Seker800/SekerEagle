@@ -1219,3 +1219,28 @@ select:focus-visible {
 .auth-offline-card p {
   color: #aeb3bc;
 }
+
+.photo-private-people > div {
+  width: 100%;
+}
+.photo-private-people-list {
+  display: grid;
+  gap: 8px;
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.photo-private-people-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 12px;
+}
+.photo-private-people-list li span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.photo-private-people-list button {
+  flex-shrink: 0;
+}

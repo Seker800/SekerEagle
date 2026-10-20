@@ -43,20 +43,25 @@ export function PhotoPrivatePeopleSettings({
     }
   }
   return (
-    <div className="privacy-tag-settings">
+    <div className="privacy-tag-settings photo-private-people">
       <div>
         <strong>{t('私密人物')}</strong>
-        <p>{t('在人物页面选择某人，可将包含此人的照片设为私密。')}</p>
+        <small>{t('在人物页面选择某人，可将包含此人的照片设为私密。')}</small>
         {!includePrivate ? (
-          <p>{t('开启显示隐私内容后，可在这里解除私密人物规则。')}</p>
+          <small>{t('开启显示隐私内容后，可在这里解除私密人物规则。')}</small>
         ) : (
-          <ul>
+          <ul className="photo-private-people-list">
             {people.data?.people
               .filter((person) => person.marksAssetsPrivate)
               .map((person) => (
                 <li key={person.id}>
-                  {person.name ?? t('未命名人物')}{' '}
-                  <button type="button" disabled={pending} onClick={() => void unmark(person)}>
+                  <span>{person.name ?? t('未命名人物')}</span>
+                  <button
+                    className="quiet-button"
+                    type="button"
+                    disabled={pending}
+                    onClick={() => void unmark(person)}
+                  >
                     {t('解除人物私密')}
                   </button>
                 </li>
