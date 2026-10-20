@@ -297,6 +297,8 @@ it('keeps watermark text inside the output without collisions with fixed templat
     [1600, 1000],
     [1000, 1500],
     [1600, 400],
+    [4800, 400],
+    [9600, 400],
   ]) {
     for (const template of WATERMARK_TEMPLATES) {
       const boxes: { left: number; top: number; right: number; bottom: number }[] = [];
@@ -591,4 +593,53 @@ it('uses the fixed dark glass preset and ignores obsolete slider values in exist
       .toBuffer('image/png')
       .equals((output as unknown as Canvas).toBuffer('image/png')),
   ).toBe(true);
+});
+
+it('caps panorama border height and font scale while keeping every metadata field visible', () => {
+  for (const template of WATERMARK_TEMPLATES) {
+    for (const width of [2400, 4800, 9600]) {
+      const height = 400;
+      const photo = asHTML(createCanvas(width, height));
+      const drawn: { text: string; size: number }[] = [];
+      const output = renderPhotoWatermark(
+        photo,
+        { ...DEFAULT_PHOTO_EDITS, watermark: template.id },
+        {
+          camera: 'NIKON Z5',
+          parameters: '35mm · f/4 · 1/250s · ISO 100',
+          capturedAt: '2026.10.20',
+        },
+        () => {
+          const canvas = createCanvas(1, 1),
+            context = canvas.getContext('2d');
+          vi.spyOn(context, 'fillText').mockImplementation((text) =>
+            drawn.push({ text, size: Number(context.font.match(/([\d.]+)px/)?.[1]) }),
+          );
+          return asHTML(canvas);
+        },
+      );
+      expect(output.height - height, template.id).toBeLessThanOrEqual(height * 0.25 + 2);
+      expect(drawn.length, template.id).toBeGreaterThan(0);
+      expect(Math.max(...drawn.map((d) => d.size)), template.id).toBeLessThanOrEqual(height * 0.05);
+      const text = drawn.map((d) => d.text).join(' ');
+      for (const field of ['NIKON Z5', '35mm', '2026.10.20', 'WWW.SEKER.WANG'])
+        expect(text, template.id).toContain(field);
+    }
+  }
+});
+
+it('retains the established portrait geometry for every watermark layout', () => {
+  const expected: Record<string, number[]> = {
+    'photo-strip': [800, 1272, 0, 0],
+    'photo-side': [852, 1200, 0, 0],
+    'frame-minimal': [880, 1368, 40, 40],
+    'header-footer': [800, 1344, 0, 60],
+    'editorial-panel': [1052, 1256, 224, 28],
+  };
+  for (const template of WATERMARK_TEMPLATES) {
+    const l = photoWatermarkLayout(800, 1200, template);
+    expect([l.width, l.height, l.x, l.y], template.id).toEqual(
+      expected[template.id] ?? [800, 1200, 0, 0],
+    );
+  }
 });
