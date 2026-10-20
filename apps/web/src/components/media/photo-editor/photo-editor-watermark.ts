@@ -60,7 +60,7 @@ export function renderPhotoWatermark(
     website: edits.watermarkShowWebsite ? edits.watermarkWebsite.trim() : '',
     foreground,
     secondary,
-    size: Math.max(1, source.width * 0.028),
+    size: Math.max(1, layout.referenceWidth * 0.028),
   });
   context.restore();
   return canvas;

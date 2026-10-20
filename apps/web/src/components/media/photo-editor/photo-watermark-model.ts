@@ -148,15 +148,18 @@ export function photoWatermarkLayout(width: number, height: number, template: Wa
     headerFooter: [0.075, 0, 0.105, 0],
     editorial: [0.035, 0.035, 0.035, 0.28],
   };
-  const [top, right, bottom, left] = geometry[template.style].map((value) =>
-    Math.round(value * width),
+  const edges = geometry[template.style];
+  const vertical = edges[0] + edges[2];
+  // Keep the existing portrait scale, but stop panorama width from inflating decoration.
+  // Outside top + bottom borders occupy at most 20% of the finished image height.
+  const referenceWidth = Math.min(
+    width,
+    height * 1.5,
+    vertical > 0 ? (height * 0.25) / vertical : Infinity,
   );
+  const [top, right, bottom, left] = edges.map((value) => Math.round(value * referenceWidth));
   const outputWidth = Math.max(1, width + left + right);
-  const outputHeight = Math.max(
-    1,
-    height + top + bottom,
-    template.style === 'editorial' ? Math.round(width * 0.55) : 0,
-  );
+  const outputHeight = Math.max(1, height + top + bottom);
   const x = left,
     y = top + Math.floor((outputHeight - height - top - bottom) / 2);
   return {
@@ -164,6 +167,7 @@ export function photoWatermarkLayout(width: number, height: number, template: Wa
     height: outputHeight,
     x,
     y,
+    referenceWidth,
     photoWidth: width,
     photoHeight: height,
     caption: template.style === 'side' ? right : template.style === 'editorial' ? left : bottom,
