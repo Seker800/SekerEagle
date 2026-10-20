@@ -195,3 +195,20 @@ test('client disconnect aborts a media request before object headers arrive', ()
 
   assert.equal(signal.aborted, true);
 });
+
+test('unsafe originals download as attachments, safe video previews remain playable and every response disables sniffing', async () => {
+  for (const [mimeType, disposition] of [
+    ['image/svg+xml', 'attachment'], ['text/html', 'attachment'],
+    ['image/x-sony-arw', 'attachment'], ['application/octet-stream', 'attachment'],
+    ['image/jpeg', 'inline'], ['video/mp4', 'inline'],
+  ]) {
+    const headers = new Map<string, string>();
+    const response = { setHeader: (name: string, value: string) => headers.set(name, value), vary: () => undefined, once: () => undefined };
+    const controller = new EagleController({} as never, {} as never, {
+      getOriginal: async () => ({ notModified: false, fileName: 'untrusted.svg', mimeType, stream: Readable.from('test'), fullSize: 4n }),
+    } as never, {} as never);
+    await controller.getOriginal({ sub: 'owner' } as never, 'asset', undefined, undefined, response as never);
+    assert.ok(headers.get('Content-Disposition')?.startsWith(disposition));
+    assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
+  }
+});

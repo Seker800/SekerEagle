@@ -317,3 +317,10 @@ test('camera playback ranges preserve mode authorization and private cache polic
   );
   assert.equal(reads, 0);
 });
+
+test('untrusted storage MIME cannot override the inspected database MIME', async () => {
+  const service = new EagleMediaService({ eagleAsset: { findFirst: async () => ({
+    originalObjectKey: 'users/owner/assets/asset/original.jpg', originalName: 'original.jpg', mimeType: 'image/jpeg', byteSize: 4n,
+  }) } } as never, { getObject: async () => ({ Body: {}, ContentType: 'text/html' }) } as never);
+  assert.equal((await service.getOriginal('owner', 'asset')).mimeType, 'image/jpeg');
+});
