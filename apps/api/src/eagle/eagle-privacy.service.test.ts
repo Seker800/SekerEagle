@@ -153,7 +153,10 @@ test('privacy snapshot accommodates automatic protection labels beyond the selec
   const { validateSync } = await import('class-validator');
   const { UpdateEaglePrivacySettingsDto } = await import('./eagle.dto');
   const input = Object.assign(new UpdateEaglePrivacySettingsDto(), {
-    tagIds: [], expectedTagIds: Array.from({ length: 102 }, () => randomUUID()),
+    tagIds: [],
+    expectedTagIds: Array.from({ length: 102 }, () => randomUUID()),
   });
   assert.deepEqual(validateSync(input), []);
+  input.tagIds = Array.from({ length: 101 }, () => randomUUID());
+  assert.ok(validateSync(input).some((error) => error.property === 'tagIds'));
 });

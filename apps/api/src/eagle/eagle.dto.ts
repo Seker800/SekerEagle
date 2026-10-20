@@ -260,11 +260,11 @@ export class EaglePrivacySettingsDto {
 export class UpdateEaglePrivacySettingsDto extends EaglePrivacySettingsDto {
   @ApiProperty({
     type: [String],
-    maxItems: 100,
+    maxItems: 1000,
     description: '打开编辑器时读取的私密标签快照；变化时返回 409。',
   })
   @IsArray()
-  @ArrayMaxSize(100)
+  @ArrayMaxSize(1000)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   expectedTagIds!: string[];
