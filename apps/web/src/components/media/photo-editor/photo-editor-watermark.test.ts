@@ -280,7 +280,8 @@ describe('watermark typography and content hierarchy', () => {
     const layout = photoWatermarkLayout(1600, 1000, findWatermark('photo-strip')!);
     expect(layout.panel.height).toBeLessThanOrEqual(160);
     const parameters = capture('photo-strip').find(({ text }) => text.includes('35mm'))!;
-    expect(parameters.size).toBeGreaterThanOrEqual(25);
+    expect(parameters.size).toBeGreaterThanOrEqual(16);
+    expect(parameters.size).toBeLessThanOrEqual(20);
   });
   it('retains camera, parameters and date as distinct side-rail information', () => {
     const texts = capture('photo-side').map(({ text }) => text);
@@ -641,5 +642,40 @@ it('retains the established portrait geometry for every watermark layout', () =>
     expect([l.width, l.height, l.x, l.y], template.id).toEqual(
       expected[template.id] ?? [800, 1200, 0, 0],
     );
+  }
+});
+
+it('keeps every ordinary landscape watermark compact, including the original 6000 by 2696 photo', () => {
+  for (const [width, height] of [
+    [1600, 1000],
+    [4000, 3000],
+    [6000, 2696],
+  ]) {
+    for (const template of WATERMARK_TEMPLATES) {
+      const layout = photoWatermarkLayout(width, height, template);
+      expect(layout.height - height, template.id).toBeLessThanOrEqual(height * 0.22 + 2);
+      expect(layout.width - width, template.id).toBeLessThanOrEqual(height * 0.32 + 2);
+    }
+  }
+  for (const template of WATERMARK_TEMPLATES) {
+    const sizes: number[] = [];
+    renderPhotoWatermark(
+      asHTML(createCanvas(1600, 1000)),
+      { ...DEFAULT_PHOTO_EDITS, watermark: template.id },
+      {
+        camera: 'NIKON D80',
+        parameters: '135mm · f/5.6 · 1/500s · ISO 125',
+        capturedAt: '2010.07.13',
+      },
+      () => {
+        const canvas = createCanvas(1, 1),
+          context = canvas.getContext('2d');
+        vi.spyOn(context, 'fillText').mockImplementation(() => {
+          sizes.push(Number(context.font.match(/([\d.]+)px/)?.[1]));
+        });
+        return asHTML(canvas);
+      },
+    );
+    expect(Math.max(...sizes), template.id).toBeLessThanOrEqual(30);
   }
 });
