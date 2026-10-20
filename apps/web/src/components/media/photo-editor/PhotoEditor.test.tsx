@@ -19,7 +19,9 @@ vi.mock('./photo-editor-watermark', () => ({
 
 vi.mock('./photo-editor-render', () => ({
   MAX_PHOTO_PIXELS: 48_000_000,
-  sourceCanvas: vi.fn(() => Object.assign(document.createElement('canvas'), { width: 800, height: 600 })),
+  sourceCanvas: vi.fn(() =>
+    Object.assign(document.createElement('canvas'), { width: 800, height: 600 }),
+  ),
   drawPhoto: (target: HTMLCanvasElement) => {
     target.width = 800;
     target.height = 600;
@@ -781,57 +783,152 @@ it('persists a return to the initial settings while an earlier autosave is in fl
   );
 });
 
-
 it('opens only the small preview, preserves export dimensions and loads the original only when saving', async () => {
   const requests: string[] = [];
-  vi.stubGlobal('Image', class {
-    naturalWidth = 800;
-    naturalHeight = 600;
-    onload: (() => void) | null = null;
-    set src(value: string) {
-      if (!value) return;
-      requests.push(value);
-      if (value === '/original.jpg') { this.naturalWidth = 6000; this.naturalHeight = 4500; }
-      queueMicrotask(() => this.onload?.());
-    }
-  });
-  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['png'])));
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      set src(value: string) {
+        if (!value) return;
+        requests.push(value);
+        if (value === '/original.jpg') {
+          this.naturalWidth = 6000;
+          this.naturalHeight = 4500;
+        }
+        queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+    callback(new Blob(['png'])),
+  );
   vi.mocked(readPhotoMetadata).mockClear();
   vi.mocked(sourceCanvas).mockClear();
-  const save = vi.fn().mockRejectedValueOnce(new Error('offline')).mockResolvedValue({id:'saved',name:'saved.png'});
-  render(<PhotoEditor source="/original.jpg" previewSource="/preview.webp" sourceSize={{width:6000,height:4500}} initialMetadata={{camera:'Nikon Z5'}} name="Photo.jpg" onClose={vi.fn()} onSave={save} />);
-  const button = screen.getByRole('button', {name:'保存到相册'});
+  const save = vi
+    .fn()
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValue({ id: 'saved', name: 'saved.png' });
+  render(
+    <PhotoEditor
+      source="/original.jpg"
+      previewSource="/preview.webp"
+      sourceSize={{ width: 6000, height: 4500 }}
+      initialMetadata={{ camera: 'Nikon Z5' }}
+      name="Photo.jpg"
+      onClose={vi.fn()}
+      onSave={save}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
   await waitFor(() => expect(button).toBeEnabled());
   expect(requests).toEqual(['/preview.webp']);
   expect(readPhotoMetadata).not.toHaveBeenCalled();
   expect(screen.getByText('6000 × 4500')).toBeInTheDocument();
   fireEvent.click(button);
   await waitFor(() => expect(save).toHaveBeenCalledOnce());
-  expect(requests).toEqual(['/preview.webp','/original.jpg']);
+  expect(requests).toEqual(['/preview.webp', '/original.jpg']);
   expect(vi.mocked(sourceCanvas).mock.calls.at(-1)?.[0].naturalWidth).toBe(6000);
   await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
   await waitFor(() => expect(save).toHaveBeenCalledTimes(2));
-  expect(requests).toEqual(['/preview.webp','/original.jpg']);
+  expect(requests).toEqual(['/preview.webp', '/original.jpg']);
   expect(save.mock.calls[1][0]).toBe(save.mock.calls[0][0]);
 });
 
 it('never silently exports a small preview when the original cannot be loaded', async () => {
-  vi.stubGlobal('Image', class {
-    naturalWidth = 800;
-    naturalHeight = 600;
-    onload: (() => void) | null = null;
-    onerror: (() => void) | null = null;
-    set src(value: string) {
-      if (value) queueMicrotask(() => value === '/preview.webp' ? this.onload?.() : this.onerror?.());
-    }
-  });
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(value: string) {
+        if (value)
+          queueMicrotask(() => (value === '/preview.webp' ? this.onload?.() : this.onerror?.()));
+      }
+    },
+  );
   const save = vi.fn();
-  render(<PhotoEditor source="/original.jpg" previewSource="/preview.webp" sourceSize={{width:6000,height:4500}} name="Photo.jpg" onClose={vi.fn()} onSave={save} />);
-  const button = screen.getByRole('button', {name:'保存到相册'});
+  render(
+    <PhotoEditor
+      source="/original.jpg"
+      previewSource="/preview.webp"
+      sourceSize={{ width: 6000, height: 4500 }}
+      name="Photo.jpg"
+      onClose={vi.fn()}
+      onSave={save}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
   await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('照片保存失败'));
   expect(save).not.toHaveBeenCalled();
   expect(button).toBeEnabled();
+});
+
+it('rejects source dimension changes instead of saving a differently cropped picture', async () => {
+  const save = vi.fn();
+  render(
+    <PhotoEditor
+      source="/original.jpg"
+      previewSource="/preview.webp"
+      sourceSize={{ width: 6000, height: 4500 }}
+      name="Photo.jpg"
+      onClose={vi.fn()}
+      onSave={save}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('照片保存失败'));
+  expect(save).not.toHaveBeenCalled();
+});
+
+it('aborts an original download when its editing scope is destroyed', async () => {
+  const images: Array<{ src: string; onload: (() => void) | null }> = [];
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      value = '';
+      constructor() {
+        images.push(this);
+      }
+      get src() {
+        return this.value;
+      }
+      set src(value: string) {
+        this.value = value;
+        if (value === '/preview.webp') queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  const save = vi.fn();
+  const view = render(
+    <PhotoEditor
+      source="/original.jpg"
+      previewSource="/preview.webp"
+      sourceSize={{ width: 6000, height: 4500 }}
+      name="Photo.jpg"
+      onClose={vi.fn()}
+      onSave={save}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(images).toHaveLength(2));
+  view.unmount();
+  expect(images[1].src).toBe('');
+  expect(images[1].onload).toBeNull();
+  expect(save).not.toHaveBeenCalled();
 });

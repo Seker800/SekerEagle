@@ -1,4 +1,4 @@
-import { renderEditedPhotoFile } from './photo-editor-export';
+import { loadEditablePhoto, renderEditedPhotoFile } from './photo-editor-export';
 import type { PhotoEditRecipe } from '@sekereagle/library-core';
 import { ApiError } from '../../../lib/api-error';
 import { withinPhotoOutputBudget } from './photo-editor-limits';
@@ -48,6 +48,8 @@ type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] }
 
 export function PhotoEditor({
   source,
+  previewSource,
+  sourceSize,
   name,
   onClose,
   onSave,
@@ -58,6 +60,8 @@ export function PhotoEditor({
   onOpenSaved,
 }: {
   source: string;
+  previewSource?: string;
+  sourceSize?: { width: number; height: number };
   name: string;
   initialMetadata?: PhotoMetadata;
   initialEdits?: PhotoEdits;
@@ -112,6 +116,10 @@ export function PhotoEditor({
   }, [edits, onDraftChange]);
   const [tab, setTab] = useState<Tab>('adjust');
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
+  const imageWidth = sourceSize?.width ?? loaded?.naturalWidth ?? 1;
+  const imageHeight = sourceSize?.height ?? loaded?.naturalHeight ?? 1;
+  const exportController = useRef<AbortController | null>(null);
+  useEffect(() => () => exportController.current?.abort(), []);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState('');
   const [sourceConflict, setSourceConflict] = useState(false);
@@ -286,7 +294,12 @@ export function PhotoEditor({
     const image = new Image();
     image.onload = () => {
       if (cancelled) return;
-      if (image.naturalWidth * image.naturalHeight > MAX_PHOTO_PIXELS) {
+      if (
+        Math.max(
+          image.naturalWidth * image.naturalHeight,
+          (sourceSize?.width ?? image.naturalWidth) * (sourceSize?.height ?? image.naturalHeight),
+        ) > MAX_PHOTO_PIXELS
+      ) {
         setError(t('暂支持不超过 4800 万像素的照片，请先缩小图片。'));
         return;
       }
@@ -300,19 +313,25 @@ export function PhotoEditor({
     image.onerror = () => {
       if (!cancelled) setError(t('照片读取失败，请选择 JPG、PNG 或 WebP 图片。'));
     };
-    image.src = source;
+    image.src = previewSource ?? source;
     return () => {
       cancelled = true;
       image.onload = null;
       image.onerror = null;
+      image.src = '';
       renderer.dispose();
       rendererRef.current = null;
     };
-  }, [source, loadAttempt]);
+  }, [source, previewSource, sourceSize?.width, sourceSize?.height, loadAttempt]);
 
   useEffect(() => {
     const controller = new AbortController();
     setMetadata(initialMetadata ?? {});
+    // Managed previews have no EXIF; the session already carries library metadata.
+    if (previewSource) {
+      setMetadataLoading(false);
+      return () => controller.abort();
+    }
     setMetadataLoading(true);
     void readPhotoMetadata(source, controller.signal)
       .then((value) => {
@@ -330,7 +349,7 @@ export function PhotoEditor({
         if (!controller.signal.aborted) setMetadataLoading(false);
       });
     return () => controller.abort();
-  }, [source, initialMetadata]);
+  }, [source, previewSource, initialMetadata]);
 
   useEffect(() => {
     const input = previewRef.current;
@@ -374,7 +393,7 @@ export function PhotoEditor({
     };
   }, [loaded, edits, compare, tab, metadata]);
 
-  const fullCrop = loaded ? photoCrop(loaded.naturalWidth, loaded.naturalHeight, edits) : null;
+  const fullCrop = loaded ? photoCrop(imageWidth, imageHeight, edits) : null;
   const fullTemplate = findWatermark(edits.watermark);
   const fullOutput =
     fullCrop && fullTemplate
@@ -404,8 +423,21 @@ export function PhotoEditor({
       const saveKey = JSON.stringify({ source, edits, metadata });
       let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
       if (!file) {
-        file = await renderEditedPhotoFile(loaded, edits, metadata, rendererRef.current, name);
-        pendingSaveRef.current = { key: saveKey, file };
+        const controller = new AbortController();
+        exportController.current = controller;
+        const original = previewSource
+          ? await loadEditablePhoto(source, controller.signal)
+          : loaded;
+        try {
+          if (original.naturalWidth !== imageWidth || original.naturalHeight !== imageHeight)
+            throw new Error('PHOTO_SOURCE_DIMENSIONS_CHANGED');
+          file = await renderEditedPhotoFile(original, edits, metadata, rendererRef.current, name);
+          if (controller.signal.aborted) return;
+          pendingSaveRef.current = { key: saveKey, file };
+        } finally {
+          if (original !== loaded) original.src = '';
+          exportController.current = null;
+        }
       }
       const savedPhoto = await onSave(file, { version: 1, edits });
       pendingSaveRef.current = null;
@@ -596,7 +628,7 @@ export function PhotoEditor({
           <span>
             {loaded
               ? (() => {
-                  const size = photoCrop(loaded.naturalWidth, loaded.naturalHeight, edits);
+                  const size = photoCrop(imageWidth, imageHeight, edits);
                   const template = tab !== 'crop' ? findWatermark(edits.watermark) : undefined;
                   const output = template
                     ? photoWatermarkLayout(size.width, size.height, template)
@@ -632,8 +664,8 @@ export function PhotoEditor({
             {loaded && tab === 'crop' && crop && (
               <PhotoCropViewport
                 edits={edits}
-                width={loaded.naturalWidth}
-                height={loaded.naturalHeight}
+                width={imageWidth}
+                height={imageHeight}
                 disabled={busy || compare}
                 onStart={() => {
                   sliderStartRef.current ??= edits;
@@ -756,8 +788,8 @@ export function PhotoEditor({
             <PhotoCropPanel
               compareControl={compareControl}
               edits={edits}
-              width={loaded?.naturalWidth ?? 1}
-              height={loaded?.naturalHeight ?? 1}
+              width={imageWidth}
+              height={imageHeight}
               onChange={update}
             />
           )}

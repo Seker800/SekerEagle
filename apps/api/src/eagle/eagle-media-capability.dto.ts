@@ -1,3 +1,4 @@
+import { CAMERA_MAX_IMAGE_BYTES, CAMERA_MAX_VIDEO_BYTES } from '@sekereagle/library-core';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class EagleImageMediaCapabilityDto {
@@ -7,7 +8,7 @@ export class EagleImageMediaCapabilityDto {
   @ApiProperty({ type: [String], example: ['.jpg', '.jpeg', '.png'] })
   extensions!: string[];
 
-  @ApiProperty({ example: 262_144_000 })
+  @ApiProperty({ example: CAMERA_MAX_IMAGE_BYTES })
   maxBytes!: number;
 
   @ApiProperty({ example: 50_000_000 })
@@ -24,7 +25,7 @@ export class EagleVideoMediaCapabilityDto {
   @ApiProperty({ type: [String], example: ['.mp4'] })
   extensions!: string[];
 
-  @ApiProperty({ example: 2_147_483_648 })
+  @ApiProperty({ example: CAMERA_MAX_VIDEO_BYTES })
   maxBytes!: number;
 
   @ApiProperty({ nullable: true, type: Number, example: 14_400_000 })

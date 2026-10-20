@@ -7,7 +7,7 @@ import { isCameraRawMime } from '@sekereagle/library-core';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
-import { getEagleEditContentUrl } from './eagle-media-sources';
+import { getEagleEditContentUrl, getEaglePreviewContentUrl } from './eagle-media-sources';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { formatPhotoMetadata } from '../media/photo-editor/photo-editor-metadata';
 import type { PhotoMetadata } from '../media/photo-editor/photo-watermark-model';
@@ -62,6 +62,8 @@ export function eaglePhotoWatermarkMetadata(asset: EagleAssetListItem): PhotoMet
 export interface PhotoEditSession {
   scopeKey: string;
   source: string;
+  previewSource?: string;
+  sourceSize?: { width: number; height: number };
   name: string;
   initialMetadata: PhotoMetadata;
   initialEdits?: PhotoEdits;
@@ -102,6 +104,23 @@ export function useEaglePhotoEditing({
   ): PhotoEditSession | null => {
     const source = getEagleEditContentUrl(asset);
     if (!source || (asset.libraryMode && asset.libraryMode !== libraryMode)) return null;
+    const exportMedia = isCameraRawMime(asset.mimeType)
+      ? asset.renditions.find(
+          (row) =>
+            row.revision === asset.mediaRevision &&
+            row.kind === 'PREVIEW' &&
+            row.variant === 'edit' &&
+            row.mimeType === 'image/webp',
+        )
+      : asset;
+    const width = exportMedia?.width,
+      height = exportMedia?.height;
+    const previewSource = getEaglePreviewContentUrl(asset);
+    // Legacy material imports may need their original EXIF; do not lose watermark metadata.
+    const preview =
+      asset.photoMetadata && previewSource && width && height && width > 0 && height > 0
+        ? { previewSource, sourceSize: { width, height } }
+        : {};
     const sourceId = asset.id,
       sourceVersion = asset.rowVersion;
     const upload = api.uploadEagleAsset;
@@ -109,6 +128,7 @@ export function useEaglePhotoEditing({
     return {
       scopeKey,
       source,
+      ...preview,
       name: asset.displayName,
       initialMetadata: eaglePhotoWatermarkMetadata(asset),
       initialEdits,

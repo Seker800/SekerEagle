@@ -2888,7 +2888,7 @@ export interface components {
        *     ]
        */
       extensions: string[];
-      /** @example 262144000 */
+      /** @example 500000000 */
       maxBytes: number;
       /** @example 50000000 */
       maxPixels: number;
@@ -2908,7 +2908,7 @@ export interface components {
        *     ]
        */
       extensions: string[];
-      /** @example 2147483648 */
+      /** @example 5000000000 */
       maxBytes: number;
       /** @example 14400000 */
       maxDurationMs: number | null;
