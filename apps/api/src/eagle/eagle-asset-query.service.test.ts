@@ -184,6 +184,9 @@ test('asset listing only loads relations required by gallery cards', async () =>
     'photoMetadata',
     'renditions',
   ]);
+  const photo = include?.photoMetadata as { select: Record<string, boolean> };
+  assert.equal(photo.select.captureMetadataInherited, true);
+  assert.equal(photo.select.processorVersion, undefined);
 });
 
 test('image search preserves the ranked order without resolving AI tags', async () => {

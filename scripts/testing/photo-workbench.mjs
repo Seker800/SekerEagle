@@ -512,6 +512,23 @@ try {
         );
         assert.equal(copy.width, 512);
         assert.equal(copy.height, 256);
+        if (mode === 'photos') {
+          assert.equal(
+            copy.chronologicalAt,
+            detail.chronologicalAt,
+            'pixel processing must retain source timeline position',
+          );
+          assert.equal(copy.photoMetadata.captureMetadataInherited, true);
+          assert.equal(copy.photoMetadata.cameraModel, detail.photoMetadata.cameraModel);
+          assert.equal(copy.photoMetadata.capturedAt, detail.photoMetadata.capturedAt);
+          const photoPage = await api('/photos/assets?limit=100');
+          const stack = photoPage.photoStacks.find((row) => row.assetIds.includes(sourceId));
+          assert.ok(
+            stack?.assetIds.includes(copy.id),
+            'published edited copy belongs to source stack',
+          );
+          assert.equal(stack.cover.id, copy.id, 'processed edited copy becomes the default cover');
+        }
         const original = await fetch(`${origin}/api/${mode}/assets/${sourceId}/original`, {
           headers: { cookie: `sekereagle_access=${accessToken}` },
         });
