@@ -37,3 +37,15 @@ test('the root test suite includes the safe Mac deployment contract', async () =
   assert.match(manifest.scripts.test, /scripts\/deploy-mac\.test\.mjs/u);
   assert.equal(manifest.scripts['deploy:mac'], 'node ./scripts/deploy-mac.mjs');
 });
+
+test('web health check and gateway target the actual web listener', async () => {
+  const [compose, webNginx, gateway] = await Promise.all([
+    readFile(composePath, 'utf8'),
+    readFile(new URL('../apps/web/nginx.conf', import.meta.url), 'utf8'),
+    readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8'),
+  ]);
+  const port = webNginx.match(/listen\s+(\d+);/)[1];
+  const web = compose.split('\n  web:')[1].split('\n  gateway:')[0];
+  assert.ok(web.includes(`http://127.0.0.1:${port}/`));
+  assert.ok(gateway.includes(`server web:${port} resolve;`));
+});
