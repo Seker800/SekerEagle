@@ -28,6 +28,8 @@ const containers = [],
   children = [],
   timers = [];
 let db, gateway;
+// Separate MinIO container; mirror the gateway path accepted by the real Web uploader.
+const storageBucket = 'sekereagle-assets';
 const artifacts = join(root, '.omx/artifacts');
 await mkdir(artifacts, { recursive: true });
 function run(command, args, env = process.env) {
@@ -122,10 +124,20 @@ try {
       res.end();
       return;
     }
-    if (req.url.startsWith('/api/') || req.url.startsWith('/sekereagle-test/')) {
+    if (req.url.startsWith('/api/') || req.url.startsWith(`/${storageBucket}/`)) {
       const port = req.url.startsWith('/api/') ? apiPort : Number(minioPort);
       const upstream = proxyRequest(
-        { host: '127.0.0.1', port, path: req.url, method: req.method, headers: req.headers },
+        {
+          host: '127.0.0.1',
+          port,
+          path: req.url,
+          method: req.method,
+          // Mirror nginx: MinIO must see the canonical host used to sign the part URL,
+          // including when the browser reaches this gateway via a loopback alias.
+          headers: req.url.startsWith('/api/')
+            ? req.headers
+            : { ...req.headers, host: new URL(origin).host },
+        },
         (response) => {
           res.writeHead(response.statusCode, response.headers);
           response.pipe(res);
@@ -180,7 +192,7 @@ try {
     S3_ENDPOINT: `http://127.0.0.1:${minioPort}`,
     S3_PUBLIC_ENDPOINT: origin,
     S3_REGION: 'us-east-1',
-    S3_BUCKET: 'sekereagle-test',
+    S3_BUCKET: storageBucket,
     S3_ACCESS_KEY_ID: accessKey,
     S3_SECRET_ACCESS_KEY: secretKey,
     MLX_EMBEDDING_URL: 'http://127.0.0.1:9',
