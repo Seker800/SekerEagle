@@ -837,6 +837,11 @@
   pointer-events: none;
   font-size: 12px;
 }
+.saveNotice button {
+  pointer-events: auto;
+  margin-left: 12px;
+  border-color: currentColor;
+}
 .confirmBackdrop {
   position: absolute;
   inset: 0;

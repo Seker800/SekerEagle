@@ -25,7 +25,7 @@ export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | n
 
 /** Explicit editing may use originals only for browser-native formats. RAW uses bounded sRGB. */
 export function getEagleEditContentUrl(asset: EagleAssetListItem): string | null {
-  if (asset.lifecycleStatus !== 'READY') return null;
+  if (asset.lifecycleStatus !== 'READY' || asset.deletedAt) return null;
   if (['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType))
     return getEagleAssetContentUrl(asset.id, asset.libraryMode);
   if (!isCameraRawMime(asset.mimeType)) return null;

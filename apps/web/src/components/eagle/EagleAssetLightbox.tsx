@@ -13,6 +13,7 @@ import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleAssetLightbox.module.css';
+import { EagleEditPhotoButton } from './EaglePhotoEditing';
 interface EagleAssetLightboxProps {
   asset: EagleAssetListItem;
   loading?: boolean;
@@ -20,11 +21,13 @@ interface EagleAssetLightboxProps {
   navigation?: { index: number; count: number; onPrevious: () => void; onNext: () => void };
   onClose: () => void;
   onLocate?: (assetId: string) => Promise<void>;
+  onEdit?: (asset: EagleAssetListItem) => void;
 }
 export function EagleAssetLightbox({
   asset,
   onClose,
   onLocate,
+  onEdit,
   navigation,
   actions,
   loading,
@@ -148,6 +151,7 @@ export function EagleAssetLightbox({
         {!loading && asset.mimeType.startsWith('image/') && previewUrl && (
           <EagleImageCopyButton sourceUrl={previewUrl} />
         )}
+        {!loading && <EagleEditPhotoButton asset={asset} onEdit={onEdit} />}
         {navigation ? (
           <>
             <span>

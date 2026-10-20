@@ -4,7 +4,7 @@ import {
   getPhotoTimelineMonth,
 } from '../photos/photo-timeline-sections';
 import { EagleSendAssetsMenuItem } from './EagleSendAssetsMenuItem';
-import { isCameraVideoMime, isCameraRawMime } from '@sekereagle/library-core';
+import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { EaglePhotoStack } from '../../lib/eagle-api';
 import { collapsePhotoStacks } from '../photos/photo-stacks';
 import { PhotoStackLightbox } from '../photos/PhotoStackLightbox';
@@ -72,6 +72,12 @@ import { canCopyImageToClipboard, copyImageToClipboard } from '../../lib/image-c
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 
 import { EagleAssetLightbox } from './EagleAssetLightbox';
+import {
+  EagleEditPhotoButton,
+  EaglePhotoEditorDialog,
+  eaglePhotoEditLabel,
+  useEaglePhotoEditing,
+} from './EaglePhotoEditing';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetLocation, useEagleAssetLocationFocus } from './useEagleAssetLocation';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
@@ -247,7 +253,6 @@ export function SekerEaglePage({
   const {
     api: {
       getEagleAsset,
-      uploadEagleAsset,
       getEagleAssetLocation,
       getEagleTrashAsset,
       getEaglePyramidDescriptor,
@@ -314,6 +319,15 @@ export function SekerEaglePage({
   const [editorDescription, setEditorDescription] = useState('');
   const [editorSourceUrl, setEditorSourceUrl] = useState('');
   const imagePreview = useImagePreviewState();
+  const photoEditing = useEaglePhotoEditing({
+    accessToken,
+    ownerId,
+    scopeKey: `${storeScope}:${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
+  });
+  const openPhotoEditor = (asset: EagleAssetListItem) => {
+    setAssetContextMenu(null);
+    photoEditing.open(asset);
+  };
   const { importFiles, uploadStatus } = useEagleUploadController(accessToken, queryKeys.assets);
   useEffect(() => {
     window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
@@ -1881,6 +1895,11 @@ export function SekerEaglePage({
               </div>
             ) : selectedAsset ? (
               <>
+                {!isSelectedAssetReadOnly && selectedAssetIds.length === 1 && (
+                  <section className={styles.detailSection}>
+                    <EagleEditPhotoButton asset={selectedAsset} onEdit={openPhotoEditor} />
+                  </section>
+                )}
                 {libraryMode === 'PHOTO' && (
                   <PhotoMetadataDetails metadata={selectedAsset.photoMetadata} />
                 )}
@@ -2233,6 +2252,13 @@ export function SekerEaglePage({
                   }}
                 />
               )}
+            {contextMenuAsset && libraryView !== 'TRASH' && (
+              <EagleEditPhotoButton
+                asset={contextMenuAsset}
+                onEdit={openPhotoEditor}
+                role="menuitem"
+              />
+            )}
             {contextMenuAsset && libraryView !== 'TRASH' ? (
               <button
                 type="button"
@@ -2387,6 +2413,7 @@ export function SekerEaglePage({
         <PhotoStackLightbox
           key={previewStack.id}
           stack={previewStack}
+          onEdit={libraryView === 'TRASH' ? undefined : openPhotoEditor}
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={() => setPreviewAssetId(null)}
         />
@@ -2394,6 +2421,7 @@ export function SekerEaglePage({
         previewAsset && (
           <EagleAssetLightbox
             asset={previewAsset}
+            onEdit={libraryView === 'TRASH' ? undefined : openPhotoEditor}
             onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
             onClose={() => setPreviewAssetId(null)}
           />
@@ -2403,30 +2431,23 @@ export function SekerEaglePage({
         <EagleImageViewer
           image={imagePreview.previewImage}
           descriptor={previewPyramidQuery.data}
-          onSavePhoto={async (file) => {
-            const result = await uploadEagleAsset(accessToken, file, () => undefined, {
-              duplicatePolicy: 'CREATE_COPY',
-              copySourceAssetId: previewImageAsset?.id,
-              copySourceRowVersion: previewImageAsset?.rowVersion,
-              retry: true,
-            });
-            await queryClient.invalidateQueries({ queryKey: queryKeys.assets });
-            return { id: result.asset.id, name: file.name };
-          }}
-          editLabel={
-            previewImageAsset && isCameraRawMime(previewImageAsset.mimeType)
-              ? t('编辑 RAW 显影副本')
-              : undefined
-          }
-          editSource={
-            libraryView !== 'TRASH' && previewImageAsset
-              ? (getEagleEditContentUrl(previewImageAsset) ?? undefined)
+          editLabel={previewImageAsset ? eaglePhotoEditLabel(previewImageAsset) : undefined}
+          onEdit={
+            libraryView !== 'TRASH' &&
+            previewImageAsset &&
+            getEagleEditContentUrl(previewImageAsset)
+              ? () => openPhotoEditor(previewImageAsset)
               : undefined
           }
           onLocate={libraryView === 'TRASH' ? undefined : assetLocator.locate}
           onClose={imagePreview.closePreview}
         />
       ) : null}
+      <EaglePhotoEditorDialog
+        session={photoEditing.session}
+        onClose={photoEditing.close}
+        onOpenSaved={assetLocator.locate}
+      />
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
           fieldOptions={photoFieldOptions}

@@ -14,15 +14,24 @@ const { openSeadragonMock } = vi.hoisted(() => ({
   })),
 }));
 
-const editorPropsMock = vi.hoisted(() => ({ current: null as null | {
-  source: string; name: string; initialMetadata?: { camera?: string };
-  onClose: () => void; onSave: (file: File) => Promise<unknown>;
-} }));
+const editorPropsMock = vi.hoisted(() => ({
+  current: null as null | {
+    source: string;
+    name: string;
+    initialMetadata?: { camera?: string };
+    onClose: () => void;
+    onSave: (file: File) => Promise<unknown>;
+  },
+}));
 vi.mock('../media/photo-editor/PhotoEditor', () => ({
   PhotoEditor: (props: NonNullable<typeof editorPropsMock.current>) => {
     editorPropsMock.current = props;
-    return <div role="dialog" aria-label="编辑照片"><span>{props.name}</span>
-      <button onClick={props.onClose}>关闭编辑器</button></div>;
+    return (
+      <div role="dialog" aria-label="编辑照片">
+        <span>{props.name}</span>
+        <button onClick={props.onClose}>关闭编辑器</button>
+      </div>
+    );
   },
 }));
 
@@ -2438,8 +2447,10 @@ describe('SekerEaglePage', () => {
       expect(await opened.onSave(output)).toEqual({ id: 'edited-copy', name: 'edited.png' });
     });
     expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', output, expect.any(Function), {
-      duplicatePolicy: 'CREATE_COPY', copySourceAssetId: asset.id,
-      copySourceRowVersion: asset.rowVersion, retry: true,
+      duplicatePolicy: 'CREATE_COPY',
+      copySourceAssetId: asset.id,
+      copySourceRowVersion: asset.rowVersion,
+      retry: true,
     });
     expect(invalidate).toHaveBeenCalled();
   });
@@ -2450,7 +2461,8 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(inspector).getByRole('button', { name: '编辑照片' }));
     await screen.findByRole('dialog', { name: '编辑照片' });
     view.rerender(view.renderForOwner('different-owner'));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: '编辑照片' })).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: '编辑照片' })).not.toBeInTheDocument(),
+    );
   });
-
 });

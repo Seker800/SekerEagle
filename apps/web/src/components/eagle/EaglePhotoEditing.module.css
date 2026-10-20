@@ -1,0 +1,10 @@
+.loading {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-content: center;
+  gap: 16px;
+  color: #eeeff1;
+  background: #080808;
+}

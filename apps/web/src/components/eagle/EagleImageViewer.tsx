@@ -1,6 +1,6 @@
 import { t } from '../../i18n';
 import { IconRefresh } from '@tabler/icons-react';
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EaglePyramidDescriptor } from '../../lib/eagle-api';
 import type { PreviewImage } from '../media/image-preview/useImagePreviewState';
 import { createEaglePreviewTileSource, createEagleTileSource } from './eagle-media-sources';
@@ -8,10 +8,6 @@ import { EagleLivePhotoPlayback } from './EagleLivePhotoPlayback';
 import { EagleLocateAssetButton } from './EagleLocateAssetButton';
 import { EagleImageCopyButton } from './EagleImageCopyButton';
 import styles from './EagleImageViewer.module.css';
-import type { SavedPhoto } from '../media/photo-editor/photo-editor-save';
-const PhotoEditor = lazy(() =>
-  import('../media/photo-editor/PhotoEditor').then((module) => ({ default: module.PhotoEditor })),
-);
 type ViewerStatus = 'loading' | 'ready' | 'error';
 type ViewerSource = ReturnType<typeof createEaglePreviewTileSource | typeof createEagleTileSource>;
 type ViewerPoint = {
@@ -117,23 +113,16 @@ export function EagleImageViewer({
   descriptor,
   onLocate,
   onClose,
-  editSource,
+  onEdit,
   editLabel,
-  onSavePhoto,
 }: {
   image: PreviewImage;
   descriptor?: EaglePyramidDescriptor;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
-  editSource?: string;
+  onEdit?: () => void;
   editLabel?: string;
-  onSavePhoto?: (file: File) => Promise<SavedPhoto>;
 }) {
-  const [editing, setEditing] = useState<{
-    source: string;
-    name: string;
-    onSave: (file: File) => Promise<SavedPhoto>;
-  } | null>(null);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -362,13 +351,8 @@ export function EagleImageViewer({
             <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
           <EagleImageCopyButton sourceUrl={image.src} />
-          {editSource && onSavePhoto && (
-            <button
-              type="button"
-              onClick={() =>
-                setEditing({ source: editSource, name: image.alt, onSave: onSavePhoto })
-              }
-            >
+          {onEdit && (
+            <button type="button" onClick={onEdit}>
               {editLabel ?? t('编辑照片')}
             </button>
           )}
@@ -377,19 +361,6 @@ export function EagleImageViewer({
           </button>
         </footer>
       </section>
-      {editing && (
-        <Suspense fallback={<div role="status">{t('正在读取照片…')}</div>}>
-          <div onClick={(event) => event.stopPropagation()}>
-            <PhotoEditor
-              key={editing.source}
-              source={editing.source}
-              name={editing.name}
-              onSave={editing.onSave}
-              onClose={() => setEditing(null)}
-            />
-          </div>
-        </Suspense>
-      )}
     </div>
   );
 }

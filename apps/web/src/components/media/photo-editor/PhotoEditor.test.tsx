@@ -596,10 +596,24 @@ it('uses a fixed glass preset without blur or darkness controls', async () => {
 });
 
 it('uses managed photo metadata when the editable RAW rendition has no original EXIF', async () => {
-  render(<PhotoEditor source="/raw-edit.webp" name="DSC.RAF" onClose={vi.fn()} onSave={vi.fn()}
-    initialMetadata={{ camera: 'FUJIFILM X-E5', parameters: '35mm · f/2', capturedAt: '2026.10.20 12:30' }} />);
-  await waitFor(() => expect(composePhoto).toHaveBeenLastCalledWith(
-    expect.anything(), expect.anything(), expect.anything(),
-    { camera: 'FUJIFILM X-E5', parameters: '35mm · f/2', capturedAt: '2026.10.20 12:30' },
-  ));
+  render(
+    <PhotoEditor
+      source="/raw-edit.webp"
+      name="DSC.RAF"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      initialMetadata={{
+        camera: 'FUJIFILM X-E5',
+        parameters: '35mm · f/2',
+        capturedAt: '2026.10.20 12:30',
+      }}
+    />,
+  );
+  await waitFor(() =>
+    expect(vi.mocked(composePhoto).mock.lastCall?.[3]).toEqual({
+      camera: 'FUJIFILM X-E5',
+      parameters: '35mm · f/2',
+      capturedAt: '2026.10.20 12:30',
+    }),
+  );
 });

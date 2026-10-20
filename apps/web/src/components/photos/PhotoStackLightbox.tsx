@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
-import type { EaglePhotoStack } from '../../lib/eagle-api';
+import type { EaglePhotoStack, EagleAssetListItem } from '../../lib/eagle-api';
 import { updatePhotoGroup } from '../../lib/photo-management-api';
 import { EagleAssetLightbox } from '../eagle/EagleAssetLightbox';
 import { t } from '../../i18n';
@@ -10,10 +10,12 @@ export function PhotoStackLightbox({
   stack,
   onClose,
   onLocate,
+  onEdit,
 }: {
   stack: EaglePhotoStack;
   onClose: () => void;
   onLocate?: (assetId: string) => Promise<void>;
+  onEdit?: (asset: EagleAssetListItem) => void;
 }) {
   const { ownerId, api } = useLibraryWorkspace();
   const client = useQueryClient();
@@ -50,6 +52,7 @@ export function PhotoStackLightbox({
       loading={!displayed}
       onClose={onClose}
       onLocate={onLocate}
+      onEdit={onEdit}
       navigation={{
         index,
         count: stack.assetIds.length,

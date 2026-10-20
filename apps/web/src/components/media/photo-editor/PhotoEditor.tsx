@@ -47,9 +47,13 @@ export function PhotoEditor({
   name,
   onClose,
   onSave,
+  initialMetadata,
+  onOpenSaved,
 }: {
   source: string;
   name: string;
+  initialMetadata?: PhotoMetadata;
+  onOpenSaved?: (assetId: string) => Promise<void>;
   onClose: () => void;
   onSave: (file: File) => Promise<SavedPhoto>;
 }) {
@@ -67,6 +71,7 @@ export function PhotoEditor({
   const [rendering, setRendering] = useState(false);
   const [saved, setSaved] = useState(false);
   const [savedName, setSavedName] = useState('');
+  const [savedId, setSavedId] = useState('');
   const [renderedKey, setRenderedKey] = useState('');
   const [compare, setCompare] = useState(false);
   const [metadata, setMetadata] = useState<PhotoMetadata>({});
@@ -255,11 +260,16 @@ export function PhotoEditor({
 
   useEffect(() => {
     const controller = new AbortController();
-    setMetadata({});
+    setMetadata(initialMetadata ?? {});
     setMetadataLoading(true);
     void readPhotoMetadata(source, controller.signal)
       .then((value) => {
-        if (!controller.signal.aborted) setMetadata(value);
+        if (!controller.signal.aborted)
+          setMetadata({
+            camera: initialMetadata?.camera ?? value.camera,
+            parameters: initialMetadata?.parameters ?? value.parameters,
+            capturedAt: initialMetadata?.capturedAt ?? value.capturedAt,
+          });
       })
       .catch(() => {
         /* EXIF is optional; absent or unreadable metadata is never invented. */
@@ -268,7 +278,7 @@ export function PhotoEditor({
         if (!controller.signal.aborted) setMetadataLoading(false);
       });
     return () => controller.abort();
-  }, [source]);
+  }, [source, initialMetadata]);
 
   useEffect(() => {
     const input = previewRef.current;
@@ -344,6 +354,7 @@ export function PhotoEditor({
       const savedPhoto = await onSave(file);
       pendingSaveRef.current = null;
       setSavedName(savedPhoto.name);
+      setSavedId(savedPhoto.id);
       setSaved(true);
     } catch {
       setError(t('照片保存失败，请重试。'));
@@ -566,6 +577,24 @@ export function PhotoEditor({
       {saved && (
         <div className={styles.saveNotice} role="status">
           {t('已保存到相册')} · {savedName}
+          {onOpenSaved && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await onOpenSaved(savedId);
+                } catch {
+                  setError(t('定位失败，请重试'));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t('查看已保存照片')}
+            </button>
+          )}
         </div>
       )}
       <aside className={styles.panel} inert={confirmClose}>

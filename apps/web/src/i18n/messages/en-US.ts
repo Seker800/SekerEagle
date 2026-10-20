@@ -1075,6 +1075,8 @@ export const enUS = {
   保存到相册: 'Save to library',
   裁剪区域预览: 'Crop area preview',
   成片预览: 'Result preview',
+  查看已保存照片: 'View saved photo',
+  '定位失败，请重试': 'Could not locate the photo. Please retry.',
   已保存到相册: 'Saved to library',
   '保留原图，修改后的照片以“已编辑”后缀保存到相册。':
     'Keep the original. Save a new photo with an edited suffix.',
