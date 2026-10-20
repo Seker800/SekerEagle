@@ -201,7 +201,7 @@ test('unsafe originals download as attachments, safe video previews remain playa
     ['image/svg+xml', 'attachment'], ['text/html', 'attachment'],
     ['image/x-sony-arw', 'attachment'], ['application/octet-stream', 'attachment'],
     ['image/jpeg', 'inline'], ['video/mp4', 'inline'],
-  ]) {
+  ] as const) {
     const headers = new Map<string, string>();
     const response = { setHeader: (name: string, value: string) => headers.set(name, value), vary: () => undefined, once: () => undefined };
     const controller = new EagleController({} as never, {} as never, {
