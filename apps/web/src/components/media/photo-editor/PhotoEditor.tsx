@@ -76,6 +76,7 @@ export function PhotoEditor({
   const [copied, setCopied] = useState(false);
   const [draftStatus, setDraftStatus] = useState('');
   const draftQueue = useRef(Promise.resolve());
+  const pendingDraftWrites = useRef(0);
   const persistedDraftKey = useRef(JSON.stringify(edits));
   const currentDraftKey = useRef(JSON.stringify(edits));
   currentDraftKey.current = JSON.stringify(edits);
@@ -84,22 +85,25 @@ export function PhotoEditor({
   useEffect(() => {
     if (!onDraftChange) return;
     const key = JSON.stringify(edits);
-    if (key === persistedDraftKey.current) {
+    if (key === persistedDraftKey.current && pendingDraftWrites.current === 0) {
       setDraftStatus('');
       return;
     }
     setDraftStatus(t('正在自动保存…'));
     const timer = setTimeout(() => {
+      pendingDraftWrites.current++;
       setDraftStatus(t('正在自动保存…'));
       draftQueue.current = draftQueue.current
         .catch(() => undefined)
         .then(() => latestDraft.current?.({ version: 1, edits }))
         .then(
           () => {
+            pendingDraftWrites.current--;
             persistedDraftKey.current = key;
             if (currentDraftKey.current === key) setDraftStatus(t('已自动保存'));
           },
           () => {
+            pendingDraftWrites.current--;
             if (currentDraftKey.current === key) setDraftStatus(t('草稿保存失败，请重试。'));
           },
         );
