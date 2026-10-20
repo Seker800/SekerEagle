@@ -80,6 +80,10 @@ domain rules and narrow ports
 Prisma repositories / MinIO adapters
 ```
 
+## Abandoned library sends
+
+跨库复制计划先持久化再复制；超过 24 小时未完成的计划由全局维护任务分批锁定，标记为 ABANDONED 并事务写入现有对象删除 outbox。发布事务与清理使用同一计划行锁，过期操作不能再发布，必须重新发送。已完成计划永不参与此清理；原资源保持不变。过期计划保留为删除墓碑并每日重新排队，收敛可能迟于首次删除才返回的对象复制。
+
 ## Asset deletion boundary
 
 清空回收站只处理当前 owner、模式和私密可见范围。worker 在事务中锁定任务租约及资产，清空上传／采集的限制性引用，将原文件、派生文件和金字塔前缀写入独立删除 outbox 后删除资产行；提交后才允许消费者删除对象。outbox 不随资产级联删除，失败保留意图并带租约重试。禁止先删对象再尝试删除数据库资源。
@@ -128,3 +132,9 @@ MinIO root 仅用于初始化；API／worker 使用单 bucket 受限身份，buc
 ## Explicit cross-library sending
 
 共享发送服务从认证主体推导 owner、从路由推导源模式，目标只能为另一模式。原图在服务端独立复制；复制全部成功且源版本／权限仍有效时，在同一数据库事务发布目标资源与任务并将源项放入回收站。原模式移除成功前目标不可见。使用持久化操作计划与客户端幂等键，复制失败不移除任何源项，可重试同一操作；进程中断后的复制对象由计划追踪。实况照片连同唯一可访问的配对视频一起移动。私密标记保留，标签、人物和分组等模式关系不跨库。
+
+## Migration review safeguards
+
+PostgreSQL 列级 `ON DELETE SET NULL (pointer)` 是刻意保留的数据库契约：删除可选关联仅清空指针，不清空 ownerId 或 libraryMode。Prisma schema 不能完整表达该列清单，部分关系使用 NoAction 作为建模折衷；生成迁移中的相关外键差异必须人工保留上述语义，禁止直接应用全字段 SET NULL。隔离数据库测试检查这些约束真实的 confdelsetcols，历史升级和完整恢复测试同样执行该契约。
+
+双模式历史迁移要求停止写入后离线执行，不改写已执行迁移的 checksum。部署 Docker 命令有期限：普通命令 2 分钟、构建 30 分钟、迁移等待 10 分钟；迁移超时只停止本次迁移容器，保持业务写入停止。恢复时先查看 migrate 容器日志和 Prisma migration 状态，确认数据库一致后按 Prisma resolve 流程处理失败记录，再重新部署；不能盲目启动旧代码。新加入的废弃发送状态迁移在事务中设置 5 秒锁等待和 60 秒语句期限。

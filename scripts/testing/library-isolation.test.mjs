@@ -167,3 +167,23 @@ test('database rejects cross-library job dependencies', () =>
       /foreign key/i,
     );
   }));
+
+test('custom SET NULL foreign keys clear only optional pointers, preserving owner and mode', async () => {
+  const expected = {
+    EagleExternalAsset_ownerId_libraryMode_assetId_fkey: ['assetId'],
+    EagleImportRunItem_ownerId_libraryMode_assetId_fkey: ['assetId'],
+    EagleImportRunItem_activeUploadSession_fkey: ['activeUploadSessionId'],
+    EagleManualTagSemanticConfig_currentSnapshot_fkey: ['currentSnapshotId'],
+    EagleAssetManualTag_acceptedSuggestion_fkey: ['acceptedSuggestionId'],
+    EaglePhotoGroup_ownerId_libraryMode_bestAssetId_fkey: ['bestAssetId'],
+  };
+  const rows = await prisma.$queryRaw`
+    SELECT c.conname AS name, array_agg(a.attname::text ORDER BY u.ordinality) AS columns
+    FROM pg_constraint c
+    CROSS JOIN LATERAL unnest(c.confdelsetcols) WITH ORDINALITY AS u(attnum, ordinality)
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = u.attnum
+    WHERE c.conname = ANY(${Object.keys(expected)}::text[]) AND c.confdeltype = 'n'
+    GROUP BY c.conname
+  `;
+  assert.deepEqual(Object.fromEntries(rows.map((row) => [row.name, row.columns])), expected);
+});

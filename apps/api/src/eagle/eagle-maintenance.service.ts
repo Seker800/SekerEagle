@@ -1,5 +1,7 @@
 import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import type { EagleLibraryTransfer } from '@prisma/client';
+import { assertOwnedObjectKey } from '../storage/object-key';
 import { EagleImportsService } from './import/eagle-app-import.service';
 
 const MAINTENANCE_INTERVAL_MS = 10 * 60 * 1_000;
@@ -31,6 +33,7 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
     await this.imports.reconcileStaleUploadSessions();
     await this.imports.projectTerminalItemProgress(500);
     await this.imports.backfillTerminalProgress(500);
+    const transfersExpired = await this.expireLibraryTransfers(now);
     const completedBefore = new Date(now.getTime() - COMPLETED_JOB_RETENTION_MS);
     const completedJobsDeleted = await this.prisma.$executeRaw`
       WITH doomed AS (
@@ -50,7 +53,39 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
       keepPerLibrary: 10,
       limit: 100,
     });
-    return { completedJobsDeleted, importRunsDeleted };
+    return { completedJobsDeleted, importRunsDeleted, transfersExpired };
+  }
+
+  async expireLibraryTransfers(now = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    return this.prisma.$transaction(async (tx) => {
+      // Global infrastructure sweep: no asset read is authorized by this query.
+      const plans = await tx.$queryRaw<EagleLibraryTransfer[]>`
+        SELECT * FROM "EagleLibraryTransfer"
+        WHERE status IN ('PENDING', 'ABANDONED') AND "updatedAt" < ${cutoff}
+        ORDER BY "updatedAt", id LIMIT 100 FOR UPDATE SKIP LOCKED
+      `;
+      for (const plan of plans) {
+        const items = plan.plan as Array<{ targetKey: string; targetId: string }>;
+        if (!Array.isArray(items) || !items.length || items.length > 200)
+          throw new Error('Invalid transfer cleanup plan');
+        const objectKeys = items.map((item) => {
+          assertOwnedObjectKey(plan.ownerId, item.targetKey);
+          if (!item.targetKey.startsWith(`users/${plan.ownerId}/assets/${item.targetId}/`))
+            throw new Error('Invalid transfer cleanup key');
+          return item.targetKey;
+        });
+        await tx.eagleLibraryTransfer.update({
+          where: { id: plan.id, ownerId: plan.ownerId, sourceMode: plan.sourceMode },
+          data: { status: 'ABANDONED', updatedAt: now },
+        });
+        await tx.eagleObjectDeletion.create({
+          data: { ownerId: plan.ownerId, libraryMode: plan.targetMode, objectKeys, prefixes: [] },
+        });
+      }
+      // Keep tombstones and revisit them daily: a delayed object copy may finish after deletion.
+      return plans.length;
+    });
   }
 
   private async runScheduledMaintenance(): Promise<void> {
@@ -58,7 +93,7 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
     this.running = true;
     try {
       const result = await this.runMaintenance();
-      if (result.completedJobsDeleted || result.importRunsDeleted) {
+      if (result.completedJobsDeleted || result.importRunsDeleted || result.transfersExpired) {
         this.logger.log(JSON.stringify({ event: 'eagle_maintenance_pruned', ...result }));
       }
     } catch (error) {

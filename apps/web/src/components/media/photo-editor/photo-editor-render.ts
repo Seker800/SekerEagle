@@ -4,7 +4,7 @@ import { photoCrop, type PhotoEdits } from './photo-editor-model';
 import { renderPhotoWatermark } from './photo-editor-watermark';
 import type { PhotoMetadata } from './photo-watermark-model';
 
-export const MAX_PHOTO_PIXELS = 48_000_000;
+export { MAX_PHOTO_PIXELS } from './photo-editor-limits';
 export function sourceCanvas(image: HTMLImageElement, maxEdge?: number): HTMLCanvasElement {
   const scale = maxEdge
     ? Math.min(1, maxEdge / Math.max(image.naturalWidth, image.naturalHeight))

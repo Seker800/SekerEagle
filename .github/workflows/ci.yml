@@ -25,8 +25,6 @@ jobs:
         run: SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
       - name: Verify real database isolation, migrations and full restore
         run: npm run test:library-integration
-      - name: Verify HTTP login and dual-mode media pipeline
-        run: PHOTO_WORKBENCH_BASIC=1 npm run test:photo-smoke
       - name: Install camera media test runtime
         run: |
           sudo apt-get update
@@ -35,6 +33,8 @@ jobs:
           .omx/camera-media/venv/bin/pip install -r scripts/testing/camera-requirements.txt
       - name: Verify RAW decoding and camera video playback
         run: CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run smoke:camera-media
+      - name: Verify extended HTTP uploads, edited copies, camera formats, live photos and sends
+        run: PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_EDITED_COPY=1 PHOTO_WORKBENCH_CAMERA=1 PHOTO_WORKBENCH_LIVE=1 PHOTO_WORKBENCH_SEND=1 CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run test:photo-smoke
       - run: docker compose --env-file .env.example -f deploy/mac/docker-compose.yml config --quiet
       - name: Verify private backup files never enter Docker context
         run: SEKEREAGLE_TEST_DOCKER_CONTEXT=1 node --test scripts/backup-build-context.test.mjs

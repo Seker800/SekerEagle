@@ -1200,4 +1200,8 @@ export const enUS = {
   '已导入 {{value1}} 个 LUT，仅保存在此浏览器':
     'Imported {{value1}} LUTs, stored only in this browser',
   毛玻璃底: 'Frosted glass',
+  '水印后的图片超过编辑器尺寸限制，请裁剪图片或选择叠印水印。':
+    'The bordered image exceeds editor limits. Crop the photo or choose an overlay watermark.',
+  '原照片或保存条件已变化，请关闭后重新打开编辑器。':
+    'The original photo or save conditions changed. Close and reopen the editor.',
 } as const;

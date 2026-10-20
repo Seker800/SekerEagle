@@ -1,3 +1,4 @@
+import { withinPhotoOutputBudget } from './photo-editor-limits';
 import type { PhotoEdits } from './photo-editor-model';
 import { findWatermark, photoWatermarkLayout, type PhotoMetadata } from './photo-watermark-model';
 import { paintFrostedWatermarkBackground } from './photo-watermark-background';
@@ -13,7 +14,7 @@ export function renderPhotoWatermark(
   const template = findWatermark(edits.watermark);
   if (!template) return source;
   const layout = photoWatermarkLayout(source.width, source.height, template);
-  if (layout.width * layout.height > 48_000_000 || Math.max(layout.width, layout.height) > 16384)
+  if (!withinPhotoOutputBudget(layout.width, layout.height))
     throw new Error('WATERMARK_OUTPUT_TOO_LARGE');
   const canvas = createCanvas();
   canvas.width = layout.width;

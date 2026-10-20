@@ -70,6 +70,8 @@ export class EagleLibraryTransferService {
   private checkOperation(operation: EagleLibraryTransfer, ownerId: string, ids: string[]) {
     if (operation.ownerId !== ownerId || operation.sourceMode !== this.sourceMode)
       throw new NotFoundException('发送操作不存在。');
+    if (operation.status === 'ABANDONED')
+      throw new ConflictException('发送操作已过期，请重新发送。');
     if (JSON.stringify([...operation.sourceIds].sort()) !== JSON.stringify(ids))
       throw new BadRequestException('发送操作与所选图片不一致。');
   }
@@ -174,6 +176,10 @@ export class EagleLibraryTransferService {
       throw new ConflictException('图片已变化或不再可访问，请刷新后重新发送。');
     // The durable plan owns these keys before copying; retrying never creates additional copies.
     for (const item of items) {
+      const active = await this.prisma.eagleLibraryTransfer.findUniqueOrThrow({
+        where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
+      });
+      this.checkOperation(active, ownerId, ids);
       assertOwnedObjectKey(ownerId, item.sourceKey);
       assertOwnedObjectKey(ownerId, item.targetKey);
       await this.storage.copyObject(item.sourceKey, item.targetKey);
@@ -187,6 +193,7 @@ export class EagleLibraryTransferService {
         const currentOperation = await tx.eagleLibraryTransfer.findUniqueOrThrow({
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
         });
+        this.checkOperation(currentOperation, ownerId, ids);
         if (currentOperation.status === 'COMPLETED')
           return currentOperation.result as unknown as LibraryTransferResult;
         // Match tag mutation lock order before taking asset row locks.

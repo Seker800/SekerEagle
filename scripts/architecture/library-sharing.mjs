@@ -54,11 +54,11 @@ function walk(node, visit) {
   visit(node);
   ts.forEachChild(node, (child) => walk(child, visit));
 }
-function hasMode(node) {
+function hasMode(node, aliases = new Set()) {
   let found = false;
   walk(node, (child) => {
     if (
-      (ts.isIdentifier(child) && child.text === 'libraryMode') ||
+      (ts.isIdentifier(child) && (child.text === 'libraryMode' || aliases.has(child.text))) ||
       (ts.isStringLiteral(child) && ['PHOTO', 'MATERIAL'].includes(child.text))
     )
       found = true;
@@ -72,11 +72,63 @@ function isPresentationLabel(node) {
   }
   return false;
 }
+const modeAliases = new WeakMap();
+function aliasesFor(node) {
+  const tree = node.getSourceFile();
+  if (modeAliases.has(tree)) return modeAliases.get(tree);
+  const aliases = new Set(['libraryMode']);
+  const declarations = [];
+  walk(tree, (child) => {
+    if (
+      ts.isVariableDeclaration(child) &&
+      ts.isIdentifier(child.name) &&
+      child.initializer &&
+      ts.isVariableDeclarationList(child.parent) &&
+      child.parent.flags & ts.NodeFlags.Const
+    )
+      declarations.push(child);
+  });
+  const pureMode = (expression) => {
+    if (ts.isParenthesizedExpression(expression) || ts.isAsExpression(expression))
+      return pureMode(expression.expression);
+    if (ts.isIdentifier(expression)) return aliases.has(expression.text);
+    if (ts.isStringLiteral(expression)) return ['PHOTO', 'MATERIAL'].includes(expression.text);
+    if (ts.isPrefixUnaryExpression(expression))
+      return expression.operator === ts.SyntaxKind.ExclamationToken && pureMode(expression.operand);
+    if (ts.isBinaryExpression(expression))
+      return (
+        [
+          ts.SyntaxKind.EqualsEqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsEqualsToken,
+          ts.SyntaxKind.EqualsEqualsToken,
+          ts.SyntaxKind.ExclamationEqualsToken,
+          ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken,
+        ].includes(expression.operatorToken.kind) &&
+        pureMode(expression.left) &&
+        pureMode(expression.right)
+      );
+    return false;
+  };
+  let changed;
+  do {
+    changed = false;
+    for (const declaration of declarations) {
+      if (!aliases.has(declaration.name.text) && pureMode(declaration.initializer)) {
+        aliases.add(declaration.name.text);
+        changed = true;
+      }
+    }
+  } while (changed);
+  modeAliases.set(tree, aliases);
+  return aliases;
+}
 function modeGuarded(node) {
+  const aliases = aliasesFor(node);
   for (let parent = node.parent; parent; parent = parent.parent) {
     if (
       (ts.isIfStatement(parent) || ts.isConditionalExpression(parent)) &&
-      hasMode(parent.expression ?? parent.condition)
+      hasMode(parent.expression ?? parent.condition, aliases)
     )
       return true;
     if (
@@ -84,10 +136,10 @@ function modeGuarded(node) {
       [ts.SyntaxKind.AmpersandAmpersandToken, ts.SyntaxKind.BarBarToken].includes(
         parent.operatorToken.kind,
       ) &&
-      hasMode(parent.left)
+      hasMode(parent.left, aliases)
     )
       return true;
-    if (ts.isSwitchStatement(parent) && hasMode(parent.expression)) return true;
+    if (ts.isSwitchStatement(parent) && hasMode(parent.expression, aliases)) return true;
   }
   return false;
 }
@@ -232,6 +284,25 @@ export function checkLibrarySharing(sources) {
     });
     if (cards !== 1)
       report(page, 'shared-card', 'Keep one shared card composition for both libraries.');
+  }
+  for (const [file, tree] of trees) {
+    if (!file.startsWith('apps/api/src/photos/') || file === photoModule) continue;
+    walk(tree, (node) => {
+      if (!ts.isClassDeclaration(node)) return;
+      const parent = node.heritageClauses?.find(
+        (clause) => clause.token === ts.SyntaxKind.ExtendsKeyword,
+      );
+      if (
+        parent?.types.some((type) =>
+          Object.values(controllers).includes(type.expression.getText(tree)),
+        )
+      )
+        report(
+          file,
+          'inherited-controllers',
+          'Shared controller subclasses must stay in the reviewed photo module.',
+        );
+    });
   }
   const photoTree = trees.get(photoModule);
   if (photoTree) {

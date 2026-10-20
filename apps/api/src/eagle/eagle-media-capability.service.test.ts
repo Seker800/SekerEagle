@@ -11,10 +11,79 @@ test('publishes frozen camera capabilities with separate image and video budgets
   const capabilities = service.getCapabilities();
   assert.equal(capabilities.version, 1);
   assert.ok(Object.isFrozen(capabilities));
-  for (const extension of ['.jpg', '.tiff', '.dng', '.nef', '.cr3'])
-    assert.ok(capabilities.images.extensions.includes(extension));
-  for (const extension of ['.mp4', '.mov', '.mts', '.mxf'])
-    assert.ok(capabilities.videos.extensions.includes(extension));
+  assert.deepEqual(capabilities.images.extensions, [
+    '.jpg',
+    '.jpeg',
+    '.png',
+    '.webp',
+    '.gif',
+    '.avif',
+    '.heic',
+    '.heif',
+    '.tif',
+    '.tiff',
+    '.dng',
+    '.cr2',
+    '.cr3',
+    '.crw',
+    '.nef',
+    '.nrw',
+    '.arw',
+    '.sr2',
+    '.raf',
+    '.orf',
+    '.rw2',
+    '.rwl',
+    '.pef',
+    '.srw',
+    '.kdc',
+    '.raw',
+  ]);
+  assert.deepEqual(capabilities.videos.extensions, [
+    '.mp4',
+    '.m4v',
+    '.mov',
+    '.mts',
+    '.m2ts',
+    '.avi',
+    '.mxf',
+    '.mpg',
+    '.mpeg',
+  ]);
+  assert.deepEqual(capabilities.images.mimeTypes, [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/gif',
+    'image/avif',
+    'image/heic',
+    'image/heif',
+    'image/tiff',
+    'image/x-adobe-dng',
+    'image/x-canon-cr2',
+    'image/x-canon-cr3',
+    'image/x-canon-crw',
+    'image/x-nikon-nef',
+    'image/x-nikon-nrw',
+    'image/x-sony-arw',
+    'image/x-sony-sr2',
+    'image/x-fuji-raf',
+    'image/x-olympus-orf',
+    'image/x-panasonic-rw2',
+    'image/x-leica-rwl',
+    'image/x-pentax-pef',
+    'image/x-samsung-srw',
+    'image/x-kodak-kdc',
+    'image/x-raw',
+  ]);
+  assert.deepEqual(capabilities.videos.mimeTypes, [
+    'video/mp4',
+    'video/quicktime',
+    'video/mp2t',
+    'video/x-msvideo',
+    'application/mxf',
+    'video/mpeg',
+  ]);
   assert.equal(capabilities.images.maxBytes, 250 * 1024 * 1024);
   assert.equal(capabilities.videos.maxBytes, 2 * 1024 * 1024 * 1024);
   assert.equal(capabilities.images.maxPixels, MAX_EAGLE_IMAGE_INPUT_PIXELS);

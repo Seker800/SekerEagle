@@ -25,5 +25,8 @@ test('library integration builds media-core before API and worker on a clean che
   const manifest = await readManifest('package.json');
   const command = manifest.scripts['test:library-integration'];
   assert.ok(command.includes('--workspace @sekereagle/media-core'));
-  assert.ok(command.indexOf('--workspace @sekereagle/media-core') < command.indexOf('--workspace @sekereagle/api'));
+  assert.ok(
+    command.indexOf('--workspace @sekereagle/media-core') <
+      command.indexOf('--workspace @sekereagle/api'),
+  );
 });

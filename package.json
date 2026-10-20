@@ -48,7 +48,7 @@
     "mlx:test": "./scripts/mlx-embedding-host.sh test",
     "oss:check": "node ./scripts/check-oss-readiness.mjs",
     "ci:check": "npm run architecture:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check",
-    "test:library-integration": "npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && node scripts/testing/run-library-tests.mjs",
+    "test:library-integration": "npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api && npm run build --workspace @sekereagle/worker && node scripts/testing/run-library-tests.mjs",
     "test:photo-smoke": "npm run db:generate && npm run build && node scripts/testing/photo-workbench.mjs",
     "test:photo-workbench": "npm run db:generate && npm run build && node scripts/testing/photo-workbench.mjs --serve",
     "architecture:check": "node scripts/architecture/check-library-sharing.mjs",

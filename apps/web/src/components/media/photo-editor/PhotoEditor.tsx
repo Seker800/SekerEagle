@@ -1,3 +1,5 @@
+import { ApiError } from '../../../lib/api-error';
+import { withinPhotoOutputBudget } from './photo-editor-limits';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IconAdjustments,
@@ -67,6 +69,7 @@ export function PhotoEditor({
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [error, setError] = useState('');
+  const [sourceConflict, setSourceConflict] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rendering, setRendering] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -326,8 +329,21 @@ export function PhotoEditor({
     };
   }, [loaded, edits, compare, tab, metadata]);
 
+  const fullCrop = loaded ? photoCrop(loaded.naturalWidth, loaded.naturalHeight, edits) : null;
+  const fullTemplate = findWatermark(edits.watermark);
+  const fullOutput =
+    fullCrop && fullTemplate
+      ? photoWatermarkLayout(fullCrop.width, fullCrop.height, fullTemplate)
+      : fullCrop;
+  const outputTooLarge =
+    !!fullOutput && !withinPhotoOutputBudget(fullOutput.width, fullOutput.height);
+  const outputWarning = outputTooLarge
+    ? t('水印后的图片超过编辑器尺寸限制，请裁剪图片或选择叠印水印。')
+    : '';
   async function savePhoto() {
     if (
+      sourceConflict ||
+      outputTooLarge ||
       !loaded ||
       !rendererRef.current ||
       busy ||
@@ -360,8 +376,13 @@ export function PhotoEditor({
       setSavedName(savedPhoto.name);
       setSavedId(savedPhoto.id);
       setSaved(true);
-    } catch {
-      setError(t('照片保存失败，请重试。'));
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 409) {
+        setSourceConflict(true);
+        setError(t('原照片或保存条件已变化，请关闭后重新打开编辑器。'));
+      } else {
+        setError(cause instanceof ApiError ? cause.message : t('照片保存失败，请重试。'));
+      }
     } finally {
       setBusy(false);
     }
@@ -494,6 +515,8 @@ export function PhotoEditor({
           className={styles.exportButton}
           disabled={
             !loaded ||
+            sourceConflict ||
+            (tab !== 'crop' && outputTooLarge) ||
             busy ||
             rendering ||
             compare ||
@@ -571,16 +594,23 @@ export function PhotoEditor({
           </div>
           {!loaded && !error && <p role="status">{t('正在读取照片…')}</p>}
         </div>
-        {error && (
+        {outputWarning && (
           <div className={styles.error} role="alert">
-            {error}
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => setLoadAttempt((value) => value + 1)}
-            >
-              {t('重新加载')}
-            </button>
+            {outputWarning}
+          </div>
+        )}
+        {(sourceConflict || error) && (
+          <div className={styles.error} role="alert">
+            {sourceConflict ? t('原照片或保存条件已变化，请关闭后重新打开编辑器。') : error}
+            {!sourceConflict && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setLoadAttempt((value) => value + 1)}
+              >
+                {t('重新加载')}
+              </button>
+            )}
           </div>
         )}
         <div className={styles.stageBottom}>

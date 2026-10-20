@@ -1109,6 +1109,7 @@ export function SekerEaglePage({
   };
   return (
     <main
+      inert={photoEditing.session !== null}
       className={styles.page}
       onDragEnter={handleDragEnter}
       onDragOver={(event) => {

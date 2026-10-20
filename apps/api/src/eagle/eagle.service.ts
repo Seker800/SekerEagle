@@ -936,7 +936,7 @@ export class EagleService {
 
   async listManualTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleManualTag.findMany({
-      where: { ownerId, libraryMode: this.libraryMode },
+      where: { ownerId, libraryMode: this.libraryMode, ...visibleManualTagWhere(includePrivate) },
       orderBy: [{ isStarred: 'desc' }, { normalizedName: 'asc' }],
       select: {
         id: true,
@@ -1110,11 +1110,26 @@ export class EagleService {
     }
   }
 
-  async listManualTagGroups(ownerId: string) {
+  async listManualTagGroups(ownerId: string, includePrivate = false) {
     const groups = await this.prisma.eagleManualTagGroup.findMany({
-      where: { ownerId, libraryMode: this.libraryMode },
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        ...(includePrivate
+          ? {}
+          : {
+              OR: [
+                { tagMemberships: { none: {} } },
+                { tagMemberships: { some: { tag: visibleManualTagWhere(false) } } },
+              ],
+            }),
+      },
       orderBy: { normalizedName: 'asc' },
-      include: { _count: { select: { tagMemberships: true } } },
+      include: {
+        _count: {
+          select: { tagMemberships: { where: { tag: visibleManualTagWhere(includePrivate) } } },
+        },
+      },
     });
     return groups.map(({ _count, ...group }) => ({ ...group, tagCount: _count.tagMemberships }));
   }
@@ -1198,7 +1213,22 @@ export class EagleService {
 
   async listAiTags(ownerId: string, includePrivate = false) {
     const tags = await this.prisma.eagleAiTag.findMany({
-      where: { ownerId, libraryMode: this.libraryMode },
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        ...(includePrivate
+          ? {}
+          : {
+              OR: [
+                { assetLinks: { none: {} } },
+                {
+                  assetLinks: {
+                    some: { status: 'ACTIVE', asset: { deletedAt: null, isPrivate: false } },
+                  },
+                },
+              ],
+            }),
+      },
       orderBy: { normalizedName: 'asc' },
       include: {
         _count: {
@@ -2073,4 +2103,15 @@ function isUniqueError(error: unknown): boolean {
 
 function isForeignKeyError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003';
+}
+
+function visibleManualTagWhere(includePrivate: boolean): Prisma.EagleManualTagWhereInput {
+  return includePrivate
+    ? {}
+    : {
+        OR: [
+          { marksAssetsPrivate: false, assetLinks: { none: {} } },
+          { assetLinks: { some: { asset: { deletedAt: null, isPrivate: false } } } },
+        ],
+      };
 }

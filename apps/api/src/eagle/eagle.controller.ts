@@ -446,7 +446,7 @@ export class EagleController {
 
   @Get(['tag-groups', 'manual-tag-groups'])
   listTagGroups(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.eagle.listManualTagGroups(principal.sub);
+    return this.eagle.listManualTagGroups(principal.sub, principal.canViewPrivate);
   }
 
   @Post(['tag-groups', 'manual-tag-groups'])

@@ -660,7 +660,9 @@ it('dismisses the discard confirmation with Escape without closing the editor', 
 
 it('explains a stale source conflict and blocks retries against the same frozen version', async () => {
   const { ApiError } = await import('../../../lib/api-error');
-  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(callback => callback(new Blob(['png'])));
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+    callback(new Blob(['png'])),
+  );
   const save = vi.fn().mockRejectedValue(new ApiError('stale source', 409, null));
   render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={save} />);
   const button = screen.getByRole('button', { name: '保存到相册' });
@@ -671,11 +673,17 @@ it('explains a stale source conflict and blocks retries against the same frozen 
 });
 
 it('rejects an oversized bordered output before allocating a full-resolution canvas', async () => {
-  vi.stubGlobal('Image', class {
-    naturalWidth = 7728; naturalHeight = 5152;
-    onload: (() => void) | null = null;
-    set src(_value: string) { queueMicrotask(() => this.onload?.()); }
-  });
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 7728;
+      naturalHeight = 5152;
+      onload: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
   render(<PhotoEditor source="/large.png" name="large.png" onClose={vi.fn()} onSave={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole('button', { name: '保存到相册' })).toBeEnabled());
   fireEvent.click(screen.getByRole('button', { name: '水印' }));

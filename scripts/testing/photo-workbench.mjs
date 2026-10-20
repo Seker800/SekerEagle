@@ -521,36 +521,28 @@ try {
       );
     }
     assert.ok(!process.argv.includes('--serve'), 'basic smoke is an automated check only');
-    assert.ok(
-      !['PHOTO_WORKBENCH_CAMERA', 'PHOTO_WORKBENCH_LIVE', 'PHOTO_WORKBENCH_SEND'].some(
-        (flag) => process.env[flag] === '1',
-      ),
-      'basic smoke cannot silently skip requested extended checks',
-    );
-    console.log(
-      'Photo basic smoke passed: HTTP session, origin denial, uploads, previews, metadata and mode isolation.',
-    );
-    await cleanup();
-    process.exit(0);
   }
-  const faceScan = await api('/photos/photography/people/scan', {});
-  assert.ok(faceScan.queued >= 4);
-  await waitFor(
-    async () =>
-      (await db.eagleAssetProcessingJob.count({
-        where: { ownerId: owner.id, kind: 'ANALYZE_PHOTO_FACES', status: 'COMPLETED' },
-      })) === 4,
-    'local face inference',
-    240,
-  );
-  const people = await api('/photos/photography/people');
-  assert.ok(people.people.length >= 1);
-  const automaticGroups = await api('/photos/photography/groups');
-  assert.equal(automaticGroups.length, 1, 'worker automatically stacks matching photographs');
-  const groupScan = await api('/photos/photography/groups/scan', {});
-  assert.equal(groupScan.created, 0, 'batch scan preserves the existing automatic stack');
-  const groups = await api('/photos/photography/groups');
-  assert.equal(groups[0].bestAssetId, a.assetId);
+  let people, groups;
+  if (!basic) {
+    const faceScan = await api('/photos/photography/people/scan', {});
+    assert.ok(faceScan.queued >= 4);
+    await waitFor(
+      async () =>
+        (await db.eagleAssetProcessingJob.count({
+          where: { ownerId: owner.id, kind: 'ANALYZE_PHOTO_FACES', status: 'COMPLETED' },
+        })) === 4,
+      'local face inference',
+      240,
+    );
+    people = await api('/photos/photography/people');
+    assert.ok(people.people.length >= 1);
+    const automaticGroups = await api('/photos/photography/groups');
+    assert.equal(automaticGroups.length, 1, 'worker automatically stacks matching photographs');
+    const groupScan = await api('/photos/photography/groups/scan', {});
+    assert.equal(groupScan.created, 0, 'batch scan preserves the existing automatic stack');
+    groups = await api('/photos/photography/groups');
+    assert.equal(groups[0].bestAssetId, a.assetId);
+  }
   const cameraCases = [];
   if (process.env.PHOTO_WORKBENCH_CAMERA === '1') {
     const fixtures = await createCameraFixtures(join(root, '.omx/test-camera/workbench'));
@@ -568,8 +560,13 @@ try {
     }
     await waitFor(
       async () =>
-        (await db.eagleAsset.count({ where: { ownerId: owner.id, lifecycleStatus: 'READY' } })) ===
-        7 + cameraCases.length,
+        (await db.eagleAsset.count({
+          where: {
+            ownerId: owner.id,
+            id: { in: cameraCases.map((row) => row.assetId) },
+            lifecycleStatus: 'READY',
+          },
+        })) === cameraCases.length,
       'camera RAW and video previews',
       480,
     );
@@ -870,6 +867,13 @@ try {
       reverse.assets.find((row) => row.sourceId !== targetId).assetId,
     );
     sendCases.push(reverse);
+  }
+  if (basic) {
+    console.log(
+      'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',
+    );
+    await cleanup();
+    process.exit(0);
   }
   // Synthetic historical import dates make the full-library date rail visible in acceptance.
   // Files without EXIF retain the production fallback: chronologicalAt equals libraryAddedAt.

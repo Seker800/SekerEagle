@@ -1948,29 +1948,181 @@ test('locked privacy hides private-only tag and group names while keeping unused
 });
 
 test('abandoned transfer plans expire without deleting completed targets and remain fenced on retry', async () => {
-  const { EagleMaintenanceService } = await import('../../apps/api/dist/eagle/eagle-maintenance.service.js');
-  const { EagleLibraryTransferService } = await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const { EagleMaintenanceService } =
+    await import('../../apps/api/dist/eagle/eagle-maintenance.service.js');
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
   const f = await fixtures();
   const targetId = randomUUID();
   const targetKey = `users/${f.ownerId}/assets/${targetId}/original.jpg`;
-  const op = await prisma.eagleLibraryTransfer.create({ data: {
-    ownerId: f.ownerId, sourceMode: 'MATERIAL', targetMode: 'PHOTO', sourceIds: [f.material.id],
-    plan: [{ sourceId: f.material.id, targetId, revision: 1, rowVersion: 1, sourceKey: f.material.originalObjectKey, targetKey, size: '1' }],
-    updatedAt: new Date('2020-01-01'),
-  } });
+  const op = await prisma.eagleLibraryTransfer.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      sourceMode: 'MATERIAL',
+      targetMode: 'PHOTO',
+      sourceIds: [f.material.id],
+      plan: [
+        {
+          sourceId: f.material.id,
+          targetId,
+          revision: 1,
+          rowVersion: 1,
+          sourceKey: f.material.originalObjectKey,
+          targetKey,
+          size: '1',
+        },
+      ],
+      updatedAt: new Date('2020-01-01'),
+    },
+  });
+  const completed = await prisma.eagleLibraryTransfer.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      sourceMode: 'MATERIAL',
+      targetMode: 'PHOTO',
+      sourceIds: [f.material.id],
+      status: 'COMPLETED',
+      result: {},
+      plan: [{ targetId: f.photo.id, targetKey: f.photo.originalObjectKey }],
+      updatedAt: new Date('2020-01-01'),
+    },
+  });
   const maintenance = new EagleMaintenanceService(prisma, {});
   await maintenance.expireLibraryTransfers(new Date());
   const expired = await prisma.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: op.id } });
   assert.equal(expired.status, 'ABANDONED');
-  const deletion = await prisma.eagleObjectDeletion.findFirstOrThrow({ where: { ownerId: f.ownerId } });
+  const deletion = await prisma.eagleObjectDeletion.findFirstOrThrow({
+    where: { ownerId: f.ownerId },
+  });
   assert.deepEqual(deletion.objectKeys, [targetKey]);
   let copies = 0;
-  const sender = new EagleLibraryTransferService(prisma, { copyObject: async () => copies++ }, 'MATERIAL');
-  await assert.rejects(() => sender.send(f.ownerId, { operationId: op.id, assetIds: [f.material.id] }, false), /过期/);
+  const sender = new EagleLibraryTransferService(
+    prisma,
+    { copyObject: async () => copies++ },
+    'MATERIAL',
+  );
+  await assert.rejects(
+    () => sender.send(f.ownerId, { operationId: op.id, assetIds: [f.material.id] }, false),
+    /过期/,
+  );
   assert.equal(copies, 0);
-  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt, null);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt,
+    null,
+  );
   // An arbitrarily delayed S3 copy can finish after the first cleanup: retain its tombstone and retry deletion.
-  await prisma.eagleLibraryTransfer.update({ where: { id: op.id }, data: { updatedAt: new Date('2020-01-01') } });
+  await prisma.eagleLibraryTransfer.update({
+    where: { id: op.id },
+    data: { updatedAt: new Date('2020-01-01') },
+  });
   await maintenance.expireLibraryTransfers(new Date());
   assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }), 2);
+  assert.equal(
+    (await prisma.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: completed.id } })).status,
+    'COMPLETED',
+  );
+  assert.equal(
+    await prisma.eagleObjectDeletion.count({
+      where: { ownerId: f.ownerId, objectKeys: { has: f.photo.originalObjectKey } },
+    }),
+    0,
+  );
+});
+
+test('replaying an old refresh token commits family revocation and rejects its new access JWT', async () => {
+  const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
+  const { JwtService } = await import('@nestjs/jwt');
+  const f = await fixtures();
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: f.ownerId } });
+  const service = new SessionTokenService(
+    prisma,
+    new JwtService({ secret: 'isolated-replay-test-secret', signOptions: { expiresIn: 600 } }),
+    { getOrThrow: () => 600 },
+  );
+  const first = await service.createSession(user);
+  const otherDevice = await service.createSession(user);
+  const rotated = await service.refreshSession(first.refreshToken);
+  await assert.rejects(() => service.refreshSession(first.refreshToken));
+  await assert.rejects(() => service.verifyAccessToken(rotated.accessToken));
+  await assert.rejects(() => service.refreshSession(rotated.refreshToken));
+  assert.equal((await service.verifyAccessToken(otherDevice.accessToken)).sub, f.ownerId);
+});
+
+test('private sends in both directions do not privatize colliding public tags and survive unrelated tag deletion', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const { EaglePrivacyService } =
+    await import('../../apps/api/dist/eagle/eagle-privacy.service.js');
+  for (const mode of ['MATERIAL', 'PHOTO']) {
+    const f = await fixtures();
+    const source = mode === 'PHOTO' ? f.photo : f.material;
+    const destinationAsset = mode === 'PHOTO' ? f.material : f.photo;
+    const destination = mode === 'PHOTO' ? f.materials : f.photos;
+    const targetMode = mode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
+    const collision = await destination.createManualTag(f.ownerId, { name: '跨库私密' });
+    await destination.replaceAssetTags(f.ownerId, destinationAsset.id, [collision.id]);
+    const unrelated = await destination.createManualTag(f.ownerId, { name: 'unrelated' });
+    await prisma.eagleAsset.update({ where: { id: source.id }, data: { isPrivate: true } });
+    const sender = new EagleLibraryTransferService(
+      prisma,
+      { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) },
+      mode,
+    );
+    const result = await sender.send(
+      f.ownerId,
+      { operationId: randomUUID(), assetIds: [source.id] },
+      true,
+    );
+    const id = result.assets[0].assetId;
+    const privacy = new EaglePrivacyService(prisma, targetMode);
+    await privacy.updateSettings(f.ownerId, await privacy.getSettings(f.ownerId));
+    await destination.deleteManualTag(f.ownerId, unrelated.id);
+    assert.equal((await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).isPrivate, true);
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: destinationAsset.id } })).isPrivate,
+      false,
+    );
+    assert.equal(
+      (await prisma.eagleManualTag.findUniqueOrThrow({ where: { id: collision.id } }))
+        .marksAssetsPrivate,
+      false,
+    );
+  }
+});
+
+test('expiry racing an object copy fences publication and keeps the original visible', async () => {
+  const { EagleMaintenanceService } =
+    await import('../../apps/api/dist/eagle/eagle-maintenance.service.js');
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  const operationId = randomUUID();
+  const sender = new EagleLibraryTransferService(
+    prisma,
+    {
+      copyObject: async () => {
+        await prisma.eagleLibraryTransfer.update({
+          where: { id: operationId },
+          data: { updatedAt: new Date('2020-01-01') },
+        });
+        await new EagleMaintenanceService(prisma, {}).expireLibraryTransfers(new Date());
+      },
+      headObject: async () => ({ ContentLength: 1 }),
+    },
+    'MATERIAL',
+  );
+  await assert.rejects(
+    () => sender.send(f.ownerId, { operationId, assetIds: [f.material.id] }, false),
+    /过期/,
+  );
+  const operation = await prisma.eagleLibraryTransfer.findUniqueOrThrow({
+    where: { id: operationId },
+  });
+  assert.equal(await prisma.eagleAsset.count({ where: { id: operation.plan[0].targetId } }), 0);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt,
+    null,
+  );
 });

@@ -47,7 +47,8 @@ export async function readPhotoMetadata(
   source: string,
   signal: AbortSignal,
 ): Promise<PhotoMetadata> {
-  const response = await fetch(source, { signal, credentials: 'same-origin' });
+  const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
+  const response = await fetch(source, { signal: boundedSignal, credentials: 'same-origin' });
   if (!response.ok) return {};
   const data: unknown = await parse(await response.blob(), {
     pick: TAGS,
