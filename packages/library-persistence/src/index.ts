@@ -41,15 +41,18 @@ export async function syncAssetPrivacy(
               AND f."assetId" = a.id AND f."assetRevision" = a."mediaRevision"
               AND f."isCurrent" AND p."marksAssetsPrivate")) AS private
         FROM "EagleAsset" a WHERE a."ownerId" = ${ownerId} AND a."libraryMode" = 'PHOTO' ${scope}
-      ), projection AS (
-        SELECT r.id, (r.private OR EXISTS (SELECT 1 FROM reasons pair
-          WHERE r."livePhotoIdentifier" IS NOT NULL AND pair."livePhotoIdentifier" = r."livePhotoIdentifier"
-            AND r."livePhotoRole" IN ('STILL','MOTION') AND pair."livePhotoRole" IN ('STILL','MOTION')
-            AND pair.private)) AS private FROM reasons r
+      ), private_assets AS MATERIALIZED (
+        SELECT r.id FROM reasons r WHERE r.private OR (
+          r."livePhotoRole" IN ('STILL','MOTION') AND r."livePhotoIdentifier" IN (
+            SELECT pair."livePhotoIdentifier" FROM reasons pair
+            WHERE pair.private AND pair."livePhotoIdentifier" IS NOT NULL AND pair."livePhotoRole" IN ('STILL','MOTION')
+          )
+        )
       )
-      UPDATE "EagleAsset" a SET "isPrivate" = p.private, "rowVersion" = a."rowVersion" + 1, "updatedAt" = NOW()
-      FROM projection p WHERE a.id = p.id AND a."ownerId" = ${ownerId}
-        AND a."libraryMode" = 'PHOTO' AND a."isPrivate" IS DISTINCT FROM p.private
+      UPDATE "EagleAsset" a SET "isPrivate" = (a.id IN (SELECT id FROM private_assets)),
+        "rowVersion" = a."rowVersion" + 1, "updatedAt" = NOW()
+      WHERE a."ownerId" = ${ownerId} AND a."libraryMode" = 'PHOTO' ${scope}
+        AND a."isPrivate" IS DISTINCT FROM (a.id IN (SELECT id FROM private_assets))
     `);
   }
   const assetScope = assetIds ? { id: { in: assetIds } } : {};
@@ -92,4 +95,49 @@ export async function inheritedPrivacyTag(
     if (tag.marksAssetsPrivate) return tag.id;
   }
   throw new Error('无法创建继承私密标签，请调整同名标签后重试。');
+}
+
+interface ReplacementPrivacyAsset {
+  id: string;
+  isPrivate: boolean;
+  livePhotoIdentifier: string | null;
+  livePhotoRole: string | null;
+  manualTagLinks: Array<{ tag: { marksAssetsPrivate: boolean } }>;
+}
+/** Caller holds privacy, then asset locks. Preserve the old pair before breaking its identity. */
+export async function preserveReplacementPrivacy(
+  transaction: Prisma.TransactionClient,
+  ownerId: string,
+  libraryMode: LibraryMode,
+  current: ReplacementPrivacyAsset,
+): Promise<string[]> {
+  if (!current.isPrivate) return [];
+  const targets =
+    libraryMode === 'PHOTO' &&
+    current.livePhotoIdentifier &&
+    ['STILL', 'MOTION'].includes(current.livePhotoRole ?? '')
+      ? await transaction.eagleAsset.findMany({
+          where: {
+            ownerId,
+            libraryMode,
+            livePhotoIdentifier: current.livePhotoIdentifier,
+            livePhotoRole: { in: ['STILL', 'MOTION'] },
+          },
+          select: {
+            id: true,
+            manualTagLinks: { select: { tag: { select: { marksAssetsPrivate: true } } } },
+          },
+        })
+      : [current];
+  const missing = targets.filter(
+    (asset) => !asset.manualTagLinks.some((link) => link.tag.marksAssetsPrivate),
+  );
+  if (missing.length) {
+    const tagId = await inheritedPrivacyTag(transaction, ownerId, libraryMode);
+    await transaction.eagleAssetManualTag.createMany({
+      data: missing.map(({ id: assetId }) => ({ ownerId, libraryMode, assetId, tagId })),
+      skipDuplicates: true,
+    });
+  }
+  return targets.map(({ id }) => id);
 }

@@ -253,11 +253,18 @@ try {
         `SELECT '${table}', count(*), COALESCE(md5(string_agg(row_to_json(t)::text, '' ORDER BY row_to_json(t)::text)),'empty') FROM "${table}" t`,
     )
     .join(' UNION ALL ');
-  if (
-    run('docker', [...sqlArgs(name), digestSql]) !==
-    run('docker', [...sqlArgs(restoreName), digestSql])
-  )
-    throw new Error('Restored business data does not match the source test database');
+  const sourceRows = run('docker', [...sqlArgs(name), digestSql]).split('\n');
+  const restoredRows = run('docker', [...sqlArgs(restoreName), digestSql]).split('\n');
+  // UNION ALL may use parallel append after a large fixture changes the planner estimates.
+  // Compare each named table's digest; result arrival order is not part of database contents.
+  if (JSON.stringify([...sourceRows].sort()) !== JSON.stringify([...restoredRows].sort())) {
+    const mismatchedTables = sourceRows
+      .filter((row) => !restoredRows.includes(row))
+      .map((row) => row.split('|')[0]);
+    throw new Error(`Restored business data differs in tables: ${mismatchedTables.join(', ')}`);
+  }
+  if (JSON.stringify(sourceRows) !== JSON.stringify(restoredRows))
+    process.stdout.write('Restore table digests match; parallel result order was normalized.\n');
   if (process.argv.includes('--scale'))
     run(process.execPath, ['scripts/testing/photo-library-scale.mjs'], {
       env: restoreEnv,

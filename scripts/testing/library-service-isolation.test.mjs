@@ -1280,7 +1280,7 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   const privacy = new EaglePrivacyService(prisma, 'PHOTO');
   const settings = await privacy.getSettings(f.ownerId);
   assert.ok(settings.tagIds.includes(target.manualTagLinks[0].tagId));
-  await privacy.updateSettings(f.ownerId, settings);
+  await privacy.updateSettings(f.ownerId, { ...settings, expectedTagIds: settings.tagIds });
   assert.equal(
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } })).isPrivate,
     true,
@@ -2008,7 +2008,11 @@ test('locked privacy hides private-only tag and group names while keeping unused
       data: { ownerId: f.ownerId, libraryMode: mode, tagId: tag.id, groupId: group.id },
     });
     await service.replaceAssetTags(f.ownerId, asset.id, [tag.id]);
-    await new EaglePrivacyService(prisma, mode).updateSettings(f.ownerId, { tagIds: [tag.id] });
+    const privacy = new EaglePrivacyService(prisma, mode);
+    await privacy.updateSettings(f.ownerId, {
+      tagIds: [tag.id],
+      expectedTagIds: (await privacy.getSettings(f.ownerId)).tagIds,
+    });
     const locked = await service.listManualTags(f.ownerId, false);
     assert.ok(!locked.some((t) => t.id === tag.id));
     assert.ok(locked.some((t) => t.id === unused.id));
@@ -2150,7 +2154,8 @@ test('private sends in both directions do not privatize colliding public tags an
     );
     const id = result.assets[0].assetId;
     const privacy = new EaglePrivacyService(prisma, targetMode);
-    await privacy.updateSettings(f.ownerId, await privacy.getSettings(f.ownerId));
+    const settings = await privacy.getSettings(f.ownerId);
+    await privacy.updateSettings(f.ownerId, { ...settings, expectedTagIds: settings.tagIds });
     await destination.deleteManualTag(f.ownerId, unrelated.id);
     assert.equal((await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).isPrivate, true);
     assert.equal(

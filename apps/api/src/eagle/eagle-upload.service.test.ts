@@ -252,6 +252,7 @@ test('content replacement preserves the logical asset id and advances its media 
     $executeRaw: async () => 0,
     uploadSession: { updateMany: async () => ({ count: 1 }), update: async () => undefined },
     eagleAsset: {
+      updateMany: async () => ({ count: 0 }),
       findFirst: async () => ({
         id: 'asset-existing',
         mediaRevision: 3,
@@ -289,7 +290,11 @@ test('content replacement preserves the logical asset id and advances its media 
     parts: [{ partNumber: 1, etag: 'etag-1' }],
   });
 
-  assert.match(locks[0] ?? '', /sekereagle:privacy:/, 'replacement must acquire privacy before the asset row lock');
+  assert.match(
+    locks[0] ?? '',
+    /sekereagle:privacy:/,
+    'replacement must acquire privacy before the asset row lock',
+  );
   assert.equal(result.assetId, 'asset-existing');
   assert.equal(assetWrites[0]?.mediaRevision, 4);
   assert.equal(assetWrites[0]?.livePhotoIdentifier, null);

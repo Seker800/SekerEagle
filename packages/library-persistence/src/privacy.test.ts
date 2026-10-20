@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { syncAssetPrivacy, inheritedPrivacyTag } from './index';
+import { syncAssetPrivacy, inheritedPrivacyTag, preserveReplacementPrivacy } from './index';
 
 test('empty photo scope never updates other assets', async () => {
   const tx = {
@@ -54,3 +54,45 @@ test('material scope preserves manual tag semantics and counts changed assets', 
   assert.equal(await syncAssetPrivacy(tx as never, 'owner', ['one']), 2);
   assert.equal(writes, 2);
 });
+
+test('public replacements do not acquire inherited privacy labels', async () => {
+  assert.deepEqual(
+    await preserveReplacementPrivacy({} as never, 'owner', 'PHOTO', {
+      id: 'asset',
+      isPrivate: false,
+      livePhotoIdentifier: null,
+      livePhotoRole: null,
+      manualTagLinks: [],
+    }),
+    [],
+  );
+});
+for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+  for (const hasPrivateTag of [false, true]) {
+    test(`unpaired replacement preserves scoped privacy without changing existing rules (${mode}, labelled: ${hasPrivateTag})`, async () => {
+      let created: unknown[] = [];
+      const tx = {
+        eagleManualTag: { upsert: async () => ({ id: 'inherited', marksAssetsPrivate: true }) },
+        eagleAssetManualTag: {
+          createMany: async ({ data }: { data: unknown[] }) => {
+            created = data;
+          },
+        },
+      };
+      const retained = await preserveReplacementPrivacy(tx as never, 'owner', mode, {
+        id: 'asset',
+        isPrivate: true,
+        livePhotoIdentifier: null,
+        livePhotoRole: null,
+        manualTagLinks: hasPrivateTag ? [{ tag: { marksAssetsPrivate: true } }] : [],
+      });
+      assert.deepEqual(retained, ['asset']);
+      assert.deepEqual(
+        created,
+        hasPrivateTag
+          ? []
+          : [{ ownerId: 'owner', libraryMode: mode, assetId: 'asset', tagId: 'inherited' }],
+      );
+    });
+  }
+}

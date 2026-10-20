@@ -1,6 +1,6 @@
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
@@ -26,6 +26,7 @@ export function PhotoCollections({
   onPerson: (personId: string) => void;
 }) {
   const { ownerId, api } = useLibraryWorkspace();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -48,6 +49,10 @@ export function PhotoCollections({
           setError(t('隐私规则已保存，但桌面媒体缓存清理失败。'));
         }
       }
+      if (!changesPrivacy)
+        await queryClient.invalidateQueries({
+          queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
+        });
       await people.refetch();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));

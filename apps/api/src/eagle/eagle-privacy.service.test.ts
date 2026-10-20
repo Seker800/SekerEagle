@@ -35,6 +35,7 @@ test('privacy settings fail closed when any selected tag belongs to another owne
   const transaction = {
     $queryRaw: async () => [],
     eagleManualTag: {
+      findMany: async () => [],
       count: async () => 1,
       updateMany: async () => {
         writes += 1;
@@ -46,7 +47,7 @@ test('privacy settings fail closed when any selected tag belongs to another owne
   } as never);
 
   await assert.rejects(
-    service.updateSettings('owner-a', { tagIds: ['tag-owned', 'tag-foreign'] }),
+    service.updateSettings('owner-a', { expectedTagIds: [], tagIds: ['tag-owned', 'tag-foreign'] }),
     NotFoundException,
   );
   assert.equal(writes, 0);
@@ -57,6 +58,7 @@ test('privacy settings fail closed if a selected tag disappears during the trans
   const transaction = {
     $queryRaw: async () => [],
     eagleManualTag: {
+      findMany: async () => [],
       count: async () => 1,
       updateMany: async (input: { data: { marksAssetsPrivate: boolean } }) => ({
         count: input.data.marksAssetsPrivate ? 0 : 1,
@@ -74,7 +76,7 @@ test('privacy settings fail closed if a selected tag disappears during the trans
   } as never);
 
   await assert.rejects(
-    service.updateSettings('owner-a', { tagIds: ['tag-removed-concurrently'] }),
+    service.updateSettings('owner-a', { expectedTagIds: [], tagIds: ['tag-removed-concurrently'] }),
     NotFoundException,
   );
   assert.equal(assetWrites, 0);
@@ -86,6 +88,7 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   const transaction = {
     $queryRaw: async () => [],
     eagleManualTag: {
+      findMany: async () => [],
       count: async () => 2,
       updateMany: async (input: { data: { marksAssetsPrivate: boolean } }) => {
         tagWrites.push(input);
@@ -104,7 +107,10 @@ test('privacy settings replace tag rules and recompute only assets whose derived
   } as never);
 
   assert.deepEqual(
-    await service.updateSettings('owner-a', { tagIds: ['tag-a', 'tag-b', 'tag-a'] }),
+    await service.updateSettings('owner-a', {
+      expectedTagIds: [],
+      tagIds: ['tag-a', 'tag-b', 'tag-a'],
+    }),
     { tagIds: ['tag-a', 'tag-b'] },
   );
   assert.equal(tagWrites.length, 2);

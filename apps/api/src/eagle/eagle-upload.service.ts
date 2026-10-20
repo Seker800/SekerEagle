@@ -1,4 +1,8 @@
-import { inheritedPrivacyTag } from '@sekereagle/library-persistence';
+import {
+  inheritedPrivacyTag,
+  preserveReplacementPrivacy,
+  syncAssetPrivacy,
+} from '@sekereagle/library-persistence';
 import { validatedEditRecipe } from './eagle-edit-recipe';
 import { invalidateMediaRevision } from './invalidate-media-revision';
 import { Prisma } from '@prisma/client';
@@ -334,8 +338,9 @@ export class EagleUploadService {
       const finalized = await this.prisma.$transaction(async (transaction) => {
         const copySourceId = session.eagleState?.copySourceAssetId;
         let copySource: Awaited<ReturnType<typeof loadEditedCopySource>> | undefined;
-        if (copySourceId) {
+        if (copySourceId || session.eagleState?.replacementAssetId)
           await lockOwnerPrivacyProjection(transaction, session.uploaderId, this.libraryMode);
+        if (copySourceId) {
           await this.revisionObserver?.beforeEditedCopy?.(transaction, {
             ownerId: session.uploaderId,
             libraryMode: this.libraryMode,
@@ -392,6 +397,12 @@ export class EagleUploadService {
             },
           });
           if (!current) throw new NotFoundException('待替换的素材不存在。');
+          const retainedAssetIds = await preserveReplacementPrivacy(
+            transaction,
+            session.uploaderId,
+            this.libraryMode,
+            current,
+          );
           const currentRenditions = current.renditions.filter(
             (rendition) => rendition.revision === current.mediaRevision,
           );
@@ -421,27 +432,6 @@ export class EagleUploadService {
               rowVersion: { increment: 1 },
             },
           });
-          if (
-            current.isPrivate &&
-            !current.manualTagLinks.some((link) => link.tag.marksAssetsPrivate)
-          ) {
-            const tagId = await inheritedPrivacyTag(
-              transaction,
-              session.uploaderId,
-              this.libraryMode,
-            );
-            await transaction.eagleAssetManualTag.createMany({
-              data: [
-                {
-                  ownerId: session.uploaderId,
-                  libraryMode: this.libraryMode,
-                  assetId: current.id,
-                  tagId,
-                },
-              ],
-              skipDuplicates: true,
-            });
-          }
           await invalidateMediaRevision(
             transaction,
             { ownerId: session.uploaderId, libraryMode: this.libraryMode, assetId: current.id },
@@ -451,6 +441,12 @@ export class EagleUploadService {
             transaction,
             { ownerId: session.uploaderId, libraryMode: this.libraryMode },
             current.id,
+          );
+          await syncAssetPrivacy(
+            transaction,
+            session.uploaderId,
+            [...new Set([current.id, ...retainedAssetIds])],
+            this.libraryMode,
           );
           if (currentRenditions.length) {
             await transaction.eagleAssetRendition.deleteMany({

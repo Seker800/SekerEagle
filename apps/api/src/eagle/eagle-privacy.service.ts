@@ -1,6 +1,6 @@
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE } from './library-mode';
-import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface EaglePrivacySettings {
@@ -28,7 +28,7 @@ export class EaglePrivacyService {
 
   async updateSettings(
     ownerId: string,
-    input: EaglePrivacySettings,
+    input: EaglePrivacySettings & { expectedTagIds: string[] },
   ): Promise<EaglePrivacySettings> {
     const tagIds = [...new Set(input.tagIds)];
     await this.prisma.$transaction(async (transaction) => {
@@ -39,6 +39,14 @@ export class EaglePrivacyService {
       if (ownedTagCount !== tagIds.length) {
         throw new NotFoundException('一个或多个标签不存在。');
       }
+      const current = await transaction.eagleManualTag.findMany({
+        where: { ownerId, libraryMode: this.libraryMode, marksAssetsPrivate: true },
+        select: { id: true },
+      });
+      const currentIds = current.map(({ id }) => id).sort();
+      const expectedIds = [...new Set(input.expectedTagIds)].sort();
+      if (JSON.stringify(currentIds) !== JSON.stringify(expectedIds))
+        throw new ConflictException('私密标签规则已变化，请重新打开编辑器后再保存。');
       await transaction.eagleManualTag.updateMany({
         where: {
           ownerId,

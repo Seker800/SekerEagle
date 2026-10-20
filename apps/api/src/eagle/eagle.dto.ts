@@ -248,13 +248,26 @@ export class BatchUpdateEagleAssetsDto {
   sourceUrl?: string | null;
 }
 
-export class UpdateEaglePrivacySettingsDto {
+export class EaglePrivacySettingsDto {
   @ApiProperty({ type: [String], maxItems: 100 })
   @IsArray()
   @ArrayMaxSize(100)
   @ArrayUnique()
   @IsUUID('4', { each: true })
   tagIds!: string[];
+}
+
+export class UpdateEaglePrivacySettingsDto extends EaglePrivacySettingsDto {
+  @ApiProperty({
+    type: [String],
+    maxItems: 100,
+    description: '打开编辑器时读取的私密标签快照；变化时返回 409。',
+  })
+  @IsArray()
+  @ArrayMaxSize(100)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  expectedTagIds!: string[];
 }
 
 export class BatchChangeEagleManualTagsDto {

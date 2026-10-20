@@ -52,6 +52,7 @@ import {
   UpdateManualTagDto,
   UpdateManualTagGroupDto,
   UpdateEaglePrivacySettingsDto,
+  EaglePrivacySettingsDto,
   UpdateSmartFolderDto,
 } from './eagle.dto';
 import { EagleService } from './eagle.service';
@@ -374,14 +375,14 @@ export class EagleController {
   }
 
   @Get('privacy-settings')
-  @ApiOkResponse({ type: UpdateEaglePrivacySettingsDto })
+  @ApiOkResponse({ type: EaglePrivacySettingsDto })
   getPrivacySettings(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.privacy.getSettings(principal.sub);
   }
 
   @Put('privacy-settings')
   @UseGuards(BrowserOriginGuard)
-  @ApiOkResponse({ type: UpdateEaglePrivacySettingsDto })
+  @ApiOkResponse({ type: EaglePrivacySettingsDto })
   updatePrivacySettings(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: UpdateEaglePrivacySettingsDto,

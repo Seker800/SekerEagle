@@ -143,6 +143,11 @@ export function AccountHome({
   const [privacyTagsLoaded, setPrivacyTagsLoaded] = useState(false);
   const privacyVisibility = providedPrivacyVisibility ?? localPrivacyVisibility;
   const setPrivacyVisibility = onPrivacyVisibilityChange ?? setLocalPrivacyVisibility;
+  useEffect(() => {
+    setPrivacyTagEditorOpen(false);
+    setPrivacyTagOptions([]);
+    setPrivacyTagsLoaded(false);
+  }, [privacyVisibility.enabled]);
   const desktopCache = getDesktopCacheBridge();
   const sections =
     user.role === 'ADMIN'
@@ -201,7 +206,6 @@ export function AccountHome({
       return;
     }
     setPrivacyTagEditorOpen(true);
-    if (privacyTagsLoaded) return;
     setPrivacyTagsLoading(true);
     setPrivacyError('');
     try {
@@ -224,7 +228,7 @@ export function AccountHome({
     setPrivacyTagsSaving(true);
     setPrivacyError('');
     try {
-      const settings = await updateEaglePrivacySettings(draftPrivateTagIds);
+      const settings = await updateEaglePrivacySettings(draftPrivateTagIds, privateTagIds);
       setPrivateTagIds(settings.tagIds);
       setDraftPrivateTagIds(settings.tagIds);
       onPrivacyRulesChange?.();
@@ -434,6 +438,7 @@ export function AccountHome({
               </label>
             </div>
             {privacyExtras}
+            {!privacyVisibility.enabled && <p>{t('开启显示隐私内容后，可管理全部私密标签。')}</p>}
             <div className="privacy-tag-settings">
               <div>
                 <span className="privacy-tag-heading">

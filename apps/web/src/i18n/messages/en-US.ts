@@ -1,4 +1,6 @@
 export const enUS = {
+  '开启显示隐私内容后，可管理全部私密标签。':
+    'Enable Show private content to manage all private tags.',
   '隐私规则已保存，但桌面媒体缓存清理失败。':
     'Privacy rules saved, but clearing the desktop media cache failed.',
   私密原因: 'Privacy reasons',

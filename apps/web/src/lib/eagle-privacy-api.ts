@@ -23,12 +23,12 @@ export function createEaglePrivacyApi(libraryMode: LibraryMode = 'MATERIAL') {
     return request<EaglePrivacyTagOption[]>(libraryApiPath('/api/eagle/tags', libraryMode));
   }
 
-  function updateEaglePrivacySettings(tagIds: string[]) {
+  function updateEaglePrivacySettings(tagIds: string[], expectedTagIds: string[]) {
     return request<EaglePrivacySettings>(
       libraryApiPath('/api/eagle/privacy-settings', libraryMode),
       {
         method: 'PUT',
-        body: JSON.stringify({ tagIds }),
+        body: JSON.stringify({ tagIds, expectedTagIds }),
       },
     );
   }

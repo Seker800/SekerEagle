@@ -86,13 +86,25 @@ test('人物规则隐藏照片，标签取消不解除人物保护，公开时�
   });
   const result = await f.rule(true, false);
   assert.equal(result.changed, 1);
-  await f.tags.updateSettings(f.ownerId, { tagIds: [tag.id] });
-  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  await f.tags.updateSettings(f.ownerId, {
+    expectedTagIds: (await f.tags.getSettings(f.ownerId)).tagIds,
+    tagIds: [tag.id],
+  });
+  await f.tags.updateSettings(f.ownerId, {
+    expectedTagIds: (await f.tags.getSettings(f.ownerId)).tagIds,
+    tagIds: [],
+  });
   assert.equal((await f.marked()).isPrivate, true);
-  await f.tags.updateSettings(f.ownerId, { tagIds: [tag.id] });
+  await f.tags.updateSettings(f.ownerId, {
+    expectedTagIds: (await f.tags.getSettings(f.ownerId)).tagIds,
+    tagIds: [tag.id],
+  });
   await f.rule(false);
   assert.equal((await f.marked()).isPrivate, true);
-  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  await f.tags.updateSettings(f.ownerId, {
+    expectedTagIds: (await f.tags.getSettings(f.ownerId)).tagIds,
+    tagIds: [],
+  });
   assert.equal((await f.marked()).isPrivate, false);
 });
 test('重复投影不改变版本，过期人物版本冲突且跨用户不可修改', async () => {
@@ -150,7 +162,10 @@ test('人脸纠错仅解除该人物原因，私密标签继续保护', async ()
   const split = await f.service.reassignFace(f.ownerId, f.face.id, null, true);
   assert.notEqual(split.id, f.person.id);
   assert.equal((await f.marked()).isPrivate, true);
-  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  await f.tags.updateSettings(f.ownerId, {
+    expectedTagIds: (await f.tags.getSettings(f.ownerId)).tagIds,
+    tagIds: [],
+  });
   assert.equal((await f.marked()).isPrivate, false);
   await f.service.reassignFace(f.ownerId, f.face.id, f.person.id, true);
   assert.equal((await f.marked()).isPrivate, true);
@@ -298,6 +313,39 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       origin: defaults.CANONICAL_ORIGIN,
       'content-type': 'application/json',
     };
+    const settingsUrl = `${base}/api/photos/privacy-settings`;
+    assert.equal(
+      (
+        await fetch(settingsUrl, {
+          method: 'PUT',
+          headers: auth,
+          body: JSON.stringify({ tagIds: [] }),
+        })
+      ).status,
+      400,
+    );
+    const loadedRules = await (await fetch(settingsUrl, { headers: auth })).json();
+    const inheritedTagId = await prisma.$transaction((tx) =>
+      inheritedPrivacyTag(tx, f.ownerId, 'PHOTO'),
+    );
+    await prisma.eagleAssetManualTag.create({
+      data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.b.id, tagId: inheritedTagId },
+    });
+    await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, undefined, 'PHOTO'));
+    assert.equal(
+      (
+        await fetch(settingsUrl, {
+          method: 'PUT',
+          headers: auth,
+          body: JSON.stringify({ tagIds: [], expectedTagIds: loadedRules.tagIds }),
+        })
+      ).status,
+      409,
+    );
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
+      true,
+    );
     const url = `${base}/api/photos/photography/people/${f.person.id}/privacy`;
     const body = { marksAssetsPrivate: true, rowVersion: 1 };
     const patch = async (headers, payload = body, path = url) => {
@@ -381,7 +429,7 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
   }
 });
 
-async function replacePrivacyFixture(f, assetId) {
+async function replacePrivacyFixture(f, assetId, uploadDb = prisma) {
   const { EagleUploadService } = await import('../../apps/api/dist/eagle/eagle-upload.service.js');
   const { PhotoRevisionObserver } =
     await import('../../apps/api/dist/photos/photo-revision.observer.js');
@@ -400,7 +448,7 @@ async function replacePrivacyFixture(f, assetId) {
     },
   });
   const upload = new EagleUploadService(
-    prisma,
+    uploadDb,
     { headObject: async () => ({ ContentLength: 1 }) },
     {},
     {
@@ -471,18 +519,34 @@ test('过期标签设置草稿不能静默取消新创建的继承私密保护',
 });
 
 if (process.env.PHOTO_PRIVACY_BENCH === '1') {
-  test('一万二千张实况组件的全量人物隐私投影在默认事务预算内完成', async () => {
+  test('实况组件的全量人物隐私投影在默认事务预算内完成', async () => {
+    const count = Number(process.env.PHOTO_PRIVACY_BENCH_ASSETS ?? 12000);
+    assert.ok([12000, 50000, 100000].includes(count));
     const f = await fixture();
-    const identifiers = Array.from({ length: 6000 }, () => randomUUID());
+    const identifiers = Array.from({ length: count / 2 }, () => randomUUID());
+    const privateIdentifier = randomUUID();
+    await prisma.eagleAsset.update({
+      where: { id: f.a.id },
+      data: { livePhotoIdentifier: privateIdentifier, livePhotoRole: 'STILL' },
+    });
+    await prisma.eagleAsset.update({
+      where: { id: f.b.id },
+      data: {
+        livePhotoIdentifier: privateIdentifier,
+        livePhotoRole: 'MOTION',
+        mimeType: 'video/quicktime',
+        format: 'mov',
+      },
+    });
     await prisma.eagleAsset.createMany({
-      data: Array.from({ length: 12000 }, (_, i) => ({
+      data: Array.from({ length: count }, (_, i) => ({
         ownerId: f.ownerId,
         libraryMode: 'PHOTO',
         originalName: 'scale.jpg',
         displayName: 'scale',
         normalizedDisplayName: 'scale',
-        mimeType: 'image/jpeg',
-        format: 'jpg',
+        mimeType: i % 2 ? 'video/quicktime' : 'image/jpeg',
+        format: i % 2 ? 'mov' : 'jpg',
         byteSize: 1,
         originalObjectKey: `test/${randomUUID()}`,
         lifecycleStatus: 'READY',
@@ -493,7 +557,76 @@ if (process.env.PHOTO_PRIVACY_BENCH === '1') {
     const start = performance.now();
     await f.rule(true, false);
     console.log(
-      `Photo privacy projection, 12003 assets: ${Math.round(performance.now() - start)}ms`,
+      `Photo privacy projection, ${count + 3} assets: ${Math.round(performance.now() - start)}ms`,
+    );
+    assert.equal((await f.marked()).isPrivate, true);
+    assert.equal(
+      await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, isPrivate: true } }),
+      2,
     );
   });
 }
+
+test('替换与取消人物私密并发时，继承标签和私密投影保持原子一致', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const ready = Promise.withResolvers(),
+    release = Promise.withResolvers();
+  const uploadDb = new Proxy(prisma, {
+    get(target, key) {
+      if (key === '$transaction')
+        return (work) =>
+          prisma.$transaction((tx) =>
+            work(
+              new Proxy(tx, {
+                get(transaction, field) {
+                  if (field === 'eagleAsset')
+                    return new Proxy(tx.eagleAsset, {
+                      get(delegate, operation) {
+                        if (operation === 'findFirst')
+                          return async (input) => {
+                            const row = await delegate.findFirst(input);
+                            if (input.where.id === f.a.id) {
+                              ready.resolve();
+                              await release.promise;
+                            }
+                            return row;
+                          };
+                        const value = Reflect.get(delegate, operation);
+                        return typeof value === 'function' ? value.bind(delegate) : value;
+                      },
+                    });
+                  const value = Reflect.get(transaction, field);
+                  return typeof value === 'function' ? value.bind(transaction) : value;
+                },
+              }),
+            ),
+          );
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const replacing = replacePrivacyFixture(f, f.a.id, uploadDb);
+  try {
+    await Promise.race([
+      ready.promise,
+      delay(2000).then(() => {
+        throw new Error('replacement barrier timed out');
+      }),
+    ]);
+    const changing = f.rule(false);
+    await delay(30);
+    release.resolve();
+    await Promise.all([replacing, changing]);
+    assert.equal((await f.marked()).isPrivate, true);
+    assert.equal(
+      await prisma.eagleAssetManualTag.count({
+        where: { ownerId: f.ownerId, assetId: f.a.id, tag: { marksAssetsPrivate: true } },
+      }),
+      1,
+    );
+  } finally {
+    release.resolve();
+    await replacing.catch(() => {});
+  }
+});
