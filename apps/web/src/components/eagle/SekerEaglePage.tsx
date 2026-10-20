@@ -1,3 +1,4 @@
+import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
 import { EagleImportButton } from './EagleImportButton';
 import { EagleSelectionToolbar } from './EagleSelectionToolbar';
@@ -28,7 +29,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type CSSProperties,
   type DragEvent,
   type MouseEvent,
   type ReactNode,
@@ -2232,175 +2232,146 @@ export function SekerEaglePage({
       </div>
 
       {assetContextMenu && selectedAssetIds.length > 0 && (
-        <>
-          <button
-            className={styles.contextMenuDismiss}
-            type="button"
-            aria-label={t('关闭素材操作菜单')}
-            onClick={() => setAssetContextMenu(null)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setAssetContextMenu(null);
-            }}
-          />
-          <div
-            className={styles.contextMenu}
-            role="menu"
-            aria-label={t('素材操作')}
-            style={
-              {
-                '--menu-x': `${assetContextMenu.x}px`,
-                '--menu-y': `${assetContextMenu.y}px`,
-              } as CSSProperties
-            }
-          >
-            <div className={styles.contextMenuTitle}>
-              {t('已选择') + ' '}
-              {selectedAssetIds.length}
-              {' ' + t('项')}
-            </div>
-            {libraryView !== 'TRASH' &&
-              selectedTransferAssets.length === selectedAssetIds.length &&
-              selectedTransferAssets.every((asset) => asset.mimeType.startsWith('image/')) && (
-                <EagleSendAssetsMenuItem
-                  key={`${storeScope}:${[...selectedAssetIds].sort().join(',')}`}
-                  assetIds={selectedAssetIds}
-                  ownerId={ownerId}
-                  label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
-                  disabled={selectedTransferAssets.some(
-                    (asset) => asset.lifecycleStatus !== 'READY',
-                  )}
-                  onSent={(result) => {
-                    setAssetContextMenu(null);
-                    setSelectedAssetIds([]);
-                    setSelectedAssetId(null);
-                    setIsBatchSelection(false);
-                    setSelectionMode(false);
-                    setTransferStatus(
-                      t('已发送 {{value1}} 项，原图片已移入当前图库回收站。', {
-                        value1: result.movedCount,
-                      }),
-                    );
-                  }}
-                />
-              )}
-            {contextMenuAsset && libraryView !== 'TRASH' && (
-              <EagleEditPhotoButton
-                asset={contextMenuAsset}
-                onEdit={openPhotoEditor}
-                role="menuitem"
+        <EagleAssetActionMenu
+          position={assetContextMenu}
+          count={selectedAssetIds.length}
+          onClose={() => setAssetContextMenu(null)}
+        >
+          {libraryView !== 'TRASH' &&
+            selectedTransferAssets.length === selectedAssetIds.length &&
+            selectedTransferAssets.every((asset) => asset.mimeType.startsWith('image/')) && (
+              <EagleSendAssetsMenuItem
+                key={`${storeScope}:${[...selectedAssetIds].sort().join(',')}`}
+                assetIds={selectedAssetIds}
+                ownerId={ownerId}
+                label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
+                disabled={selectedTransferAssets.some((asset) => asset.lifecycleStatus !== 'READY')}
+                onSent={(result) => {
+                  setAssetContextMenu(null);
+                  setSelectedAssetIds([]);
+                  setSelectedAssetId(null);
+                  setIsBatchSelection(false);
+                  setSelectionMode(false);
+                  setTransferStatus(
+                    t('已发送 {{value1}} 项，原图片已移入当前图库回收站。', {
+                      value1: result.movedCount,
+                    }),
+                  );
+                }}
               />
             )}
-            {contextMenuAsset && libraryView !== 'TRASH' ? (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('另存为…')}
-                disabled={assetActionPending !== null}
-                onClick={saveSelectedOriginal}
-              >
-                <IconDownload size={15} />
-                {assetActionPending === 'save' ? t('正在准备…') : t('另存为…')}
-              </button>
-            ) : null}
-            {imageClipboardAvailable &&
-            contextMenuAsset?.mimeType.startsWith('image/') &&
-            getEaglePreviewContentUrl(contextMenuAsset) ? (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('复制图片')}
-                disabled={assetActionPending !== null}
-                onClick={copySelectedImage}
-              >
-                <IconCopy size={15} />
-                {assetActionPending === 'copy' ? t('正在复制…') : t('复制图片')}
-              </button>
-            ) : null}
-            {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('批量下载（{{value1}}）…', {
-                  value1: selectedAssetIds.length,
-                })}
-                disabled={isBatchDownloading}
-                onClick={batchDownloadSelectedOriginals}
-              >
-                <IconDownload size={15} />
-                {isBatchDownloading
-                  ? t('正在下载 {{value1}} 项…', {
-                      value1: selectedAssetIds.length,
-                    })
-                  : t('批量下载（{{value1}}）…', {
-                      value1: selectedAssetIds.length,
-                    })}
-              </button>
-            ) : null}
-            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('添加标签')}
-                disabled={batchTagMutation.isPending}
-                onClick={() => {
-                  setAssetContextMenu(null);
-                  batchTagMutation.reset();
-                  createBatchTagMutation.reset();
-                  setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
-                }}
-              >
-                <IconTags size={15} />
-                {' ' + t('添加标签…') + ' '}
-              </button>
-            )}
-            {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('删除人工标签')}
-                disabled={batchTagMutation.isPending || selectedManualTagSummaries.length === 0}
-                onClick={() => {
-                  setAssetContextMenu(null);
-                  batchTagMutation.reset();
-                  setTagPicker({ mode: 'remove', assetIds: [...selectedAssetIds] });
-                }}
-              >
-                <IconTagsOff size={15} />
-                {' ' + t('删除人工标签…') + ' '}
-              </button>
-            )}
-            {libraryView === 'ACTIVE' || libraryView === 'PRIVATE' ? (
-              <button
-                className={styles.contextMenuDanger}
-                type="button"
-                role="menuitem"
-                aria-label={t('删除所选素材')}
-                disabled={trashMutation.isPending}
-                onClick={() => trashMutation.mutate(selectedAssetIds)}
-              >
-                <IconTrash size={15} />
-                {' ' + t('删除（移到回收站）') + ' '}
-              </button>
-            ) : (
-              <button
-                type="button"
-                role="menuitem"
-                aria-label={t('恢复所选素材')}
-                disabled={restoreMutation.isPending}
-                onClick={() => restoreMutation.mutate(selectedAssetIds)}
-              >
-                <IconRefresh size={15} />
-                {' ' + t('恢复') + ' '}
-              </button>
-            )}
-            {assetActionError ? (
-              <div className={styles.contextMenuError} role="alert">
-                {assetActionError}
-              </div>
-            ) : null}
-          </div>
-        </>
+          {contextMenuAsset && libraryView !== 'TRASH' && (
+            <EagleEditPhotoButton
+              asset={contextMenuAsset}
+              onEdit={openPhotoEditor}
+              role="menuitem"
+            />
+          )}
+          {contextMenuAsset && libraryView !== 'TRASH' ? (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('另存为…')}
+              disabled={assetActionPending !== null}
+              onClick={saveSelectedOriginal}
+            >
+              <IconDownload size={15} />
+              {assetActionPending === 'save' ? t('正在准备…') : t('另存为…')}
+            </button>
+          ) : null}
+          {imageClipboardAvailable &&
+          contextMenuAsset?.mimeType.startsWith('image/') &&
+          getEaglePreviewContentUrl(contextMenuAsset) ? (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('复制图片')}
+              disabled={assetActionPending !== null}
+              onClick={copySelectedImage}
+            >
+              <IconCopy size={15} />
+              {assetActionPending === 'copy' ? t('正在复制…') : t('复制图片')}
+            </button>
+          ) : null}
+          {selectedAssetIds.length > 1 && libraryView !== 'TRASH' ? (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('批量下载（{{value1}}）…', {
+                value1: selectedAssetIds.length,
+              })}
+              disabled={isBatchDownloading}
+              onClick={batchDownloadSelectedOriginals}
+            >
+              <IconDownload size={15} />
+              {isBatchDownloading
+                ? t('正在下载 {{value1}} 项…', {
+                    value1: selectedAssetIds.length,
+                  })
+                : t('批量下载（{{value1}}）…', {
+                    value1: selectedAssetIds.length,
+                  })}
+            </button>
+          ) : null}
+          {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('添加标签')}
+              disabled={batchTagMutation.isPending}
+              onClick={() => {
+                setAssetContextMenu(null);
+                batchTagMutation.reset();
+                createBatchTagMutation.reset();
+                setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
+              }}
+            >
+              <IconTags size={15} />
+              {' ' + t('添加标签…') + ' '}
+            </button>
+          )}
+          {(libraryView === 'ACTIVE' || libraryView === 'PRIVATE') && (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('删除人工标签')}
+              disabled={batchTagMutation.isPending || selectedManualTagSummaries.length === 0}
+              onClick={() => {
+                setAssetContextMenu(null);
+                batchTagMutation.reset();
+                setTagPicker({ mode: 'remove', assetIds: [...selectedAssetIds] });
+              }}
+            >
+              <IconTagsOff size={15} />
+              {' ' + t('删除人工标签…') + ' '}
+            </button>
+          )}
+          {libraryView === 'ACTIVE' || libraryView === 'PRIVATE' ? (
+            <button
+              data-menu-danger
+              type="button"
+              role="menuitem"
+              aria-label={t('删除所选素材')}
+              disabled={trashMutation.isPending}
+              onClick={() => trashMutation.mutate(selectedAssetIds)}
+            >
+              <IconTrash size={15} />
+              {' ' + t('删除（移到回收站）') + ' '}
+            </button>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              aria-label={t('恢复所选素材')}
+              disabled={restoreMutation.isPending}
+              onClick={() => restoreMutation.mutate(selectedAssetIds)}
+            >
+              <IconRefresh size={15} />
+              {' ' + t('恢复') + ' '}
+            </button>
+          )}
+          {assetActionError ? <div role="alert">{assetActionError}</div> : null}
+        </EagleAssetActionMenu>
       )}
 
       {tagPicker && tagPicker.assetIds.length > 0 && (
