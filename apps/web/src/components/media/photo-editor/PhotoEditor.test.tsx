@@ -726,8 +726,12 @@ it('restores initial edits, autosaves a draft and copies the current recipe', as
 it('does not save or claim autosave until a user changes the restored draft', async () => {
   const onDraftChange = vi.fn().mockResolvedValue(undefined);
   const props = {
-    source: '/photo.png', name: 'Photo.png', onClose: vi.fn(), onSave: vi.fn(),
-    initialEdits: { ...DEFAULT_PHOTO_EDITS, exposure: 0.24 }, onDraftChange,
+    source: '/photo.png',
+    name: 'Photo.png',
+    onClose: vi.fn(),
+    onSave: vi.fn(),
+    initialEdits: { ...DEFAULT_PHOTO_EDITS, exposure: 0.24 },
+    onDraftChange,
   };
   const view = render(<PhotoEditor {...props} />);
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
@@ -738,16 +742,32 @@ it('does not save or claim autosave until a user changes the restored draft', as
   await new Promise((resolve) => setTimeout(resolve, 650));
   expect(onDraftChange).not.toHaveBeenCalled();
   fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '0.35' } });
-  await waitFor(() => expect(screen.getByText('已自动保存')).toBeInTheDocument(), { timeout: 2000 });
+  await waitFor(() => expect(screen.getByText('已自动保存')).toBeInTheDocument(), {
+    timeout: 2000,
+  });
   expect(onDraftChange).toHaveBeenCalledTimes(1);
 });
 
 it('persists a return to the initial settings while an earlier autosave is in flight', async () => {
   let completeFirst!: () => void;
-  const onDraftChange = vi.fn()
-    .mockImplementationOnce(() => new Promise<void>((resolve) => { completeFirst = resolve; }))
+  const onDraftChange = vi
+    .fn()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          completeFirst = resolve;
+        }),
+    )
     .mockResolvedValue(undefined);
-  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} onDraftChange={onDraftChange} />);
+  render(
+    <PhotoEditor
+      source="/photo.png"
+      name="Photo.png"
+      onClose={vi.fn()}
+      onSave={vi.fn()}
+      onDraftChange={onDraftChange}
+    />,
+  );
   const exposure = screen.getByRole('slider', { name: '曝光' });
   await waitFor(() => expect(exposure).toBeEnabled());
   fireEvent.change(exposure, { target: { value: '0.35' } });
@@ -755,5 +775,7 @@ it('persists a return to the initial settings while an earlier autosave is in fl
   fireEvent.change(exposure, { target: { value: '0' } });
   completeFirst();
   await waitFor(() => expect(onDraftChange).toHaveBeenCalledTimes(2), { timeout: 2000 });
-  expect(onDraftChange).toHaveBeenLastCalledWith(expect.objectContaining({ edits: expect.objectContaining({ exposure: 0 }) }));
+  expect(onDraftChange).toHaveBeenLastCalledWith(
+    expect.objectContaining({ edits: expect.objectContaining({ exposure: 0 }) }),
+  );
 });

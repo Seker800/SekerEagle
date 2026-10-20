@@ -10,6 +10,10 @@ Every candidate must answer `/api/desktop/bootstrap`. The desktop records the fi
 
 The API dynamically accepts a loopback or private-IP browser request only when its source origin exactly matches the gateway protocol, host, and port. A LAN IP therefore does not need to be copied into `BROWSER_TRUSTED_ORIGINS`; unrelated private origins and arbitrary DNS hosts remain rejected. The bundled Mac Compose configuration reserves the explicit origin list for the optional `SEKEREAGLE_PUBLIC_ORIGIN`. Public HTTP remains rejected unless the deployment explicitly enables `SEKEREAGLE_ALLOW_INSECURE_PUBLIC_HTTP`; HTTPS is the supported long-term boundary. A probe shown as “来源未受信任” now indicates a real cross-origin mismatch or an incomplete public-origin configuration.
 
+## Photo editor security policy
+
+The desktop CSP permits same-origin Web Workers and WebAssembly compilation (`wasm-unsafe-eval`) for the shared Photon photo renderer. JavaScript eval, remote scripts, objects, and cross-origin connections remain blocked. Updating the server cannot change an installed desktop client's CSP; desktop versions before 0.1.7 need a client update to use photo editing.
+
 ## Cache behavior
 
 - Default capacity is 10 GiB; settings accept 1–100 GiB.
