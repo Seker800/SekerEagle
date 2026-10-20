@@ -1,13 +1,18 @@
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EagleQuickFilterBar,
   buildEagleQuickFilterQuery,
   createEmptyEagleQuickFilterState,
   type EagleQuickFilterState,
 } from './EagleQuickFilterBar';
+
+beforeEach(() => {
+  window.localStorage.removeItem('seker-eagle.quick-filter-fields.v1');
+  window.localStorage.removeItem('seker-eagle.quick-filter-fields.v1.PHOTO');
+});
 
 const manualTags = [
   {
@@ -216,4 +221,57 @@ it('renders filter panels outside the scrolling toolbar, keeps inside pointers o
   fireEvent.keyDown(panel, { key: 'Escape' });
   expect(screen.queryByRole('dialog', { name: '标签筛选' })).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
+});
+
+function scopedBar(mode: 'MATERIAL' | 'PHOTO') {
+  return (
+    <LibraryWorkspaceProvider ownerId="owner" libraryMode={mode}>
+      <EagleQuickFilterBar
+        value={createEmptyEagleQuickFilterState()}
+        manualTags={[]}
+        aiTags={[]}
+        onChange={vi.fn()}
+      />
+    </LibraryWorkspaceProvider>
+  );
+}
+function shownFields() {
+  return within(screen.getByRole('toolbar', { name: '快捷筛选' }))
+    .getAllByRole('button')
+    .map((button) => button.getAttribute('aria-label'))
+    .filter((label) => label?.endsWith('筛选'));
+}
+it('uses photo defaults in order and restores independent customizations when switching and remounting', () => {
+  const view = render(scopedBar('PHOTO'));
+  expect(shownFields()).toEqual(['相机筛选', '镜头筛选', '标签筛选', '格式筛选']);
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  fireEvent.click(screen.getByRole('button', { name: '取消固定 镜头' }));
+  fireEvent.click(screen.getByRole('button', { name: '固定 评分' }));
+  view.rerender(scopedBar('MATERIAL'));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(shownFields()).toEqual(['颜色筛选', '标签筛选', '形状筛选', '评分筛选', '格式筛选']);
+  fireEvent.click(screen.getByRole('button', { name: '添加筛选器' }));
+  fireEvent.click(screen.getByRole('button', { name: '取消固定 颜色' }));
+  view.rerender(scopedBar('PHOTO'));
+  expect(shownFields()).toEqual(['相机筛选', '标签筛选', '格式筛选', '评分筛选']);
+  view.unmount();
+  const reloaded = render(scopedBar('PHOTO'));
+  expect(shownFields()).toEqual(['相机筛选', '标签筛选', '格式筛选', '评分筛选']);
+  reloaded.rerender(scopedBar('MATERIAL'));
+  expect(shownFields()).toEqual(['标签筛选', '形状筛选', '评分筛选', '格式筛选']);
+});
+it('keeps saved layouts including an intentionally empty photo toolbar and falls back per mode on corrupt storage', () => {
+  window.localStorage.setItem(
+    'seker-eagle.quick-filter-fields.v1',
+    JSON.stringify(['FORMAT', 'MANUAL_TAGS']),
+  );
+  window.localStorage.setItem('seker-eagle.quick-filter-fields.v1.PHOTO', '[]');
+  const view = render(scopedBar('MATERIAL'));
+  expect(shownFields()).toEqual(['格式筛选', '标签筛选']);
+  view.rerender(scopedBar('PHOTO'));
+  expect(shownFields()).toEqual([]);
+  view.unmount();
+  window.localStorage.setItem('seker-eagle.quick-filter-fields.v1.PHOTO', 'broken json');
+  render(scopedBar('PHOTO'));
+  expect(shownFields()).toEqual(['相机筛选', '镜头筛选', '标签筛选', '格式筛选']);
 });
