@@ -1601,7 +1601,7 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('uses Ctrl and Command clicks to toggle batch selection without a mode button', async () => {
+  it('preserves Ctrl and Command selection alongside explicit selection controls', async () => {
     const secondAsset = { ...asset, id: 'asset-2', displayName: 'Second Asset' };
     const thirdAsset = { ...asset, id: 'asset-3', displayName: 'Third Asset' };
     listEagleAssetsMock.mockResolvedValue({
@@ -1896,13 +1896,12 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('menu', { name: '素材操作' })).toHaveTextContent('已选择 4 项');
   });
 
-  it('removes file-picker entry points while retaining drag-and-drop import', async () => {
+  it('offers file picking alongside drag-and-drop import', async () => {
     const { container } = renderPage();
     await screen.findByRole('heading', { name: '全部素材' });
 
-    expect(screen.queryByRole('button', { name: '导入' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '选择文件' })).not.toBeInTheDocument();
-    expect(container.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '导入' })).toBeEnabled();
+    expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
 
     const file = new File(['image'], 'dropped.png', { type: 'image/png' });
     fireEvent.dragEnter(screen.getByRole('main'), {
@@ -2467,7 +2466,10 @@ describe('SekerEaglePage', () => {
     );
   });
   it('offers explicit touch selection and opens the shared management menu without modifiers', async () => {
-    listEagleAssetsMock.mockResolvedValue({ items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }], nextCursor: null });
+    listEagleAssetsMock.mockResolvedValue({
+      items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }],
+      nextCursor: null,
+    });
     renderPage();
     const first = await screen.findByRole('button', { name: /Owl Reference/ });
     const second = screen.getByRole('button', { name: /Second Asset/ });
@@ -2480,7 +2482,9 @@ describe('SekerEaglePage', () => {
     const menu = screen.getByRole('menu', { name: '素材操作' });
     expect(menu).toHaveTextContent('已选择 2 项');
     fireEvent.click(within(menu).getByRole('menuitem', { name: '删除所选素材' }));
-    await waitFor(() => expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1', 'asset-2']));
+    await waitFor(() =>
+      expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1', 'asset-2']),
+    );
   });
   it('provides a file picker that can import the same file again after completion', async () => {
     renderPage();
@@ -2494,7 +2498,10 @@ describe('SekerEaglePage', () => {
     expect(input).toHaveAttribute('accept', expect.stringContaining('.nef'));
   });
   it('provides previous and next buttons for ordinary previews using the same gallery order', async () => {
-    listEagleAssetsMock.mockResolvedValue({ items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }], nextCursor: null });
+    listEagleAssetsMock.mockResolvedValue({
+      items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }],
+      nextCursor: null,
+    });
     renderPage();
     fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
     expect(await screen.findByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
@@ -2505,9 +2512,15 @@ describe('SekerEaglePage', () => {
   });
 
   it('keeps the mode switch visible and exposes the existing navigation through a narrow-screen drawer', async () => {
-    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
-    const show = HTMLDialogElement.prototype.showModal;
-    HTMLDialogElement.prototype.showModal = function() { this.open = true; };
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const show = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
     const view = renderPage();
     try {
       const toggle = screen.getByRole('button', { name: '打开导航' });
@@ -2519,9 +2532,24 @@ describe('SekerEaglePage', () => {
       expect(screen.queryByRole('dialog', { name: '素材库导航' })).not.toBeInTheDocument();
     } finally {
       view.unmount();
-      HTMLDialogElement.prototype.showModal = show;
+      if (show) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', show);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
       vi.unstubAllGlobals();
     }
+  });
+  it('focuses the explicit action menu, supports menu keys and returns focus to its trigger', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
+    const trigger = screen.getByRole('button', { name: '操作' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const menu = screen.getByRole('menu', { name: '素材操作' });
+    expect(within(menu).getByRole('menuitem', { name: '发送到照片' })).toHaveFocus();
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(within(menu).getByRole('menuitem', { name: '删除所选素材' })).toHaveFocus();
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
 });
