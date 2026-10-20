@@ -179,7 +179,7 @@ services:
       dockerfile: apps/web/Dockerfile
     restart: unless-stopped
     healthcheck:
-      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1/']
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8080/']
       interval: 10s
       timeout: 5s
       retries: 6
