@@ -1,3 +1,5 @@
+import { PhotoAgentService } from './photo-agent.service';
+import { PhotoAgentController } from './photo-agent.controller';
 import { PhotoManagementController } from './photo-management.controller';
 import { PhotoManagementService } from './photo-management.service';
 import {
@@ -83,6 +85,7 @@ export class PhotoPrivacyVisibilityController {
   controllers: [
     PhotosController,
     PhotoManagementController,
+    PhotoAgentController,
     PhotoPrivacyVisibilityController,
     PhotoUploadsController,
     PhotoAiTagsController,
@@ -91,6 +94,7 @@ export class PhotoPrivacyVisibilityController {
   ],
   providers: [
     PhotoManagementService,
+    PhotoAgentService,
     PhotoRevisionObserver,
     { provide: LIBRARY_REVISION_OBSERVER, useExisting: PhotoRevisionObserver },
     ...EAGLE_LIBRARY_PROVIDERS.filter((provider) => provider !== EagleMaintenanceService),

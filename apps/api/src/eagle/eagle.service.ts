@@ -1,3 +1,4 @@
+import { setEagleTrash } from './eagle-trash';
 import {
   readEagleEditRecipe,
   saveEagleEditRecipe,
@@ -867,72 +868,15 @@ export class EagleService {
   }
 
   async setTrash(ownerId: string, assetIds: string[], restore: boolean, includePrivate = false) {
-    const ids = [...new Set(assetIds)];
-    if (ids.length !== assetIds.length) throw new BadRequestException('素材 ID 不能重复。');
-    const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
-      const sources = await transaction.eagleAsset.findMany({
-        where: {
-          ownerId,
-          libraryMode: this.libraryMode,
-          id: { in: ids },
-          deletedAt: restore ? { not: null } : null,
-          purgeAfter: restore ? null : undefined,
-          ...privateVisibilityWhere(includePrivate),
-        },
-        select: { id: true, mediaRevision: true, livePhotoIdentifier: true, livePhotoRole: true },
-      });
-      if (sources.length !== ids.length) throw new NotFoundException('一个或多个素材不存在。');
-      const motions = await resolveLivePhotoMotions(
+    const affectedAssetCount = await this.prisma.$transaction((transaction) =>
+      setEagleTrash(
         transaction,
         { ownerId, libraryMode: this.libraryMode },
-        sources,
-        includePrivate,
+        assetIds,
         restore,
-      );
-      const resourceIds = [
-        ...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)]),
-      ];
-      const result = await transaction.eagleAsset.updateMany({
-        where: {
-          ownerId,
-          id: { in: resourceIds },
-          deletedAt: restore ? { not: null } : null,
-          purgeAfter: restore ? null : undefined,
-          ...privateVisibilityWhere(includePrivate),
-          libraryMode: this.libraryMode,
-        },
-        data: {
-          deletedAt: restore ? null : new Date(),
-          purgeAfter: null,
-          rowVersion: { increment: 1 },
-        },
-      });
-      if (result.count !== resourceIds.length)
-        throw new NotFoundException('一个或多个素材不存在。');
-      if (restore) {
-        // Only work skipped while trashed is resumed; completed durable work stays reusable.
-        await transaction.eagleAssetProcessingJob.updateMany({
-          where: {
-            ownerId,
-            libraryMode: this.libraryMode,
-            assetId: { in: resourceIds },
-            status: 'COMPLETED',
-            lastError: 'ASSET_TRASHED',
-            kind: { not: 'PURGE_ASSET' },
-          },
-          data: {
-            status: 'PENDING',
-            attempts: 0,
-            availableAt: new Date(),
-            lockedAt: null,
-            completedAt: null,
-            lastError: null,
-            leaseVersion: { increment: 1 },
-          },
-        });
-      }
-      return result.count;
-    });
+        includePrivate,
+      ),
+    );
     return { affectedAssetCount };
   }
 

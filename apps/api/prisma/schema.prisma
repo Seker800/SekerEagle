@@ -384,6 +384,8 @@ model EagleAsset {
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
   photoMetadata                  EaglePhotoMetadata?
+  photoLocation                  EaglePhotoLocation?
+  photoAgentSuggestions          EaglePhotoAgentSuggestion[]
   photoFaces                     EaglePhotoFace[]
   bestPhotoGroups                EaglePhotoGroup[] @relation("PhotoGroupBestAsset")
   photoGroupMembers              EaglePhotoGroupMember[]
@@ -1384,4 +1386,58 @@ model EagleAssetEditRecipe {
   asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   @@unique([ownerId,libraryMode,assetId])
   @@index([ownerId,libraryMode,baseAssetId])
+}
+
+model EaglePhotoAgentTask {
+  id String @id @default(uuid())
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  kind String
+  status String @default("OPEN")
+  scope Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  suggestions EaglePhotoAgentSuggestion[]
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, createdAt, id])
+}
+model EaglePhotoAgentSuggestion {
+  id String @id @default(uuid())
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  taskId String
+  assetId String
+  assetRevision Int
+  assetRowVersion Int
+  kind String
+  value Json
+  evidence Json
+  rationale String
+  status String @default("PENDING")
+  operation Json?
+  createdAt DateTime @default(now())
+  reviewedAt DateTime?
+  asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  task EaglePhotoAgentTask @relation(fields:[ownerId,libraryMode,taskId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@unique([taskId, assetId])
+  @@index([ownerId,libraryMode,assetId,assetRevision,status])
+}
+model EaglePhotoLocation {
+  assetId String @id
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  assetRevision Int
+  cityId String
+  name String
+  country String
+  region String
+  latitude Float
+  longitude Float
+  source String @default("INFERRED")
+  suggestionId String
+  rowVersion Int @default(1)
+  updatedAt DateTime @updatedAt
+  asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@unique([ownerId,libraryMode,assetId])
+  @@index([ownerId,libraryMode,cityId])
 }
