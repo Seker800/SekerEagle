@@ -152,6 +152,16 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
   if (jwtAccessSecret.length < 32)
     throw new Error('JWT_ACCESS_SECRET must contain at least 32 characters');
 
+  if (nodeEnv === 'production') {
+    const placeholder = /replace[-_ ]?with|change[-_ ]?me|example|placeholder|test[-_ ]?secret/i;
+    const decoded = /^[a-f0-9]{64,}$/i.test(jwtAccessSecret) && jwtAccessSecret.length % 2 === 0
+      ? Buffer.from(jwtAccessSecret, 'hex')
+      : /^[A-Za-z0-9+/_-]+={0,2}$/.test(jwtAccessSecret)
+        ? Buffer.from(jwtAccessSecret, 'base64') : Buffer.alloc(0);
+    if (placeholder.test(jwtAccessSecret) || decoded.length < 32 || new Set(decoded).size < 16)
+      throw new Error('JWT_ACCESS_SECRET must be a random base64 or hex secret of at least 32 bytes');
+  }
+
   const databaseUrl = required(env, 'DATABASE_URL');
   const s3Endpoint = required(env, 'S3_ENDPOINT');
   const s3PublicEndpoint = required(env, 'S3_PUBLIC_ENDPOINT');

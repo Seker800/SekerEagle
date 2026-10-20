@@ -14,6 +14,7 @@ import {
   IsString,
   MaxLength,
   MinLength,
+  IsByteLength,
 } from 'class-validator';
 import { PAT_SCOPES, type PatScope } from './auth.types';
 
@@ -51,6 +52,7 @@ export class ChangePasswordDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @IsByteLength(0, 72, { message: '密码不能超过 72 个 UTF-8 字节。' })
   newPassword!: string;
 }
 
@@ -59,6 +61,7 @@ export class ResetPasswordDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @IsByteLength(0, 72, { message: '密码不能超过 72 个 UTF-8 字节。' })
   newPassword!: string;
 }
 
@@ -91,6 +94,7 @@ export class CreateUserDto {
   @IsString()
   @MinLength(12)
   @MaxLength(128)
+  @IsByteLength(0, 72, { message: '密码不能超过 72 个 UTF-8 字节。' })
   password!: string;
 
   @ApiPropertyOptional({ enum: UserRole, default: UserRole.USER })

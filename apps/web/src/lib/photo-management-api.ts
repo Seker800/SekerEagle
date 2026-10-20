@@ -24,8 +24,9 @@ export interface PhotoGroup {
 const base = '/api/photos/photography';
 export const getPhotoFacets = () =>
   request<{ cameras: string[]; lenses: string[] }>(`${base}/facets`);
-export const listPhotoPeople = () =>
-  request<{ runtimeConfigured: boolean; people: PhotoPerson[] }>(`${base}/people`);
+export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
+  request<{ runtimeConfigured: boolean; people: PhotoPerson[]; nextCursor: string | null }>(
+    `${base}/people${after ? `?after=${encodeURIComponent(after)}` : ''}`, { signal });
 export const scanPhotoPeople = () =>
   request<{ queued: number; scanned: number; limit: number }>(`${base}/people/scan`, {
     method: 'POST',

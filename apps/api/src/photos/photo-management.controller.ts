@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, SetMetadata, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, SetMetadata, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsInt,
@@ -19,6 +19,9 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoManagementService } from './photo-management.service';
+class PeopleQueryDto {
+  @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID('4') after?: string;
+}
 class PersonPrivacyDto {
   @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;
   @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) rowVersion!: number;
@@ -61,8 +64,8 @@ export class PhotoManagementController {
   facets(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.facets(p.sub, p.canViewPrivate);
   }
-  @Get('people') people(@CurrentPrincipal() p: AuthPrincipal) {
-    return this.photos.people(p.sub, p.canViewPrivate);
+  @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
+    return this.photos.people(p.sub, p.canViewPrivate, query.after);
   }
   @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(
     @CurrentPrincipal() p: AuthPrincipal,

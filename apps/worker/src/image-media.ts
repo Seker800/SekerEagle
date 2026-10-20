@@ -1,3 +1,4 @@
+import { mediaSubprocessEnvironment } from '@sekereagle/media-core';
 import { isCameraRawMime, CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
 import { readCameraRaw, type CameraDimensions } from '@sekereagle/media-core';
 import { execFile } from 'node:child_process';
@@ -128,21 +129,17 @@ async function decodeHeifFile(inputPath: string, outputPath: string): Promise<vo
     const { stdout } = await execFileAsync(
       process.env.HEIF_INFO_PATH?.trim() || 'heif-info',
       [inputPath],
-      { maxBuffer: 256 * 1024, timeout: 30_000 },
+      { env: mediaSubprocessEnvironment(), maxBuffer: 256 * 1024, timeout: 30_000 },
     );
     assertSafeHeifInfo(stdout);
     await execFileAsync(
       process.env.HEIF_CONVERT_PATH?.trim() || 'heif-convert',
       [inputPath, outputPath],
-      { timeout: 120_000 },
+      { env: mediaSubprocessEnvironment(), timeout: 120_000 },
     );
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    await rm(outputPath, { force: true });
-    await execFileAsync(
-      process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
-      ['-v', 'error', '-y', '-i', inputPath, '-frames:v', '1', outputPath],
-      { timeout: 120_000 },
-    );
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
+      throw new Error('HEIF 解码工具未安装，拒绝使用未经检查的回退解码。');
+    throw error;
   }
 }

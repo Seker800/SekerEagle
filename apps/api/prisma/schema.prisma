@@ -210,6 +210,7 @@ model User {
 }
 
 model RefreshToken {
+  authVersion Int @default(0)
   familyId String @default(uuid())
   id         String    @id @default(uuid())
   tokenHash  String    @unique

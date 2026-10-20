@@ -33,6 +33,7 @@ export class PasswordService {
   }
 
   async createUser(email: string, password: string, role: UserRole): Promise<User> {
+    assertNewPassword(password);
     const normalized = normalizeEmail(email);
     if (await this.prisma.user.findUnique({ where: { email: normalized }, select: { id: true } })) {
       throw new ConflictException('邮箱已存在。');
@@ -58,6 +59,7 @@ export class PasswordService {
     currentPassword: string,
     newPassword: string,
   ): Promise<void> {
+    assertNewPassword(newPassword);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new NotFoundException('用户不存在。');
     if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
@@ -70,6 +72,7 @@ export class PasswordService {
   }
 
   async resetPassword(userId: string, newPassword: string): Promise<void> {
+    assertNewPassword(newPassword);
     const exists = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
@@ -177,4 +180,9 @@ export class PasswordService {
 
 function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
+}
+
+function assertNewPassword(password: string): void {
+  if (Buffer.byteLength(password, 'utf8') > 72)
+    throw new BadRequestException('密码不能超过 72 个 UTF-8 字节。');
 }

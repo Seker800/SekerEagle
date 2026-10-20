@@ -1,10 +1,10 @@
+import { usePhotoPeople } from './use-photo-people';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
-  listPhotoPeople,
   scanPhotoPeople,
   renamePhotoPerson,
   mergePhotoPeople,
@@ -31,11 +31,7 @@ export function PhotoCollections({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
-  const people = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
-    queryFn: listPhotoPeople,
-    refetchInterval: 10000,
-  });
+  const people = usePhotoPeople(ownerId, includePrivate);
   async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
     setError(null);
     setPending(true);
@@ -84,6 +80,7 @@ export function PhotoCollections({
           {t('分析人物')}
         </button>
       </div>
+      {people.hasNextPage && <button type="button" disabled={people.isFetchingNextPage} onClick={() => void people.fetchNextPage()}>{t('加载更多人物')}</button>}
       {people.data?.runtimeConfigured === false && (
         <p>{t('本地人物模型尚未启用，安装后可分析人物。')}</p>
       )}

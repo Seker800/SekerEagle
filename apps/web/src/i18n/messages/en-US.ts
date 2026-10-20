@@ -1329,4 +1329,5 @@ export const enUS = {
   操作: 'Actions',
   查看所选图片: 'View selected image',
   图片切换: 'Image navigation',
+  加载更多人物: 'Load more people',
 } as const;

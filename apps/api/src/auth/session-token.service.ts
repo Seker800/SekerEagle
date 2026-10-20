@@ -37,6 +37,7 @@ export class SessionTokenService {
         tokenHash: this.hash(refreshToken),
         familyId,
         userId: user.id,
+        authVersion: user.authVersion,
         expiresAt: new Date(Date.now() + refreshTtl * 1000),
       },
     });
@@ -56,6 +57,8 @@ export class SessionTokenService {
     if (!stored || (!stored.revokedAt && stored.expiresAt <= new Date())) {
       throw new UnauthorizedException(`${REFRESH_COOKIE_NAME} 无效或已过期。`);
     }
+    if (stored.authVersion !== stored.user.authVersion)
+      throw new UnauthorizedException('登录状态已失效。');
     if (stored.user.disabledAt) throw new ForbiddenException('该账号已停用。');
 
     const session = await this.prisma.$transaction(async (tx) => {

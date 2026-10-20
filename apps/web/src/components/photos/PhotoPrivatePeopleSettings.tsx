@@ -1,10 +1,9 @@
+import { usePhotoPeople } from './use-photo-people';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
-  listPhotoPeople,
   updatePhotoPersonPrivacy,
   type PhotoPerson,
 } from '../../lib/photo-management-api';
@@ -19,11 +18,7 @@ export function PhotoPrivatePeopleSettings({
   const { ownerId } = useLibraryWorkspace();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const people = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
-    queryFn: listPhotoPeople,
-    enabled: includePrivate,
-  });
+  const people = usePhotoPeople(ownerId, includePrivate, includePrivate);
   async function unmark(person: PhotoPerson) {
     setPending(true);
     setError(null);
@@ -68,6 +63,7 @@ export function PhotoPrivatePeopleSettings({
               ))}
           </ul>
         )}
+      {people.hasNextPage && <button type="button" disabled={people.isFetchingNextPage} onClick={() => void people.fetchNextPage()}>{t('加载更多人物')}</button>}
         {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
       </div>
     </div>

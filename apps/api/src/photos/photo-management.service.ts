@@ -112,11 +112,12 @@ export class PhotoManagementService {
       lenses: lenses.flatMap((row) => (row.lensModel ? [row.lensModel] : [])),
     };
   }
-  async people(ownerId: string, includePrivate: boolean) {
+  async people(ownerId: string, includePrivate: boolean, after?: string) {
     const rows = await this.prisma.eaglePhotoPerson.findMany({
       where: {
         ownerId,
         libraryMode: 'PHOTO',
+        ...(after ? { id: { gt: after } } : {}),
         ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
         OR: [
           { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
@@ -141,13 +142,14 @@ export class PhotoManagementService {
           orderBy: { confidence: 'desc' },
         },
       },
-      orderBy: { createdAt: 'asc' },
-      take: 200,
+      orderBy: { id: 'asc' },
+      take: 201,
     });
     return {
       runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
       limits: { people: 200, facesPerPerson: 20 },
-      people: rows.map((person) => ({
+      nextCursor: rows.length > 200 ? rows[199]!.id : null,
+      people: rows.slice(0, 200).map((person) => ({
         ...person,
         faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
       })),

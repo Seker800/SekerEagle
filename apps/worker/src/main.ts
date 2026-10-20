@@ -1,3 +1,4 @@
+import { mediaSubprocessEnvironment } from '@sekereagle/media-core';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { imageRenditionSpecs, catalogImageDimensions } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
@@ -700,7 +701,7 @@ async function processVideo(
         '3',
         posterPath,
       ],
-      { timeout: 120_000 },
+      { env: mediaSubprocessEnvironment(), timeout: 120_000 },
     );
     const poster = await readFile(posterPath);
     const posterMetadata = await sharp(poster).metadata();
