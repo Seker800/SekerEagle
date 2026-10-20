@@ -1,3 +1,4 @@
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -91,6 +92,7 @@ export async function persistPhotoFaces(
 ) {
   if (job.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
   await prisma.$transaction(async (tx) => {
+    await lockOwnerPrivacyProjection(tx, job.ownerId, 'PHOTO');
     // Serialize automatic assignments against human merges/corrections for this owner.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${job.ownerId}`}))`;
     const current = await tx.eagleAsset.findFirst({
@@ -114,7 +116,7 @@ export async function persistPhotoFaces(
         assetId: job.assetId,
         OR: [
           { assetRevision: { not: job.assetRevision } },
-          { modelVersion: { not: FACE_MODEL_VERSION } },
+          { modelVersion: { not: FACE_MODEL_VERSION }, userAssigned: false },
         ],
       },
       data: { isCurrent: false },
@@ -123,8 +125,22 @@ export async function persistPhotoFaces(
       where: { ownerId: job.ownerId, libraryMode: 'PHOTO', modelVersion: FACE_MODEL_VERSION },
       take: 10000,
     });
-    const assigned = new Set<string>();
+    const corrected = await tx.eaglePhotoFace.findMany({
+      where: {
+        ownerId: job.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: job.assetId,
+        assetRevision: job.assetRevision,
+        isCurrent: true,
+        userAssigned: true,
+      },
+    });
+    const assigned = new Set<string>(
+      corrected.flatMap((face) => (face.personId ? [face.personId] : [])),
+    );
     for (const [index, face] of detections.entries()) {
+      // Preserve human identities even when an upgraded detector changes its face indices.
+      if (corrected.some((row) => faceBoxOverlap(row.box, face.box) >= 0.5)) continue;
       const id = createHash('sha256')
         .update(`${job.assetId}:${job.assetRevision}:${FACE_MODEL_VERSION}:${index}`)
         .digest('hex');
@@ -163,5 +179,13 @@ export async function persistPhotoFaces(
         },
       });
     }
+    await syncAssetPrivacy(tx, job.ownerId, [job.assetId], 'PHOTO');
   });
+}
+
+function faceBoxOverlap(a: number[], b: number[]) {
+  const intersection =
+    Math.max(0, Math.min(a[0]! + a[2]!, b[0]! + b[2]!) - Math.max(a[0]!, b[0]!)) *
+    Math.max(0, Math.min(a[1]! + a[3]!, b[1]! + b[3]!) - Math.max(a[1]!, b[1]!));
+  return intersection / Math.max(Number.EPSILON, a[2]! * a[3]! + b[2]! * b[3]! - intersection);
 }

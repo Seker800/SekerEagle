@@ -51,10 +51,7 @@ import {
   readEagleFilterQuery,
   readEagleFilterTagDependencies,
 } from './eagle-filter-query';
-import {
-  lockOwnerPrivacyProjection,
-  syncAssetPrivacyFromManualTags,
-} from './eagle-privacy.service';
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
 
 const publicPhotoMetadataSelect = Prisma.validator<Prisma.EaglePhotoMetadataSelect>()({
   capturedAt: true,
@@ -111,6 +108,13 @@ const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
 
 const assetInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   ...assetListInclude,
+  manualTagLinks: {
+    select: { tag: { select: { id: true, name: true, color: true, marksAssetsPrivate: true } } },
+  },
+  photoFaces: {
+    where: { isCurrent: true, person: { marksAssetsPrivate: true } },
+    select: { assetRevision: true, person: { select: { id: true, name: true } } },
+  },
   annotation: { select: { color: true, description: true, sourceUrl: true } },
   aiTagLinks: {
     where: { status: 'ACTIVE' },
@@ -877,7 +881,7 @@ export class EagleService {
           includePrivate,
         });
       }
-      return syncAssetPrivacyFromManualTags(transaction, ownerId, input.assetIds, this.libraryMode);
+      return syncAssetPrivacy(transaction, ownerId, input.assetIds, this.libraryMode);
     });
     return { affectedAssetCount: input.assetIds.length, privacyChangedAssetCount };
   }
@@ -1110,7 +1114,7 @@ export class EagleService {
         await transaction.eagleManualTag.delete({
           where: { id: tagId, libraryMode: this.libraryMode },
         });
-        await syncAssetPrivacyFromManualTags(transaction, ownerId, undefined, this.libraryMode);
+        await syncAssetPrivacy(transaction, ownerId, undefined, this.libraryMode);
       });
       return { deletedId: tagId };
     } catch (error) {
@@ -1311,7 +1315,7 @@ export class EagleService {
           includePrivate,
         });
       }
-      return syncAssetPrivacyFromManualTags(transaction, ownerId, [assetId], this.libraryMode);
+      return syncAssetPrivacy(transaction, ownerId, [assetId], this.libraryMode);
     });
     return { affectedAssetCount: 1, privacyChangedAssetCount };
   }
@@ -1651,9 +1655,25 @@ export class EagleService {
 }
 
 function serializeAsset(asset: AssetRecord) {
-  const { annotation, aiTagLinks, colorAnalyses, ...listRecord } = asset;
+  const { annotation, aiTagLinks, colorAnalyses, photoFaces, ...listRecord } = asset;
+  const privacyReasons = asset.isPrivate
+    ? [
+        ...asset.manualTagLinks
+          .filter(({ tag }) => tag.marksAssetsPrivate)
+          .map(({ tag }) => ({ kind: 'TAG' as const, id: tag.id, name: tag.name })),
+        ...new Map(
+          (photoFaces ?? [])
+            .filter((face) => face.assetRevision === asset.mediaRevision && face.person)
+            .map((face) => [
+              face.person!.id,
+              { kind: 'PERSON' as const, id: face.person!.id, name: face.person!.name },
+            ]),
+        ).values(),
+      ]
+    : [];
   return {
     ...serializeAssetList(listRecord),
+    privacyReasons,
     annotation,
     aiTags: aiTagLinks.map(({ aiTag, confidence, status }) => ({ ...aiTag, confidence, status })),
     colorAnalysis: colorAnalyses[0]

@@ -1,3 +1,4 @@
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { imageRenditionSpecs, catalogImageDimensions } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
@@ -559,7 +560,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       });
     }
     await prisma.$transaction(async (transaction) => {
-      // Group decisions and publication use one lock order: group, then asset/projections.
+      await lockOwnerPrivacyProjection(transaction, asset.ownerId, asset.libraryMode);
+      // Global lock order: privacy, group, asset/projections.
       if (asset.libraryMode === 'PHOTO')
         await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${asset.ownerId}`}))`;
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
@@ -625,6 +627,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
         },
       });
+      await syncAssetPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
     });
     return;
   }
@@ -722,6 +725,7 @@ async function processVideo(
       }),
     );
     await prisma.$transaction(async (transaction) => {
+      await lockOwnerPrivacyProjection(transaction, asset.ownerId, asset.libraryMode);
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
         where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
         data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
@@ -805,6 +809,7 @@ async function processVideo(
           livePhotoRole: metadata.livePhotoIdentifier ? 'MOTION' : null,
         },
       });
+      await syncAssetPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
     });
   } finally {
     await rm(directory, { recursive: true, force: true });

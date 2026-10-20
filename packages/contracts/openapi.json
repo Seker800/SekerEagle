@@ -5301,6 +5301,37 @@
         "tags": ["photo-management"]
       }
     },
+    "/api/photos/photography/people/{id}/privacy": {
+      "patch": {
+        "operationId": "PhotoManagementController_privacy",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonPrivacyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
     "/api/photos/photography/people/{id}/merge": {
       "post": {
         "operationId": "PhotoManagementController_merge",
@@ -7204,6 +7235,19 @@
           }
         },
         "required": ["name"]
+      },
+      "PersonPrivacyDto": {
+        "type": "object",
+        "properties": {
+          "marksAssetsPrivate": {
+            "type": "boolean"
+          },
+          "rowVersion": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": ["marksAssetsPrivate", "rowVersion"]
       },
       "MergePeopleDto": {
         "type": "object",

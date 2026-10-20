@@ -199,3 +199,20 @@ test('photo organization remains a photography provider and cannot replace commo
     'shared-providers',
   );
 });
+
+for (const file of ['apps/web/src/App.tsx', 'packages/library-core/src/index.ts']) {
+  test(`rejects backend persistence import from ${file}`, () => {
+    rejectsMutation(
+      file,
+      (s) => "import { syncAssetPrivacy } from '@sekereagle/library-persistence';\n" + s,
+      'server-persistence-boundary',
+    );
+  });
+}
+test('rejects dynamic Prisma import from browser code', () => {
+  rejectsMutation(
+    'apps/web/src/App.tsx',
+    (s) => "const db = import('@prisma/client');\n" + s,
+    'server-persistence-boundary',
+  );
+});

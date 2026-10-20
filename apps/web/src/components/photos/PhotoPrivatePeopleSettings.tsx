@@ -1,0 +1,70 @@
+import { getDesktopCacheBridge } from '../../lib/media-resolver';
+import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { t } from '../../i18n';
+import { useLibraryWorkspace } from '../../lib/library-workspace';
+import {
+  listPhotoPeople,
+  updatePhotoPersonPrivacy,
+  type PhotoPerson,
+} from '../../lib/photo-management-api';
+
+export function PhotoPrivatePeopleSettings({
+  includePrivate,
+  onRulesChange,
+}: {
+  includePrivate: boolean;
+  onRulesChange: () => void;
+}) {
+  const { ownerId } = useLibraryWorkspace();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const people = useQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
+    queryFn: listPhotoPeople,
+    enabled: includePrivate,
+  });
+  async function unmark(person: PhotoPerson) {
+    setPending(true);
+    setError(null);
+    try {
+      await updatePhotoPersonPrivacy(person, false);
+      onRulesChange();
+      try {
+        await getDesktopCacheBridge()?.clearCache();
+      } catch {
+        setError(t('隐私规则已保存，但桌面媒体缓存清理失败。'));
+      }
+      await people.refetch();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('操作失败'));
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <div className="privacy-tag-settings">
+      <div>
+        <strong>{t('私密人物')}</strong>
+        <p>{t('在人物页面选择某人，可将包含此人的照片设为私密。')}</p>
+        {!includePrivate ? (
+          <p>{t('开启显示隐私内容后，可在这里解除私密人物规则。')}</p>
+        ) : (
+          <ul>
+            {people.data?.people
+              .filter((person) => person.marksAssetsPrivate)
+              .map((person) => (
+                <li key={person.id}>
+                  {person.name ?? t('未命名人物')}{' '}
+                  <button type="button" disabled={pending} onClick={() => void unmark(person)}>
+                    {t('解除人物私密')}
+                  </button>
+                </li>
+              ))}
+          </ul>
+        )}
+        {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
+      </div>
+    </div>
+  );
+}

@@ -21,10 +21,7 @@ import {
   upsertAcceptedSuggestionMemberDistance,
 } from './eagle-vector.persistence';
 import { EMBEDDING_PROCESSOR_VERSION, RENDITION_PROCESSOR_VERSION } from './media-job-plan';
-import {
-  lockOwnerPrivacyProjection,
-  syncAssetPrivacyFromManualTags,
-} from './eagle-privacy.service';
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
 
 const vectorReviewRenditions = () => ({
   where: {
@@ -704,7 +701,7 @@ export class EagleVectorService {
         snapshotId: suggestion.snapshotId,
         embeddingId: suggestion.embeddingId,
       });
-      const privacyChangedAssetCount = await syncAssetPrivacyFromManualTags(
+      const privacyChangedAssetCount = await syncAssetPrivacy(
         transaction,
         ownerId,
         [suggestion.assetId],

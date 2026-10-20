@@ -1,0 +1,3 @@
+BEGIN;
+ALTER TABLE "EaglePhotoPerson" ADD COLUMN "marksAssetsPrivate" BOOLEAN NOT NULL DEFAULT false;
+COMMIT;

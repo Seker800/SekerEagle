@@ -138,6 +138,7 @@ interface SekerEaglePageProps {
   accountView?: ReactNode;
   privacyVisibility?: PrivacyVisibilityState;
   privacyRulesRevision?: number;
+  onPrivacyRulesChange?: () => void;
 }
 type EagleAssetContextMenu = {
   x: number;
@@ -256,6 +257,7 @@ export function SekerEaglePage({
   accountView,
   privacyVisibility,
   privacyRulesRevision = 0,
+  onPrivacyRulesChange,
 }: SekerEaglePageProps) {
   const { libraryMode } = useLibraryWorkspace();
   const storeScope = JSON.stringify([ownerId, libraryMode]);
@@ -1684,6 +1686,7 @@ export function SekerEaglePage({
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
+                  onPrivacyRulesChange={onPrivacyRulesChange ?? resetAssetPrivacyState}
                   includePrivate={privateVisible}
                   onOpen={openAssetPreview}
                   onPerson={(personId) => {
@@ -2102,6 +2105,24 @@ export function SekerEaglePage({
                   id="eagle-asset-metadata-form"
                   className={`${styles.detailSection} ${styles.annotationForm}`}
                 >
+                  {selectedAsset?.isPrivate && (
+                    <div role="note">
+                      <strong>{t('私密原因')}</strong>
+                      {selectedAsset.privacyReasons?.length ? (
+                        <ul>
+                          {selectedAsset.privacyReasons.map((reason) => (
+                            <li key={`${reason.kind}:${reason.id}`}>
+                              {reason.kind === 'TAG' ? t('私密标签') : t('私密人物')}
+                              {': '}
+                              {reason.name ?? t('未命名人物')}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p>{t('关联照片的私密规则')}</p>
+                      )}
+                    </div>
+                  )}
                   <label>
                     {' ' + t('描述') + ' '}
                     <textarea

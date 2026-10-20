@@ -1,0 +1,382 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test, after } from 'node:test';
+import { PrismaClient } from '@prisma/client';
+import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+import {
+  syncAssetPrivacy,
+  inheritedPrivacyTag,
+} from '../../packages/library-persistence/dist/index.js';
+import { PhotoManagementService } from '../../apps/api/dist/photos/photo-management.service.js';
+import { EaglePrivacyService } from '../../apps/api/dist/eagle/eagle-privacy.service.js';
+import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { persistPhotoFaces, FACE_MODEL_VERSION } from '../../apps/worker/dist/photo-faces.js';
+assertSafeRuntimeTarget({
+  databaseUrl: process.env.DATABASE_URL ?? '',
+  s3Endpoint: process.env.S3_ENDPOINT ?? '',
+  s3Bucket: process.env.S3_BUCKET ?? '',
+});
+assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
+const prisma = new PrismaClient();
+after(() => prisma.$disconnect());
+const embedding = [1, ...Array(127).fill(0)];
+async function fixture() {
+  const ownerId = randomUUID();
+  await prisma.user.create({
+    data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'test-only' },
+  });
+  const add = (more = {}) =>
+    prisma.eagleAsset.create({
+      data: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        originalName: 'privacy-test.jpg',
+        displayName: 'privacy sample',
+        normalizedDisplayName: 'privacy sample',
+        mimeType: 'image/jpeg',
+        format: 'jpg',
+        byteSize: 1,
+        originalObjectKey: `test/${randomUUID()}`,
+        lifecycleStatus: 'READY',
+        ...more,
+      },
+    });
+  const a = await add(),
+    b = await add(),
+    publicAsset = await add();
+  const person = await prisma.eaglePhotoPerson.create({
+    data: { ownerId, name: '测试人物', prototype: embedding, modelVersion: FACE_MODEL_VERSION },
+  });
+  const face = await prisma.eaglePhotoFace.create({
+    data: {
+      id: randomUUID(),
+      ownerId,
+      assetId: a.id,
+      assetRevision: a.mediaRevision,
+      modelVersion: FACE_MODEL_VERSION,
+      personId: person.id,
+      box: [0.1, 0.1, 0.4, 0.4],
+      confidence: 1,
+      embedding,
+    },
+  });
+  const service = new PhotoManagementService(prisma),
+    tags = new EaglePrivacyService(prisma, 'PHOTO'),
+    assets = new EagleService(prisma, undefined, 'PHOTO');
+  const marked = () => prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } });
+  const rule = async (value, includePrivate = true, id = person.id) => {
+    const p = await prisma.eaglePhotoPerson.findUniqueOrThrow({ where: { id } });
+    return service.setPersonPrivacy(ownerId, id, value, p.rowVersion, includePrivate);
+  };
+  return { ownerId, a, b, publicAsset, add, person, face, service, tags, assets, marked, rule };
+}
+test('人物规则隐藏照片，标签取消不解除人物保护，公开时才解除全部保护', async () => {
+  const f = await fixture();
+  const tag = await prisma.eagleManualTag.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      name: '私密测试',
+      normalizedName: '私密测试',
+    },
+  });
+  await prisma.eagleAssetManualTag.create({
+    data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.a.id, tagId: tag.id },
+  });
+  const result = await f.rule(true, false);
+  assert.equal(result.changed, 1);
+  await f.tags.updateSettings(f.ownerId, { tagIds: [tag.id] });
+  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  assert.equal((await f.marked()).isPrivate, true);
+  await f.tags.updateSettings(f.ownerId, { tagIds: [tag.id] });
+  await f.rule(false);
+  assert.equal((await f.marked()).isPrivate, true);
+  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  assert.equal((await f.marked()).isPrivate, false);
+});
+test('重复投影不改变版本，过期人物版本冲突且跨用户不可修改', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const version = (await f.marked()).rowVersion;
+  await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, [f.a.id], 'PHOTO'));
+  assert.equal((await f.marked()).rowVersion, version);
+  await assert.rejects(f.service.setPersonPrivacy(f.ownerId, f.person.id, false, 1, true), /变化/);
+  await assert.rejects(
+    f.service.setPersonPrivacy(randomUUID(), f.person.id, false, 2, true),
+    /不存在/,
+  );
+  await assert.rejects(f.rule(false, false), /不存在/);
+  assert.equal((await f.marked()).isPrivate, true);
+});
+test('私密人物合并到公开人物保留规则，目标原有照片同时隐藏', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const target = await prisma.eaglePhotoPerson.create({
+    data: { ownerId: f.ownerId, prototype: embedding, modelVersion: FACE_MODEL_VERSION },
+  });
+  await prisma.eaglePhotoFace.create({
+    data: {
+      id: randomUUID(),
+      ownerId: f.ownerId,
+      assetId: f.b.id,
+      assetRevision: 0,
+      modelVersion: FACE_MODEL_VERSION,
+      personId: target.id,
+      box: [0, 0, 1, 1],
+      confidence: 1,
+      embedding,
+    },
+  });
+  await f.service.mergePeople(f.ownerId, f.person.id, target.id, true);
+  assert.equal(
+    (await prisma.eaglePhotoPerson.findUniqueOrThrow({ where: { id: target.id } }))
+      .marksAssetsPrivate,
+    true,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, isPrivate: true } }),
+    2,
+  );
+  await assert.rejects(f.service.mergePeople(f.ownerId, target.id, randomUUID(), true), /不存在/);
+});
+test('人脸纠错仅解除该人物原因，私密标签继续保护', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const tagId = await prisma.$transaction((tx) => inheritedPrivacyTag(tx, f.ownerId, 'PHOTO'));
+  await prisma.eagleAssetManualTag.create({
+    data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.a.id, tagId },
+  });
+  const split = await f.service.reassignFace(f.ownerId, f.face.id, null, true);
+  assert.notEqual(split.id, f.person.id);
+  assert.equal((await f.marked()).isPrivate, true);
+  await f.tags.updateSettings(f.ownerId, { tagIds: [] });
+  assert.equal((await f.marked()).isPrivate, false);
+  await f.service.reassignFace(f.ownerId, f.face.id, f.person.id, true);
+  assert.equal((await f.marked()).isPrivate, true);
+});
+test('实况配对包括迟到视频继承保护，模式和其他用户保持隔离', async () => {
+  const f = await fixture(),
+    id = randomUUID();
+  await prisma.eagleAsset.update({
+    where: { id: f.a.id },
+    data: { livePhotoIdentifier: id, livePhotoRole: 'STILL' },
+  });
+  await f.rule(true);
+  const movie = await f.add({
+    livePhotoIdentifier: id,
+    livePhotoRole: 'MOTION',
+    mimeType: 'video/quicktime',
+  });
+  const material = await f.add({
+    libraryMode: 'MATERIAL',
+    livePhotoIdentifier: id,
+    livePhotoRole: 'MOTION',
+  });
+  await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, [movie.id], 'PHOTO'));
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: movie.id } })).isPrivate,
+    true,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: material.id } })).isPrivate,
+    false,
+  );
+  await f.rule(false);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: movie.id } })).isPrivate,
+    false,
+  );
+});
+test('过期人脸不命中规则，合照任一私密人物即可保护', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  await prisma.eaglePhotoFace.update({ where: { id: f.face.id }, data: { assetRevision: 99 } });
+  await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, [f.a.id], 'PHOTO'));
+  assert.equal((await f.marked()).isPrivate, false);
+  await prisma.eaglePhotoFace.update({ where: { id: f.face.id }, data: { assetRevision: 0 } });
+  await prisma.$transaction((tx) => syncAssetPrivacy(tx, f.ownerId, [f.a.id], 'PHOTO'));
+  assert.equal((await f.marked()).isPrivate, true);
+});
+test('后台识别新增照片自动继承人物私密，人工纠错跨模型重跑保留', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const job = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.b.id,
+      assetRevision: 0,
+      kind: 'ANALYZE_PHOTO_FACES',
+      processorVersion: FACE_MODEL_VERSION,
+      status: 'PROCESSING',
+    },
+  });
+  await persistPhotoFaces(prisma, job, [{ box: [0.1, 0.1, 0.4, 0.4], confidence: 1, embedding }]);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
+    true,
+  );
+  await prisma.eaglePhotoFace.update({
+    where: { id: f.face.id },
+    data: { userAssigned: true, modelVersion: 'previous-model' },
+  });
+  const rerun = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.a.id,
+      assetRevision: 0,
+      kind: 'ANALYZE_PHOTO_FACES',
+      processorVersion: FACE_MODEL_VERSION,
+      status: 'PROCESSING',
+    },
+  });
+  await persistPhotoFaces(prisma, rerun, [
+    { box: [0.11, 0.1, 0.4, 0.4], confidence: 1, embedding },
+  ]);
+  assert.equal(
+    await prisma.eaglePhotoFace.count({ where: { assetId: f.a.id, isCurrent: true } }),
+    1,
+  );
+  assert.equal((await f.marked()).isPrivate, true);
+});
+test('列表、人物、时间索引和详情统一过滤，授权详情解释私密原因', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  assert.equal((await f.service.people(f.ownerId, false)).people.length, 0);
+  assert.equal((await f.service.people(f.ownerId, true)).people[0].marksAssetsPrivate, true);
+  assert.equal(
+    (await f.assets.listAssets(f.ownerId, { limit: 50 })).items.some((a) => a.id === f.a.id),
+    false,
+  );
+  await assert.rejects(f.assets.getAsset(f.ownerId, f.a.id), /不存在/);
+  const detail = await f.assets.getAsset(f.ownerId, f.a.id, { includePrivate: true });
+  assert.deepEqual(detail.privacyReasons, [{ kind: 'PERSON', id: f.person.id, name: '测试人物' }]);
+  assert.equal(
+    (await f.service.timeline(f.ownerId, false)).months.reduce((n, m) => n + m.count, 0),
+    2,
+  );
+});
+test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过期版本；媒体与 Agent 不泄露', async () => {
+  const defaults = {
+    NODE_ENV: 'test',
+    PORT: '3000',
+    CANONICAL_ORIGIN: 'http://localhost:8180',
+    JWT_ACCESS_SECRET: 'isolated-privacy-test-signing-key-over-32-characters',
+    ACCESS_TOKEN_TTL_SECONDS: '900',
+    REFRESH_TOKEN_TTL_SECONDS: '2592000',
+    S3_PUBLIC_ENDPOINT: 'http://localhost:8180',
+    S3_REGION: 'us-east-1',
+    S3_ACCESS_KEY_ID: 'isolated-test-only',
+    S3_SECRET_ACCESS_KEY: 'isolated-test-only',
+  };
+  for (const [key, value] of Object.entries(defaults)) process.env[key] ??= value;
+  const { NestFactory } = await import('@nestjs/core');
+  const { ValidationPipe } = await import('@nestjs/common');
+  const { default: cookieParser } = await import('cookie-parser');
+  const { AppModule } = await import('../../apps/api/dist/app.module.js');
+  const { PatService } = await import('../../apps/api/dist/auth/pat.service.js');
+  const { SessionTokenService } = await import('../../apps/api/dist/auth/session-token.service.js');
+  const { PrivacyVisibilityService } =
+    await import('../../apps/api/dist/auth/privacy-visibility.service.js');
+  const { ACCESS_COOKIE_NAME } = await import('../../apps/api/dist/auth/auth.constants.js');
+  const app = await NestFactory.create(AppModule, { logger: false });
+  app.setGlobalPrefix('api');
+  app.use(cookieParser());
+  app.useGlobalPipes(
+    new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+  );
+  try {
+    await app.listen(0, '127.0.0.1');
+    const base = await app.getUrl(),
+      f = await fixture();
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: f.ownerId } });
+    const session = await app.get(SessionTokenService).createSession(user);
+    const auth = {
+      cookie: `${ACCESS_COOKIE_NAME}=${session.accessToken}`,
+      origin: defaults.CANONICAL_ORIGIN,
+      'content-type': 'application/json',
+    };
+    const url = `${base}/api/photos/photography/people/${f.person.id}/privacy`;
+    const body = { marksAssetsPrivate: true, rowVersion: 1 };
+    const patch = async (headers, payload = body, path = url) => {
+      // Exercise all guards without exhausting the production short-window limiter.
+      await delay(150);
+      return fetch(path, { method: 'PATCH', headers, body: JSON.stringify(payload) });
+    };
+    assert.equal((await patch({ 'content-type': 'application/json' })).status, 401);
+    const pat = await app.get(PatService).create(f.ownerId, 'privacy-read', ['photo:read']);
+    const bearer = { authorization: `Bearer ${pat.token}`, 'content-type': 'application/json' };
+    assert.equal((await patch(bearer)).status, 403);
+    assert.equal((await patch({ ...auth, origin: 'https://invalid.example' })).status, 403);
+    assert.equal((await patch(auth, { ...body, ownerId: randomUUID() })).status, 400);
+    assert.equal((await patch(auth, { ...body, marksAssetsPrivate: 'true' })).status, 400);
+    assert.equal((await patch(auth, { ...body, rowVersion: 0 })).status, 400);
+    assert.equal(
+      (await patch(auth, body, `${base}/api/eagle/photography/people/${f.person.id}/privacy`))
+        .status,
+      404,
+    );
+    const foreign = await fixture();
+    assert.equal(
+      (
+        await patch(
+          auth,
+          body,
+          `${base}/api/photos/photography/people/${foreign.person.id}/privacy`,
+        )
+      ).status,
+      404,
+    );
+    const marked = await patch(auth);
+    assert.equal(marked.status, 200, await marked.text());
+    assert.equal((await patch(auth, { marksAssetsPrivate: false, rowVersion: 2 })).status, 404);
+    for (const suffix of [
+      '',
+      '/original',
+      '/content',
+      `/renditions/${randomUUID()}/content`,
+      '/pyramid',
+    ]) {
+      assert.equal(
+        (await fetch(`${base}/api/photos/assets/${f.a.id}${suffix}`, { headers: auth })).status,
+        404,
+        suffix,
+      );
+    }
+    const visible = await (
+      await fetch(`${base}/api/photos/agent/photos`, { headers: bearer })
+    ).json();
+    assert.equal(
+      visible.items.some((a) => a.id === f.a.id),
+      false,
+    );
+    let grantCookie;
+    await app.get(PrivacyVisibilityService).update(
+      f.ownerId,
+      {
+        cookie: (name, token) => {
+          grantCookie = `${name}=${token}`;
+        },
+      },
+      { enabled: true, durationHours: 1 },
+      'PHOTO',
+    );
+    const privateAuth = { ...auth, cookie: `${auth.cookie}; ${grantCookie}` };
+    assert.equal(
+      (await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 1 })).status,
+      409,
+    );
+    assert.equal(
+      (await patch(privateAuth, { marksAssetsPrivate: false, rowVersion: 2 })).status,
+      200,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/photos/assets/${f.a.id}`, { headers: auth })).status,
+      200,
+    );
+  } finally {
+    await app.close();
+  }
+});

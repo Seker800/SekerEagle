@@ -1,3 +1,4 @@
+import { PhotoPrivatePeopleSettings } from './components/photos/PhotoPrivatePeopleSettings';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -288,6 +289,7 @@ export function App() {
           canManageProcessing={user.role === 'ADMIN'}
           privacyVisibility={privacyVisibility}
           privacyRulesRevision={privacyRulesRevision}
+          onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
           accountView={
             <AccountHome
               user={user}
@@ -297,6 +299,14 @@ export function App() {
               onPrivacyVisibilityChange={(value) => {
                 if (modeRef.current === libraryMode) setPrivacyVisibility(value);
               }}
+              privacyExtras={
+                libraryMode === 'PHOTO' ? (
+                  <PhotoPrivatePeopleSettings
+                    includePrivate={privacyVisibility?.enabled === true}
+                    onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                  />
+                ) : undefined
+              }
               onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             />
           }

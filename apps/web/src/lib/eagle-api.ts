@@ -112,6 +112,7 @@ export interface EagleAssetListItem {
 }
 
 export interface EagleAsset extends EagleAssetListItem {
+  privacyReasons?: Array<{ kind: 'TAG' | 'PERSON'; id: string; name: string | null }>;
   annotation: {
     color: string | null;
     description: string | null;

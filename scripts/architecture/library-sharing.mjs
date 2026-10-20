@@ -13,7 +13,12 @@ export function readLibrarySources(root) {
       }
     }
   }
-  for (const directory of ['apps/web/src', 'apps/api/src/eagle', 'apps/api/src/photos']) {
+  for (const directory of [
+    'apps/web/src',
+    'apps/api/src/eagle',
+    'apps/api/src/photos',
+    'packages/library-core/src',
+  ]) {
     visit(join(root, directory));
   }
   return sources;
@@ -174,6 +179,28 @@ export function checkLibrarySharing(sources) {
     trees.set(file, tree);
     for (const error of tree.parseDiagnostics) {
       report(file, 'parse-error', ts.flattenDiagnosticMessageText(error.messageText, ' '));
+    }
+    if (file.startsWith('apps/web/src/') || file.startsWith('packages/library-core/src/')) {
+      walk(tree, (node) => {
+        const dependency =
+          ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+            ? node.moduleSpecifier
+            : ts.isCallExpression(node) &&
+                (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+                  node.expression.getText(tree) === 'require')
+              ? node.arguments[0]
+              : undefined;
+        if (
+          dependency &&
+          ts.isStringLiteral(dependency) &&
+          /(?:library-persistence|@prisma\/client)/.test(dependency.text)
+        )
+          report(
+            file,
+            'server-persistence-boundary',
+            'Browser and pure library-core must not depend on database persistence.',
+          );
+      });
     }
     const isShared =
       file.startsWith('apps/web/src/components/eagle/') || file.startsWith('apps/api/src/eagle/');

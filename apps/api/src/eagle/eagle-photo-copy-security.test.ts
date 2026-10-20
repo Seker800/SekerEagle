@@ -163,8 +163,12 @@ test('edited source IDs and versions form a validated declaration without client
 });
 
 for (const mode of ['MATERIAL', 'PHOTO'] as const) {
-  for (const alreadyTagged of [false, true]) {
-    test(`edited copy adds one scoped edited tag and preserves existing labels (${mode}, already tagged: ${alreadyTagged})`, async () => {
+  for (const [alreadyTagged, privateSource] of [
+    [false, false],
+    [true, false],
+    [false, true],
+  ] as const) {
+    test(`edited copy adds one scoped edited tag and preserves existing labels (${mode}, already tagged: ${alreadyTagged}, private source: ${privateSource})`, async () => {
       const ownerId = '5a1fd7d1-fd57-4e42-83f7-55425ca8704a';
       let tagInput: any;
       let links: any[] = [];
@@ -177,9 +181,14 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
           findFirst: async () => ({
             rowVersion: 2,
             rating: 4,
-            isPrivate: false,
+            isPrivate: privateSource,
             annotation: null,
-            manualTagLinks: [{ tagId: 'travel' }, ...(alreadyTagged ? [{ tagId: 'edited' }] : [])],
+            manualTagLinks: [
+              { tagId: 'travel', tag: { marksAssetsPrivate: false } },
+              ...(alreadyTagged
+                ? [{ tagId: 'edited', tag: { marksAssetsPrivate: alreadyTagged } }]
+                : []),
+            ],
           }),
           create: async ({ data }: any) => {
             created = data;
@@ -187,6 +196,8 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
         },
         eagleManualTag: {
           upsert: async (args: any) => {
+            if (args.create.name === '继承私密')
+              return { id: 'inherited', marksAssetsPrivate: true };
             tagInput = args;
             return { id: 'edited', marksAssetsPrivate: alreadyTagged };
           },
@@ -248,7 +259,10 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       });
       assert.equal(tagInput.create.name, '已编辑');
       assert.deepEqual(tagInput.update, {}, 'existing tag preferences must remain intact');
-      assert.deepEqual(links.map((link) => link.tagId).sort(), ['edited', 'travel']);
+      assert.deepEqual(
+        links.map((link) => link.tagId).sort(),
+        privateSource ? ['edited', 'inherited', 'travel'] : ['edited', 'travel'],
+      );
       assert.ok(
         links.every(
           (link) =>
@@ -259,7 +273,7 @@ for (const mode of ['MATERIAL', 'PHOTO'] as const) {
       );
       assert.equal(
         created.isPrivate,
-        alreadyTagged,
+        alreadyTagged || privateSource,
         'a reused private marker must keep the output private',
       );
       assert.equal(created.rating, 4);

@@ -1,3 +1,4 @@
+import { inheritedPrivacyTag } from '@sekereagle/library-persistence';
 import { validatedEditRecipe } from './eagle-edit-recipe';
 import { invalidateMediaRevision } from './invalidate-media-revision';
 import { Prisma } from '@prisma/client';
@@ -38,7 +39,10 @@ async function loadEditedCopySource(
   await transaction.$queryRaw`SELECT id FROM "EagleAsset" WHERE id=${sourceId} AND "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" FOR UPDATE`;
   const source = await transaction.eagleAsset.findFirst({
     where: { id: sourceId, ownerId, libraryMode, deletedAt: null, purgeAfter: null },
-    include: { annotation: true, manualTagLinks: true },
+    include: {
+      annotation: true,
+      manualTagLinks: { include: { tag: { select: { marksAssetsPrivate: true } } } },
+    },
   });
   if (!source) throw new NotFoundException('原照片不存在。');
   if (source.rowVersion !== rowVersion)
@@ -381,6 +385,7 @@ export class EagleUploadService {
               libraryMode: this.libraryMode,
             },
             include: {
+              manualTagLinks: { include: { tag: { select: { marksAssetsPrivate: true } } } },
               renditions: {
                 select: { storageKey: true, revision: true },
               },
@@ -416,6 +421,27 @@ export class EagleUploadService {
               rowVersion: { increment: 1 },
             },
           });
+          if (
+            current.isPrivate &&
+            !current.manualTagLinks.some((link) => link.tag.marksAssetsPrivate)
+          ) {
+            const tagId = await inheritedPrivacyTag(
+              transaction,
+              session.uploaderId,
+              this.libraryMode,
+            );
+            await transaction.eagleAssetManualTag.createMany({
+              data: [
+                {
+                  ownerId: session.uploaderId,
+                  libraryMode: this.libraryMode,
+                  assetId: current.id,
+                  tagId,
+                },
+              ],
+              skipDuplicates: true,
+            });
+          }
           await invalidateMediaRevision(
             transaction,
             { ownerId: session.uploaderId, libraryMode: this.libraryMode, assetId: current.id },
@@ -530,6 +556,13 @@ export class EagleUploadService {
                 });
               const tagIds = new Set(copySource.manualTagLinks.map((link) => link.tagId));
               if (editedTag) tagIds.add(editedTag.id);
+              if (
+                copySource.isPrivate &&
+                !copySource.manualTagLinks.some((link) => link.tag.marksAssetsPrivate)
+              )
+                tagIds.add(
+                  await inheritedPrivacyTag(transaction, session.uploaderId, this.libraryMode),
+                );
               if (tagIds.size)
                 await transaction.eagleAssetManualTag.createMany({
                   data: [...tagIds].map((tagId) => ({

@@ -5,10 +5,7 @@ import type {
   SekerEagleIngestionPort,
   SekerEagleIngestionTag,
 } from '../../seker-eagle-ingestion.port';
-import {
-  lockOwnerPrivacyProjection,
-  syncAssetPrivacyFromManualTags,
-} from '../../eagle-privacy.service';
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '../../eagle-privacy.service';
 
 type ResolvedDefinition = { id: string; normalizedName: string };
 
@@ -114,7 +111,7 @@ export class PrismaSekerEagleIngestionAdapter implements SekerEagleIngestionPort
         },
       });
     }
-    await syncAssetPrivacyFromManualTags(transaction, command.ownerId, [command.assetId]);
+    await syncAssetPrivacy(transaction, command.ownerId, [command.assetId]);
   }
 
   private async resolveManualTags(

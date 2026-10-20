@@ -122,10 +122,21 @@ try {
             '--test-coverage-functions=80',
           ]
         : []),
+      ...(process.env.PHOTO_PRIVACY_COVERAGE === '1'
+        ? [
+            '--experimental-test-coverage',
+            '--test-coverage-include=packages/library-persistence/dist/index.js',
+            '--test-coverage-lines=80',
+            '--test-coverage-branches=80',
+            '--test-coverage-functions=80',
+          ]
+        : []),
       '--test',
+      'packages/library-persistence/dist/privacy.test.js',
       'scripts/testing/library-isolation.test.mjs',
       'scripts/testing/library-service-isolation.test.mjs',
       'scripts/testing/photo-agent.test.mjs',
+      'scripts/testing/photo-privacy.test.mjs',
     ],
     {
       env,

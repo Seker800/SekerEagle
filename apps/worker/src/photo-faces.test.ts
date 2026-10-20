@@ -20,6 +20,7 @@ test('obsolete face results complete only the matching lease without publishing 
   let finished = false;
   const db = {
     $executeRaw: async () => 1,
+    $queryRaw: async () => [],
     eagleAsset: { findFirst: async () => null },
     eagleAssetProcessingJob: {
       updateMany: async ({

@@ -2212,6 +2212,22 @@ export interface paths {
     patch: operations['PhotoManagementController_rename'];
     trace?: never;
   };
+  '/api/photos/photography/people/{id}/privacy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['PhotoManagementController_privacy'];
+    trace?: never;
+  };
   '/api/photos/photography/people/{id}/merge': {
     parameters: {
       query?: never;
@@ -3235,6 +3251,10 @@ export interface components {
     BatchReviewVectorSuggestionsDto: Record<string, never>;
     RenamePersonDto: {
       name: string;
+    };
+    PersonPrivacyDto: {
+      marksAssetsPrivate: boolean;
+      rowVersion: number;
     };
     MergePeopleDto: {
       /** Format: uuid */
@@ -6852,6 +6872,29 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['RenamePersonDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_privacy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PersonPrivacyDto'];
       };
     };
     responses: {

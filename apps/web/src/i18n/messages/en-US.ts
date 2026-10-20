@@ -1,4 +1,27 @@
 export const enUS = {
+  '隐私规则已保存，但桌面媒体缓存清理失败。':
+    'Privacy rules saved, but clearing the desktop media cache failed.',
+  私密原因: 'Privacy reasons',
+  私密人物: 'Private people',
+  未命名人物: 'Unnamed person',
+  关联照片的私密规则: 'Privacy rules from a related photo',
+  包含此人的照片设为私密: 'Make photos containing this person private',
+  '私密标签或私密人物任一命中，整张照片都会隐藏，包括合照。人物合并会保留私密规则。':
+    'A private tag or person hides the whole photo, including group photos. Merging people preserves privacy rules.',
+  '识别可能漏检，敏感照片请同时手动添加私密标签。':
+    'Recognition can miss faces. Also add private tags to sensitive photos manually.',
+  '已设为私密，开启显示隐私内容后可管理。':
+    'Made private. Enable Show private content to manage it.',
+  '人物隐私规则已更新。': 'Person privacy rule updated.',
+  '关闭时，私密内容不会出现在图库、搜索、标签、智能文件夹或推荐中。':
+    'When disabled, private content is hidden from the library, search, tags, smart folders and recommendations.',
+  '拥有任一所选标签的内容会自动进入私密。': 'Content with any selected tag becomes private.',
+  '在人物页面选择某人，可将包含此人的照片设为私密。':
+    'Select someone on the People page to make their photos private.',
+  '开启显示隐私内容后，可在这里解除私密人物规则。':
+    'Enable Show private content to remove private person rules here.',
+  解除人物私密: 'Remove person privacy rule',
+
   已取消: 'Cancelled',
   已拒绝: 'Rejected',
 

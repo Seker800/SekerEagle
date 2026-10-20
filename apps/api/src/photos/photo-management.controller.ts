@@ -1,6 +1,8 @@
 import { Body, Controller, Get, Param, Patch, Post, SetMetadata, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsInt,
+  Min,
   IsArray,
   ArrayMinSize,
   ArrayMaxSize,
@@ -17,6 +19,10 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoManagementService } from './photo-management.service';
+class PersonPrivacyDto {
+  @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) rowVersion!: number;
+}
 class RenamePersonDto {
   @ApiProperty({ maxLength: 120 }) @IsString() @MaxLength(120) name!: string;
 }
@@ -69,6 +75,19 @@ export class PhotoManagementController {
     @Body() dto: RenamePersonDto,
   ) {
     return this.photos.renamePerson(p.sub, id, dto.name, p.canViewPrivate);
+  }
+  @Patch('people/:id/privacy') @UseGuards(BrowserOriginGuard) privacy(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('id') id: string,
+    @Body() dto: PersonPrivacyDto,
+  ) {
+    return this.photos.setPersonPrivacy(
+      p.sub,
+      id,
+      dto.marksAssetsPrivate,
+      dto.rowVersion,
+      p.canViewPrivate,
+    );
   }
   @Post('people/:id/merge') @UseGuards(BrowserOriginGuard) merge(
     @CurrentPrincipal() p: AuthPrincipal,

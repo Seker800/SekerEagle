@@ -1,3 +1,4 @@
+import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
@@ -8,6 +9,7 @@ import {
   renamePhotoPerson,
   mergePhotoPeople,
   splitPhotoFace,
+  updatePhotoPersonPrivacy,
   type PhotoPerson,
 } from '../../lib/photo-management-api';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
@@ -16,8 +18,10 @@ export function PhotoCollections({
   includePrivate,
   onOpen,
   onPerson,
+  onPrivacyRulesChange,
 }: {
   includePrivate: boolean;
+  onPrivacyRulesChange: () => void;
   onOpen: (asset: EagleAssetListItem) => void;
   onPerson: (personId: string) => void;
 }) {
@@ -31,11 +35,19 @@ export function PhotoCollections({
     queryFn: listPhotoPeople,
     refetchInterval: 10000,
   });
-  async function perform(action: () => Promise<unknown>) {
+  async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
     setError(null);
     setPending(true);
     try {
       await action();
+      if (changesPrivacy) {
+        onPrivacyRulesChange();
+        try {
+          await getDesktopCacheBridge()?.clearCache();
+        } catch {
+          setError(t('隐私规则已保存，但桌面媒体缓存清理失败。'));
+        }
+      }
       await people.refetch();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
@@ -114,7 +126,17 @@ export function PhotoCollections({
               person={people.data.people.find((person) => person.id === selectedPerson)!}
               people={people.data.people}
               pending={pending}
-              perform={perform}
+              perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
+              onPrivacyChange={(person, checked) =>
+                perform(async () => {
+                  await updatePhotoPersonPrivacy(person, checked);
+                  setFeedback(
+                    checked && !includePrivate
+                      ? t('已设为私密，开启显示隐私内容后可管理。')
+                      : t('人物隐私规则已更新。'),
+                  );
+                }, true)
+              }
               onPerson={onPerson}
               onOpen={onOpen}
               thumbnail={thumbnail}
@@ -136,11 +158,13 @@ function PersonEditor({
   onPerson,
   onOpen,
   thumbnail,
+  onPrivacyChange,
 }: {
   person: PhotoPerson;
   people: PhotoPerson[];
   pending: boolean;
-  perform: (action: () => Promise<unknown>) => Promise<void>;
+  perform: (action: () => Promise<unknown>, changesPrivacy?: boolean) => Promise<void>;
+  onPrivacyChange: (person: PhotoPerson, checked: boolean) => Promise<void>;
   onPerson: (id: string) => void;
   onOpen: (asset: EagleAssetListItem) => void;
   thumbnail: (asset: EagleAssetListItem) => string | null;
@@ -161,6 +185,17 @@ function PersonEditor({
         </label>
         <button disabled={pending}>{t('保存')}</button>
       </form>
+      <label className="privacy-switch-row">
+        <span>{t('包含此人的照片设为私密')}</span>
+        <input
+          type="checkbox"
+          checked={person.marksAssetsPrivate ?? false}
+          disabled={pending}
+          onChange={(event) => void onPrivacyChange(person, event.currentTarget.checked)}
+        />
+      </label>
+      <p>{t('私密标签或私密人物任一命中，整张照片都会隐藏，包括合照。人物合并会保留私密规则。')}</p>
+      <p>{t('识别可能漏检，敏感照片请同时手动添加私密标签。')}</p>
       <button type="button" onClick={() => onPerson(person.id)}>
         {t('查看此人物的照片')}
       </button>
@@ -180,7 +215,7 @@ function PersonEditor({
       <button
         type="button"
         disabled={!target || pending}
-        onClick={() => void perform(() => mergePhotoPeople(person.id, target))}
+        onClick={() => void perform(() => mergePhotoPeople(person.id, target), true)}
       >
         {t('合并人物')}
       </button>
@@ -195,7 +230,7 @@ function PersonEditor({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => void perform(() => splitPhotoFace(face.id))}
+                onClick={() => void perform(() => splitPhotoFace(face.id), true)}
               >
                 {t('这不是同一个人')}
               </button>

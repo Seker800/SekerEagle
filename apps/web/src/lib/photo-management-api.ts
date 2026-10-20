@@ -11,6 +11,7 @@ export interface PhotoPerson {
   id: string;
   name: string | null;
   rowVersion: number;
+  marksAssetsPrivate: boolean;
   faces: PhotoFace[];
 }
 export interface PhotoGroup {
@@ -80,3 +81,15 @@ export interface PhotoTimelineMonth {
 }
 export const getPhotoTimeline = (signal?: AbortSignal) =>
   request<{ months: PhotoTimelineMonth[] }>(`${base}/timeline`, { signal });
+
+export const updatePhotoPersonPrivacy = (
+  person: Pick<PhotoPerson, 'id' | 'rowVersion'>,
+  marksAssetsPrivate: boolean,
+) =>
+  request<{ id: string; rowVersion: number; marksAssetsPrivate: boolean; changed: number }>(
+    `${base}/people/${encodeURIComponent(person.id)}/privacy`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ marksAssetsPrivate, rowVersion: person.rowVersion }),
+    },
+  );

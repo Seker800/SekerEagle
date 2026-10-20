@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
@@ -93,6 +94,7 @@ export function AccountHome({
   privacyVisibility: providedPrivacyVisibility,
   onPrivacyVisibilityChange,
   onPrivacyRulesChange,
+  privacyExtras,
 }: {
   user: User;
   onPasswordChanged: () => Promise<void>;
@@ -100,6 +102,7 @@ export function AccountHome({
   privacyVisibility?: PrivacyVisibilityState;
   onPrivacyVisibilityChange?: (state: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
+  privacyExtras?: ReactNode;
 }) {
   const {
     api: {
@@ -378,7 +381,7 @@ export function AccountHome({
             <div className="panel-heading">
               <div>
                 <h2>{t('隐私内容')}</h2>
-                <p>{t('关闭时，隐私素材不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
+                <p>{t('关闭时，私密内容不会出现在图库、搜索、标签、智能文件夹或推荐中。')}</p>
               </div>
               <IconEye size={22} />
             </div>
@@ -430,6 +433,7 @@ export function AccountHome({
                 </select>
               </label>
             </div>
+            {privacyExtras}
             <div className="privacy-tag-settings">
               <div>
                 <span className="privacy-tag-heading">
@@ -439,7 +443,7 @@ export function AccountHome({
                 <small>
                   {privacyTagsLoaded
                     ? t('已选择 {{value1}} 个私密标签', { value1: privateTagIds.length })
-                    : t('拥有任一所选标签的素材会自动进入私密。')}
+                    : t('拥有任一所选标签的内容会自动进入私密。')}
                 </small>
               </div>
               <button

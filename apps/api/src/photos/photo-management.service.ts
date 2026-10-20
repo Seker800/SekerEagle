@@ -1,8 +1,14 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { encodeEagleAssetCursor } from '../eagle/eagle-cursor';
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { suggestPhotoGroups } from './photo-grouping';
 
 const MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
@@ -111,12 +117,17 @@ export class PhotoManagementService {
       where: {
         ownerId,
         libraryMode: 'PHOTO',
-        faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } },
+        ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
+        OR: [
+          { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
+          ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
+        ],
       },
       select: {
         id: true,
         name: true,
         rowVersion: true,
+        marksAssetsPrivate: true,
         faces: {
           where: { isCurrent: true, asset: visible(ownerId, includePrivate) },
           select: {
@@ -195,11 +206,37 @@ export class PhotoManagementService {
         id,
         ownerId,
         libraryMode: 'PHOTO',
-        faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } },
+        ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
+        OR: [
+          { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
+          ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
+        ],
       },
     });
     if (!person) throw new NotFoundException('人物不存在。');
     return person;
+  }
+  async setPersonPrivacy(
+    ownerId: string,
+    id: string,
+    marksAssetsPrivate: boolean,
+    rowVersion: number,
+    includePrivate: boolean,
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
+      const person = await this.requirePerson(tx, ownerId, id, includePrivate);
+      if (person.rowVersion !== rowVersion)
+        throw new ConflictException('人物已变化，请刷新后重试。');
+      const updated = await tx.eaglePhotoPerson.update({
+        where: { id },
+        data: { marksAssetsPrivate, rowVersion: { increment: 1 } },
+        select: { id: true, marksAssetsPrivate: true, rowVersion: true },
+      });
+      const changed = await syncAssetPrivacy(tx, ownerId, undefined, 'PHOTO');
+      return { ...updated, changed };
+    });
   }
   async renamePerson(ownerId: string, id: string, name: string, includePrivate: boolean) {
     return this.prisma.$transaction(async (tx) => {
@@ -215,14 +252,23 @@ export class PhotoManagementService {
   async mergePeople(ownerId: string, sourceId: string, targetId: string, includePrivate: boolean) {
     if (sourceId === targetId) throw new BadRequestException('请选择另一个人物。');
     return this.prisma.$transaction(async (tx) => {
+      await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
-      await this.requirePerson(tx, ownerId, sourceId, includePrivate);
-      await this.requirePerson(tx, ownerId, targetId, includePrivate);
+      const source = await this.requirePerson(tx, ownerId, sourceId, includePrivate);
+      const target = await this.requirePerson(tx, ownerId, targetId, includePrivate);
+      await tx.eaglePhotoPerson.update({
+        where: { id: targetId },
+        data: {
+          marksAssetsPrivate: source.marksAssetsPrivate || target.marksAssetsPrivate,
+          rowVersion: { increment: 1 },
+        },
+      });
       await tx.eaglePhotoFace.updateMany({
         where: { ownerId, libraryMode: 'PHOTO', personId: sourceId },
         data: { personId: targetId, userAssigned: true },
       });
       await tx.eaglePhotoPerson.delete({ where: { id: sourceId } });
+      await syncAssetPrivacy(tx, ownerId, undefined, 'PHOTO');
       return { id: targetId };
     });
   }
@@ -233,6 +279,7 @@ export class PhotoManagementService {
     includePrivate: boolean,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const face = await tx.eaglePhotoFace.findFirst({
         where: {
@@ -258,6 +305,7 @@ export class PhotoManagementService {
         where: { id: faceId },
         data: { personId: person.id, userAssigned: true },
       });
+      await syncAssetPrivacy(tx, ownerId, [face.assetId], 'PHOTO');
       return { id: person.id };
     });
   }
