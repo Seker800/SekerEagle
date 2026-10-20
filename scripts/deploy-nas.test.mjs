@@ -35,7 +35,7 @@ test('NAS uses matching signed upload host and no Mac runtime mounts', async () 
   for (const name of ['api', 'worker', 'migrate']) {
     const env = result.services[name].environment;
     assert.match(env.DATABASE_URL, /@postgres:5432\/sekereagle_test\?/u);
-    assert.equal(env.CANONICAL_ORIGIN, 'http://192.168.31.146:8181');
+    assert.equal(env.CANONICAL_ORIGIN, 'http://localhost:8181');
     assert.equal(env.S3_PUBLIC_ENDPOINT, env.CANONICAL_ORIGIN);
     assert.equal(env.S3_ENDPOINT, 'http://minio:9000');
     assert.equal(env.S3_BUCKET, 'sekereagle-assets');
@@ -48,7 +48,7 @@ test('NAS uses matching signed upload host and no Mac runtime mounts', async () 
   const gateway = createNasGateway(
     await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8'),
   );
-  assert.match(gateway, /proxy_set_header Host 192\.168\.31\.146:8181;/u);
+  assert.match(gateway, /proxy_set_header Host localhost:8181;/u);
   assert.doesNotMatch(gateway, /localhost:8180/u);
 });
 
@@ -94,7 +94,7 @@ test('package preparation creates private new credentials and never overwrites a
     assert.equal((await stat(join(first, '.env'))).mode & 0o777, 0o600);
     assert.equal((await stat(join(first, 'nginx.conf'))).mode & 0o777, 0o644);
     const rendered = yaml.load(await readFile(join(first, 'compose.yml'), 'utf8'));
-    assert.equal(rendered.services.api.environment.CANONICAL_ORIGIN, 'http://192.168.31.146:8181');
+    assert.equal(rendered.services.api.environment.CANONICAL_ORIGIN, 'http://localhost:8181');
     await assert.rejects(prepareNasPackage(first, 'f8e4864739a9'), /EEXIST/u);
     assert.equal(await readFile(join(first, '.env'), 'utf8'), env);
     assert.throws(() => createNasGateway('unexpected gateway'), /contract changed/u);
