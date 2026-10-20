@@ -58,7 +58,7 @@ export class EagleMediaCapabilityService {
       resolved.mediaType === 'image' ? CAMERA_MAX_IMAGE_BYTES : CAMERA_MAX_VIDEO_BYTES;
     if (candidate.size > maxBytes) {
       throw new BadRequestException(
-        `${resolved.mediaType === 'image' ? '图片' : '视频'}大小不能超过 ${maxBytes / 1024 / 1024}MB。`,
+        `${resolved.mediaType === 'image' ? '图片' : '视频'}大小不能超过 ${resolved.mediaType === 'image' ? `${maxBytes / 1_000_000} MB` : `${maxBytes / 1_000_000_000} GB`}。`,
       );
     }
     return resolved;
