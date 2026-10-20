@@ -15,7 +15,7 @@
 
 ## 接入 MCP
 
-在本机独立测试服务中打开设置的连接管理，选择“照片整理 Agent”用途创建可撤销 PAT，权限仅为 `photo:read` 和 `photo:suggest`。真实 PAT 只放入本机 Agent 的受保护配置，不提交仓库或写入聊天。
+在本机独立测试服务中打开设置的连接管理，选择“照片整理 Agent”用途创建可撤销 PAT，权限仅为 `photo:read` 和 `photo:suggest`。真实 PAT 保存在当前用户拥有、权限为 0600 的独立文件中，不提交仓库或写入聊天。客户端 JSON 只记录文件路径；读取时拒绝符号链接、共享权限与超大文件。文件入口当前仅支持 macOS／Linux 的 POSIX 权限语义；Windows 客户端应使用系统凭据管理器安全注入环境变量，暂不宣称支持 Windows ACL 校验。
 
 在支持 stdio 的 Agent 客户端中配置：
 
@@ -27,12 +27,14 @@
       "args": ["/absolute/path/to/SekerEagle/apps/photo-agent-mcp/main.mjs"],
       "env": {
         "SEKEREAGLE_AGENT_URL": "http://127.0.0.1:YOUR_TEST_PORT",
-        "SEKEREAGLE_AGENT_PAT": "YOUR_TEST_PHOTO_SCOPED_PAT"
+        "SEKEREAGLE_AGENT_PAT_FILE": "/absolute/private/path/photo-agent.pat"
       }
     }
   }
 }
 ```
+
+先在本机安全保存 PAT 文件并设置 `chmod 600`；不要把令牌直接粘进客户端 JSON。旧环境变量入口仍兼容，但不能与文件入口同时设置。
 
 替换为当前机器的 Node 22、仓库路径和独立测试站点端口。入口直接运行 Node，避免 npm 启动信息混入 stdio 协议。MCP 只接受无凭据、无路径的 loopback origin，禁止重定向；图片限制为当前派生缩略图及 1 MiB，JSON 返回限制为 4 MiB。它不自行读取 `.env`，不直接连接数据库、MinIO 或模型服务。
 

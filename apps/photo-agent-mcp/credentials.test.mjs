@@ -13,8 +13,20 @@ test('MCP initializes with an owner-only PAT file and refuses shared files and s
   const env = { PATH: process.env.PATH, SEKEREAGLE_AGENT_URL: 'http://127.0.0.1:8180' };
   function start(path) {
     return spawnSync(process.execPath, [new URL('./main.mjs', import.meta.url).pathname], {
-      env: { ...env, SEKEREAGLE_AGENT_PAT_FILE: path }, encoding: 'utf8', timeout: 5000,
-      input: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } } }) + '\n',
+      env: { ...env, SEKEREAGLE_AGENT_PAT_FILE: path },
+      encoding: 'utf8',
+      timeout: 5000,
+      input:
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'initialize',
+          params: {
+            protocolVersion: '2025-03-26',
+            capabilities: {},
+            clientInfo: { name: 'test', version: '1' },
+          },
+        }) + '\n',
     });
   }
   try {
@@ -28,5 +40,7 @@ test('MCP initializes with an owner-only PAT file and refuses shared files and s
     await chmod(file, 0o600);
     await symlink(file, link);
     assert.notEqual(start(link).status, 0);
-  } finally { await rm(dir, {recursive: true, force: true}); }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

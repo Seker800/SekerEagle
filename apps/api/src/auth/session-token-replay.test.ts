@@ -13,7 +13,8 @@ for (const preRevoked of [true, false])
         tokenHash: createHash('sha256').update('old-token').digest('hex'),
         revokedAt: preRevoked ? new Date() : null,
         expiresAt: new Date(Date.now() + 60000),
-        user: { id: 'owner', disabledAt: null },
+        authVersion: 0,
+        user: { id: 'owner', disabledAt: null, authVersion: 0 },
       },
       { id: 'replacement', userId: 'owner', familyId: 'family', revokedAt: null },
       { id: 'other-device', userId: 'owner', familyId: 'other-family', revokedAt: null },
@@ -38,6 +39,7 @@ for (const preRevoked of [true, false])
           return { count };
         },
       },
+      $queryRaw: async () => [{ id: 'owner' }],
       $executeRaw: async () => 1,
       $transaction: async (fn: (tx: unknown) => Promise<unknown>) => {
         const before = rows.map((r) => r.revokedAt);
@@ -92,10 +94,72 @@ test('login rejects a stale account snapshot before creating a dead refresh row'
   let issued = false;
   const db = {
     $queryRaw: async () => [],
-    refreshToken: { create: async () => { issued = true; } },
+    refreshToken: {
+      create: async () => {
+        issued = true;
+      },
+    },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
   };
-  const service = new SessionTokenService(db as never, {signAsync: async () => 'access'} as never, {getOrThrow: () => 900} as never);
-  await assert.rejects(service.createSession({id:'owner', authVersion: 1, disabledAt:null} as never), /登录状态已失效/);
+  const service = new SessionTokenService(
+    db as never,
+    { signAsync: async () => 'access' } as never,
+    { getOrThrow: () => 900 } as never,
+  );
+  await assert.rejects(
+    service.createSession({ id: 'owner', authVersion: 1, disabledAt: null } as never),
+    /登录状态已失效/,
+  );
   assert.equal(issued, false);
+});
+
+test('refresh locks and rechecks the account before family and token rows, including a version change while waiting', async () => {
+  for (const accountStillCurrent of [true, false]) {
+    const order: string[] = [];
+    const db = {
+      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+        order.push('account');
+        assert.match(query.sql, /FOR SHARE/);
+        assert.match(query.sql, /"authVersion"/);
+        assert.match(query.sql, /"disabledAt" IS NULL/);
+        assert.deepEqual(query.values, ['owner', 4]);
+        return accountStillCurrent ? [{ id: 'owner' }] : [];
+      },
+      $executeRaw: async () => {
+        order.push('family');
+        return 1;
+      },
+      refreshToken: {
+        findUnique: async () => ({
+          id: 'old',
+          userId: 'owner',
+          familyId: 'family',
+          revokedAt: null,
+          expiresAt: new Date(Date.now() + 60000),
+          authVersion: 4,
+          user: { id: 'owner', authVersion: 4, disabledAt: null },
+        }),
+        updateMany: async () => {
+          order.push('rotate');
+          return { count: 1 };
+        },
+        create: async () => {
+          order.push('issue');
+        },
+      },
+      $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
+    };
+    const service = new SessionTokenService(
+      db as never,
+      { signAsync: async () => 'access' } as never,
+      { getOrThrow: () => 900 } as never,
+    );
+    if (accountStillCurrent) {
+      assert.equal((await service.refreshSession('refresh')).accessToken, 'access');
+      assert.deepEqual(order, ['account', 'family', 'rotate', 'issue']);
+    } else {
+      await assert.rejects(service.refreshSession('refresh'), /登录状态已失效/);
+      assert.deepEqual(order, ['account']);
+    }
+  }
 });

@@ -118,12 +118,17 @@ test('people paging visits all 205 records with privacy scope and survives remov
 });
 
 test('historical refresh migration revokes unverifiable legacy sessions and permits fresh sign-in', async () => {
-  const stored = await prisma.refreshToken.findUniqueOrThrow({where: {id: 'legacy-auth-token'}});
+  const stored = await prisma.refreshToken.findUniqueOrThrow({
+    where: { id: 'legacy-auth-token' },
+  });
   assert.equal(stored.authVersion, 7);
-  assert.ok(stored.revokedAt, 'legacy rows have no trustworthy issuance version and must not be legitimized');
+  assert.ok(
+    stored.revokedAt,
+    'legacy rows have no trustworthy issuance version and must not be legitimized',
+  );
   const sessions = new SessionTokenService(prisma, jwt, config);
   await assert.rejects(sessions.refreshSession('synthetic-legacy-refresh'));
-  const user = await prisma.user.findUniqueOrThrow({where: {id: 'legacy-auth-owner'}});
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: 'legacy-auth-owner' } });
   const fresh = await sessions.createSession(user);
   const refreshed = await sessions.refreshSession(fresh.refreshToken);
   assert.equal((await sessions.verifyAccessToken(refreshed.accessToken)).sub, 'legacy-auth-owner');
@@ -131,33 +136,49 @@ test('historical refresh migration revokes unverifiable legacy sessions and perm
 
 test('concurrent account reset holds the row before either login or refresh can issue credentials', async () => {
   const passwords = new PasswordService(prisma);
-  const user = await passwords.createUser(`${randomUUID()}@example.invalid`, 'original-password-123', 'USER');
+  const user = await passwords.createUser(
+    `${randomUUID()}@example.invalid`,
+    'original-password-123',
+    'USER',
+  );
   const sessions = new SessionTokenService(prisma, jwt, config);
   const prior = await sessions.createSession(user);
   let release;
   let locked;
-  const gate = new Promise(resolve => {release = resolve;});
-  const ready = new Promise(resolve => {locked = resolve;});
-  const reset = prisma.$transaction(async tx => {
-    await tx.user.update({where: {id: user.id}, data: {authVersion: {increment: 1}}});
-    await tx.refreshToken.updateMany({where: {userId: user.id, revokedAt: null}, data: {revokedAt: new Date()}});
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const ready = new Promise((resolve) => {
+    locked = resolve;
+  });
+  const reset = prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { authVersion: { increment: 1 } } });
+    await tx.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
     locked();
     await gate;
   });
   try {
     await ready;
     let settled = false;
-    const login = assert.rejects(sessions.createSession(user), /登录状态已失效/).then(() => {settled = true;});
+    const login = assert.rejects(sessions.createSession(user), /登录状态已失效/).then(() => {
+      settled = true;
+    });
     const refresh = assert.rejects(sessions.refreshSession(prior.refreshToken));
     await delay(50);
     assert.equal(settled, false, 'issuance must wait for the account row lock');
     release();
     await Promise.all([reset, login, refresh]);
-    assert.equal(await prisma.refreshToken.count({where: {userId: user.id}}), 1);
-    assert.equal(await prisma.refreshToken.count({where: {userId: user.id, revokedAt: null}}), 0);
+    assert.equal(await prisma.refreshToken.count({ where: { userId: user.id } }), 1);
+    assert.equal(
+      await prisma.refreshToken.count({ where: { userId: user.id, revokedAt: null } }),
+      0,
+    );
   } finally {
     release();
     await reset;
-    await prisma.user.delete({where: {id: user.id}});
+    await prisma.user.delete({ where: { id: user.id } });
   }
 });

@@ -1,3 +1,4 @@
+import { safeMediaResponse } from '../common/media-response';
 import {
   Body,
   Controller,
@@ -53,7 +54,7 @@ export class PhotoAgentController {
     const media = await this.media.getRendition(p.sub, id, rendition, undefined, p.canViewPrivate);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    return new StreamableFile(media.stream!, { type: media.mimeType });
+    return new StreamableFile(media.stream!, safeMediaResponse(media.mimeType, media.fileName));
   }
   @Get('tasks') tasks(@CurrentPrincipal() p: AuthPrincipal, @Query() q: PhotoAgentQueryDto) {
     return this.agent.tasks(p.sub, q, p.canViewPrivate);

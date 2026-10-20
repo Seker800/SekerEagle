@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, rmSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -97,6 +97,8 @@ try {
     {
       input: `
     INSERT INTO "User" (id,email,"passwordHash","updatedAt") VALUES ('legacy-library-owner','legacy-library@example.invalid','test-only',now());
+    INSERT INTO "User" (id,email,"passwordHash","authVersion","updatedAt") VALUES ('legacy-auth-owner','legacy-auth@example.invalid','test-only',7,now());
+    INSERT INTO "RefreshToken" (id,"tokenHash","expiresAt","userId") VALUES ('legacy-auth-token','${createHash('sha256').update('synthetic-legacy-refresh').digest('hex')}',now()+interval '1 hour','legacy-auth-owner');
     INSERT INTO "EagleAsset" (id,"ownerId","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize","originalObjectKey","updatedAt") VALUES ('legacy-library-asset','legacy-library-owner','legacy.jpg','legacy','legacy','image/jpeg','jpeg',42,'users/legacy-library-owner/assets/legacy/original.jpg',now());
   `,
     },
@@ -137,6 +139,7 @@ try {
       'scripts/testing/library-service-isolation.test.mjs',
       'scripts/testing/photo-agent.test.mjs',
       'scripts/testing/photo-privacy.test.mjs',
+      'scripts/testing/auth-session-security.test.mjs',
     ],
     {
       env,

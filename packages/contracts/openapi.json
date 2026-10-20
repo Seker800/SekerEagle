@@ -5249,7 +5249,17 @@
     "/api/photos/photography/people": {
       "get": {
         "operationId": "PhotoManagementController_people",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""

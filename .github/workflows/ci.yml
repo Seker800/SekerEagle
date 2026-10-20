@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 env:
-  SCARF_ANALYTICS: "false"
+  SCARF_ANALYTICS: 'false'
 
 jobs:
   check:
@@ -21,6 +21,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run security:audit
+      - run: npm run security:audit:all
       - run: npm run db:generate
       - run: npm run ci:check
       - run: npm run test:worker-leases

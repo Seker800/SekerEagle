@@ -22,7 +22,11 @@ import { DesktopBootstrapController } from './desktop-bootstrap.controller';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         secret: config.getOrThrow<string>('JWT_ACCESS_SECRET'),
-        signOptions: { expiresIn: config.getOrThrow<number>('ACCESS_TOKEN_TTL_SECONDS') },
+        verifyOptions: { algorithms: ['HS256'] },
+        signOptions: {
+          algorithm: 'HS256',
+          expiresIn: config.getOrThrow<number>('ACCESS_TOKEN_TTL_SECONDS'),
+        },
       }),
     }),
   ],

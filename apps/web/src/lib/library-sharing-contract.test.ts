@@ -55,7 +55,13 @@ for (const [name, execute] of Object.entries(operations)) {
         .replace('/api/admin/eagle-processing', '/api/admin/photo-processing')
         .replace('/api/eagle', '/api/photos'),
     );
-    expect(photo[1]).toEqual(material[1]);
+    const { signal: photoSignal, ...photoInit } = photo[1]!;
+    const { signal: materialSignal, ...materialInit } = material[1]!;
+    expect(photoInit).toEqual(materialInit);
+    expect(photoSignal).toBeInstanceOf(AbortSignal);
+    expect(materialSignal).toBeInstanceOf(AbortSignal);
+    expect(photoSignal?.aborted).toBe(false);
+    expect(materialSignal?.aborted).toBe(false);
     expect(results[1]).toEqual(results[0]);
   });
 }

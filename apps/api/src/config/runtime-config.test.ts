@@ -145,8 +145,38 @@ void test('rejects a SekerChat database target', () => {
 });
 
 void test('production rejects placeholder and repetitive JWT secrets', () => {
-  for (const secret of ['replace-with-a-long-random-secret-at-least-32-chars', 'a'.repeat(64), '12345678'.repeat(8)]) {
-    assert.throws(() => validateEnvironment({ ...safeEnv, NODE_ENV: 'production', JWT_ACCESS_SECRET: secret }), /JWT_ACCESS_SECRET/);
+  for (const secret of [
+    'replace-with-a-long-random-secret-at-least-32-chars',
+    'a'.repeat(64),
+    '12345678'.repeat(8),
+  ]) {
+    assert.throws(
+      () => validateEnvironment({ ...safeEnv, NODE_ENV: 'production', JWT_ACCESS_SECRET: secret }),
+      /JWT_ACCESS_SECRET/,
+    );
   }
-  assert.doesNotThrow(() => validateEnvironment({ ...safeEnv, NODE_ENV: 'production', JWT_ACCESS_SECRET: '32d6b34aab6d2097208cba441bbfe3a05a180aefa2ab1b5ad2763b31517f4c28' }));
+  assert.doesNotThrow(() =>
+    validateEnvironment({
+      ...safeEnv,
+      NODE_ENV: 'production',
+      JWT_ACCESS_SECRET: '32d6b34aab6d2097208cba441bbfe3a05a180aefa2ab1b5ad2763b31517f4c28',
+    }),
+  );
+});
+
+void test('production accepts equivalent 32-byte base64/hex secrets and intentionally rejects old 32-character keys', () => {
+  const hex = '32d6b34aab6d2097208cba441bbfe3a05a180aefa2ab1b5ad2763b31517f4c28';
+  for (const secret of [hex, Buffer.from(hex, 'hex').toString('base64')])
+    assert.doesNotThrow(() =>
+      validateEnvironment({ ...safeEnv, NODE_ENV: 'production', JWT_ACCESS_SECRET: secret }),
+    );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...safeEnv,
+        NODE_ENV: 'production',
+        JWT_ACCESS_SECRET: hex.slice(0, 32),
+      }),
+    /JWT_ACCESS_SECRET/,
+  );
 });

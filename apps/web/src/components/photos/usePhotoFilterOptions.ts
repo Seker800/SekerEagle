@@ -1,6 +1,7 @@
+import { usePhotoPeople } from './use-photo-people';
 import { useQuery } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
-import { getPhotoFacets, listPhotoPeople } from '../../lib/photo-management-api';
+import { getPhotoFacets } from '../../lib/photo-management-api';
 import { t } from '../../i18n';
 export function usePhotoFilterOptions(includePrivate: boolean) {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -10,12 +11,7 @@ export function usePhotoFilterOptions(includePrivate: boolean) {
     enabled: libraryMode === 'PHOTO',
     staleTime: 30000,
   });
-  const people = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
-    queryFn: listPhotoPeople,
-    enabled: libraryMode === 'PHOTO',
-    staleTime: 30000,
-  });
+  const people = usePhotoPeople(ownerId, includePrivate, libraryMode === 'PHOTO');
   const options = (values: string[] = []) => values.map((value) => ({ value, label: value }));
   return {
     CAMERA_MODEL: options(facets.data?.cameras),

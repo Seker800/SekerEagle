@@ -1,16 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import express from 'express';
+import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { securityResponse } from './security-response';
 
 test('HTTP security headers cover failed authentication and token responses without caching', async () => {
-  const app = express();
-  app.use(securityResponse);
-  app.use((_request, response) => {
-    response.status(401).json({ message: 'unauthorized' });
-  });
-  const server = app.listen(0, '127.0.0.1');
+  const server = createServer((request, response) => {
+    response.setHeader('X-Powered-By', 'synthetic-test');
+    securityResponse(request as never, response as never, () => {
+      response.writeHead(401);
+      response.end('unauthorized');
+    });
+  }).listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
   try {
     for (const path of [

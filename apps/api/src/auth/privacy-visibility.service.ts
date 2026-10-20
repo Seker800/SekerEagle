@@ -99,7 +99,9 @@ export class PrivacyVisibilityService {
     const token = request.cookies?.[this.cookieName(libraryMode)] as string | undefined;
     if (!token) return null;
     try {
-      const claims = await this.jwt.verifyAsync<PrivacyVisibilityClaims>(token);
+      const claims = await this.jwt.verifyAsync<PrivacyVisibilityClaims>(token, {
+        algorithms: ['HS256'],
+      });
       if (
         claims.kind !== 'privacy-visibility' ||
         claims.sub !== ownerId ||

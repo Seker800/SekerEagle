@@ -113,11 +113,23 @@ export class PhotoManagementService {
     };
   }
   async people(ownerId: string, includePrivate: boolean, after?: string) {
+    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate) : null;
     const rows = await this.prisma.eaglePhotoPerson.findMany({
       where: {
         ownerId,
         libraryMode: 'PHOTO',
-        ...(after ? { id: { gt: after } } : {}),
+        ...(cursor
+          ? {
+              AND: [
+                {
+                  OR: [
+                    { createdAt: { gt: cursor.createdAt } },
+                    { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+                  ],
+                },
+              ],
+            }
+          : {}),
         ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
         OR: [
           { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
@@ -127,6 +139,7 @@ export class PhotoManagementService {
       select: {
         id: true,
         name: true,
+        createdAt: true,
         rowVersion: true,
         marksAssetsPrivate: true,
         faces: {
@@ -142,13 +155,14 @@ export class PhotoManagementService {
           orderBy: { confidence: 'desc' },
         },
       },
-      orderBy: { id: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       take: 201,
     });
     return {
       runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
       limits: { people: 200, facesPerPerson: 20 },
-      nextCursor: rows.length > 200 ? rows[199]!.id : null,
+      nextCursor:
+        rows.length > 200 ? encodePeopleCursor(rows[199]!, ownerId, includePrivate) : null,
       people: rows.slice(0, 200).map((person) => ({
         ...person,
         faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
@@ -514,5 +528,48 @@ export class PhotoManagementService {
         select: { id: true, bestAssetId: true, dismissed: true },
       });
     });
+  }
+}
+
+function encodePeopleCursor(
+  person: { id: string; createdAt: Date },
+  ownerId: string,
+  includePrivate: boolean,
+): string {
+  return Buffer.from(
+    JSON.stringify({
+      v: 1,
+      ownerId,
+      includePrivate,
+      id: person.id,
+      createdAt: person.createdAt.toISOString(),
+    }),
+  ).toString('base64url');
+}
+function decodePeopleCursor(
+  value: string,
+  ownerId: string,
+  includePrivate: boolean,
+): { id: string; createdAt: Date } {
+  try {
+    if (value.length > 1024) throw new Error('Cursor too long');
+    const row = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<
+      string,
+      unknown
+    >;
+    const createdAt = new Date(String(row.createdAt));
+    if (
+      row.v !== 1 ||
+      row.ownerId !== ownerId ||
+      row.includePrivate !== includePrivate ||
+      typeof row.id !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(row.id) ||
+      !Number.isFinite(createdAt.getTime()) ||
+      createdAt.toISOString() !== row.createdAt
+    )
+      throw new Error('Cursor invalid');
+    return { id: row.id, createdAt };
+  } catch {
+    throw new BadRequestException('人物列表游标无效，请刷新列表。');
   }
 }

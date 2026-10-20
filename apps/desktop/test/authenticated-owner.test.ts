@@ -48,3 +48,23 @@ describe('AuthenticatedOwner', () => {
     expect(fetchMe).toHaveBeenCalledTimes(2);
   });
 });
+
+it('rejects malformed owner and deployment identities instead of caching an ambiguous security scope', async () => {
+  for (const body of [
+    null,
+    [],
+    { user: null },
+    { user: 7 },
+    { user: { id: '' }, desktopCache: { deploymentId: 'd'.repeat(64) } },
+    { user: { id: 'a'.repeat(257) }, desktopCache: { deploymentId: 'd'.repeat(64) } },
+    { user: { id: 7 }, desktopCache: { deploymentId: 'd'.repeat(64) } },
+    { user: { id: 'owner' }, desktopCache: 'not-an-identity' },
+    { user: { id: 'owner' }, desktopCache: { deploymentId: 'D'.repeat(64) } },
+  ]) {
+    const fetchMe = vi.fn(async () => Response.json(body));
+    const owner = new AuthenticatedOwner(fetchMe);
+    expect(await owner.get()).toBeNull();
+    expect(await owner.get()).toBeNull();
+    expect(fetchMe).toHaveBeenCalledTimes(2);
+  }
+});

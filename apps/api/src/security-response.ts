@@ -1,13 +1,11 @@
 import type { Request, Response, NextFunction } from 'express';
 
-export function securityResponse(request: Request, response: Response, next: NextFunction): void {
+export function securityResponse(_request: Request, response: Response, next: NextFunction): void {
   response.removeHeader('X-Powered-By');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('X-Frame-Options', 'DENY');
   response.setHeader('Referrer-Policy', 'no-referrer');
-  if (/^\/api\/(?:auth(?:\/|$)|tokens(?:\/|$)|admin(?:\/|$))/.test(request.path)) {
-    response.setHeader('Cache-Control', 'no-store');
-    response.setHeader('Pragma', 'no-cache');
-  }
+  // All API metadata is private. Media controllers explicitly opt into revalidation caching.
+  response.setHeader('Cache-Control', 'no-store');
   next();
 }

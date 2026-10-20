@@ -24,12 +24,20 @@ export class SessionTokenService {
     private readonly config: ConfigService,
   ) {}
 
-  async createSession(
-    user: User,
-    familyId: string = randomUUID(),
-    client: Pick<Prisma.TransactionClient, 'refreshToken'> = this.prisma,
-  ): Promise<BrowserSession> {
+  async createSession(user: User, familyId: string = randomUUID()): Promise<BrowserSession> {
     if (user.disabledAt) throw new ForbiddenException('该账号已停用。');
+    return this.prisma.$transaction(async (tx) => {
+      await this.lockActiveAccount(tx, user);
+      return this.issueLockedSession(user, familyId, tx);
+    });
+  }
+
+  // Callers hold the account row lock for this transaction before touching token rows.
+  private async issueLockedSession(
+    user: User,
+    familyId: string,
+    client: Prisma.TransactionClient,
+  ): Promise<BrowserSession> {
     const refreshToken = `sea_refresh_${randomBytes(32).toString('base64url')}`;
     const refreshTtl = this.config.getOrThrow<number>('REFRESH_TOKEN_TTL_SECONDS');
     await client.refreshToken.create({
@@ -62,6 +70,8 @@ export class SessionTokenService {
     if (stored.user.disabledAt) throw new ForbiddenException('该账号已停用。');
 
     const session = await this.prisma.$transaction(async (tx) => {
+      // Account row before family/token locks: password changes take the same row first.
+      await this.lockActiveAccount(tx, stored.user);
       await tx.$executeRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${stored.familyId}, 7432))`,
       );
@@ -77,7 +87,7 @@ export class SessionTokenService {
         });
         return null;
       }
-      return this.createSession(stored.user, stored.familyId, tx);
+      return this.issueLockedSession(stored.user, stored.familyId, tx);
     });
     if (!session) throw new UnauthorizedException('刷新令牌已被使用，请重新登录。');
     return session;
@@ -103,7 +113,7 @@ export class SessionTokenService {
   async verifyAccessToken(token: string): Promise<AuthPrincipal> {
     let payload: AccessPayload;
     try {
-      payload = await this.jwt.verifyAsync<AccessPayload>(token);
+      payload = await this.jwt.verifyAsync<AccessPayload>(token, { algorithms: ['HS256'] });
     } catch {
       throw new UnauthorizedException('访问令牌无效或已过期。');
     }
@@ -138,6 +148,14 @@ export class SessionTokenService {
       canViewPrivate: false,
       privacyVisibleUntil: null,
     };
+  }
+
+  private async lockActiveAccount(tx: Prisma.TransactionClient, user: User): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT id FROM "User" WHERE id = ${user.id}
+        AND "authVersion" = ${user.authVersion} AND "disabledAt" IS NULL FOR SHARE
+    `);
+    if (rows.length !== 1) throw new UnauthorizedException('登录状态已失效，请重新登录。');
   }
 
   private signAccessToken(user: User, familyId: string): Promise<string> {

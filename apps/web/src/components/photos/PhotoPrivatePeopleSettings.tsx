@@ -3,10 +3,7 @@ import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useState } from 'react';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
-import {
-  updatePhotoPersonPrivacy,
-  type PhotoPerson,
-} from '../../lib/photo-management-api';
+import { updatePhotoPersonPrivacy, type PhotoPerson } from '../../lib/photo-management-api';
 
 export function PhotoPrivatePeopleSettings({
   includePrivate,
@@ -63,7 +60,15 @@ export function PhotoPrivatePeopleSettings({
               ))}
           </ul>
         )}
-      {people.hasNextPage && <button type="button" disabled={people.isFetchingNextPage} onClick={() => void people.fetchNextPage()}>{t('加载更多人物')}</button>}
+        {people.hasNextPage && (
+          <button
+            type="button"
+            disabled={people.isFetchingNextPage}
+            onClick={() => void people.fetchNextPage()}
+          >
+            {t('加载更多人物')}
+          </button>
+        )}
         {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
       </div>
     </div>

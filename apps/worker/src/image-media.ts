@@ -125,21 +125,16 @@ function requiresHeifDecode(mimeType: string, storageKey: string): boolean {
 }
 
 async function decodeHeifFile(inputPath: string, outputPath: string): Promise<void> {
-  try {
-    const { stdout } = await execFileAsync(
-      process.env.HEIF_INFO_PATH?.trim() || 'heif-info',
-      [inputPath],
-      { env: mediaSubprocessEnvironment(), maxBuffer: 256 * 1024, timeout: 30_000 },
-    );
-    assertSafeHeifInfo(stdout);
-    await execFileAsync(
-      process.env.HEIF_CONVERT_PATH?.trim() || 'heif-convert',
-      [inputPath, outputPath],
-      { env: mediaSubprocessEnvironment(), timeout: 120_000 },
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT')
-      throw new Error('HEIF 解码工具未安装，拒绝使用未经检查的回退解码。');
-    throw error;
-  }
+  // Missing tools retain ENOENT so the queue treats deployment/runtime failures as retryable.
+  const { stdout } = await execFileAsync(
+    process.env.HEIF_INFO_PATH?.trim() || 'heif-info',
+    [inputPath],
+    { env: mediaSubprocessEnvironment(), maxBuffer: 256 * 1024, timeout: 30_000 },
+  );
+  assertSafeHeifInfo(stdout);
+  await execFileAsync(
+    process.env.HEIF_CONVERT_PATH?.trim() || 'heif-convert',
+    [inputPath, outputPath],
+    { env: mediaSubprocessEnvironment(), timeout: 120_000 },
+  );
 }

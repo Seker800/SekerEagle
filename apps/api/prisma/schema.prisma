@@ -1309,6 +1309,7 @@ model EaglePhotoPerson {
   faces EaglePhotoFace[]
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode])
+  @@index([ownerId, libraryMode, createdAt, id])
 }
 model EaglePhotoFace {
   id String @id

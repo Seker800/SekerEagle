@@ -211,6 +211,9 @@ void test('所有新密码入口按 UTF-8 拒绝 bcrypt 会截断的密码', asy
     await assert.rejects(service.changePassword('owner', 'current-password', password), /72/);
   }
   for (const password of ['a'.repeat(72), '中'.repeat(24), '😀'.repeat(18)]) {
-    assert.equal((await validate(plainToInstance(ResetPasswordDto, { newPassword: password }))).length, 0);
+    assert.equal(
+      (await validate(plainToInstance(ResetPasswordDto, { newPassword: password }))).length,
+      0,
+    );
   }
 });

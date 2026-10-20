@@ -443,6 +443,21 @@ test('real Nest photo routes preserve guards and inject the photo service graph'
       (await timelineResponse.json()).months.reduce((sum, row) => sum + row.count, 0),
       1,
     );
+    for (const path of [
+      '/api/auth/me',
+      '/api/tokens',
+      '/api/backup/status',
+      '/api/photos/agent/tasks',
+      '/api/photos/privacy-visibility',
+    ]) {
+      const denied = await fetch(`${base}${path}`);
+      assert.ok(denied.status >= 400);
+      assert.equal(denied.headers.get('cache-control'), 'no-store');
+      assert.equal(denied.headers.get('x-content-type-options'), 'nosniff');
+      assert.equal(denied.headers.get('x-frame-options'), 'DENY');
+      assert.equal(denied.headers.get('referrer-policy'), 'no-referrer');
+      assert.equal(denied.headers.get('x-powered-by'), null);
+    }
   } finally {
     await app.close();
   }

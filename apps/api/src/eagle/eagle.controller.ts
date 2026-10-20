@@ -1,3 +1,4 @@
+import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
@@ -611,15 +612,10 @@ function applyMediaHeaders(
   },
   cacheControl: string,
 ): void {
-  const safeInline = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'video/mp4']);
-  const mimeType = /^[a-z0-9!#$&^_.+-]+\/[a-z0-9!#$&^_.+-]+$/i.test(media.mimeType)
-    ? media.mimeType : 'application/octet-stream';
-  response.setHeader('Content-Type', mimeType);
+  const policy = safeMediaResponse(media.mimeType, media.fileName);
+  response.setHeader('Content-Type', policy.type);
   response.setHeader('X-Content-Type-Options', 'nosniff');
-  response.setHeader(
-    'Content-Disposition',
-    `${safeInline.has(mimeType) ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(media.fileName)}`,
-  );
+  response.setHeader('Content-Disposition', policy.disposition);
   response.setHeader('Cache-Control', cacheControl);
   response.vary('Authorization');
   if (media.contentLength !== undefined)

@@ -155,12 +155,35 @@ it('人物目录可以加载第二页且保留第一页', async () => {
 it('翻到第二页后停止周期性重拉整个目录', async () => {
   vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
   try {
-    mocks.list.mockImplementation(async (after?: string) => ({runtimeConfigured: true, nextCursor: after ? null : 'person', people: [{ id: after ? 'second' : 'person', name: after ? '第二页人物' : '测试人物', rowVersion: 1, marksAssetsPrivate: false, faces: [] }]}));
-    wrapper(<PhotoCollections includePrivate onPrivacyRulesChange={vi.fn()} onOpen={vi.fn()} onPerson={vi.fn()} />);
-    fireEvent.click(await screen.findByRole('button', {name: '加载更多人物'}));
-    await screen.findByRole('button', {name:'第二页人物'});
+    mocks.list.mockImplementation(async (after?: string) => ({
+      runtimeConfigured: true,
+      nextCursor: after ? null : 'person',
+      people: [
+        {
+          id: after ? 'second' : 'person',
+          name: after ? '第二页人物' : '测试人物',
+          rowVersion: 1,
+          marksAssetsPrivate: false,
+          faces: [],
+        },
+      ],
+    }));
+    wrapper(
+      <PhotoCollections
+        includePrivate
+        onPrivacyRulesChange={vi.fn()}
+        onOpen={vi.fn()}
+        onPerson={vi.fn()}
+      />,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: '加载更多人物' }));
+    await screen.findByRole('button', { name: '第二页人物' });
     const calls = mocks.list.mock.calls.length;
-    await act(async () => { await vi.advanceTimersByTimeAsync(30000); });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
     expect(mocks.list).toHaveBeenCalledTimes(calls);
-  } finally { vi.useRealTimers(); }
+  } finally {
+    vi.useRealTimers();
+  }
 });

@@ -7,8 +7,8 @@
   "scripts": {
     "start": "node main.mjs",
     "test": "node --experimental-test-coverage --test-coverage-include=server.mjs --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test *.test.mjs",
-    "typecheck": "node --check main.mjs && node --check server.mjs",
-    "build": "node --check main.mjs && node --check server.mjs"
+    "typecheck": "node --check main.mjs && node --check server.mjs && node --check credentials.mjs",
+    "build": "node --check main.mjs && node --check server.mjs && node --check credentials.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

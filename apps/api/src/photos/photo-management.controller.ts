@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Param, Patch, Post, SetMetadata, UseGuards, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  SetMetadata,
+  UseGuards,
+  Query,
+} from '@nestjs/common';
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsInt,
@@ -20,7 +30,11 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoManagementService } from './photo-management.service';
 class PeopleQueryDto {
-  @ApiPropertyOptional({ format: 'uuid' }) @IsOptional() @IsUUID('4') after?: string;
+  @ApiPropertyOptional({ maxLength: 1024 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1024)
+  after?: string;
 }
 class PersonPrivacyDto {
   @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;

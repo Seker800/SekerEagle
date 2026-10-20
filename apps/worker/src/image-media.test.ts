@@ -25,3 +25,17 @@ test('image processing does not concatenate the complete source object in memory
   assert.doesNotMatch(source, /transformToByteArray\s*\(/);
   assert.match(source, /pipeline\s*\(/);
 });
+
+test('HEIF missing decoder fails closed instead of invoking an uninspected ffmpeg fallback', async () => {
+  const previous = process.env.HEIF_INFO_PATH;
+  process.env.HEIF_INFO_PATH = '/nonexistent/sekereagle-test-heif-info';
+  try {
+    await assert.rejects(
+      decodeProcessableImage(Buffer.from('synthetic-heif'), 'image/heic', 'original.heic'),
+      { code: 'ENOENT' },
+    );
+  } finally {
+    if (previous === undefined) delete process.env.HEIF_INFO_PATH;
+    else process.env.HEIF_INFO_PATH = previous;
+  }
+});

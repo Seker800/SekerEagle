@@ -5,15 +5,18 @@
   "private": true,
   "packageManager": "npm@10.9.4",
   "engines": {
-    "node": ">=22 <23"
+    "node": ">=22.12 <23"
   },
   "overrides": {
     "@nestjs/swagger": {
-      "js-yaml": "5.2.2"
+      "js-yaml": "5.5.0"
     },
     "@prisma/config": {
       "deepmerge-ts": "8.0.0"
-    }
+    },
+    "@nestjs/common": "11.2.7",
+    "@nestjs/core": "11.2.7",
+    "@nestjs/platform-express": "11.2.7"
   },
   "workspaces": [
     "apps/*",
@@ -59,14 +62,16 @@
     "backup:migrate": "python3 scripts/backup/backup.py --migrate",
     "backup:test": "python3 -m unittest discover -s scripts/backup -p 'test_*.py'",
     "test:worker-leases": "npm run test:leases --workspace @sekereagle/worker",
-    "security:audit": "npm audit --omit=dev --audit-level=high"
+    "security:audit": "npm audit --omit=dev --audit-level=high",
+    "security:audit:all": "npm audit --audit-level=high"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^5.0.5",
     "deepmerge-ts": "^8.0.2",
     "eslint": "^10.9.0",
-    "js-yaml": "4.3.1",
+    "js-yaml": "^4.3.2",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.3"

@@ -6833,7 +6833,9 @@ export interface operations {
   };
   PhotoManagementController_people: {
     parameters: {
-      query?: never;
+      query?: {
+        after?: string;
+      };
       header?: never;
       path?: never;
       cookie?: never;
