@@ -114,7 +114,11 @@ test('existing editor copies retain private tags and metadata atomically in thei
     });
     const copy = await prisma.eagleAsset.findUniqueOrThrow({
       where: { id: result.assetId },
-      include: { annotation: true, manualTagLinks: true, processingJobs: true },
+      include: {
+        annotation: true,
+        manualTagLinks: { include: { tag: true } },
+        processingJobs: true,
+      },
     });
     assert.notEqual(copy.id, source.id);
     assert.equal(copy.libraryMode, mode);
@@ -122,8 +126,8 @@ test('existing editor copies retain private tags and metadata atomically in thei
     assert.equal(copy.rating, 4);
     assert.equal(copy.annotation.description, 'keep description');
     assert.deepEqual(
-      copy.manualTagLinks.map((link) => link.tagId),
-      [tag.id],
+      copy.manualTagLinks.map((link) => link.tag.name).sort(),
+      ['private', '已编辑'].sort(),
     );
     assert.ok(copy.processingJobs.some((job) => job.kind === 'GENERATE_RENDITIONS'));
     assert.equal(
@@ -134,6 +138,20 @@ test('existing editor copies retain private tags and metadata atomically in thei
       parts: [{ partNumber: 1, etag: 'part' }],
     });
     assert.equal(replay.assetId, copy.id);
+    assert.equal(
+      await prisma.eagleManualTag.count({
+        where: { ownerId: f.ownerId, libraryMode: mode, normalizedName: '已编辑' },
+      }),
+      1,
+    );
+    const editedTag = copy.manualTagLinks.find((link) => link.tag.name === '已编辑').tag;
+    assert.equal(editedTag.libraryMode, mode);
+    assert.equal(editedTag.ownerId, f.ownerId);
+    assert.equal(
+      await prisma.eagleAssetManualTag.count({ where: { assetId: id, tagId: editedTag.id } }),
+      0,
+      'source must not be marked as edited',
+    );
   }
 });
 

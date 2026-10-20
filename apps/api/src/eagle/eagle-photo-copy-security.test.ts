@@ -161,3 +161,107 @@ test('edited source IDs and versions form a validated declaration without client
     );
   }
 });
+
+for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+  for (const alreadyTagged of [false, true]) {
+    test(`edited copy adds one scoped edited tag and preserves existing labels (${mode}, already tagged: ${alreadyTagged})`, async () => {
+      const ownerId = '5a1fd7d1-fd57-4e42-83f7-55425ca8704a';
+      let tagInput: any;
+      let links: any[] = [];
+      let created: any;
+      const tx = {
+        $queryRaw: async () => [],
+        $executeRaw: async () => 0,
+        uploadSession: { updateMany: async () => ({ count: 1 }), update: async () => undefined },
+        eagleAsset: {
+          findFirst: async () => ({
+            rowVersion: 2,
+            rating: 4,
+            isPrivate: false,
+            annotation: null,
+            manualTagLinks: [{ tagId: 'travel' }, ...(alreadyTagged ? [{ tagId: 'edited' }] : [])],
+          }),
+          create: async ({ data }: any) => {
+            created = data;
+          },
+        },
+        eagleManualTag: {
+          upsert: async (args: any) => {
+            tagInput = args;
+            return { id: 'edited', marksAssetsPrivate: alreadyTagged };
+          },
+        },
+        eagleAssetManualTag: {
+          createMany: async ({ data }: any) => {
+            links = data;
+          },
+        },
+        eagleBrowserCapture: { findUnique: async () => null },
+        eagleAssetProcessingJob: { createMany: async () => undefined },
+        eagleUploadSessionState: { update: async () => undefined },
+      };
+      const service = new EagleUploadService(
+        {
+          uploadSession: {
+            findFirst: async () => ({
+              id: 'session',
+              uploaderId: ownerId,
+              status: 'ASSEMBLED',
+              originalName: 'photo.png',
+              mimeType: 'image/png',
+              size: 12n,
+              objectKey: 'local-test-object',
+              completionParts: [{ PartNumber: 1, ETag: 'part' }],
+              eagleState: {
+                duplicatePolicy: 'CREATE_COPY',
+                copySourceAssetId: 'source',
+                copySourceRowVersion: 2,
+              },
+            }),
+            count: async () => 1,
+            updateMany: async () => ({ count: 1 }),
+          },
+          $transaction: async (callback: any) => callback(tx),
+        } as never,
+        { headObject: async () => ({ ContentLength: 12 }) } as never,
+        {} as never,
+        {
+          inspect: async () => ({
+            sha256: 'a'.repeat(64),
+            format: 'png',
+            width: 20,
+            height: 10,
+            durationMs: null,
+          }),
+        } as never,
+        mode,
+      );
+      const result = await service.complete(ownerId, 'session', {
+        parts: [{ partNumber: 1, etag: 'part' }],
+      });
+      assert.ok(tagInput, 'editing must attach the edited marker');
+      assert.deepEqual(tagInput.where.ownerId_libraryMode_normalizedName, {
+        ownerId,
+        libraryMode: mode,
+        normalizedName: '已编辑',
+      });
+      assert.equal(tagInput.create.name, '已编辑');
+      assert.deepEqual(tagInput.update, {}, 'existing tag preferences must remain intact');
+      assert.deepEqual(links.map((link) => link.tagId).sort(), ['edited', 'travel']);
+      assert.ok(
+        links.every(
+          (link) =>
+            link.ownerId === ownerId &&
+            link.libraryMode === mode &&
+            link.assetId === result.assetId,
+        ),
+      );
+      assert.equal(
+        created.isPrivate,
+        alreadyTagged,
+        'a reused private marker must keep the output private',
+      );
+      assert.equal(created.rating, 4);
+    });
+  }
+}
