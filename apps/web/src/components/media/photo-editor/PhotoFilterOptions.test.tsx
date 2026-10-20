@@ -61,3 +61,49 @@ it('reports a local library read failure', async () => {
   render(<PhotoFilterOptions selected="original" disabled={false} onChange={vi.fn()} />);
   expect(await screen.findByRole('alert')).toHaveTextContent('本地滤镜读取失败');
 });
+
+it('navigates a continuous grouped strip without changing the selected filter', async () => {
+  repository.listPhotoLuts.mockResolvedValueOnce([
+    { id: 'priority', name: 'Favorite', size: 2, group: 'Priority', groupOrder: 0 },
+    { id: 'film', name: 'Film LUT', size: 2, group: 'Film', groupOrder: 1 },
+  ]);
+  const onChange = vi.fn();
+  render(<PhotoFilterOptions selected="original" disabled={false} onChange={onChange} />);
+  await screen.findByRole('button', { name: 'Favorite' });
+  const row = screen.getByRole('group', { name: '照片滤镜' });
+  const buttons = Array.from(row.querySelectorAll('button'));
+  expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual([
+    '原图',
+    'Favorite',
+    'Film LUT',
+    '复古',
+    '清冷',
+    '黑白',
+  ]);
+  Object.defineProperties(row, { clientWidth: { value: 100 }, scrollWidth: { value: 600 } });
+  const bounds = (left: number) => ({
+    left,
+    right: left + 90,
+    top: 0,
+    bottom: 100,
+    width: 90,
+    height: 100,
+    x: left,
+    y: 0,
+    toJSON: () => ({}),
+  });
+  vi.spyOn(row, 'getBoundingClientRect').mockImplementation(() => bounds(0));
+  buttons.forEach((button, index) =>
+    vi.spyOn(button, 'getBoundingClientRect').mockImplementation(() => bounds(index * 100)),
+  );
+  const scrollTo = vi.fn();
+  Object.defineProperty(row, 'scrollTo', { value: scrollTo });
+  fireEvent.click(screen.getByRole('button', { name: 'Film', exact: true }));
+  expect(scrollTo).toHaveBeenCalledWith({ left: 200, behavior: 'smooth' });
+  expect(screen.getByRole('button', { name: 'Film', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  expect(screen.getByRole('button', { name: 'Favorite' })).toBeInTheDocument();
+  expect(onChange).not.toHaveBeenCalled();
+});
