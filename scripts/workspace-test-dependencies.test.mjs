@@ -20,3 +20,10 @@ test('API pretest builds every internal runtime dependency before loading tests'
     );
   }
 });
+
+test('library integration builds media-core before API and worker on a clean checkout', async () => {
+  const manifest = await readManifest('package.json');
+  const command = manifest.scripts['test:library-integration'];
+  assert.ok(command.includes('--workspace @sekereagle/media-core'));
+  assert.ok(command.indexOf('--workspace @sekereagle/media-core') < command.indexOf('--workspace @sekereagle/api'));
+});

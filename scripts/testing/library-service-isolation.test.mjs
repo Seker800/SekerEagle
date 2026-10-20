@@ -1913,3 +1913,24 @@ test('concurrent semantic builders reclaim stale leases and cannot publish throu
     'FAILED',
   );
 });
+
+test('locked privacy hides private-only tag and group names while keeping unused tags', async () => {
+  const { EaglePrivacyService } = await import('../../apps/api/dist/eagle/eagle-privacy.service.js');
+  for (const mode of ['MATERIAL', 'PHOTO']) {
+    const f = await fixtures();
+    const service = mode === 'PHOTO' ? f.photos : f.materials;
+    const asset = mode === 'PHOTO' ? f.photo : f.material;
+    const tag = await service.createManualTag(f.ownerId, { name: 'private-only label' });
+    const unused = await service.createManualTag(f.ownerId, { name: 'unused label' });
+    const group = await prisma.eagleManualTagGroup.create({ data: { ownerId: f.ownerId, libraryMode: mode, name: 'private group', normalizedName: 'private group' } });
+    await prisma.eagleManualTagGroupMembership.create({ data: { ownerId: f.ownerId, libraryMode: mode, tagId: tag.id, groupId: group.id } });
+    await service.replaceAssetTags(f.ownerId, asset.id, [tag.id]);
+    await new EaglePrivacyService(prisma, mode).updateSettings(f.ownerId, { tagIds: [tag.id] });
+    const locked = await service.listManualTags(f.ownerId, false);
+    assert.ok(!locked.some(t => t.id === tag.id));
+    assert.ok(locked.some(t => t.id === unused.id));
+    assert.ok(!(await service.listManualTagGroups(f.ownerId, false)).some(g => g.id === group.id));
+    assert.ok((await service.listManualTags(f.ownerId, true)).some(t => t.id === tag.id));
+    assert.ok((await service.listManualTagGroups(f.ownerId, true)).some(g => g.id === group.id));
+  }
+});
