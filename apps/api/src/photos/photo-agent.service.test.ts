@@ -72,6 +72,6 @@ test('agent previews use the same safe media disposition as browser previews', a
     getRendition: async () => ({stream: (await import('node:stream')).Readable.from('test'), fileName: 'untrusted.svg', mimeType: 'image/svg+xml'}),
   } as never);
   const file = await controller.preview({sub: 'owner', canViewPrivate: false} as never, 'asset', {setHeader: (name: string, value: string) => headers.set(name, value)} as never);
-  assert.ok(file.getHeaders().disposition?.startsWith('attachment'));
+  assert.ok(String(file.getHeaders().disposition).startsWith('attachment'));
   assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
 });
