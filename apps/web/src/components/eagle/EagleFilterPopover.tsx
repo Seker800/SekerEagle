@@ -40,7 +40,7 @@ export function EagleFilterPopover({
       const below = Math.max(0, y + vh - rect.bottom - 16);
       const above = Math.max(0, rect.top - y - 16);
       const useBelow = below >= Math.min(panel.scrollHeight, 240) || below >= above;
-      const maxHeight = Math.min(vh - 16, Math.max(above, below));
+      const maxHeight = Math.max(0, Math.min(vh - 16, useBelow ? below : above));
       const height = Math.min(panel.getBoundingClientRect().height, maxHeight);
       const next = {
         left: Math.max(x + 8, Math.min(rect.left, x + vw - panelWidth - 8)),
@@ -52,9 +52,10 @@ export function EagleFilterPopover({
         maxHeight,
       };
       setPosition((current) =>
-        Object.keys(next).every(
-          (key) => current[key as keyof typeof current] === next[key as keyof typeof next],
-        )
+        current.left === next.left &&
+        current.top === next.top &&
+        current.width === next.width &&
+        current.maxHeight === next.maxHeight
           ? current
           : next,
       );

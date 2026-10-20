@@ -56,3 +56,9 @@
     font-size: 14px;
   }
 }
+
+@media (pointer: coarse) {
+  .navigation .content button {
+    min-height: 44px;
+  }
+}

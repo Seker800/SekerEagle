@@ -144,6 +144,10 @@ export function EagleQuickFilterBar({
     window.addEventListener('pointerdown', closeOnOutsidePointer);
     return () => window.removeEventListener('pointerdown', closeOnOutsidePointer);
   }, []);
+  const closePopover = () => {
+    setOpenField(null);
+    anchorRef.current?.focus();
+  };
   const updatePinnedFields = (fields: EagleQuickFilterField[]) => {
     setPinnedFields(fields);
     window.localStorage.setItem(pinnedKey, JSON.stringify(fields));
@@ -189,11 +193,7 @@ export function EagleQuickFilterBar({
                 {summary ? <small>{summary}</small> : null}
               </button>
               {openField === field ? (
-                <EagleFilterPopover
-                  anchor={anchorRef}
-                  panelRef={panelRef}
-                  onClose={() => setOpenField(null)}
-                >
+                <EagleFilterPopover anchor={anchorRef} panelRef={panelRef} onClose={closePopover}>
                   <FieldPopover
                     field={field}
                     options={fieldOptions?.[field]}
@@ -201,7 +201,7 @@ export function EagleQuickFilterBar({
                     manualTags={manualTags}
                     aiTags={aiTags}
                     onChange={onChange}
-                    onClose={() => setOpenField(null)}
+                    onClose={closePopover}
                   />
                 </EagleFilterPopover>
               ) : null}
@@ -227,13 +227,13 @@ export function EagleQuickFilterBar({
               anchor={anchorRef}
               panelRef={panelRef}
               width={360}
-              onClose={() => setOpenField(null)}
+              onClose={closePopover}
             >
               <FilterManager
                 availableFields={availableFields}
                 pinnedFields={pinnedFields}
                 onChange={updatePinnedFields}
-                onClose={() => setOpenField(null)}
+                onClose={closePopover}
               />
             </EagleFilterPopover>
           ) : null}

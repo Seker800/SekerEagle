@@ -2551,5 +2551,4 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
-
 });
