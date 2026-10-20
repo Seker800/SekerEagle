@@ -147,3 +147,13 @@ test('privacy settings replace tag rules and recompute only assets whose derived
     data: { isPrivate: true, rowVersion: { increment: 1 } },
   });
 });
+
+test('privacy snapshot accommodates automatic protection labels beyond the selection limit', async () => {
+  const { randomUUID } = await import('node:crypto');
+  const { validateSync } = await import('class-validator');
+  const { UpdateEaglePrivacySettingsDto } = await import('./eagle.dto');
+  const input = Object.assign(new UpdateEaglePrivacySettingsDto(), {
+    tagIds: [], expectedTagIds: Array.from({ length: 102 }, () => randomUUID()),
+  });
+  assert.deepEqual(validateSync(input), []);
+});
