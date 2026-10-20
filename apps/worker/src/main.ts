@@ -213,7 +213,7 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
         'PENDING'::"EagleMediaJobStatus", 'BACKGROUND'::"EagleProcessingLane",
         asset."mediaRevision", ${EAGLE_AI_TAG_PROCESSOR_VERSION}, 0, 0, now(), now(), now()
       FROM "EagleAsset" AS asset
-      WHERE asset."ownerId" = ${setting.ownerId} AND asset."libraryMode" = ${setting.libraryMode}
+      WHERE asset."ownerId" = ${setting.ownerId} AND asset."libraryMode" = ${setting.libraryMode}::"LibraryMode"
         AND asset."deletedAt" IS NULL
         AND asset."isPrivate" = false
         AND asset."mimeType" LIKE 'image/%'
@@ -910,7 +910,7 @@ async function processEmbeddingJob(
       },
     });
     await transaction.$executeRaw(
-      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode} AND "id" = ${record.id}`,
+      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode" AND "id" = ${record.id}`,
     );
     await createTopSuggestion(transaction, asset.ownerId, asset.libraryMode, asset.id, record.id);
   });
@@ -953,7 +953,7 @@ async function processAiTaggingJob(
     ? await prisma.$queryRaw<Array<{ normalizedName: string }>>(Prisma.sql`
         SELECT "normalizedName"
         FROM "EagleAiTag"
-        WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}
+        WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode"
           AND "normalizedName" IN (${Prisma.join(normalizedNames)})
           AND "embeddingSpaceId" = ${embeddingSpaceId}
           AND embedding IS NOT NULL
@@ -1024,7 +1024,7 @@ async function processAiTaggingJob(
         await transaction.$executeRaw(Prisma.sql`
           UPDATE "EagleAiTag"
           SET embedding = ${serialized}::vector, "embeddingSpaceId" = ${embeddingSpaceId}
-          WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode} AND id = ${tag.id}
+          WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode" AND id = ${tag.id}
         `);
       }
       await transaction.eagleAssetAiTag.create({
@@ -1153,7 +1153,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
         ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
        AND embedding."isCurrent" = true AND embedding.status = 'READY'
        AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
-      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
+      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
         AND asset."deletedAt" IS NULL
     `),
   ]);
@@ -1170,7 +1170,7 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
       ON embedding."ownerId" = link."ownerId" AND embedding."libraryMode" = link."libraryMode" AND embedding."assetId" = link."assetId"
      AND embedding."isCurrent" = true AND embedding.status = 'READY'
      AND embedding."assetRevision" = asset."mediaRevision" AND embedding."spaceId" = ${embeddingSpaceId}
-    WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
+    WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
       AND asset."deletedAt" IS NULL
     ORDER BY md5(link."assetId")
     LIMIT ${sampleLimit}
@@ -1259,11 +1259,11 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
       CROSS JOIN LATERAL (
         SELECT prototype.rank, prototype.embedding <=> embedding.embedding AS distance
         FROM "EagleTagPrototype" prototype
-        WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode} AND prototype."snapshotId" = ${snapshot.id}
+        WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}::"LibraryMode" AND prototype."snapshotId" = ${snapshot.id}
         ORDER BY prototype.embedding <=> embedding.embedding
         LIMIT 1
       ) nearest
-      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode} AND link."tagId" = ${build.tagId}
+      WHERE link."ownerId" = ${build.ownerId} AND link."libraryMode" = ${build.libraryMode}::"LibraryMode" AND link."tagId" = ${build.tagId}
         AND asset."deletedAt" IS NULL
     `,
   );
@@ -1281,10 +1281,10 @@ async function processTagSemanticBuild(build: EagleTagSemanticBuild): Promise<vo
                percentile_cont(0.95) WITHIN GROUP (ORDER BY distance.distance)::double precision
                  AS "p95Distance"
         FROM "EagleTagMemberDistance" distance
-        WHERE distance."ownerId" = ${build.ownerId} AND distance."libraryMode" = ${build.libraryMode} AND distance."snapshotId" = ${snapshot.id}
+        WHERE distance."ownerId" = ${build.ownerId} AND distance."libraryMode" = ${build.libraryMode}::"LibraryMode" AND distance."snapshotId" = ${snapshot.id}
         GROUP BY distance."prototypeRank"
       ) statistics
-      WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}
+      WHERE prototype."ownerId" = ${build.ownerId} AND prototype."libraryMode" = ${build.libraryMode}::"LibraryMode"
         AND prototype."snapshotId" = ${snapshot.id}
         AND prototype.rank = statistics.rank
     `,
@@ -1329,7 +1329,7 @@ async function recomputeSuggestionGeneration(
         ORDER BY prototype.embedding <=> embedding.embedding
         LIMIT 1
       ) nearest
-      WHERE embedding."ownerId" = ${build.ownerId} AND embedding."libraryMode" = ${build.libraryMode} AND embedding."isCurrent" = true
+      WHERE embedding."ownerId" = ${build.ownerId} AND embedding."libraryMode" = ${build.libraryMode}::"LibraryMode" AND embedding."isCurrent" = true
         AND embedding.status = 'READY' AND embedding."assetRevision" = asset."mediaRevision"
         AND embedding."spaceId" = ${embeddingSpaceId} AND asset."deletedAt" IS NULL
         AND 1 - nearest.distance >= ${minimumScore}
