@@ -68,3 +68,15 @@ it('reports storage unavailability instead of claiming a successful import', asy
   await expect(importPhotoLut(file(identity))).rejects.toThrow('LUT_STORAGE_UNAVAILABLE');
   await expect(listPhotoLuts()).rejects.toThrow('LUT_STORAGE_UNAVAILABLE');
 });
+
+it('updates local grouping by content id and retains it when reimporting an ordinary filename', async () => {
+  const grouped = await importPhotoLut(file(identity, '01-Priority__02-Favorite.cube'));
+  expect(grouped).toMatchObject({ name: 'Favorite', group: 'Priority', groupOrder: 1, order: 2 });
+  const before = await loadPhotoLut(grouped.id);
+  const ordinary = await importPhotoLut(file(identity));
+  expect(ordinary.id).toBe(grouped.id);
+  expect(await listPhotoLuts()).toEqual([
+    expect.objectContaining({ id: grouped.id, group: 'Priority', groupOrder: 1, order: 2 }),
+  ]);
+  expect((await loadPhotoLut(grouped.id)).data).toEqual(before.data);
+});

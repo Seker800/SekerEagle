@@ -1,8 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { PhotoLutEntry } from './photo-lut-storage';
 import { PhotoFilterOptions } from './PhotoFilterOptions';
 const repository = vi.hoisted(() => ({
-  listPhotoLuts: vi.fn(async () => [{ id: 'personal', name: '个人 LUT', size: 2 }]),
+  listPhotoLuts: vi.fn<() => Promise<PhotoLutEntry[]>>(async () => [
+    { id: 'personal', name: '个人 LUT', size: 2 },
+  ]),
   importPhotoLut: vi.fn(async () => ({ id: 'new', name: '新 LUT', size: 2 })),
 }));
 vi.mock('./photo-lut-storage', () => repository);
@@ -98,12 +101,9 @@ it('navigates a continuous grouped strip without changing the selected filter', 
   );
   const scrollTo = vi.fn();
   Object.defineProperty(row, 'scrollTo', { value: scrollTo });
-  fireEvent.click(screen.getByRole('button', { name: 'Film', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: 'Film' }));
   expect(scrollTo).toHaveBeenCalledWith({ left: 200, behavior: 'smooth' });
-  expect(screen.getByRole('button', { name: 'Film', exact: true })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  expect(screen.getByRole('button', { name: 'Film' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: 'Favorite' })).toBeInTheDocument();
   expect(onChange).not.toHaveBeenCalled();
 });

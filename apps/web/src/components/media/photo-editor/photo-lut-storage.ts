@@ -1,9 +1,13 @@
 import { decode } from 'fast-png';
+import { photoLutFileName } from './photo-lut-groups';
 import { parseCubeLut, parsePngLut, pngLutLayout, type PhotoLut } from './photo-lut';
 export interface PhotoLutEntry {
   id: string;
   name: string;
   size: number;
+  group?: string;
+  groupOrder?: number;
+  order?: number;
 }
 const database = 'sekereagle-personal-luts-v1';
 async function open(): Promise<IDBDatabase> {
@@ -68,12 +72,17 @@ export async function importPhotoLut(file: File): Promise<PhotoLutEntry> {
   const lut = decodeFile(file, bytes);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   const id = Array.from(new Uint8Array(digest), (v) => v.toString(16).padStart(2, '0')).join('');
-  const entry = { id, name: file.name.replace(/\.(cube|png)$/i, '').slice(0, 100), size: lut.size };
+  const entry: PhotoLutEntry = { id, ...photoLutFileName(file.name), size: lut.size };
   const db = await open();
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = db.transaction(['entries', 'tables'], 'readwrite');
-      transaction.objectStore('entries').put(entry);
+      const entries = transaction.objectStore('entries');
+      const current = entries.get(id);
+      current.onsuccess = () => {
+        const previous = current.result as PhotoLutEntry | undefined;
+        entries.put(entry.group ? entry : { ...previous, ...entry });
+      };
       transaction.objectStore('tables').put(lut, id);
       transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(new Error('LUT_STORAGE_UNAVAILABLE'));

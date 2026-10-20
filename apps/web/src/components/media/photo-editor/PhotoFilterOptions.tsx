@@ -1,16 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconCheck, IconUpload } from '@tabler/icons-react';
 import { t } from '../../../i18n';
 import type { PhotoFilter } from './photo-editor-model';
 import { importPhotoLut, listPhotoLuts, type PhotoLutEntry } from './photo-lut-storage';
 import { ScrollableToolRow } from './ScrollableToolRow';
 import styles from './PhotoEditor.module.css';
-const builtins: { id: PhotoFilter; label: string }[] = [
-  { id: 'original', label: t('原图') },
-  { id: 'vintage', label: t('复古') },
-  { id: 'oceanic', label: t('清冷') },
-  { id: 'monochrome', label: t('黑白') },
-];
+import { groupPhotoFilters } from './photo-lut-groups';
+import { useToolGroupNavigation } from './useToolGroupNavigation';
 export function PhotoFilterOptions({
   selected,
   disabled,
@@ -21,6 +17,23 @@ export function PhotoFilterOptions({
   onChange: (filter: PhotoFilter) => void;
 }) {
   const [entries, setEntries] = useState<PhotoLutEntry[]>([]);
+  const groups = useMemo(() => groupPhotoFilters(entries), [entries]);
+  const items = useMemo(
+    () => [
+      {
+        id: 'original' as PhotoFilter,
+        label: t('原图'),
+        group: groups[0].id,
+        start: false,
+        anchor: false,
+      },
+      ...groups.flatMap((group) =>
+        group.items.map((item, index) => ({ ...item, group: group.id, start: index === 0 })),
+      ),
+    ],
+    [groups],
+  );
+  const navigation = useToolGroupNavigation(items, selected);
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -93,17 +106,41 @@ export function PhotoFilterOptions({
           }}
         />
       </div>
-      <ScrollableToolRow className={styles.filters} label={t('照片滤镜')}>
-        {[
-          ...builtins,
-          ...entries.map((entry) => ({ id: `lut:${entry.id}` as PhotoFilter, label: entry.name })),
-        ].map(({ id, label }) => (
+      {groups.length > 1 && (
+        <ScrollableToolRow className={styles.watermarkCategories} label={t('滤镜分组')}>
+          {groups.map((group) => (
+            <button
+              type="button"
+              key={group.id}
+              disabled={disabled}
+              ref={navigation.group === group.id ? navigation.categoryRef : undefined}
+              aria-label={group.label}
+              aria-pressed={navigation.group === group.id}
+              onClick={() => navigation.selectGroup(group.id)}
+            >
+              {group.label}
+              <span aria-hidden="true">{group.items.length}</span>
+            </button>
+          ))}
+        </ScrollableToolRow>
+      )}
+      <ScrollableToolRow
+        className={styles.filters}
+        label={t('照片滤镜')}
+        anchorSelector="[data-category-start]"
+        viewportRef={navigation.viewportRef}
+        onScroll={navigation.followScroll}
+        onNavigate={navigation.beginNavigation}
+      >
+        {items.map(({ id, label, start }) => (
           <button
             type="button"
             key={id}
             aria-label={label}
             title={label}
             disabled={disabled}
+            ref={navigation.itemRef(id)}
+            data-category-start={start || undefined}
             aria-pressed={selected === id}
             onClick={() => onChange(id)}
           >
