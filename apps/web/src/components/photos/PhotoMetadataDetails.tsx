@@ -5,10 +5,11 @@ export function PhotoMetadataDetails({ metadata }: { metadata?: PhotoMetadata | 
   return (
     <section className="photo-metadata">
       <h3>{t('摄影信息')}</h3>
+      {metadata.captureMetadataInherited && <p>{t('拍摄信息继承自原片')}</p>}
       <dl>
         <dt>{t('拍摄时间')}</dt>
         <dd>
-          {metadata.capturedLocal?.replace('T', ' ') ?? t('未知拍摄时间，按导入时间排列')}
+          {metadata.capturedLocal?.replace('T', ' ') ?? (metadata.captureMetadataInherited ? t('未知拍摄时间，沿用原片时间线') : t('未知拍摄时间，按导入时间排列'))}
           {metadata.capturedAt && !metadata.captureTimeZoneKnown ? ` · ${t('时区未知')}` : ''}
         </dd>
         <dt>{t('相机')}</dt>

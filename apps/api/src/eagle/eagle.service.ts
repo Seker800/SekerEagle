@@ -345,7 +345,7 @@ export class EagleService {
         bestSelectedByUser: true,
         members: {
           where: { ownerId, libraryMode: 'PHOTO', asset: inLibrary('PHOTO', queryWhere) },
-          orderBy: { assetId: 'asc' },
+          orderBy: [{ asset: { createdAt: 'asc' } }, { assetId: 'asc' }],
           select: {
             assetId: true,
             asset: {
@@ -378,8 +378,11 @@ export class EagleService {
       .map((group) => ({
         id: group.id,
         bestSelectedByUser: group.bestSelectedByUser,
+        timelineAt: new Date(Math.max(...group.members.map(({ asset }) => asset.chronologicalAt.getTime()))).toISOString(),
         assetIds: group.members.map(({ assetId }) => assetId),
-        processingAssetIds: group.members.filter(({ asset }) => asset.lifecycleStatus === 'PROCESSING').map(({ assetId }) => assetId),
+        processingAssetIds: group.members
+          .filter(({ asset }) => asset.lifecycleStatus === 'PROCESSING')
+          .map(({ assetId }) => assetId),
         bestAssetId: (
           group.members.find(
             ({ assetId, asset }) =>

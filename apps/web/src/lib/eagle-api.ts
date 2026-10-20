@@ -234,6 +234,7 @@ export interface EagleAssetChanges {
 }
 
 export interface EaglePhotoStack {
+  timelineAt?: string;
   processingAssetIds?: string[];
   id: string;
   bestAssetId: string;

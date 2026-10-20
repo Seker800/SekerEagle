@@ -15,6 +15,6 @@ export function collapsePhotoStacks(
     const key = stack?.id ?? asset.id;
     if (seen.has(key)) return [];
     seen.add(key);
-    return [cover];
+    return [stack?.timelineAt ? { ...cover, chronologicalAt: stack.timelineAt } : cover];
   });
 }

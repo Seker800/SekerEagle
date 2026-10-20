@@ -1,4 +1,7 @@
 export const enUS = {
+  '拍摄信息继承自原片': 'Capture information inherited from the original',
+  '未知拍摄时间，沿用原片时间线': 'Capture time unknown; keeps the original timeline position',
+
   '照片组，共 {{value1}} 张': 'Photo group, {{value1}} photos',
   '拍摄时间 · 最新优先': 'Capture time · Newest first',
   '添加时间 · 最新优先': 'Date added · Newest first',
