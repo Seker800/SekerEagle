@@ -67,6 +67,12 @@ export class ProposePhotoDto {
   @ApiProperty() @IsBoolean() visualReviewed!: boolean;
 }
 export class InferPhotoCitiesDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(240)
+  cameraModel?: string;
   @ApiProperty({ type: [PhotoCityDto], maxItems: 20 })
   @IsArray()
   @ArrayMinSize(1)

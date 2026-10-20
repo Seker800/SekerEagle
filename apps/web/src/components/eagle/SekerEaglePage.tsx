@@ -1424,7 +1424,9 @@ export function SekerEaglePage({
                                 ? t('地图')
                                 : photoView === 'people'
                                   ? t('人物')
-                                  : t('照片时间线')
+                                  : photoView === 'agent'
+                                    ? t('智能整理')
+                                    : t('照片时间线')
                               : t('全部素材')))}
                     </h1>
                     {showsAssetControls && (

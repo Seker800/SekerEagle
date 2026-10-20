@@ -5502,6 +5502,342 @@
         "tags": ["photo-management"]
       }
     },
+    "/api/photos/agent/photos": {
+      "get": {
+        "operationId": "PhotoAgentController_photos",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/photos/{id}/preview": {
+      "get": {
+        "operationId": "PhotoAgentController_preview",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks": {
+      "get": {
+        "operationId": "PhotoAgentController_tasks",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      },
+      "post": {
+        "operationId": "PhotoAgentController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePhotoTaskDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}": {
+      "get": {
+        "operationId": "PhotoAgentController_detail",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/infer-cities": {
+      "post": {
+        "operationId": "PhotoAgentController_infer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InferPhotoCitiesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/scores": {
+      "post": {
+        "operationId": "PhotoAgentController_scores",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScorePhotoCandidatesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/suggestions": {
+      "post": {
+        "operationId": "PhotoAgentController_propose",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposePhotoDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/cancel": {
+      "post": {
+        "operationId": "PhotoAgentController_cancel",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/suggestions/{suggestionId}/review": {
+      "post": {
+        "operationId": "PhotoAgentController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPhotoSuggestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/suggestions/{suggestionId}/undo": {
+      "post": {
+        "operationId": "PhotoAgentController_undo",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "suggestionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
     "/api/photos/privacy-visibility": {
       "get": {
         "operationId": "PhotoPrivacyVisibilityController_get",
@@ -6244,7 +6580,14 @@
             "type": "array",
             "items": {
               "type": "string",
-              "enum": ["import:read", "import:write", "asset:write", "capture:write"]
+              "enum": [
+                "import:read",
+                "import:write",
+                "asset:write",
+                "capture:write",
+                "photo:read",
+                "photo:suggest"
+              ]
             }
           }
         },
@@ -6907,6 +7250,115 @@
             "format": "uuid"
           }
         }
+      },
+      "CreatePhotoTaskDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["CITY", "NON_PHOTO"]
+          },
+          "assetIds": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["kind", "assetIds"]
+      },
+      "PhotoCityDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          }
+        },
+        "required": ["id", "name", "country", "region", "latitude", "longitude"]
+      },
+      "InferPhotoCitiesDto": {
+        "type": "object",
+        "properties": {
+          "cameraModel": {
+            "type": "string"
+          },
+          "cities": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PhotoCityDto"
+            }
+          },
+          "offsetSeconds": {
+            "type": "object",
+            "minimum": -86400,
+            "maximum": 86400
+          }
+        },
+        "required": ["cities", "offsetSeconds"]
+      },
+      "ScorePhotoCandidatesDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": ["description"]
+      },
+      "ProposePhotoDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "city": {
+            "$ref": "#/components/schemas/PhotoCityDto"
+          },
+          "evidenceIds": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "visualReviewed": {
+            "type": "boolean"
+          }
+        },
+        "required": ["assetId", "evidenceIds", "rationale", "visualReviewed"]
+      },
+      "ReviewPhotoSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": ["ACCEPT", "REJECT"]
+          },
+          "city": {
+            "$ref": "#/components/schemas/PhotoCityDto"
+          }
+        },
+        "required": ["action"]
       }
     }
   }

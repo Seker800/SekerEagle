@@ -152,11 +152,12 @@ export function createPhotoAgentServer({ baseUrl, token, fetch: fetcher = fetch 
   );
   tool(
     'photo_city_candidates',
-    'Return conservative city candidates from bracketing GPS photos; no changes are made. Supply explicit city identities and representative coordinates, not asserted capture coordinates. Unknown timezone is unresolved. Clock correction is limited to this call.',
+    'Return conservative city candidates from bracketing GPS photos; no changes are made. Supply explicit city identities and representative coordinates, not asserted capture coordinates. Unknown timezone is unresolved. Clock correction is limited to this call and requires an explicit cameraModel.',
     z
       .object({
         taskId: uuid,
         cities: z.array(city).min(1).max(20),
+        cameraModel: z.string().min(1).max(240).optional(),
         offsetSeconds: z.number().int().min(-86400).max(86400).default(0),
       })
       .strict(),

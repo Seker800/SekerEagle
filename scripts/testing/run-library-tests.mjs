@@ -113,6 +113,15 @@ try {
   run(
     process.execPath,
     [
+      ...(process.env.PHOTO_AGENT_COVERAGE === '1'
+        ? [
+            '--experimental-test-coverage',
+            '--test-coverage-include=apps/api/dist/photos/photo-agent.service.js',
+            '--test-coverage-lines=80',
+            '--test-coverage-branches=80',
+            '--test-coverage-functions=80',
+          ]
+        : []),
       '--test',
       'scripts/testing/library-isolation.test.mjs',
       'scripts/testing/library-service-isolation.test.mjs',

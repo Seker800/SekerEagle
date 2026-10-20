@@ -354,17 +354,148 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
   }
 });
 
-test('re-extracted GPS evidence invalidates a pending city proposal even without a media revision change',async()=>{
- const f=await fixture(),t=await f.task(),p=await f.proposal(t);
- await prisma.eaglePhotoMetadata.update({where:{assetId:f.b.id},data:{longitude:100,analyzedAt:new Date(Date.now()+1000)}});
- await assert.rejects(f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false),/证据|变化/);
- assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),0);
+test('re-extracted GPS evidence invalidates a pending city proposal even without a media revision change', async () => {
+  const f = await fixture(),
+    t = await f.task(),
+    p = await f.proposal(t);
+  await prisma.eaglePhotoMetadata.update({
+    where: { assetId: f.b.id },
+    data: { longitude: 100, analyzedAt: new Date(Date.now() + 1000) },
+  });
+  await assert.rejects(
+    f.service.review(f.ownerId, t.id, p.id, { action: 'ACCEPT' }, false),
+    /证据|变化/,
+  );
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 0);
 });
-test('clock corrections require an explicit camera scope and accepted replay remains safe after expiry',async()=>{
- const f=await fixture(),t=await f.task();
- await assert.rejects(f.service.infer(f.ownerId,t.id,{cities:[city],offsetSeconds:420},false),/相机/);
- const p=await f.proposal(t);await f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false);
- await prisma.eaglePhotoAgentTask.update({where:{id:t.id},data:{expiresAt:new Date(0)}});
- assert.equal((await f.service.review(f.ownerId,t.id,p.id,{action:'ACCEPT'},false)).status,'ACCEPTED');
- assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),1);
+test('clock corrections require an explicit camera scope and accepted replay remains safe after expiry', async () => {
+  const f = await fixture(),
+    t = await f.task();
+  await assert.rejects(
+    f.service.infer(f.ownerId, t.id, { cities: [city], offsetSeconds: 420 }, false),
+    /相机/,
+  );
+  const p = await f.proposal(t);
+  await f.service.review(f.ownerId, t.id, p.id, { action: 'ACCEPT' }, false);
+  await prisma.eaglePhotoAgentTask.update({
+    where: { id: t.id },
+    data: { expiresAt: new Date(0) },
+  });
+  assert.equal(
+    (await f.service.review(f.ownerId, t.id, p.id, { action: 'ACCEPT' }, false)).status,
+    'ACCEPTED',
+  );
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 1);
+});
+
+test('bounded 2B scoring excludes stale embeddings and scopes candidates to the task', async () => {
+  const { Prisma } = await import('@prisma/client');
+  const f = await fixture(),
+    other = await fixture(),
+    task = await f.task('NON_PHOTO');
+  const spaceId = `agent-test-${randomUUID()}`;
+  await prisma.eagleEmbeddingSpace.create({
+    data: {
+      id: spaceId,
+      model: 'test',
+      revision: spaceId,
+      dimensions: 1024,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+      isCurrent: false,
+    },
+  });
+  const vector = `[${[1, ...Array(1023).fill(0)].join(',')}]`;
+  for (const [asset, revision] of [
+    [f.a, 0],
+    [f.b, 99],
+    [other.a, 0],
+  ])
+    await prisma.$executeRaw(
+      Prisma.sql`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"updatedAt") VALUES (${randomUUID()},${asset.ownerId},'PHOTO',${asset.id},${revision},${spaceId},'READY',true,${vector}::vector,now())`,
+    );
+  const agent = new PhotoAgentService(prisma, {
+    prepare: async () => ({ status: 'READY', spaceId, vector }),
+  });
+  const result = await agent.scores(f.ownerId, task.id, 'screenshot', false);
+  assert.equal(result.status, 'READY');
+  assert.deepEqual(
+    result.items.map((i) => i.assetId),
+    [f.a.id],
+  );
+  assert.equal(result.items[0].similarity, 1);
+  assert.ok(result.unanalysed.includes(f.b.id));
+});
+test('preview returns current derived media only and manual city corrections retain source', async () => {
+  const f = await fixture(),
+    task = await f.task();
+  await assert.rejects(f.service.preview(f.ownerId, f.a.id, false), /不存在/);
+  const rendition = await prisma.eagleAssetRendition.create({
+    data: {
+      assetId: f.a.id,
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      kind: 'THUMBNAIL',
+      revision: 0,
+      status: 'READY',
+      mimeType: 'image/webp',
+      storageKey: `test/${randomUUID()}`,
+      byteSize: 10,
+      width: 256,
+      height: 256,
+    },
+  });
+  assert.equal(await f.service.preview(f.ownerId, f.a.id, false), rendition.id);
+  const p = await f.proposal(task);
+  await f.service.review(
+    f.ownerId,
+    task.id,
+    p.id,
+    { action: 'ACCEPT', city: { ...city, name: '人工确认的城市' } },
+    false,
+  );
+  assert.equal(
+    (await prisma.eaglePhotoLocation.findUniqueOrThrow({ where: { assetId: f.a.id } })).source,
+    'MANUAL',
+  );
+});
+
+test('proposal validation rejects missing GPS proof, wrong task kinds, protected media and unknown IDs', async () => {
+  const f = await fixture(),
+    t = await f.task();
+  await assert.rejects(f.proposal(t, { city: undefined }), /城市/);
+  await assert.rejects(f.proposal(t, { evidenceIds: [] }), /参考照片/);
+  await assert.rejects(f.proposal(t, { evidenceIds: [randomUUID()] }), /不存在/);
+  await assert.rejects(f.proposal(t, { assetId: randomUUID() }), /不存在/);
+  await assert.rejects(f.proposal(t, { evidenceIds: [f.a.id] }), /GPS/);
+  await assert.rejects(f.proposal(t, { assetId: f.b.id }), /已有位置/);
+  const non = await f.task('NON_PHOTO');
+  await assert.rejects(
+    f.service.infer(f.ownerId, non.id, { cities: [city], offsetSeconds: 0 }, false),
+    /不是城市/,
+  );
+  await prisma.eagleAsset.update({ where: { id: f.a.id }, data: { originalName: 'photo.NEF' } });
+  await assert.rejects(f.proposal(non), /不支持/);
+  await assert.rejects(f.service.undo(f.ownerId, t.id, randomUUID(), false), /不存在/);
+  const g = await fixture(),
+    gt = await g.task(),
+    gp = await g.proposal(gt);
+  await assert.rejects(g.service.undo(g.ownerId, gt.id, gp.id, false), /已应用/);
+  await assert.rejects(
+    g.service.review(g.ownerId, gt.id, randomUUID(), { action: 'REJECT' }, false),
+    /不存在/,
+  );
+  const page = await g.service.tasks(g.ownerId, { limit: 1 }, false);
+  assert.equal(page.items.length, 1);
+  const start = new Date('2026-01-01T00:00:00Z').toISOString(),
+    end = new Date('2027-01-01T00:00:00Z').toISOString();
+  assert.equal(
+    (await g.service.photos(g.ownerId, { limit: 10, from: start, to: end }, true)).items.length,
+    3,
+  );
+  await assert.rejects(
+    g.service.photos(g.ownerId, { limit: 10, from: end, to: start }, false),
+    /范围/,
+  );
 });

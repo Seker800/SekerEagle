@@ -1,5 +1,10 @@
 .panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  box-sizing: border-box;
   padding: 20px;
+  color-scheme: dark;
   color: var(--eagle-text);
 }
 .form,
@@ -23,7 +28,7 @@
 }
 .card {
   padding: 16px;
-  border: 1px solid var(--eagle-border);
+  border: 1px solid var(--eagle-line);
   border-radius: 12px;
   background: var(--eagle-panel);
   overflow-wrap: anywhere;
@@ -43,4 +48,42 @@
 .form input,
 .form select {
   max-width: 100%;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 20px;
+}
+.panel p {
+  line-height: 1.6;
+}
+.panel button,
+.form input,
+.form select,
+.card input:not([type='checkbox']) {
+  border: 1px solid var(--eagle-line);
+  border-radius: 6px;
+  background: var(--eagle-panel-raised);
+  color: var(--eagle-text);
+  padding: 7px 10px;
+  font: inherit;
+}
+.panel button {
+  cursor: pointer;
+}
+.panel button:hover:not(:disabled),
+.panel button[aria-pressed='true'] {
+  border-color: var(--eagle-accent);
+}
+.panel button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.panel :is(button, input, select, summary):focus-visible {
+  outline: 2px solid var(--eagle-accent);
+  outline-offset: 2px;
+}
+.card label:has(input[type='checkbox']) {
+  display: flex;
+  align-items: center;
 }

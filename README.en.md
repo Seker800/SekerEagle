@@ -366,6 +366,8 @@ media memory boundaries, and system invariants.
 
 ## Documentation
 
+See the [project to-do list](docs/todo.md) for deferred work. The [photo agent and MCP implementation](docs/photo-agent.md) has local code and isolated validation; real-model quality evaluation remains pending.
+
 The detailed operational and maintainer documentation is currently written in Simplified Chinese.
 English translations can be added incrementally without blocking the English project overview.
 

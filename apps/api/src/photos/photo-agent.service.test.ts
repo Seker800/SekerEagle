@@ -45,9 +45,23 @@ test('accept, reject, undo and cancel are browser-only operations', () => {
   }
 });
 
-test('date range comparisons use instants rather than ISO string ordering across timezone offsets',async()=>{
- const service=new PhotoAgentService({eagleAsset:{findMany:async()=>[]}} as never,{} as never);
- const result=await service.photos('owner',{limit:10,from:'2026-10-01T10:00:00+08:00',to:'2026-10-01T03:00:00Z'},false);
- assert.deepEqual(result.items,[]);
- await assert.rejects(service.photos('owner',{limit:10,from:'2026-10-01T03:00:00Z',to:'2026-10-01T10:00:00+08:00'},false),/范围/);
+test('date range comparisons use instants rather than ISO string ordering across timezone offsets', async () => {
+  const service = new PhotoAgentService(
+    { eagleAsset: { findMany: async () => [] } } as never,
+    {} as never,
+  );
+  const result = await service.photos(
+    'owner',
+    { limit: 10, from: '2026-10-01T10:00:00+08:00', to: '2026-10-01T03:00:00Z' },
+    false,
+  );
+  assert.deepEqual(result.items, []);
+  await assert.rejects(
+    service.photos(
+      'owner',
+      { limit: 10, from: '2026-10-01T03:00:00Z', to: '2026-10-01T10:00:00+08:00' },
+      false,
+    ),
+    /范围/,
+  );
 });

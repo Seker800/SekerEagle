@@ -17,8 +17,26 @@ import type {
   ProposePhotoDto,
   ReviewPhotoSuggestionDto,
 } from './photo-agent.dto';
-type Snapshot = { id: string; mediaRevision: number; rowVersion: number };
+type Snapshot = {
+  id: string;
+  mediaRevision: number;
+  rowVersion: number;
+  metadataAt?: string | null;
+};
 type Evidence = Snapshot[];
+const metadataAt = (asset: { photoMetadata?: { analyzedAt: Date } | null }) =>
+  asset.photoMetadata?.analyzedAt.toISOString() ?? null;
+const snapshotOf = (asset: {
+  id: string;
+  mediaRevision: number;
+  rowVersion: number;
+  photoMetadata?: { analyzedAt: Date } | null;
+}): Snapshot => ({
+  id: asset.id,
+  mediaRevision: asset.mediaRevision,
+  rowVersion: asset.rowVersion,
+  metadataAt: metadataAt(asset),
+});
 const scope = (ownerId: string, includePrivate: boolean) => ({
   ownerId,
   libraryMode: 'PHOTO' as const,
@@ -39,6 +57,7 @@ const select = {
   photoLocation: true,
   renditions: {
     where: { status: 'READY' as const, kind: 'THUMBNAIL' as const },
+    orderBy: { revision: 'desc' as const },
     select: { id: true, revision: true },
     take: 4,
   },
@@ -59,7 +78,7 @@ export class PhotoAgentService {
     private readonly search: EagleImageSearchService,
   ) {}
   async photos(ownerId: string, input: PhotoAgentQueryDto, includePrivate: boolean) {
-    if (input.from && input.to && input.from >= input.to)
+    if (input.from && input.to && Date.parse(input.from) >= Date.parse(input.to))
       throw new BadRequestException('时间范围无效。');
     const rows = await this.prisma.eagleAsset.findMany({
       where: {
@@ -93,7 +112,12 @@ export class PhotoAgentService {
     return this.prisma.$transaction(async (tx) => {
       const assets = await tx.eagleAsset.findMany({
         where: { ...scope(ownerId, includePrivate), id: { in: input.assetIds }, deletedAt: null },
-        select: { id: true, mediaRevision: true, rowVersion: true },
+        select: {
+          id: true,
+          mediaRevision: true,
+          rowVersion: true,
+          photoMetadata: { select: { analyzedAt: true } },
+        },
       });
       if (
         assets.length !== input.assetIds.length ||
@@ -104,7 +128,7 @@ export class PhotoAgentService {
         data: {
           ownerId,
           kind: input.kind,
-          scope: json(assets),
+          scope: json(assets.map(snapshotOf)),
           expiresAt: new Date(Date.now() + 24 * 3600000),
         },
         select: { id: true, kind: true, status: true, expiresAt: true },
@@ -185,19 +209,25 @@ export class PhotoAgentService {
       const snapshot = frozen.find((a) => a.id === asset.id)!;
       if (
         asset.mediaRevision !== snapshot.mediaRevision ||
-        asset.rowVersion !== snapshot.rowVersion
+        asset.rowVersion !== snapshot.rowVersion ||
+        metadataAt(asset) !== snapshot.metadataAt
       )
         throw new ConflictException('照片已变化，请创建新任务。');
       const evidence = input.evidenceIds.map((e) => {
         const a = assets.find((a) => a.id === e),
           old = frozen.find((a) => a.id === e);
         if (!a || !old || a.deletedAt) throw new NotFoundException('参考照片不存在。');
-        if (a.mediaRevision !== old.mediaRevision || a.rowVersion !== old.rowVersion)
+        if (
+          a.mediaRevision !== old.mediaRevision ||
+          a.rowVersion !== old.rowVersion ||
+          metadataAt(a) !== old.metadataAt
+        )
           throw new ConflictException('参考照片已变化。');
-        return { id: a.id, mediaRevision: a.mediaRevision, rowVersion: a.rowVersion };
+        return snapshotOf(a);
       });
+      if (!evidence.some((e) => e.id === asset.id)) evidence.push(snapshotOf(asset));
       if (task.kind === 'CITY') {
-        if (!input.city || evidence.length < 1)
+        if (!input.city || input.evidenceIds.length < 1)
           throw new BadRequestException('城市建议必须包含城市和参考照片。');
         if (asset.photoLocation || asset.photoMetadata?.latitude != null)
           throw new ConflictException('已有位置不能被批量推断覆盖。');
@@ -205,6 +235,7 @@ export class PhotoAgentService {
           (a) =>
             input.evidenceIds.includes(a.id) &&
             a.photoMetadata?.latitude != null &&
+            a.photoMetadata.assetRevision === a.mediaRevision &&
             a.photoMetadata.longitude != null,
         );
         if (
@@ -258,6 +289,8 @@ export class PhotoAgentService {
     });
   }
   async infer(ownerId: string, id: string, input: InferPhotoCitiesDto, includePrivate: boolean) {
+    if (input.offsetSeconds !== 0 && !input.cameraModel?.trim())
+      throw new BadRequestException('时间校正必须指定相机型号作用域。');
     const task = await this.detail(ownerId, id, includePrivate);
     if (task.kind !== 'CITY') throw new BadRequestException('不是城市整理任务。');
     const anchors = task.assets.flatMap((a) => {
@@ -286,6 +319,7 @@ export class PhotoAgentService {
     });
     const candidates = task.assets.flatMap((a) => {
       if (a.deletedAt || a.photoLocation || a.photoMetadata?.latitude != null) return [];
+      if (input.cameraModel && a.photoMetadata?.cameraModel !== input.cameraModel) return [];
       const result = inferCity(
         a.photoMetadata?.capturedAt ?? null,
         a.photoMetadata?.captureTimeZoneKnown ?? false,
@@ -360,13 +394,17 @@ export class PhotoAgentService {
     return this.prisma.$transaction(async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
-      const { assets } = await this.task(tx, ownerId, taskId, includePrivate, true);
+      const { task, assets } = await this.task(tx, ownerId, taskId, includePrivate);
       const suggestion = await tx.eaglePhotoAgentSuggestion.findFirst({
         where: { id: suggestionId, ownerId, libraryMode: 'PHOTO', taskId },
       });
       if (!suggestion) throw new NotFoundException('整理建议不存在。');
       const expected = input.action === 'ACCEPT' ? 'ACCEPTED' : 'REJECTED';
       if (suggestion.status === expected) return suggestion;
+      if (task.status !== 'OPEN' || task.expiresAt <= new Date())
+        throw new ConflictException('整理任务已取消或过期。');
+      if (suggestion.kind !== 'CITY' && input.city)
+        throw new BadRequestException('非照片建议不接受城市修改。');
       if (suggestion.status !== 'PENDING') throw new ConflictException('此建议已审核。');
       const target = assets.find((a) => a.id === suggestion.assetId)!;
       const evidence = suggestion.evidence as unknown as Evidence;
@@ -381,7 +419,12 @@ export class PhotoAgentService {
           deletedAt: null,
           purgeAfter: null,
         },
-        select: { id: true, mediaRevision: true, rowVersion: true },
+        select: {
+          id: true,
+          mediaRevision: true,
+          rowVersion: true,
+          photoMetadata: { select: { analyzedAt: true } },
+        },
       });
       for (const snapshot of [
         {
@@ -395,7 +438,8 @@ export class PhotoAgentService {
         if (
           !a ||
           a.mediaRevision !== snapshot.mediaRevision ||
-          a.rowVersion !== snapshot.rowVersion
+          a.rowVersion !== snapshot.rowVersion ||
+          ('metadataAt' in snapshot && metadataAt(a) !== snapshot.metadataAt)
         )
           throw new ConflictException('照片或参考证据已变化，请重新分析。');
       }

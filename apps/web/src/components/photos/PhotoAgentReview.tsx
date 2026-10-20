@@ -45,10 +45,10 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     setBusy(true);
     try {
       await action();
-      await client.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO'] });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {
+      await client.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO'] });
       setBusy(false);
     }
   }
@@ -273,7 +273,7 @@ function Suggestion({
             <input
               type="checkbox"
               checked={selected}
-              disabled={busy || disabled}
+              disabled={busy || disabled || edited}
               onChange={(e) => onSelect(e.target.checked)}
             />
             {t('选择此建议')}
@@ -284,25 +284,24 @@ function Suggestion({
               {(['id', 'name', 'country', 'region', 'latitude', 'longitude'] as const).map(
                 (field) => (
                   <label key={field}>
-                    {t(
-                      field === 'id'
-                        ? '城市标识'
-                        : field === 'name'
-                          ? '城市名称'
-                          : field === 'country'
-                            ? '国家'
-                            : field === 'region'
-                              ? '省份或地区'
-                              : field === 'latitude'
-                                ? '城市代表纬度'
-                                : '城市代表经度',
-                    )}
+                    {field === 'id'
+                      ? t('城市标识')
+                      : field === 'name'
+                        ? t('城市名称')
+                        : field === 'country'
+                          ? t('国家')
+                          : field === 'region'
+                            ? t('省份或地区')
+                            : field === 'latitude'
+                              ? t('城市代表纬度')
+                              : t('城市代表经度')}
                     <input
                       type={field === 'latitude' || field === 'longitude' ? 'number' : 'text'}
                       step="any"
                       value={city[field]}
                       onChange={(e) => {
                         setEdited(true);
+                        onSelect(false);
                         setCity({
                           ...city,
                           [field]:

@@ -97,3 +97,36 @@ it('retries local resource failures and keeps the latest photo-open callback wit
   await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   expect(mocks.map.remove).toHaveBeenCalledTimes(1);
 });
+
+it('labels city representatives as approximate and ignores supplemental positions from an older media revision', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ type: 'FeatureCollection', features: [], cities: [] }),
+    })),
+  );
+  const city = {
+    assetRevision: 1,
+    cityId: 'hangzhou',
+    name: '杭州',
+    country: '中国',
+    region: '浙江',
+    latitude: 30.25,
+    longitude: 120.15,
+    source: 'INFERRED',
+  };
+  const assets = [
+    { id: 'current', displayName: 'City photo', mediaRevision: 1, photoLocation: city },
+    { id: 'stale', displayName: 'Old photo', mediaRevision: 2, photoLocation: city },
+  ] as EagleAssetListItem[];
+  render(<PhotoMap assets={assets} onOpen={vi.fn()} />);
+  await waitFor(() => expect(mocks.circleMarker).toHaveBeenCalledTimes(1));
+  expect(mocks.circleMarker.mock.calls[0]?.[1]).toMatchObject({
+    dashArray: '4 4',
+    fillOpacity: 0.15,
+  });
+  expect((mocks.popup.mock.calls.at(-1)?.[0] as HTMLElement).textContent).toContain(
+    '城市级位置，非拍摄坐标',
+  );
+});

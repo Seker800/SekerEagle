@@ -63,7 +63,6 @@ interface EagleQuickFilterBarProps {
 }
 const QUICK_FILTER_FIELDS_KEY = 'seker-eagle.quick-filter-fields.v1';
 const PHOTO_QUICK_FILTER_FIELDS: readonly EagleQuickFilterField[] = [
-  'CITY',
   'CAMERA_MODEL',
   'LENS_MODEL',
   'MANUAL_TAGS',
