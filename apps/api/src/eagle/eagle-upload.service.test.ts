@@ -224,6 +224,7 @@ test('finalization skips an owner-scoped duplicate and queues uploaded object cl
 test('content replacement preserves the logical asset id and advances its media revision', async () => {
   const assetWrites: Array<Record<string, unknown>> = [];
   const jobs: unknown[] = [];
+  const locks: string[] = [];
   const stateWrites: Array<Record<string, unknown>> = [];
   const session = {
     id: sessionId,
@@ -244,7 +245,10 @@ test('content replacement preserves the logical asset id and advances its media 
     },
   };
   const transaction = {
-    $queryRaw: async () => [],
+    $queryRaw: async (...statements: unknown[]) => {
+      locks.push(JSON.stringify(statements));
+      return [];
+    },
     $executeRaw: async () => 0,
     uploadSession: { updateMany: async () => ({ count: 1 }), update: async () => undefined },
     eagleAsset: {
@@ -285,6 +289,7 @@ test('content replacement preserves the logical asset id and advances its media 
     parts: [{ partNumber: 1, etag: 'etag-1' }],
   });
 
+  assert.match(locks[0] ?? '', /sekereagle:privacy:/, 'replacement must acquire privacy before the asset row lock');
   assert.equal(result.assetId, 'asset-existing');
   assert.equal(assetWrites[0]?.mediaRevision, 4);
   assert.equal(assetWrites[0]?.livePhotoIdentifier, null);
