@@ -23,10 +23,9 @@ def decode_raw(raw, input_limit, output_limit, output_path=None, profile=None, t
     if output_path:
         # LibRaw's half-size processing reduces demosaic memory for high-resolution
         # originals. The retained original and its catalog dimensions never shrink.
-        # Sensor values are not a display exposure. Use LibRaw's per-image
-        # brightness normalization, with a conservative 0.1% highlight budget.
+        # Retain the decoder's documented rendering defaults; camera thumbnails
+        # come from its embedded JPEG rather than a custom exposure threshold.
         params = dict(use_camera_wb=True, no_auto_bright=False,
-                      auto_bright_thr=0.001,
                       half_size=width * height > output_limit)
         if profile:
             # Linear, white-balanced camera RGB; apply the explicit camera
