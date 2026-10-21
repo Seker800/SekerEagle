@@ -36,9 +36,12 @@ test('catalog keeps original oriented RAW dimensions while pyramids use decoded 
   assert.deepEqual(catalogImageDimensions({ width: 10, height: 20 }), { width: 10, height: 20 });
 });
 
- test('only thumbnails prefer the camera JPEG; editing and ordinary previews retain their source', () => {
+test('only thumbnails prefer the camera JPEG; editing and ordinary previews retain their source', () => {
   for (const spec of imageRenditionSpecs('image/x-fuji-raf')) {
-    assert.equal(renditionSource(spec, 'developed', 'embedded'), spec.kind === 'THUMBNAIL' ? 'embedded' : 'developed');
+    assert.equal(
+      renditionSource(spec, 'developed', 'embedded'),
+      spec.kind === 'THUMBNAIL' ? 'embedded' : 'developed',
+    );
     assert.equal(renditionSource(spec, 'developed'), 'developed');
   }
 });

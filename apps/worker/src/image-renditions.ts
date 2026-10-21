@@ -37,6 +37,10 @@ export function catalogImageDimensions(
 }
 
 /** Camera previews are display thumbnails, never an editing source. */
-export function renditionSource<T>(spec: Pick<ImageRenditionSpec, 'kind'>, developed: T, embeddedThumbnail?: T): T {
-  return spec.kind === 'THUMBNAIL' ? embeddedThumbnail ?? developed : developed;
+export function renditionSource<T>(
+  spec: Pick<ImageRenditionSpec, 'kind'>,
+  developed: T,
+  embeddedThumbnail?: T,
+): T {
+  return spec.kind === 'THUMBNAIL' ? (embeddedThumbnail ?? developed) : developed;
 }
