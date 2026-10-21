@@ -23,7 +23,7 @@ LOCAL_ZONE = dt.timezone(dt.timedelta(hours=8))
 
 
 def fingerprint(s):
-    return {'size': s.st_size, 'mtime_ns': s.st_mtime_ns, 'inode': s.st_ino, 'device': s.st_dev}
+    return {'size': s.st_size, 'mtime_ns': str(s.st_mtime_ns), 'inode': str(s.st_ino), 'device': str(s.st_dev)}
 
 
 def open_source(root, relative):
@@ -48,7 +48,7 @@ def open_source(root, relative):
 
 def verify_source(root, relative, expected):
     fd = open_source(root, relative)
-    if fingerprint(os.fstat(fd)) != {k: expected[k] for k in fingerprint(os.fstat(fd))}:
+    if fingerprint(os.fstat(fd)) != {k: expected[k] if k == 'size' else str(expected[k]) for k in fingerprint(os.fstat(fd))}:
         os.close(fd)
         raise ValueError('SOURCE_CHANGED')
     return fd
@@ -94,12 +94,12 @@ class Journal:
         self._batch = False
         self.db.executescript('''PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
-        CREATE TABLE IF NOT EXISTS items(path TEXT PRIMARY KEY,size INTEGER,mtime_ns INTEGER,inode INTEGER,device INTEGER,
+        CREATE TABLE IF NOT EXISTS items(path TEXT PRIMARY KEY,size INTEGER,mtime_ns TEXT,inode TEXT,device TEXT,
           mime TEXT,kind TEXT,capture REAL,date_source TEXT,upload_name TEXT,status TEXT DEFAULT 'DISCOVERED',
           sha256 TEXT,session_id TEXT,part_size INTEGER,asset_id TEXT,media_status TEXT,attempts INTEGER DEFAULT 0,error TEXT);
         CREATE INDEX IF NOT EXISTS queue_order ON items(status,capture DESC,path);
         ''')
-        self.fixed('schema_version', '1')
+        self.fixed('schema_version', '2')
 
     @contextlib.contextmanager
     def write(self):
@@ -145,6 +145,7 @@ class Journal:
         self.fixed('deployment', deployment)
 
     def add(self, path, facts, mime, kind):
+        facts = {**facts, **{k: str(facts[k]) for k in ('mtime_ns', 'inode', 'device')}}
         row = self.db.execute('SELECT * FROM items WHERE path=?', (path,)).fetchone()
         if row:
             if any(row[k] != facts[k] for k in facts):
@@ -243,11 +244,11 @@ def inventory(root, journal, policy):
             tags = {x['SourceFile']: x for x in json.loads(process.stdout)}
             with journal.batch():
                 for row, fd, input_path in zip(selected, descriptors, paths):
-                    if fingerprint(os.fstat(fd)) != {k: row[k] for k in fingerprint(os.fstat(fd))}:
+                    if fingerprint(os.fstat(fd)) != {k: row[k] if k == 'size' else str(row[k]) for k in fingerprint(os.fstat(fd))}:
                         journal.update(row['path'], status='SOURCE_CHANGED', error='SOURCE_CHANGED')
                         continue
                     data = tags.get(input_path, {})
-                    timestamp, source = capture_time(data, row['mtime_ns']/1e9)
+                    timestamp, source = capture_time(data, int(row['mtime_ns'])/1e9)
                     name = Path(row['path']).name
                     # Correct a demonstrable extension mismatch, never the source name or bytes.
                     actual = data.get('MIMEType')
@@ -365,7 +366,7 @@ def upload_one(root, journal, row, api):
                 offset += len(block)
             sha = digest.hexdigest()
             journal.update(path, sha256=sha)
-        if fingerprint(os.fstat(fd)) != {k: row[k] for k in fingerprint(os.fstat(fd))}:
+        if fingerprint(os.fstat(fd)) != {k: row[k] if k == 'size' else str(row[k]) for k in fingerprint(os.fstat(fd))}:
             raise ValueError('SOURCE_CHANGED')
         session_id, part_size = row['session_id'], row['part_size']
         if session_id:
@@ -397,7 +398,7 @@ def upload_one(root, journal, row, api):
                 signed = api.request('POST', '/photos/uploads/'+session_id+'/parts/'+str(index), {})
                 etag = api.part(signed['uploadUrl'], index, fd, offset, size)
             parts.append({'partNumber': index, 'etag': etag})
-        if fingerprint(os.fstat(fd)) != {k: row[k] for k in fingerprint(os.fstat(fd))}:
+        if fingerprint(os.fstat(fd)) != {k: row[k] if k == 'size' else str(row[k]) for k in fingerprint(os.fstat(fd))}:
             raise ValueError('SOURCE_CHANGED')
         result = api.request('POST', '/photos/uploads/'+session_id+'/complete', {'parts': parts})
         journal.update(path, status='IMPORTED', asset_id=result['assetId'], media_status='PROCESSING', error=None)
