@@ -1,0 +1,386 @@
+package com.sekereagle.android;
+
+import static org.junit.Assert.*;
+
+import android.app.*;
+import android.content.*;
+import android.graphics.*;
+import android.net.Uri;
+import android.provider.MediaStore;
+import android.webkit.CookieManager;
+import androidx.test.platform.app.InstrumentationRegistry;
+import com.sekereagle.android.core.BackupPolicy;
+import java.io.*;
+import java.net.*;
+import java.security.MessageDigest;
+import java.util.*;
+import java.util.concurrent.*;
+import org.json.*;
+import org.junit.*;
+
+/** Real Android media + SQLite + Keystore + HTTP API + private test object storage. */
+public final class MobileBackupTest {
+  private Instrumentation getInstrumentation() {
+    return InstrumentationRegistry.getInstrumentation();
+  }
+
+  private Context context;
+  private BackupSettings settings;
+  private MainActivity activity;
+  private String origin, scope, path;
+  private final List<Uri> created = new ArrayList<>();
+
+  @Before
+  public void setUp() throws Exception {
+    context = getInstrumentation().getTargetContext();
+    settings = new BackupSettings(context);
+    origin = InstrumentationRegistry.getArguments().getString("origin", "");
+    if (!origin.matches("http://localhost:[0-9]+"))
+      throw new IllegalArgumentException(
+          "Only an explicitly supplied loopback test workbench is allowed");
+    HttpURLConnection connection =
+        (HttpURLConnection) new URL(origin + "/__test/login").openConnection();
+    connection.setInstanceFollowRedirects(false);
+    assertEquals(302, connection.getResponseCode());
+    List<String> cookies = new ArrayList<>();
+    for (Map.Entry<String, List<String>> header : connection.getHeaderFields().entrySet())
+      if (header.getKey() != null && header.getKey().equalsIgnoreCase("Set-Cookie"))
+        cookies.addAll(header.getValue());
+    connection.disconnect();
+    CountDownLatch latch = new CountDownLatch(cookies.size());
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              for (String cookie : cookies)
+                CookieManager.getInstance().setCookie(origin, cookie, value -> latch.countDown());
+            });
+    assertTrue(latch.await(10, TimeUnit.SECONDS));
+    CookieManager.getInstance().flush();
+    settings.origin(origin);
+    launch();
+    waitUntil(() -> !settings.active().isEmpty(), 15000, "authenticated identity");
+    scope = settings.active();
+    JSONObject token =
+        new ApiClient(origin, "")
+            .request(
+                "POST",
+                "/api/tokens",
+                new JSONObject()
+                    .put("name", "Android isolated test")
+                    .put("scopes", new JSONArray().put("asset:write")));
+    settings.saveToken(scope, token.getString("token"));
+    settings.setFlag(scope, "enabled", true);
+    settings.setFlag(scope, "auto", false);
+    settings.setFlag(scope, "wifi", false);
+    path = "Pictures/SekerEagleTest-" + UUID.randomUUID() + "/";
+    settings.rules(scope, new JSONArray());
+    try (BackupJournal journal = new BackupJournal(context)) {
+      journal.forget(scope);
+    }
+  }
+
+  private void launch() {
+    activity =
+        (MainActivity)
+            getInstrumentation()
+                .startActivitySync(
+                    new Intent(context, MainActivity.class)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    getInstrumentation().waitForIdleSync();
+  }
+
+  private interface Check {
+    boolean value() throws Exception;
+  }
+
+  private void waitUntil(Check check, long timeout, String label) throws Exception {
+    long end = System.currentTimeMillis() + timeout;
+    while (System.currentTimeMillis() < end) {
+      if (check.value()) return;
+      Thread.sleep(100);
+    }
+    fail("Timed out: " + label + "; " + settings.value(scope == null ? "" : scope, "status", ""));
+  }
+
+  private Uri image(String name, int color, boolean publish) throws Exception {
+    Bitmap bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888);
+    bitmap.eraseColor(color);
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+    bitmap.recycle();
+    return media(name, "image/png", bytes.toByteArray(), publish);
+  }
+
+  private Uri media(String name, String mime, byte[] bytes, boolean publish) throws Exception {
+    ContentValues values = new ContentValues();
+    values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+    values.put(MediaStore.MediaColumns.MIME_TYPE, mime);
+    values.put(MediaStore.MediaColumns.RELATIVE_PATH, path);
+    values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+    Uri collection =
+        path.startsWith("Download/")
+            ? MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            : (mime.startsWith("video/")
+                ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+    Uri uri = context.getContentResolver().insert(collection, values);
+    assertNotNull(uri);
+    created.add(uri);
+    try (OutputStream output = context.getContentResolver().openOutputStream(uri)) {
+      output.write(bytes);
+    }
+    if (publish) {
+      ContentValues ready = new ContentValues();
+      ready.put(MediaStore.MediaColumns.IS_PENDING, 0);
+      context.getContentResolver().update(uri, ready, null, null);
+    }
+    return uri;
+  }
+
+  private String hash(Uri uri) throws Exception {
+    MessageDigest hash = MessageDigest.getInstance("SHA-256");
+    try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+      byte[] buffer = new byte[8192];
+      int n;
+      while ((n = input.read(buffer)) != -1) hash.update(buffer, 0, n);
+    }
+    return BackupPolicy.hex(hash.digest());
+  }
+
+  private long size(Uri uri) throws Exception {
+    long size = 0;
+    try (InputStream input = context.getContentResolver().openInputStream(uri)) {
+      byte[] bytes = new byte[8192];
+      int n;
+      while ((n = input.read(bytes)) != -1) size += n;
+    }
+    return size;
+  }
+
+  private boolean exists(Uri uri, String library) throws Exception {
+    return new ApiClient(origin, settings.token(scope))
+        .request(
+            "POST",
+            "/api/" + library + "/uploads/check-content",
+            new JSONObject().put("contentSha256", hash(uri)).put("size", size(uri)))
+        .getBoolean("exists");
+  }
+
+  private void runScan() throws Exception {
+    String previous = settings.value(scope, "lastFinished", "");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              activity.startBackup();
+              activity.startBackup();
+            });
+    waitUntil(
+        () ->
+            !settings.value(scope, "lastFinished", "").equals(previous)
+                && !settings.flag(scope, "running", false),
+        90000,
+        "backup completion");
+    assertEquals("备份完成", settings.value(scope, "status", ""));
+  }
+
+  @Test
+  public void testIncrementalDuplicateRenameModesPendingAndAutomaticReopen() throws Exception {
+    int color = 0xff000000 | new Random().nextInt(0xffffff);
+    Uri first = image("original.png", color, true);
+    image("same-content-new-name.png", color, true);
+    Uri pending = image("still-writing.png", color ^ 0x555555, false);
+    assertTrue(new MediaCatalog(context).folders().contains(path));
+    assertFalse(exists(first, "photos"));
+    assertFalse(exists(first, "eagle"));
+    BackupScreen.addRule(settings, scope, "media", path);
+    runScan();
+    assertTrue(exists(first, "photos"));
+    assertFalse(exists(first, "eagle"));
+    assertTrue(settings.value(scope, "counts", "").contains("已上传 1"));
+    assertTrue(settings.value(scope, "counts", "").contains("已存在 1"));
+    runScan();
+    assertTrue(settings.value(scope, "counts", "").contains("已上传 0"));
+    assertTrue(settings.value(scope, "counts", "").contains("已存在 2"));
+    ContentValues renamed = new ContentValues();
+    renamed.put(MediaStore.MediaColumns.DISPLAY_NAME, "renamed.png");
+    context.getContentResolver().update(first, renamed, null, null);
+    runScan();
+    assertTrue(settings.value(scope, "counts", "").contains("已上传 0"));
+    Uri later = image("new-after-first-scan.png", color ^ 0x111111, true);
+    String previous = settings.value(scope, "lastFinished", "");
+    settings.setFlag(scope, "auto", true);
+    getInstrumentation().runOnMainSync(() -> activity.finish());
+    getInstrumentation().waitForIdleSync();
+    launch();
+    waitUntil(
+        () ->
+            !settings.value(scope, "lastFinished", "").equals(previous)
+                && !settings.flag(scope, "running", false),
+        90000,
+        "open automatically backs up new image");
+    assertTrue(exists(later, "photos"));
+    assertTrue(settings.value(scope, "counts", "").contains("已上传 1"));
+    assertFalse(exists(pending, "photos"));
+    settings.setFlag(scope, "auto", false);
+    JSONArray rules = settings.rules(scope);
+    rules.getJSONObject(0).put("mode", "MATERIAL");
+    settings.rules(scope, rules);
+    runScan();
+    assertTrue(exists(first, "eagle"));
+    assertTrue(exists(first, "photos"));
+    getInstrumentation().runOnMainSync(() -> activity.show("backup"));
+    getInstrumentation().waitForIdleSync();
+  }
+
+  @Test
+  public void testRawAndVideoPreserveOriginalBytes() throws Exception {
+    List<Uri> files = new ArrayList<>();
+    for (String[] format :
+        new String[][] {{"synthetic.dng", "image/x-adobe-dng"}, {"synthetic.mp4", "video/mp4"}}) {
+      byte[] bytes;
+      try (InputStream input = getInstrumentation().getContext().getAssets().open(format[0])) {
+        bytes = input.readAllBytes();
+      }
+      files.add(media(format[0], format[1], bytes, true));
+    }
+    BackupScreen.addRule(settings, scope, "media", path);
+    runScan();
+    for (Uri uri : files) assertTrue(exists(uri, "photos"));
+    runScan();
+    assertTrue(settings.value(scope, "counts", "").contains("已上传 0"));
+    assertTrue(settings.value(scope, "counts", "").contains("已存在 2"));
+  }
+
+  @Test
+  public void testDownloadedImagesRespectSelectedFolders() throws Exception {
+    String chosen = "Download/SekerEagleTest-" + UUID.randomUUID() + "/";
+    path = chosen;
+    int color = 0xff000000 | new Random().nextInt(0xffffff);
+    Uri downloaded = image("downloaded.png", color, true);
+    path = "Pictures/SekerEagleExcluded-" + UUID.randomUUID() + "/";
+    Uri excluded = image("excluded.png", color ^ 0x333333, true);
+    BackupScreen.addRule(settings, scope, "media", chosen);
+    runScan();
+    assertTrue(exists(downloaded, "photos"));
+    assertFalse(exists(excluded, "photos"));
+    assertTrue(settings.value(scope, "counts", "").contains("扫描 1"));
+  }
+
+  @Test
+  public void testMultipartInterruptionResumesPersistedSession() throws Exception {
+    int width = 1600, height = 1200;
+    int[] pixels = new int[width * height];
+    Random random = new Random();
+    for (int i = 0; i < pixels.length; i++) pixels[i] = 0xff000000 | random.nextInt(0xffffff);
+    Bitmap bitmap = Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888);
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+    bitmap.recycle();
+    Uri uri = media("multipart.png", "image/png", bytes.toByteArray(), true);
+    assertTrue(size(uri) > 5242880);
+    BackupScreen.addRule(settings, scope, "media", path);
+    MediaCatalog catalog = new MediaCatalog(context);
+    List<MediaCatalog.Item> selected = new ArrayList<>();
+    catalog.scan(settings.rules(scope), (item, mode) -> selected.add(item), () -> {});
+    assertEquals(1, selected.size());
+    MediaCatalog.Item item = selected.get(0);
+    ApiClient api = new ApiClient(origin, settings.token(scope));
+    MultipartTransport transport = new MultipartTransport(api, "PHOTO", catalog, item);
+    com.sekereagle.android.core.BackupEngine.File file =
+        new com.sekereagle.android.core.BackupEngine.File(
+            item.uri.toString(),
+            item.size,
+            item.modified,
+            () -> catalog.hash(item, () -> {}),
+            () -> catalog.stable(item));
+    String key =
+        scope + ":PHOTO:" + BackupPolicy.digest(file.uri + "\n" + file.size + "\n" + file.modified);
+    String session;
+    try (BackupJournal journal = new BackupJournal(context)) {
+      com.sekereagle.android.core.BackupEngine.Transport interrupted =
+          new com.sekereagle.android.core.BackupEngine.Transport() {
+            public boolean exists(String hash, long size) throws Exception {
+              return transport.exists(hash, size);
+            }
+
+            public void upload(
+                com.sekereagle.android.core.BackupEngine.File source,
+                com.sekereagle.android.core.BackupEngine.Checkpoint cp,
+                com.sekereagle.android.core.BackupEngine.Save save,
+                com.sekereagle.android.core.BackupEngine.Guard guard)
+                throws Exception {
+              int[] checks = {0};
+              transport.upload(
+                  source,
+                  cp,
+                  save,
+                  () -> {
+                    if (++checks[0] > 25) throw new IOException("test interruption");
+                  });
+            }
+          };
+      try {
+        new com.sekereagle.android.core.BackupEngine(journal, interrupted, () -> {})
+            .process(scope, "PHOTO", file);
+        fail("Expected interrupted upload");
+      } catch (IOException expected) {
+      }
+      com.sekereagle.android.core.BackupEngine.Checkpoint cp = journal.load(key);
+      assertNotNull(cp);
+      assertFalse(cp.confirmed);
+      session = cp.session;
+      assertFalse(session.isEmpty());
+      assertEquals(
+          1,
+          api.request("GET", "/api/photos/uploads/" + session + "/parts", null)
+              .getJSONArray("parts")
+              .length());
+    }
+    try (BackupJournal restored = new BackupJournal(context)) {
+      assertEquals(
+          com.sekereagle.android.core.BackupEngine.Result.UPLOADED,
+          new com.sekereagle.android.core.BackupEngine(restored, transport, () -> {})
+              .process(scope, "PHOTO", file));
+      assertEquals(session, restored.load(key).session);
+      assertTrue(restored.load(key).confirmed);
+    }
+    assertEquals(
+        "COMPLETED",
+        api.request("GET", "/api/photos/uploads/" + session, null).getString("status"));
+    assertTrue(exists(uri, "photos"));
+    assertEquals(file.hash.read(), hash(uri));
+  }
+
+  @Test
+  public void testInterruptedStatusDoesNotLockTheNextLaunch() throws Exception {
+    settings.setFlag(scope,"running",true);
+    getInstrumentation().runOnMainSync(()->activity.finish());
+    getInstrumentation().waitForIdleSync();
+    launch();
+    assertFalse(settings.flag(scope,"running",false));
+  }
+
+  @Test
+  public void testKeystoreAndJournalNeverCrossScopes() throws Exception {
+    assertFalse(settings.token(scope).isEmpty());
+    assertEquals("", settings.token("other-owner"));
+    try (BackupJournal journal = new BackupJournal(context)) {
+      com.sekereagle.android.core.BackupEngine.Checkpoint cp =
+          new com.sekereagle.android.core.BackupEngine.Checkpoint();
+      cp.hash = "a".repeat(64);
+      cp.confirmed = true;
+      journal.confirm(scope + ":PHOTO:file", scope + ":PHOTO:hash", cp);
+      assertNull(journal.load("other:PHOTO:file"));
+      assertFalse(journal.contains(scope + ":MATERIAL:hash"));
+      assertTrue(journal.contains(scope + ":PHOTO:hash"));
+    }
+  }
+
+  @After
+  public void tearDown() throws Exception {
+    context.stopService(new Intent(context, BackupService.class));
+    settings.setFlag(scope, "auto", false);
+    for (Uri uri : created) context.getContentResolver().delete(uri, null, null);
+    if (activity != null) getInstrumentation().runOnMainSync(() -> activity.finish());
+  }
+}
