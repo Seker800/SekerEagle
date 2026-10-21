@@ -154,3 +154,31 @@ class WideFilesystemFactsTests(unittest.TestCase):
         row=j.next_batch(1)[0]
         self.assertEqual(row['inode'],str((1<<64)-1))
         self.assertEqual(row['mtime_ns'],str(-(1<<64)));j.close()
+
+class CoordinationTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+
+    def test_waiting_importer_waits_for_inventory_lock(self):
+        from unittest.mock import patch
+        with open(Path(self.tmp.name)/'lock','a') as lock:
+            with patch.object(self.m.fcntl,'flock',side_effect=[BlockingIOError(),None]) as flock, patch.object(self.m.time,'sleep') as sleep:
+                self.assertTrue(self.m.acquire_lock(lock,wait=True))
+                self.assertEqual(flock.call_count,2)
+                sleep.assert_called_once_with(1)
+
+    def test_processing_retry_does_not_treat_unknown_status_as_complete(self):
+        from unittest.mock import patch
+        j=self.m.Journal(Path(self.tmp.name)/'state')
+        j.add('photo.jpg',{'size':1,'mtime_ns':'1','inode':'1','device':'1'},'image/jpeg','image')
+        j.update('photo.jpg',status='IMPORTED',session_id='session')
+        class Api:
+            def __init__(self):self.calls=0
+            def request(self,*args):
+                self.calls+=1
+                if self.calls==1:raise OSError('temporary')
+                return {'assetStatus':'READY'}
+        api=Api()
+        with patch.object(self.m.time,'sleep'):self.m.await_processing(j,api)
+        self.assertEqual(api.calls,2)
+        self.assertEqual(j.db.execute('SELECT media_status FROM items').fetchone()[0],'READY')
+        j.close()

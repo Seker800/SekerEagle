@@ -15,6 +15,8 @@ python3 /import/shared_import.py run --state /state --policy /import/policy.json
 python3 /import/shared_import.py status --state /state
 ```
 
+已有独立清单进程时，`run --wait-for-inventory` 会等待其释放私有日志锁，再自动继续；不允许两个进程同时写入检查点。
+
 `run` 会先完成清单，再按拍摄时间倒序导入。无时区时间仅用于排序时按上海时区解释，缺失时区不会写回原片或冒充 EXIF。没有拍摄时间时尝试媒体创建时间，最后回退文件修改时间；数据库的拍摄时间仍由原有摄影分析从原片读取，不用排序回退伪造拍摄时间。清单冻结后新增的文件不自动加入本轮。
 
 每批最多 25 项，全部进入 READY／FAILED 后才处理下一批；文件级永久错误保留记录并继续。网络／服务升级暂时失败重试，401／403 停止等待凭据修复。SIGTERM／SIGINT 在检查点安全暂停；再次运行同一目录即恢复，先核对服务器已接收的分片，不清库、不重新复制已完成项。相同文件仍由服务端在同一 owner／PHOTO 内去重。
