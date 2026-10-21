@@ -23,8 +23,7 @@ COPY packages/vector-core packages/vector-core
 RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/worker
 
 FROM node:22-bookworm-slim AS runtime
-RUN printf '%s\n' 'deb https://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/sekereagle-media.list
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg python3 python3-venv libimage-exiftool-perl openssl && apt-get install -y --no-install-recommends -t bookworm-backports libheif-examples libheif-plugin-libde265 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && printf '%s\n' 'deb https://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/sekereagle-media.list && apt-get update && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv libimage-exiftool-perl openssl && apt-get install -y --no-install-recommends -t bookworm-backports libheif-examples libheif-plugin-libde265 && rm -rf /var/lib/apt/lists/*
 COPY packages/media-core/python/requirements.txt /tmp/camera-media-requirements.txt
 RUN python3 -m venv /opt/camera-media && /opt/camera-media/bin/pip install --no-cache-dir -r /tmp/camera-media-requirements.txt
 ENV CAMERA_RAW_PYTHON=/opt/camera-media/bin/python
