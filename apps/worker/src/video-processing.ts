@@ -183,7 +183,7 @@ export async function processVideo(
               assetId: asset.id,
               kind: 'THUMBNAIL',
               revision: job.assetRevision,
-              variant: 'default',
+              variant: 'poster',
             },
           },
           create: {
@@ -191,7 +191,7 @@ export async function processVideo(
             libraryMode: asset.libraryMode,
             assetId: asset.id,
             kind: 'THUMBNAIL',
-            variant: 'default',
+            variant: 'poster',
             revision: job.assetRevision,
             storageKey,
             mimeType: 'image/jpeg',

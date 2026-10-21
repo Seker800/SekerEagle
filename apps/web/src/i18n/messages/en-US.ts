@@ -916,6 +916,8 @@ export const enUS = {
   有效: 'Valid',
   有效期: 'Expiry',
   '与“': 'with "',
+  '视频播放副本尚未生成，原片已保存':
+    'Video playback preview is not generated yet. The original is saved.',
   预览图尚未生成: 'Preview not generated yet.',
   原始文件名: 'Original Filename',
   '原文件拖出失败。': 'Failed to drag original file out.',
