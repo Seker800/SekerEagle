@@ -1,6 +1,6 @@
+import { decodeHeifFile, assertSafeHeifInfo as assertHeifPixels } from '@sekereagle/media-core';
 import { isCameraRawMime, CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
 import { readCameraRaw, type CameraDimensions } from '@sekereagle/media-core';
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -8,12 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { promisify } from 'node:util';
 import sharp, { type Sharp } from 'sharp';
 import { classifyImageInputError, PermanentMediaValidationError } from './media-validation-error';
 
 export const MAX_EAGLE_IMAGE_INPUT_PIXELS = CAMERA_MAX_IMAGE_PIXELS;
-const execFileAsync = promisify(execFile);
 
 // libvips otherwise retains a large process-global cache and may create one worker per CPU.
 // Media jobs are already concurrency-controlled at the queue boundary.
@@ -21,16 +19,9 @@ sharp.cache({ memory: 64, files: 20, items: 100 });
 sharp.concurrency(1);
 
 export function assertSafeHeifInfo(output: string): void {
-  const dimensions = [...output.matchAll(/^\s*image:\s+(\d+)x(\d+)\b/gm)];
-  const totalPixels = dimensions.reduce(
-    (sum, match) => sum + BigInt(match[1]!) * BigInt(match[2]!),
-    0n,
-  );
-  if (
-    dimensions.length === 0 ||
-    totalPixels <= 0n ||
-    totalPixels > BigInt(MAX_EAGLE_IMAGE_INPUT_PIXELS)
-  ) {
+  try {
+    assertHeifPixels(output);
+  } catch {
     throw new PermanentMediaValidationError(
       'IMAGE_PIXEL_LIMIT_EXCEEDED',
       'HEIC/HEIF 图片像素数量超出安全限制。',
@@ -121,28 +112,4 @@ function requiresHeifDecode(mimeType: string, storageKey: string): boolean {
   return (
     mimeType === 'image/heic' || mimeType === 'image/heif' || /\.(?:heic|heif)$/i.test(storageKey)
   );
-}
-
-async function decodeHeifFile(inputPath: string, outputPath: string): Promise<void> {
-  try {
-    const { stdout } = await execFileAsync(
-      process.env.HEIF_INFO_PATH?.trim() || 'heif-info',
-      [inputPath],
-      { maxBuffer: 256 * 1024, timeout: 30_000 },
-    );
-    assertSafeHeifInfo(stdout);
-    await execFileAsync(
-      process.env.HEIF_CONVERT_PATH?.trim() || 'heif-convert',
-      [inputPath, outputPath],
-      { timeout: 120_000 },
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    await rm(outputPath, { force: true });
-    await execFileAsync(
-      process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
-      ['-v', 'error', '-y', '-i', inputPath, '-frames:v', '1', outputPath],
-      { timeout: 120_000 },
-    );
-  }
 }

@@ -1,7 +1,8 @@
 import { parse } from 'exifr';
+import { readPhotoMetadataTags } from '@sekereagle/media-core';
 import type { Sharp } from 'sharp';
 
-export const PHOTO_ANALYSIS_VERSION = 'exifr-7.1.3-laplacian-dhash-v1';
+export const PHOTO_ANALYSIS_VERSION = 'original-exiftool-laplacian-dhash-v2';
 const text = (value: unknown) =>
   typeof value === 'string' ? value.normalize('NFKC').trim().slice(0, 240) || null : null;
 const numeric = (value: unknown, min = 0, max = 1e9) =>
@@ -51,6 +52,7 @@ export function normalizePhotoExif(exif: Record<string, unknown>) {
 }
 
 export async function readPhotoExif(exif?: Buffer, originalPath?: string) {
+  if (originalPath) return normalizePhotoExif(await readPhotoMetadataTags(originalPath));
   let tags: Record<string, unknown> = {};
   if ((exif && exif.length <= 1024 * 1024) || (!exif && originalPath)) {
     try {

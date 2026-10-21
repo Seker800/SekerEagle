@@ -1,3 +1,5 @@
+import { mediaSubprocessEnvironment } from './subprocess-environment';
+export { mediaSubprocessEnvironment } from './subprocess-environment';
 import { normalizeLivePhotoIdentifier } from './live-photo';
 import { execFile } from 'node:child_process';
 import { stat } from 'node:fs/promises';
@@ -103,7 +105,7 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
       'json',
       inputPath,
     ],
-    { timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
+    { env: mediaSubprocessEnvironment(), timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
   );
   const probe = JSON.parse(stdout) as CameraVideoProbe;
   const livePhotoIdentifier = normalizeLivePhotoIdentifier(
@@ -161,7 +163,7 @@ export async function transcodeCameraVideo(
       String(1024 * 1024 * 1024),
       outputPath,
     ],
-    { timeout: 30 * 60 * 1000, maxBuffer: 2 * 1024 * 1024 },
+    { env: mediaSubprocessEnvironment(), timeout: 30 * 60 * 1000, maxBuffer: 2 * 1024 * 1024 },
   );
   const preview = await probeCameraVideo(outputPath, 'video/mp4');
   if (
@@ -188,7 +190,7 @@ export async function readCameraRaw(
     {
       timeout: outputPath ? 180_000 : 60_000,
       maxBuffer: 256 * 1024,
-      env: { ...process.env, OMP_NUM_THREADS: '1', OPENBLAS_NUM_THREADS: '1' },
+      env: mediaSubprocessEnvironment(),
     },
   );
   const result = JSON.parse(stdout) as CameraRawDimensions;
@@ -219,3 +221,6 @@ export {
   LIVE_PHOTO_MAX_VIDEO_BYTES,
   LIVE_PHOTO_MAX_DURATION_MS,
 } from './live-photo';
+
+export { readPhotoMetadataTags } from './photo-metadata';
+export { decodeHeifFile, assertSafeHeifInfo } from './heif';
