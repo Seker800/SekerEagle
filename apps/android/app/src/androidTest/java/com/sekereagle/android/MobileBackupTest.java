@@ -561,6 +561,142 @@ public final class MobileBackupTest {
     getInstrumentation().runOnMainSync(() -> activity.show("library"));
   }
 
+  @Test
+  public void testCaptureMobilePageAudit() throws Exception {
+    org.junit.Assume.assumeTrue(
+        InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true"));
+    getInstrumentation().runOnMainSync(() -> activity.show("library"));
+    webScript("window.sekerEagleI18n?.setLocale('zh-CN')");
+    Thread.sleep(600);
+    auditMode("照片");
+    capture("audit-photo-home.png");
+    webScript("document.querySelector('button[aria-label=\"搜索\"]').click()");
+    capture("audit-search.png");
+    webScript("document.querySelector('dialog[open] button[aria-label=\"关闭搜索\"]').click()");
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('[data-asset-id]'))").equals("true"),
+        10000,
+        "photo card");
+    webScript("document.querySelector('[data-asset-id]').click()");
+    Thread.sleep(1500);
+    capture("audit-viewer.png");
+    webScript("document.querySelector('[role=dialog] details summary')?.click()");
+    capture("audit-viewer-more.png");
+    webScript("document.querySelector('[role=dialog] button[aria-label=\"返回\"]')?.click()");
+    auditDestination("地图");
+    capture("audit-map.png");
+    auditDestination("人物");
+    capture("audit-people.png");
+    auditDestination("更多");
+    capture("audit-more.png");
+    webScript(
+        "Array.from(document.querySelectorAll('section[aria-label=\"更多\"]"
+            + " button')).find(b=>b.textContent.trim()==='设置')?.click()");
+    Thread.sleep(700);
+    capture("audit-account.png");
+    int tabs =
+        Integer.parseInt(
+            webValue("document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab]').length"));
+    for (int index = 0; index < tabs; index++) {
+      webScript(
+          "document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab])[" + index + "].click()");
+      capture("audit-account-" + index + ".png");
+    }
+    auditMode("素材");
+    capture("audit-material.png");
+    auditDestination("标签");
+    capture("audit-tags.png");
+    auditDestination("素材");
+    webScript("document.querySelector('button[aria-label=\"视图与筛选\"]').click()");
+    capture("audit-filters.png");
+    webScript(
+        "Array.from(document.querySelectorAll('dialog[open]"
+            + " button')).find(b=>b.textContent.trim()==='完成').click()");
+    getInstrumentation().runOnMainSync(() -> activity.show("backup"));
+    capture("audit-backup.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("cleanup"));
+    capture("audit-cleanup.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("server"));
+    capture("audit-connection.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("library"));
+  }
+
+  @Test
+  public void testSystemBackReturnsThroughSearchViewerAndSubpages() throws Exception {
+    webScript("window.sekerEagleI18n?.setLocale('zh-CN')");
+    Thread.sleep(600);
+    auditMode("照片");
+    webScript("document.querySelector('button[aria-label=\"搜索\"]').click()");
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('dialog[open]'))").equals("true"),
+        5000,
+        "search opened");
+    getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('dialog[open]'))").equals("false"),
+        5000,
+        "back closes search");
+    assertFalse(activity.isFinishing());
+    auditDestination("更多");
+    getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    waitUntil(
+        () ->
+            webValue("Boolean(document.querySelector('section[aria-label=\"更多\"]'))")
+                .equals("false"),
+        5000,
+        "back returns from more");
+    webScript("document.querySelector('[data-asset-id]').click()");
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('[role=dialog]'))").equals("true"),
+        5000,
+        "viewer opened");
+    getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('[role=dialog]'))").equals("false"),
+        5000,
+        "back closes viewer");
+    assertFalse(activity.isFinishing());
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              activity.show("backup");
+              activity.show("server");
+            });
+    getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    getInstrumentation().waitForIdleSync();
+    getInstrumentation()
+        .runOnMainSync(
+            () ->
+                assertNotNull(
+                    activity.findViewById(android.R.id.content).findViewWithTag("backup-auto")));
+    getInstrumentation().sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
+    getInstrumentation().waitForIdleSync();
+    assertFalse(activity.isFinishing());
+  }
+
+  private void auditMode(String label) throws Exception {
+    webScript(
+        "Array.from(document.querySelectorAll('nav[aria-label=\"图库模式\"]"
+            + " button')).find(b=>b.textContent.trim()==='"
+            + label
+            + "').click()");
+    Thread.sleep(700);
+  }
+
+  private void auditDestination(String label) throws Exception {
+    webScript("document.querySelector('button[aria-label=\"更多操作\"]').click()");
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('dialog[open] nav'))").equals("true"),
+        5000,
+        "navigation menu");
+    webScript(
+        "Array.from(document.querySelectorAll('dialog[open] nav"
+            + " button')).find(b=>b.textContent.trim()==='"
+            + label
+            + "').click()");
+    Thread.sleep(500);
+  }
+
   private void openMoreSection() throws Exception {
     String selector = "button[aria-label=\"更多操作\"],button[aria-label=\"More actions\"]";
     waitUntil(
