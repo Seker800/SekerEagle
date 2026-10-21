@@ -18,7 +18,7 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import { PatScopeGuard } from '../auth/pat-scope.guard';
 import { RequirePatScopes } from '../auth/required-scopes';
 import type { AuthPrincipal } from '../auth/auth.types';
-import { CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
+import { CheckUploadContentDto, CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
 import { EagleImportsService } from './import/eagle-app-import.service';
 import { EagleUploadService } from './eagle-upload.service';
 
@@ -39,6 +39,12 @@ export class EagleUploadController {
   @UseGuards(BrowserOrPatOriginGuard)
   initiate(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: InitiateEagleUploadDto) {
     return this.uploads.initiate(principal.sub, input, principal.canViewPrivate === true);
+  }
+
+  @Post('check-content')
+  @UseGuards(BrowserOrPatOriginGuard)
+  checkContent(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: CheckUploadContentDto) {
+    return this.uploads.checkContent(principal.sub, input, principal.canViewPrivate === true);
   }
 
   @Get(':uploadSessionId')

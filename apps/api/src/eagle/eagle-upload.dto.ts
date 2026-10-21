@@ -95,3 +95,16 @@ export class CompleteEagleUploadDto {
   @Type(() => CompleteUploadPartDto)
   parts!: CompleteUploadPartDto[];
 }
+
+export class CheckUploadContentDto {
+  @ApiProperty({ pattern: '^[a-fA-F0-9]{64}$' })
+  @Matches(/^[a-fA-F0-9]{64}$/)
+  contentSha256!: string;
+
+  @ApiProperty({ minimum: 1, maximum: CAMERA_MAX_VIDEO_BYTES })
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(CAMERA_MAX_VIDEO_BYTES)
+  size!: number;
+}

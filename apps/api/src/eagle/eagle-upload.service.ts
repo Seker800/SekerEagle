@@ -143,6 +143,17 @@ export class EagleUploadService {
     }
   }
 
+  async checkContent(ownerId: string, input: { contentSha256: string; size: number }, includePrivate = false) {
+    const found = await this.prisma.eagleAsset.findFirst({
+      where: { ownerId, libraryMode: this.libraryMode, sha256: input.contentSha256.toLowerCase(),
+        byteSize: BigInt(input.size), deletedAt: null, purgeAfter: null,
+        ...(includePrivate ? {} : { isPrivate: false }),
+      },
+      select: { id: true },
+    });
+    return { exists: found !== null };
+  }
+
   async getSession(ownerId: string, uploadSessionId: string) {
     const session = await this.prisma.uploadSession.findFirst({
       where: { id: uploadSessionId, uploaderId: ownerId, libraryMode: this.libraryMode },
