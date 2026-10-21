@@ -243,3 +243,12 @@ it('does not add headings or change the existing material layout without section
     buildEagleMasonryLayout([], 900, { strategy: 'justified', sectionKeys: new Map() }).sections,
   ).toEqual([]);
 });
+
+it('uses three square columns and never fills the last row across a date boundary', () => {
+ const assets=Array.from({length:5},(_,i)=>({id:String(i),width:100,height:200}));
+ const result=buildEagleMasonryLayout(assets,390,{strategy:'square',sectionKeys:new Map([['0','2026-10-21'],['1','2026-10-21'],['2','2026-10-21'],['3','2026-10-21'],['4','2026-10-20']])});
+ expect(result.columns).toBe(3); expect(result.items[0].width).toBe(result.items[0].height);
+ expect(result.items[2].top).toBe(result.items[0].top); expect(result.items[3].left).toBe(0);
+ expect(result.sections).toHaveLength(2);expect(result.items[4].top).toBeGreaterThan(result.items[3].top+result.items[3].height);
+ expect(result.items[4].left).toBe(0);
+});
