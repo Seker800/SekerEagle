@@ -1,3 +1,4 @@
+import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { processVideo } from './video-processing';
 import {
   VIDEO_PLAYBACK_PROCESSOR_VERSION,
