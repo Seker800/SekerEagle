@@ -296,3 +296,23 @@ class ConcurrentIngestTests(unittest.TestCase):
             a=pool.submit(failed);b=pool.submit(success);a.result();b.result()
         self.assertEqual(j.summary(),{'IMPORTED':1,'PENDING':1})
         self.assertEqual(j.db.execute("SELECT status FROM items WHERE path='1.jpg'").fetchone()[0],'IMPORTED')
+
+class ReviewRegressionTests(unittest.TestCase):
+    setUp=SharedImportTests.setUp
+    def test_reads_wait_for_the_journal_transaction_lock(self):
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError
+        j=self.m.Journal(Path(self.tmp.name)/'state');self.addCleanup(j.close)
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            for read in [j.summary,lambda:j.meta('schema_version'),lambda:j.next_batch(1)]:
+                with j._lock:
+                    future=pool.submit(read)
+                    with self.assertRaises(TimeoutError):future.result(timeout=.05)
+                future.result(timeout=1)
+    def test_missing_assembled_parts_fails_one_file_without_stopping_the_batch(self):
+        from unittest.mock import patch
+        j=self.m.Journal(Path(self.tmp.name)/'state');self.addCleanup(j.close)
+        j.add('bad.jpg',{'size':1,'mtime_ns':1,'inode':1,'device':1},'image/jpeg','image')
+        j.metadata('bad.jpg',1,'FileModifyTime','bad.jpg');row=j.next_batch(1)[0]
+        with patch.object(self.m,'upload_one',side_effect=ValueError('ASSEMBLED_PARTS_MISSING')):
+            self.assertEqual(self.m.import_one_with_retry(self.root,j,row,None),1)
+        self.assertEqual(j.summary(),{'FAILED':1})

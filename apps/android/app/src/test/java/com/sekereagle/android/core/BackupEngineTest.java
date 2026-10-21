@@ -205,4 +205,12 @@ public class BackupEngineTest {
           IllegalArgumentException.class,
           () -> BackupPolicy.uploadUrl(value, "https://eagle.example"));
   }
+  @Test
+  public void terminalFailuresDoNotRepeatNetworkRequestsUntilTheFileChangesOrUserRetries() throws Exception {
+    BackupEngine.Checkpoint cp=new BackupEngine.Checkpoint();cp.terminalError="INVALID_MEDIA";
+    files.put(BackupEngine.fileKey("scope","PHOTO",file("one",12,1)),cp);
+    assertThrows(BackupEngine.PermanentFailure.class,()->engine(false).process("scope","PHOTO",file("one",12,1)));
+    assertEquals(0,uploads);assertEquals(0,checks);
+    assertEquals(BackupEngine.Result.UPLOADED,engine(false).process("scope","PHOTO",file("one",13,2)));
+  }
 }

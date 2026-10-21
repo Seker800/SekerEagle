@@ -434,3 +434,13 @@ test('processing progress rejects unavailable sessions without revealing another
   );
   await assert.rejects(service.getSession(ownerId, sessionId), NotFoundException);
 });
+
+
+test('transient inspection failure increments finalization attempts exactly once',async()=>{
+ const {ServiceUnavailableException}=await import('@nestjs/common');
+ const updates:Record<string,unknown>[]=[];
+ const session={id:sessionId,uploaderId:ownerId,status:'ASSEMBLED',originalName:'photo.jpg',mimeType:'image/jpeg',size:5n,objectKey:`users/${ownerId}/assets/id/photo.jpg`,multipartUploadId:'multipart-id',eagleState:{},completionParts:[{PartNumber:1,ETag:'etag'}]};
+ const service=new EagleUploadService({uploadSession:{findFirst:async()=>session,count:async()=>1,updateMany:async({data}:{data:Record<string,unknown>})=>{updates.push(data);return {count:1};}},$transaction:async()=>assert.fail('failed inspection must not publish an asset')} as never,{headObject:async()=>({ContentLength:5})} as never,{inspect:async()=>{throw new ServiceUnavailableException('decoder temporarily unavailable');}} as never,{} as never);
+ await assert.rejects(service.complete(ownerId,sessionId,{parts:[{partNumber:1,etag:'etag'}]}),ServiceUnavailableException);
+ assert.equal(updates.length,1);assert.deepEqual(updates[0]?.finalizationAttempts,{increment:1});assert.equal(updates[0]?.objectCleanupPending,false);
+});

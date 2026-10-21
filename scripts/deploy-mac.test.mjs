@@ -194,3 +194,13 @@ test('migration waits have a deadline, terminate only their migration container 
     false,
   );
 });
+
+test('import processing switches are forwarded by compose and documented with safe defaults', async () => {
+ const {readFile}=await import('node:fs/promises');const {load}=await import('js-yaml');
+ const compose=load(await readFile(new URL('../deploy/mac/docker-compose.yml',import.meta.url),'utf8'));
+ const sample=await readFile(new URL('../.env.example',import.meta.url),'utf8');
+ for(const key of ['EAGLE_VIDEO_TRANSCODING_ENABLED','EAGLE_BACKGROUND_PROCESSING_ENABLED']){
+  assert.equal(compose.services.worker.environment[key],`\${${key}:-true}`);
+  assert.match(sample,new RegExp(`^${key}=true$`,'m'));
+ }
+});

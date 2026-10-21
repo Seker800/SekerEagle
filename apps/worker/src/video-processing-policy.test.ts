@@ -16,3 +16,12 @@ test('paused transcoding still creates a poster and keeps playback explicitly de
   assert.equal(taskBlocksAssetReady('GENERATE_PREVIEW', VIDEO_PLAYBACK_PROCESSOR_VERSION), false);
   assert.equal(taskBlocksAssetReady('GENERATE_PREVIEW', 'legacy'), true);
 });
+
+test('playback uses the background lane and reports terminal failure without hiding the poster', async()=>{
+ const {processingLaneForKind,terminalAssetFailure}=await import('./processing-policy');
+ assert.equal(processingLaneForKind('GENERATE_PREVIEW',VIDEO_PLAYBACK_PROCESSOR_VERSION),'BACKGROUND');
+ assert.equal(processingLaneForKind('GENERATE_PREVIEW','legacy'),'INTERACTIVE');
+ assert.deepEqual(terminalAssetFailure('GENERATE_PREVIEW',VIDEO_PLAYBACK_PROCESSOR_VERSION,'ffmpeg failed'),{mediaErrorCode:'VIDEO_PLAYBACK_FAILED'});
+ assert.deepEqual(terminalAssetFailure('GENERATE_THUMBNAIL','v1','invalid'),{lifecycleStatus:'FAILED',mediaErrorCode:'invalid'});
+ assert.equal(terminalAssetFailure('GENERATE_EMBEDDING','v1','failed'),null);
+});
