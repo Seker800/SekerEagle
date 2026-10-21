@@ -5,6 +5,8 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      'apps/android/**/build/**',
+      'apps/android/.gradle/**',
       '**/coverage/**',
       '.gitnexus/**',
       '.omx/**',

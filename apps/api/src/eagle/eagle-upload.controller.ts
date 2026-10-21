@@ -18,7 +18,11 @@ import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import { PatScopeGuard } from '../auth/pat-scope.guard';
 import { RequirePatScopes } from '../auth/required-scopes';
 import type { AuthPrincipal } from '../auth/auth.types';
-import { CheckUploadContentDto, CompleteEagleUploadDto, InitiateEagleUploadDto } from './eagle-upload.dto';
+import {
+  CheckUploadContentDto,
+  CompleteEagleUploadDto,
+  InitiateEagleUploadDto,
+} from './eagle-upload.dto';
 import { EagleImportsService } from './import/eagle-app-import.service';
 import { EagleUploadService } from './eagle-upload.service';
 

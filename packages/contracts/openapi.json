@@ -2404,6 +2404,36 @@
         "tags": ["eagle-uploads"]
       }
     },
+    "/api/eagle/uploads/check-content": {
+      "post": {
+        "operationId": "EagleUploadController_checkContent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckUploadContentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads"]
+      }
+    },
     "/api/eagle/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "EagleUploadController_getSession",
@@ -5941,6 +5971,36 @@
         "tags": ["eagle-uploads", "photo-uploads"]
       }
     },
+    "/api/photos/uploads/check-content": {
+      "post": {
+        "operationId": "PhotoUploadsController_checkContent",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckUploadContentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle-uploads", "photo-uploads"]
+      }
+    },
     "/api/photos/uploads/{uploadSessionId}": {
       "get": {
         "operationId": "PhotoUploadsController_getSession",
@@ -7219,6 +7279,21 @@
           }
         },
         "required": ["originalName", "mimeType", "size"]
+      },
+      "CheckUploadContentDto": {
+        "type": "object",
+        "properties": {
+          "contentSha256": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$"
+          },
+          "size": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 5000000000
+          }
+        },
+        "required": ["contentSha256", "size"]
       },
       "Object": {
         "type": "object",

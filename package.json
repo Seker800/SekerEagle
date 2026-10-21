@@ -63,7 +63,10 @@
     "backup:test": "python3 -m unittest discover -s scripts/backup -p 'test_*.py'",
     "test:worker-leases": "npm run test:leases --workspace @sekereagle/worker",
     "security:audit": "npm audit --omit=dev --audit-level=high",
-    "security:audit:all": "npm audit --audit-level=high"
+    "security:audit:all": "npm audit --audit-level=high",
+    "android:build": "npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/android",
+    "android:check": "npm run build --workspace @sekereagle/library-core && npm run typecheck --workspace @sekereagle/android && npm run test --workspace @sekereagle/android && npm run lint --workspace @sekereagle/android && npm run build --workspace @sekereagle/android",
+    "android:install": "npm run install:device --workspace @sekereagle/android"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

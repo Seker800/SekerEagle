@@ -9,7 +9,8 @@
     "typecheck": "node scripts/gradle.mjs compileDebugJavaWithJavac",
     "test": "node scripts/gradle.mjs testDebugUnitTest",
     "lint": "node scripts/gradle.mjs lintDebug",
-    "install": "node scripts/gradle.mjs installDebug",
-    "test:device": "node scripts/gradle.mjs connectedDebugAndroidTest"
+    "test:device": "node scripts/gradle.mjs connectedDebugAndroidTest",
+    "install:device": "node scripts/gradle.mjs installDebug",
+    "test:coverage": "node scripts/gradle.mjs verifyCoreCoverage"
   }
 }

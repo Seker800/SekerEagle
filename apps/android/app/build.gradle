@@ -1,4 +1,4 @@
-plugins { id 'com.android.application' }
+plugins { id 'com.android.application'; id 'jacoco' }
 android {
     namespace 'com.sekereagle.android'
     compileSdk 36
@@ -8,7 +8,7 @@ android {
         targetSdk 36
         versionCode 1
         versionName '0.1.0'
-        testInstrumentationRunner 'android.test.InstrumentationTestRunner'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true }
     buildTypes {
@@ -16,10 +16,30 @@ android {
         release { minifyEnabled false }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    sourceSets { main.assets.srcDirs += layout.buildDirectory.dir('generated/media-assets') }
+    sourceSets { main.assets.srcDirs += layout.buildDirectory.dir('generated/media-assets'); androidTest.assets.srcDirs += layout.buildDirectory.dir('generated/device-fixtures') }
     lint { abortOnError true; disable 'OldTargetApi', 'GradleDependency', 'NewerVersionAvailable' }
     testOptions { unitTests.returnDefaultValues = true }
 }
-dependencies { testImplementation 'junit:junit:4.13.2' }
+dependencies { testImplementation 'junit:junit:4.13.2'; androidTestImplementation 'androidx.test:runner:1.7.0'; androidTestImplementation 'junit:junit:4.13.2' }
 tasks.register('generateMediaPolicy', Exec) { workingDir rootProject.projectDir; commandLine 'node', 'scripts/generate-media-policy.mjs' }
 tasks.named('preBuild') { dependsOn 'generateMediaPolicy' }
+
+jacoco { toolVersion = '0.8.14' }
+def coreClasses = fileTree(layout.buildDirectory.dir('intermediates/javac/debug/compileDebugJavaWithJavac/classes')) { include 'com/sekereagle/android/core/**' }
+def unitCoverage = layout.buildDirectory.file('outputs/unit_test_code_coverage/debugUnitTest/testDebugUnitTest.exec')
+tasks.register('coreCoverage', JacocoReport) {
+    dependsOn 'testDebugUnitTest'
+    executionData unitCoverage
+    classDirectories.from coreClasses
+    sourceDirectories.from files('src/main/java')
+    reports { xml.required = true; html.required = true }
+}
+tasks.register('verifyCoreCoverage', JacocoCoverageVerification) {
+    dependsOn 'coreCoverage'
+    executionData unitCoverage
+    classDirectories.from coreClasses
+    violationRules { rule { limit { counter = 'LINE'; minimum = 0.80 }; limit { counter = 'BRANCH'; minimum = 0.80 } } }
+}
+
+tasks.register('generateDeviceFixtures', Exec) { workingDir rootProject.projectDir; commandLine 'node', 'scripts/generate-test-fixtures.mjs' }
+tasks.matching { it.name == 'mergeDebugAndroidTestAssets' }.configureEach { dependsOn 'generateDeviceFixtures' }

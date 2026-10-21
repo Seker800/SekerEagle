@@ -11,37 +11,97 @@ test('content preflight is bounded to owner, mode, size and visible non-deleted 
     for (const privateAccess of [false, true]) {
       let query: unknown;
       const service = new EagleUploadService(
-        { eagleAsset: { findFirst: async (input: unknown) => { query = input; return { id: 'known' }; } } } as never,
-        {} as never, {} as never, {} as never, mode,
+        {
+          eagleAsset: {
+            findFirst: async (input: unknown) => {
+              query = input;
+              return { id: 'known' };
+            },
+          },
+        } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        mode,
       );
-      assert.deepEqual(await service.checkContent('authenticated-owner', { contentSha256: 'A'.repeat(64), size: 12 }, privateAccess), { exists: true });
-      assert.deepEqual(query, { where: { ownerId: 'authenticated-owner', libraryMode: mode,
-        sha256: 'a'.repeat(64), byteSize: 12n, deletedAt: null, purgeAfter: null,
-        ...(privateAccess ? {} : { isPrivate: false }),
-      }, select: { id: true } });
+      assert.deepEqual(
+        await service.checkContent(
+          'authenticated-owner',
+          { contentSha256: 'A'.repeat(64), size: 12 },
+          privateAccess,
+        ),
+        { exists: true },
+      );
+      assert.deepEqual(query, {
+        where: {
+          ownerId: 'authenticated-owner',
+          libraryMode: mode,
+          sha256: 'a'.repeat(64),
+          byteSize: 12n,
+          deletedAt: null,
+          purgeAfter: null,
+          ...(privateAccess ? {} : { isPrivate: false }),
+        },
+        select: { id: true },
+      });
     }
   }
 });
 
 test('absent, foreign, private or recycled content has the same preflight response', async () => {
   const service = new EagleUploadService(
-    { eagleAsset: { findFirst: async () => null } } as never, {} as never, {} as never, {} as never,
+    { eagleAsset: { findFirst: async () => null } } as never,
+    {} as never,
+    {} as never,
+    {} as never,
   );
-  assert.deepEqual(await service.checkContent('owner', { contentSha256: 'b'.repeat(64), size: 10 }), { exists: false });
+  assert.deepEqual(
+    await service.checkContent('owner', { contentSha256: 'b'.repeat(64), size: 10 }),
+    { exists: false },
+  );
 });
 
 test('content preflight takes identity from authentication and never returns an asset identifier', async () => {
   const calls: unknown[] = [];
-  const controller = new EagleUploadController({ checkContent: async (...args: unknown[]) => { calls.push(args); return { exists: true }; } } as never, {} as never);
+  const controller = new EagleUploadController(
+    {
+      checkContent: async (...args: unknown[]) => {
+        calls.push(args);
+        return { exists: true };
+      },
+    } as never,
+    {} as never,
+  );
   const input = { contentSha256: 'a'.repeat(64), size: 12 };
-  assert.deepEqual(await controller.checkContent({ sub: 'owner', canViewPrivate: false } as never, input), { exists: true });
+  assert.deepEqual(
+    await controller.checkContent({ sub: 'owner', canViewPrivate: false } as never, input),
+    { exists: true },
+  );
   assert.deepEqual(calls, [['owner', input, false]]);
 });
 
 test('preflight DTO rejects malformed hashes, unbounded sizes and owner injection', async () => {
-  for (const input of [ { contentSha256: 'wrong', size: 1 }, { contentSha256: 'a'.repeat(64), size: 0 },
-    { contentSha256: 'a'.repeat(64), size: 5_000_000_001 }, { contentSha256: 'a'.repeat(64), size: 1, ownerId: 'foreign' } ]) {
-    assert.ok((await validate(plainToInstance(CheckUploadContentDto, input), { whitelist: true, forbidNonWhitelisted: true })).length > 0);
+  for (const input of [
+    { contentSha256: 'wrong', size: 1 },
+    { contentSha256: 'a'.repeat(64), size: 0 },
+    { contentSha256: 'a'.repeat(64), size: 5_000_000_001 },
+    { contentSha256: 'a'.repeat(64), size: 1, ownerId: 'foreign' },
+  ]) {
+    assert.ok(
+      (
+        await validate(plainToInstance(CheckUploadContentDto, input), {
+          whitelist: true,
+          forbidNonWhitelisted: true,
+        })
+      ).length > 0,
+    );
   }
-  assert.equal((await validate(plainToInstance(CheckUploadContentDto, { contentSha256: 'A'.repeat(64), size: 12 }))).length, 0);
+  assert.equal(
+    (
+      await validate(
+        plainToInstance(CheckUploadContentDto, { contentSha256: 'A'.repeat(64), size: 12 }),
+      )
+    ).length,
+    0,
+  );
 });

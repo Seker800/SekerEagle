@@ -980,6 +980,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/uploads/check-content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleUploadController_checkContent'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -2548,6 +2564,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/uploads/check-content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoUploadsController_checkContent'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/uploads/{uploadSessionId}': {
     parameters: {
       query?: never;
@@ -3243,6 +3275,10 @@ export interface components {
       /** Format: uuid */
       copySourceAssetId?: string;
       copySourceRowVersion?: number;
+    };
+    CheckUploadContentDto: {
+      contentSha256: string;
+      size: number;
     };
     Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;
@@ -4940,6 +4976,27 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['InitiateEagleUploadDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleUploadController_checkContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckUploadContentDto'];
       };
     };
     responses: {
@@ -7366,6 +7423,27 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['InitiateEagleUploadDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoUploadsController_checkContent: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CheckUploadContentDto'];
       };
     };
     responses: {

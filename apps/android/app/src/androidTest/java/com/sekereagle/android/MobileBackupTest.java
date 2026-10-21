@@ -353,11 +353,11 @@ public final class MobileBackupTest {
 
   @Test
   public void testInterruptedStatusDoesNotLockTheNextLaunch() throws Exception {
-    settings.setFlag(scope,"running",true);
-    getInstrumentation().runOnMainSync(()->activity.finish());
+    settings.setFlag(scope, "running", true);
+    getInstrumentation().runOnMainSync(() -> activity.finish());
     getInstrumentation().waitForIdleSync();
     launch();
-    assertFalse(settings.flag(scope,"running",false));
+    assertFalse(settings.flag(scope, "running", false));
   }
 
   @Test
