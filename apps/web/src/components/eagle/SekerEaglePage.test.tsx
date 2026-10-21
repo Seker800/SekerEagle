@@ -2549,22 +2549,27 @@ describe('SekerEaglePage', () => {
     }
   });
 
-  it('opens the existing tag workspace from the material phone navigation', async () => {
-    vi.stubGlobal('matchMedia', () => ({
-      matches: true,
-      addEventListener() {},
-      removeEventListener() {},
-    }));
+  it('keeps material destinations in the three-dot menu and closes it after navigation', () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const show = HTMLDialogElement.prototype.showModal, close = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+    HTMLDialogElement.prototype.close = function () { this.open = false; };
     const view = renderPage();
     try {
-      fireEvent.click(screen.getByRole('button', { name: '标签' }));
+      expect(screen.queryByRole('button', { name: '标签' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '标签' }));
       expect(screen.getByRole('region', { name: '标签' })).toBeVisible();
-      expect(screen.getByRole('button', { name: '标签' })).toHaveAttribute('aria-current', 'page');
-      fireEvent.click(screen.getByRole('button', { name: '素材' }));
-      expect(screen.getByRole('button', { name: '素材' })).toHaveAttribute('aria-current', 'page');
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '更多' }));
+      expect(screen.getByRole('region', { name: '更多' })).toBeVisible();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     } finally {
-      view.unmount();
-      vi.unstubAllGlobals();
+      view.unmount(); vi.unstubAllGlobals();
+      HTMLDialogElement.prototype.showModal = show;
+      HTMLDialogElement.prototype.close = close;
     }
   });
 

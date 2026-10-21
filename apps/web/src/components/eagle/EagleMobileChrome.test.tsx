@@ -1,15 +1,13 @@
 import '@testing-library/jest-dom/vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { EagleMobileChrome } from './EagleMobileChrome';
+import { EagleMobileChrome, EagleMobileNavigation } from './EagleMobileChrome';
 import { EagleMobileMore } from './EagleMobileMore';
 describe('reference mobile composition', () => {
   it('places mode switching and independent search below content, with only tools above', () => {
-    const navigate = vi.fn();
     const search = vi.fn();
     render(
       <EagleMobileChrome
-        mode="PHOTO"
         switcher={
           <select aria-label="图库模式">
             <option>相册</option>
@@ -18,8 +16,6 @@ describe('reference mobile composition', () => {
         searchOpen={false}
         onSearch={search}
         tools={<button>图库选项</button>}
-        active="timeline"
-        onNavigate={navigate}
       >
         <p>gallery</p>
       </EagleMobileChrome>,
@@ -31,24 +27,12 @@ describe('reference mobile composition', () => {
     expect(screen.getByRole('button', { name: '搜索' }).closest('header')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '搜索' }));
     expect(search).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: '地图' }));
-    expect(navigate).toHaveBeenCalledWith('map');
-    expect(screen.getByRole('button', { name: '照片' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: '人物' })).toBeVisible();
+    expect(screen.queryByRole('navigation', { name: '主导航' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
   });
   it('removes photography-only destinations in material mode', () => {
     render(
-      <EagleMobileChrome
-        mode="MATERIAL"
-        switcher={null}
-        searchOpen={false}
-        onSearch={() => {}}
-        tools={null}
-        active="more"
-        onNavigate={() => {}}
-      >
-        <p>gallery</p>
-      </EagleMobileChrome>,
+      <EagleMobileNavigation mode="MATERIAL" active="tags" onNavigate={() => {}} />,
     );
     expect(screen.queryByRole('button', { name: '地图' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '人物' })).not.toBeInTheDocument();
