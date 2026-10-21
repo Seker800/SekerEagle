@@ -58,3 +58,34 @@ test('reads real TIFF EXIF produced by an encoder', async () => {
   assert.equal(result.cameraModel, 'Test Model');
   assert.equal(result.capturedAt?.toISOString(), '2024-03-01T12:30:00.000Z');
 });
+
+// The original container, rather than its metadata-poor decoded TIFF, is authoritative.
+test('reads RAF and IFD0 DNG capture fields from the original without losing GPS signs', async () => {
+  const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { readPhotoExif } = await import('./photo-analysis');
+  const dir = await mkdtemp(join(tmpdir(), 'photo-exif-test-'));
+  const previous = process.env.EXIFTOOL_PATH;
+  const tool = join(dir, 'exiftool');
+  const original = join(dir, 'original.raf');
+  await writeFile(original, 'synthetic-container');
+  await writeFile(tool, `#!${process.execPath}\nprocess.stdout.write(JSON.stringify([{Make:'FUJIFILM',Model:'X-E5',LensModel:'Prime',DateTimeOriginal:'2026:10:01 12:30:00',FocalLength:35,FNumber:2,ExposureTime:0.008,ISO:400,GPSLatitude:30,GPSLongitude:120,GPSLatitudeRef:'S',GPSLongitudeRef:'W'}]));`, {mode:0o700});
+  process.env.EXIFTOOL_PATH = tool;
+  try {
+    const result = await readPhotoExif(undefined, original);
+    assert.equal(result.cameraModel, 'X-E5');
+    assert.equal(result.lensModel, 'Prime');
+    assert.equal(result.capturedLocal, '2026-10-01T12:30:00');
+    assert.equal(result.exposureSeconds, 0.008);
+    assert.equal(result.latitude, -30);
+    assert.equal(result.longitude, -120);
+    const partial = await sharp({create:{width:2,height:2,channels:3,background:'#333'}}).withExif({IFD0:{Model:'Decoded TIFF'}}).tiff().toBuffer();
+    assert.equal((await readPhotoExif((await sharp(partial).metadata()).exif, original)).cameraModel,'X-E5');
+    process.env.EXIFTOOL_PATH = join(dir,'missing');
+    await assert.rejects(readPhotoExif(undefined,original), {code:'ENOENT'});
+  } finally {
+    if(previous===undefined)delete process.env.EXIFTOOL_PATH;else process.env.EXIFTOOL_PATH=previous;
+    await rm(dir,{recursive:true,force:true});
+  }
+});
