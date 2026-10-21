@@ -31,6 +31,7 @@ export class EagleUploadRecoveryService implements OnModuleInit, OnModuleDestroy
   ) {}
 
   onModuleInit(): void {
+    if (process.env.EAGLE_UPLOAD_RECOVERY_ENABLED === 'false') return;
     void this.recoverPendingFinalizations();
     this.timer = setInterval(() => void this.recoverPendingFinalizations(), RECOVERY_INTERVAL_MS);
     this.timer.unref();

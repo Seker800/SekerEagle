@@ -126,6 +126,7 @@ function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
     case 'MODIFIED_AT':
       return { updatedAt: buildDateFilter(rule) };
   }
+  throw new BadRequestException('当前部署不支持该筛选字段。');
 }
 
 function buildTextWhere(
