@@ -77,12 +77,23 @@ export class ObjectStorageService implements OnModuleDestroy {
     );
   }
 
-  async uploadLocalPart(key: string, uploadId: string, partNumber: number, bytes: Buffer): Promise<string> {
-    const response = await this.client.send(new UploadPartCommand({
-      Bucket: this.bucket, Key: key, UploadId: uploadId, PartNumber: partNumber,
-      Body: bytes, ContentLength: bytes.length,
-      ContentMD5: createHash('md5').update(bytes).digest('base64'),
-    }));
+  async uploadLocalPart(
+    key: string,
+    uploadId: string,
+    partNumber: number,
+    bytes: Buffer,
+  ): Promise<string> {
+    const response = await this.client.send(
+      new UploadPartCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
+        PartNumber: partNumber,
+        Body: bytes,
+        ContentLength: bytes.length,
+        ContentMD5: createHash('md5').update(bytes).digest('base64'),
+      }),
+    );
     if (!response.ETag) throw new Error('本地复制缺少分片校验回执。');
     return response.ETag;
   }

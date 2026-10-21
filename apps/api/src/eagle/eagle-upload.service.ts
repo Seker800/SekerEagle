@@ -365,7 +365,13 @@ export class EagleUploadService {
   private async publishInspectedOriginal(
     session: Awaited<ReturnType<EagleUploadService['requireCompletable']>>,
     parts: ReturnType<typeof normalizeParts>,
-    inspection: { sha256: string; format: string; width: number | null; height: number | null; durationMs: number | null },
+    inspection: {
+      sha256: string;
+      format: string;
+      width: number | null;
+      height: number | null;
+      durationMs: number | null;
+    },
   ) {
     const now = new Date();
     const assetId = randomUUID();
@@ -708,24 +714,44 @@ export class EagleUploadService {
       return { assetId: session.eagleAssetId, duplicate: true, status: 'PROCESSING' };
     if (session.eagleState?.copySourceAssetId || session.eagleState?.replacementAssetId)
       throw new BadRequestException('本地复制不能用于编辑或替换。');
-    if (!/^[a-f0-9]{64}$/.test(sha256) ||
-        (session.eagleState?.expectedContentSha256 && session.eagleState.expectedContentSha256 !== sha256))
+    if (
+      !/^[a-f0-9]{64}$/.test(sha256) ||
+      (session.eagleState?.expectedContentSha256 &&
+        session.eagleState.expectedContentSha256 !== sha256)
+    )
       throw new BadRequestException('本地复制校验值不一致。');
     const head = await this.storage.headObject(session.objectKey);
     if (head.ContentLength === undefined || BigInt(head.ContentLength) !== session.size)
       throw new BadRequestException('本地复制校验大小不一致。');
     const parts = normalizeParts(completedParts);
     const changed = await this.prisma.uploadSession.updateMany({
-      where: { id: session.id, uploaderId: ownerId, libraryMode: this.libraryMode,
-        status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED'] } },
-      data: { status: 'ASSEMBLED', assembledAt: new Date(), completionParts: parts,
-        finalizationAttempts: 0, lastError: null, objectCleanupPending: false },
+      where: {
+        id: session.id,
+        uploaderId: ownerId,
+        libraryMode: this.libraryMode,
+        status: { in: ['INITIATED', 'ASSEMBLED', 'FAILED'] },
+      },
+      data: {
+        status: 'ASSEMBLED',
+        assembledAt: new Date(),
+        completionParts: parts,
+        finalizationAttempts: 0,
+        lastError: null,
+        objectCleanupPending: false,
+      },
     });
     if (changed.count !== 1) throw new ConflictException('上传会话状态已改变。');
-    const format = ({ 'image/jpeg': 'jpeg', 'image/tiff': 'tiff' } as Record<string,string>)[session.mimeType]
-      ?? extname(session.originalName).slice(1).toLowerCase();
-    return this.publishInspectedOriginal({ ...session, status: 'ASSEMBLED' }, parts,
-      { sha256, format, width: null, height: null, durationMs: null });
+    const format =
+      ({ 'image/jpeg': 'jpeg', 'image/tiff': 'tiff' } as Record<string, string>)[
+        session.mimeType
+      ] ?? extname(session.originalName).slice(1).toLowerCase();
+    return this.publishInspectedOriginal({ ...session, status: 'ASSEMBLED' }, parts, {
+      sha256,
+      format,
+      width: null,
+      height: null,
+      durationMs: null,
+    });
   }
 
   async abort(ownerId: string, uploadSessionId: string) {
