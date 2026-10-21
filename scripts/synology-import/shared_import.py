@@ -1,6 +1,7 @@
 """One-shot managed PHOTO import; source files are read-only and never a live library."""
 import argparse
 import contextlib
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import datetime as dt
 import fcntl
 import hashlib
@@ -14,6 +15,7 @@ import sqlite3
 import stat
 import subprocess
 import time
+import threading
 import unicodedata
 from urllib.parse import urlsplit, parse_qs
 
@@ -88,7 +90,8 @@ class Journal:
         self.path = directory / 'journal.sqlite'
         if self.path.is_symlink():
             raise ValueError('STATE_SYMLINK_REJECTED')
-        self.db = sqlite3.connect(self.path, timeout=30)
+        self._lock = threading.RLock()
+        self.db = sqlite3.connect(self.path, timeout=30, check_same_thread=False)
         os.chmod(self.path, 0o600)
         self.db.row_factory = sqlite3.Row
         self._batch = False
@@ -103,22 +106,24 @@ class Journal:
 
     @contextlib.contextmanager
     def write(self):
-        if self._batch:
-            yield
-        else:
-            with self.db:
+        with self._lock:
+            if self._batch:
                 yield
+            else:
+                with self.db:
+                    yield
 
     @contextlib.contextmanager
     def batch(self):
-        if self._batch:
-            raise ValueError('NESTED_BATCH_REJECTED')
-        with self.db:
-            self._batch = True
-            try:
-                yield
-            finally:
-                self._batch = False
+        with self._lock:
+            if self._batch:
+                raise ValueError('NESTED_BATCH_REJECTED')
+            with self.db:
+                self._batch = True
+                try:
+                    yield
+                finally:
+                    self._batch = False
 
     def close(self):
         self.db.close()
@@ -356,6 +361,7 @@ class Api:
 
 
 def upload_one(root, journal, row, api):
+    started = time.monotonic()
     path = row['path']
     fd = verify_source(root, path, row)
     try:
@@ -373,6 +379,7 @@ def upload_one(root, journal, row, api):
             journal.update(path, sha256=sha)
         if fingerprint(os.fstat(fd)) != {k: row[k] if k == 'size' else str(row[k]) for k in fingerprint(os.fstat(fd))}:
             raise ValueError('SOURCE_CHANGED')
+        hashed = time.monotonic()
         session_id, part_size = row['session_id'], row['part_size']
         if session_id:
             session = api.request('GET', '/photos/uploads/'+session_id)
@@ -412,8 +419,12 @@ def upload_one(root, journal, row, api):
             parts.append({'partNumber': index, 'etag': etag})
         if fingerprint(os.fstat(fd)) != {k: row[k] if k == 'size' else str(row[k]) for k in fingerprint(os.fstat(fd))}:
             raise ValueError('SOURCE_CHANGED')
+        transferred = time.monotonic()
         result = api.request('POST', '/photos/uploads/'+session_id+'/complete', {'parts': parts})
         journal.update(path, status='IMPORTED', asset_id=result['assetId'], media_status='PROCESSING', error=None)
+        log('original_ingest_timing', mime=row['mime'], sourceBytes=row['size'],
+            hashSeconds=round(hashed-started, 3), transferSeconds=round(transferred-hashed, 3),
+            finalizeSeconds=round(time.monotonic()-transferred, 3))
     finally:
         os.close(fd)
 
@@ -450,7 +461,67 @@ def await_processing(journal, api):
             time.sleep(1)
 
 
-def run_import(root, journal, api, limit=None, wait_for_processing=False):
+def import_one_with_retry(root, journal, row, api):
+    if STOP:
+        return 0
+    try:
+        upload_one(root, journal, row, api)
+        return 1
+    except ApiError as error:
+        if error.status in (401, 403):
+            raise
+        attempts = row['attempts']+1
+        permanent = error.status in (400, 404, 413, 415)
+        journal.update(row['path'], attempts=attempts, error=str(error), **({'status':'FAILED'} if permanent else {}))
+        if not permanent:
+            log('api_retry', httpStatus=error.status)
+            for _ in range(min(60, attempts*10)):
+                if STOP:
+                    break
+                time.sleep(1)
+    except (OSError, TimeoutError, http.client.HTTPException):
+        journal.update(row['path'], error='NETWORK_OR_SOURCE_IO_FAILED')
+        log('io_retry')
+        for _ in range(30):
+            if STOP:
+                break
+            time.sleep(1)
+    except ValueError as error:
+        code = str(error)
+        if code not in ('SOURCE_CHANGED', 'SOURCE_PATH_INVALID', 'SOURCE_NOT_REGULAR', 'SOURCE_TRUNCATED'):
+            raise
+        journal.update(row['path'], status='SOURCE_CHANGED', error=code)
+    return 1
+
+
+def import_batch(root, journal, api, rows, concurrency):
+    if concurrency == 1:
+        return sum(import_one_with_retry(root, journal, row, api) for row in rows)
+    # Only the coordinator dispatches rows from the frozen newest-first queue.
+    # At most two files are in flight; fatal failures never enqueue another row.
+    pending = set()
+    remaining = iter(rows)
+    count = 0
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        def dispatch():
+            if not STOP:
+                row = next(remaining, None)
+                if row is not None:
+                    pending.add(executor.submit(import_one_with_retry, root, journal, row, api))
+        for _ in range(concurrency):
+            dispatch()
+        while pending:
+            done, pending = wait(pending, return_when=FIRST_COMPLETED)
+            # Resolve all completed results before dispatching replacements.
+            count += sum(future.result() for future in done)
+            for _ in done:
+                dispatch()
+    return count
+
+
+def run_import(root, journal, api, limit=None, wait_for_processing=False, concurrency=1):
+    if concurrency not in (1, 2):
+        raise ValueError('IMPORT_CONCURRENCY_MUST_BE_ONE_OR_TWO')
     api.authenticate(journal)
     if wait_for_processing:
         await_processing(journal, api)
@@ -459,37 +530,8 @@ def run_import(root, journal, api, limit=None, wait_for_processing=False):
         batch = journal.next_batch(min(25, limit-count) if limit else 25)
         if not batch or (limit and count >= limit):
             break
-        for row in batch:
-            if STOP:
-                break
-            try:
-                upload_one(root, journal, row, api)
-                count += 1
-            except ApiError as error:
-                if error.status in (401, 403):
-                    raise
-                attempts = row['attempts']+1
-                permanent = error.status in (400, 404, 413, 415)
-                journal.update(row['path'], attempts=attempts, error=str(error), **({'status':'FAILED'} if permanent else {}))
-                if not permanent:
-                    log('api_retry', httpStatus=error.status)
-                    for _ in range(min(60, attempts*10)):
-                        if STOP:
-                            break
-                        time.sleep(1)
-            except (OSError, TimeoutError, http.client.HTTPException):
-                journal.update(row['path'], error='NETWORK_OR_SOURCE_IO_FAILED')
-                log('io_retry')
-                for _ in range(30):
-                    if STOP:
-                        break
-                    time.sleep(1)
-            except ValueError as error:
-                code = str(error)
-                if code not in ('SOURCE_CHANGED', 'SOURCE_PATH_INVALID', 'SOURCE_NOT_REGULAR', 'SOURCE_TRUNCATED'):
-                    raise
-                journal.update(row['path'], status='SOURCE_CHANGED', error=code)
-        log('import_progress', counts=journal.summary())
+        count += import_batch(root, journal, api, batch, concurrency)
+        log('import_progress', counts=journal.summary(), concurrency=concurrency)
         if wait_for_processing:
             await_processing(journal, api)
     log('import_paused' if STOP or limit else 'import_complete', counts=journal.summary())
@@ -522,6 +564,7 @@ def main():
     parser.add_argument('--limit', type=int)
     parser.add_argument('--wait-for-inventory', action='store_true')
     parser.add_argument('--wait-for-processing', action='store_true')
+    parser.add_argument('--concurrency', type=int, choices=(1, 2), default=1)
     args = parser.parse_args()
     if args.limit is not None and not 1 <= args.limit <= 100:
         parser.error('Pilot limit must be between 1 and 100')
@@ -548,7 +591,7 @@ def main():
             if args.command == 'run' and not STOP:
                 if not args.public_origin:
                     parser.error('A public origin is required')
-                run_import(root, journal, Api(state/'token', args.public_origin), args.limit, args.wait_for_processing)
+                run_import(root, journal, Api(state/'token', args.public_origin), args.limit, args.wait_for_processing, args.concurrency)
         finally:
             journal.close()
 

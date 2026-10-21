@@ -266,3 +266,33 @@ class ConcurrentIngestTests(unittest.TestCase):
         api=Mock()
         with self.assertRaises(ValueError):self.m.run_import(self.root,Mock(),api,concurrency=3)
         api.authenticate.assert_not_called()
+
+
+    def test_stop_signal_leaves_unstarted_rows_pending(self):
+        from unittest.mock import Mock,patch
+        import threading
+        j=self.make_journal();self.addCleanup(j.close)
+        barrier=threading.Barrier(2)
+        def upload(root,journal,row,api):
+            barrier.wait(timeout=3);self.m.STOP=True
+            journal.update(row['path'],status='IMPORTED')
+        with patch.object(self.m,'upload_one',side_effect=upload):
+            self.m.run_import(self.root,j,Mock(),concurrency=2)
+        self.assertEqual(j.summary(),{'IMPORTED':2,'PENDING':4})
+
+    def test_failed_checkpoint_transaction_cannot_rollback_other_thread(self):
+        from concurrent.futures import ThreadPoolExecutor
+        import sqlite3,threading
+        j=self.make_journal(2);self.addCleanup(j.close)
+        barrier=threading.Barrier(2)
+        def failed():
+            barrier.wait(timeout=3)
+            with self.assertRaises(sqlite3.IntegrityError),j.write():
+                j.db.execute("UPDATE items SET status='IMPORTED' WHERE path='0.jpg'")
+                j.db.execute("INSERT INTO meta VALUES('schema_version','duplicate')")
+        def success():
+            barrier.wait(timeout=3);j.update('1.jpg',status='IMPORTED')
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            a=pool.submit(failed);b=pool.submit(success);a.result();b.result()
+        self.assertEqual(j.summary(),{'IMPORTED':1,'PENDING':1})
+        self.assertEqual(j.db.execute("SELECT status FROM items WHERE path='1.jpg'").fetchone()[0],'IMPORTED')
