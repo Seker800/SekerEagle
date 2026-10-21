@@ -221,3 +221,6 @@ export {
   LIVE_PHOTO_MAX_VIDEO_BYTES,
   LIVE_PHOTO_MAX_DURATION_MS,
 } from './live-photo';
+
+export { readPhotoMetadataTags } from './photo-metadata';
+export { decodeHeifFile, assertSafeHeifInfo } from './heif';
