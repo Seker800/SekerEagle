@@ -67,7 +67,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.10.2",
+    "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
     "deepmerge-ts": "^8.0.2",
     "eslint": "^10.9.0",
