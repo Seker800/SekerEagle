@@ -94,3 +94,11 @@ CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" \
 API 与 worker 均安装 ExifTool（worker 使用）和 Debian bookworm-backports 的 libheif-examples／libheif-plugin-libde265；上传与预览共用 media-core 的 HEIF 解码，保留 MIME、总像素、大小、超时、进程环境与输出预算，禁止关闭 libheif 安全限制。解码依赖缺失时，worker 重试而非将空摄影信息标记为成功。
 
 已有照片可用 worker 镜像中的 `apps/worker/dist/photo-metadata-refresh.js` 补读。首个参数是明确资源清单文件，每项仅含 assetId、sha256、mediaRevision，最多 100 项且必须属于同一个账号的 PHOTO；默认仅输出计划，附加 `--apply` 才写入。先完成备份与安全目标检查。命令核对当前媒体版本、未删除状态、原片大小与 SHA，在资源行锁内复核并复用原有摄影持久化函数；保留既有像素分析、不覆盖继承了原片拍摄信息的编辑副本、不重新生成缩略图、不全库扫描。它不修改原片、素材、模型或数据库 schema。
+
+### 群晖本轮发布与真实样本复验
+
+2026-10-21 本轮只针对已授权的 100 张真实样本：100 张入库并生成预览，原片 SHA／大小一致；既有 91 项保持原 ID，仅新增此前失败的 9 项。83 个已有拍摄时间全部读入，17 张原片没有该字段而回退添加时间；593 项已有摄影字段与独立基准逐项一致。原始文件和群晖相册目录不改动。1 张扩展名误写 PNG 的 JPEG 仅在导入用临时副本中修正名称，不放宽服务端声明格式校验。
+
+群晖仍使用 35 个 migration 的既有 schema，镜像源码为 `codex/nas-photo-format-fix-20261021` 的兼容补丁；本轮没有执行数据库迁移或部署主分支新增的其他功能。发布叠加顺序为既有 compose、search-inference、https，最后增加 `photo-format-fix-20261021.yml`；该覆盖文件仅固定 API／worker 镜像，不更改认证、对象存储、HTTPS、Mac 模型或其他服务。后续维护必须保留这些覆盖关系，或在完整升级计划中明确替换；不能直接用旧基础 compose 覆盖当前 HTTPS 和补丁版本。
+
+这次复验只覆盖原片、基础预览、摄影信息和时间线。AI 标签、向量与更深层图像金字塔仍遵循既有后台安排，未作为本轮成功条件，也未开启全相册导入。
