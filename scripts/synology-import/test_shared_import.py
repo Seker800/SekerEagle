@@ -65,3 +65,59 @@ class SharedImportTests(unittest.TestCase):
         self.assertIsNone(self.m.file_policy('config.exe',10,policy))
 
 if __name__=='__main__':unittest.main()
+
+class UploadRecoveryTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_upload_resume_reuses_remote_parts_and_original_hash_without_owner_dto(self):
+        import hashlib
+        source=self.root/'camera.jpg';original=b'camera original bytes';source.write_bytes(original)
+        j=self.m.Journal(Path(self.tmp.name)/'upload-state')
+        j.add('camera.jpg',self.m.fingerprint(source.stat()),'image/jpeg','image');j.metadata('camera.jpg',10,'DateTimeOriginal','camera.jpg')
+        session='11111111-1111-4111-8111-111111111111'
+        class FakeApi:
+            def __init__(self):self.parts={};self.sent=[];self.failed=False;self.declaration=None;self.done=False
+            def request(self,method,path,body=None):
+                if method=='POST' and path=='/photos/uploads':
+                    self.declaration=body;return {'id':session,'partSize':4}
+                if method=='GET' and path.endswith('/parts'):return {'parts':list(self.parts.values())}
+                if method=='GET':return {'status':'COMPLETED' if self.done else 'INITIATED','eagleAssetId':'asset','assetStatus':'READY'}
+                if path.endswith('/complete'):
+                    self.done=True;return {'assetId':'asset','duplicate':False}
+                return {'uploadUrl':path}
+            def part(self,url,number,fd,offset,length):
+                if number==2 and not self.failed:self.failed=True;raise OSError('interrupted')
+                self.sent.append(number);self.parts[number]={'partNumber':number,'etag':'part'+str(number),'size':length}
+                assert os.pread(fd,length,offset)==original[offset:offset+length]
+                return self.parts[number]['etag']
+        api=FakeApi()
+        with self.assertRaises(OSError):self.m.upload_one(self.root,j,j.next_batch(1)[0],api)
+        self.m.upload_one(self.root,j,j.next_batch(1)[0],api)
+        self.assertEqual(api.sent.count(1),1)
+        self.assertEqual(api.declaration['contentSha256'],hashlib.sha256(original).hexdigest())
+        self.assertNotIn('ownerId',api.declaration)
+        self.assertEqual(source.read_bytes(),original)
+        self.assertEqual(j.summary(),{'IMPORTED':1});j.close()
+
+class InventoryTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_inventory_uses_verified_descriptors_and_freezes_discovery(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        (self.root/'photo.jpg').write_bytes(b'camera')
+        (self.root/'@eaDir').mkdir();(self.root/'@eaDir'/'thumb.jpg').write_bytes(b'thumbnail')
+        (self.root/'link.jpg').symlink_to(self.root/'photo.jpg')
+        policy={'formats':[{'extension':'.jpg','mimeType':'image/jpeg','kind':'image'}],'imageMaxBytes':500000000,'videoMaxBytes':5000000000}
+        j=self.m.Journal(Path(self.tmp.name)/'state')
+        def exif(args,**kwargs):
+            self.assertTrue(kwargs['pass_fds'])
+            self.assertTrue(all('/source/' not in a for a in args))
+            result=[]
+            for fd in kwargs['pass_fds']:
+                self.assertEqual(os.pread(fd,100,0),b'camera')
+                result.append({'SourceFile':'/proc/self/fd/'+str(fd),'DateTimeOriginal':'2026:10:01 12:00:00','MIMEType':'image/jpeg'})
+            return SimpleNamespace(returncode=0,stdout=json.dumps(result).encode())
+        with patch.object(self.m.subprocess,'run',side_effect=exif):self.m.inventory(self.root,j,policy)
+        self.assertEqual(j.summary(),{'PENDING':1})
+        (self.root/'new.jpg').write_bytes(b'newer')
+        self.m.inventory(self.root,j,policy)
+        self.assertEqual(j.summary(),{'PENDING':1});j.close()

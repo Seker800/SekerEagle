@@ -153,13 +153,20 @@ export class EagleUploadService {
         mimeType: true,
         size: true,
         eagleAssetId: true,
+        eagleAsset: { select: { lifecycleStatus: true, mediaErrorCode: true } },
         lastError: true,
         createdAt: true,
         completedAt: true,
       },
     });
     if (!session) throw new NotFoundException('上传会话不存在。');
-    return { ...session, size: Number(session.size) };
+    const { eagleAsset, ...upload } = session;
+    return {
+      ...upload,
+      size: Number(upload.size),
+      assetStatus: eagleAsset?.lifecycleStatus ?? null,
+      assetError: eagleAsset?.mediaErrorCode ?? null,
+    };
   }
 
   async presignPart(ownerId: string, uploadSessionId: string, partNumber: number) {
