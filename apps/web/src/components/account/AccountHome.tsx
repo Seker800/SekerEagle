@@ -64,6 +64,11 @@ const statusLabels = {
   revoked: t('已撤销'),
 } as const;
 const tokenPurposes = {
+  upload: {
+    label: t('文件上传脚本'),
+    defaultName: t('文件上传脚本'),
+    scopes: ['asset:write'],
+  },
   capture: {
     label: t('SekerEagle 灵感采集'),
     defaultName: t('SekerEagle 灵感采集'),

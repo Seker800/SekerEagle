@@ -1,4 +1,5 @@
 export const enUS = {
+  文件上传脚本: 'Upload script',
   拍摄信息继承自原片: 'Capture information inherited from the original',
   '未知拍摄时间，沿用原片时间线': 'Capture time unknown; keeps the original timeline position',
 
