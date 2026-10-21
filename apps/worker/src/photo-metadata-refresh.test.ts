@@ -12,6 +12,16 @@ const item = {
 test('metadata refresh accepts only a bounded exact manifest without owner input', () => {
   assert.deepEqual(validatePhotoMetadataRefreshManifest([item]), [item]);
   for (const invalid of [
+    null,
+    undefined,
+    {},
+    [null],
+    [1],
+    [[]],
+    [{ ...item, mediaRevision: NaN }],
+    [{ ...item, mediaRevision: 1.5 }],
+    [{ ...item, assetId: 1 }],
+    [{ ...item, sha256: 1 }],
     [],
     Array(101).fill(item),
     [item, item],
