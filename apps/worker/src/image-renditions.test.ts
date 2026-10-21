@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { imageRenditionSpecs, catalogImageDimensions } from './image-renditions';
+import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
 
 test('RAW adds a bounded lossless edit derivative without enlarging ordinary preview requests', () => {
   const specs = imageRenditionSpecs('image/x-fuji-raf');
@@ -34,4 +34,14 @@ test('catalog keeps original oriented RAW dimensions while pyramids use decoded 
     { width: 3000, height: 4000 },
   );
   assert.deepEqual(catalogImageDimensions({ width: 10, height: 20 }), { width: 10, height: 20 });
+});
+
+test('only thumbnails prefer the camera JPEG; editing and ordinary previews retain their source', () => {
+  for (const spec of imageRenditionSpecs('image/x-fuji-raf')) {
+    assert.equal(
+      renditionSource(spec, 'developed', 'embedded'),
+      spec.kind === 'THUMBNAIL' ? 'embedded' : 'developed',
+    );
+    assert.equal(renditionSource(spec, 'developed'), 'developed');
+  }
 });

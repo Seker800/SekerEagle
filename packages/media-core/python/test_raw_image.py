@@ -26,7 +26,7 @@ class RawPolicyTests(unittest.TestCase):
         self.assertEqual((result["decodedWidth"], result["decodedHeight"]), (4368, 5824))
         self.assertTrue(self.raw.postprocess.call_args.kwargs["half_size"])
         self.assertFalse(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
-        self.assertEqual(self.raw.postprocess.call_args.kwargs["auto_bright_thr"], 0.001)
+        self.assertNotIn("auto_bright_thr", self.raw.postprocess.call_args.kwargs)
 
     def test_missing_native_calibration_uses_profile_after_unpack(self):
         self.raw.rgb_xyz_matrix.any.return_value = False
@@ -68,7 +68,7 @@ class RawPolicyTests(unittest.TestCase):
         options=self.raw.postprocess.call_args.kwargs
         self.assertTrue(options["use_camera_wb"])
         self.assertFalse(options["no_auto_bright"])
-        self.assertEqual(options["auto_bright_thr"],0.001)
+        self.assertNotIn("auto_bright_thr",options)
         self.assertNotIn("bright",options)
 
     def test_probe_unpacks_without_rendering(self):

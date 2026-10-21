@@ -8,7 +8,7 @@ import {
   type PhotoMaintenanceCandidate,
   type RefreshItem,
 } from './photo-maintenance-scope';
-export const RAW_PREVIEW_PROCESSOR_VERSION = 'libraw-srgb-auto001-v2';
+export const RAW_PREVIEW_PROCESSOR_VERSION = 'raw-embedded-thumbnail-v3';
 type Candidate = PhotoMaintenanceCandidate & Pick<EagleAsset, 'mimeType'>;
 
 export function buildRawPreviewRefreshJobs(manifest: RefreshItem[], assets: Candidate[]) {

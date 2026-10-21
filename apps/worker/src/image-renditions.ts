@@ -35,3 +35,12 @@ export function catalogImageDimensions(
     height: original?.height ?? decoded.autoOrient?.height ?? decoded.height,
   };
 }
+
+/** Camera previews are display thumbnails, never an editing source. */
+export function renditionSource<T>(
+  spec: Pick<ImageRenditionSpec, 'kind'>,
+  developed: T,
+  embeddedThumbnail?: T,
+): T {
+  return spec.kind === 'THUMBNAIL' ? (embeddedThumbnail ?? developed) : developed;
+}
