@@ -392,4 +392,21 @@ describe('administrator backup entry', () => {
     await waitFor(() => expect(screen.queryByText(tag.name)).not.toBeInTheDocument());
     expect(screen.getByText('开启显示隐私内容后，可管理全部私密标签。')).toBeInTheDocument();
   });
+
+  it('provides upload-only credentials without import management or account privileges', async () => {
+    let requested: unknown;
+    vi.stubGlobal('fetch', vi.fn(async (_input: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        requested = JSON.parse(init.body as string);
+        return jsonResponse({ id: 'upload-token', name: '文件上传脚本', scopes: ['asset:write'], token: 'test-only-token', createdAt: '2026-10-21T00:00:00Z', expiresAt: null, revokedAt: null });
+      }
+      return jsonResponse([]);
+    }));
+    render(<AccountHome user={user} onPasswordChanged={vi.fn()} onLogout={vi.fn()} privacyVisibility={{ enabled: false, durationHours: 3, expiresAt: null }} />);
+    fireEvent.click(screen.getByRole('tab', { name: '连接' }));
+    expect(await screen.findByRole('option', { name: '文件上传脚本' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('令牌用途'), { target: { value: 'upload' } });
+    fireEvent.click(screen.getByRole('button', { name: '创建令牌' }));
+    await waitFor(() => expect(requested).toEqual({ name: '文件上传脚本', scopes: ['asset:write'] }));
+  });
 });
