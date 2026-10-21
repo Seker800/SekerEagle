@@ -10,7 +10,7 @@
 | 相机 RAW | DNG、CR2／CR3／CRW、NEF／NRW、ARW／SR2、RAF、ORF、RW2、RWL、PEF、SRW、KDC、RAW | LibRaw 验证并解码，生成可浏览的 sRGB 派生图片；EXIF 尽力从原文件提取 |
 | 相机视频 | MP4／M4V、MOV、MTS／M2TS、AVI、MXF、MPG／MPEG                                  | 验证真实容器及编码，生成海报与浏览器播放副本                         |
 
-视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影关闭自动提亮，使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
+视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影采用解码器按照片计算的标准亮度归一化，以 0.1% 高光阈值限制裁切，使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
 
 RAW 的拍摄时间、镜头、GPS 等元数据取决于原文件与 EXIF 解析器支持。普通 TIFF／DNG 等可读字段沿用现有摄影信息模块；不能把生成预览成功视作所有专有 MakerNote 或 CR3 元数据均已支持。本轮不增加视频的人物识别或视频摄影元数据管理。
 
@@ -102,3 +102,9 @@ API 与 worker 均安装 ExifTool（worker 使用）和 Debian bookworm-backport
 群晖仍使用 35 个 migration 的既有 schema，镜像源码为 `codex/nas-photo-format-fix-20261021` 的兼容补丁；本轮没有执行数据库迁移或部署主分支新增的其他功能。发布叠加顺序为既有 compose、search-inference、https，最后增加 `photo-format-fix-20261021.yml`；该覆盖文件仅固定 API／worker 镜像，不更改认证、对象存储、HTTPS、Mac 模型或其他服务。后续维护必须保留这些覆盖关系，或在完整升级计划中明确替换；不能直接用旧基础 compose 覆盖当前 HTTPS 和补丁版本。
 
 这次复验只覆盖原片、基础预览、摄影信息和时间线。AI 标签、向量与更深层图像金字塔仍遵循既有后台安排，未作为本轮成功条件，也未开启全相册导入。
+
+### RAW 偏暗修复
+
+实片复现旧策略 `no_auto_bright=True` 使富士等 RAW 显示偏暗。恢复 LibRaw 的自适应亮度并将 `auto_bright_thr` 设为 0.001，保留相机白平衡、原片尺寸与像素预算；不固定增加曝光，不修改原片或 EXIF。缩略图、普通预览、编辑显影副本与后续金字塔继续走同一显影策略。它仍不等同于厂商 JPEG 的电影模拟、曲线或手机 HDR 合成。
+
+既有 RAW 通过 worker 的 `raw-preview-refresh.js` 和同样的精确版本清单重新生成派生图片；默认预演，`--apply` 在账号／PHOTO／原始 RAW／SHA／媒体版本复核和行锁内创建现有 GENERATE_RENDITIONS 任务。任务按显影策略版本去重，重试不新增照片，不更改原件、摄影时间或模式归属。仅重建明确授权的样本，不自动扫描全库。

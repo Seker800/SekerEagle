@@ -54,4 +54,3 @@ export function assertPhotoMaintenanceCandidates(
       throw new Error('Photo refresh source changed or contains inherited capture data');
   }
 }
-
