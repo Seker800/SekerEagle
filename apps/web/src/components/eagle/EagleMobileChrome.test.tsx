@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { EagleMobileChrome } from './EagleMobileChrome';
 import { EagleMobileMore } from './EagleMobileMore';
 describe('reference mobile composition', () => {
-  it('shows only the switch, search and tools above the content, with photo destinations below', () => {
+  it('places mode switching and independent search below content, with only tools above', () => {
     const navigate = vi.fn();
     const search = vi.fn();
     render(
@@ -27,6 +27,8 @@ describe('reference mobile composition', () => {
     expect(screen.queryByRole('heading')).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: '图库模式' })).toBeVisible();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox').closest('header')).toBeNull();
+    expect(screen.getByRole('button', { name: '搜索' }).closest('header')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '搜索' }));
     expect(search).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole('button', { name: '地图' }));
@@ -51,6 +53,7 @@ describe('reference mobile composition', () => {
     expect(screen.queryByRole('button', { name: '地图' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '人物' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '素材' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '标签' }));
   });
   it('puts identity before the four more actions and disables native file operations in browsers', () => {
     const logout = vi.fn();

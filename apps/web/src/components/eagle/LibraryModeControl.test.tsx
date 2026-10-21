@@ -18,10 +18,10 @@ it('resizing changes only the mode presentation and preserves the selected busin
     compact = true;
     listeners.forEach((listener) => listener());
   });
-  expect(screen.queryByRole('button', { name: '照片' })).not.toBeInTheDocument();
-  expect(screen.getByRole('combobox', { name: '图库模式' })).toHaveValue('PHOTO');
+  expect(screen.getByRole('button', { name: '照片' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   expect(changed).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: 'MATERIAL' } });
+  fireEvent.click(screen.getByRole('button', { name: '素材' }));
   expect(changed).toHaveBeenCalledWith('MATERIAL');
   page.rerender(<LibraryModeControl value="MATERIAL" onChange={changed} />);
   act(() => {
