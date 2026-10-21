@@ -428,7 +428,7 @@ def await_processing(journal, api):
             if media not in ('PROCESSING', 'READY', 'FAILED'):
                 raise ValueError('PROCESSING_PROGRESS_UNAVAILABLE')
             journal.update(row['path'], media_status=media, error='MEDIA_PROCESSING_FAILED' if media == 'FAILED' else None)
-        pending = journal.db.execute("SELECT count(*) FROM items WHERE status='IMPORTED' AND media_status='PROCESSING'").fetchone()[0]
+        pending = journal.db.execute("SELECT count(*) FROM items WHERE status='IMPORTED' AND (media_status IS NULL OR media_status NOT IN ('READY','FAILED'))").fetchone()[0]
         if not pending:
             return
         log('processing_batch', pending=pending)
@@ -476,9 +476,25 @@ def run_import(root, journal, api, limit=None):
                 if code not in ('SOURCE_CHANGED', 'SOURCE_PATH_INVALID', 'SOURCE_NOT_REGULAR', 'SOURCE_TRUNCATED'):
                     raise
                 journal.update(row['path'], status='SOURCE_CHANGED', error=code)
-            log('import_progress', counts=journal.summary())
+        log('import_progress', counts=journal.summary())
         await_processing(journal, api)
     log('import_paused' if STOP or limit else 'import_complete', counts=journal.summary())
+
+
+def acquire_lock(lock, wait=False):
+    announced = False
+    while not STOP:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except BlockingIOError:
+            if not wait:
+                raise
+            if not announced:
+                log('waiting_for_inventory')
+                announced = True
+            time.sleep(1)
+    return False
 
 
 def main():
@@ -490,6 +506,7 @@ def main():
     parser.add_argument('--source', default='/source', choices=['/source'])
     parser.add_argument('--public-origin')
     parser.add_argument('--limit', type=int)
+    parser.add_argument('--wait-for-inventory', action='store_true')
     args = parser.parse_args()
     if args.limit is not None and not 1 <= args.limit <= 100:
         parser.error('Pilot limit must be between 1 and 100')
@@ -508,7 +525,8 @@ def main():
     state = Path(args.state)
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     with open(state/'import.lock', 'a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if not acquire_lock(lock, args.wait_for_inventory):
+            return
         journal = Journal(state)
         try:
             inventory(root, journal, json.loads(Path(args.policy).read_text()))
