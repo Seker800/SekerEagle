@@ -1,0 +1,15 @@
+{
+  "name": "@sekereagle/android",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/gradle.mjs assembleDebug",
+    "typecheck": "node scripts/gradle.mjs compileDebugJavaWithJavac",
+    "test": "node scripts/gradle.mjs testDebugUnitTest",
+    "lint": "node scripts/gradle.mjs lintDebug",
+    "install": "node scripts/gradle.mjs installDebug",
+    "test:device": "node scripts/gradle.mjs connectedDebugAndroidTest"
+  }
+}

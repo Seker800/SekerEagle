@@ -1,0 +1,16 @@
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+const root = fileURLToPath(new URL('..', import.meta.url));
+const home = homedir();
+const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || [join(home, 'Library/Android/sdk'), join(home, '.local/android-sdk')].find(existsSync);
+if (!sdk) throw new Error('Install Android SDK and set ANDROID_HOME.');
+const cache = join(home, '.gradle/wrapper/dists/gradle-9.4.1-bin');
+const cached = existsSync(cache) ? readdirSync(cache).map((entry) => join(cache, entry, 'gradle-9.4.1/bin/gradle')).find(existsSync) : undefined;
+const java = process.env.JAVA_HOME || (existsSync(join(home, '.local/jdk21/Contents/Home')) ? join(home, '.local/jdk21/Contents/Home') : undefined);
+const command = existsSync(resolve(root, 'gradlew')) ? resolve(root, 'gradlew') : cached || 'gradle';
+const result = spawnSync(command, process.argv.slice(2), { cwd: root, env: { ...process.env, ANDROID_HOME: sdk, ...(java ? { JAVA_HOME: java } : {}) }, stdio: 'inherit' });
+if (result.error) throw result.error;
+process.exit(result.status ?? 1);
