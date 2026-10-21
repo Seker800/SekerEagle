@@ -65,6 +65,11 @@ const statusLabels = {
   revoked: t('已撤销'),
 } as const;
 const tokenPurposes = {
+  upload: {
+    label: t('文件上传脚本'),
+    defaultName: t('文件上传脚本'),
+    scopes: ['asset:write'],
+  },
   photoAgent: {
     label: t('照片整理 Agent'),
     defaultName: t('照片整理 Agent'),
