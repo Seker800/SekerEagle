@@ -144,3 +144,13 @@ class JournalBatchTests(unittest.TestCase):
             if path=='pipe.jpg':self.assertTrue(flags&os.O_NONBLOCK)
             return original(path,flags,*args,**kwargs)
         with patch.object(self.m.os,'open',side_effect=checked),self.assertRaises(ValueError):self.m.open_source(self.root,'pipe.jpg')
+
+class WideFilesystemFactsTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_preserves_unsigned_inode_and_legacy_nanosecond_times_exactly(self):
+        j=self.m.Journal(Path(self.tmp.name)/'state')
+        j.add('photo.jpg',{'size':1,'mtime_ns':-(1<<64),'inode':(1<<64)-1,'device':1},'image/jpeg','image')
+        j.metadata('photo.jpg',1,'FileModifyTime','photo.jpg')
+        row=j.next_batch(1)[0]
+        self.assertEqual(row['inode'],str((1<<64)-1))
+        self.assertEqual(row['mtime_ns'],str(-(1<<64)));j.close()
