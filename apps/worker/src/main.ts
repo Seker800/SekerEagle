@@ -1,3 +1,4 @@
+import { backgroundProcessingEnabled } from './processing-policy';
 import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
@@ -106,6 +107,9 @@ let stopping = false;
 let activeJobCount = 0;
 let activeTagBuildCount = 0;
 let deletingObjects = false;
+const runBackgroundProcessing = backgroundProcessingEnabled(
+  process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
+);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   ? Math.min(4, Math.max(1, configuredConcurrency))
@@ -159,6 +163,7 @@ async function canClaimBackgroundForOwner(
   kind: EagleAssetProcessingJob['kind'],
   libraryMode: LibraryMode,
 ): Promise<boolean> {
+  if (!runBackgroundProcessing) return false;
   const settings = await prisma.eagleProcessingSetting.findUnique({
     where: { ownerId_libraryMode: { ownerId, libraryMode } },
   });
@@ -183,6 +188,7 @@ async function canClaimBackgroundForOwner(
 }
 
 async function reconcileEnabledAiTagJobs(): Promise<void> {
+  if (!runBackgroundProcessing) return;
   const settings = await prisma.eagleProcessingSetting.findMany({
     where: { OR: [{ aiTagManualEnabled: true }, { aiTagScheduleEnabled: true }] },
     select: {
@@ -1683,7 +1689,7 @@ async function poll(): Promise<void> {
         deletingObjects = false;
       });
   }
-  if (!stopping && activeTagBuildCount === 0) {
+  if (!stopping && runBackgroundProcessing && activeTagBuildCount === 0) {
     const build = await claimNextTagBuild(prisma);
     if (build) {
       activeTagBuildCount++;
@@ -1740,8 +1746,9 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
     ),
   );
-  let earliest = nextTagBuild?.availableAt ?? null;
+  let earliest = runBackgroundProcessing ? (nextTagBuild?.availableAt ?? null) : null;
   for (const candidate of mediaCandidates) {
+    if (!runBackgroundProcessing && candidate.lane === 'BACKGROUND') continue;
     const wakeAt = nextEligibleWakeAt(
       candidate,
       settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??

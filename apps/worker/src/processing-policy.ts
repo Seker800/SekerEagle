@@ -97,3 +97,10 @@ export function canClaimAiTagJobs(
   if (!scheduleEnabled) return false;
   return canClaimBackgroundJobs('NIGHT', windowStart, windowEnd, now);
 }
+
+/** An import-only worker can pause optional analysis without changing owner preferences. */
+export function backgroundProcessingEnabled(value: string | undefined): boolean {
+  if (value === undefined || value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error('EAGLE_BACKGROUND_PROCESSING_ENABLED must be true or false');
+}
