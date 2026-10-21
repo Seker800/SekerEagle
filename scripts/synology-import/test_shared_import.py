@@ -208,3 +208,61 @@ class AssembledUploadTests(unittest.TestCase):
             def part(self,*args):raise AssertionError('must not retransmit assembled file')
         self.m.upload_one(self.root,j,j.next_batch(1)[0],Api())
         self.assertEqual(j.summary(),{'IMPORTED':1});j.close()
+
+
+class ConcurrentIngestTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+
+    def make_journal(self, count=6):
+        j=self.m.Journal(Path(self.tmp.name)/'concurrent-state')
+        for i in range(count):
+            name=f'{i}.jpg';j.add(name,{'size':10,'mtime_ns':i,'inode':i,'device':1},'image/jpeg','image')
+            j.metadata(name,100-i,'DateTimeOriginal',name)
+        return j
+
+    def test_two_uploads_overlap_and_checkpoints_survive_resume(self):
+        from unittest.mock import Mock,patch
+        import threading
+        j=self.make_journal();self.addCleanup(j.close)
+        barrier=threading.Barrier(2);seen=[];lock=threading.Lock()
+        def upload(root,journal,row,api):
+            barrier.wait(timeout=3)
+            with lock:seen.append(row['path'])
+            journal.update(row['path'],status='IMPORTED',asset_id=row['path'])
+        with patch.object(self.m,'upload_one',side_effect=upload):
+            self.m.run_import(self.root,j,Mock(),concurrency=2)
+        self.assertEqual(len(seen),6);self.assertEqual(len(set(seen)),6)
+        self.assertEqual(set(seen[:2]),{'0.jpg','1.jpg'})
+        self.assertEqual(j.summary(),{'IMPORTED':6})
+        with patch.object(self.m,'upload_one') as repeated:
+            self.m.run_import(self.root,j,Mock(),concurrency=2)
+            repeated.assert_not_called()
+
+    def test_auth_failure_does_not_dispatch_the_remaining_batch(self):
+        from unittest.mock import Mock,patch
+        import threading
+        j=self.make_journal(10);self.addCleanup(j.close)
+        barrier=threading.Barrier(2);seen=[]
+        def upload(root,journal,row,api):
+            seen.append(row['path']);barrier.wait(timeout=3)
+            raise self.m.ApiError(401)
+        with patch.object(self.m,'upload_one',side_effect=upload):
+            with self.assertRaises(self.m.ApiError):self.m.run_import(self.root,j,Mock(),concurrency=2)
+        self.assertEqual(len(seen),2)
+        self.assertEqual(j.summary(),{'PENDING':10})
+
+    def test_parallel_pilot_obeys_limit_and_permanent_failure_is_checkpointed(self):
+        from unittest.mock import Mock,patch
+        j=self.make_journal();self.addCleanup(j.close)
+        def upload(root,journal,row,api):
+            if row['path']=='0.jpg':raise self.m.ApiError(413)
+            journal.update(row['path'],status='IMPORTED')
+        with patch.object(self.m,'upload_one',side_effect=upload):
+            self.m.run_import(self.root,j,Mock(),limit=2,concurrency=2)
+        self.assertEqual(j.summary(),{'FAILED':1,'IMPORTED':1,'PENDING':4})
+
+    def test_invalid_concurrency_is_rejected_before_authentication(self):
+        from unittest.mock import Mock
+        api=Mock()
+        with self.assertRaises(ValueError):self.m.run_import(self.root,Mock(),api,concurrency=3)
+        api.authenticate.assert_not_called()
