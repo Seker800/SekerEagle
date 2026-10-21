@@ -18,3 +18,16 @@
     min-height: 44px;
   }
 }
+@media (max-width: 720px) {
+  .button {
+    width: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 14px;
+    color: #eabd80;
+    background: #302a22;
+  }
+  .label {
+    display: none;
+  }
+}

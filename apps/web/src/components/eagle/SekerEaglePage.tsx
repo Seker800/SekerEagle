@@ -1,3 +1,6 @@
+import { useCompactLayout } from '../../hooks/useCompactLayout';
+import { EagleResponsiveTools } from './EagleResponsiveTools';
+import { EagleResponsiveDetails } from './EagleResponsiveDetails';
 import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
 import { EagleSortSummary } from './EagleSortSummary';
@@ -306,6 +309,7 @@ export function SekerEaglePage({
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
   const [isBatchSelection, setIsBatchSelection] = useState(false);
+  const compact = useCompactLayout();
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
@@ -886,6 +890,11 @@ export function SekerEaglePage({
   }, [assetContextMenu, clearAssetSelection, isBatchSelection, selectionMode, tagPicker]);
   const handleAssetClick = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     setAssetContextMenu(null);
+    if (compact && !selectionMode && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+      const asset = assetsById.get(assetId);
+      if (asset) openAssetPreview(asset);
+      return;
+    }
     const gesture: EagleSelectionGesture = event.shiftKey
       ? 'range'
       : selectionMode || event.ctrlKey || event.metaKey
@@ -896,6 +905,11 @@ export function SekerEaglePage({
   const handleAssetContextMenu = (event: MouseEvent<HTMLButtonElement>, assetId: string) => {
     event.preventDefault();
     event.stopPropagation();
+    if (compact) {
+      setSelectionMode(true);
+      if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'toggle');
+      return;
+    }
     if (!selectedAssetIds.includes(assetId)) selectAsset(assetId, 'single');
     openAssetContextMenu(event.clientX, event.clientY);
   };
@@ -1116,6 +1130,39 @@ export function SekerEaglePage({
     setIsDragging(false);
     void importFiles([...event.dataTransfer.files]);
   };
+  const quickFilterPanel =
+    libraryView === 'ACTIVE' && showsAssetControls && filtersExpanded ? (
+      <div id={filterPanelId}>
+        <EagleQuickFilterBar
+          presentation={compact ? 'sheet' : 'toolbar'}
+          fieldOptions={photoFieldOptions}
+          value={quickFilters}
+          manualTags={manualTags}
+          aiTags={aiTags}
+          onRequestAiTags={() => setAiTagReferenceRequested(true)}
+          onChange={setQuickFilters}
+        />
+      </div>
+    ) : null;
+  const selectionToolbar = showsAssetControls && photoView === 'timeline' && (
+    <EagleSelectionToolbar
+      selecting={selectionMode}
+      count={selectedAssetIds.length}
+      onToggle={() => (selectionMode ? clearAssetSelection() : setSelectionMode(true))}
+      onActions={(event) => {
+        const bounds = event.currentTarget.getBoundingClientRect();
+        openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
+      }}
+      onBatchEdit={
+        photoEditing.clipboard ? () => setBatchEditIds([...selectedAssetIds]) : undefined
+      }
+      onPreview={
+        selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
+          ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
+          : undefined
+      }
+    />
+  );
   return (
     <main
       inert={photoEditing.session !== null}
@@ -1129,7 +1176,9 @@ export function SekerEaglePage({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      <div className={`${styles.workspace} ${!isInspectorOpen ? styles.workspaceWide : ''}`}>
+      <div
+        className={`${styles.workspace} ${!isInspectorOpen || compact ? styles.workspaceWide : ''}`}
+      >
         <EagleLibraryNavigation
           className={styles.sidebar}
           headerClassName={styles.sidebarHeader}
@@ -1448,10 +1497,14 @@ export function SekerEaglePage({
                     !search &&
                     !activeFilterCount &&
                     !activeSmartFolderId &&
+                    !compact &&
                     libraryView !== 'TRASH' && (
                       <EagleSortSummary dateKind={libraryMode === 'PHOTO' ? 'capture' : 'added'} />
                     )}
                 </div>
+                {compact && !selectionMode && selectedAssetIds.length === 0 && (
+                  <div className={styles.mobileSelect}>{selectionToolbar}</div>
+                )}
                 {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
                 {showsAssetControls && (
                   <>
@@ -1474,7 +1527,12 @@ export function SekerEaglePage({
                         </button>
                       )}
                     </label>
-                    <div className={styles.toolbarActions}>
+                    <EagleResponsiveTools
+                      className={styles.toolbarActions}
+                      scopeKey={storeScope}
+                      panel={quickFilterPanel}
+                      count={activeFilterCount}
+                    >
                       {libraryView === 'ACTIVE' && (
                         <>
                           <button
@@ -1577,29 +1635,19 @@ export function SekerEaglePage({
                               ? t('显示照片详情')
                               : t('显示素材详情')
                         }
+                        data-dismiss-tools
                         aria-pressed={isInspectorOpen}
                         onClick={() => setIsInspectorVisible((value) => !value)}
                       >
                         <IconLayoutSidebarRight size={18} />
                         {' ' + t('详情') + ' '}
                       </button>
-                    </div>
+                    </EagleResponsiveTools>
                   </>
                 )}
               </div>
 
-              {libraryView === 'ACTIVE' && showsAssetControls && filtersExpanded ? (
-                <div id={filterPanelId}>
-                  <EagleQuickFilterBar
-                    fieldOptions={photoFieldOptions}
-                    value={quickFilters}
-                    manualTags={manualTags}
-                    aiTags={aiTags}
-                    onRequestAiTags={() => setAiTagReferenceRequested(true)}
-                    onChange={setQuickFilters}
-                  />
-                </div>
-              ) : null}
+              {!compact && quickFilterPanel}
 
               {deferredSearch &&
                 assetsQuery.data?.pages[0]?.imageSearch?.status === 'UNAVAILABLE' && (
@@ -1612,27 +1660,7 @@ export function SekerEaglePage({
                   {transferStatus}
                 </div>
               )}
-              {showsAssetControls && photoView === 'timeline' && (
-                <EagleSelectionToolbar
-                  selecting={selectionMode}
-                  count={selectedAssetIds.length}
-                  onToggle={() => (selectionMode ? clearAssetSelection() : setSelectionMode(true))}
-                  onActions={(event) => {
-                    const bounds = event.currentTarget.getBoundingClientRect();
-                    openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
-                  }}
-                  onBatchEdit={
-                    photoEditing.clipboard
-                      ? () => setBatchEditIds([...selectedAssetIds])
-                      : undefined
-                  }
-                  onPreview={
-                    selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
-                      ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
-                      : undefined
-                  }
-                />
-              )}
+              {(!compact || selectionMode || selectedAssetIds.length > 0) && selectionToolbar}
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
                   {uploadStatus}
@@ -1917,384 +1945,395 @@ export function SekerEaglePage({
         </section>
 
         {isInspectorOpen && (
-          <aside
-            className={styles.inspector}
-            aria-label={libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}
+          <EagleResponsiveDetails
+            label={libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}
+            onClose={() => setIsInspectorVisible(false)}
           >
-            <div className={styles.inspectorHeader}>
-              <div>
-                <strong>{libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}</strong>
-                {selectedAssetIds.length > 1 && (
-                  <span>
-                    {t('已选择') + ' '}
-                    {selectedAssetIds.length}
-                    {' ' + t('项')}
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                aria-label={libraryMode === 'PHOTO' ? t('关闭照片详情') : t('关闭素材详情')}
-                onClick={() => setIsInspectorVisible(false)}
-              >
-                <IconX size={17} />
-              </button>
-            </div>
-            {selectedAssetId === null ? (
-              <div className={styles.inspectorEmpty}>
-                <IconPhoto size={28} />
-                <span>
-                  {libraryMode === 'PHOTO' ? t('选择一张照片查看详情') : t('选择一项素材查看详情')}
-                </span>
-              </div>
-            ) : selectedAssetQuery.isPending ? (
-              <div className={styles.inspectorEmpty} role="status">
-                <IconPhoto size={28} />
-                <span>
-                  {libraryMode === 'PHOTO' ? t('正在加载照片详情…') : t('正在加载素材详情…')}
-                </span>
-              </div>
-            ) : selectedAssetQuery.isError ? (
-              <div className={styles.inspectorEmpty} role="alert">
-                <IconPhoto size={28} />
-                <span>
-                  {t('加载失败：')}
-                  {selectedAssetQuery.error.message}
-                </span>
-                <button type="button" onClick={() => void selectedAssetQuery.refetch()}>
-                  {' ' + t('重试加载素材详情') + ' '}
+            <aside
+              className={styles.inspector}
+              aria-label={libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}
+            >
+              <div className={styles.inspectorHeader}>
+                <div>
+                  <strong>{libraryMode === 'PHOTO' ? t('照片详情') : t('素材详情')}</strong>
+                  {selectedAssetIds.length > 1 && (
+                    <span>
+                      {t('已选择') + ' '}
+                      {selectedAssetIds.length}
+                      {' ' + t('项')}
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  aria-label={libraryMode === 'PHOTO' ? t('关闭照片详情') : t('关闭素材详情')}
+                  onClick={() => setIsInspectorVisible(false)}
+                >
+                  <IconX size={17} />
                 </button>
               </div>
-            ) : selectedAsset ? (
-              <>
-                {!isSelectedAssetReadOnly && selectedAssetIds.length === 1 && (
+              {selectedAssetId === null ? (
+                <div className={styles.inspectorEmpty}>
+                  <IconPhoto size={28} />
+                  <span>
+                    {libraryMode === 'PHOTO'
+                      ? t('选择一张照片查看详情')
+                      : t('选择一项素材查看详情')}
+                  </span>
+                </div>
+              ) : selectedAssetQuery.isPending ? (
+                <div className={styles.inspectorEmpty} role="status">
+                  <IconPhoto size={28} />
+                  <span>
+                    {libraryMode === 'PHOTO' ? t('正在加载照片详情…') : t('正在加载素材详情…')}
+                  </span>
+                </div>
+              ) : selectedAssetQuery.isError ? (
+                <div className={styles.inspectorEmpty} role="alert">
+                  <IconPhoto size={28} />
+                  <span>
+                    {t('加载失败：')}
+                    {selectedAssetQuery.error.message}
+                  </span>
+                  <button type="button" onClick={() => void selectedAssetQuery.refetch()}>
+                    {' ' + t('重试加载素材详情') + ' '}
+                  </button>
+                </div>
+              ) : selectedAsset ? (
+                <>
+                  {!isSelectedAssetReadOnly && selectedAssetIds.length === 1 && (
+                    <section className={styles.detailSection}>
+                      <EagleEditPhotoButton asset={selectedAsset} onEdit={openPhotoEditor} />
+                    </section>
+                  )}
+                  {libraryMode === 'PHOTO' && (
+                    <PhotoMetadataDetails
+                      metadata={selectedAsset.photoMetadata}
+                      location={selectedAsset.photoLocation}
+                    />
+                  )}
+                  {isSelectedAssetReadOnly && (
+                    <p className={styles.saveFeedback}>{t('回收站中的素材信息为只读。')}</p>
+                  )}
                   <section className={styles.detailSection}>
-                    <EagleEditPhotoButton asset={selectedAsset} onEdit={openPhotoEditor} />
+                    <div className={styles.annotationForm}>
+                      <label>
+                        {' ' + t('标题') + ' '}
+                        <input
+                          aria-label={t('素材标题')}
+                          maxLength={255}
+                          disabled={isSelectedAssetReadOnly}
+                          value={editorTitle}
+                          onChange={(event) => {
+                            editorDirtyRef.current = true;
+                            editorDirtyFieldsRef.current.add('displayName');
+                            editorRevisionRef.current += 1;
+                            setEditorTitle(event.target.value);
+                          }}
+                          onBlur={saveEditedMetadata}
+                        />
+                      </label>
+                    </div>
                   </section>
-                )}
-                {libraryMode === 'PHOTO' && (
-                  <PhotoMetadataDetails
-                    metadata={selectedAsset.photoMetadata}
-                    location={selectedAsset.photoLocation}
-                  />
-                )}
-                {isSelectedAssetReadOnly && (
-                  <p className={styles.saveFeedback}>{t('回收站中的素材信息为只读。')}</p>
-                )}
-                <section className={styles.detailSection}>
-                  <div className={styles.annotationForm}>
-                    <label>
-                      {' ' + t('标题') + ' '}
-                      <input
-                        aria-label={t('素材标题')}
-                        maxLength={255}
+                  <section className={styles.detailSection}>
+                    <h3>{selectedAssetIds.length > 1 ? t('批量编辑人工标签') : t('人工标签')}</h3>
+                    {selectedAssetIds.length > 1 && (
+                      <p className={styles.batchTagSummary}>
+                        {' ' +
+                          t('标签后的数字表示拥有该标签的素材数；移除操作会作用于全部所选素材。') +
+                          ' '}
+                      </p>
+                    )}
+                    <div className={styles.tagEditor}>
+                      {selectedManualTagSummaries.map(({ tag, assetCount }) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className={styles.tagAssigned}
+                          aria-label={
+                            selectedAssetIds.length > 1
+                              ? t('移除人工标签 {{value1}}，应用于 {{value2}}/{{value3}} 项素材', {
+                                  value1: tag.name,
+                                  value2: assetCount,
+                                  value3: selectedAssetIds.length,
+                                })
+                              : t('移除人工标签 {{value1}}', {
+                                  value1: tag.name,
+                                })
+                          }
+                          disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
+                          onClick={() =>
+                            batchTagMutation.mutate({
+                              assetIds: selectedAssetIds,
+                              removeTagIds: [tag.id],
+                            })
+                          }
+                        >
+                          {tag.name}
+                          {selectedAssetIds.length > 1
+                            ? ` · ${assetCount}/${selectedAssetIds.length}`
+                            : ''}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        className={styles.tagAdd}
+                        aria-label={t('添加人工标签')}
                         disabled={isSelectedAssetReadOnly}
-                        value={editorTitle}
+                        onClick={() => {
+                          batchTagMutation.reset();
+                          createBatchTagMutation.reset();
+                          setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
+                        }}
+                      >
+                        <IconPlus size={14} />
+                        {' ' + t('添加标签…') + ' '}
+                      </button>
+                      {selectedAssetIds.length > 1 && selectedManualTagSummaries.length > 0 && (
+                        <button
+                          type="button"
+                          className={styles.tagClearAll}
+                          aria-label={t('清空所有人工标签')}
+                          disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
+                          onClick={() => {
+                            const confirmed = window.confirm(
+                              t(
+                                '将清除 {{value1}} 项素材上的全部人工标签，共涉及 {{value2}} 个不同标签。AI 自动标签不受影响。确认继续？',
+                                {
+                                  value1: selectedAssetIds.length,
+                                  value2: selectedManualTagSummaries.length,
+                                },
+                              ),
+                            );
+                            if (!confirmed) return;
+                            batchTagMutation.mutate({
+                              assetIds: selectedAssetIds,
+                              clearAll: true,
+                            });
+                          }}
+                        >
+                          <IconTrash size={14} />
+                          {' ' + t('清空所有人工标签') + ' '}
+                        </button>
+                      )}
+                    </div>
+                    {batchTagMutation.isError && (
+                      <p className={styles.inlineError}>{batchTagMutation.error.message}</p>
+                    )}
+                  </section>
+                  <section className={styles.detailSection}>
+                    <h3>
+                      <IconSparkles size={15} />
+                      {' ' + t('AI 自动标签') + ' '}
+                    </h3>
+                    <div className={styles.tagList}>
+                      {selectedAsset.aiTags.length ? (
+                        selectedAsset.aiTags.map((tag) => <span key={tag.id}>{tag.name}</span>)
+                      ) : (
+                        <em>{t('AI 分析尚未启用')}</em>
+                      )}
+                    </div>
+                  </section>
+                  <form
+                    ref={metadataFormRef}
+                    id="eagle-asset-metadata-form"
+                    className={`${styles.detailSection} ${styles.annotationForm}`}
+                  >
+                    {selectedAsset?.isPrivate && (
+                      <div role="note">
+                        <strong>{t('私密原因')}</strong>
+                        {selectedAsset.privacyReasons?.length ? (
+                          <ul>
+                            {selectedAsset.privacyReasons.map((reason) => (
+                              <li key={`${reason.kind}:${reason.id}`}>
+                                {reason.kind === 'TAG' ? t('私密标签') : t('私密人物')}
+                                {': '}
+                                {reason.name ?? t('未命名人物')}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>{t('关联照片的私密规则')}</p>
+                        )}
+                      </div>
+                    )}
+                    <label>
+                      {' ' + t('描述') + ' '}
+                      <textarea
+                        aria-label={t('素材描述')}
+                        maxLength={4000}
+                        disabled={isSelectedAssetReadOnly}
+                        rows={4}
+                        value={editorDescription}
                         onChange={(event) => {
                           editorDirtyRef.current = true;
-                          editorDirtyFieldsRef.current.add('displayName');
+                          editorDirtyFieldsRef.current.add('description');
                           editorRevisionRef.current += 1;
-                          setEditorTitle(event.target.value);
+                          setEditorDescription(event.target.value);
                         }}
                         onBlur={saveEditedMetadata}
                       />
                     </label>
-                  </div>
-                </section>
-                <section className={styles.detailSection}>
-                  <h3>{selectedAssetIds.length > 1 ? t('批量编辑人工标签') : t('人工标签')}</h3>
-                  {selectedAssetIds.length > 1 && (
-                    <p className={styles.batchTagSummary}>
-                      {' ' +
-                        t('标签后的数字表示拥有该标签的素材数；移除操作会作用于全部所选素材。') +
-                        ' '}
+                    <label>
+                      {' ' + t('来源') + ' '}
+                      <input
+                        aria-label={t('素材来源链接')}
+                        maxLength={2048}
+                        disabled={isSelectedAssetReadOnly}
+                        placeholder="https://"
+                        type="url"
+                        value={editorSourceUrl}
+                        onChange={(event) => {
+                          editorDirtyRef.current = true;
+                          editorDirtyFieldsRef.current.add('sourceUrl');
+                          editorRevisionRef.current += 1;
+                          setEditorSourceUrl(event.target.value);
+                        }}
+                        onBlur={(event) => {
+                          if (event.currentTarget.checkValidity()) saveEditedMetadata();
+                        }}
+                      />
+                    </label>
+                  </form>
+                  {metadataMutation.isPending && (
+                    <p className={styles.saveFeedback} role="status">
+                      {' ' + t('正在自动保存…') + ' '}
                     </p>
                   )}
-                  <div className={styles.tagEditor}>
-                    {selectedManualTagSummaries.map(({ tag, assetCount }) => (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        className={styles.tagAssigned}
-                        aria-label={
-                          selectedAssetIds.length > 1
-                            ? t('移除人工标签 {{value1}}，应用于 {{value2}}/{{value3}} 项素材', {
-                                value1: tag.name,
-                                value2: assetCount,
-                                value3: selectedAssetIds.length,
-                              })
-                            : t('移除人工标签 {{value1}}', {
-                                value1: tag.name,
-                              })
-                        }
-                        disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
-                        onClick={() =>
-                          batchTagMutation.mutate({
-                            assetIds: selectedAssetIds,
-                            removeTagIds: [tag.id],
-                          })
-                        }
-                      >
-                        {tag.name}
-                        {selectedAssetIds.length > 1
-                          ? ` · ${assetCount}/${selectedAssetIds.length}`
-                          : ''}
+                  {metadataMutation.isSuccess && !editorDirtyRef.current && (
+                    <p className={styles.saveFeedback} role="status">
+                      {' ' + t('已自动保存') + ' '}
+                    </p>
+                  )}
+                  {metadataMutation.isError && (
+                    <div className={styles.saveFeedback}>
+                      <p className={styles.inlineError} role="alert">
+                        {' ' + t('自动保存失败：')}
+                        {metadataMutation.error.message}
+                      </p>
+                      <button type="button" onClick={saveEditedMetadata}>
+                        {' ' + t('重试') + ' '}
                       </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={styles.tagAdd}
-                      aria-label={t('添加人工标签')}
-                      disabled={isSelectedAssetReadOnly}
-                      onClick={() => {
-                        batchTagMutation.reset();
-                        createBatchTagMutation.reset();
-                        setTagPicker({ mode: 'add', assetIds: [...selectedAssetIds] });
-                      }}
-                    >
-                      <IconPlus size={14} />
-                      {' ' + t('添加标签…') + ' '}
-                    </button>
-                    {selectedAssetIds.length > 1 && selectedManualTagSummaries.length > 0 && (
-                      <button
-                        type="button"
-                        className={styles.tagClearAll}
-                        aria-label={t('清空所有人工标签')}
-                        disabled={isSelectedAssetReadOnly || batchTagMutation.isPending}
-                        onClick={() => {
-                          const confirmed = window.confirm(
-                            t(
-                              '将清除 {{value1}} 项素材上的全部人工标签，共涉及 {{value2}} 个不同标签。AI 自动标签不受影响。确认继续？',
-                              {
-                                value1: selectedAssetIds.length,
-                                value2: selectedManualTagSummaries.length,
-                              },
-                            ),
-                          );
-                          if (!confirmed) return;
-                          batchTagMutation.mutate({
-                            assetIds: selectedAssetIds,
-                            clearAll: true,
+                    </div>
+                  )}
+                  <section className={styles.detailSection}>
+                    <h3>{t('星级')}</h3>
+                    <div className={styles.rating} aria-label={t('星级评分')}>
+                      {[1, 2, 3, 4, 5].map((rating) => (
+                        <button
+                          key={rating}
+                          type="button"
+                          aria-label={t('{{value1}} 星', {
+                            value1: rating,
+                          })}
+                          disabled={isSelectedAssetReadOnly || ratingMutation.isPending}
+                          onClick={() =>
+                            ratingMutation.mutate({
+                              assets: selectedAssetVersions,
+                              rating: selectedRating === rating ? null : rating,
+                            })
+                          }
+                        >
+                          {selectedRating && selectedRating >= rating ? (
+                            <IconStarFilled size={19} />
+                          ) : (
+                            <IconStar size={19} />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                  <section className={styles.detailSection}>
+                    <div className={styles.annotationForm}>
+                      <h3>{t('颜色')}</h3>
+                      <EagleColorPalette
+                        analysis={selectedAsset.colorAnalysis}
+                        onSelectColor={(nextColor) => {
+                          changeLibraryView('ACTIVE');
+                          setQuickFilters({
+                            ...createEmptyEagleQuickFilterState(),
+                            color: nextColor,
                           });
                         }}
-                      >
-                        <IconTrash size={14} />
-                        {' ' + t('清空所有人工标签') + ' '}
-                      </button>
-                    )}
-                  </div>
-                  {batchTagMutation.isError && (
-                    <p className={styles.inlineError}>{batchTagMutation.error.message}</p>
-                  )}
-                </section>
-                <section className={styles.detailSection}>
-                  <h3>
-                    <IconSparkles size={15} />
-                    {' ' + t('AI 自动标签') + ' '}
-                  </h3>
-                  <div className={styles.tagList}>
-                    {selectedAsset.aiTags.length ? (
-                      selectedAsset.aiTags.map((tag) => <span key={tag.id}>{tag.name}</span>)
-                    ) : (
-                      <em>{t('AI 分析尚未启用')}</em>
-                    )}
-                  </div>
-                </section>
-                <form
-                  ref={metadataFormRef}
-                  id="eagle-asset-metadata-form"
-                  className={`${styles.detailSection} ${styles.annotationForm}`}
-                >
-                  {selectedAsset?.isPrivate && (
-                    <div role="note">
-                      <strong>{t('私密原因')}</strong>
-                      {selectedAsset.privacyReasons?.length ? (
-                        <ul>
-                          {selectedAsset.privacyReasons.map((reason) => (
-                            <li key={`${reason.kind}:${reason.id}`}>
-                              {reason.kind === 'TAG' ? t('私密标签') : t('私密人物')}
-                              {': '}
-                              {reason.name ?? t('未命名人物')}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p>{t('关联照片的私密规则')}</p>
-                      )}
+                      />
                     </div>
-                  )}
-                  <label>
-                    {' ' + t('描述') + ' '}
-                    <textarea
-                      aria-label={t('素材描述')}
-                      maxLength={4000}
-                      disabled={isSelectedAssetReadOnly}
-                      rows={4}
-                      value={editorDescription}
-                      onChange={(event) => {
-                        editorDirtyRef.current = true;
-                        editorDirtyFieldsRef.current.add('description');
-                        editorRevisionRef.current += 1;
-                        setEditorDescription(event.target.value);
-                      }}
-                      onBlur={saveEditedMetadata}
-                    />
-                  </label>
-                  <label>
-                    {' ' + t('来源') + ' '}
-                    <input
-                      aria-label={t('素材来源链接')}
-                      maxLength={2048}
-                      disabled={isSelectedAssetReadOnly}
-                      placeholder="https://"
-                      type="url"
-                      value={editorSourceUrl}
-                      onChange={(event) => {
-                        editorDirtyRef.current = true;
-                        editorDirtyFieldsRef.current.add('sourceUrl');
-                        editorRevisionRef.current += 1;
-                        setEditorSourceUrl(event.target.value);
-                      }}
-                      onBlur={(event) => {
-                        if (event.currentTarget.checkValidity()) saveEditedMetadata();
-                      }}
-                    />
-                  </label>
-                </form>
-                {metadataMutation.isPending && (
-                  <p className={styles.saveFeedback} role="status">
-                    {' ' + t('正在自动保存…') + ' '}
-                  </p>
-                )}
-                {metadataMutation.isSuccess && !editorDirtyRef.current && (
-                  <p className={styles.saveFeedback} role="status">
-                    {' ' + t('已自动保存') + ' '}
-                  </p>
-                )}
-                {metadataMutation.isError && (
-                  <div className={styles.saveFeedback}>
-                    <p className={styles.inlineError} role="alert">
-                      {' ' + t('自动保存失败：')}
-                      {metadataMutation.error.message}
-                    </p>
-                    <button type="button" onClick={saveEditedMetadata}>
-                      {' ' + t('重试') + ' '}
-                    </button>
-                  </div>
-                )}
-                <section className={styles.detailSection}>
-                  <h3>{t('星级')}</h3>
-                  <div className={styles.rating} aria-label={t('星级评分')}>
-                    {[1, 2, 3, 4, 5].map((rating) => (
-                      <button
-                        key={rating}
-                        type="button"
-                        aria-label={t('{{value1}} 星', {
-                          value1: rating,
-                        })}
-                        disabled={isSelectedAssetReadOnly || ratingMutation.isPending}
-                        onClick={() =>
-                          ratingMutation.mutate({
-                            assets: selectedAssetVersions,
-                            rating: selectedRating === rating ? null : rating,
-                          })
-                        }
-                      >
-                        {selectedRating && selectedRating >= rating ? (
-                          <IconStarFilled size={19} />
-                        ) : (
-                          <IconStar size={19} />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </section>
-                <section className={styles.detailSection}>
-                  <div className={styles.annotationForm}>
-                    <h3>{t('颜色')}</h3>
-                    <EagleColorPalette
-                      analysis={selectedAsset.colorAnalysis}
-                      onSelectColor={(nextColor) => {
-                        changeLibraryView('ACTIVE');
-                        setQuickFilters({
-                          ...createEmptyEagleQuickFilterState(),
-                          color: nextColor,
-                        });
-                      }}
-                    />
-                  </div>
-                </section>
-                <section className={styles.detailSection}>
-                  <h3>{t('完整属性')}</h3>
-                  <dl>
-                    <div>
-                      <dt>{t('原始文件名')}</dt>
-                      <dd>{selectedAsset.originalName}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('格式')}</dt>
-                      <dd>{selectedAsset.format.toUpperCase()}</dd>
-                    </div>
-                    <div>
-                      <dt>MIME</dt>
-                      <dd>{selectedAsset.mimeType}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('尺寸')}</dt>
-                      <dd>
-                        {selectedAsset.width && selectedAsset.height
-                          ? `${selectedAsset.width} × ${selectedAsset.height}`
-                          : '—'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('时长')}</dt>
-                      <dd>
-                        {selectedAsset.durationMs
-                          ? t('{{value1}} 秒', {
-                              value1: (selectedAsset.durationMs / 1000).toFixed(1),
-                            })
-                          : '—'}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('大小')}</dt>
-                      <dd>{formatBytes(selectedAsset.byteSize)}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('处理状态')}</dt>
-                      <dd>
-                        {selectedAsset.lifecycleStatus === 'READY'
-                          ? t('可用')
-                          : selectedAsset.lifecycleStatus === 'FAILED'
-                            ? t('失败')
-                            : t('处理中')}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>{t('添加时间')}</dt>
-                      <dd>{new Date(selectedAsset.libraryAddedAt).toLocaleString(getLocale())}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('更新时间')}</dt>
-                      <dd>{new Date(selectedAsset.updatedAt).toLocaleString(getLocale())}</dd>
-                    </div>
-                    <div>
-                      <dt>{t('素材 ID')}</dt>
-                      <dd>{selectedAsset.id}</dd>
-                    </div>
-                  </dl>
-                </section>
-              </>
-            ) : (
-              <div className={styles.inspectorEmpty}>
-                <IconPhoto size={28} />
-                <span>
-                  {libraryMode === 'PHOTO' ? t('选择一张照片查看详情') : t('选择一项素材查看详情')}
-                </span>
-              </div>
-            )}
-          </aside>
+                  </section>
+                  <section className={styles.detailSection}>
+                    <h3>{t('完整属性')}</h3>
+                    <dl>
+                      <div>
+                        <dt>{t('原始文件名')}</dt>
+                        <dd>{selectedAsset.originalName}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('格式')}</dt>
+                        <dd>{selectedAsset.format.toUpperCase()}</dd>
+                      </div>
+                      <div>
+                        <dt>MIME</dt>
+                        <dd>{selectedAsset.mimeType}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('尺寸')}</dt>
+                        <dd>
+                          {selectedAsset.width && selectedAsset.height
+                            ? `${selectedAsset.width} × ${selectedAsset.height}`
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('时长')}</dt>
+                        <dd>
+                          {selectedAsset.durationMs
+                            ? t('{{value1}} 秒', {
+                                value1: (selectedAsset.durationMs / 1000).toFixed(1),
+                              })
+                            : '—'}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('大小')}</dt>
+                        <dd>{formatBytes(selectedAsset.byteSize)}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('处理状态')}</dt>
+                        <dd>
+                          {selectedAsset.lifecycleStatus === 'READY'
+                            ? t('可用')
+                            : selectedAsset.lifecycleStatus === 'FAILED'
+                              ? t('失败')
+                              : t('处理中')}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('添加时间')}</dt>
+                        <dd>
+                          {new Date(selectedAsset.libraryAddedAt).toLocaleString(getLocale())}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>{t('更新时间')}</dt>
+                        <dd>{new Date(selectedAsset.updatedAt).toLocaleString(getLocale())}</dd>
+                      </div>
+                      <div>
+                        <dt>{t('素材 ID')}</dt>
+                        <dd>{selectedAsset.id}</dd>
+                      </div>
+                    </dl>
+                  </section>
+                </>
+              ) : (
+                <div className={styles.inspectorEmpty}>
+                  <IconPhoto size={28} />
+                  <span>
+                    {libraryMode === 'PHOTO'
+                      ? t('选择一张照片查看详情')
+                      : t('选择一项素材查看详情')}
+                  </span>
+                </div>
+              )}
+            </aside>
+          </EagleResponsiveDetails>
         )}
       </div>
 

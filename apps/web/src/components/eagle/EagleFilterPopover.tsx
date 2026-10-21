@@ -24,6 +24,10 @@ export function EagleFilterPopover({
     width,
     maxHeight: window.innerHeight - 16,
   });
+  const [host, setHost] = useState<Element>(document.body);
+  useLayoutEffect(() => {
+    setHost(anchor.current?.closest('dialog[open]') ?? document.body);
+  }, [anchor]);
   useLayoutEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
@@ -79,7 +83,7 @@ export function EagleFilterPopover({
       window.visualViewport?.removeEventListener('resize', place);
       window.visualViewport?.removeEventListener('scroll', place);
     };
-  }, [anchor, panelRef, width]);
+  }, [anchor, panelRef, width, host]);
   return createPortal(
     <div
       ref={panelRef}
@@ -96,6 +100,6 @@ export function EagleFilterPopover({
     >
       {children}
     </div>,
-    document.body,
+    host,
   );
 }

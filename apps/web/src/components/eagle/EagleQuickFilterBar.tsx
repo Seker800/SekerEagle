@@ -54,6 +54,7 @@ export {
 };
 export type { EagleQuickFilterState };
 interface EagleQuickFilterBarProps {
+  presentation?: 'toolbar' | 'sheet';
   fieldOptions?: Partial<Record<EagleQuickFilterField, Array<{ value: string; label: string }>>>;
   value: EagleQuickFilterState;
   manualTags: EagleManualTag[];
@@ -116,6 +117,7 @@ export function EagleQuickFilterBar(props: EagleQuickFilterBarProps) {
   return <ScopedQuickFilterBar key={`${ownerId}:${libraryMode}`} {...props} />;
 }
 function ScopedQuickFilterBar({
+  presentation = 'toolbar',
   fieldOptions,
   value,
   manualTags,
@@ -172,7 +174,7 @@ function ScopedQuickFilterBar({
   return (
     <div
       ref={rootRef}
-      className={styles.root}
+      className={`${styles.root} ${presentation === 'sheet' ? styles.rootSheet : ''}`}
       role="toolbar"
       aria-label={t('快捷筛选')}
       onKeyDown={(event) => {

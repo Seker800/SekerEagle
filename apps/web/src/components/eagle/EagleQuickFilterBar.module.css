@@ -539,3 +539,21 @@
     min-height: 44px;
   }
 }
+
+.rootSheet {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  flex-direction: column;
+  align-items: stretch;
+}
+.rootSheet .fields {
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow: visible;
+}
+.rootSheet .entry > button {
+  background: #24262b;
+  border: 1px solid var(--eagle-line);
+  border-radius: 12px;
+}

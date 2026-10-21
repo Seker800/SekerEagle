@@ -45,3 +45,28 @@
     gap: 2px;
   }
 }
+
+.idle {
+  border: 0;
+  padding: 0;
+}
+.idle .count {
+  display: none;
+}
+@media (max-width: 720px) {
+  .root {
+    border: 0;
+    background: #111214;
+  }
+  .root:not(.idle) {
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--eagle-line);
+  }
+  .idle button {
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--eagle-line);
+    border-radius: 20px;
+    font-size: 13px;
+  }
+}

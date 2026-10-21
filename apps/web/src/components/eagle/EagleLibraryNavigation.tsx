@@ -1,23 +1,9 @@
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { IconMenu2, IconX } from '@tabler/icons-react';
 import { t } from '../../i18n';
 import styles from './EagleLibraryNavigation.module.css';
 
-const compactQuery = '(max-width: 720px)';
-const compactSnapshot = () => window.matchMedia?.(compactQuery).matches ?? false;
-const subscribeCompact = (changed: () => void) => {
-  const media = window.matchMedia?.(compactQuery);
-  media?.addEventListener('change', changed);
-  return () => media?.removeEventListener('change', changed);
-};
+import { useCompactLayout } from '../../hooks/useCompactLayout';
 
 /** One navigation tree: a sidebar on desktop and a native modal drawer on narrow screens. */
 export function EagleLibraryNavigation({
@@ -37,7 +23,7 @@ export function EagleLibraryNavigation({
   activeKey: string;
   scopeKey: string;
 }) {
-  const compact = useSyncExternalStore(subscribeCompact, compactSnapshot, () => false);
+  const compact = useCompactLayout();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const close = useCallback(() => setOpen(false), []);

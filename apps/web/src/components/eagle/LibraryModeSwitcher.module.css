@@ -36,3 +36,17 @@
   outline: 2px solid var(--eagle-accent);
   outline-offset: 1px;
 }
+@media (max-width: 720px) {
+  .switcher {
+    flex: 0 1 192px;
+    border: 0;
+    padding: 3px;
+    border-radius: 24px;
+    background: var(--eagle-panel-raised);
+  }
+  .switcher > .option {
+    min-height: 34px;
+    border-radius: 20px;
+    font-size: 13px;
+  }
+}

@@ -62,11 +62,23 @@ it('keeps a tall popover below its trigger without borrowing space from above an
 it('keeps a filter popup inside its owning modal so phone sheet controls remain interactive', () => {
   const anchor = createRef<HTMLElement>();
   const panel = createRef<HTMLDivElement>();
-  render(<dialog open aria-label="phone tools">
-    <button ref={(element) => { anchor.current = element; }}>trigger</button>
-    <EagleFilterPopover anchor={anchor} panelRef={panel} onClose={() => {}}>
-      <div role="dialog" aria-label="filter choices">choices</div>
-    </EagleFilterPopover>
-  </dialog>);
-  expect(screen.getByRole('dialog', { name: 'filter choices' }).closest('dialog')).toBe(screen.getByRole('dialog', { name: 'phone tools' }));
+  render(
+    <dialog open aria-label="phone tools">
+      <button
+        ref={(element) => {
+          anchor.current = element;
+        }}
+      >
+        trigger
+      </button>
+      <EagleFilterPopover anchor={anchor} panelRef={panel} onClose={() => {}}>
+        <div role="dialog" aria-label="filter choices">
+          choices
+        </div>
+      </EagleFilterPopover>
+    </dialog>,
+  );
+  expect(screen.getByRole('dialog', { name: 'filter choices' }).closest('dialog')).toBe(
+    screen.getByRole('dialog', { name: 'phone tools' }),
+  );
 });

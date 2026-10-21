@@ -34,6 +34,25 @@ public final class MobileBackupTest {
   public void setUp() throws Exception {
     context = getInstrumentation().getTargetContext();
     settings = new BackupSettings(context);
+    String[] permissions =
+        android.os.Build.VERSION.SDK_INT >= 33
+            ? new String[] {
+              android.Manifest.permission.READ_MEDIA_IMAGES,
+              android.Manifest.permission.READ_MEDIA_VIDEO
+            }
+            : new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE};
+    for (String permission : permissions) {
+      try (android.os.ParcelFileDescriptor result =
+              getInstrumentation()
+                  .getUiAutomation()
+                  .executeShellCommand("pm grant " + context.getPackageName() + " " + permission);
+          InputStream output = new android.os.ParcelFileDescriptor.AutoCloseInputStream(result)) {
+        output.readAllBytes();
+      }
+      assertEquals(
+          android.content.pm.PackageManager.PERMISSION_GRANTED,
+          context.checkSelfPermission(permission));
+    }
     origin = InstrumentationRegistry.getArguments().getString("origin", "");
     if (!origin.matches("http://localhost:[0-9]+"))
       throw new IllegalArgumentException(
@@ -57,6 +76,7 @@ public final class MobileBackupTest {
     assertTrue(latch.await(10, TimeUnit.SECONDS));
     CookieManager.getInstance().flush();
     settings.origin(origin);
+    settings.active("");
     launch();
     waitUntil(() -> !settings.active().isEmpty(), 15000, "authenticated identity");
     scope = settings.active();
@@ -184,35 +204,95 @@ public final class MobileBackupTest {
   }
 
   @Test
-  public void testLibraryUsesCompactActionsAndReturnsWithoutReloadingTheWorkspace() throws Exception {
+  public void testLibraryUsesCompactActionsAndReturnsWithoutReloadingTheWorkspace()
+      throws Exception {
     getInstrumentation().runOnMainSync(() -> activity.show("library"));
     getInstrumentation().waitForIdleSync();
-    getInstrumentation().runOnMainSync(() -> {
-      android.view.View root = activity.findViewById(android.R.id.content);
-      android.view.View cloud = root.findViewWithTag("backup-action");
-      assertNotNull("Home needs a compact backup icon instead of bottom buttons", cloud);
-      assertTrue(cloud.getLayoutParams().width <= Ui.dp(activity,48));
-      android.webkit.WebView workspace = findWorkspace(root);
-      assertNotNull(workspace);
-      cloud.performClick();
-      assertNotNull(root.findViewWithTag("backup-auto"));
-      android.view.View back = root.findViewWithTag("back-action");
-      assertNotNull(back);
-      back.performClick();
-      assertSame(workspace, findWorkspace(root));
-      assertNull(root.findViewWithTag("bottom-navigation"));
-      android.view.View account = root.findViewWithTag("account-action");
-      assertNotNull(account); account.performClick();
-      assertNotNull(root.findViewWithTag("server-address"));
-    });
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.view.View root = activity.findViewById(android.R.id.content);
+              android.view.View cloud = root.findViewWithTag("backup-action");
+              assertNotNull("Home needs a compact backup icon instead of bottom buttons", cloud);
+              assertTrue(cloud.getLayoutParams().width <= Ui.dp(activity, 48));
+              android.webkit.WebView workspace = findWorkspace(root);
+              assertNotNull(workspace);
+              cloud.performClick();
+              assertNotNull(root.findViewWithTag("backup-auto"));
+              android.view.View back = root.findViewWithTag("back-action");
+              assertNotNull(back);
+              back.performClick();
+              assertSame(workspace, findWorkspace(root));
+              assertNull(root.findViewWithTag("bottom-navigation"));
+              android.view.View account = root.findViewWithTag("account-action");
+              assertNotNull(account);
+              account.performClick();
+              assertNotNull(root.findViewWithTag("server-address"));
+            });
+  }
+
+  @Test
+  public void testCaptureModernScreens() throws Exception {
+    org.junit.Assume.assumeTrue(
+        InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true"));
+    getInstrumentation().runOnMainSync(() -> activity.show("library"));
+    Thread.sleep(1000);
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.webkit.WebView web =
+                  findWorkspace(activity.findViewById(android.R.id.content));
+              web.evaluateJavascript("window.sekerEagleI18n?.setLocale('zh-CN')", null);
+            });
+    Thread.sleep(4000);
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.webkit.WebView web =
+                  findWorkspace(activity.findViewById(android.R.id.content));
+              web.evaluateJavascript(
+                  "Array.from(document.querySelectorAll('nav"
+                      + " button')).find(b=>b.textContent.trim()==='照片')?.click()",
+                  null);
+            });
+    Thread.sleep(1500);
+    capture("modern-home.png");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.webkit.WebView web =
+                  findWorkspace(activity.findViewById(android.R.id.content));
+              web.evaluateJavascript(
+                  "document.querySelector('button[aria-label=\"视图与筛选\"]')?.click()", null);
+            });
+    capture("modern-tools.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("backup"));
+    getInstrumentation().waitForIdleSync();
+    capture("modern-backup.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("server"));
+    getInstrumentation().waitForIdleSync();
+    capture("modern-account.png");
+    getInstrumentation().runOnMainSync(() -> activity.show("library"));
+  }
+
+  private void capture(String name) throws Exception {
+    Thread.sleep(400);
+    Bitmap bitmap = getInstrumentation().getUiAutomation().takeScreenshot();
+    assertNotNull(bitmap);
+    try (OutputStream output =
+        new FileOutputStream(new File(context.getExternalFilesDir(null), name))) {
+      assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
+    }
+    bitmap.recycle();
   }
 
   private static android.webkit.WebView findWorkspace(android.view.View view) {
-    if (view instanceof android.webkit.WebView) return (android.webkit.WebView)view;
+    if (view instanceof android.webkit.WebView) return (android.webkit.WebView) view;
     if (view instanceof android.view.ViewGroup) {
-      android.view.ViewGroup group = (android.view.ViewGroup)view;
-      for (int i=0;i<group.getChildCount();i++) {
-        android.webkit.WebView result = findWorkspace(group.getChildAt(i)); if(result!=null)return result;
+      android.view.ViewGroup group = (android.view.ViewGroup) view;
+      for (int i = 0; i < group.getChildCount(); i++) {
+        android.webkit.WebView result = findWorkspace(group.getChildAt(i));
+        if (result != null) return result;
       }
     }
     return null;

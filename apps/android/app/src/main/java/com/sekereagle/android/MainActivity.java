@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.*;
 import android.content.*;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.net.Uri;
 import android.os.*;
 import android.view.*;
@@ -19,7 +18,7 @@ public final class MainActivity extends Activity {
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private BackupSettings settings;
-  private LinearLayout root, body, tabs;
+  private LinearLayout root, body, appBar;
   private WebView web;
   private BackupScreen backup;
   private String currentTab = "library", activeScope = "", pendingTreeScope = "";
@@ -49,7 +48,7 @@ public final class MainActivity extends Activity {
     }
     root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
-    root.setBackgroundColor(Color.rgb(17, 21, 31));
+    root.setBackgroundColor(Ui.BG);
     root.setOnApplyWindowInsetsListener(
         (view, insets) -> {
           android.graphics.Insets padding =
@@ -58,18 +57,13 @@ public final class MainActivity extends Activity {
           return insets;
         });
     setContentView(root);
-    TextView brand = Ui.text(this, "SekerEagle", 19);
-    brand.setPadding(Ui.dp(this, 20), Ui.dp(this, 12), 0, Ui.dp(this, 12));
-    root.addView(brand);
+    appBar = new LinearLayout(this);
+    appBar.setGravity(Gravity.CENTER_VERTICAL);
+    appBar.setPadding(Ui.dp(this, 8), 0, Ui.dp(this, 8), 0);
+    root.addView(appBar, new LinearLayout.LayoutParams(-1, Ui.dp(this, 52)));
     body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
     root.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
-    tabs = new LinearLayout(this);
-    root.addView(tabs);
-    for (String[] tab : new String[][] {{"library", "图库"}, {"backup", "手机备份"}, {"server", "连接"}}) {
-      Button button = Ui.button(this, tab[1], () -> show(tab[0]));
-      tabs.addView(button, new LinearLayout.LayoutParams(0, Ui.dp(this, 54), 1));
-    }
     if (Build.VERSION.SDK_INT >= 33)
       getOnBackInvokedDispatcher()
           .registerOnBackInvokedCallback(
@@ -96,7 +90,7 @@ public final class MainActivity extends Activity {
     CookieManager.getInstance().setAcceptCookie(true);
     CookieManager.getInstance().setAcceptThirdPartyCookies(web, false);
     WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG);
-    web.setBackgroundColor(Color.rgb(17, 21, 31));
+    web.setBackgroundColor(Ui.BG);
     web.setWebViewClient(
         new WebViewClient() {
           @Override
@@ -168,6 +162,7 @@ public final class MainActivity extends Activity {
   void show(String tab) {
     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     currentTab = tab;
+    renderAppBar();
     body.removeAllViews();
     backup = null;
     if (tab.equals("library")) {
@@ -183,24 +178,95 @@ public final class MainActivity extends Activity {
     } else serverScreen();
   }
 
+  private void renderAppBar() {
+    appBar.removeAllViews();
+    boolean home = currentTab.equals("library");
+    if (home) {
+      android.widget.ImageView logo = Ui.icon(this, R.drawable.app_icon, Ui.ACCENT, 28);
+      logo.setImageTintList(null);
+      LinearLayout.LayoutParams logoParams =
+          new LinearLayout.LayoutParams(Ui.dp(this, 28), Ui.dp(this, 28));
+      logoParams.setMargins(Ui.dp(this, 8), 0, Ui.dp(this, 10), 0);
+      appBar.addView(logo, logoParams);
+    } else {
+      ImageButton back = Ui.iconButton(this, R.drawable.ic_back, "返回图库", () -> show("library"));
+      back.setTag("back-action");
+      appBar.addView(back);
+    }
+    TextView title =
+        Ui.text(this, home ? "SekerEagle" : currentTab.equals("backup") ? "手机备份" : "账户", 18);
+    appBar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+    if (home) {
+      ImageButton backupAction =
+          Ui.iconButton(this, R.drawable.ic_cloud, "手机备份", () -> show("backup"));
+      backupAction.setTag("backup-action");
+      appBar.addView(backupAction);
+    }
+    if (!currentTab.equals("server")) {
+      ImageButton account =
+          Ui.iconButton(this, R.drawable.ic_account, "账户与服务", () -> show("server"));
+      account.setTag("account-action");
+      appBar.addView(account);
+    }
+  }
+
   private void serverScreen() {
+    ScrollView scroll = new ScrollView(this);
+    scroll.setFillViewport(true);
+    body.addView(scroll, new LinearLayout.LayoutParams(-1, -1));
     LinearLayout panel = Ui.panel(this);
-    body.addView(panel);
-    panel.addView(Ui.text(this, "连接你的 SekerEagle", 24));
-    panel.addView(Ui.text(this, "使用与网页版相同的服务和账号。测试版仅额外允许 localhost 的 HTTP 连接。", 14));
-    EditText address = new EditText(this);
-    address.setTextColor(Color.WHITE);
+    scroll.addView(panel);
+    boolean connected = !settings.origin().isEmpty();
+    Ui.space(panel, 8);
+    TextView heading = Ui.text(this, connected ? "你的图库，随时在手边" : "连接你的图库", 26);
+    panel.addView(heading);
+    Ui.space(panel, 8);
+    panel.addView(Ui.muted(this, "登录后即可浏览图库，并为手机原片开启自动备份。", 14));
+    Ui.space(panel, 26);
+    if (!activeScope.isEmpty()) {
+      LinearLayout identity = Ui.card(this, panel);
+      identity.addView(
+          Ui.row(
+              this,
+              R.drawable.ic_account,
+              settings.value(activeScope, "email", "当前账号"),
+              "SekerEagle 账号",
+              null));
+      Ui.divider(identity);
+      identity.addView(
+          Ui.row(
+              this,
+              R.drawable.ic_cloud,
+              "手机备份",
+              settings.flag(activeScope, "enabled", false) ? "已启用" : "尚未启用",
+              () -> show("backup")));
+    }
+    Ui.section(panel, "服务地址");
+    LinearLayout service = Ui.card(this, panel);
+    com.google.android.material.textfield.TextInputLayout field =
+        new com.google.android.material.textfield.TextInputLayout(
+            this, null, com.google.android.material.R.attr.textInputOutlinedStyle);
+    field.setHint("SekerEagle 服务地址");
+    field.setBoxBackgroundMode(
+        com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+    field.setBoxCornerRadii(Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12), Ui.dp(this, 12));
+    com.google.android.material.textfield.TextInputEditText address =
+        new com.google.android.material.textfield.TextInputEditText(field.getContext());
+    address.setTag("server-address");
     address.setSingleLine(true);
-    address.setHint("https://你的服务地址");
-    address.setHintTextColor(Color.GRAY);
+    address.setTextSize(14);
     address.setInputType(
         android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
     address.setText(settings.origin());
-    panel.addView(address);
-    panel.addView(
+    field.addView(address, new LinearLayout.LayoutParams(-1, -2));
+    service.addView(field);
+    Ui.space(service, 10);
+    service.addView(Ui.muted(this, "使用与你的网页版相同的地址和账号。", 12));
+    Ui.space(service, 20);
+    service.addView(
         Ui.button(
             this,
-            "连接",
+            connected ? "保存并连接" : "连接图库",
             () -> {
               try {
                 String next = BackupPolicy.origin(address.getText().toString(), BuildConfig.DEBUG);
@@ -212,9 +278,12 @@ public final class MainActivity extends Activity {
                 web.loadUrl(next);
                 show("library");
               } catch (Exception e) {
-                toast(e.getMessage());
+                field.setError(e.getMessage());
               }
-            }));
+            }),
+        new LinearLayout.LayoutParams(-1, Ui.dp(this, 48)));
+    Ui.space(panel, 8);
+    panel.addView(Ui.row(this, R.drawable.ic_shield, "原片保存在你的服务中", "手机目录仅用于备份，不会自动删除原片。", null));
   }
 
   private void checkIdentity() {
