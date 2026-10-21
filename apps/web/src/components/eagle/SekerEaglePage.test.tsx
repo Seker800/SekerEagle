@@ -2549,7 +2549,7 @@ describe('SekerEaglePage', () => {
     }
   });
 
-  it('keeps the mode switch visible and exposes the existing navigation through a narrow-screen drawer', async () => {
+  it('puts library management behind the phone three-dot sheet without a hamburger', async () => {
     vi.stubGlobal('matchMedia', () => ({
       matches: true,
       addEventListener() {},
@@ -2565,13 +2565,16 @@ describe('SekerEaglePage', () => {
     };
     const view = renderPage();
     try {
-      const toggle = screen.getByRole('button', { name: '打开导航' });
+      expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+      const toggle = screen.getByRole('button', { name: '视图与筛选' });
       expect(screen.queryByRole('button', { name: '回收站' })).not.toBeInTheDocument();
       fireEvent.click(toggle);
-      const drawer = screen.getByRole('dialog', { name: '素材库导航' });
+      const drawer = screen.getByRole('dialog', { name: '视图与筛选' });
+      fireEvent.click(within(drawer).getByText('图库管理'));
       fireEvent.click(within(drawer).getByRole('button', { name: '回收站' }));
-      await screen.findByRole('heading', { name: '回收站' });
-      expect(screen.queryByRole('dialog', { name: '素材库导航' })).not.toBeInTheDocument();
+      await waitFor(() => expect(listEagleTrashMock).toHaveBeenCalled());
+      expect(screen.queryByRole('dialog', { name: '视图与筛选' })).not.toBeInTheDocument();
     } finally {
       view.unmount();
       if (show) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', show);

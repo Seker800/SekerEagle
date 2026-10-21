@@ -21,6 +21,7 @@ public final class MainActivity extends Activity {
   private LinearLayout root, body, appBar;
   private WebView web;
   private BackupScreen backup;
+  private CleanupScreen cleanup;
   private String currentTab = "library", activeScope = "", pendingTreeScope = "";
   private boolean resumed, checking, autoPending;
   private long nextCheck;
@@ -82,6 +83,7 @@ public final class MainActivity extends Activity {
     WebSettings config = web.getSettings();
     config.setJavaScriptEnabled(true);
     config.setDomStorageEnabled(true);
+    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/0.1.2");
     config.setAllowFileAccess(false);
     config.setAllowContentAccess(false);
     config.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -95,6 +97,17 @@ public final class MainActivity extends Activity {
         new WebViewClient() {
           @Override
           public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            String screen =
+                com.sekereagle.android.core.NativeRoute.screen(
+                    settings.origin(),
+                    view.getUrl(),
+                    request.getUrl().toString(),
+                    request.isForMainFrame(),
+                    request.hasGesture());
+            if (!screen.isEmpty()) {
+              show(screen);
+              return true;
+            }
             String scheme = request.getUrl().getScheme();
             if (request.isForMainFrame() && !sameOrigin(request.getUrl())) {
               if ("https".equals(scheme))
@@ -165,6 +178,7 @@ public final class MainActivity extends Activity {
     renderAppBar();
     body.removeAllViews();
     backup = null;
+    cleanup = null;
     if (tab.equals("library")) {
       if (settings.origin().isEmpty()) {
         show("server");
@@ -175,39 +189,26 @@ public final class MainActivity extends Activity {
       backup = new BackupScreen(this, settings, activeScope);
       body.addView(backup, new LinearLayout.LayoutParams(-1, -1));
       checkIdentity();
+    } else if (tab.equals("cleanup")) {
+      cleanup = new CleanupScreen(this, settings, activeScope, io);
+      body.addView(cleanup, new LinearLayout.LayoutParams(-1, -1));
     } else serverScreen();
   }
 
   private void renderAppBar() {
     appBar.removeAllViews();
     boolean home = currentTab.equals("library");
-    if (home) {
-      android.widget.ImageView logo = Ui.icon(this, R.drawable.app_icon, Ui.ACCENT, 28);
-      logo.setImageTintList(null);
-      LinearLayout.LayoutParams logoParams =
-          new LinearLayout.LayoutParams(Ui.dp(this, 28), Ui.dp(this, 28));
-      logoParams.setMargins(Ui.dp(this, 8), 0, Ui.dp(this, 10), 0);
-      appBar.addView(logo, logoParams);
-    } else {
-      ImageButton back = Ui.iconButton(this, R.drawable.ic_back, "返回图库", () -> show("library"));
-      back.setTag("back-action");
-      appBar.addView(back);
-    }
+    appBar.setVisibility(home ? View.GONE : View.VISIBLE);
+    if (home) return;
+    ImageButton back = Ui.iconButton(this, R.drawable.ic_back, "返回图库", () -> show("library"));
+    back.setTag("back-action");
+    appBar.addView(back);
     TextView title =
-        Ui.text(this, home ? "SekerEagle" : currentTab.equals("backup") ? "手机备份" : "账户", 18);
+        Ui.text(
+            this,
+            currentTab.equals("backup") ? "手机备份" : currentTab.equals("cleanup") ? "释放空间" : "账户",
+            18);
     appBar.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-    if (home) {
-      ImageButton backupAction =
-          Ui.iconButton(this, R.drawable.ic_cloud, "手机备份", () -> show("backup"));
-      backupAction.setTag("backup-action");
-      appBar.addView(backupAction);
-    }
-    if (!currentTab.equals("server")) {
-      ImageButton account =
-          Ui.iconButton(this, R.drawable.ic_account, "账户与服务", () -> show("server"));
-      account.setTag("account-action");
-      appBar.addView(account);
-    }
   }
 
   private void serverScreen() {
@@ -400,7 +401,7 @@ public final class MainActivity extends Activity {
     }
   }
 
-  private boolean hasMediaRules(String scope) {
+  boolean hasMediaRules(String scope) {
     JSONArray rules = settings.rules(scope);
     for (int i = 0; i < rules.length(); i++)
       if (rules.optJSONObject(i).optString("type").equals("media")) return true;
@@ -437,6 +438,7 @@ public final class MainActivity extends Activity {
         new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
             .addFlags(
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
                     | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
     startActivityForResult(intent, 73);
   }
@@ -461,7 +463,7 @@ public final class MainActivity extends Activity {
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
     super.onRequestPermissionsResult(requestCode, permissions, results);
     if (requestCode == 72) {
-      show("backup");
+      show(currentTab.equals("cleanup") ? "cleanup" : "backup");
       if (!mediaPermission()) toast("请允许访问全部照片和视频，以免自动备份遗漏文件");
     }
   }
@@ -469,6 +471,10 @@ public final class MainActivity extends Activity {
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == CleanupScreen.DELETE_REQUEST) {
+      if (cleanup != null) cleanup.onDeleteResult(resultCode);
+      return;
+    }
     if (requestCode == 71 && chooser != null) {
       chooser.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
       chooser = null;
@@ -480,8 +486,11 @@ public final class MainActivity extends Activity {
         && pendingTreeScope.equals(activeScope)) {
       try {
         Uri tree = data.getData();
-        getContentResolver()
-            .takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        int flags =
+            (data.getFlags() & Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
+                ? Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                : Intent.FLAG_GRANT_READ_URI_PERMISSION;
+        getContentResolver().takePersistableUriPermission(tree, flags);
         BackupScreen.addRule(settings, activeScope, "tree", tree.toString());
         show("backup");
       } catch (Exception e) {

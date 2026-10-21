@@ -1335,4 +1335,15 @@ export const enUS = {
   图片切换: 'Image navigation',
   加载更多人物: 'Load more people',
   视图与筛选: 'View and filters',
+  主导航: 'Main navigation',
+  搜索: 'Search',
+  关闭搜索: 'Close search',
+  更多: 'More',
+  释放空间: 'Free up space',
+  退出: 'Sign out',
+  连接设置: 'Connection settings',
+  图库管理: 'Library management',
+  '手机备份与释放空间请在安卓应用中使用。':
+    'Use the Android app to back up files and free up phone storage.',
+  相册: 'Albums',
 } as const;

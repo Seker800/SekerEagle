@@ -42,7 +42,7 @@ const PREVIEW_MAX_HEIGHT = 360;
 const CARD_BORDER_HEIGHT = 2;
 
 export interface EagleMasonryLayoutOptions {
-  strategy?: 'masonry' | 'justified';
+  strategy?: 'masonry' | 'justified' | 'square';
   targetCardWidth?: number;
   sectionKeys?: ReadonlyMap<string, string>;
 }
@@ -52,6 +52,8 @@ export function buildEagleMasonryLayout(
   containerWidth: number,
   options: EagleMasonryLayoutOptions = {},
 ): EagleMasonryLayout {
+  if (options.strategy === 'square')
+    return buildSquareLayout(assets, containerWidth, options.sectionKeys);
   if (options.strategy === 'justified')
     return buildJustifiedLayout(
       assets,
@@ -200,4 +202,56 @@ function buildJustifiedLayout(
   }
   flush(true);
   return { items, sections, columns, height: items.length ? top - gap : 0 };
+}
+
+function buildSquareLayout(
+  assets: EagleMasonryAsset[],
+  width: number,
+  keys?: ReadonlyMap<string, string>,
+): EagleMasonryLayout {
+  const columns = 3,
+    gap = 2,
+    safeWidth = Math.max(6, width),
+    size = (safeWidth - gap * (columns - 1)) / columns;
+  const items: EagleMasonryItem[] = [],
+    sections: EagleMasonrySection[] = [];
+  let top = 0,
+    column = 0,
+    previous: string | undefined;
+  for (const asset of assets) {
+    const key = keys?.get(asset.id);
+    if (key !== previous) {
+      if (column) {
+        top += size + gap;
+        column = 0;
+      }
+      if (key !== undefined) {
+        sections.push({
+          id: `section:${asset.id}`,
+          key,
+          column: 0,
+          top,
+          width: safeWidth,
+          height: 48,
+        });
+        top += 48;
+      }
+      previous = key;
+    }
+    items.push({
+      id: asset.id,
+      column,
+      left: column * (size + gap),
+      top,
+      width: size,
+      height: size,
+      previewHeight: size,
+    });
+    column++;
+    if (column === columns) {
+      column = 0;
+      top += size + gap;
+    }
+  }
+  return { columns, items, sections, height: items.length ? (column ? top + size : top - gap) : 0 };
 }

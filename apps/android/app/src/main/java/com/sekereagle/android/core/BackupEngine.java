@@ -72,12 +72,20 @@ public final class BackupEngine {
     this.guard = guard;
   }
 
+  public static String fileKey(String scope, String mode, File file) {
+    return scope
+        + ":"
+        + mode
+        + ":"
+        + BackupPolicy.digest(file.uri + "\n" + file.size + "\n" + file.modified);
+  }
+
   public Result process(String scope, String mode, File file) throws Exception {
     if (scope.isEmpty() || !(mode.equals("PHOTO") || mode.equals("MATERIAL")) || file.size <= 0)
       throw new IllegalArgumentException("备份作用域或文件无效");
     guard.check();
     String prefix = scope + ":" + mode + ":";
-    String key = prefix + BackupPolicy.digest(file.uri + "\n" + file.size + "\n" + file.modified);
+    String key = fileKey(scope, mode, file);
     Checkpoint cp = store.load(key);
     if (cp != null && cp.confirmed && file.modified > 0) return Result.SKIPPED;
     if (cp == null || file.modified == 0) cp = new Checkpoint();

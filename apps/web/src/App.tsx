@@ -6,7 +6,7 @@ import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { AccountHome } from './components/account/AccountHome';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
-import modeStyles from './components/eagle/LibraryModeSwitcher.module.css';
+import { LibraryModeControl } from './components/eagle/LibraryModeControl';
 import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { LibraryWorkspaceProvider } from './lib/library-workspace';
 import { createPrivacyVisibilityApi } from './lib/privacy-visibility-api';
@@ -24,7 +24,9 @@ export interface User {
 }
 export function App() {
   const queryClient = useQueryClient();
-  const [libraryMode, setLibraryMode] = useState<LibraryMode>('MATERIAL');
+  const [libraryMode, setLibraryMode] = useState<LibraryMode>(() =>
+    window.matchMedia?.('(max-width: 720px)').matches ? 'PHOTO' : 'MATERIAL',
+  );
   const modeRef = useRef(libraryMode);
   modeRef.current = libraryMode;
   const [user, setUser] = useState<User | null>(null);
@@ -260,31 +262,15 @@ export function App() {
         {connectionButton}
         <SekerEaglePage
           modeSwitcher={
-            <nav aria-label={t('图库模式')} className={modeStyles.switcher}>
-              <button
-                type="button"
-                className={modeStyles.option}
-                aria-pressed={libraryMode === 'MATERIAL'}
-                onClick={() => {
-                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-                  setLibraryMode('MATERIAL');
-                }}
-              >
-                {t('素材')}
-              </button>
-              <button
-                type="button"
-                className={modeStyles.option}
-                aria-pressed={libraryMode === 'PHOTO'}
-                onClick={() => {
-                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-                  setLibraryMode('PHOTO');
-                }}
-              >
-                {t('照片')}
-              </button>
-            </nav>
+            <LibraryModeControl
+              value={libraryMode}
+              onChange={(mode) => {
+                setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                setLibraryMode(mode);
+              }}
+            />
           }
+          accountSummary={{ email: user.email, onLogout: () => void logout() }}
           ownerId={user.id}
           canManageProcessing={user.role === 'ADMIN'}
           privacyVisibility={privacyVisibility}

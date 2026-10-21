@@ -50,3 +50,30 @@
     font-size: 13px;
   }
 }
+.dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  color: #f3f3f5;
+}
+.dropdown select {
+  appearance: none;
+  padding: 10px 30px 10px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  min-height: 48px;
+  cursor: pointer;
+}
+.dropdown select option {
+  background: #252527;
+}
+.dropdown svg {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+}

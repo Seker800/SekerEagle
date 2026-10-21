@@ -204,31 +204,190 @@ public final class MobileBackupTest {
   }
 
   @Test
-  public void testLibraryUsesCompactActionsAndReturnsWithoutReloadingTheWorkspace()
-      throws Exception {
-    getInstrumentation().runOnMainSync(() -> activity.show("library"));
-    getInstrumentation().waitForIdleSync();
+  public void testLibraryHasNoNativeTitleAndReturnsToTheSameWorkspace() throws Exception {
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              activity.show("library");
+              android.view.View root = activity.findViewById(android.R.id.content);
+              assertNull(root.findViewWithTag("backup-action"));
+              assertNull(root.findViewWithTag("account-action"));
+              android.webkit.WebView workspace = findWorkspace(root);
+              assertNotNull(workspace);
+              activity.show("backup");
+              assertNotNull(root.findViewWithTag("backup-auto"));
+              root.findViewWithTag("back-action").performClick();
+              assertSame(workspace, findWorkspace(root));
+              activity.show("cleanup");
+              assertNotNull(root.findViewWithTag("cleanup-action"));
+              root.findViewWithTag("back-action").performClick();
+              assertSame(workspace, findWorkspace(root));
+              activity.show("server");
+              assertNotNull(root.findViewWithTag("server-address"));
+            });
+  }
+
+  @Test
+  public void testCleanupOnlyAcceptsConfirmedUnchangedFilesWithLiveServerCopies() throws Exception {
+    Uri original = image("cleanup-backed-up.png", 0xff123456, true);
+    image("cleanup-not-backed-up.png", 0xff654321, true);
+    MediaCatalog catalog = new MediaCatalog(context);
+    MediaCatalog.Item item =
+        new MediaCatalog.Item(
+            android.content.ContentUris.withAppendedId(
+                MediaStore.Files.getContentUri("external"),
+                android.content.ContentUris.parseId(original)),
+            "cleanup-backed-up.png",
+            path,
+            "image/png",
+            size(original),
+            modified(original),
+            false);
+    checkCleanupEligibility(catalog, item, false);
+    BackupScreen.addRule(settings, scope, "media", path);
+    runScan();
+    checkCleanupEligibility(catalog, item, true);
+    android.app.PendingIntent prompt =
+        MediaStore.createDeleteRequest(context.getContentResolver(), java.util.List.of(original));
+    assertNotNull(prompt);
+    // Merely building the system request never deletes a file or a server resource.
+    assertTrue(exists(original, "photos"));
+    try (InputStream input = context.getContentResolver().openInputStream(original)) {
+      assertTrue(input.read() >= 0);
+    }
+    Uri changed = image("cleanup-unconfirmed.png", 0xffaa1122, true);
+    MediaCatalog.Item other =
+        new MediaCatalog.Item(
+            changed,
+            "cleanup-unconfirmed.png",
+            path,
+            "image/png",
+            size(changed),
+            modified(changed),
+            false);
+    checkCleanupEligibility(catalog, other, false);
+  }
+
+  private long modified(Uri uri) {
+    try (android.database.Cursor cursor =
+        context.getContentResolver().query(uri, new String[] {"date_modified"}, null, null, null)) {
+      assertTrue(cursor.moveToFirst());
+      return cursor.getLong(0) * 1000;
+    }
+  }
+
+  private void checkCleanupEligibility(
+      MediaCatalog catalog, MediaCatalog.Item item, boolean expected) throws Exception {
+    try (BackupJournal journal = new BackupJournal(context)) {
+      com.sekereagle.android.core.CleanupEngine engine =
+          new com.sekereagle.android.core.CleanupEngine(
+              journal,
+              (mode, hash, size) ->
+                  new MultipartTransport(
+                          new ApiClient(origin, settings.token(scope)), mode, catalog, item)
+                      .exists(hash, size),
+              () -> {});
+      com.sekereagle.android.core.CleanupEngine.Candidate result =
+          engine.check(
+              scope,
+              "PHOTO",
+              new com.sekereagle.android.core.BackupEngine.File(
+                  item.uri.toString(),
+                  item.size,
+                  item.modified,
+                  () -> catalog.hash(item, () -> {}),
+                  () -> catalog.stable(item)));
+      assertEquals(expected, result != null);
+    }
+  }
+
+  @Test
+  public void testMoreLinksUseRealUserNavigationToOpenNativeScreens() throws Exception {
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('nav button:last-child'))").equals("true"),
+        15000,
+        "mobile navigation");
+    webScript("document.querySelector('nav button:last-child').click()");
+    waitUntil(
+        () ->
+            webValue("Boolean(document.querySelector('a[href=\"/_native/backup\"]'))")
+                .equals("true"),
+        10000,
+        "native backup link");
+    tapWebLink("/_native/backup");
     getInstrumentation()
         .runOnMainSync(
             () -> {
               android.view.View root = activity.findViewById(android.R.id.content);
-              android.view.View cloud = root.findViewWithTag("backup-action");
-              assertNotNull("Home needs a compact backup icon instead of bottom buttons", cloud);
-              assertTrue(cloud.getLayoutParams().width <= Ui.dp(activity, 48));
-              android.webkit.WebView workspace = findWorkspace(root);
-              assertNotNull(workspace);
-              cloud.performClick();
               assertNotNull(root.findViewWithTag("backup-auto"));
-              android.view.View back = root.findViewWithTag("back-action");
-              assertNotNull(back);
-              back.performClick();
-              assertSame(workspace, findWorkspace(root));
-              assertNull(root.findViewWithTag("bottom-navigation"));
-              android.view.View account = root.findViewWithTag("account-action");
-              assertNotNull(account);
-              account.performClick();
-              assertNotNull(root.findViewWithTag("server-address"));
+              root.findViewWithTag("back-action").performClick();
             });
+    Thread.sleep(300);
+    tapWebLink("/_native/cleanup");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.view.View root = activity.findViewById(android.R.id.content);
+              assertNotNull(root.findViewWithTag("cleanup-action"));
+              root.findViewWithTag("back-action").performClick();
+            });
+  }
+
+  private String webValue(String script) throws Exception {
+    CountDownLatch ready = new CountDownLatch(1);
+    String[] value = {""};
+    getInstrumentation()
+        .runOnMainSync(
+            () ->
+                findWorkspace(activity.findViewById(android.R.id.content))
+                    .evaluateJavascript(
+                        script,
+                        result -> {
+                          value[0] = result;
+                          ready.countDown();
+                        }));
+    assertTrue(ready.await(10, TimeUnit.SECONDS));
+    return value[0];
+  }
+
+  private void tapWebLink(String href) throws Exception {
+    CountDownLatch ready = new CountDownLatch(1);
+    String[] bounds = {""};
+    int[] location = new int[2];
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              android.webkit.WebView web =
+                  findWorkspace(activity.findViewById(android.R.id.content));
+              web.getLocationOnScreen(location);
+              web.evaluateJavascript(
+                  "(()=>{const r=document.querySelector('a[href=\""
+                      + href
+                      + "\"]').getBoundingClientRect();return"
+                      + " [r.x+r.width/2,r.y+r.height/2,devicePixelRatio];})()",
+                  value -> {
+                    bounds[0] = value;
+                    ready.countDown();
+                  });
+            });
+    assertTrue(ready.await(10, TimeUnit.SECONDS));
+    JSONArray point = new JSONArray(bounds[0]);
+    float x = (float) (location[0] + point.getDouble(0) * point.getDouble(2)),
+        y = (float) (location[1] + point.getDouble(1) * point.getDouble(2));
+    long now = android.os.SystemClock.uptimeMillis();
+    android.view.MotionEvent
+        down =
+            android.view.MotionEvent.obtain(
+                now, now, android.view.MotionEvent.ACTION_DOWN, x, y, 0),
+        up =
+            android.view.MotionEvent.obtain(
+                now, now + 60, android.view.MotionEvent.ACTION_UP, x, y, 0);
+    getInstrumentation().sendPointerSync(down);
+    getInstrumentation().sendPointerSync(up);
+    down.recycle();
+    up.recycle();
+    Thread.sleep(400);
+    getInstrumentation().waitForIdleSync();
   }
 
   @Test
@@ -266,6 +425,13 @@ public final class MobileBackupTest {
                   "document.querySelector('button[aria-label=\"视图与筛选\"]')?.click()", null);
             });
     capture("modern-tools.png");
+    webScript(
+        "Array.from(document.querySelectorAll('dialog"
+            + " button')).find(b=>b.textContent.trim()==='完成')?.click()");
+    webScript(
+        "Array.from(document.querySelectorAll('nav"
+            + " button')).find(b=>b.textContent.trim()==='更多')?.click()");
+    capture("modern-more.png");
     getInstrumentation().runOnMainSync(() -> activity.show("backup"));
     getInstrumentation().waitForIdleSync();
     capture("modern-backup.png");
@@ -273,6 +439,14 @@ public final class MobileBackupTest {
     getInstrumentation().waitForIdleSync();
     capture("modern-account.png");
     getInstrumentation().runOnMainSync(() -> activity.show("library"));
+  }
+
+  private void webScript(String script) {
+    getInstrumentation()
+        .runOnMainSync(
+            () ->
+                findWorkspace(activity.findViewById(android.R.id.content))
+                    .evaluateJavascript(script, null));
   }
 
   private void capture(String name) throws Exception {

@@ -1,6 +1,9 @@
 import { afterEach, expect, it } from 'vitest';
 import {
   getPhotoTimelineMonth,
+  getPhotoTimelineDay,
+  createPhotoTimelineDayKeys,
+  formatPhotoTimelineDay,
   createPhotoTimelineSectionKeys,
   formatPhotoTimelineMonth,
 } from './photo-timeline-sections';
@@ -39,4 +42,22 @@ it('shows the full month and year in the selected display language', async () =>
   expect(formatPhotoTimelineMonth('2026-10')).toBe('2026年10月');
   await i18next.changeLanguage('en-US');
   expect(formatPhotoTimelineMonth('2026-10')).toBe('October 2026');
+});
+
+it('groups mobile dates by day while retaining canonical timestamps and fallback rules', () => {
+  expect(getPhotoTimelineDay({ ...date, chronologicalAt: '2024-03-01T00:30:00+08:00' })).toBe(
+    '2024-02-29',
+  );
+  expect(
+    createPhotoTimelineDayKeys([
+      { ...date, id: 'one' },
+      { ...date, id: 'two', chronologicalAt: '2026-10-18T03:00:00Z' },
+    ]),
+  ).toEqual(
+    new Map([
+      ['one', '2026-10-19'],
+      ['two', '2026-10-18'],
+    ]),
+  );
+  expect(formatPhotoTimelineDay('2026-10-21')).toContain('21');
 });

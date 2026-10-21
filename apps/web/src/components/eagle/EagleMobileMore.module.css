@@ -1,0 +1,73 @@
+.more {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 18px;
+  background: #1c1c1e;
+}
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 22px 0 32px;
+  color: #eee;
+}
+.identity > div {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.identity strong {
+  font-size: 17px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.identity span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #929299;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.identity a {
+  color: #aaa;
+  padding: 12px;
+}
+.actions {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #ffffff0b;
+}
+.actions > button,
+.actions > a {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 68px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 1px solid #ffffff0b;
+  color: #efeff1;
+  background: transparent;
+  text-decoration: none;
+  text-align: left;
+  font-size: 16px;
+  cursor: pointer;
+}
+.actions span {
+  flex: 1;
+}
+.actions :disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+.hint {
+  margin: 22px 8px;
+  color: #8e8e95;
+  line-height: 1.7;
+  font-size: 12px;
+}

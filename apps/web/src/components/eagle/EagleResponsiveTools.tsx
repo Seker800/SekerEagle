@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { IconAdjustmentsHorizontal } from '@tabler/icons-react';
+import { IconDotsVertical } from '@tabler/icons-react';
 import { t } from '../../i18n';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import styles from './EagleResponsiveTools.module.css';
@@ -42,7 +42,7 @@ export function EagleResponsiveTools({
         aria-expanded={open}
         onClick={() => setOpen(true)}
       >
-        <IconAdjustmentsHorizontal size={20} />
+        <IconDotsVertical size={20} />
         {count > 0 && <span>{count}</span>}
       </button>
       <dialog
