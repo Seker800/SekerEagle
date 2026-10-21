@@ -127,23 +127,43 @@ async function inspectCameraFile(stream: Readable, mimeType: string) {
 
 async function inspectHeifImage(stream: Readable) {
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-inspect-'));
-  const inputPath = join(directory, 'original.heic'), outputPath = join(directory, 'decoded.png');
+  const inputPath = join(directory, 'original.heic'),
+    outputPath = join(directory, 'decoded.png');
   const hash = createHash('sha256');
   let byteSize = 0;
-  const tap = new Transform({transform(chunk: Buffer, _encoding, callback) {
-    byteSize += chunk.length;
-    if (byteSize > CAMERA_MAX_IMAGE_BYTES) return callback(new BadRequestException('媒体内容超出安全大小限制。'));
-    hash.update(chunk);callback(null, chunk);
-  }});
+  const tap = new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      byteSize += chunk.length;
+      if (byteSize > CAMERA_MAX_IMAGE_BYTES)
+        return callback(new BadRequestException('媒体内容超出安全大小限制。'));
+      hash.update(chunk);
+      callback(null, chunk);
+    },
+  });
   try {
-    await pipeline(stream, tap, createWriteStream(inputPath, {flags:'wx'}));
+    await pipeline(stream, tap, createWriteStream(inputPath, { flags: 'wx' }));
     await decodeHeifFile(inputPath, outputPath);
-    const metadata = await sharp(outputPath, {failOn:'warning', limitInputPixels:MAX_EAGLE_IMAGE_INPUT_PIXELS}).metadata();
+    const metadata = await sharp(outputPath, {
+      failOn: 'warning',
+      limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
+    }).metadata();
     if (!metadata.width || !metadata.height) throw new Error('Invalid dimensions');
-    return {sha256:hash.digest('hex'),format:'heif',width:metadata.width,height:metadata.height,durationMs:null};
+    return {
+      sha256: hash.digest('hex'),
+      format: 'heif',
+      width: metadata.width,
+      height: metadata.height,
+      durationMs: null,
+    };
   } catch (error) {
     if (error instanceof BadRequestException) throw error;
     const pixelLimit = error instanceof Error && /pixel limit/i.test(error.message);
-    throw new BadRequestException(pixelLimit ? 'HEIC/HEIF 图片像素数量超出安全限制。' : '无法解码该图片，请确认文件完整且格式受支持。');
-  } finally { await rm(directory,{recursive:true,force:true}); }
+    throw new BadRequestException(
+      pixelLimit
+        ? 'HEIC/HEIF 图片像素数量超出安全限制。'
+        : '无法解码该图片，请确认文件完整且格式受支持。',
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }

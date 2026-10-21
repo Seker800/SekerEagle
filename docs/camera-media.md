@@ -86,3 +86,11 @@ CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" \
 | Xiaomi 17 Ultra  | 三份 Ultra RAW DNG 与一份普通 RAW DNG                     |
 
 以上合计 15 份实拍文件。单一机型通过这些模式不代表其他固件、镜头校正、所有压缩模式或厂商外观均已逐一验证；GFX100S 的其他位深模式本轮未取得完整样本，不列入实拍已验证范围。
+
+## 2026-10-21 群晖实片兼容修复
+
+摄影信息从原文件通过 ExifTool 的只读标签白名单提取，覆盖 RAF 封装、小米 DNG 的 IFD0 标签和 HEIC。保留没有时区信息的原始本地拍摄时间；GPS 方位与海拔符号显式归一化。不以显影 TIFF 的残缺 EXIF 替代原片，不从文件名、复制时间或导入时间伪造拍摄日期。原文件字节不变，文件系统时间不等于 EXIF 拍摄时间，也不会自动成为 S3 原文件的创建日期。
+
+API 与 worker 均安装 ExifTool（worker 使用）和 Debian bookworm-backports 的 libheif-examples／libheif-plugin-libde265；上传与预览共用 media-core 的 HEIF 解码，保留 MIME、总像素、大小、超时、进程环境与输出预算，禁止关闭 libheif 安全限制。解码依赖缺失时，worker 重试而非将空摄影信息标记为成功。
+
+已有照片可用 worker 镜像中的 `apps/worker/dist/photo-metadata-refresh.js` 补读。首个参数是明确资源清单文件，每项仅含 assetId、sha256、mediaRevision，最多 100 项且必须属于同一个账号的 PHOTO；默认仅输出计划，附加 `--apply` 才写入。先完成备份与安全目标检查。命令核对当前媒体版本、未删除状态、原片大小与 SHA，在资源行锁内复核并复用原有摄影持久化函数；保留既有像素分析、不覆盖继承了原片拍摄信息的编辑副本、不重新生成缩略图、不全库扫描。它不修改原片、素材、模型或数据库 schema。

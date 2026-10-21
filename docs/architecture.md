@@ -39,6 +39,12 @@ SekerEagle 是独立的多用户图片管理系统，提供业务数据完全分
 
 PhotoAgentService 属于摄影应用服务，不替换共用 provider。回收操作抽取为共用事务函数，普通界面与审核使用同一实现；MCP 不直接访问数据库或存储。首轮不开放跨库发送工具或永久删除，发送仍使用已有显式界面。现有基础设施共用、owner／模式与私密边界保持完整。实施与验证范围见 [照片智能整理计划](photo-agent-plan.md)。
 
+## Original photography metadata and HEIF compatibility
+
+2026-10-21 群晖试导入复现富士 RAF 容器和小米 DNG 的 IFD0 摄影标签漏读。摄影分析优先通过有超时、输出大小与标签白名单的 ExifTool 只读原件；显影 TIFF 或 PNG 不作为原始拍摄信息的权威来源。共用 media-core 封装外部进程并隔离凭据环境，worker 保留现有摄影归一化与继承保护。原片与文件字节保持不变，维修仅补读当前版本摄影信息及时间线。
+
+HEIC／HEIF 上传与预览使用同一个有界解码器，先校验真实 MIME 与总像素预算，再解码。API 与 worker 从官方 Debian bookworm-backports 安装同一新版 libheif 和 HEVC 解码插件；不关闭解析器安全限制、不接受伪装容器、不为照片复制上传或预览实现。仅限明确资源清单的维护命令用于补读，校验 SHA、模式、账号一致性及媒体版本，复用既有摄影信息写回事务并保护继承信息；不扫描外部目录、不全库自动回填。
+
 ## Shared library architecture gate
 
 ### Existing photo editor integration

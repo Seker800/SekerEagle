@@ -22,7 +22,10 @@ export function assertSafeHeifInfo(output: string): void {
   try {
     assertHeifPixels(output);
   } catch {
-    throw new PermanentMediaValidationError('IMAGE_PIXEL_LIMIT_EXCEEDED', 'HEIC/HEIF 图片像素数量超出安全限制。');
+    throw new PermanentMediaValidationError(
+      'IMAGE_PIXEL_LIMIT_EXCEEDED',
+      'HEIC/HEIF 图片像素数量超出安全限制。',
+    );
   }
 }
 
@@ -110,4 +113,3 @@ function requiresHeifDecode(mimeType: string, storageKey: string): boolean {
     mimeType === 'image/heic' || mimeType === 'image/heif' || /\.(?:heic|heif)$/i.test(storageKey)
   );
 }
-
