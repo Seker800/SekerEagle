@@ -5,6 +5,7 @@ import {
   createEaglePreviewTileSource,
   getEaglePreviewContentUrl,
   getEagleEditContentUrl,
+  getEagleVideoContentUrl,
   needsEagleImagePyramid,
 } from './eagle-media-sources';
 import type { SekerDesktopBridge } from '../../lib/media-resolver';
@@ -140,4 +141,28 @@ it('edits camera RAW from a current dedicated derivative, never from the sensor 
     '/api/eagle/assets/asset-1/original',
   );
   expect(getEagleEditContentUrl({ ...raw, lifecycleStatus: 'FAILED' })).toBeNull();
+});
+
+it('new video posters never trigger original download while playback is deferred; legacy playback stays compatible', () => {
+  const movie = {
+    ...asset,
+    mimeType: 'video/mp4',
+    lifecycleStatus: 'READY',
+    renditions: [
+      { id: 'poster', kind: 'THUMBNAIL', variant: 'poster', revision: 3, mimeType: 'image/jpeg' },
+    ],
+  } as EagleAssetListItem;
+  expect(getEagleVideoContentUrl(movie)).toBeNull();
+  expect(
+    getEagleVideoContentUrl({
+      ...movie,
+      renditions: [
+        ...movie.renditions,
+        { id: 'playback', kind: 'PREVIEW', variant: 'default', revision: 3, mimeType: 'video/mp4' },
+      ] as EagleAssetListItem['renditions'],
+    }),
+  ).toBe('/api/eagle/assets/asset-1/renditions/playback');
+  expect(getEagleVideoContentUrl({ ...movie, renditions: [] })).toBe(
+    '/api/eagle/assets/asset-1/original',
+  );
 });

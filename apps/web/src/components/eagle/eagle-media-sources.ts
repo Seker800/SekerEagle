@@ -87,7 +87,16 @@ export function getEagleVideoContentUrl(asset: EagleAssetListItem): string | nul
       `/api/eagle/assets/${encodeURIComponent(asset.id)}/renditions/${encodeURIComponent(playback.id)}`,
       asset.libraryMode ?? 'MATERIAL',
     );
-  // Existing H.264-only MP4 assets predate playback renditions.
+  if (
+    asset.renditions.some(
+      (row) =>
+        row.revision === asset.mediaRevision &&
+        row.kind === 'THUMBNAIL' &&
+        row.variant === 'poster',
+    )
+  )
+    return null;
+  // Existing H.264-only MP4 assets predate explicit video poster variants.
   return asset.mimeType === 'video/mp4' && asset.lifecycleStatus === 'READY'
     ? getEagleAssetContentUrl(asset.id, asset.libraryMode)
     : null;

@@ -108,6 +108,11 @@ export function EagleAssetLightbox({
             autoPlay
             playsInline
           />
+        ) : isCameraVideoMime(asset.mimeType) && previewUrl ? (
+          <div>
+            <img className={styles.videoPlayer} src={previewUrl} alt={asset.displayName} />
+            <p>{t('视频播放副本尚未生成，原片已保存')}</p>
+          </div>
         ) : (
           <p>{t('预览图尚未生成')}</p>
         )}
