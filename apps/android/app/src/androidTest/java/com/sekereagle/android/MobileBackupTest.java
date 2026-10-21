@@ -184,6 +184,41 @@ public final class MobileBackupTest {
   }
 
   @Test
+  public void testLibraryUsesCompactActionsAndReturnsWithoutReloadingTheWorkspace() throws Exception {
+    getInstrumentation().runOnMainSync(() -> activity.show("library"));
+    getInstrumentation().waitForIdleSync();
+    getInstrumentation().runOnMainSync(() -> {
+      android.view.View root = activity.findViewById(android.R.id.content);
+      android.view.View cloud = root.findViewWithTag("backup-action");
+      assertNotNull("Home needs a compact backup icon instead of bottom buttons", cloud);
+      assertTrue(cloud.getLayoutParams().width <= Ui.dp(activity,48));
+      android.webkit.WebView workspace = findWorkspace(root);
+      assertNotNull(workspace);
+      cloud.performClick();
+      assertNotNull(root.findViewWithTag("backup-auto"));
+      android.view.View back = root.findViewWithTag("back-action");
+      assertNotNull(back);
+      back.performClick();
+      assertSame(workspace, findWorkspace(root));
+      assertNull(root.findViewWithTag("bottom-navigation"));
+      android.view.View account = root.findViewWithTag("account-action");
+      assertNotNull(account); account.performClick();
+      assertNotNull(root.findViewWithTag("server-address"));
+    });
+  }
+
+  private static android.webkit.WebView findWorkspace(android.view.View view) {
+    if (view instanceof android.webkit.WebView) return (android.webkit.WebView)view;
+    if (view instanceof android.view.ViewGroup) {
+      android.view.ViewGroup group = (android.view.ViewGroup)view;
+      for (int i=0;i<group.getChildCount();i++) {
+        android.webkit.WebView result = findWorkspace(group.getChildAt(i)); if(result!=null)return result;
+      }
+    }
+    return null;
+  }
+
+  @Test
   public void testIncrementalDuplicateRenameModesPendingAndAutomaticReopen() throws Exception {
     int color = 0xff000000 | new Random().nextInt(0xffffff);
     Uri first = image("original.png", color, true);
