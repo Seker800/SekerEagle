@@ -2514,6 +2514,27 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('button', { name: '下一张' })).toBeDisabled();
   });
 
+  it('opens images with one tap on phones without exposing idle batch actions', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const view = renderPage();
+    try {
+      expect(screen.queryByRole('button', { name: '操作' })).not.toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
+      expect(await screen.findByRole('dialog', { name: 'Owl Reference' })).toBeInTheDocument();
+    } finally { view.unmount(); vi.unstubAllGlobals(); }
+  });
+  it('uses phone long press to enter selection before exposing management actions', async () => {
+    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
+    const view = renderPage();
+    try {
+      fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
+      expect(screen.getByRole('button', { name: '取消选择' })).toBeInTheDocument();
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '操作' }));
+      expect(screen.getByRole('menu')).toBeInTheDocument();
+    } finally { view.unmount(); vi.unstubAllGlobals(); }
+  });
+
   it('keeps the mode switch visible and exposes the existing navigation through a narrow-screen drawer', async () => {
     vi.stubGlobal('matchMedia', () => ({
       matches: true,
