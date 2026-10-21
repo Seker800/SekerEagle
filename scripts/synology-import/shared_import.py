@@ -569,7 +569,7 @@ def acquire_lock(lock, wait=False):
 def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['inventory', 'run', 'status'])
+    parser.add_argument('command', choices=['inventory', 'run', 'local', 'status'])
     parser.add_argument('--state', required=True)
     parser.add_argument('--policy')
     parser.add_argument('--source', default='/source', choices=['/source'])
@@ -598,6 +598,13 @@ def main():
     with open(state/'import.lock', 'a') as lock:
         if not acquire_lock(lock, args.wait_for_inventory):
             return
+        if args.command == 'local':
+            # Preserve the existing kernel lock across exec; Node owns the same journal.
+            os.set_inheritable(lock.fileno(), True)
+            command = ['node', '/sekereagle/apps/api/dist/maintenance/local-copy.js']
+            if args.limit is not None:
+                command += ['--limit', str(args.limit)]
+            os.execvp(command[0], command)
         journal = Journal(state)
         try:
             inventory(root, journal, json.loads(Path(args.policy).read_text()))
