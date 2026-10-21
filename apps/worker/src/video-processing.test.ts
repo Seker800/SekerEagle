@@ -93,6 +93,11 @@ test('video poster, deferred playback and normal full processing preserve scoped
           storage: storage as never,
           s3Bucket: 'sekereagle-assets',
           transcodingEnabled: enabled,
+          lockPrivacy: async (_transaction, owner, mode) => {
+            assert.equal(owner, 'owner');
+            assert.equal(mode, 'PHOTO');
+          },
+          syncPrivacy: async () => 0,
           assertExpectedHash: () => {
             verified = true;
           },

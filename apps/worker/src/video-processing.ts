@@ -6,8 +6,7 @@ import {
   CAMERA_VIDEO_INPUT_OPTIONS,
   mediaSubprocessEnvironment,
 } from '@sekereagle/media-core';
-import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
-import type { PrismaClient, EagleAssetProcessingJob, LibraryMode } from '@prisma/client';
+import type { Prisma, PrismaClient, EagleAssetProcessingJob, LibraryMode } from '@prisma/client';
 import { type S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
 import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
@@ -25,6 +24,17 @@ interface VideoProcessingDependencies {
   storage: S3Client;
   s3Bucket: string;
   transcodingEnabled: boolean;
+  lockPrivacy: (
+    transaction: Prisma.TransactionClient,
+    ownerId: string,
+    mode: LibraryMode,
+  ) => Promise<void>;
+  syncPrivacy: (
+    transaction: Prisma.TransactionClient,
+    ownerId: string,
+    ids: string[],
+    mode: LibraryMode,
+  ) => Promise<unknown>;
   assertExpectedHash(this: void, expected: string | null | undefined, actual: string): void;
 }
 
@@ -40,7 +50,15 @@ export async function processVideo(
   },
   dependencies: VideoProcessingDependencies,
 ): Promise<void> {
-  const { prisma, storage, s3Bucket, assertExpectedHash, transcodingEnabled } = dependencies;
+  const {
+    prisma,
+    storage,
+    s3Bucket,
+    assertExpectedHash,
+    transcodingEnabled,
+    lockPrivacy,
+    syncPrivacy,
+  } = dependencies;
   const stage = videoProcessingStage(job.kind, transcodingEnabled);
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
   const inputPath = join(directory, 'input.mp4');
@@ -122,7 +140,7 @@ export async function processVideo(
         }),
       );
     await prisma.$transaction(async (transaction) => {
-      await lockOwnerPrivacyProjection(transaction, asset.ownerId, asset.libraryMode);
+      await lockPrivacy(transaction, asset.ownerId, asset.libraryMode);
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
         where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
         data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
@@ -227,7 +245,7 @@ export async function processVideo(
             livePhotoRole: metadata.livePhotoIdentifier ? 'MOTION' : null,
           },
         });
-      await syncAssetPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
+      await syncPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
     });
   } finally {
     await rm(directory, { recursive: true, force: true });

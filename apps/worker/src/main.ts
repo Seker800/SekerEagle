@@ -638,6 +638,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     s3Bucket,
     assertExpectedHash,
     transcodingEnabled: runVideoTranscoding,
+    lockPrivacy: lockOwnerPrivacyProjection,
+    syncPrivacy: syncAssetPrivacy,
   });
 }
 
