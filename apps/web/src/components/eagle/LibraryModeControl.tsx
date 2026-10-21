@@ -24,9 +24,9 @@ export function LibraryModeControl({
           >
             {compact &&
               (mode === 'PHOTO' ? (
-                <IconPhoto size={25} stroke={1.7} />
+                <IconPhoto size={18} stroke={1.7} />
               ) : (
-                <IconLayoutGrid size={25} stroke={1.7} />
+                <IconLayoutGrid size={18} stroke={1.7} />
               ))}
             <span>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
           </button>

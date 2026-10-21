@@ -12,7 +12,7 @@
   bottom: max(18px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  width: min(354px, calc(100% - 32px));
+  width: min(244px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -22,7 +22,7 @@
 .bottom {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .switcher {
   flex: 1;
@@ -33,8 +33,8 @@
   composes: surface from './EagleGlass.module.css';
   display: grid;
   place-items: center;
-  width: 62px;
-  height: 62px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   flex-shrink: 0;
   padding: 0;
@@ -42,35 +42,36 @@
   pointer-events: auto;
 }
 .destinations {
-  composes: surface from './EagleGlass.module.css';
   display: flex;
-  padding: 4px;
-  border-radius: 24px;
-  pointer-events: auto;
+  flex-direction: column;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 12%);
 }
 .destinations button {
-  flex: 1;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-width: 0;
-  min-height: 38px;
+  gap: 12px;
+  min-height: 46px;
   border: 0;
-  border-radius: 20px;
-  padding: 0 5px;
+  border-radius: 14px;
+  padding: 10px 12px;
   background: transparent;
-  color: #b4b4be;
-  font-size: 12px;
+  color: #f0f1f3;
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
   cursor: pointer;
 }
+.destinations button:hover {
+  background: rgb(255 255 255 / 8%);
+}
 .destinations svg {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
 }
 .destinations button[aria-current='page'] {
-  color: #fff;
-  background: rgb(255 255 255 / 12%);
+  color: #8bb1ff;
 }
 .search:focus-visible,
 .destinations button:focus-visible {

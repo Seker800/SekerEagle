@@ -1,4 +1,8 @@
-import { EagleMobileChrome, type MobileDestination } from './EagleMobileChrome';
+import {
+  EagleMobileChrome,
+  EagleMobileNavigation,
+  type MobileDestination,
+} from './EagleMobileChrome';
 import { EagleMobileMore, isAndroidClient } from './EagleMobileMore';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { EagleResponsiveTools } from './EagleResponsiveTools';
@@ -1326,6 +1330,25 @@ export function SekerEaglePage({
       </button>
     </>
   );
+  const navigateMobile = (destination: MobileDestination) => {
+    setMobileMore(destination === 'more');
+    setMobileSearch(false);
+    clearAssetSelection();
+    if (destination === 'tags') {
+      changeLibraryView('MANUAL_TAGS');
+    } else if (destination !== 'more') {
+      changeLibraryView('ACTIVE');
+      setPhotoView(destination);
+    }
+  };
+  const activeMobileDestination: MobileDestination =
+    mobileMore || workspaceSection === 'SETTINGS'
+      ? 'more'
+      : workspaceSection === 'TAGS'
+        ? 'tags'
+        : photoView === 'map' || photoView === 'people'
+          ? photoView
+          : 'timeline';
   const toolbarTools = (
     <EagleResponsiveTools
       className={styles.toolbarActions}
@@ -1334,6 +1357,11 @@ export function SekerEaglePage({
       actions={
         compact ? (
           <>
+            <EagleMobileNavigation
+              mode={libraryMode}
+              active={activeMobileDestination}
+              onNavigate={navigateMobile}
+            />
             <div data-dismiss-tools>{selectionToolbar}</div>
             {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
             <details>
@@ -1457,17 +1485,7 @@ export function SekerEaglePage({
       </button>
     </EagleResponsiveTools>
   );
-  const navigateMobile = (destination: MobileDestination) => {
-    setMobileMore(destination === 'more');
-    setMobileSearch(false);
-    clearAssetSelection();
-    if (destination === 'tags') {
-      changeLibraryView('MANUAL_TAGS');
-    } else if (destination !== 'more') {
-      changeLibraryView('ACTIVE');
-      setPhotoView(destination);
-    }
-  };
+
   return (
     <main
       inert={photoEditing.session !== null}
@@ -1499,7 +1517,6 @@ export function SekerEaglePage({
 
         {compact && (
           <EagleMobileChrome
-            mode={libraryMode}
             switcher={modeSwitcher}
             searchOpen={mobileSearch}
             onSearch={() => {
@@ -1511,16 +1528,6 @@ export function SekerEaglePage({
               }
             }}
             tools={toolbarTools}
-            active={
-              mobileMore || workspaceSection === 'SETTINGS'
-                ? 'more'
-                : workspaceSection === 'TAGS'
-                  ? 'tags'
-                  : photoView === 'map' || photoView === 'people'
-                    ? photoView
-                    : 'timeline'
-            }
-            onNavigate={navigateMobile}
           >
             {null}
           </EagleMobileChrome>

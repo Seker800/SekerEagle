@@ -24,6 +24,7 @@
 }
 .sheet {
   composes: surface from './EagleGlass.module.css';
+  --eagle-glass-tint: rgb(30 30 34 / 68%);
   --eagle-text: #f0f1f3;
   --eagle-muted: #a6a6ad;
   --eagle-line: rgb(255 255 255 / 12%);
@@ -134,4 +135,29 @@
   .sheet {
     animation: none;
   }
+}
+
+/* Shared inline controls should become menu rows inside the frosted surface. */
+.sheet .controls > button {
+  width: 100%;
+}
+.sheet .controls > button > span {
+  display: inline;
+}
+.sheet .controls [role='toolbar'] {
+  background: transparent;
+  padding: 0;
+  border: 0;
+}
+.sheet .controls [role='toolbar'] button {
+  justify-content: flex-start;
+  flex: 1;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--eagle-text);
+  font-size: 15px;
+  gap: 12px;
 }

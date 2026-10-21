@@ -111,3 +111,5 @@ npm run ci:check
 2026-10-21 审查修复：内容预检响应 DTO 与主体限流继续由共用上传 Controller 提供，PHOTO 空继承获得；HEIF 整幅解码的 6400 万总像素预算下沉 library-core，并由共用 API 能力契约公布。视频播放终态与队列判断在共用 worker 策略实现，不增加模式专属 provider 或门禁例外。
 
 2026-10-21 玻璃小屏改版：模式胶囊复用 LibraryModeControl，当前模式导航复用 EagleMobileChrome，标签直接打开已有 MANUAL_TAGS 工作区。视图与管理操作由同一响应式工具组件装配，桌面仍内联；样式表共用玻璃表面，不新增手机标签页、照片卡片或筛选状态。
+
+2026-10-22 单层底栏修正：EagleMobileChrome 仅负责模式胶囊和搜索的呈现，原有模式内目的地抽成同文件的 EagleMobileNavigation，装配在共用工具组件的 actions 插槽中。标签与更多复用原工作区；不引入新导航状态、API 或模式旁路。

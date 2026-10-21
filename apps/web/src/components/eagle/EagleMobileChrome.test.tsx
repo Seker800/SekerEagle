@@ -31,13 +31,21 @@ describe('reference mobile composition', () => {
     expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
   });
   it('removes photography-only destinations in material mode', () => {
-    render(
-      <EagleMobileNavigation mode="MATERIAL" active="tags" onNavigate={() => {}} />,
-    );
+    render(<EagleMobileNavigation mode="MATERIAL" active="tags" onNavigate={() => {}} />);
     expect(screen.queryByRole('button', { name: '地图' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '人物' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: '素材' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '标签' }));
+  });
+  it('keeps photo map, people and more destinations selectable inside the menu', () => {
+    const navigate = vi.fn();
+    render(<EagleMobileNavigation mode="PHOTO" active="map" onNavigate={navigate} />);
+    expect(screen.getByRole('button', { name: '地图' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('button', { name: '人物' }));
+    expect(navigate).toHaveBeenCalledWith('people');
+    fireEvent.click(screen.getByRole('button', { name: '更多' }));
+    expect(navigate).toHaveBeenCalledWith('more');
+    expect(screen.queryByRole('button', { name: '标签' })).not.toBeInTheDocument();
   });
   it('puts identity before the four more actions and disables native file operations in browsers', () => {
     const logout = vi.fn();

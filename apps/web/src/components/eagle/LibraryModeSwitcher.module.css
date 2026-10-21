@@ -47,19 +47,19 @@
     box-sizing: border-box;
     width: 100%;
     gap: 2px;
-    padding: 4px;
+    padding: 3px;
     border-radius: 36px;
   }
   .phoneSwitcher > .option {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 3px;
-    min-height: 54px;
+    gap: 1px;
+    min-height: 36px;
     border-radius: 30px;
-    padding: 5px 12px;
+    padding: 2px 10px;
     color: #c9c9d0;
-    font-size: 12px;
+    font-size: 10px;
   }
   .phoneSwitcher > .option[aria-pressed='true'] {
     background: linear-gradient(160deg, rgb(255 255 255 / 24%), rgb(255 255 255 / 10%));

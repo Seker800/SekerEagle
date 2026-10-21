@@ -2550,16 +2550,29 @@ describe('SekerEaglePage', () => {
   });
 
   it('keeps material destinations in the three-dot menu and closes it after navigation', () => {
-    vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }));
-    const show = HTMLDialogElement.prototype.showModal, close = HTMLDialogElement.prototype.close;
-    HTMLDialogElement.prototype.showModal = function () { this.open = true; };
-    HTMLDialogElement.prototype.close = function () { this.open = false; };
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const show = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
+    const close = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.open = false;
+    };
     const view = renderPage();
     try {
       expect(screen.queryByRole('button', { name: '标签' })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: '更多' })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
-      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '标签' }));
+      fireEvent.click(
+        within(
+          within(screen.getByRole('dialog')).getByRole('navigation', { name: '主导航' }),
+        ).getByRole('button', { name: '标签' }),
+      );
       expect(screen.getByRole('region', { name: '标签' })).toBeVisible();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
@@ -2567,9 +2580,12 @@ describe('SekerEaglePage', () => {
       expect(screen.getByRole('region', { name: '更多' })).toBeVisible();
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     } finally {
-      view.unmount(); vi.unstubAllGlobals();
-      HTMLDialogElement.prototype.showModal = show;
-      HTMLDialogElement.prototype.close = close;
+      view.unmount();
+      vi.unstubAllGlobals();
+      if (show) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', show);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
+      if (close) Object.defineProperty(HTMLDialogElement.prototype, 'close', close);
+      else Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
     }
   });
 

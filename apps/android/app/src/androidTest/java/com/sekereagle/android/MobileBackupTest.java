@@ -303,11 +303,7 @@ public final class MobileBackupTest {
 
   @Test
   public void testMoreLinksUseRealUserNavigationToOpenNativeScreens() throws Exception {
-    waitUntil(
-        () -> webValue("Boolean(document.querySelector('nav button:last-child'))").equals("true"),
-        15000,
-        "mobile navigation");
-    webScript("document.querySelector('nav button:last-child').click()");
+    openMoreSection();
     waitUntil(
         () ->
             webValue("Boolean(document.querySelector('a[href=\"/_native/backup\"]'))")
@@ -554,9 +550,7 @@ public final class MobileBackupTest {
     webScript(
         "Array.from(document.querySelectorAll('dialog"
             + " button')).find(b=>b.textContent.trim()==='完成')?.click()");
-    webScript(
-        "Array.from(document.querySelectorAll('nav"
-            + " button')).find(b=>b.textContent.trim()==='更多')?.click()");
+    openMoreSection();
     capture("modern-more.png");
     getInstrumentation().runOnMainSync(() -> activity.show("backup"));
     getInstrumentation().waitForIdleSync();
@@ -565,6 +559,24 @@ public final class MobileBackupTest {
     getInstrumentation().waitForIdleSync();
     capture("modern-account.png");
     getInstrumentation().runOnMainSync(() -> activity.show("library"));
+  }
+
+  private void openMoreSection() throws Exception {
+    String selector = "button[aria-label=\"更多操作\"],button[aria-label=\"More actions\"]";
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('" + selector + "'))").equals("true"),
+        15000,
+        "actions trigger");
+    webScript("document.querySelector('" + selector + "').click()");
+    waitUntil(
+        () ->
+            webValue("Boolean(document.querySelector('dialog[open] nav button:last-child'))")
+                .equals("true"),
+        10000,
+        "actions destinations");
+    if (InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true"))
+      capture("modern-navigation.png");
+    webScript("document.querySelector('dialog[open] nav button:last-child').click()");
   }
 
   private void webScript(String script) {
