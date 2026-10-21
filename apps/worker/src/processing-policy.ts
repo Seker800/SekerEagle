@@ -1,3 +1,4 @@
+import { VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
 export type EagleBackgroundProcessingMode = 'ALWAYS' | 'NIGHT' | 'MANUAL';
 export type EagleMediaJobKind =
   | 'GENERATE_RENDITIONS'
@@ -50,8 +51,10 @@ export function processingLaneForKind(kind: EagleMediaJobKind): EagleProcessingL
   return LANE_BY_KIND[kind];
 }
 
-export function taskBlocksAssetReady(kind: EagleMediaJobKind): boolean {
-  return ASSET_READY_BLOCKING_KINDS.has(kind);
+export function taskBlocksAssetReady(kind: EagleMediaJobKind, processorVersion?: string): boolean {
+  return (
+    processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION && ASSET_READY_BLOCKING_KINDS.has(kind)
+  );
 }
 
 function minuteOfDay(value: string): number {

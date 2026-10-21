@@ -6,7 +6,7 @@ import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import {
-  CAMERA_MAX_IMAGE_PIXELS,
+  CAMERA_MAX_DECODED_RAW_PIXELS,
   CAMERA_MAX_RAW_PIXELS,
   CAMERA_MAX_VIDEO_DURATION_MS,
 } from '@sekereagle/library-core';
@@ -186,7 +186,7 @@ export async function readCameraRaw(
       script,
       inputPath,
       String(CAMERA_MAX_RAW_PIXELS),
-      String(CAMERA_MAX_IMAGE_PIXELS),
+      String(CAMERA_MAX_DECODED_RAW_PIXELS),
       ...(outputPath ? [outputPath, ...(thumbnailPath ? [thumbnailPath] : [])] : []),
     ],
     {
@@ -210,7 +210,7 @@ export async function readCameraRaw(
       !Number.isSafeInteger(result.decodedHeight) ||
       result.decodedWidth! <= 0 ||
       result.decodedHeight! <= 0 ||
-      result.decodedWidth! * result.decodedHeight! > CAMERA_MAX_IMAGE_PIXELS)
+      result.decodedWidth! * result.decodedHeight! > CAMERA_MAX_DECODED_RAW_PIXELS)
   )
     throw new Error('RAW 显影尺寸无效或超出安全限制。');
   return result;
@@ -225,4 +225,4 @@ export {
 } from './live-photo';
 
 export { readPhotoMetadataTags } from './photo-metadata';
-export { decodeHeifFile, assertSafeHeifInfo } from './heif';
+export { probeHeifFile, decodeHeifFile, assertSafeHeifInfo } from './heif';

@@ -1,3 +1,4 @@
+import { inspectionFailure } from './media-inspection-error';
 import { mediaInspectionBudget } from './media-inspection-budget';
 import {
   CAMERA_MEDIA_FORMATS,
@@ -6,7 +7,7 @@ import {
   isCameraRawMime,
   isCameraVideoMime,
 } from '@sekereagle/library-core';
-import { readCameraRaw, probeCameraVideo, decodeHeifFile } from '@sekereagle/media-core';
+import { readCameraRaw, probeCameraVideo, probeHeifFile } from '@sekereagle/media-core';
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -83,8 +84,7 @@ export class EagleUploadInspectionService {
         durationMs: null,
       };
     } catch (error) {
-      if (error instanceof BadRequestException) throw error;
-      throw new BadRequestException('无法解码该图片，请确认文件完整且格式受支持。');
+      throw inspectionFailure(error, 'image');
     }
   }
 }
@@ -114,12 +114,7 @@ async function inspectCameraFile(stream: Readable, mimeType: string) {
     )!.extension.slice(1);
     return { sha256: hash.digest('hex'), format, ...metadata };
   } catch (error) {
-    if (error instanceof BadRequestException) throw error;
-    throw new BadRequestException(
-      raw
-        ? '无法读取该 RAW，请确认文件完整、尺寸不超过 1.2 亿像素、相机受 LibRaw 支持且已安装 RAW 解码运行环境。'
-        : '无法读取该相机视频，请确认文件完整且容器与编码受支持。',
-    );
+    throw inspectionFailure(error, raw ? 'raw' : 'video');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -127,8 +122,7 @@ async function inspectCameraFile(stream: Readable, mimeType: string) {
 
 async function inspectHeifImage(stream: Readable) {
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-inspect-'));
-  const inputPath = join(directory, 'original.heic'),
-    outputPath = join(directory, 'decoded.png');
+  const inputPath = join(directory, 'original.heic');
   const hash = createHash('sha256');
   let byteSize = 0;
   const tap = new Transform({
@@ -142,12 +136,7 @@ async function inspectHeifImage(stream: Readable) {
   });
   try {
     await pipeline(stream, tap, createWriteStream(inputPath, { flags: 'wx' }));
-    await decodeHeifFile(inputPath, outputPath);
-    const metadata = await sharp(outputPath, {
-      failOn: 'warning',
-      limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
-    }).metadata();
-    if (!metadata.width || !metadata.height) throw new Error('Invalid dimensions');
+    const metadata = await probeHeifFile(inputPath);
     return {
       sha256: hash.digest('hex'),
       format: 'heif',
@@ -156,13 +145,7 @@ async function inspectHeifImage(stream: Readable) {
       durationMs: null,
     };
   } catch (error) {
-    if (error instanceof BadRequestException) throw error;
-    const pixelLimit = error instanceof Error && /pixel limit/i.test(error.message);
-    throw new BadRequestException(
-      pixelLimit
-        ? 'HEIC/HEIF 图片像素数量超出安全限制。'
-        : '无法解码该图片，请确认文件完整且格式受支持。',
-    );
+    throw inspectionFailure(error, 'image');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

@@ -64,7 +64,7 @@ test('aggregate HEIF pixel budgets reject zero, oversized and unrecognized image
   for (const info of [
     'image: 0x100 (id=1)',
     'image: 100x0 (id=1)',
-    'image: 8000x5000 (id=1)\nimage: 4000x3000 (id=2)',
+    'image: 12000x10000 (id=1)\nimage: 1x1 (id=2)',
     'image: 99999999999999999999x9000000000',
     'no images',
   ])

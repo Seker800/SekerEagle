@@ -3073,7 +3073,7 @@ export interface components {
       extensions: string[];
       /** @example 500000000 */
       maxBytes: number;
-      /** @example 50000000 */
+      /** @example 120000000 */
       maxPixels: number;
       /** @example 120000000 */
       maxRawPixels: number;

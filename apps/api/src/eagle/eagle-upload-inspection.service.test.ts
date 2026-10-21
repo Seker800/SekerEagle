@@ -48,16 +48,13 @@ test('upload inspection accepts real AVIF bytes but rejects a mismatched declara
   );
 });
 
-test('HEIC upload uses the guarded native decoder and hashes the untouched source', async () => {
+test('HEIC upload probes guarded native headers without full RGB decode and hashes the untouched source', async () => {
   const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { createHash } = await import('node:crypto');
   const dir = await mkdtemp(join(tmpdir(), 'heif-inspection-test-'));
   const oldInfo = process.env.HEIF_INFO_PATH,
     oldDecode = process.env.HEIF_CONVERT_PATH;
-  const png = await sharp({ create: { width: 12, height: 8, channels: 3, background: '#336699' } })
-    .png()
-    .toBuffer();
   const info = join(dir, 'info'),
     decode = join(dir, 'decode');
   await writeFile(
@@ -67,7 +64,7 @@ test('HEIC upload uses the guarded native decoder and hashes the untouched sourc
   );
   await writeFile(
     decode,
-    `#!${process.execPath}\nrequire('node:fs').writeFileSync(process.argv.at(-1),Buffer.from('${png.toString('base64')}','base64'));`,
+    `#!${process.execPath}\nthrow new Error('Full decoding must not run during upload');`,
     { mode: 0o700 },
   );
   process.env.HEIF_INFO_PATH = info;
@@ -101,4 +98,18 @@ test('HEIC upload uses the guarded native decoder and hashes the untouched sourc
     else process.env.HEIF_CONVERT_PATH = oldDecode;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('ordinary camera JPEG above 50 megapixels is accepted within the shared input budget', async () => {
+  const bytes = await sharp({
+    create: { width: 6144, height: 8160, channels: 3, background: '#336699' },
+  })
+    .jpeg()
+    .toBuffer();
+  const service = new EagleUploadInspectionService({
+    getObject: async () => ({ Body: Readable.from([bytes]) }),
+  } as never);
+  const result = await service.inspect('original.jpg', 'image/jpeg');
+  assert.equal(result.width, 6144);
+  assert.equal(result.height, 8160);
 });

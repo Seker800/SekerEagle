@@ -182,3 +182,29 @@ class CoordinationTests(unittest.TestCase):
         self.assertEqual(api.calls,2)
         self.assertEqual(j.db.execute('SELECT media_status FROM items').fetchone()[0],'READY')
         j.close()
+
+class IngestPriorityTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_original_ingest_does_not_wait_for_preview_batches(self):
+        from unittest.mock import Mock,patch
+        journal=Mock();journal.next_batch.side_effect=[[{'path':'photo.jpg'}],[]];journal.summary.return_value={'IMPORTED':1}
+        api=Mock()
+        with patch.object(self.m,'upload_one') as upload,patch.object(self.m,'await_processing') as processing:
+            self.m.run_import(self.root,journal,api)
+            upload.assert_called_once();processing.assert_not_called()
+
+class AssembledUploadTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_transient_inspection_failure_reuses_assembled_original_without_reupload(self):
+        source=self.root/'camera.jpg';source.write_bytes(b'original')
+        j=self.m.Journal(Path(self.tmp.name)/'state');j.add('camera.jpg',self.m.fingerprint(source.stat()),'image/jpeg','image');j.metadata('camera.jpg',10,'DateTimeOriginal','camera.jpg')
+        session='11111111-1111-4111-8111-111111111111';j.update('camera.jpg',status='UPLOADING',session_id=session,part_size=100)
+        class Api:
+            def request(self,method,path,body=None):
+                if path.endswith('/parts'):return {'parts':[{'partNumber':1,'etag':'existing'}]}
+                if path.endswith('/complete'):
+                    assert body=={'parts':[{'partNumber':1,'etag':'existing'}]};return {'assetId':'asset'}
+                return {'status':'FAILED'}
+            def part(self,*args):raise AssertionError('must not retransmit assembled file')
+        self.m.upload_one(self.root,j,j.next_batch(1)[0],Api())
+        self.assertEqual(j.summary(),{'IMPORTED':1});j.close()

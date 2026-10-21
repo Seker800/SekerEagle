@@ -7,7 +7,7 @@ import { assertSafeHeifInfo, decodeProcessableImage } from './image-media';
 test('HEIF decoder rejects multi-image decompression bombs before pixel decoding', () => {
   assert.doesNotThrow(() => assertSafeHeifInfo('image: 4000x3000 (id=1), primary'));
   assert.throws(
-    () => assertSafeHeifInfo('image: 8000x5000 (id=1), primary\nimage: 4000x3000 (id=2)'),
+    () => assertSafeHeifInfo('image: 12000x10000 (id=1), primary\nimage: 1x1 (id=2)'),
     /IMAGE_PIXEL_LIMIT_EXCEEDED/,
   );
   assert.throws(() => assertSafeHeifInfo('metadata only'), /IMAGE_PIXEL_LIMIT_EXCEEDED/);

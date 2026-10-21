@@ -11,7 +11,7 @@ export class EagleImageMediaCapabilityDto {
   @ApiProperty({ example: CAMERA_MAX_IMAGE_BYTES })
   maxBytes!: number;
 
-  @ApiProperty({ example: 50_000_000 })
+  @ApiProperty({ example: 120_000_000 })
   maxPixels!: number;
 
   @ApiProperty({ example: 120_000_000 })
