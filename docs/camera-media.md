@@ -112,3 +112,9 @@ API 与 worker 均安装 ExifTool（worker 使用）和 Debian bookworm-backport
 既有 RAW 通过 worker 的 `raw-preview-refresh.js` 和同样的精确版本清单重新生成派生图片；默认预演，`--apply` 在账号／PHOTO／原始 RAW／SHA／媒体版本复核和行锁内创建现有 GENERATE_RENDITIONS 任务。任务按显影策略版本去重，重试不新增照片，不更改原件、摄影时间或模式归属。仅重建明确授权的样本，不自动扫描全库。
 
 入库检查 HEIC/HEIF 时只读取原片校验值和同一有界原生工具的主图尺寸、格式及总像素，不展开 RGB；后台生成预览时再解码。视频设置 `EAGLE_VIDEO_TRANSCODING_ENABLED=false` 时仅从原片抽取封面，播放副本保留为暂停的后台版本化任务；封面可以浏览，暂停期间新视频尚不能在网页播放，原片可下载。
+
+## 审查后的处理边界
+
+普通图片输入仍支持 1.2 亿像素；HEIF 因外部解码器整幅输出 PNG，独立限制为 6400 万总像素，覆盖常见标称 5000 万像素手机照片；RAW 传感器 1.2 亿／RGB 输出 5000 万预算不变。客户端可从共用 capabilities 的 `images.maxHeifPixels` 读取限制。HEIF 单图缺少 primary 标记时允许唯一图回退，多图无 primary 时拒绝猜测。
+
+HEIF 入库的头部检查不保证 HEVC 图像可完整解码；损坏原片可能已入库而派生处理失败，此时应检查处理任务，不能将「已保存」解释为预览已生成。视频播放任务终态失败写入 `VIDEO_PLAYBACK_FAILED`；查看器保留封面并提示生成失败、原片已保存和任务重试入口。成功重试只清除该播放错误，不覆盖其他失败原因。

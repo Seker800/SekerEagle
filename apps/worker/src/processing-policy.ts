@@ -47,8 +47,13 @@ export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] = [
 
 const ASSET_READY_BLOCKING_KINDS = new Set<EagleMediaJobKind>(ASSET_READY_BLOCKING_JOB_KINDS);
 
-export function processingLaneForKind(kind: EagleMediaJobKind): EagleProcessingLane {
-  return LANE_BY_KIND[kind];
+export function processingLaneForKind(
+  kind: EagleMediaJobKind,
+  processorVersion?: string,
+): EagleProcessingLane {
+  return kind === 'GENERATE_PREVIEW' && processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION
+    ? 'BACKGROUND'
+    : LANE_BY_KIND[kind];
 }
 
 export function taskBlocksAssetReady(kind: EagleMediaJobKind, processorVersion?: string): boolean {
@@ -106,4 +111,16 @@ export function backgroundProcessingEnabled(value: string | undefined): boolean 
   if (value === undefined || value === 'true') return true;
   if (value === 'false') return false;
   throw new Error('EAGLE_BACKGROUND_PROCESSING_ENABLED must be true or false');
+}
+
+export function terminalAssetFailure(
+  kind: EagleMediaJobKind,
+  processorVersion: string,
+  message: string,
+): { lifecycleStatus?: 'FAILED'; mediaErrorCode: string } | null {
+  if (kind === 'GENERATE_PREVIEW' && processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION)
+    return { mediaErrorCode: 'VIDEO_PLAYBACK_FAILED' };
+  return taskBlocksAssetReady(kind, processorVersion)
+    ? { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) }
+    : null;
 }

@@ -4,7 +4,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readPhotoMetadataTags } from './photo-metadata';
-import { assertSafeHeifInfo } from './heif';
+import { assertSafeHeifInfo, parseHeifInfo } from './heif';
 
 test('original tag reader bounds its command, signs GPS coordinates and rejects malformed responses', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'media-tag-test-'));
@@ -69,4 +69,22 @@ test('aggregate HEIF pixel budgets reject zero, oversized and unrecognized image
     'no images',
   ])
     assert.throws(() => assertSafeHeifInfo(info));
+});
+
+test('HEIF full-frame decoding stays inside an independent 64MP aggregate budget', () => {
+  assert.doesNotThrow(() => assertSafeHeifInfo('image: 8000x8000, primary'));
+  assert.throws(() => assertSafeHeifInfo('image: 8000x8000, primary\nimage: 1x1'));
+  assert.throws(() => assertSafeHeifInfo('image: 12000x10000, primary'));
+});
+
+test('a single HEIF image needs no primary flag; ambiguous multi-image containers fail closed', () => {
+  assert.deepEqual(parseHeifInfo('MIME type: image/heic\nimage: 12x8 (id=1)'), {
+    width: 12,
+    height: 8,
+  });
+  assert.deepEqual(parseHeifInfo('MIME type: image/heif\nimage: 6x4\nimage: 12x8, primary'), {
+    width: 12,
+    height: 8,
+  });
+  assert.throws(() => parseHeifInfo('MIME type: image/heic\nimage: 6x4\nimage: 12x8'), /primary/);
 });

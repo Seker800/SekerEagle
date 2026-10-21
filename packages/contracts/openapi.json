@@ -2420,7 +2420,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckUploadContentResultDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -5987,7 +5994,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckUploadContentResultDto"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6739,9 +6753,21 @@
           "maxRawPixels": {
             "type": "number",
             "example": 120000000
+          },
+          "maxHeifPixels": {
+            "type": "number",
+            "example": 64000000,
+            "description": "Aggregate HEIC/HEIF pixel limit for whole-frame native decoding."
           }
         },
-        "required": ["mimeTypes", "extensions", "maxBytes", "maxPixels", "maxRawPixels"]
+        "required": [
+          "mimeTypes",
+          "extensions",
+          "maxBytes",
+          "maxPixels",
+          "maxRawPixels",
+          "maxHeifPixels"
+        ]
       },
       "EagleVideoMediaCapabilityDto": {
         "type": "object",
@@ -7294,6 +7320,16 @@
           }
         },
         "required": ["contentSha256", "size"]
+      },
+      "CheckUploadContentResultDto": {
+        "type": "object",
+        "properties": {
+          "exists": {
+            "type": "boolean",
+            "description": "Content exists within the authenticated owner, library and visible scope."
+          }
+        },
+        "required": ["exists"]
       },
       "Object": {
         "type": "object",

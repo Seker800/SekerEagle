@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { CAMERA_MAX_IMAGE_PIXELS } from '@sekereagle/library-core';
+import { CAMERA_MAX_DECODED_HEIF_PIXELS } from '@sekereagle/library-core';
 import { mediaSubprocessEnvironment } from './subprocess-environment';
 const run = promisify(execFile);
 
@@ -10,7 +10,7 @@ export function assertSafeHeifInfo(output: string): void {
   if (
     !images.length ||
     images.some((image) => BigInt(image[1]!) <= 0n || BigInt(image[2]!) <= 0n) ||
-    pixels > BigInt(CAMERA_MAX_IMAGE_PIXELS)
+    pixels > BigInt(CAMERA_MAX_DECODED_HEIF_PIXELS)
   )
     throw new Error('HEIF pixel limit exceeded');
 }
@@ -22,6 +22,10 @@ export async function probeHeifFile(inputPath: string): Promise<{ width: number;
     maxBuffer: 256 * 1024,
     timeout: 30_000,
   });
+  return parseHeifInfo(stdout);
+}
+
+export function parseHeifInfo(stdout: string): { width: number; height: number } {
   if (!/^MIME type:\s*image\/hei[cf]\s*$/m.test(stdout))
     throw new Error('HEIF content format mismatch');
   assertSafeHeifInfo(stdout);

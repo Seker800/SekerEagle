@@ -17,7 +17,7 @@ PostgreSQL 容器显式分配 512 MiB `/dev/shm`，用于图库查询的排序�
 - 桌面冷缓存只消费一条上游流：先有界分块落盘、校验并原子提交，再从本地文件服务；不使用 `Response.body.tee()`。
 - 本地 MinIO 的 namespace scanner 默认为 `slowest`，避免数十万小瓦片反复扫描形成高 CPU 和可回收 slab；代价是容量统计更新较慢。
 
-这些边界下，图库静置内存不应随 60 GiB 原图容量增长；它主要随已加载的素材元数据数量增长。单 worker 处理 5000 万像素图片时仍会出现短时峰值，因此生产默认保持 `EAGLE_INTERACTIVE_CONCURRENCY=1`，扩吞吐优先横向增加 worker，而不是提高单进程并发。
+这些边界下，图库静置内存不应随 60 GiB 原图容量增长；它主要随已加载的素材元数据数量增长。单 worker 处理最高 1.2 亿像素图片时仍会出现短时峰值，因此生产默认保持 `EAGLE_INTERACTIVE_CONCURRENCY=1`，扩吞吐优先横向增加 worker，而不是提高单进程并发。
 
 ## 部署与回填
 
@@ -31,15 +31,16 @@ PostgreSQL 容器显式分配 512 MiB `/dev/shm`，用于图库查询的排序�
 
 将浏览器/worker 集成测量写入 `.omx/artifacts/media-memory-measurements.json`：
 
-```json
-{
-  "measurements": [
-    { "name": "viewer-preview-50mp", "peakRssMiB": 180, "originalGetCount": 0 },
-    { "name": "palette-50mp", "peakRssMiB": 140, "originalGetCount": 0 },
-    { "name": "pyramid-viewer-50mp", "peakRssMiB": 240, "originalGetCount": 0 }
-  ]
-}
-```
+报告必须包含以下场景，每项记录实测的正数 `peakRssMiB`；查看／代表色场景还必须记录非负整数 `originalGetCount`，上限均为 0。禁止用下面的预算代替实测值。
+
+| 必测场景                                                                      | RSS 预算 MiB |
+| ----------------------------------------------------------------------------- | -----------: |
+| viewer-preview-50mp、viewer-preview-120mp                                     |          256 |
+| palette-50mp、palette-120mp                                                   |          192 |
+| pyramid-viewer-50mp、pyramid-viewer-120mp                                     |          320 |
+| worker-preview-jpeg-120mp、worker-preview-png-120mp、worker-preview-heif-64mp |         1536 |
+
+JSON 结构为 `{"measurements": [{"name": "场景名", "peakRssMiB": 实测值, "originalGetCount": 实测次数}]}`。worker 解码预算与浏览器查看预算分开；HEIF 整幅解码独立限制 6400 万总像素，JPEG／PNG 仍可接收 1.2 亿像素。1536 MiB 给 2 GiB worker 留出进程与其他开销空间，不代表任意内容一定低于预算。
 
 只在隔离测试库运行：
 
@@ -56,8 +57,14 @@ DATABASE_URL='postgresql://sekereagle:...@localhost:5432/sekereagle_test' \
 npm run performance:desktop-cache:100k
 ```
 
-发布前聚合入口为 `npm run performance:verify`；它要求十万图库、50MP 内存报告和桌面缓存索引三类证据同时通过。
+发布前聚合入口为 `npm run performance:verify`；它要求十万图库、50MP／120MP 与 HEIF 64MP 内存报告和桌面缓存索引三类证据同时通过。
 
 ## 回滚
 
 先回滚 web 以恢复普通 PREVIEW 查看；API 瓦片端点和数据库表可以暂时保留。停止新金字塔任务后再回滚 worker。迁移均为 additive，紧急回滚不删除表、切片或原始素材；确认无需恢复后再单独安排清理任务。
+
+## 2026-10-21 隔离解码测量
+
+仅用合成低熵图，Linux amd64、libvips 8.18.7、Sharp cache 64 MiB／concurrency 1、独立 2 GiB 容器，禁网、只读文件系统、无用户图库挂载。共用 HEIF 解码后生成最长边 1600 的 WebP，测得 JPEG 120MP 为 56.38 MiB、PNG 120MP 为 110.73 MiB、HEIF 64MP 为 316.44 MiB。指标实际取 cgroup memory.peak，包含解码子进程与文件缓存，是比单进程 RSS 更保守的容器峰值。
+
+这些数字仅验证该合成样本的解码路径，不代表高熵图片、完整 worker 或浏览器端到端峰值。本轮未生成完整九场景报告，也未执行发布聚合性能验收；更严格的门禁会拒绝原来只有 50MP 的报告，正式发布仍须补齐实测。

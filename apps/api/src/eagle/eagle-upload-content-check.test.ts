@@ -106,13 +106,15 @@ test('preflight DTO rejects malformed hashes, unbounded sizes and owner injectio
   );
 });
 
-test('preflight has a typed boolean contract and uses the shared authenticated owner throttle',async()=>{
- const {CheckUploadContentResultDto}=await import('./eagle-upload.dto');
- const {EagleMediaThrottleGuard}=await import('./eagle-media-throttle.guard');
- const {GUARDS_METADATA}=await import('@nestjs/common/constants');
- const {PhotoUploadsController}=await import('../photos/photo-library.module');
- assert.ok(CheckUploadContentResultDto);
- for(const controller of [EagleUploadController,PhotoUploadsController]){
-  assert.ok(Reflect.getMetadata(GUARDS_METADATA,controller.prototype.checkContent).includes(EagleMediaThrottleGuard));
- }
+test('preflight has a typed boolean contract and uses the shared authenticated owner throttle', async () => {
+  const { CheckUploadContentResultDto } = await import('./eagle-upload.dto');
+  const { EagleMediaThrottleGuard } = await import('./eagle-media-throttle.guard');
+  const { GUARDS_METADATA } = await import('@nestjs/common/constants');
+  const { PhotoUploadsController } = await import('../photos/photo-library.module');
+  assert.ok(CheckUploadContentResultDto);
+  for (const controller of [EagleUploadController, PhotoUploadsController]) {
+    const handler = Reflect.get(controller.prototype, 'checkContent') as object;
+    const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
+    assert.ok(guards.includes(EagleMediaThrottleGuard));
+  }
 });

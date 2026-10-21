@@ -1,0 +1,59 @@
+name: Android verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_device_tests:
+        description: Run the isolated workbench and Android 36 emulator tests
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install verification runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openjdk-21-jdk ffmpeg python3-venv libimage-exiftool-perl
+          echo "JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run android:check
+      - name: Prepare optional emulator
+        if: inputs.run_device_tests
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-36' 'system-images;android-36;google_apis;x86_64'
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name sekereagle_ci --package 'system-images;android-36;google_apis;x86_64'
+          "$ANDROID_HOME/emulator/emulator" -avd sekereagle_ci -no-window -accel off -gpu swiftshader_indirect -no-audio -no-snapshot > /tmp/sekereagle-emulator.log 2>&1 &
+          "$ANDROID_HOME/platform-tools/adb" wait-for-device
+          timeout 600 sh -c 'until [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed | tr -d "\r")" = 1 ]; do sleep 2; done'
+      - name: Start isolated test services
+        if: inputs.run_device_tests
+        run: |
+          python3 -m venv .omx/camera-media/venv
+          .omx/camera-media/venv/bin/pip install -r scripts/testing/camera-requirements.txt
+          npm run build
+          mkdir -p .omx/artifacts
+          PHOTO_WORKBENCH_BASIC=1 EAGLE_BACKGROUND_PROCESSING_ENABLED=false CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" node scripts/testing/photo-workbench.mjs --serve > .omx/artifacts/android-workbench.log 2>&1 &
+          timeout 180 sh -c 'until [ -f .omx/artifacts/photo-workbench.json ]; do sleep 2; done'
+      - name: Verify device flows through the guarded entry point
+        if: inputs.run_device_tests
+        env:
+          CAMERA_RAW_PYTHON: ${{ github.workspace }}/.omx/camera-media/venv/bin/python
+        run: npm run android:check:device
+      - name: Stop only the isolated test workbench
+        if: always() && inputs.run_device_tests
+        run: |
+          if [ -f .omx/artifacts/photo-workbench.json ]; then
+            node --input-type=module -e 'import fs from "node:fs"; const p=JSON.parse(fs.readFileSync(".omx/artifacts/photo-workbench.json")); try{process.kill(p.pid,"SIGTERM")}catch{}'
+          fi

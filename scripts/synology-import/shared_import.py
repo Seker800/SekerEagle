@@ -126,10 +126,16 @@ class Journal:
                     self._batch = False
 
     def close(self):
-        self.db.close()
+        with self._lock:
+            self.db.close()
+
+    def query(self, sql, parameters=()):
+        with self._lock:
+            return self.db.execute(sql, parameters).fetchall()
 
     def meta(self, key):
-        row = self.db.execute('SELECT value FROM meta WHERE key=?', (key,)).fetchone()
+        rows = self.query('SELECT value FROM meta WHERE key=?', (key,))
+        row = rows[0] if rows else None
         return row[0] if row else None
 
     def set_meta(self, key, value):
@@ -137,28 +143,32 @@ class Journal:
             self.db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)', (key, str(value)))
 
     def fixed(self, key, value):
-        previous = self.meta(key)
-        if previous is not None and previous != str(value):
-            raise ValueError('IMPORT_IDENTITY_CHANGED')
-        self.set_meta(key, value)
+        with self._lock:
+            previous = self.meta(key)
+            if previous is not None and previous != str(value):
+                raise ValueError('IMPORT_IDENTITY_CHANGED')
+            self.set_meta(key, value)
 
     def bind_identity(self, owner, deployment):
-        for key, value in [('authenticated_user', owner), ('deployment', deployment)]:
-            if self.meta(key) not in (None, value):
-                raise ValueError('IMPORT_IDENTITY_CHANGED')
-        self.fixed('authenticated_user', owner)
-        self.fixed('deployment', deployment)
+        with self._lock:
+            for key, value in [('authenticated_user', owner), ('deployment', deployment)]:
+                if self.meta(key) not in (None, value):
+                    raise ValueError('IMPORT_IDENTITY_CHANGED')
+            self.fixed('authenticated_user', owner)
+            self.fixed('deployment', deployment)
 
     def add(self, path, facts, mime, kind):
-        facts = {**facts, **{k: str(facts[k]) for k in ('mtime_ns', 'inode', 'device')}}
-        row = self.db.execute('SELECT * FROM items WHERE path=?', (path,)).fetchone()
-        if row:
-            if any(row[k] != facts[k] for k in facts):
-                self.update(path, status='SOURCE_CHANGED', error='SOURCE_CHANGED')
-            return
-        with self.write():
-            self.db.execute('INSERT INTO items(path,size,mtime_ns,inode,device,mime,kind) VALUES(?,?,?,?,?,?,?)',
-                            (path, facts['size'], facts['mtime_ns'], facts['inode'], facts['device'], mime, kind))
+        with self._lock:
+            facts = {**facts, **{k: str(facts[k]) for k in ('mtime_ns', 'inode', 'device')}}
+            rows = self.query('SELECT * FROM items WHERE path=?', (path,))
+            row = rows[0] if rows else None
+            if row:
+                if any(row[k] != facts[k] for k in facts):
+                    self.update(path, status='SOURCE_CHANGED', error='SOURCE_CHANGED')
+                return
+            with self.write():
+                self.db.execute('INSERT INTO items(path,size,mtime_ns,inode,device,mime,kind) VALUES(?,?,?,?,?,?,?)',
+                                (path, facts['size'], facts['mtime_ns'], facts['inode'], facts['device'], mime, kind))
 
     def metadata(self, path, capture, source, name):
         with self.write():
@@ -173,10 +183,10 @@ class Journal:
             self.db.execute('UPDATE items SET '+','.join(k+'=?' for k in fields)+' WHERE path=?', (*fields.values(), path))
 
     def next_batch(self, size):
-        return self.db.execute("SELECT * FROM items WHERE status IN ('PENDING','UPLOADING') ORDER BY capture DESC,path LIMIT ?", (size,)).fetchall()
+        return self.query("SELECT * FROM items WHERE status IN ('PENDING','UPLOADING') ORDER BY capture DESC,path LIMIT ?", (size,))
 
     def summary(self):
-        return {r[0]: r[1] for r in self.db.execute('SELECT status,count(*) FROM items GROUP BY status')}
+        return {r[0]: r[1] for r in self.query('SELECT status,count(*) FROM items GROUP BY status')}
 
 
 def log(event, **values):
@@ -221,7 +231,7 @@ def inventory(root, journal, policy):
         save_discovery()
         journal.set_meta('discovery_complete', '1')
     while not STOP:
-        batch = journal.db.execute("SELECT * FROM items WHERE status='DISCOVERED' ORDER BY path LIMIT 100").fetchall()
+        batch = journal.query("SELECT * FROM items WHERE status='DISCOVERED' ORDER BY path LIMIT 100")
         if not batch:
             journal.set_meta('inventory_complete', '1')
             log('inventory_complete', counts=journal.summary())
@@ -266,7 +276,7 @@ def inventory(root, journal, policy):
         finally:
             for fd in descriptors:
                 os.close(fd)
-        done = journal.db.execute("SELECT count(*) FROM items WHERE status!='DISCOVERED'").fetchone()[0]
+        done = journal.query("SELECT count(*) FROM items WHERE status!='DISCOVERED'")[0][0]
         log('metadata_indexed', count=done)
 
 
@@ -431,7 +441,7 @@ def upload_one(root, journal, row, api):
 
 def await_processing(journal, api):
     while not STOP:
-        rows = journal.db.execute("SELECT * FROM items WHERE status='IMPORTED' AND (media_status IS NULL OR media_status NOT IN ('READY','FAILED'))").fetchall()
+        rows = journal.query("SELECT * FROM items WHERE status='IMPORTED' AND (media_status IS NULL OR media_status NOT IN ('READY','FAILED'))")
         if not rows:
             return
         for row in rows:
@@ -451,7 +461,7 @@ def await_processing(journal, api):
             if media not in ('PROCESSING', 'READY', 'FAILED'):
                 raise ValueError('PROCESSING_PROGRESS_UNAVAILABLE')
             journal.update(row['path'], media_status=media, error='MEDIA_PROCESSING_FAILED' if media == 'FAILED' else None)
-        pending = journal.db.execute("SELECT count(*) FROM items WHERE status='IMPORTED' AND (media_status IS NULL OR media_status NOT IN ('READY','FAILED'))").fetchone()[0]
+        pending = journal.query("SELECT count(*) FROM items WHERE status='IMPORTED' AND (media_status IS NULL OR media_status NOT IN ('READY','FAILED'))")[0][0]
         if not pending:
             return
         log('processing_batch', pending=pending)
@@ -488,6 +498,9 @@ def import_one_with_retry(root, journal, row, api):
             time.sleep(1)
     except ValueError as error:
         code = str(error)
+        if code == 'ASSEMBLED_PARTS_MISSING':
+            journal.update(row['path'], status='FAILED', error=code)
+            return 1
         if code not in ('SOURCE_CHANGED', 'SOURCE_PATH_INVALID', 'SOURCE_NOT_REGULAR', 'SOURCE_TRUNCATED'):
             raise
         journal.update(row['path'], status='SOURCE_CHANGED', error=code)

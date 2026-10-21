@@ -120,7 +120,9 @@ test('video poster, deferred playback and normal full processing preserve scoped
           (deferred[0]!.data as { processorVersion: string }[])[0]!.processorVersion,
           VIDEO_PLAYBACK_PROCESSOR_VERSION,
         );
-      assert.equal(updates.length, claimed && kind !== 'GENERATE_PREVIEW' ? 1 : 0);
+      assert.equal(updates.length, claimed ? 1 : 0);
+      if (claimed && kind === 'GENERATE_PREVIEW')
+        assert.deepEqual((updates[0] as { data: unknown }).data, { mediaErrorCode: null });
     }
   } finally {
     if (previousProbe === undefined) delete process.env.FFPROBE_PATH;

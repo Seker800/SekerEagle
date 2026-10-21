@@ -3109,6 +3109,11 @@ export interface components {
       maxPixels: number;
       /** @example 120000000 */
       maxRawPixels: number;
+      /**
+       * @description Aggregate HEIC/HEIF pixel limit for whole-frame native decoding.
+       * @example 64000000
+       */
+      maxHeifPixels: number;
     };
     EagleVideoMediaCapabilityDto: {
       /**
@@ -3279,6 +3284,10 @@ export interface components {
     CheckUploadContentDto: {
       contentSha256: string;
       size: number;
+    };
+    CheckUploadContentResultDto: {
+      /** @description Content exists within the authenticated owner, library and visible scope. */
+      exists: boolean;
     };
     Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;
@@ -5004,7 +5013,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['CheckUploadContentResultDto'];
+        };
       };
     };
   };
@@ -7451,7 +7462,9 @@ export interface operations {
         headers: {
           [name: string]: unknown;
         };
-        content?: never;
+        content: {
+          'application/json': components['schemas']['CheckUploadContentResultDto'];
+        };
       };
     };
   };

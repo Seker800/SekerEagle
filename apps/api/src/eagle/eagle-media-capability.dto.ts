@@ -16,6 +16,12 @@ export class EagleImageMediaCapabilityDto {
 
   @ApiProperty({ example: 120_000_000 })
   maxRawPixels!: number;
+
+  @ApiProperty({
+    example: 64_000_000,
+    description: 'Aggregate HEIC/HEIF pixel limit for whole-frame native decoding.',
+  })
+  maxHeifPixels!: number;
 }
 
 export class EagleVideoMediaCapabilityDto {

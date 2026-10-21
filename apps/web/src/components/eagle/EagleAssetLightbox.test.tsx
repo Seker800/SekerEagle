@@ -174,3 +174,24 @@ it('edits the displayed group member rather than a cover or neighboring photo', 
   );
   expect(screen.queryByRole('button', { name: '编辑照片' })).toBeNull();
 });
+
+it('distinguishes a failed playback job from a deferred copy while retaining the poster', () => {
+  const asset = {
+    ...videoAsset,
+    id: 'video',
+    mimeType: 'video/quicktime',
+    displayName: 'video.mov',
+    mediaRevision: 1,
+    renditions: [
+      { id: 'poster', kind: 'THUMBNAIL', variant: 'poster', revision: 1, mimeType: 'image/jpeg' },
+    ],
+    mediaErrorCode: 'VIDEO_PLAYBACK_FAILED',
+  } as EagleAssetListItem;
+  const view = render(<EagleAssetLightbox asset={asset} onClose={() => {}} />);
+  expect(screen.getByText('视频播放副本生成失败，原片已保存，可在处理任务中重试')).toBeVisible();
+  expect(screen.getByRole('img', { name: 'video.mov' })).toBeVisible();
+  view.rerender(
+    <EagleAssetLightbox asset={{ ...asset, mediaErrorCode: null }} onClose={() => {}} />,
+  );
+  expect(screen.getByText('视频播放副本尚未生成，原片已保存')).toBeVisible();
+});

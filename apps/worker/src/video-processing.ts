@@ -226,6 +226,17 @@ export async function processVideo(
           skipDuplicates: true,
         });
       }
+      if (stage === 'PLAYBACK')
+        await transaction.eagleAsset.updateMany({
+          where: {
+            id: asset.id,
+            ownerId: asset.ownerId,
+            libraryMode: asset.libraryMode,
+            mediaRevision: job.assetRevision,
+            mediaErrorCode: 'VIDEO_PLAYBACK_FAILED',
+          },
+          data: { mediaErrorCode: null },
+        });
       if (stage !== 'PLAYBACK')
         await transaction.eagleAsset.updateMany({
           where: {

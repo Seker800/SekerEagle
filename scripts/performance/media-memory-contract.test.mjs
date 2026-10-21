@@ -111,3 +111,28 @@ test('percentile is deterministic for unsorted samples', () => {
   assert.equal(percentile([9, 1, 5, 3, 7], 0.5), 5);
   assert.equal(percentile([9, 1, 5, 3, 7], 0.95), 9);
 });
+
+test('the release memory gate covers the current 120MP policy rather than accepting 50MP-only evidence', async () => {
+  const { mediaMemoryLimits } = await import('./media-memory-limits.mjs');
+  const missing = evaluateMediaMemoryMeasurements({ measurements: [] }, mediaMemoryLimits);
+  for (const name of [
+    'viewer-preview-120mp',
+    'palette-120mp',
+    'pyramid-viewer-120mp',
+    'worker-preview-png-120mp',
+    'worker-preview-heif-64mp',
+  ])
+    assert.ok(missing.includes(`${name} measurement is missing`));
+  assert.ok(
+    evaluateMediaMemoryMeasurements(
+      { measurements: [{ name: 'worker-preview-png-120mp', peakRssMiB: 2100 }] },
+      mediaMemoryLimits,
+    ).some((x) => x.includes('exceeds')),
+  );
+  assert.ok(
+    evaluateMediaMemoryMeasurements(
+      { measurements: [{ name: 'viewer-preview-120mp', peakRssMiB: NaN, originalGetCount: 0 }] },
+      mediaMemoryLimits,
+    ).some((x) => x.includes('invalid')),
+  );
+});

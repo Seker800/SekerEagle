@@ -8,7 +8,7 @@
 2. 点击「更多 → 备份」进入「手机备份」，启用备份。应用为当前主体创建仅有 `asset:write` 的独立令牌，使用 Android Keystore 加密保存在应用私有目录中；网页拿不到令牌。可在网页版账号令牌管理中撤销「Android 手机备份」。
 3. 选择一个或多个手机相册目录，或使用系统选择器授权其他文件夹。目录项可以修改目标模式、子目录范围或移除。初始目标为照片；切换当前浏览模式不会改变备份目标。目录移除不删除已备份资源。
 4. 按需启用「打开时自动备份」。手机的定时任务只需打开应用；应用确认登录身份后自动执行，无需再次点击备份。
-5. 可限制仅 Wi-Fi、仅充电。低于 15% 且未充电时暂停。首次大量上传可启用「专注备份」，在备份页保持屏幕唤醒。
+5. 可限制仅 Wi-Fi、仅充电。15% 及以下且未充电时暂停。首次大量上传可启用「专注备份」，在备份页保持屏幕唤醒。
 
 小米／HyperOS 建议允许自启动、后台联网，并将省电策略设为无限制。应用提供系统设置入口；各机型设置名称不同，模拟器结果不能代替小米实机后台验收。
 
@@ -65,18 +65,15 @@ PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_PORT=42319 \
   node scripts/testing/photo-workbench.mjs --serve
 ```
 
-等待出现测试工作台就绪消息，再在另一个终端执行。以下命令只应针对安卓模拟器；存在多设备时设置 `ANDROID_SERIAL` 为模拟器序列号。
+等待出现测试工作台就绪消息，连接且只连接一个模拟器，然后执行：
 
 ```sh
-adb reverse tcp:42319 tcp:42319
-npm run install:device --workspace @sekereagle/android
-adb shell pm grant com.sekereagle.android.debug android.permission.READ_MEDIA_IMAGES
-adb shell pm grant com.sekereagle.android.debug android.permission.READ_MEDIA_VIDEO
-npm run test:device --workspace @sekereagle/android -- \
-  -Pandroid.testInstrumentationRunnerArguments.origin=http://localhost:42319
+npm run android:check:device
 ```
 
-设备测试仅接受显式给出的 localhost HTTP 地址，并使用测试工作台的专属登录入口；测试代码和自动登录不包含在应用 APK 中。测试完成后停止工作台会删除它创建的临时容器；不影响其他数据库或服务。
+该入口先跑安卓核心门禁，再核验工作台清单、存活进程、专属测试容器和单一模拟器；拒绝生产常用端口、远程地址和物理手机，然后配置端口反向映射并执行全部设备测试。设备测试使用工作台专属登录入口；测试代码和自动登录不包含在应用 APK 中。停止工作台会删除它创建的临时容器，不影响其他服务。
+
+`android:check` 是无需设备的单测、核心覆盖、lint 和构建检查；不能代替设备测试。GitHub 的 Android verification 为手动触发工作流，选择 `run_device_tests` 后才启动隔离工作台与模拟器。该工作流已添加，尚未在 GitHub 实际运行；下面记录的是本机结果。
 
 ## 2026-10-21 验证记录
 
@@ -102,3 +99,11 @@ npm run test:device --workspace @sekereagle/android -- \
 - 安卓核心 18 项单测与行／分支至少 80% 覆盖门禁通过；清理决策覆盖未确认文件、账号／模式隔离、变化文件、已删除服务器副本和失效任务，固定导航覆盖来源、iframe、无手势、未知路径及参数负向情形。
 - Android 36 模拟器覆盖 10 项集成流程（含可选截图）：备份原有 6 项、无原生首页标题且返回同一 WebView、真实手势从更多进入原生页、实际 SQLite／MediaStore／HTTP 清理资格和系统请求构造，以及中文界面截图。测试确认构造系统请求不会提前删除文件；系统最终删除确认与不同小米机型、SAF 文件提供器仍需实机验收，不据此宣称全部机型可用。
 - 本地预览包 `apps/android/release/SekerEagle-0.1.2-android-debug.apk`；仅连接本机隔离工作台，没有访问或变更生产、群晖及 SekerChat。
+
+## 0.1.3 审查修复验收
+
+- 签名分片上传失败与 API 鉴权失败分开处理；只有 API 401 撤销本机凭据。签名失效会重新签名并重新打开源流，有界重试，不向对象存储发送 PAT。
+- 永久上传失败保存文件终态，避免每次扫描重复请求死会话；备份设置提供「重试失败文件」，保留成功回执。临时网络错误和入库中的会话继续保留检查点；会话 ID 在请求前校验。
+- 重新创建活动时恢复已保存的账号作用域，不再误停同账号手动备份。SQLite v1 升 v2 添加失败状态，保留成功文件和内容回执。
+- 本机 Android 36 模拟器 13 项设备测试全部通过，无跳过；新增覆盖重开活动继续手动备份、签名恢复与永久错误、旧检查点升级。23 项 JVM 单测、核心行／分支覆盖门禁、Android lint 与构建通过。
+- 完整项目检查及审查结论见 [审查核实记录](review-2026-10-21.md)。安装包为 `apps/android/release/SekerEagle-0.1.3-android-debug.apk`。小米实机后台限制仍需实机验证。

@@ -57,9 +57,15 @@ public final class BackupEngine {
   }
 
   public static final class Checkpoint {
-    public String hash = "", session = "";
+    public String hash = "", session = "", terminalError = "";
     public long partSize;
     public boolean confirmed;
+  }
+
+  public static final class PermanentFailure extends IOException {
+    public PermanentFailure(String message) {
+      super(message + "；文件变化或手动重试失败文件后会重新检查");
+    }
   }
 
   private final Store store;
@@ -87,6 +93,10 @@ public final class BackupEngine {
     String prefix = scope + ":" + mode + ":";
     String key = fileKey(scope, mode, file);
     Checkpoint cp = store.load(key);
+    if (cp != null && !cp.terminalError.isEmpty()) {
+      if (file.modified == 0 && !file.hash.read().equals(cp.hash)) cp = null;
+      else throw new PermanentFailure(cp.terminalError);
+    }
     if (cp != null && cp.confirmed && file.modified > 0) return Result.SKIPPED;
     if (cp == null || file.modified == 0) cp = new Checkpoint();
     if (cp.hash.isEmpty()) cp.hash = file.hash.read();

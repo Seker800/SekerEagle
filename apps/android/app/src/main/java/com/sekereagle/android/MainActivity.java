@@ -44,6 +44,8 @@ public final class MainActivity extends Activity {
   public void onCreate(Bundle state) {
     super.onCreate(state);
     settings = new BackupSettings(this);
+    activeScope = settings.active();
+    autoPending = true;
     if (!settings.active().isEmpty() && !BackupService.isRunning(settings.active())) {
       settings.setFlag(settings.active(), "running", false);
     }
@@ -83,7 +85,7 @@ public final class MainActivity extends Activity {
     WebSettings config = web.getSettings();
     config.setJavaScriptEnabled(true);
     config.setDomStorageEnabled(true);
-    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/0.1.2");
+    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/0.1.3");
     config.setAllowFileAccess(false);
     config.setAllowContentAccess(false);
     config.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);

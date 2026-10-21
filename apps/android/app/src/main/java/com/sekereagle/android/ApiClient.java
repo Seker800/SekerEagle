@@ -8,16 +8,14 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
-final class ApiClient {
-  static final class Failure extends IOException {
-    final int status;
-
+final class ApiClient implements UploadApi {
+  static final class Failure extends com.sekereagle.android.core.UploadFailure {
     Failure(int status) {
-      super(
-          status == 401 || status == 403
-              ? "登录或备份授权已失效，请重新登录并启用备份"
-              : "服务请求失败（" + status + "），可稍后重试");
-      this.status = status;
+      this(status, Endpoint.API);
+    }
+
+    Failure(int status, Endpoint endpoint) {
+      super(status, endpoint);
     }
   }
 
@@ -29,7 +27,7 @@ final class ApiClient {
     this.token = token;
   }
 
-  JSONObject request(String method, String path, JSONObject body) throws Exception {
+  public JSONObject request(String method, String path, JSONObject body) throws Exception {
     if (!path.startsWith("/api/")) throw new IOException("无效接口路径");
     HttpURLConnection connection = open(origin + path);
     try {
@@ -59,7 +57,7 @@ final class ApiClient {
     }
   }
 
-  String put(
+  public String put(
       String url,
       InputStream input,
       long bytes,
@@ -85,7 +83,8 @@ final class ApiClient {
         }
       }
       int code = connection.getResponseCode();
-      if (code < 200 || code >= 300) throw new Failure(code);
+      if (code < 200 || code >= 300)
+        throw new Failure(code, com.sekereagle.android.core.UploadFailure.Endpoint.SIGNED_PART);
       String etag = connection.getHeaderField("ETag");
       if (etag == null || etag.isEmpty()) throw new IOException("服务器未确认上传分片");
       return etag;

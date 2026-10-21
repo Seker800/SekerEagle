@@ -391,6 +391,132 @@ public final class MobileBackupTest {
   }
 
   @Test
+  public void testReopeningAnActivityDoesNotStopAnActiveManualBackup() throws Exception {
+    for (int i = 0; i < 24; i++)
+      image("reopen-" + i + ".png", 0xff000000 | new Random().nextInt(0xffffff), true);
+    BackupScreen.addRule(settings, scope, "media", path);
+    settings.setFlag(scope, "auto", false);
+    String previous = settings.value(scope, "lastFinished", "");
+    getInstrumentation().runOnMainSync(activity::startBackup);
+    waitUntil(() -> settings.flag(scope, "running", false), 10000, "active manual backup");
+    getInstrumentation().runOnMainSync(() -> activity.finish());
+    getInstrumentation().waitForIdleSync();
+    launch();
+    Thread.sleep(400);
+    assertTrue(
+        "Reopening must not cancel a manual foreground backup",
+        BackupService.isRunning(scope)
+            || !settings.value(scope, "lastFinished", "").equals(previous));
+    waitUntil(
+        () -> !settings.value(scope, "lastFinished", "").equals(previous),
+        90000,
+        "resumed manual backup completion");
+    assertEquals("备份完成", settings.value(scope, "status", ""));
+  }
+
+  @Test
+  public void testMultipartResigns403AndPersistsPermanentFailuresWithoutClearingSuccess()
+      throws Exception {
+    Uri uri = image("retry-part.png", 0xff123987, true);
+    MediaCatalog catalog = new MediaCatalog(context);
+    MediaCatalog.Item item =
+        new MediaCatalog.Item(
+            uri, "retry-part.png", path, "image/png", size(uri), modified(uri), false);
+    String session = UUID.randomUUID().toString();
+    int[] signs = {0}, puts = {0};
+    boolean[] permanent = {false};
+    UploadApi api =
+        new UploadApi() {
+          public JSONObject request(String method, String request, JSONObject body)
+              throws Exception {
+            assertFalse(request.contains(".."));
+            if (method.equals("DELETE")) return new JSONObject();
+            if (request.endsWith("/complete")) {
+              if (permanent[0]) throw new ApiClient.Failure(400);
+              return new JSONObject().put("assetId", UUID.randomUUID().toString());
+            }
+            if (request.endsWith("/parts/1")) {
+              signs[0]++;
+              return new JSONObject().put("uploadUrl", "signed");
+            }
+            if (request.endsWith("/parts")) return new JSONObject().put("parts", new JSONArray());
+            return new JSONObject()
+                .put("id", session)
+                .put("size", item.size)
+                .put("partSize", 5242880)
+                .put("status", "INITIATED");
+          }
+
+          public String put(
+              String url,
+              InputStream input,
+              long length,
+              com.sekereagle.android.core.BackupEngine.Guard guard)
+              throws Exception {
+            if (puts[0]++ == 0)
+              throw new ApiClient.Failure(
+                  403, com.sekereagle.android.core.UploadFailure.Endpoint.SIGNED_PART);
+            return "etag";
+          }
+        };
+    com.sekereagle.android.core.BackupEngine.File source =
+        new com.sekereagle.android.core.BackupEngine.File(
+            uri.toString(), item.size, item.modified, () -> hash(uri), () -> true);
+    com.sekereagle.android.core.BackupEngine.Checkpoint cp =
+        new com.sekereagle.android.core.BackupEngine.Checkpoint();
+    cp.hash = hash(uri);
+    cp.session = "../not-a-session";
+    MultipartTransport transport = new MultipartTransport(api, "PHOTO", catalog, item);
+    transport.upload(source, cp, value -> {}, () -> {});
+    assertEquals(2, signs[0]);
+    assertFalse(settings.token(scope).isEmpty());
+    permanent[0] = true;
+    try (BackupJournal journal = new BackupJournal(context)) {
+      String key = com.sekereagle.android.core.BackupEngine.fileKey(scope, "PHOTO", source);
+      try {
+        transport.upload(source, cp, value -> journal.save(key, value), () -> {});
+        fail("expected terminal failure");
+      } catch (com.sekereagle.android.core.BackupEngine.PermanentFailure expected) {
+      }
+      assertEquals("", journal.load(key).session);
+      assertFalse(journal.load(key).terminalError.isEmpty());
+      com.sekereagle.android.core.BackupEngine.Checkpoint success =
+          new com.sekereagle.android.core.BackupEngine.Checkpoint();
+      success.confirmed = true;
+      journal.confirm(scope + ":PHOTO:success", scope + ":PHOTO:receipt", success);
+      journal.retryFailures(scope);
+      assertNull(journal.load(key));
+      assertNotNull(journal.load(scope + ":PHOTO:success"));
+      assertTrue(journal.contains(scope + ":PHOTO:receipt"));
+    }
+  }
+
+  @Test
+  public void testVersionOneJournalMigratesWithoutLosingSuccessfulReceipts() throws Exception {
+    android.content.Context isolated = context.createDeviceProtectedStorageContext();
+    isolated.deleteDatabase("mobile-backup.db");
+    android.database.sqlite.SQLiteDatabase legacy =
+        isolated.openOrCreateDatabase("mobile-backup.db", 0, null);
+    legacy.execSQL(
+        "CREATE TABLE files(key TEXT PRIMARY KEY, hash TEXT NOT NULL, session TEXT NOT NULL,"
+            + " part_size INTEGER NOT NULL, confirmed INTEGER NOT NULL)");
+    legacy.execSQL("CREATE TABLE receipts(key TEXT PRIMARY KEY)");
+    legacy.execSQL("INSERT INTO files VALUES('owner:PHOTO:file','hash','',0,1)");
+    legacy.execSQL("INSERT INTO receipts VALUES('owner:PHOTO:receipt')");
+    legacy.setVersion(1);
+    legacy.close();
+    try (BackupJournal upgraded = new BackupJournal(isolated)) {
+      assertTrue(upgraded.load("owner:PHOTO:file").confirmed);
+      assertEquals("", upgraded.load("owner:PHOTO:file").terminalError);
+      assertTrue(upgraded.contains("owner:PHOTO:receipt"));
+      upgraded.retryFailures("owner");
+      assertNotNull(upgraded.load("owner:PHOTO:file"));
+    } finally {
+      isolated.deleteDatabase("mobile-backup.db");
+    }
+  }
+
+  @Test
   public void testCaptureModernScreens() throws Exception {
     org.junit.Assume.assumeTrue(
         InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true"));

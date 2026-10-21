@@ -108,3 +108,11 @@ export class CheckUploadContentDto {
   @Max(CAMERA_MAX_VIDEO_BYTES)
   size!: number;
 }
+
+export class CheckUploadContentResultDto {
+  @ApiProperty({
+    type: Boolean,
+    description: 'Content exists within the authenticated owner, library and visible scope.',
+  })
+  exists!: boolean;
+}

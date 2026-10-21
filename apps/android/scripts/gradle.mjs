@@ -1,3 +1,4 @@
+import { androidSdk } from './runtime.mjs';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -5,11 +6,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const home = homedir();
-const sdk =
-  process.env.ANDROID_HOME ||
-  process.env.ANDROID_SDK_ROOT ||
-  [join(home, 'Library/Android/sdk'), join(home, '.local/android-sdk')].find(existsSync);
-if (!sdk) throw new Error('Install Android SDK and set ANDROID_HOME.');
+const sdk = androidSdk();
 const cache = join(home, '.gradle/wrapper/dists/gradle-9.4.1-bin');
 const cached = existsSync(cache)
   ? readdirSync(cache)

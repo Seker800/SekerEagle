@@ -6,12 +6,12 @@ import java.util.*;
 import org.json.*;
 
 final class MultipartTransport implements BackupEngine.Transport {
-  private final ApiClient api;
+  private final UploadApi api;
   private final String path;
   private final MediaCatalog catalog;
   private final MediaCatalog.Item item;
 
-  MultipartTransport(ApiClient api, String mode, MediaCatalog catalog, MediaCatalog.Item item) {
+  MultipartTransport(UploadApi api, String mode, MediaCatalog catalog, MediaCatalog.Item item) {
     if (!(mode.equals("PHOTO") || mode.equals("MATERIAL")))
       throw new IllegalArgumentException("无效模式");
     this.api = api;
@@ -36,7 +36,69 @@ final class MultipartTransport implements BackupEngine.Transport {
       BackupEngine.Save save,
       BackupEngine.Guard guard)
       throws Exception {
+    try {
+      resume(file, cp, save, guard);
+    } catch (ApiClient.Failure error) {
+      if (error.endpoint != com.sekereagle.android.core.UploadFailure.Endpoint.API) throw error;
+      if (error.permanent()) {
+        if (validSession(cp.session))
+          try {
+            guard.check();
+            api.request("DELETE", path + "/" + cp.session, null);
+          } catch (Exception ignored) {
+          }
+        cp.session = "";
+        cp.partSize = 0;
+        cp.terminalError = error.getMessage();
+        save.write(cp);
+        throw new BackupEngine.PermanentFailure(cp.terminalError);
+      }
+      if (error.status == 404) {
+        cp.session = "";
+        cp.partSize = 0;
+        save.write(cp);
+      }
+      if (error.status == 409 && validSession(cp.session)) {
+        JSONObject current = api.request("GET", path + "/" + cp.session, null);
+        if (current.optString("status").equals("COMPLETED")
+            && !current.isNull("eagleAssetId")
+            && !current.optString("eagleAssetId").isEmpty()) return;
+        if (current.optString("status").equals("ABORTED")) {
+          cp.session = "";
+          cp.partSize = 0;
+          save.write(cp);
+        } else if (current.optString("status").equals("FAILED")
+            && (current.optInt("finalizationAttempts") >= 10
+                || current.optBoolean("objectCleanupPending"))) {
+          cp.session = "";
+          cp.partSize = 0;
+          cp.terminalError = "服务器已拒绝该文件，请检查后重试失败文件";
+          save.write(cp);
+          throw new BackupEngine.PermanentFailure(cp.terminalError);
+        }
+      }
+      throw error;
+    }
+  }
+
+  private static boolean validSession(String value) {
+    return value.matches(
+        "[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}");
+  }
+
+  private void resume(
+      BackupEngine.File file,
+      BackupEngine.Checkpoint cp,
+      BackupEngine.Save save,
+      BackupEngine.Guard guard)
+      throws Exception {
     String status = "";
+    if (!cp.session.isEmpty() && !validSession(cp.session)) {
+      cp.session = "";
+      cp.partSize = 0;
+      save.write(cp);
+    }
+
     if (!cp.session.isEmpty()) {
       try {
         JSONObject session = api.request("GET", path + "/" + cp.session, null);
@@ -70,7 +132,7 @@ final class MultipartTransport implements BackupEngine.Transport {
       save.write(cp);
       status = "INITIATED";
     }
-    if (!cp.session.matches("[a-fA-F0-9-]{36}") || cp.partSize < 5_242_880)
+    if (!validSession(cp.session) || cp.partSize < 5_242_880 || cp.partSize > 64L * 1024 * 1024)
       throw new IOException("上传检查点无效");
     Map<Integer, JSONObject> committed = new HashMap<>();
     JSONArray inventory =
@@ -90,10 +152,17 @@ final class MultipartTransport implements BackupEngine.Transport {
       if (reusable) etag = part.getString("etag");
       else {
         if (!status.equals("INITIATED")) throw new IOException("上传已进入确认阶段，等待服务器恢复");
-        JSONObject signed =
-            api.request("POST", path + "/" + cp.session + "/parts/" + number, new JSONObject());
-        try (InputStream input = catalog.open(item, offset, guard)) {
-          etag = api.put(signed.getString("uploadUrl"), input, length, guard);
+        etag = null;
+        for (int attempt = 0; attempt < 2; attempt++) {
+          guard.check();
+          JSONObject signed =
+              api.request("POST", path + "/" + cp.session + "/parts/" + number, new JSONObject());
+          try (InputStream input = catalog.open(item, offset, guard)) {
+            etag = api.put(signed.getString("uploadUrl"), input, length, guard);
+            break;
+          } catch (ApiClient.Failure error) {
+            if (attempt != 0 || !error.renewSignature()) throw error;
+          }
         }
       }
       parts.put(new JSONObject().put("partNumber", number).put("etag", etag));

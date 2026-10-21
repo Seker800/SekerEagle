@@ -1,3 +1,4 @@
+import { mediaMemoryLimits } from './media-memory-limits.mjs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import {
@@ -6,19 +7,7 @@ import {
 } from './media-memory-contract.mjs';
 
 const DEFAULT_REPORT = '.omx/artifacts/media-memory-measurements.json';
-const limits = {
-  requiredMeasurements: ['viewer-preview-50mp', 'palette-50mp', 'pyramid-viewer-50mp'],
-  maximumPeakRssMiB: {
-    'viewer-preview-50mp': 256,
-    'palette-50mp': 192,
-    'pyramid-viewer-50mp': 320,
-  },
-  maximumOriginalGetCount: {
-    'viewer-preview-50mp': 0,
-    'palette-50mp': 0,
-    'pyramid-viewer-50mp': 0,
-  },
-};
+const limits = mediaMemoryLimits;
 
 const args = process.argv.slice(2);
 const reportArgument = args.indexOf('--report');

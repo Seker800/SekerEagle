@@ -1,5 +1,6 @@
 import {
   CAMERA_MAX_IMAGE_BYTES,
+  CAMERA_MAX_DECODED_HEIF_PIXELS,
   CAMERA_MAX_RAW_PIXELS,
   CAMERA_MAX_VIDEO_BYTES,
   CAMERA_MAX_VIDEO_DURATION_MS,
@@ -22,6 +23,7 @@ const CAPABILITIES: EagleMediaCapabilitiesDto = Object.freeze({
     maxBytes: CAMERA_MAX_IMAGE_BYTES,
     maxPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
     maxRawPixels: CAMERA_MAX_RAW_PIXELS,
+    maxHeifPixels: CAMERA_MAX_DECODED_HEIF_PIXELS,
   }),
   videos: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_VIDEO_MIME_BY_EXTENSION.values())]),

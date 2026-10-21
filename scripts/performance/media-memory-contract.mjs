@@ -63,6 +63,16 @@ export function evaluateMediaMemoryMeasurements(report, limits) {
   }
 
   for (const measurement of report.measurements ?? []) {
+    if (
+      (limits.requiredMeasurements ?? []).includes(measurement.name) &&
+      (!Number.isFinite(measurement.peakRssMiB) || measurement.peakRssMiB <= 0)
+    )
+      failures.push(`${measurement.name} peak RSS is invalid`);
+    if (
+      limits.maximumOriginalGetCount?.[measurement.name] !== undefined &&
+      (!Number.isSafeInteger(measurement.originalGetCount) || measurement.originalGetCount < 0)
+    )
+      failures.push(`${measurement.name} original GET count is invalid`);
     const peakLimit = limits.maximumPeakRssMiB?.[measurement.name];
     if (
       peakLimit !== undefined &&

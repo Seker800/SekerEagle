@@ -44,6 +44,7 @@ import {
   canClaimAiTagJobs,
   canClaimBackgroundJobs,
   taskBlocksAssetReady,
+  terminalAssetFailure,
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces, FACE_MODEL_VERSION } from './photo-faces';
 import { inspectLivePhotoImage } from './live-photo';
@@ -1461,15 +1462,19 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
       });
     }
-    if (terminal && taskBlocksAssetReady(job.kind, job.processorVersion)) {
+    const assetFailure = terminal
+      ? terminalAssetFailure(job.kind, job.processorVersion, message)
+      : null;
+    if (assetFailure) {
       await transaction.eagleAsset.updateMany({
         where: {
           id: job.assetId,
           ownerId: job.ownerId,
           libraryMode: job.libraryMode,
           mediaRevision: job.assetRevision,
+          ...(assetFailure.lifecycleStatus ? {} : { lifecycleStatus: { not: 'FAILED' as const } }),
         },
-        data: { lifecycleStatus: 'FAILED', mediaErrorCode: message.slice(0, 100) },
+        data: assetFailure,
       });
     }
   });

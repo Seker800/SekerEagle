@@ -235,6 +235,24 @@ final class BackupScreen extends ScrollView {
     content.addView(
         Ui.row(
             activity,
+            R.drawable.ic_cloud,
+            "重试失败文件",
+            "保留成功回执，仅重新检查失败项",
+            () -> {
+              sheet.dismiss();
+              if (settings.flag(scope, "running", false)) {
+                activity.toast("请先暂停当前备份");
+                return;
+              }
+              try (BackupJournal journal = new BackupJournal(activity)) {
+                journal.retryFailures(scope);
+              }
+              activity.startBackup();
+            }));
+    Ui.divider(content);
+    content.addView(
+        Ui.row(
+            activity,
             R.drawable.ic_settings,
             "重新检查全部文件",
             "清除本机回执，重新校验所选目录",

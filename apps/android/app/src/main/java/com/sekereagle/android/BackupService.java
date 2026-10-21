@@ -113,7 +113,6 @@ public final class BackupService extends Service {
               throw e;
             } catch (ApiClient.Failure e) {
               if (e.status == 401 || e.status == 403) {
-                settings.setValue(scope, "credential", "");
                 throw e;
               }
               failure(item.name, e);
@@ -127,6 +126,9 @@ public final class BackupService extends Service {
           this::guard);
       update(failed == 0 ? "备份完成" : "备份结束，有失败项可重试");
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
+    } catch (ApiClient.Failure e) {
+      if (e.invalidatesCredential()) settings.setValue(scope, "credential", "");
+      update(e.getMessage());
     } catch (SecurityException e) {
       update("目录权限不足，请授权照片视频或重新选择目录");
     } catch (Exception e) {

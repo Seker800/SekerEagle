@@ -9,7 +9,7 @@ import com.sekereagle.android.core.BackupEngine;
 
 final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store {
   BackupJournal(Context context) {
-    super(context, "mobile-backup.db", null, 1);
+    super(context, "mobile-backup.db", null, 2);
     setWriteAheadLoggingEnabled(true);
   }
 
@@ -17,13 +17,16 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
   public void onCreate(SQLiteDatabase db) {
     db.execSQL(
         "CREATE TABLE files (key TEXT PRIMARY KEY, hash TEXT NOT NULL, session TEXT NOT NULL,"
-            + " part_size INTEGER NOT NULL, confirmed INTEGER NOT NULL)");
+            + " part_size INTEGER NOT NULL, confirmed INTEGER NOT NULL, terminal_error TEXT NOT"
+            + " NULL DEFAULT '')");
     db.execSQL("CREATE TABLE receipts (key TEXT PRIMARY KEY)");
   }
 
   @Override
   public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-    throw new IllegalStateException("Unsupported journal migration");
+    if (oldVersion == 1 && newVersion == 2)
+      db.execSQL("ALTER TABLE files ADD COLUMN terminal_error TEXT NOT NULL DEFAULT ''");
+    else throw new IllegalStateException("Unsupported journal migration");
   }
 
   @Override
@@ -32,6 +35,7 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
         getReadableDatabase().query("files", null, "key=?", new String[] {key}, null, null, null)) {
       if (!cursor.moveToFirst()) return null;
       BackupEngine.Checkpoint cp = new BackupEngine.Checkpoint();
+      cp.terminalError = cursor.getString(cursor.getColumnIndexOrThrow("terminal_error"));
       cp.hash = cursor.getString(cursor.getColumnIndexOrThrow("hash"));
       cp.session = cursor.getString(cursor.getColumnIndexOrThrow("session"));
       cp.partSize = cursor.getLong(cursor.getColumnIndexOrThrow("part_size"));
@@ -45,6 +49,7 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
     ContentValues values = new ContentValues();
     values.put("key", key);
     values.put("hash", cp.hash);
+    values.put("terminal_error", cp.terminalError);
     values.put("session", cp.session);
     values.put("part_size", cp.partSize);
     values.put("confirmed", cp.confirmed ? 1 : 0);
@@ -73,6 +78,11 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
     } finally {
       db.endTransaction();
     }
+  }
+
+  void retryFailures(String scope) {
+    getWritableDatabase()
+        .delete("files", "key LIKE ? AND terminal_error <> ''", new String[] {scope + ":%"});
   }
 
   void forget(String scope) {

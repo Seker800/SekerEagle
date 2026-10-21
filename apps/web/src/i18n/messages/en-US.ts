@@ -1346,4 +1346,6 @@ export const enUS = {
   '手机备份与释放空间请在安卓应用中使用。':
     'Use the Android app to back up files and free up phone storage.',
   相册: 'Albums',
+  '视频播放副本生成失败，原片已保存，可在处理任务中重试':
+    'Video playback generation failed. The original is saved; retry in processing tasks.',
 } as const;
