@@ -2,7 +2,6 @@ package com.sekereagle.android;
 
 import android.webkit.CookieManager;
 import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URL;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -41,11 +40,7 @@ final class ApiClient {
     }
     String put(String url, InputStream input, long bytes, com.sekereagle.android.core.BackupEngine.Guard guard) throws Exception {
         // Signed object URLs are rewritten to the authenticated gateway, as in the shared Web client.
-        URI signed = new URI(url), gateway = new URI(origin);
-        if (signed.getRawUserInfo() != null || signed.getRawFragment() != null ||
-            !("http".equals(signed.getScheme()) || "https".equals(signed.getScheme())) ||
-            !signed.getRawPath().startsWith("/sekereagle-assets/")) throw new IOException("上传地址不受支持");
-        String target = gateway.toString() + signed.getRawPath() + (signed.getRawQuery() == null ? "" : "?" + signed.getRawQuery());
+        String target = BackupPolicy.uploadUrl(url, origin);
         HttpURLConnection connection = open(target);
         try {
             connection.setRequestMethod("PUT"); connection.setDoOutput(true); connection.setFixedLengthStreamingMode(bytes);
@@ -71,7 +66,7 @@ final class ApiClient {
         connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15_000); connection.setReadTimeout(30_000);
         return connection;
     }
-    private static byte[] readBounded(InputStream input) throws IOException {
+    static byte[] readBounded(InputStream input) throws IOException {
         ByteArrayOutputStream output = new ByteArrayOutputStream(); byte[] buffer = new byte[8192]; int count;
         while ((count = input.read(buffer)) != -1) {
             if (output.size() + count > 2 * 1024 * 1024) throw new IOException("接口响应过大");

@@ -18,6 +18,20 @@ public final class BackupPolicy {
             return uri.getScheme() + "://" + uri.getRawAuthority();
         } catch (Exception e) { throw new IllegalArgumentException("请输入 HTTPS 服务地址；调试版仅额外允许本机 HTTP 地址。", e); }
     }
+    public static String uploadUrl(String signedUrl, String gatewayOrigin) {
+        try {
+            URI signed = new URI(signedUrl), gateway = new URI(gatewayOrigin);
+            String scheme = signed.getScheme(), host = signed.getHost();
+            String path = signed.getPath(), query = signed.getRawQuery();
+            boolean sameOrigin = gateway.getScheme().equals(scheme) && gateway.getHost().equals(host) && gateway.getPort() == signed.getPort();
+            boolean loopback = "localhost".equals(host) || "127.0.0.1".equals(host) || "[::1]".equals(host);
+            if (!("http".equals(scheme) || "https".equals(scheme)) || signed.getUserInfo() != null || signed.getFragment() != null ||
+                (!sameOrigin && !loopback) || path == null || !path.startsWith("/sekereagle-assets/") ||
+                java.util.Arrays.asList(path.split("/")).contains("..") || query == null || !query.matches("(?:.*&)?X-Amz-Signature=[a-fA-F0-9]+(?:&.*)?"))
+                throw new IllegalArgumentException();
+            return gatewayOrigin + signed.getRawPath() + "?" + query;
+        } catch (Exception e) { throw new IllegalArgumentException("上传地址不属于当前 SekerEagle", e); }
+    }
     public static boolean inFolder(String folder, String path, boolean recursive) {
         String prefix = folder.endsWith("/") ? folder : folder + "/";
         return path.equals(prefix) || (recursive && path.startsWith(prefix));
