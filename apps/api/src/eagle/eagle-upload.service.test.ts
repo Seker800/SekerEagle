@@ -389,3 +389,23 @@ test('new browser captures commit provenance and initial metadata with the uploa
   assert.equal(aiTagJob?.lane, 'BACKGROUND');
   assert.equal(typeof aiTagJob?.dependsOnJobId, 'string');
 });
+
+test('upload progress exposes bounded processing status only within authenticated owner and library', async () => {
+  for (const libraryMode of ['MATERIAL', 'PHOTO'] as const) {
+    let query: unknown;
+    const prisma = { uploadSession: { findFirst: async (input: unknown) => {
+      query = input;
+      return { id: sessionId, status: 'COMPLETED', size: 100n, eagleAsset: { lifecycleStatus: 'READY', mediaErrorCode: null } };
+    } } };
+    const service = new EagleUploadService(prisma as never, {} as never, {} as never, {} as never, libraryMode);
+    const result = await service.getSession(ownerId, sessionId);
+    assert.equal(result.assetStatus, 'READY');
+    assert.equal(result.assetError, null);
+    assert.deepEqual((query as { where: unknown }).where, { id: sessionId, uploaderId: ownerId, libraryMode });
+    assert.equal('eagleAsset' in result, false);
+  }
+});
+test('processing progress rejects unavailable sessions without revealing another owner or mode', async () => {
+  const service = new EagleUploadService({ uploadSession: { findFirst: async () => null } } as never, {} as never, {} as never, {} as never, 'PHOTO');
+  await assert.rejects(service.getSession(ownerId, sessionId), NotFoundException);
+});

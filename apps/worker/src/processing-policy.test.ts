@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canClaimAiTagJobs,
+  backgroundProcessingEnabled,
   canClaimBackgroundJobs,
   processingLaneForKind,
   taskBlocksAssetReady,
@@ -62,4 +63,11 @@ test('AI tagging stays stopped by default and supports independent manual or sch
   assert.equal(canClaimAiTagJobs(true, false, '23:00', '06:00', daytime), true);
   assert.equal(canClaimAiTagJobs(false, true, '23:00', '06:00', night), true);
   assert.equal(canClaimAiTagJobs(false, true, '23:00', '06:00', daytime), false);
+});
+
+test('worker background opt-out preserves defaults and fails closed on invalid configuration', () => {
+  assert.equal(backgroundProcessingEnabled(undefined), true);
+  assert.equal(backgroundProcessingEnabled('true'), true);
+  assert.equal(backgroundProcessingEnabled('false'), false);
+  assert.throws(() => backgroundProcessingEnabled('invalid'));
 });
