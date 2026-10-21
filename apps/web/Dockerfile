@@ -5,6 +5,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/library-core/package.json packages/library-core/package.json
+COPY packages/library-persistence/package.json packages/library-persistence/package.json
 COPY packages/media-core/package.json packages/media-core/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
