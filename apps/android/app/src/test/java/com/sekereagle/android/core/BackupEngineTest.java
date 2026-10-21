@@ -94,4 +94,11 @@ public class BackupEngineTest {
         assertThrows(IllegalArgumentException.class, () -> engine(false).process("scope", "WRONG", file("one", 12, 1)));
         assertThrows(IllegalArgumentException.class, () -> engine(false).process("", "PHOTO", file("one", 12, 1)));
     }
+    @Test public void signedUploadsStayOnTheSelectedGatewayAndRequireASignature() {
+        String query = "?X-Amz-Signature=abc";
+        assertEquals("https://eagle.example/sekereagle-assets/file" + query, BackupPolicy.uploadUrl("http://localhost:9000/sekereagle-assets/file" + query, "https://eagle.example"));
+        assertEquals("https://eagle.example/sekereagle-assets/file" + query, BackupPolicy.uploadUrl("https://eagle.example/sekereagle-assets/file" + query, "https://eagle.example"));
+        for (String value : List.of("https://evil.example/sekereagle-assets/file"+query, "https://eagle.example/sekereagle-assets/file", "file:///sekereagle-assets/file"+query, "https://user:pass@eagle.example/sekereagle-assets/file"+query, "https://eagle.example/another-bucket/file"+query, "https://eagle.example/sekereagle-assets/../secret"+query))
+            assertThrows(IllegalArgumentException.class, () -> BackupPolicy.uploadUrl(value,"https://eagle.example"));
+    }
 }
