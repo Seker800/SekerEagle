@@ -69,7 +69,12 @@ export function PhotoCollections({
         <h2>{t('人物')}</h2>
         <button
           type="button"
-          disabled={pending || people.data?.runtimeConfigured === false}
+          disabled={
+            pending ||
+            people.isPending ||
+            Boolean(people.error) ||
+            people.data?.runtimeConfigured !== true
+          }
           onClick={() =>
             void perform(async () => {
               const result = await scanPhotoPeople();
@@ -80,8 +85,9 @@ export function PhotoCollections({
           {t('分析人物')}
         </button>
       </div>
-      {people.data?.runtimeConfigured === false && (
-        <p>{t('本地人物模型尚未启用，安装后可分析人物。')}</p>
+      {people.isPending && <p role="status">{t('正在加载人物…')}</p>}
+      {!people.isPending && !people.error && people.data?.runtimeConfigured === false && (
+        <p role="status">{t('人物识别服务尚未配置，暂时无法分析照片。')}</p>
       )}
       {feedback && <p role="status">{feedback}</p>}
       {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
@@ -152,9 +158,13 @@ export function PhotoCollections({
               thumbnail={thumbnail}
             />
           )}
-          {!people.isPending && people.data?.people.length === 0 && (
-            <p>{t('尚未发现人物。导入照片后可运行本地分析。')}</p>
-          )}
+          {!people.isPending &&
+            !people.error &&
+            !feedback &&
+            people.data?.runtimeConfigured === true &&
+            people.data.people.length === 0 && (
+              <p>{t('暂无人物。可点击“分析人物”扫描图库中的照片。')}</p>
+            )}
         </>
       }
     </section>

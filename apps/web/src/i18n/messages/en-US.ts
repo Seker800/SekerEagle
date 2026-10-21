@@ -190,11 +190,12 @@ export const enUS = {
   照片组: 'Photo groups',
   分析人物: 'Analyze people',
   查找连拍与相似照片: 'Find bursts and similar photos',
-  '本地人物模型尚未启用，安装后可分析人物。':
-    'The local face runtime is disabled. Install it to analyze people.',
+  '人物识别服务尚未配置，暂时无法分析照片。':
+    'People recognition is not configured. Photo analysis is currently unavailable.',
+  '正在加载人物…': 'Loading people…',
   '未命名人物 {{value1}}': 'Unnamed person {{value1}}',
-  '尚未发现人物。导入照片后可运行本地分析。':
-    'No people found yet. Import photos and run local analysis.',
+  '暂无人物。可点击“分析人物”扫描图库中的照片。':
+    'No people yet. Select “Analyze people” to scan photos in your library.',
   '清晰度只作参考，所有原片都会保留。': 'Sharpness is a reference. All originals are retained.',
   连拍组: 'Burst group',
   相似照片组: 'Similar photos',
