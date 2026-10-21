@@ -219,5 +219,29 @@ test('background permission is checked against the candidate library', async () 
       return true;
     },
   });
-  assert.deepEqual(checked, [['owner-1', 'EXTRACT_COLOR_PALETTE', 'PHOTO']]);
+  assert.deepEqual(checked, [['owner-1', 'EXTRACT_COLOR_PALETTE', 'PHOTO', 'v1']]);
+});
+
+test('disabled processor versions are excluded before the limited claim scan', async () => {
+  const filters: unknown[] = [];
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async ({ where }: { where: { processorVersion?: { notIn: string[] } } }) => {
+        filters.push(where.processorVersion);
+        return [];
+      },
+      updateMany: async () => ({ count: 0 }),
+      findUniqueOrThrow: async () => job('unused', 'INTERACTIVE'),
+    },
+  };
+  await claimNextMediaJob(client, {
+    excludedProcessorVersions: ['camera-video-playback-v1'],
+    canClaimBackground: async () => true,
+  });
+  assert.ok(filters.length > 0);
+  assert.ok(
+    filters.every(
+      (value) => JSON.stringify(value) === JSON.stringify({ notIn: ['camera-video-playback-v1'] }),
+    ),
+  );
 });

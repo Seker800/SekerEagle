@@ -15,8 +15,8 @@ export function assertSafeHeifInfo(output: string): void {
     throw new Error('HEIF pixel limit exceeded');
 }
 
-/** Same native decoder and aggregate pixel guard at upload and preview generation. */
-export async function decodeHeifFile(inputPath: string, outputPath: string): Promise<void> {
+/** Header inspection is shared with decoding; upload never expands the image into RGB. */
+export async function probeHeifFile(inputPath: string): Promise<{ width: number; height: number }> {
   const { stdout } = await run(process.env.HEIF_INFO_PATH?.trim() || 'heif-info', [inputPath], {
     env: mediaSubprocessEnvironment(),
     maxBuffer: 256 * 1024,
@@ -25,6 +25,17 @@ export async function decodeHeifFile(inputPath: string, outputPath: string): Pro
   if (!/^MIME type:\s*image\/hei[cf]\s*$/m.test(stdout))
     throw new Error('HEIF content format mismatch');
   assertSafeHeifInfo(stdout);
+  const images = [...stdout.matchAll(/^\s*image:\s+(\d+)x(\d+)([^\n]*)/gm)];
+  const primary =
+    images.find((image) => /\bprimary\b/.test(image[3]!)) ??
+    (images.length === 1 ? images[0] : undefined);
+  if (!primary) throw new Error('HEIF primary image missing');
+  return { width: Number(primary[1]), height: Number(primary[2]) };
+}
+
+/** Same native decoder and aggregate pixel guard at preview generation. */
+export async function decodeHeifFile(inputPath: string, outputPath: string): Promise<void> {
+  await probeHeifFile(inputPath);
   await run(process.env.HEIF_CONVERT_PATH?.trim() || 'heif-dec', [inputPath, outputPath], {
     env: mediaSubprocessEnvironment(),
     timeout: 120_000,

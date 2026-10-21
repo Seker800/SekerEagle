@@ -11,6 +11,7 @@ const LANE_ORDER: readonly EagleProcessingLane[] = ['INTERACTIVE', 'BACKGROUND',
 interface ClaimFindManyInput {
   where: {
     lane: EagleProcessingLane;
+    processorVersion?: { notIn: string[] };
     kind?: { not: 'GENERATE_AI_TAGS' } | 'GENERATE_AI_TAGS';
     AND: [
       {
@@ -54,11 +55,13 @@ export interface MediaJobClaimClient {
 
 interface ClaimMediaJobOptions {
   now?: Date;
+  excludedProcessorVersions?: string[];
   laneOrder?: readonly EagleProcessingLane[];
   canClaimBackground(
     ownerId: string,
     kind: EagleAssetProcessingJob['kind'],
     libraryMode: EagleAssetProcessingJob['libraryMode'],
+    processorVersion?: string,
   ): Promise<boolean>;
 }
 
@@ -76,6 +79,9 @@ export async function claimNextMediaJob(
       const candidates = await client.eagleAssetProcessingJob.findMany({
         where: {
           lane,
+          ...(options.excludedProcessorVersions?.length
+            ? { processorVersion: { notIn: options.excludedProcessorVersions } }
+            : {}),
           ...(kind ? { kind } : {}),
           AND: [
             { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
@@ -98,6 +104,7 @@ export async function claimNextMediaJob(
             candidate.ownerId,
             candidate.kind,
             candidate.libraryMode,
+            candidate.processorVersion,
           ))
         ) {
           continue;

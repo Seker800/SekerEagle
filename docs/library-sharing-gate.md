@@ -77,3 +77,9 @@ npm run ci:check
 ## 2026-10-21 原片信息与 HEIF 修复
 
 共用 media-core 提供有界 ExifTool 标签读取及 HEIF 解码，API 与 worker 调用同一实现；摄影字段归一化和继承保护仍由摄影分析负责。允许有明确资源清单、账号／PHOTO／媒体版本与 SHA 校验的运维补读命令复用现有持久化函数；不增加通用 Controller 覆盖、照片版上传服务、外部目录图库或模式旁路。门禁无需新增例外，仍须通过现有架构与双模式契约测试。
+
+## 2026-10-21 一次性共享相册导入
+
+导入脚本是现有认证上传协议的 PHOTO 客户端，不新增摄影版上传 Controller／provider。处理进度扩展写在共用 EagleUploadService.getSession，素材与照片返回同一契约；owner 与模式限定、无权会话返回 404 由共用测试覆盖。只读源目录仅作为一次性导入输入，不参与图库日常读取；SQLite 是客户端检查点，不替代 PostgreSQL 业务事实。
+
+2026-10-21 入库优先调整：视频封面与可选播放转码在共用 worker 中拆分，沿用既有 GENERATE_THUMBNAIL／GENERATE_PREVIEW、owner／模式／版本与租约；仅播放任务不阻塞封面可浏览状态。普通照片输入与 RAW 解码输出采用独立共用预算，不建立照片专属上传器。

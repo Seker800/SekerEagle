@@ -280,9 +280,10 @@ def validate_upload_url(value, origin, owner, number):
 
 
 class ApiError(Exception):
-    def __init__(self, status):
+    def __init__(self, status, code=None):
         self.status = status
-        super().__init__('API_HTTP_'+str(status))
+        safe_code = code if isinstance(code, str) and re.fullmatch(r'[A-Z][A-Z_0-9]{0,80}', code) else None
+        super().__init__('API_HTTP_'+str(status)+(('_'+safe_code) if safe_code else ''))
 
 
 class Api:
@@ -311,7 +312,11 @@ class Api:
             response = connection.getresponse()
             raw = response.read(1024*1024+1)
             if not 200 <= response.status < 300:
-                raise ApiError(response.status)
+                try:
+                    code = json.loads(raw).get('code')
+                except (ValueError, AttributeError):
+                    code = None
+                raise ApiError(response.status, code)
             if len(raw) > 1024*1024:
                 raise ValueError('API_RESPONSE_TOO_LARGE')
             return json.loads(raw)
@@ -373,6 +378,13 @@ def upload_one(root, journal, row, api):
             session = api.request('GET', '/photos/uploads/'+session_id)
             if session['status'] == 'COMPLETED':
                 journal.update(path, status='IMPORTED', asset_id=session['eagleAssetId'], media_status=session.get('assetStatus'))
+                return
+            if session['status'] in ('ASSEMBLED', 'FAILED'):
+                parts = api.request('GET', '/photos/uploads/'+session_id+'/parts')['parts']
+                if not parts:
+                    raise ValueError('ASSEMBLED_PARTS_MISSING')
+                result = api.request('POST', '/photos/uploads/'+session_id+'/complete', {'parts': [{'partNumber': p['partNumber'], 'etag': p['etag']} for p in parts]})
+                journal.update(path, status='IMPORTED', asset_id=result['assetId'], media_status='PROCESSING', error=None)
                 return
             if session['status'] == 'ABORTED':
                 session_id = None
@@ -438,9 +450,10 @@ def await_processing(journal, api):
             time.sleep(1)
 
 
-def run_import(root, journal, api, limit=None):
+def run_import(root, journal, api, limit=None, wait_for_processing=False):
     api.authenticate(journal)
-    await_processing(journal, api)
+    if wait_for_processing:
+        await_processing(journal, api)
     count = 0
     while not STOP:
         batch = journal.next_batch(min(25, limit-count) if limit else 25)
@@ -477,7 +490,8 @@ def run_import(root, journal, api, limit=None):
                     raise
                 journal.update(row['path'], status='SOURCE_CHANGED', error=code)
         log('import_progress', counts=journal.summary())
-        await_processing(journal, api)
+        if wait_for_processing:
+            await_processing(journal, api)
     log('import_paused' if STOP or limit else 'import_complete', counts=journal.summary())
 
 
@@ -507,6 +521,7 @@ def main():
     parser.add_argument('--public-origin')
     parser.add_argument('--limit', type=int)
     parser.add_argument('--wait-for-inventory', action='store_true')
+    parser.add_argument('--wait-for-processing', action='store_true')
     args = parser.parse_args()
     if args.limit is not None and not 1 <= args.limit <= 100:
         parser.error('Pilot limit must be between 1 and 100')
@@ -533,7 +548,7 @@ def main():
             if args.command == 'run' and not STOP:
                 if not args.public_origin:
                     parser.error('A public origin is required')
-                run_import(root, journal, Api(state/'token', args.public_origin), args.limit)
+                run_import(root, journal, Api(state/'token', args.public_origin), args.limit, args.wait_for_processing)
         finally:
             journal.close()
 

@@ -1,3 +1,8 @@
+import { processVideo } from './video-processing';
+import {
+  VIDEO_PLAYBACK_PROCESSOR_VERSION,
+  videoTranscodingEnabled,
+} from './video-processing-policy';
 import { backgroundProcessingEnabled } from './processing-policy';
 import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
@@ -5,28 +10,13 @@ import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
-import sharp from 'sharp';
-import {
-  CAMERA_MAX_VIDEO_BYTES,
-  CAMERA_MAX_IMAGE_BYTES,
-  isCameraVideoMime,
-} from '@sekereagle/library-core';
-import {
-  probeCameraVideo,
-  transcodeCameraVideo,
-  CAMERA_VIDEO_INPUT_OPTIONS,
-} from '@sekereagle/media-core';
+import { CAMERA_MAX_IMAGE_BYTES, isCameraVideoMime } from '@sekereagle/library-core';
 import { persistPhotoAnalysis } from './photo-analysis-persistence';
 import { groupAnalyzedPhoto } from './photo-grouping';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { promisify } from 'node:util';
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -77,8 +67,6 @@ import {
   type ProcessingWakeSettings,
 } from './job-wakeup';
 
-const execFileAsync = promisify(execFile);
-
 const databaseUrl = process.env.DATABASE_URL ?? '';
 const s3Endpoint = process.env.S3_ENDPOINT ?? '';
 const s3Bucket = process.env.S3_BUCKET ?? '';
@@ -110,6 +98,7 @@ let deletingObjects = false;
 const runBackgroundProcessing = backgroundProcessingEnabled(
   process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
 );
+const runVideoTranscoding = videoTranscodingEnabled(process.env.EAGLE_VIDEO_TRANSCODING_ENABLED);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   ? Math.min(4, Math.max(1, configuredConcurrency))
@@ -154,6 +143,7 @@ let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   return claimNextMediaJob(prisma, {
     canClaimBackground: canClaimBackgroundForOwner,
+    excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
     laneOrder: mediaLaneOrder(claimSequence++),
   });
 }
@@ -162,7 +152,9 @@ async function canClaimBackgroundForOwner(
   ownerId: string,
   kind: EagleAssetProcessingJob['kind'],
   libraryMode: LibraryMode,
+  processorVersion?: string,
 ): Promise<boolean> {
+  if (processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION) return runVideoTranscoding;
   if (!runBackgroundProcessing) return false;
   const settings = await prisma.eagleProcessingSetting.findUnique({
     where: { ownerId_libraryMode: { ownerId, libraryMode } },
@@ -439,12 +431,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
               }
             : null;
         const livePhoto =
-          originalPath && taskBlocksAssetReady(job.kind)
+          originalPath && taskBlocksAssetReady(job.kind, job.processorVersion)
             ? await inspectLivePhotoImage(originalPath)
             : null;
         return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
       },
-      taskBlocksAssetReady(job.kind),
+      taskBlocksAssetReady(job.kind, job.processorVersion),
     );
     if (sourceDetails.verifiesOriginalHash) {
       assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
@@ -637,184 +629,15 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
 
   if (!isCameraVideoMime(asset.mimeType))
     throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
-  await processVideo(job, asset);
-}
-
-async function processVideo(
-  job: EagleAssetProcessingJob,
-  asset: {
-    id: string;
-    ownerId: string;
-    libraryMode: LibraryMode;
-    originalObjectKey: string;
-    mimeType: string;
-    uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
-  },
-): Promise<void> {
-  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
-  const inputPath = join(directory, 'input.mp4');
-  const posterPath = join(directory, 'poster.jpg');
-  const previewPath = join(directory, 'preview.mp4');
-  try {
-    const object = await storage.send(
-      new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
-    );
-    if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-    const hash = createHash('sha256');
-    let inputBytes = 0;
-    const hashTap = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        inputBytes += chunk.byteLength;
-        if (inputBytes > CAMERA_MAX_VIDEO_BYTES)
-          return callback(new Error('VIDEO_SIZE_LIMIT_EXCEEDED'));
-        hash.update(chunk);
-        callback(null, chunk);
-      },
-    });
-    await pipeline(
-      Readable.from(object.Body as AsyncIterable<Uint8Array>),
-      hashTap,
-      createWriteStream(inputPath, { flags: 'wx' }),
-    );
-    const sha256 = hash.digest('hex');
-    assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-    const metadata = await probeCameraVideo(inputPath, asset.mimeType);
-    const playbackMetadata = await transcodeCameraVideo(
-      inputPath,
-      previewPath,
-      metadata.durationMs,
-    );
-    await execFileAsync(
-      process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
-      [
-        '-v',
-        'error',
-        '-y',
-        '-ss',
-        '0',
-        ...CAMERA_VIDEO_INPUT_OPTIONS,
-        '-i',
-        previewPath,
-        '-frames:v',
-        '1',
-        '-vf',
-        "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
-        '-q:v',
-        '3',
-        posterPath,
-      ],
-      { timeout: 120_000 },
-    );
-    const poster = await readFile(posterPath);
-    const posterMetadata = await sharp(poster).metadata();
-    const playbackKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/preview.mp4`;
-    const playbackSize = (await stat(previewPath)).size;
-    await storage.send(
-      new PutObjectCommand({
-        Bucket: s3Bucket,
-        Key: playbackKey,
-        Body: createReadStream(previewPath),
-        ContentLength: playbackSize,
-        ContentType: 'video/mp4',
-      }),
-    );
-    const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/thumbnail.jpg`;
-    await storage.send(
-      new PutObjectCommand({
-        Bucket: s3Bucket,
-        Key: storageKey,
-        Body: poster,
-        ContentType: 'image/jpeg',
-      }),
-    );
-    await prisma.$transaction(async (transaction) => {
-      const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-      });
-      if (completed.count !== 1) return;
-      const playbackData = {
-        storageKey: playbackKey,
-        mimeType: 'video/mp4',
-        byteSize: BigInt(playbackSize),
-        width: playbackMetadata.width,
-        height: playbackMetadata.height,
-        status: 'READY' as const,
-      };
-      await transaction.eagleAssetRendition.upsert({
-        where: {
-          assetId_kind_revision_variant: {
-            assetId: asset.id,
-            kind: 'PREVIEW',
-            revision: job.assetRevision,
-            variant: 'default',
-          },
-        },
-        create: {
-          ...playbackData,
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          kind: 'PREVIEW',
-          variant: 'default',
-          revision: job.assetRevision,
-        },
-        update: playbackData,
-      });
-      await transaction.eagleAssetRendition.upsert({
-        where: {
-          assetId_kind_revision_variant: {
-            assetId: asset.id,
-            kind: 'THUMBNAIL',
-            revision: job.assetRevision,
-            variant: 'default',
-          },
-        },
-        create: {
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          kind: 'THUMBNAIL',
-          variant: 'default',
-          revision: job.assetRevision,
-          storageKey,
-          mimeType: 'image/jpeg',
-          byteSize: BigInt(poster.byteLength),
-          width: posterMetadata.width,
-          height: posterMetadata.height,
-          status: 'READY',
-        },
-        update: {
-          storageKey,
-          mimeType: 'image/jpeg',
-          byteSize: BigInt(poster.byteLength),
-          width: posterMetadata.width,
-          height: posterMetadata.height,
-          status: 'READY',
-        },
-      });
-      await transaction.eagleAsset.updateMany({
-        where: {
-          id: asset.id,
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          mediaRevision: job.assetRevision,
-        },
-        data: {
-          lifecycleStatus: 'READY',
-          mediaErrorCode: null,
-          sha256,
-          width: metadata.width,
-          height: metadata.height,
-          durationMs: metadata.durationMs,
-          livePhotoIdentifier: metadata.livePhotoIdentifier ?? null,
-          livePhotoRole: metadata.livePhotoIdentifier ? 'MOTION' : null,
-        },
-      });
-    });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
+  await processVideo(job, asset, {
+    prisma,
+    storage,
+    s3Bucket,
+    assertExpectedHash,
+    transcodingEnabled: runVideoTranscoding,
+    lockPrivacy: lockOwnerPrivacyProjection,
+    syncPrivacy: syncAssetPrivacy,
+  });
 }
 
 async function processEmbeddingJob(
@@ -1635,7 +1458,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
       });
     }
-    if (terminal && taskBlocksAssetReady(job.kind)) {
+    if (terminal && taskBlocksAssetReady(job.kind, job.processorVersion)) {
       await transaction.eagleAsset.updateMany({
         where: {
           id: job.assetId,
@@ -1711,22 +1534,23 @@ interface PendingMediaWakeRow {
   lane: EagleAssetProcessingJob['lane'];
   kind: EagleAssetProcessingJob['kind'];
   availableAt: Date;
+  processorVersion: string;
 }
 
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
   const [mediaCandidates, nextTagBuild, settings] = await Promise.all([
     prisma.$queryRaw<PendingMediaWakeRow[]>(Prisma.sql`
-      SELECT candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind,
+      SELECT candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind, candidate."processorVersion",
              MIN(candidate."availableAt") AS "availableAt"
       FROM (
-        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind,
+        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind, job."processorVersion",
                job."availableAt" AS "availableAt"
         FROM "EagleMediaJob" AS job
         LEFT JOIN "EagleMediaJob" AS dependency ON dependency.id = job."dependsOnJobId"
         WHERE job.status = 'PENDING'
           AND (job."dependsOnJobId" IS NULL OR dependency.status = 'COMPLETED')
         UNION ALL
-        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind,
+        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind, job."processorVersion",
                job."lockedAt" + INTERVAL '10 minutes' AS "availableAt"
         FROM "EagleMediaJob" AS job
         WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
@@ -1748,13 +1572,23 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
   );
   let earliest = runBackgroundProcessing ? (nextTagBuild?.availableAt ?? null) : null;
   for (const candidate of mediaCandidates) {
-    if (!runBackgroundProcessing && candidate.lane === 'BACKGROUND') continue;
-    const wakeAt = nextEligibleWakeAt(
-      candidate,
-      settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
-        defaultWakeSettings(),
-      now,
-    );
+    if (candidate.processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION && !runVideoTranscoding)
+      continue;
+    if (
+      !runBackgroundProcessing &&
+      candidate.lane === 'BACKGROUND' &&
+      candidate.processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION
+    )
+      continue;
+    const wakeAt =
+      candidate.processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION
+        ? candidate.availableAt
+        : nextEligibleWakeAt(
+            candidate,
+            settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
+              defaultWakeSettings(),
+            now,
+          );
     if (wakeAt && (!earliest || wakeAt < earliest)) earliest = wakeAt;
   }
   return earliest;
