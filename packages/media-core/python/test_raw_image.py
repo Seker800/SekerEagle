@@ -25,7 +25,8 @@ class RawPolicyTests(unittest.TestCase):
         self.assertEqual((result["width"], result["height"]), (8736, 11648))
         self.assertEqual((result["decodedWidth"], result["decodedHeight"]), (4368, 5824))
         self.assertTrue(self.raw.postprocess.call_args.kwargs["half_size"])
-        self.assertTrue(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
+        self.assertFalse(self.raw.postprocess.call_args.kwargs["no_auto_bright"])
+        self.assertEqual(self.raw.postprocess.call_args.kwargs["auto_bright_thr"], 0.001)
 
     def test_missing_native_calibration_uses_profile_after_unpack(self):
         self.raw.rgb_xyz_matrix.any.return_value = False
@@ -58,6 +59,17 @@ class RawPolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.module.decode_raw(self.raw, 120_000_000, 50_000_000)
         self.raw.unpack.assert_not_called()
+
+    def test_display_brightness_preserves_camera_white_balance_and_protects_highlights(self):
+        self.raw.sizes = SimpleNamespace(raw_width=4100, raw_height=3100, width=4096, height=3072, flip=0)
+        self.raw.postprocess.return_value = SimpleNamespace(shape=(3072,4096,3))
+        with patch("builtins.open", MagicMock()):
+            self.module.decode_raw(self.raw,120_000_000,50_000_000,"preview.tiff")
+        options=self.raw.postprocess.call_args.kwargs
+        self.assertTrue(options["use_camera_wb"])
+        self.assertFalse(options["no_auto_bright"])
+        self.assertEqual(options["auto_bright_thr"],0.001)
+        self.assertNotIn("bright",options)
 
     def test_probe_unpacks_without_rendering(self):
         result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000)

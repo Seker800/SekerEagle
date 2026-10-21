@@ -10,7 +10,7 @@
 | 相机 RAW | DNG、CR2／CR3／CRW、NEF／NRW、ARW／SR2、RAF、ORF、RW2、RWL、PEF、SRW、KDC、RAW | LibRaw 验证并解码，生成可浏览的 sRGB 派生图片；EXIF 尽力从原文件提取 |
 | 相机视频 | MP4／M4V、MOV、MTS／M2TS、AVI、MXF、MPG／MPEG                                  | 验证真实容器及编码，生成海报与浏览器播放副本                         |
 
-视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影关闭自动提亮，使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
+视频编码白名单包含 H.264、HEVC、ProRes、DNxHD、MPEG-2、MPEG-4 Part 2、MJPEG、DV、H.263。容器相同不代表所有编码都受支持；ProRes RAW、BRAW、R3D 等视频 RAW 不在本轮范围内。RAW 是否可解码取决于运行环境中的 LibRaw 版本和具体机型／压缩方式，不能仅凭扩展名宣称所有相机均已验证。RAW 显影采用解码器按照片计算的标准亮度归一化，以 0.1% 高光阈值限制裁切，使用相机白平衡和通用 sRGB 输出，不等同于厂商显影软件；视频预览暂未提供完整 HDR 色彩管理。
 
 RAW 的拍摄时间、镜头、GPS 等元数据取决于原文件与 EXIF 解析器支持。普通 TIFF／DNG 等可读字段沿用现有摄影信息模块；不能把生成预览成功视作所有专有 MakerNote 或 CR3 元数据均已支持。本轮不增加视频的人物识别或视频摄影元数据管理。
 
@@ -94,3 +94,9 @@ CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" \
 API 与 worker 均安装 ExifTool（worker 使用）和 Debian bookworm-backports 的 libheif-examples／libheif-plugin-libde265；上传与预览共用 media-core 的 HEIF 解码，保留 MIME、总像素、大小、超时、进程环境与输出预算，禁止关闭 libheif 安全限制。解码依赖缺失时，worker 重试而非将空摄影信息标记为成功。
 
 已有照片可用 worker 镜像中的 `apps/worker/dist/photo-metadata-refresh.js` 补读。首个参数是明确资源清单文件，每项仅含 assetId、sha256、mediaRevision，最多 100 项且必须属于同一个账号的 PHOTO；默认仅输出计划，附加 `--apply` 才写入。先完成备份与安全目标检查。命令核对当前媒体版本、未删除状态、原片大小与 SHA，在资源行锁内复核并复用原有摄影持久化函数；保留既有像素分析、不覆盖继承了原片拍摄信息的编辑副本、不重新生成缩略图、不全库扫描。它不修改原片、素材、模型或数据库 schema。
+
+### RAW 偏暗修复
+
+实片复现旧策略 `no_auto_bright=True` 使富士等 RAW 显示偏暗。恢复 LibRaw 的自适应亮度并将 `auto_bright_thr` 设为 0.001，保留相机白平衡、原片尺寸与像素预算；不固定增加曝光，不修改原片或 EXIF。缩略图、普通预览、编辑显影副本与后续金字塔继续走同一显影策略。它仍不等同于厂商 JPEG 的电影模拟、曲线或手机 HDR 合成。
+
+既有 RAW 通过 worker 的 `raw-preview-refresh.js` 和同样的精确版本清单重新生成派生图片；默认预演，`--apply` 在账号／PHOTO／原始 RAW／SHA／媒体版本复核和行锁内创建现有 GENERATE_RENDITIONS 任务。任务按显影策略版本去重，重试不新增照片，不更改原件、摄影时间或模式归属。仅重建明确授权的样本，不自动扫描全库。
