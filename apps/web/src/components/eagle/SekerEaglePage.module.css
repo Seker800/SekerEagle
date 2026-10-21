@@ -1018,22 +1018,23 @@
   }
 }
 
-/* Reference phone layout: a single compact header and a persistent bottom navigation. */
+/* Phone chrome floats above the shared scroll view. */
 @media (max-width: 720px) {
   .page {
-    --eagle-bg: #1c1c1e;
+    --eagle-bg: #09090b;
     --eagle-panel: #1c1c1e;
     --eagle-panel-raised: #29292b;
   }
   .workspace,
   .workspaceWide {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 60px minmax(0, 1fr) auto;
+    position: relative;
+    grid-template-rows: minmax(0, 1fr);
   }
   .library {
     background: var(--eagle-bg);
     grid-column: 1;
-    grid-row: 2;
+    grid-row: 1;
     min-height: 0;
   }
   .library[hidden],
@@ -1048,7 +1049,7 @@
     display: flex;
     grid-column: auto;
     grid-row: auto;
-    margin: 0 16px 12px;
+    margin: 72px 16px 12px;
     width: calc(100% - 32px);
     flex-shrink: 0;
   }
@@ -1057,7 +1058,7 @@
   }
   .assetViewport,
   .horizontalViewport {
-    padding: 0;
+    padding: 0 0 160px;
   }
   .scrollContent {
     padding-right: 0;

@@ -1,10 +1,10 @@
 .more {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1;
   min-height: 0;
   overflow: auto;
-  padding: 20px 18px;
-  background: #1c1c1e;
+  padding: 76px 22px 170px;
+  background: #09090b;
 }
 .identity {
   display: flex;

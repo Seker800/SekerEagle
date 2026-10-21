@@ -8,7 +8,8 @@
   border-radius: 8px;
   background: var(--eagle-bg);
 }
-.switcher > .option {
+.switcher > .option,
+.phoneSwitcher > .option {
   flex: 1;
   width: auto;
   min-width: 0;
@@ -36,44 +37,39 @@
   outline: 2px solid var(--eagle-accent);
   outline-offset: 1px;
 }
+.phoneSwitcher {
+  composes: surface from './EagleGlass.module.css';
+  display: flex;
+  min-width: 0;
+}
 @media (max-width: 720px) {
-  .switcher {
-    flex: 0 1 192px;
-    border: 0;
-    padding: 3px;
-    border-radius: 24px;
-    background: var(--eagle-panel-raised);
+  .phoneSwitcher {
+    box-sizing: border-box;
+    width: 100%;
+    gap: 2px;
+    padding: 4px;
+    border-radius: 36px;
   }
-  .switcher > .option {
-    min-height: 34px;
-    border-radius: 20px;
-    font-size: 13px;
+  .phoneSwitcher > .option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    min-height: 54px;
+    border-radius: 30px;
+    padding: 5px 12px;
+    color: #c9c9d0;
+    font-size: 12px;
+  }
+  .phoneSwitcher > .option[aria-pressed='true'] {
+    background: linear-gradient(160deg, rgb(255 255 255 / 24%), rgb(255 255 255 / 10%));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 12%);
+    color: #fff;
+    font-weight: 500;
   }
 }
-.dropdown {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  color: #f3f3f5;
-}
-.dropdown select {
-  appearance: none;
-  padding: 10px 30px 10px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 18px;
-  min-height: 48px;
-  cursor: pointer;
-}
-.dropdown select option {
-  background: #252527;
-}
-.dropdown svg {
-  position: absolute;
-  right: 6px;
-  pointer-events: none;
+
+.phoneSwitcher > .option:focus-visible {
+  outline: 2px solid #8bb1ff;
+  outline-offset: -2px;
 }

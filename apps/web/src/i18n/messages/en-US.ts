@@ -1,4 +1,5 @@
 export const enUS = {
+  更多操作: 'More actions',
   文件上传脚本: 'Upload script',
   '开启显示隐私内容后，可管理全部私密标签。':
     'Enable Show private content to manage all private tags.',

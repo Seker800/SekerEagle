@@ -1,4 +1,4 @@
-import { IconChevronDown } from '@tabler/icons-react';
+import { IconPhoto, IconLayoutGrid } from '@tabler/icons-react';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import type { LibraryMode } from '../../lib/library-api-scope';
 import { t } from '../../i18n';
@@ -11,33 +11,27 @@ export function LibraryModeControl({
   onChange: (mode: LibraryMode) => void;
 }) {
   const compact = useCompactLayout();
-  if (compact)
-    return (
-      <label className={styles.dropdown}>
-        <select
-          aria-label={t('图库模式')}
-          value={value}
-          onChange={(event) => onChange(event.target.value as LibraryMode)}
-        >
-          <option value="PHOTO">{t('相册')}</option>
-          <option value="MATERIAL">{t('素材')}</option>
-        </select>
-        <IconChevronDown size={17} />
-      </label>
-    );
   return (
-    <nav aria-label={t('图库模式')} className={styles.switcher}>
-      {(['MATERIAL', 'PHOTO'] as const).map((mode) => (
-        <button
-          key={mode}
-          type="button"
-          className={styles.option}
-          aria-pressed={value === mode}
-          onClick={() => onChange(mode)}
-        >
-          {mode === 'PHOTO' ? t('照片') : t('素材')}
-        </button>
-      ))}
+    <nav aria-label={t('图库模式')} className={compact ? styles.phoneSwitcher : styles.switcher}>
+      {(compact ? (['PHOTO', 'MATERIAL'] as const) : (['MATERIAL', 'PHOTO'] as const)).map(
+        (mode) => (
+          <button
+            key={mode}
+            type="button"
+            className={styles.option}
+            aria-pressed={value === mode}
+            onClick={() => onChange(mode)}
+          >
+            {compact &&
+              (mode === 'PHOTO' ? (
+                <IconPhoto size={25} stroke={1.7} />
+              ) : (
+                <IconLayoutGrid size={25} stroke={1.7} />
+              ))}
+            <span>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
+          </button>
+        ),
+      )}
     </nav>
   );
 }

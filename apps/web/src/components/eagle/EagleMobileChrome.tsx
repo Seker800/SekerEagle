@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import {
   IconPhoto,
+  IconTags,
   IconMapPin,
   IconUsers,
   IconMenu2,
@@ -10,7 +11,7 @@ import {
 import type { LibraryMode } from '../../lib/library-api-scope';
 import { t } from '../../i18n';
 import styles from './EagleMobileChrome.module.css';
-export type MobileDestination = 'timeline' | 'map' | 'people' | 'more';
+export type MobileDestination = 'timeline' | 'map' | 'people' | 'tags' | 'more';
 /** Phone presentation only: destinations still select the shared workspace views. */
 export function EagleMobileChrome({
   mode,
@@ -38,37 +39,40 @@ export function EagleMobileChrome({
           { key: 'map' as const, label: t('地图'), icon: IconMapPin },
           { key: 'people' as const, label: t('人物'), icon: IconUsers },
         ]
-      : []),
+      : [{ key: 'tags' as const, label: t('标签'), icon: IconTags }]),
     { key: 'more', label: t('更多'), icon: IconMenu2 },
   ];
   return (
     <>
-      <header className={styles.header}>
-        <div className={styles.switcher}>{switcher}</div>
-        <button
-          type="button"
-          aria-label={searchOpen ? t('关闭搜索') : t('搜索')}
-          aria-expanded={searchOpen}
-          onClick={onSearch}
-        >
-          {searchOpen ? <IconX size={25} /> : <IconSearch size={25} />}
-        </button>
-        {tools}
-      </header>
+      <header className={styles.header}>{tools}</header>
       {children}
-      <nav className={styles.bottom} aria-label={t('主导航')}>
-        {destinations.map(({ key, label, icon: Icon }) => (
+      <div className={styles.dock}>
+        <nav className={styles.destinations} aria-label={t('主导航')}>
+          {destinations.map(({ key, label, icon: Icon }) => (
+            <button
+              type="button"
+              key={key}
+              aria-current={active === key ? 'page' : undefined}
+              onClick={() => onNavigate(key)}
+            >
+              <Icon size={25} stroke={1.7} />
+              <span>{label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className={styles.bottom}>
+          <div className={styles.switcher}>{switcher}</div>
           <button
+            className={styles.search}
             type="button"
-            key={key}
-            aria-current={active === key ? 'page' : undefined}
-            onClick={() => onNavigate(key)}
+            aria-label={searchOpen ? t('关闭搜索') : t('搜索')}
+            aria-expanded={searchOpen}
+            onClick={onSearch}
           >
-            <Icon size={25} stroke={1.7} />
-            <span>{label}</span>
+            {searchOpen ? <IconX size={25} /> : <IconSearch size={25} />}
           </button>
-        ))}
-      </nav>
+        </div>
+      </div>
     </>
   );
 }

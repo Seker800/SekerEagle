@@ -1,60 +1,79 @@
 .header {
-  grid-column: 1;
-  grid-row: 1;
-  position: relative;
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: 14px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  padding: 0 12px;
-  background: #1c1c1e;
-  min-width: 0;
-  z-index: 4;
+  gap: 8px;
+  z-index: 5;
 }
-.header .switcher {
+.dock {
   position: absolute;
+  bottom: max(18px, env(safe-area-inset-bottom));
   left: 50%;
   transform: translateX(-50%);
-  max-width: calc(100% - 192px);
-  min-width: 0;
-}
-.header > button {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  min-height: 48px;
-  border: 0;
-  border-radius: 24px;
-  color: #eee;
-  background: transparent;
-  padding: 0;
-  flex-shrink: 0;
-}
-.bottom {
-  grid-column: 1;
-  grid-row: 3;
-  display: flex;
-  justify-content: space-around;
-  background: #252527;
-  padding: 6px 10px max(8px, env(safe-area-inset-bottom));
-  border-top: 1px solid #ffffff08;
-  z-index: 4;
-}
-.bottom button {
-  flex: 1;
+  width: min(354px, calc(100% - 32px));
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  z-index: 5;
+  pointer-events: none;
+}
+.bottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.switcher {
+  flex: 1;
+  min-width: 0;
+  pointer-events: auto;
+}
+.search {
+  composes: surface from './EagleGlass.module.css';
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  padding: 0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.destinations {
+  composes: surface from './EagleGlass.module.css';
+  display: flex;
+  padding: 4px;
+  border-radius: 24px;
+  pointer-events: auto;
+}
+.destinations button {
+  flex: 1;
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-height: 56px;
+  gap: 5px;
+  min-width: 0;
+  min-height: 38px;
   border: 0;
+  border-radius: 20px;
+  padding: 0 5px;
   background: transparent;
-  color: #8e8e92;
+  color: #b4b4be;
   font-size: 12px;
   cursor: pointer;
 }
-.bottom button[aria-current='page'] {
+.destinations svg {
+  width: 17px;
+  height: 17px;
+}
+.destinations button[aria-current='page'] {
   color: #fff;
+  background: rgb(255 255 255 / 12%);
+}
+.search:focus-visible,
+.destinations button:focus-visible {
+  outline: 2px solid #8bb1ff;
+  outline-offset: 3px;
 }

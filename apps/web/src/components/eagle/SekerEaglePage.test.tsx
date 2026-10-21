@@ -2549,6 +2549,25 @@ describe('SekerEaglePage', () => {
     }
   });
 
+  it('opens the existing tag workspace from the material phone navigation', async () => {
+    vi.stubGlobal('matchMedia', () => ({
+      matches: true,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
+    const view = renderPage();
+    try {
+      fireEvent.click(screen.getByRole('button', { name: '标签' }));
+      expect(screen.getByRole('region', { name: '标签' })).toBeVisible();
+      expect(screen.getByRole('button', { name: '标签' })).toHaveAttribute('aria-current', 'page');
+      fireEvent.click(screen.getByRole('button', { name: '素材' }));
+      expect(screen.getByRole('button', { name: '素材' })).toHaveAttribute('aria-current', 'page');
+    } finally {
+      view.unmount();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('puts library management behind the phone three-dot sheet without a hamburger', async () => {
     vi.stubGlobal('matchMedia', () => ({
       matches: true,
@@ -2567,14 +2586,14 @@ describe('SekerEaglePage', () => {
     try {
       expect(screen.queryByRole('button', { name: '打开导航' })).not.toBeInTheDocument();
       expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-      const toggle = screen.getByRole('button', { name: '视图与筛选' });
+      const toggle = screen.getByRole('button', { name: '更多操作' });
       expect(screen.queryByRole('button', { name: '回收站' })).not.toBeInTheDocument();
       fireEvent.click(toggle);
-      const drawer = screen.getByRole('dialog', { name: '视图与筛选' });
+      const drawer = screen.getByRole('dialog', { name: '更多操作' });
       fireEvent.click(within(drawer).getByText('图库管理'));
       fireEvent.click(within(drawer).getByRole('button', { name: '回收站' }));
       await waitFor(() => expect(listEagleTrashMock).toHaveBeenCalled());
-      expect(screen.queryByRole('dialog', { name: '视图与筛选' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: '更多操作' })).not.toBeInTheDocument();
     } finally {
       view.unmount();
       if (show) Object.defineProperty(HTMLDialogElement.prototype, 'showModal', show);

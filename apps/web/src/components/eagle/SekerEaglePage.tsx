@@ -1331,30 +1331,25 @@ export function SekerEaglePage({
       className={styles.toolbarActions}
       scopeKey={storeScope}
       panel={quickFilterPanel}
+      actions={
+        compact ? (
+          <>
+            <div data-dismiss-tools>{selectionToolbar}</div>
+            {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
+            <details>
+              <summary>{t('图库管理')}</summary>
+              <div data-dismiss-tools className={`${styles.sidebar} ${styles.mobileNavigation}`}>
+                {libraryNavigation(() => {
+                  setMobileMore(false);
+                  setMobileSearch(false);
+                })}
+              </div>
+            </details>
+          </>
+        ) : undefined
+      }
       count={activeFilterCount}
     >
-      {compact && (
-        <>
-          <div data-dismiss-tools>{selectionToolbar}</div>
-          {libraryView !== 'TRASH' && <EagleImportButton onImport={importFiles} />}
-          <details>
-            <summary>{t('图库管理')}</summary>
-            <div
-              data-dismiss-tools
-              onClick={() => {
-                setMobileMore(false);
-                setMobileSearch(false);
-              }}
-              className={`${styles.sidebar} ${styles.mobileNavigation}`}
-            >
-              {libraryNavigation(() => {
-                setMobileMore(false);
-                setMobileSearch(false);
-              })}
-            </div>
-          </details>
-        </>
-      )}
       {libraryView === 'ACTIVE' && (
         <>
           <button
@@ -1466,7 +1461,9 @@ export function SekerEaglePage({
     setMobileMore(destination === 'more');
     setMobileSearch(false);
     clearAssetSelection();
-    if (destination !== 'more') {
+    if (destination === 'tags') {
+      changeLibraryView('MANUAL_TAGS');
+    } else if (destination !== 'more') {
       changeLibraryView('ACTIVE');
       setPhotoView(destination);
     }
@@ -1517,9 +1514,11 @@ export function SekerEaglePage({
             active={
               mobileMore || workspaceSection === 'SETTINGS'
                 ? 'more'
-                : photoView === 'map' || photoView === 'people'
-                  ? photoView
-                  : 'timeline'
+                : workspaceSection === 'TAGS'
+                  ? 'tags'
+                  : photoView === 'map' || photoView === 'people'
+                    ? photoView
+                    : 'timeline'
             }
             onNavigate={navigateMobile}
           >
