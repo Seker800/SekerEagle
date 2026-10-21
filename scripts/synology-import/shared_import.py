@@ -37,7 +37,7 @@ def open_source(root, relative):
             next_directory = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
             os.close(directory)
             directory = next_directory
-        fd = os.open(p.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        fd = os.open(p.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             os.close(fd)
             raise ValueError('SOURCE_NOT_REGULAR')
@@ -91,6 +91,7 @@ class Journal:
         self.db = sqlite3.connect(self.path, timeout=30)
         os.chmod(self.path, 0o600)
         self.db.row_factory = sqlite3.Row
+        self._batch = False
         self.db.executescript('''PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL;
         CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS items(path TEXT PRIMARY KEY,size INTEGER,mtime_ns INTEGER,inode INTEGER,device INTEGER,
@@ -100,6 +101,25 @@ class Journal:
         ''')
         self.fixed('schema_version', '1')
 
+    @contextlib.contextmanager
+    def write(self):
+        if self._batch:
+            yield
+        else:
+            with self.db:
+                yield
+
+    @contextlib.contextmanager
+    def batch(self):
+        if self._batch:
+            raise ValueError('NESTED_BATCH_REJECTED')
+        with self.db:
+            self._batch = True
+            try:
+                yield
+            finally:
+                self._batch = False
+
     def close(self):
         self.db.close()
 
@@ -108,7 +128,7 @@ class Journal:
         return row[0] if row else None
 
     def set_meta(self, key, value):
-        with self.db:
+        with self.write():
             self.db.execute('INSERT OR REPLACE INTO meta VALUES(?,?)', (key, str(value)))
 
     def fixed(self, key, value):
@@ -130,12 +150,12 @@ class Journal:
             if any(row[k] != facts[k] for k in facts):
                 self.update(path, status='SOURCE_CHANGED', error='SOURCE_CHANGED')
             return
-        with self.db:
+        with self.write():
             self.db.execute('INSERT INTO items(path,size,mtime_ns,inode,device,mime,kind) VALUES(?,?,?,?,?,?,?)',
                             (path, facts['size'], facts['mtime_ns'], facts['inode'], facts['device'], mime, kind))
 
     def metadata(self, path, capture, source, name):
-        with self.db:
+        with self.write():
             self.db.execute("UPDATE items SET capture=?,date_source=?,upload_name=?,status='PENDING' WHERE path=? AND status='DISCOVERED'",
                             (capture, source, name, path))
 
@@ -143,7 +163,7 @@ class Journal:
         allowed = {'status', 'sha256', 'session_id', 'part_size', 'asset_id', 'media_status', 'attempts', 'error', 'mime'}
         if not fields or not set(fields) <= allowed:
             raise ValueError('INVALID_CHECKPOINT_FIELD')
-        with self.db:
+        with self.write():
             self.db.execute('UPDATE items SET '+','.join(k+'=?' for k in fields)+' WHERE path=?', (*fields.values(), path))
 
     def next_batch(self, size):
@@ -165,10 +185,17 @@ def inventory(root, journal, policy):
     log('inventory_started')
     if journal.meta('discovery_complete') != '1':
         count = 0
+        pending = []
+        def save_discovery():
+            with journal.batch():
+                for args in pending:
+                    journal.add(*args)
+            pending.clear()
         for folder, directories, files in os.walk(root, followlinks=False):
             directories[:] = sorted(x for x in directories if not x.startswith(('@', '#', '.')) and not Path(folder, x).is_symlink())
             for name in sorted(files):
                 if STOP:
+                    save_discovery()
                     return
                 relative = Path(folder, name).relative_to(root).as_posix()
                 try:
@@ -177,12 +204,15 @@ def inventory(root, journal, policy):
                         facts = fingerprint(os.fstat(source.fileno()))
                     rule = file_policy(name, facts['size'], policy)
                     if rule:
-                        journal.add(relative, facts, *rule)
+                        pending.append((relative, facts, *rule))
                         count += 1
+                        if len(pending) >= 100:
+                            save_discovery()
                         if count % 1000 == 0:
                             log('inventory_discovered', count=count)
                 except (OSError, ValueError):
                     continue
+        save_discovery()
         journal.set_meta('discovery_complete', '1')
     while not STOP:
         batch = journal.db.execute("SELECT * FROM items WHERE status='DISCOVERED' ORDER BY path LIMIT 100").fetchall()
@@ -211,21 +241,22 @@ def inventory(root, journal, policy):
             if len(process.stdout) > 4*1024*1024 or process.returncode not in (0, 1):
                 raise ValueError('METADATA_READER_FAILED')
             tags = {x['SourceFile']: x for x in json.loads(process.stdout)}
-            for row, fd, input_path in zip(selected, descriptors, paths):
-                if fingerprint(os.fstat(fd)) != {k: row[k] for k in fingerprint(os.fstat(fd))}:
-                    journal.update(row['path'], status='SOURCE_CHANGED', error='SOURCE_CHANGED')
-                    continue
-                data = tags.get(input_path, {})
-                timestamp, source = capture_time(data, row['mtime_ns']/1e9)
-                name = Path(row['path']).name
-                # Correct a demonstrable extension mismatch, never the source name or bytes.
-                actual = data.get('MIMEType')
-                if actual in ('image/jpeg', 'image/png', 'image/webp', 'image/gif') and actual != row['mime']:
-                    match = next((x for x in policy['formats'] if x['mimeType'] == actual), None)
-                    if match:
-                        name = Path(name).stem + match['extension']
-                        journal.update(row['path'], mime=actual)
-                journal.metadata(row['path'], timestamp, source, name)
+            with journal.batch():
+                for row, fd, input_path in zip(selected, descriptors, paths):
+                    if fingerprint(os.fstat(fd)) != {k: row[k] for k in fingerprint(os.fstat(fd))}:
+                        journal.update(row['path'], status='SOURCE_CHANGED', error='SOURCE_CHANGED')
+                        continue
+                    data = tags.get(input_path, {})
+                    timestamp, source = capture_time(data, row['mtime_ns']/1e9)
+                    name = Path(row['path']).name
+                    # Correct a demonstrable extension mismatch, never the source name or bytes.
+                    actual = data.get('MIMEType')
+                    if actual in ('image/jpeg', 'image/png', 'image/webp', 'image/gif') and actual != row['mime']:
+                        match = next((x for x in policy['formats'] if x['mimeType'] == actual), None)
+                        if match:
+                            name = Path(name).stem + match['extension']
+                            journal.update(row['path'], mime=actual)
+                    journal.metadata(row['path'], timestamp, source, name)
         finally:
             for fd in descriptors:
                 os.close(fd)
