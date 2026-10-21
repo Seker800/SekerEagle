@@ -47,3 +47,22 @@
 接通后验证：无模型凭据被拒绝、有凭据文字嵌入成功、向量空间一致、共用图片搜索服务返回 READY 并对现有图片产生语义命中、浏览器入口仍健康。不要为消除降级提示而关闭身份校验、重算全库向量或顺便启动 8B／worker。
 
 2026-10-21 实测：对象恢复任务最终输出 `Restored 644206 Eagle objects.`。搜索故障由初始隔离地址的 `ECONNREFUSED` 引起；现有 68450 条 MATERIAL／READY 图片向量与模型空间一致。显式覆盖仅把 API 文字搜索接到 Mac 局域网的 SekerEagle MLX 服务，其他服务配置不变。NAS 到模型无凭据请求返回 401，有凭据真实文字请求返回 HTTP 200、1024 维归一化向量；共用搜索服务返回 READY、前五项均为语义命中，浏览器搜索「蓝天白云下的山川」显示山川图片且无降级提示。Mac 仍承担模型推理，不能据此宣称 NAS 能脱离 Mac 运行内容搜索。
+
+## 现用实例 HTTPS 入口
+
+2026-10-21 用户确认群晖版新增 `https://yuntai.design:8181`，保留 Mac 的原 8180 入口。OpenWrt 新增独立 TCP 8181 映射及 NAT reflection，由已有证书所在的 DSM 终止 TLS，再转发到 SekerEagle NAS 的局域网 HTTP 8181。DSM 仅承担入口代理，不访问 SekerChat 的数据、存储、运行时或凭据；应用、数据库及对象存储仍在独立 NAS Compose 项目内。公网 80／443 不可用，沿用现有域名解析，不新增 DDNS 或证书签发器。
+
+现用安装目录额外保存 `https.yml` 与 `nginx.https.conf`；这是对既有安装的运行配置，不改变初始隔离包生成器。API、worker、migration 的 `CANONICAL_ORIGIN` 与 `S3_PUBLIC_ENDPOINT` 同时设为上述 HTTPS origin，关闭不安全公网 HTTP 兼容；网关上传回源 Host 固定为 `yuntai.design:8181`，与签名保持一致。安全 Cookie 只通过 HTTPS 使用，局域网 HTTP 端口作为代理回源。后续维护必须保留搜索与 HTTPS 两份覆盖：
+
+```sh
+docker compose --env-file .env -f compose.yml -f search-inference.yml -f https.yml config --quiet
+docker compose --env-file .env -f compose.yml -f search-inference.yml -f https.yml up -d --no-deps api worker gateway
+```
+
+DSM 中仅为新增代理绑定有效的 ZeroSSL ECC 同域名证书，未复制私钥或更改其他服务的证书分配。实测 TLS 1.3、域名及完整证书链校验成功，证书北京时间 2026-12-09 到期。复用的是 DSM 证书对象；原续期执行者及是否更新同一对象尚未核实，任务计划两次读取均返回无法联机，不能据此承诺自动续期已验收。旧 DSM 管理入口仍使用过期默认证书，属于独立维护项。
+
+已验证应用安全目标、Compose 配置、API／worker 健康、Secure／HttpOnly／SameSite Strict 会话 Cookie；完整 HTTPS 的正确来源合成错误登录返回 401，外部来源返回 403。直达代理和 NAT 回流的首页／健康接口返回 200，浏览器正常显示登录表单；不存在对象的短时签名 HEAD 经完整 HTTPS 链路返回预期 404，没有创建测试对象。未执行真实账号登录或个人照片上传，家庭外移动网络入站仍待实测。
+
+本次只调整部署配置及维护文档，未修改应用源码；本机 lint、typecheck、完整单测和 build 均通过。
+
+回滚应用入口时以基础文件加 `search-inference.yml` 重建上述三个服务；网络侧只撤销新增的 `pf_sekereagle_nas` 和 SekerEagle DSM 代理，不覆盖其他规则或全局证书。最新网络链路、备份与维护交接同步记录在用户的 OpenWrt 网络项目中。
