@@ -34,7 +34,7 @@ test('cross-owner or cross-mode session is not disclosed',async()=>{
 });
 test('storage upload parts include ContentMD5 and preserve bytes',async()=>{
   let sent:unknown;
-  const service=Object.assign(Object.create(ObjectStorageService.prototype) as ObjectStorageService,{bucket:'sekereagle-assets',client:{send:async(x:unknown)=>{sent=x;return {ETag:'etag'};}}});
+  const service=Object.assign(Object.create(ObjectStorageService.prototype),{bucket:'sekereagle-assets',client:{send:async(x:unknown)=>{sent=x;return {ETag:'etag'};}}}) as ObjectStorageService;
   assert.equal(await service.uploadLocalPart('key','multipart',1,Buffer.from('abc')),'etag');
   assert.deepEqual((sent as {input:{Body:Buffer}}).input.Body,Buffer.from('abc'));
   assert.equal((sent as {input:{ContentMD5:string}}).input.ContentMD5,'kAFQmDzST7DWlj99KOF/cg==');
