@@ -71,3 +71,24 @@ it('closes phone tools when the account or mode changes', () => {
   );
   expect(screen.queryByRole('dialog', { name: '视图与筛选' })).not.toBeInTheDocument();
 });
+
+it('can present a separate actions dropdown without duplicating the shared view controls', () => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  render(
+    <EagleResponsiveTools scopeKey="one" actions={<button>导入照片</button>}>
+      <button>排序</button>
+    </EagleResponsiveTools>,
+  );
+  fireEvent.click(screen.getByRole('button', { name: '更多操作' }));
+  expect(screen.getByRole('button', { name: '导入照片' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: '排序' })).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+  fireEvent(screen.getByRole('dialog'), new Event('cancel', { bubbles: true, cancelable: true }));
+  fireEvent.click(screen.getByRole('button', { name: '视图与筛选' }));
+  expect(screen.getByRole('button', { name: '排序' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: '导入照片' })).not.toBeInTheDocument();
+});
