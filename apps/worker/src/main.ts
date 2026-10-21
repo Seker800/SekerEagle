@@ -1,6 +1,6 @@
 import { mediaSubprocessEnvironment } from '@sekereagle/media-core';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
-import { imageRenditionSpecs, catalogImageDimensions } from './image-renditions';
+import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
 import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
@@ -389,7 +389,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       object.Body as AsyncIterable<Uint8Array>,
       sourceDetails.mimeType,
       sourceDetails.storageKey,
-      async (source, originalPath, originalDimensions) => {
+      async (source, originalPath, originalDimensions, embeddedThumbnail) => {
         const metadataPromise = source.clone().metadata();
         if (job.kind === 'EXTRACT_COLOR_PALETTE') {
           const [{ data, info }, metadata] = await Promise.all([
@@ -414,7 +414,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         for (const spec of renditionSpecs) {
           rendered.push({
             spec,
-            output: await source
+            output: await renditionSource(spec, source, embeddedThumbnail)
               .clone()
               .rotate()
               .resize({
