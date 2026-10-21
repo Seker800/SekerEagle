@@ -121,3 +121,26 @@ class InventoryTests(unittest.TestCase):
         (self.root/'new.jpg').write_bytes(b'newer')
         self.m.inventory(self.root,j,policy)
         self.assertEqual(j.summary(),{'PENDING':1});j.close()
+
+class JournalBatchTests(unittest.TestCase):
+    setUp = SharedImportTests.setUp
+    def test_inventory_batch_commits_together_and_rolls_back_on_failure(self):
+        j=self.m.Journal(Path(self.tmp.name)/'state')
+        with self.assertRaises(RuntimeError):
+            with j.batch():
+                j.add('photo.jpg',{'size':1,'mtime_ns':1,'inode':1,'device':1},'image/jpeg','image')
+                raise RuntimeError('interrupted batch')
+        self.assertEqual(j.summary(),{})
+        with j.batch():
+            j.add('photo.jpg',{'size':1,'mtime_ns':1,'inode':1,'device':1},'image/jpeg','image')
+            j.metadata('photo.jpg',1,'FileModifyTime','photo.jpg')
+        j.close();j=self.m.Journal(Path(self.tmp.name)/'state');self.assertEqual(j.summary(),{'PENDING':1});j.close()
+
+    def test_special_source_files_do_not_block_discovery(self):
+        from unittest.mock import patch
+        os.mkfifo(self.root/'pipe.jpg')
+        original=os.open
+        def checked(path,flags,*args,**kwargs):
+            if path=='pipe.jpg':self.assertTrue(flags&os.O_NONBLOCK)
+            return original(path,flags,*args,**kwargs)
+        with patch.object(self.m.os,'open',side_effect=checked),self.assertRaises(ValueError):self.m.open_source(self.root,'pipe.jpg')
