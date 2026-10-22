@@ -22,7 +22,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
@@ -112,35 +111,32 @@ private fun NativeLibrary(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                if (state.filters.active || state.trash)
+                if (state.trash)
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
                             Modifier.padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(if (state.trash) "最近删除" else "筛选已生效", Modifier.weight(1f))
-                            TextButton({
-                                if (state.trash) model.openTrash(false)
-                                else model.applyFilters(NativeFilters())
-                            }) {
-                                Text(if (state.trash) "返回图库" else "清除筛选")
-                            }
+                            Text("最近删除", Modifier.weight(1f))
+                            TextButton({ model.openTrash(false) }) { Text("返回图库") }
                         }
                     }
-                if (state.query.isNotEmpty())
+                if (state.filters.active || state.query.isNotEmpty())
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Row(
-                            Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                                .testTag("native-search-results")
                         ) {
-                            Text(
-                                "“${state.query}”",
-                                Modifier.weight(1f),
-                                fontSize = 18.sp,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            TextButton({ model.search("") }) { Text("清除") }
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text("搜索结果", Modifier.weight(1f), fontSize = 18.sp)
+                                TextButton(model::openSearch) { Text("修改条件") }
+                                TextButton(model::clearSearch) { Text("清空") }
+                            }
+                            NativeSearchConditions(state, model)
                         }
                     }
                 state.items.forEachIndexed { index, asset ->
@@ -255,7 +251,9 @@ private fun NativeLibrary(
                     )
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        if (state.query.isEmpty()) "这里还没有${state.mode.title}" else "没有找到相关内容",
+                        if (state.query.isEmpty() && !state.filters.active)
+                            "这里还没有${state.mode.title}"
+                        else "没有找到符合条件的内容",
                         color = NativeMuted,
                     )
                 }
@@ -336,17 +334,6 @@ private fun NativeLibrary(
                 GlassSurface(Modifier.width(228.dp), radius = 26) {
                     Column(Modifier.padding(vertical = 12.dp)) {
                         if (menu == "view") {
-                            (listOf("标签") +
-                                    (if (state.mode == GalleryMode.PHOTO) listOf("相机", "镜头")
-                                    else emptyList()) +
-                                    listOf("时间", "格式", "筛选"))
-                                .forEach { label ->
-                                    MenuRow(label, Icons.Outlined.Tune) {
-                                        menu = ""
-                                        model.openFilters(label)
-                                    }
-                                }
-                            HorizontalDivider()
                             Text(
                                 "视图",
                                 Modifier.padding(20.dp, 8.dp),

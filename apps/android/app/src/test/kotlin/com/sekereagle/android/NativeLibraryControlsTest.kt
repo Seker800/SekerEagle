@@ -29,7 +29,8 @@ class NativeLibraryControlsTest {
 
     @Test
     fun alternativesWithinCategoriesUseAnyMatchAndCanBeRemovedIndividually() {
-        val filters = NativeFilters(tags = setOf("a", "b"), formats = setOf("jpg", "dng"), camera = "Sony")
+        val filters =
+            NativeFilters(tags = setOf("a", "b"), formats = setOf("jpg", "dng"), camera = "Sony")
         val parameters = filters.parameters()
         assertEquals("ANY", parameters["tagMatch"])
         assertEquals("dng,jpg", parameters["formats"])

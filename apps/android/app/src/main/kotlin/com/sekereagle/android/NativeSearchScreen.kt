@@ -2,7 +2,6 @@ package com.sekereagle.android
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -10,7 +9,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -26,7 +24,7 @@ import androidx.compose.ui.unit.sp
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
-    var query by rememberSaveable { mutableStateOf(state.query) }
+    val query = state.searchDraft
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -48,7 +46,7 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
         ) {
             TextField(
                 query,
-                { query = it.take(200) },
+                model::updateSearchDraft,
                 Modifier.weight(1f).focusRequester(focus).testTag("search-input"),
                 singleLine = true,
                 placeholder = { Text("搜索名称或描述", color = NativeMuted) },
@@ -76,13 +74,47 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
             keyboard?.show()
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 30.dp)) {
+            Text("按条件查找", color = NativeMuted, fontSize = 13.sp)
+            Text(
+                "不同类别同时满足；标签、格式多选时，匹配其中任意一个即可。",
+                Modifier.padding(top = 8.dp, bottom = 12.dp),
+                color = NativeMuted,
+                fontSize = 13.sp,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                (listOf("标签") +
+                        (if (state.mode == GalleryMode.PHOTO) listOf("相机", "镜头") else emptyList()) +
+                        listOf("时间", "格式", "更多条件"))
+                    .forEach { label ->
+                        SuggestionChip(
+                            onClick = {
+                                keyboard?.hide()
+                                focusManager.clearFocus()
+                                model.openFilters(if (label == "更多条件") "筛选" else label)
+                            },
+                            label = { Text(if (label == "时间") "导入日期" else label) },
+                            shape = CircleShape,
+                        )
+                    }
+            }
+            NativeSearchConditions(state, model, showKeyword = false)
+            Button(
+                { submit(query) },
+                Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-submit"),
+            ) {
+                Text("查看结果")
+            }
+            Spacer(Modifier.height(28.dp))
             Text("试试搜索", color = NativeMuted, fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                listOf("旅行", "风景", "猫", "RAW").forEach { word ->
+                listOf("旅行", "风景", "猫", "夜景").forEach { word ->
                     SuggestionChip(
                         onClick = { submit(word) },
                         label = { Text(word) },

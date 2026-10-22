@@ -52,24 +52,28 @@ data class NativeFilters(
         }
     }
 
-    fun without(key: String): NativeFilters = when {
-        key.startsWith("tag:") -> copy(tags = tags - key.removePrefix("tag:"))
-        key.startsWith("format:") -> copy(formats = formats - key.removePrefix("format:"))
-        key == "camera" -> copy(camera = "")
-        key == "lens" -> copy(lens = "")
-        key == "date" -> copy(from = "", to = "")
-        key == "rating" -> copy(rating = null)
-        key == "gps" -> copy(gps = "")
-        else -> this
-    }
+    fun without(key: String): NativeFilters =
+        when {
+            key.startsWith("tag:") -> copy(tags = tags - key.removePrefix("tag:"))
+            key.startsWith("format:") -> copy(formats = formats - key.removePrefix("format:"))
+            key == "camera" -> copy(camera = "")
+            key == "lens" -> copy(lens = "")
+            key == "date" -> copy(from = "", to = "")
+            key == "rating" -> copy(rating = null)
+            key == "gps" -> copy(gps = "")
+            else -> this
+        }
 
     fun tokens(availableTags: List<NativeTag>): List<NativeFilterToken> = buildList {
         val names = availableTags.associate { it.id to it.name }
         tags.sorted().forEach { add(NativeFilterToken("tag:$it", "标签：${names[it] ?: "已选标签"}")) }
         if (camera.isNotEmpty()) add(NativeFilterToken("camera", "相机：$camera"))
         if (lens.isNotEmpty()) add(NativeFilterToken("lens", "镜头：$lens"))
-        formats.sorted().forEach { add(NativeFilterToken("format:$it", "格式：${it.uppercase(java.util.Locale.ROOT)}")) }
-        if (from.isNotEmpty() || to.isNotEmpty()) add(NativeFilterToken("date", "导入：${from.ifEmpty { "不限" }} 至 ${to.ifEmpty { "不限" }}"))
+        formats.sorted().forEach {
+            add(NativeFilterToken("format:$it", "格式：${it.uppercase(java.util.Locale.ROOT)}"))
+        }
+        if (from.isNotEmpty() || to.isNotEmpty())
+            add(NativeFilterToken("date", "导入：${from.ifEmpty { "不限" }} 至 ${to.ifEmpty { "不限" }}"))
         rating?.let { add(NativeFilterToken("rating", "至少 $it 星")) }
         if (gps.isNotEmpty()) add(NativeFilterToken("gps", if (gps == "WITH") "有 GPS" else "无 GPS"))
     }

@@ -34,7 +34,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 .testTag("native-filter-sheet"),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(panel, style = MaterialTheme.typography.titleLarge)
+            Text(if (panel == "筛选") "搜索条件" else panel, style = MaterialTheme.typography.titleLarge)
             if (state.optionsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
             state.optionsError?.let {
                 Text(it, color = MaterialTheme.colorScheme.error)
@@ -80,10 +80,25 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
             if (panel == "格式" || panel == "筛选") {
                 Text("格式 · 任意一种即可", color = NativeMuted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NativeChoiceChip(draft.formats.isEmpty(), { draft = draft.copy(formats = emptySet()) }, { Text("不限") })
+                    NativeChoiceChip(
+                        draft.formats.isEmpty(),
+                        { draft = draft.copy(formats = emptySet()) },
+                        { Text("不限") },
+                    )
                     state.options.formats.forEach { format ->
                         val selected = format in draft.formats
-                        NativeChoiceChip(selected, { draft = draft.copy(formats = if (selected) draft.formats - format else draft.formats + format) }, { Text(format.uppercase(java.util.Locale.ROOT)) })
+                        NativeChoiceChip(
+                            selected,
+                            {
+                                draft =
+                                    draft.copy(
+                                        formats =
+                                            if (selected) draft.formats - format
+                                            else draft.formats + format
+                                    )
+                            },
+                            { Text(format.uppercase(java.util.Locale.ROOT)) },
+                        )
                     }
                 }
             }
@@ -143,7 +158,19 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 TextButton(model::closePanel, enabled = !state.busy) { Text("取消") }
                 if (!editingTags && panel != "评分")
-                    TextButton({ draft = NativeFilters() }) { Text("重置全部") }
+                    TextButton({
+                        draft =
+                            when (panel) {
+                                "标签" -> draft.copy(tags = emptySet())
+                                "相机" -> draft.copy(camera = "")
+                                "镜头" -> draft.copy(lens = "")
+                                "格式" -> draft.copy(formats = emptySet())
+                                "时间" -> draft.copy(from = "", to = "")
+                                else -> NativeFilters()
+                            }
+                    }) {
+                        Text(if (panel == "筛选") "清空条件" else "不限")
+                    }
                 Spacer(Modifier.weight(1f))
                 Button(
                     {
@@ -154,12 +181,18 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                                     tags,
                                 )
                             panel == "评分" -> model.changeSelection("rating", rating = draft.rating)
-                            else -> model.applyFilters(draft)
+                            else ->
+                                if (state.searchOpen) model.search(state.searchDraft, draft)
+                                else model.applyFilters(draft)
                         }
                     },
+                    modifier = Modifier.testTag("filter-submit"),
                     enabled = !state.busy && error == null && (!editingTags || tags.isNotEmpty()),
                 ) {
-                    Text(if (state.busy) "正在保存…" else "应用")
+                    Text(
+                        if (state.busy) "正在保存…"
+                        else if (state.searchOpen && !editingTags && panel != "评分") "查看结果" else "应用"
+                    )
                 }
             }
         }
@@ -175,7 +208,7 @@ private fun ChoiceList(
     display: (String) -> String = { it.uppercase() },
     change: (String) -> Unit,
 ) {
-    Text(label, color = NativeMuted)
+    Text(if (label == "相机" || label == "镜头") "$label · 单选" else label, color = NativeMuted)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         NativeChoiceChip(selected.isEmpty(), { change("") }, { Text("全部") })
         values.forEach { value ->

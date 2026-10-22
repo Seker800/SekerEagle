@@ -27,6 +27,7 @@ data class GalleryState(
     val loading: Boolean = false,
     val error: String? = null,
     val searchOpen: Boolean = false,
+    val searchDraft: String = "",
     val history: List<String> = emptyList(),
     val viewerId: String? = null,
     val moreOpen: Boolean = false,
@@ -211,8 +212,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         }
     }
 
-    fun search(value: String) {
-        if (state.value.busy) return
+    fun search(value: String, filters: NativeFilters = state.value.filters) {
+        if (state.value.busy || filters.validationError() != null) return
         val query = value.trim().take(200)
         val current = state.value
         val history =
@@ -228,6 +229,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 query = query,
+                filters = filters,
+                filterPanel = null,
+                searchDraft = query,
                 selecting = false,
                 selected = emptySet(),
                 history = history,
@@ -247,7 +251,20 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun openSearch() {
-        mutable.value = state.value.copy(searchOpen = true, moreOpen = false)
+        mutable.value =
+            state.value.copy(searchOpen = true, searchDraft = state.value.query, moreOpen = false)
+    }
+
+    fun updateSearchDraft(value: String) {
+        mutable.value = state.value.copy(searchDraft = value.take(200))
+    }
+
+    fun removeFilter(key: String) {
+        applyFilters(state.value.filters.without(key))
+    }
+
+    fun clearSearch() {
+        search("", NativeFilters())
     }
 
     fun openMore() {
@@ -278,18 +295,14 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 s.filterPanel != null -> s.copy(filterPanel = null)
                 s.selecting -> s.copy(selecting = false, selected = emptySet())
                 s.viewerId != null -> s.copy(viewerId = null)
-                s.searchOpen -> s.copy(searchOpen = false)
+                s.searchOpen -> s.copy(searchOpen = false, searchDraft = s.query)
                 s.moreOpen -> s.copy(moreOpen = false)
                 s.trash -> {
                     openTrash(false)
                     return true
                 }
-                s.filters.active -> {
-                    applyFilters(NativeFilters())
-                    return true
-                }
-                s.query.isNotEmpty() -> {
-                    search("")
+                s.filters.active || s.query.isNotEmpty() -> {
+                    clearSearch()
                     return true
                 }
                 else -> return false
