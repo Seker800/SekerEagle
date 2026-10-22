@@ -11,7 +11,7 @@ class NativeLibraryControlsTest {
                 camera = "Sony & α",
                 lens = "50/1.4",
                 tags = setOf("tag-a"),
-                format = "dng",
+                formats = setOf("dng"),
                 rating = 4,
                 gps = "WITH",
                 from = "2026-10-01",
@@ -25,6 +25,22 @@ class NativeLibraryControlsTest {
         assertEquals("2026-10-22T23:59:59.999Z", query["createdTo"])
         assertEquals("4", query["rating"])
         assertTrue(NativeFilters().parameters().isEmpty())
+    }
+
+    @Test
+    fun alternativesWithinCategoriesUseAnyMatchAndCanBeRemovedIndividually() {
+        val filters = NativeFilters(tags = setOf("a", "b"), formats = setOf("jpg", "dng"), camera = "Sony")
+        val parameters = filters.parameters()
+        assertEquals("ANY", parameters["tagMatch"])
+        assertEquals("dng,jpg", parameters["formats"])
+        assertEquals(setOf("b"), filters.without("tag:a").tags)
+        assertEquals(setOf("jpg"), filters.without("format:dng").formats)
+        assertEquals("Sony", filters.without("format:dng").camera)
+        assertEquals("", filters.without("camera").camera)
+        val tokens = filters.tokens(listOf(NativeTag("a", "旅行"), NativeTag("b", "家人")))
+        assertEquals("标签：旅行", tokens.first { it.key == "tag:a" }.label)
+        assertEquals("格式：DNG", tokens.first { it.key == "format:dng" }.label)
+        assertEquals(filters, filters.without("unknown"))
     }
 
     @Test
