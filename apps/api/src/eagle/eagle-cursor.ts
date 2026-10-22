@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { defaultAssetSort, type EagleAssetSort } from './eagle-asset-order';
 import type { LibraryIdentity } from './library-mode';
 
 export interface EagleAssetCursor {
@@ -6,10 +7,15 @@ export interface EagleAssetCursor {
   id: string;
 }
 
-export function encodeEagleAssetCursor(value: EagleAssetCursor, scope?: LibraryIdentity): string {
+export function encodeEagleAssetCursor(
+  value: EagleAssetCursor,
+  scope?: LibraryIdentity,
+  sort?: EagleAssetSort,
+): string {
   return Buffer.from(
     JSON.stringify({
-      v: scope ? 3 : 2,
+      v: sort ? 4 : scope ? 3 : 2,
+      ...(sort ? { sort } : {}),
       ...(scope ?? {}),
       libraryAddedAt: value.libraryAddedAt.toISOString(),
       id: value.id,
@@ -17,7 +23,11 @@ export function encodeEagleAssetCursor(value: EagleAssetCursor, scope?: LibraryI
   ).toString('base64url');
 }
 
-export function decodeEagleAssetCursor(value: string, scope?: LibraryIdentity): EagleAssetCursor {
+export function decodeEagleAssetCursor(
+  value: string,
+  scope?: LibraryIdentity,
+  sort?: EagleAssetSort,
+): EagleAssetCursor {
   try {
     const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Record<
       string,
@@ -25,15 +35,21 @@ export function decodeEagleAssetCursor(value: string, scope?: LibraryIdentity): 
     >;
     if (
       scope &&
-      (parsed.v === 3
+      ([3, 4].includes(Number(parsed.v))
         ? parsed.ownerId !== scope.ownerId || parsed.libraryMode !== scope.libraryMode
         : scope.libraryMode !== 'MATERIAL')
     )
       throw new Error('Cursor scope mismatch');
+    if (parsed.v === 4) {
+      if (!scope || parsed.sort !== (sort ?? defaultAssetSort(scope.libraryMode)))
+        throw new Error('Cursor sort mismatch');
+    } else if (scope && sort && sort !== defaultAssetSort(scope.libraryMode)) {
+      throw new Error('Legacy cursor cannot change date field');
+    }
     const rawTimestamp = parsed.v === 1 ? parsed.createdAt : parsed.libraryAddedAt;
     const libraryAddedAt = new Date(String(rawTimestamp));
     if (
-      ![1, 2, 3].includes(Number(parsed.v)) ||
+      ![1, 2, 3, 4].includes(Number(parsed.v)) ||
       !String(parsed.id).trim() ||
       Number.isNaN(libraryAddedAt.getTime())
     ) {

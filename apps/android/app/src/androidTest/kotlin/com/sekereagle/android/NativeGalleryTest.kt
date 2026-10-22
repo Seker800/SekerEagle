@@ -14,6 +14,10 @@ import org.junit.rules.ExternalResource
 
 /** Real Compose + existing HTTP auth/API, isolated workbench only. No fixture login in the app. */
 class NativeGalleryTest {
+    private companion object {
+        var lastLoginAt = 0L
+    }
+
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private lateinit var credentials: JSONObject
@@ -46,10 +50,16 @@ class NativeGalleryTest {
             .performTextReplacement(credentials.getString("origin"))
         compose.onNodeWithTag("native-email").performTextInput(credentials.getString("email"))
         compose.onNodeWithTag("native-password").performTextInput(credentials.getString("password"))
+        // Exercise real login without exceeding the server's five-per-minute security limit.
+        val pause = 15_250L - (android.os.SystemClock.elapsedRealtime() - lastLoginAt)
+        if (pause > 0) Thread.sleep(pause)
+        lastLoginAt = android.os.SystemClock.elapsedRealtime()
         compose.onNodeWithTag("native-login").performClick()
         compose.waitUntil(20_000) {
-            compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty() ||
+                compose.onAllNodesWithTag("native-error").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithTag("native-error").assertDoesNotExist()
         assertFalse(
             "The native launcher must never create a WebView",
             hasWebView(compose.activity.window.decorView),
@@ -431,33 +441,55 @@ class NativeGalleryTest {
     fun dateOrderingIsIndependentPersistentAndSearchHasNoExampleSuggestions() {
         login()
         firstAsset()
-        val model = androidx.lifecycle.ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+        fun currentModel() =
+            androidx.lifecycle
+                .ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
         val session = NativeSession.open(context, credentials.getString("origin"))
         fun choose(label: String) {
             compose.onNodeWithContentDescription("视图选项").performClick()
             compose.onNodeWithText(label).performClick()
-            compose.waitUntil(15_000) { !model.state.value.loading }
+            compose.waitUntil(15_000) {
+                !currentModel().state.value.loading
+            }
         }
         fun verify(mode: String, sort: String) {
             val base = com.sekereagle.android.core.NativeGalleryPolicy.base(mode)
-            val expected = session.json("GET", "$base/assets?limit=60&sort=$sort").getJSONArray("items")
-            compose.waitUntil(15_000) { !model.state.value.loading }
-            assertEquals((0 until expected.length()).map { expected.getJSONObject(it).getString("id") }, model.state.value.items.map { it.id })
+            val expected =
+                session.json("GET", "$base/assets?limit=60&sort=$sort").getJSONArray("items")
+            compose.waitUntil(15_000) {
+                !currentModel().state.value.loading
+            }
+            assertEquals(
+                (0 until expected.length()).map { expected.getJSONObject(it).getString("id") },
+                currentModel().state.value.items.map { it.id },
+            )
         }
         choose("按添加时间排序")
         verify("PHOTO", "ADDED_AT")
-        compose.onNodeWithContentDescription("切换到素材").performClick()
+        compose.onNodeWithText("素材", useUnmergedTree = true).performClick()
         firstAsset()
         choose("按拍摄时间排序")
         verify("MATERIAL", "CAPTURED_AT")
-        compose.onNodeWithContentDescription("切换到照片").performClick()
+        compose.onNodeWithText("照片", useUnmergedTree = true).performClick()
         firstAsset()
         verify("PHOTO", "ADDED_AT")
         compose.activityRule.scenario.recreate()
         firstAsset()
-        val restored = androidx.lifecycle.ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+        val restored = currentModel()
+        // Rebuild authenticated state as on a fresh process, instead of relying on retained state.
+        compose.runOnUiThread { restored.restore() }
+        firstAsset()
         assertEquals(GallerySort.ADDED_AT, restored.state.value.sort)
-        compose.onNodeWithContentDescription("切换到素材").performClick()
+        val settings = BackupSettings(context)
+        assertEquals(
+            GallerySort.CAPTURED_AT,
+            GallerySort.restore(settings, "unrelated-account", GalleryMode.PHOTO),
+        )
+        assertEquals(
+            GallerySort.ADDED_AT,
+            GallerySort.restore(settings, "unrelated-account", GalleryMode.MATERIAL),
+        )
+        compose.onNodeWithText("素材", useUnmergedTree = true).performClick()
         firstAsset()
         assertEquals(GallerySort.CAPTURED_AT, restored.state.value.sort)
         verify("MATERIAL", "CAPTURED_AT")
@@ -467,12 +499,14 @@ class NativeGalleryTest {
         compose.onNodeWithText("搜索历史").assertExists()
         capture("native-search-without-suggestions.png")
         back()
+        if (compose.onAllNodesWithTag("native-search").fetchSemanticsNodes().isNotEmpty()) back()
+        compose.onNodeWithTag("native-search").assertDoesNotExist()
         compose.onNodeWithContentDescription("视图选项").performClick()
+        compose.onNodeWithText("按添加时间排序").assertIsDisplayed()
         capture("native-date-order-menu.png")
-        back()
-        // Leave defaults for unrelated journeys, while retaining real preferences across recreation.
-        choose("按添加时间排序")
-        compose.onNodeWithContentDescription("切换到照片").performClick()
+        // Leave defaults for unrelated journeys after verifying actual keyboard/back navigation.
+        compose.onNodeWithText("按添加时间排序").performClick()
+        compose.onNodeWithText("照片", useUnmergedTree = true).performClick()
         firstAsset()
         choose("按拍摄时间排序")
     }
@@ -769,6 +803,14 @@ class NativeGalleryTest {
         assertEquals("/api/eagle/assets/photo/renditions/preview/content", material.preview)
         assertEquals(1000, photo.width)
         assertEquals(2000, photo.height)
+        asset.put("chronologicalAt", "2025-05-10T12:00:00Z")
+        asset.put("photoMetadata", JSONObject().put("capturedLocal", "2025-05-10T12:00:00"))
+        val captured = repo.parse(asset, GalleryMode.PHOTO, GallerySort.CAPTURED_AT)
+        val added = repo.parse(asset, GalleryMode.PHOTO, GallerySort.ADDED_AT)
+        assertEquals("2025年5月10日", captured.groupDate)
+        assertEquals("2026年10月22日", added.groupDate)
+        assertEquals(captured.date, added.date)
+        assertEquals(captured.time, added.time)
     }
 
     @Test

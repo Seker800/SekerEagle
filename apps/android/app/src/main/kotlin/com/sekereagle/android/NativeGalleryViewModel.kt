@@ -21,6 +21,7 @@ data class GalleryState(
     val restoring: Boolean = true,
     val authenticating: Boolean = false,
     val mode: GalleryMode = GalleryMode.PHOTO,
+    val sort: GallerySort = GallerySort.CAPTURED_AT,
     val items: List<NativeAsset> = emptyList(),
     val cursor: String? = null,
     val query: String = "",
@@ -180,6 +181,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         identity = NativeIdentity(scope, user.getString("email"), normalized),
                         restoring = false,
                         history = history(scope, GalleryMode.PHOTO),
+                        sort = GallerySort.restore(settings, scope, GalleryMode.PHOTO),
                     )
                 load()
             } catch (e: CancellationException) {
@@ -206,6 +208,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 mode = mode,
+                sort = GallerySort.restore(settings, current.identity!!.scope, mode),
                 filters = NativeFilters(),
                 filterPanel = null,
                 options = NativeOptions(),
@@ -227,6 +230,26 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         load()
     }
 
+    fun sort(order: GallerySort) {
+        val current = state.value
+        val identity = current.identity ?: return
+        if (current.busy || current.sort == order) return
+        settings.setValue(identity.scope, GallerySort.key(current.mode), order.name)
+        operation?.cancel()
+        generation++
+        mutable.value =
+            current.copy(
+                sort = order,
+                items = emptyList(),
+                cursor = null,
+                selecting = false,
+                selected = emptySet(),
+                viewerId = null,
+                error = null,
+            )
+        load()
+    }
+
     fun load(next: Boolean = false) {
         if (state.value.busy) return
         val snapshot = state.value
@@ -244,6 +267,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         if (next) snapshot.cursor else null,
                         snapshot.filters,
                         snapshot.trash,
+                        snapshot.sort,
                     )
                 if (request != generation) return@launch
                 mutable.value =

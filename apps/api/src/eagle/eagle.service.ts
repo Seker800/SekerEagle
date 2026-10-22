@@ -40,6 +40,7 @@ import type {
 } from './eagle.dto';
 import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
+import { assetDateField } from './eagle-asset-order';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
 import {
   refreshUnclassifiedSuggestions,
@@ -258,9 +259,9 @@ export class EagleService {
       );
     }
     const cursor = query.cursor
-      ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode })
+      ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode }, query.sort)
       : null;
-    const dateField = this.libraryMode === 'PHOTO' ? 'chronologicalAt' : 'libraryAddedAt';
+    const dateField = assetDateField(this.libraryMode, query.sort);
     const where: Prisma.EagleAssetWhereInput = cursor
       ? {
           AND: [
@@ -328,6 +329,7 @@ export class EagleService {
           ? encodeEagleAssetCursor(
               { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField] },
               { ownerId, libraryMode: this.libraryMode },
+              query.sort,
             )
           : null,
       colorCoverage: filterColor
@@ -470,7 +472,7 @@ export class EagleService {
       libraryMode: this.libraryMode,
     });
     const hasStructuredFilters = Object.entries(searchFilters).some(
-      ([key, value]) => key !== 'search' && value !== undefined,
+      ([key, value]) => key !== 'search' && key !== 'sort' && value !== undefined,
     );
     const eligibleAssetIds = hasStructuredFilters
       ? (
@@ -494,6 +496,7 @@ export class EagleService {
         includePrivate,
         trash,
         eligibleAssetIds,
+        query.sort,
       );
       const candidateIds = candidates.map((candidate) => candidate.assetId);
       exhausted = candidateIds.length < candidateBatchSize;
@@ -561,6 +564,7 @@ export class EagleService {
                   includePrivate,
                   trash,
                   ids,
+                  query.sort,
                 ).then((rows) => rows.map((row) => row.assetId)),
             ),
           }

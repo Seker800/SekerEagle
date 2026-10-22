@@ -98,7 +98,9 @@ private fun NativeLibrary(
     val backdrop = rememberGraphicsLayer()
     var sourceOffset by remember { mutableStateOf(Offset.Zero) }
     var menu by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(state.mode, state.query, state.filters, state.trash) { grid.scrollToItem(0) }
+    LaunchedEffect(state.mode, state.sort, state.query, state.filters, state.trash) {
+        grid.scrollToItem(0)
+    }
     LaunchedEffect(grid, state.cursor, state.loading) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .distinctUntilChanged()
@@ -159,18 +161,18 @@ private fun NativeLibrary(
                 state.items.forEachIndexed { index, asset ->
                     if (
                         state.mode == GalleryMode.PHOTO &&
-                            (index == 0 || asset.date != state.items[index - 1].date)
+                            (index == 0 || asset.groupDate != state.items[index - 1].groupDate)
                     )
                         item(key = "date:${asset.id}", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
-                                asset.date,
+                                asset.groupDate,
                                 Modifier.fillMaxWidth()
                                     .then(
                                         if (state.selecting)
                                             Modifier.clickable {
                                                 model.selectLoaded(
                                                     state.items
-                                                        .filter { it.date == asset.date }
+                                                        .filter { it.groupDate == asset.groupDate }
                                                         .map { it.id }
                                                         .toSet()
                                                 )
@@ -356,6 +358,20 @@ private fun NativeLibrary(
                                 Modifier.padding(20.dp, 8.dp),
                                 color = NativeMuted,
                                 fontSize = 13.sp,
+                            )
+                            GallerySort.entries.forEach { order ->
+                                MenuRow(
+                                    order.title,
+                                    if (state.sort == order) Icons.Outlined.Check
+                                    else Icons.Outlined.Schedule,
+                                ) {
+                                    model.sort(order)
+                                    menu = ""
+                                }
+                            }
+                            HorizontalDivider(
+                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                color = NativeMuted.copy(alpha = 0.2f),
                             )
                             listOf(3, 4).forEach { columns ->
                                 MenuRow(

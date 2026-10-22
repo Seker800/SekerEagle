@@ -3738,6 +3738,8 @@ export interface operations {
   EagleController_listAssets: {
     parameters: {
       query?: {
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
         lensModel?: string;
@@ -4178,6 +4180,8 @@ export interface operations {
   EagleController_listTrash: {
     parameters: {
       query?: {
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
         lensModel?: string;
@@ -5821,6 +5825,8 @@ export interface operations {
   PhotosController_listAssets: {
     parameters: {
       query?: {
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
         lensModel?: string;
@@ -6261,6 +6267,8 @@ export interface operations {
   PhotosController_listTrash: {
     parameters: {
       query?: {
+        /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
         cameraModel?: string;
         lensModel?: string;

@@ -2,6 +2,7 @@ import { Injectable, Inject, Optional } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
+import type { EagleAssetSort } from './eagle-asset-order';
 import { LIBRARY_MODE } from './library-mode';
 import { EAGLE_EMBEDDING_DIMENSIONS, EAGLE_EMBEDDING_MODEL } from './eagle-vector-semantics';
 
@@ -86,6 +87,7 @@ export class EagleImageSearchService {
     includePrivate: boolean,
     trash: boolean,
     allowedAssetIds?: readonly string[],
+    sort?: EagleAssetSort,
   ): Promise<ImageSearchPosition[]> {
     if (allowedAssetIds?.length === 0 || limit === 0) return [];
     const normalized = search.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
@@ -111,9 +113,20 @@ export class EagleImageSearchService {
         AND 1-(embedding.embedding <=> ${context.vector}::vector)>=${threshold}
     `
         : Prisma.empty;
-    const continuation = after
-      ? Prisma.sql`WHERE (ranked.tier, ranked.similarity, asset."libraryAddedAt", ranked."assetId") < (${after.tier}, ${after.similarity}, ${new Date(after.libraryAddedAt)}, ${after.assetId})`
-      : Prisma.empty;
+    // Columns are selected from fixed literals, never interpolated from user input.
+    const dateColumn =
+      sort === 'CAPTURED_AT'
+        ? Prisma.sql`asset."chronologicalAt"`
+        : Prisma.sql`asset."libraryAddedAt"`;
+    const order = sort
+      ? Prisma.sql`${dateColumn} DESC,ranked."assetId" DESC`
+      : Prisma.sql`ranked.tier DESC,ranked.similarity DESC,asset."libraryAddedAt" DESC,ranked."assetId" DESC`;
+    const continuation =
+      sort && after
+        ? Prisma.sql`WHERE (${dateColumn}, ranked."assetId") < (${new Date(after.libraryAddedAt)}, ${after.assetId})`
+        : after
+          ? Prisma.sql`WHERE (ranked.tier, ranked.similarity, asset."libraryAddedAt", ranked."assetId") < (${after.tier}, ${after.similarity}, ${new Date(after.libraryAddedAt)}, ${after.assetId})`
+          : Prisma.empty;
     const rows = await this.prisma.$queryRaw<
       Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
     >(Prisma.sql`
@@ -128,9 +141,9 @@ export class EagleImageSearchService {
         WHERE ${visible} AND strpos(tag."normalizedName",${normalized})>0
         ${semantic}
       ), ranked AS (SELECT "assetId",max(tier) AS tier,max(similarity) AS similarity FROM candidates GROUP BY "assetId")
-      SELECT ranked."assetId", ranked.tier, ranked.similarity, asset."libraryAddedAt" FROM ranked JOIN "EagleAsset" AS asset ON asset.id=ranked."assetId"
+      SELECT ranked."assetId", ranked.tier, ranked.similarity, ${dateColumn} AS "libraryAddedAt" FROM ranked JOIN "EagleAsset" AS asset ON asset.id=ranked."assetId"
       ${continuation}
-      ORDER BY ranked.tier DESC,ranked.similarity DESC,asset."libraryAddedAt" DESC,ranked."assetId" DESC
+      ORDER BY ${order}
       LIMIT ${limit}
     `);
     return rows.map((row) => ({ ...row, libraryAddedAt: row.libraryAddedAt.toISOString() }));

@@ -6,8 +6,8 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 11
-        versionName '0.5.0'
+        versionCode 12
+        versionName '0.6.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true; compose true }
@@ -16,7 +16,7 @@ android {
         release { minifyEnabled false }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    sourceSets { main.assets.srcDirs += layout.buildDirectory.dir('generated/media-assets'); androidTest.assets.srcDirs += layout.buildDirectory.dir('generated/device-fixtures') }
+    sourceSets { main.assets.srcDirs += layout.buildDirectory.dir('generated/media-assets') }
     lint { abortOnError true; disable 'OldTargetApi', 'GradleDependency', 'NewerVersionAvailable' }
     testOptions { unitTests.returnDefaultValues = true }
 }
@@ -41,8 +41,23 @@ tasks.register('verifyCoreCoverage', JacocoCoverageVerification) {
     violationRules { rule { limit { counter = 'LINE'; minimum = 0.80 }; limit { counter = 'BRANCH'; minimum = 0.80 } } }
 }
 
-tasks.register('generateDeviceFixtures', Exec) { workingDir rootProject.projectDir; commandLine 'node', 'scripts/generate-test-fixtures.mjs' }
-tasks.matching { it.name == 'mergeDebugAndroidTestAssets' }.configureEach { dependsOn 'generateDeviceFixtures' }
+abstract class GenerateDeviceFixtures extends Exec {
+    @org.gradle.api.tasks.OutputDirectory
+    abstract org.gradle.api.file.DirectoryProperty getOutputDirectory()
+}
+def deviceFixtures = tasks.register('generateDeviceFixtures', GenerateDeviceFixtures) {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'scripts/generate-test-fixtures.mjs'
+    inputs.files(rootProject.file('scripts/generate-test-fixtures.mjs'), rootProject.file('../../scripts/testing/create-camera-fixtures.py'))
+    inputs.files(rootProject.file('../../.omx/artifacts/native-test-credentials.json'), rootProject.file('../../.omx/artifacts/photo-workbench.json')).optional()
+    outputDirectory.set(layout.buildDirectory.dir('generated/device-fixtures'))
+}
+// Attach the producer, so AGP snapshots assets after refreshed test credentials are generated.
+androidComponents.onVariants(androidComponents.selector().withBuildType('debug')) { variant ->
+    variant.deviceTests.values().each { deviceTest ->
+        deviceTest.sources.assets.addGeneratedSourceDirectory(deviceFixtures, { task -> task.outputDirectory })
+    }
+}
 
 dependencies {
     implementation platform('androidx.compose:compose-bom:2026.03.00')

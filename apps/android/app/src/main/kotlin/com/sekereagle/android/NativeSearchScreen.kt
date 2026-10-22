@@ -107,21 +107,6 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
             ) {
                 Text("查看结果")
             }
-            Spacer(Modifier.height(28.dp))
-            Text("试试搜索", color = NativeMuted, fontSize = 13.sp)
-            Spacer(Modifier.height(12.dp))
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                listOf("旅行", "风景", "猫", "夜景").forEach { word ->
-                    SuggestionChip(
-                        onClick = { submit(word) },
-                        label = { Text(word) },
-                        shape = CircleShape,
-                    )
-                }
-            }
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("搜索历史", Modifier.weight(1f), color = NativeMuted)

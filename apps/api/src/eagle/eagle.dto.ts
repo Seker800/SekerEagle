@@ -21,6 +21,8 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import type { EagleAssetSort } from './eagle-asset-order';
+
 const COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
 
 function optionalTrimmed(value: unknown): unknown {
@@ -28,6 +30,15 @@ function optionalTrimmed(value: unknown): unknown {
 }
 
 export class ListEagleAssetsDto {
+  @ApiPropertyOptional({
+    enum: ['CAPTURED_AT', 'ADDED_AT'],
+    description:
+      'Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.',
+  })
+  @IsOptional()
+  @IsIn(['CAPTURED_AT', 'ADDED_AT'])
+  sort?: EagleAssetSort;
+
   @ApiPropertyOptional() @IsOptional() @IsUUID('4') personId?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) cameraModel?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(240) lensModel?: string;

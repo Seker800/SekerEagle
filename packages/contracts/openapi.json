@@ -390,6 +390,16 @@
         "operationId": "EagleController_listAssets",
         "parameters": [
           {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
+          {
             "name": "personId",
             "required": false,
             "in": "query",
@@ -1192,6 +1202,16 @@
       "get": {
         "operationId": "EagleController_listTrash",
         "parameters": [
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
           {
             "name": "personId",
             "required": false,
@@ -3524,6 +3544,16 @@
         "operationId": "PhotosController_listAssets",
         "parameters": [
           {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
+          {
             "name": "personId",
             "required": false,
             "in": "query",
@@ -4326,6 +4356,16 @@
       "get": {
         "operationId": "PhotosController_listTrash",
         "parameters": [
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "description": "Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance.",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
           {
             "name": "personId",
             "required": false,

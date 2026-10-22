@@ -54,3 +54,19 @@ test('sending requires an idempotency key and rejects client-supplied owner or d
   assert.ok(errors.some((error) => error.property === 'ownerId'));
   assert.ok(errors.some((error) => error.property === 'targetMode'));
 });
+
+test('date sorting accepts only declared values and cannot smuggle an owner', async () => {
+  const { ListEagleAssetsDto } = await import('./eagle.dto');
+  for (const sort of ['CAPTURED_AT', 'ADDED_AT', undefined]) {
+    assert.deepEqual(await validate(Object.assign(new ListEagleAssetsDto(), { sort })), []);
+  }
+  for (const sort of ['chronologicalAt DESC', 'createdAt', '', ['ADDED_AT'], 1]) {
+    const errors = await validate(Object.assign(new ListEagleAssetsDto(), { sort }));
+    assert.ok(errors.some(({ property }) => property === 'sort'));
+  }
+  const errors = await validate(
+    Object.assign(new ListEagleAssetsDto(), { sort: 'ADDED_AT', ownerId: 'victim' }),
+    { whitelist: true, forbidNonWhitelisted: true },
+  );
+  assert.ok(errors.some(({ property }) => property === 'ownerId'));
+});

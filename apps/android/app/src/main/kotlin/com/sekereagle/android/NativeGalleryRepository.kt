@@ -32,6 +32,7 @@ data class NativeAsset(
     val video: Boolean,
     val revision: Int,
     val rowVersion: Int = 1,
+    val groupDate: String = date,
 )
 
 data class NativePage(val items: List<NativeAsset>, val cursor: String?)
@@ -50,6 +51,7 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
         cursor: String? = null,
         filters: NativeFilters = NativeFilters(),
         trash: Boolean = false,
+        sort: GallerySort = GallerySort.default(mode),
     ): NativePage =
         withContext(Dispatchers.IO) {
             val result =
@@ -57,11 +59,11 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                     "GET",
                     NativeGalleryPolicy.listPath(mode.name, search, cursor.orEmpty()).let {
                         if (trash) it.replace("/assets?", "/trash?") else it
-                    } + filters.parameters().querySuffix(),
+                    } + "&sort=${sort.name}" + filters.parameters().querySuffix(),
                 )
             val items = result.getJSONArray("items")
             NativePage(
-                (0 until items.length()).map { parse(items.getJSONObject(it), mode) },
+                (0 until items.length()).map { parse(items.getJSONObject(it), mode, sort) },
                 result.optString("nextCursor").takeUnless { it.isEmpty() || it == "null" },
             )
         }
@@ -189,7 +191,11 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
 
     fun clear() = cache.evictAll()
 
-    internal fun parse(json: JSONObject, mode: GalleryMode): NativeAsset {
+    internal fun parse(
+        json: JSONObject,
+        mode: GalleryMode,
+        sort: GallerySort = GallerySort.default(mode),
+    ): NativeAsset {
         val id = NativeGalleryPolicy.identifier(json.getString("id"))
         val renditions = json.getJSONArray("renditions")
         val images =
@@ -212,9 +218,16 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             }
                 ?: json.optString("chronologicalAt").takeUnless { it.isEmpty() || it == "null" }
                 ?: json.optString("libraryAddedAt")
-        val date =
-            runCatching { Instant.parse(rawDate).atZone(ZoneId.systemDefault()).toLocalDateTime() }
-                .getOrElse { runCatching { LocalDateTime.parse(rawDate) }.getOrNull() }
+        fun localDate(value: String) =
+            runCatching { Instant.parse(value).atZone(ZoneId.systemDefault()).toLocalDateTime() }
+                .getOrElse { runCatching { LocalDateTime.parse(value) }.getOrNull() }
+        val date = localDate(rawDate)
+        val groupDate =
+            localDate(
+                json.optString(
+                    if (sort == GallerySort.ADDED_AT) "libraryAddedAt" else "chronologicalAt"
+                )
+            ) ?: date
         return NativeAsset(
             id,
             json.optString("displayName", json.optString("originalName")),
@@ -227,6 +240,7 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             json.optString("mimeType").startsWith("video/"),
             json.optInt("mediaRevision"),
             json.optInt("rowVersion", 1),
+            groupDate?.format(DateTimeFormatter.ofPattern("yyyy年M月d日")) ?: "日期未知",
         )
     }
 }

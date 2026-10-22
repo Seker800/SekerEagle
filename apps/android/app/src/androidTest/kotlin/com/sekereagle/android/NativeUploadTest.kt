@@ -29,6 +29,18 @@ class NativeUploadTest {
             context.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)!!
         try {
             context.contentResolver.openOutputStream(uri)!!.use { it.write(byteArrayOf(1, 2, 3)) }
+            // Closing a MediaStore stream schedules metadata scanning. Wait for that work
+            // before taking a fingerprint; the fixture must not change beneath the assertion.
+            val path =
+                context.contentResolver.query(uri, arrayOf("_data"), null, null, null)!!.use {
+                    assertTrue(it.moveToFirst())
+                    it.getString(0)
+                }
+            val scanned = java.util.concurrent.CountDownLatch(1)
+            android.media.MediaScannerConnection.scanFile(context, arrayOf(path), null) { _, _ ->
+                scanned.countDown()
+            }
+            assertTrue(scanned.await(10, java.util.concurrent.TimeUnit.SECONDS))
             val catalog = MediaCatalog(context)
             val item = catalog.selected(uri)
             assertEquals(3, item.size)
