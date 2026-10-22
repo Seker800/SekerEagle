@@ -225,6 +225,14 @@ async function selectAssetAndOpenInspector() {
 }
 
 describe('SekerEaglePage', () => {
+  it('shows the library total instead of the loaded page length in navigation and heading', async () => {
+    countEagleAssetsMock.mockResolvedValue({ count: 72100 });
+    renderPage();
+    expect(await screen.findByRole('button', { name: '全部素材 72100' })).toBeInTheDocument();
+    expect(screen.getByText('72100 项')).toBeInTheDocument();
+    expect(listEagleAssetsMock).toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;

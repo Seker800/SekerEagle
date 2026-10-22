@@ -1,3 +1,4 @@
+import { useEagleLibraryCount } from './useEagleLibraryCount';
 import { useMobileBack } from '../../lib/mobile-back';
 import { EagleMobileSearch } from './EagleMobileSearch';
 import {
@@ -593,9 +594,15 @@ export function SekerEaglePage({
     privacyRulesRevision,
     resetAssetPrivacyState,
   ]);
+  const libraryCount = useEagleLibraryCount(
+    accessToken,
+    queryKeys,
+    privateVisible,
+    privacyRulesRevision,
+  );
   const displayedAssetCount =
-    hasTimelineNavigation && timelineIndex.data
-      ? timelineIndex.data.months.reduce((total, month) => total + month.count, 0)
+    libraryView === 'ACTIVE' && !deferredSearch && !activeFilterCount && !activeSmartFolderId
+      ? (libraryCount.data ?? '…')
       : loadedAssets.length;
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();
@@ -1200,7 +1207,9 @@ export function SekerEaglePage({
       >
         <IconPhoto size={17} />
         {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
-        {libraryView === 'ACTIVE' && !activeSmartFolderId && <span>{displayedAssetCount}</span>}
+        {libraryView === 'ACTIVE' && !activeSmartFolderId && (
+          <span>{libraryCount.data ?? '…'}</span>
+        )}
       </button>
       {libraryMode === 'PHOTO' &&
         (['map', 'people', 'agent'] as const).map((view) => (
