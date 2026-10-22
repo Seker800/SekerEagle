@@ -134,7 +134,75 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         body: ByteArray?,
         limit: Int,
         refresh: Boolean,
-    ): ByteArray {
+    ): ByteArray =
+        exchange(
+            method,
+            path,
+            body,
+            refresh,
+            if (limit > 2 * 1024 * 1024) "image/*" else "application/json",
+        ) { connection, checkActive ->
+            if (connection.contentLengthLong > limit) throw IOException("媒体超过本次读取预算")
+            if (limit > 2 * 1024 * 1024 && !connection.contentType.orEmpty().startsWith("image/"))
+                throw IOException("预览暂不可用")
+            connection.inputStream.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    checkActive()
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    if (output.size() + count > limit) throw IOException("响应超过本次读取预算")
+                    output.write(buffer, 0, count)
+                }
+                checkActive()
+                output.toByteArray()
+            }
+        }
+
+    fun downloadOriginal(
+        path: String,
+        size: Long,
+        mime: String,
+        output: java.io.OutputStream,
+        cancellation: NativeDownloadCancellation,
+        progress: (Long) -> Unit,
+    ) {
+        require(path.matches(Regex("/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/original")))
+        com.sekereagle.android.core.NativeDownloadPolicy.validate(size, mime)
+        exchange("GET", path, null, true, mime, cancellation::bind) { connection, active ->
+            cancellation.check()
+            if (
+                connection.responseCode != 200 ||
+                    (connection.contentLengthLong >= 0 && connection.contentLengthLong != size)
+            )
+                throw IOException("原件大小已变化，请刷新后重试")
+            if (!connection.contentType.orEmpty().substringBefore(';').trim().equals(mime, true))
+                throw IOException("原件格式不匹配")
+            connection.inputStream.use { input ->
+                com.sekereagle.android.core.NativeDownloadPolicy.copy(
+                    input,
+                    output,
+                    size,
+                    {
+                        cancellation.check()
+                        active()
+                    },
+                    { progress(it) },
+                )
+            }
+        }
+    }
+
+    private fun <T> exchange(
+        method: String,
+        path: String,
+        body: ByteArray?,
+        refresh: Boolean,
+        accept: String,
+        onConnection: (HttpURLConnection) -> Unit = {},
+        consume: (HttpURLConnection, () -> Unit) -> T,
+    ): T {
         NativeGalleryPolicy.safePath(path)
         val (ticket, cookie) =
             synchronized(credentialLock) {
@@ -143,16 +211,14 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             }
         val connection = URL(origin + path).openConnection() as HttpURLConnection
         try {
+            onConnection(connection)
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
             connection.readTimeout = 30_000
             connection.requestMethod = method
             connection.setRequestProperty("Origin", origin)
             connection.setRequestProperty("Cookie", cookie)
-            connection.setRequestProperty(
-                "Accept",
-                if (limit > 2 * 1024 * 1024) "image/*" else "application/json",
-            )
+            connection.setRequestProperty("Accept", accept)
             if (body != null) {
                 connection.setRequestProperty("Content-Type", "application/json")
                 connection.doOutput = true
@@ -180,7 +246,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                             false,
                         )
                 }
-                return request(method, path, body, limit, false)
+                return exchange(method, path, body, false, accept, onConnection, consume)
             }
             if (status !in 200..299) {
                 if (status == 401) clear()
@@ -198,22 +264,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 }
                 if (changed) settings.saveToken(storageKey, JSONObject(jar.snapshot()).toString())
             }
-            if (connection.contentLengthLong > limit) throw IOException("媒体超过本次读取预算")
-            if (limit > 2 * 1024 * 1024 && !connection.contentType.orEmpty().startsWith("image/"))
-                throw IOException("预览暂不可用")
-            return connection.inputStream.use { input ->
-                val output = ByteArrayOutputStream()
-                val buffer = ByteArray(8192)
-                while (true) {
-                    ensureActive(ticket)
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    if (output.size() + count > limit) throw IOException("响应超过本次读取预算")
-                    output.write(buffer, 0, count)
-                }
-                ensureActive(ticket)
-                output.toByteArray()
-            }
+            return consume(connection) { ensureActive(ticket) }
         } finally {
             connection.disconnect()
         }

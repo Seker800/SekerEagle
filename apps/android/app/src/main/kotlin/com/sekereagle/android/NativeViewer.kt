@@ -91,8 +91,18 @@ fun NativeViewer(
                 color = NativeMuted,
                 fontSize = 13.sp,
             )
-            GlassSurface(Modifier.size(48.dp)) {
-                RoundAction(Icons.Outlined.MoreHoriz, "照片信息") { info = true }
+            GlassSurface(Modifier.width(if (state.trash) 48.dp else 104.dp).height(48.dp)) {
+                Row(Modifier.fillMaxSize()) {
+                    if (!state.trash)
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                            RoundAction(Icons.Outlined.Download, "下载原件") {
+                                model.downloadAssets(listOf(asset))
+                            }
+                        }
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        RoundAction(Icons.Outlined.MoreHoriz, "照片信息") { info = true }
+                    }
+                }
             }
         }
     }

@@ -11,13 +11,21 @@ public final class NativeDownloadPolicy {
   private NativeDownloadPolicy() {}
 
   public static void validate(long size, String mime) {
-    if (size <= 0 || size > 5_000_000_000L || mime == null
-        || !(mime.matches("(?:image|video)/[a-zA-Z0-9.+-]+") || mime.equals("application/octet-stream")))
+    if (size <= 0
+        || size > 5_000_000_000L
+        || mime == null
+        || !(mime.matches("(?:image|video)/[a-zA-Z0-9.+-]+")
+            || mime.equals("application/octet-stream")))
       throw new IllegalArgumentException("原文件大小或格式不可下载");
   }
 
-  public static void copy(InputStream input, OutputStream output, long expected,
-      Runnable checkActive, LongConsumer progress) throws IOException {
+  public static void copy(
+      InputStream input,
+      OutputStream output,
+      long expected,
+      Runnable checkActive,
+      LongConsumer progress)
+      throws IOException {
     if (expected <= 0 || expected > 5_000_000_000L) throw new IllegalArgumentException("文件大小无效");
     byte[] buffer = new byte[64 * 1024];
     long total = 0;
@@ -37,7 +45,11 @@ public final class NativeDownloadPolicy {
 
   public static String fileName(String original) {
     String value = original.replace('\\', '/');
-    value = value.substring(value.lastIndexOf('/') + 1).replaceAll("[\\p{Cntrl}\\p{Cf}:*?\"<>|]", "").trim();
+    value =
+        value
+            .substring(value.lastIndexOf('/') + 1)
+            .replaceAll("[\\p{Cntrl}\\p{Cf}:*?\"<>|]", "")
+            .trim();
     value = value.replaceAll("^\\.+|\\.+$", "");
     if (value.isBlank()) return "download";
     int dot = value.lastIndexOf('.');

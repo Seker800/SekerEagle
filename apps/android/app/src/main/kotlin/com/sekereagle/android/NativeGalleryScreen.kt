@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
+    val download by model.downloads.state.collectAsStateWithLifecycle()
     NativeTheme {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -48,6 +49,8 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                         }
                     }
                 }
+                if (state.identity != null && download != null)
+                    NativeDownloadDialog(download!!, model.downloads)
                 BackHandler(
                     state.searchOpen ||
                         state.moreOpen ||

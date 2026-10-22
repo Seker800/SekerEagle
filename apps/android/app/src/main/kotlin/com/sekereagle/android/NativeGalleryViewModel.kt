@@ -55,6 +55,25 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     var repository: NativeGalleryRepository? = null
         private set
 
+    val downloads =
+        NativeDownloads(application, viewModelScope) { expired ->
+            if (session === expired) expire()
+        }
+
+    fun downloadAssets(assets: List<NativeAsset>) {
+        val current = state.value
+        val connection = session ?: return
+        if (current.busy || current.trash || assets.isEmpty()) return
+        if (assets.any { candidate -> current.items.none { it.id == candidate.id } }) return
+        downloads.start(connection, current.mode, assets.toList())
+    }
+
+    fun downloadSelected() {
+        val current = state.value
+        val assets = current.items.filter { it.id in current.selected }
+        if (assets.size == current.selected.size) downloadAssets(assets)
+    }
+
     private var operation: Job? = null
     private var sessionJob: Job? = null
     private var signingOut: Job? = null
@@ -82,6 +101,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         authenticate(origin, email, password)
 
     private fun authenticate(origin: String, email: String?, password: String?) {
+        downloads.clear()
         sessionJob?.cancel()
         operation?.cancel()
         val request = ++generation
@@ -143,6 +163,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun switchMode(mode: GalleryMode) {
         if (state.value.busy || mode == state.value.mode) return
+        downloads.clear()
         operation?.cancel()
         optionsJob?.cancel()
         generation++
@@ -280,7 +301,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun viewerPage(id: String) {
-        mutable.value = state.value.copy(viewerId = id)
+        val current = state.value
+        if (current.viewerId != null && current.items.any { it.id == id })
+            mutable.value = current.copy(viewerId = id)
     }
 
     fun columns(value: Int) {
@@ -468,6 +491,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun expire() {
+        downloads.clear()
         operation?.cancel()
         generation++
         settings.active("")
@@ -537,6 +561,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             .getOrDefault(emptyList())
 
     override fun onCleared() {
+        downloads.clear()
         repository?.clear()
     }
 }

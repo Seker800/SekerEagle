@@ -88,6 +88,111 @@ class NativeGalleryTest {
         bitmap.recycle()
     }
 
+    private fun verifyOriginalDownloads() {
+        val session = NativeSession.open(context, credentials.getString("origin"))
+        val collection = android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI
+        fun rows(): Set<android.net.Uri> =
+            context.contentResolver
+                .query(
+                    collection,
+                    arrayOf("_id"),
+                    "relative_path = ?",
+                    arrayOf("Download/SekerEagle/"),
+                    null,
+                )!!
+                .use { cursor ->
+                    buildSet {
+                        while (cursor.moveToNext()) add(
+                            android.content.ContentUris.withAppendedId(
+                                collection,
+                                cursor.getLong(0),
+                            )
+                        )
+                    }
+                }
+        val before = rows()
+        try {
+            val first = firstAsset()
+            compose.onNodeWithTag("asset:$first").performClick()
+            compose.onNodeWithContentDescription("下载原件").performClick()
+            compose.waitUntil(15000) {
+                compose.onAllNodesWithText("下载结果").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("download-summary").assertTextEquals("已保存 1 / 1 项")
+            capture("native-single-download.png")
+            val savedSingle = rows() - before
+            assertEquals(1, savedSingle.size)
+            assertArrayEquals(
+                session.media("/api/photos/assets/$first/original"),
+                context.contentResolver.openInputStream(savedSingle.first())!!.use {
+                    it.readBytes()
+                },
+            )
+            compose.onNodeWithText("完成").performClick()
+            compose.onNodeWithTag("native-download-dialog").assertDoesNotExist()
+            back()
+            compose.onNodeWithTag("native-viewer").assertDoesNotExist()
+            val ids =
+                compose.onAllNodes(hasTestTagPrefix("asset:")).fetchSemanticsNodes().take(2).map {
+                    it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag]
+                        .removePrefix("asset:")
+                }
+            assertEquals(2, ids.size)
+            compose.onNodeWithTag("asset:${ids[0]}").performTouchInput { longClick() }
+            capture("native-download-selection-first.png")
+            compose.onNodeWithTag("native-selection-count").assertTextEquals("已选择 1 项")
+            compose.onNodeWithTag("asset:${ids[1]}").performClick()
+            capture("native-download-selection-second.png")
+            compose.onNodeWithTag("native-selection-count").assertTextEquals("已选择 2 项")
+            compose.onNodeWithText("下载").performClick()
+            compose.waitUntil(15000) {
+                compose.onAllNodesWithText("下载结果").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithTag("download-summary").assertTextEquals("已保存 2 / 2 项")
+            val savedBatch = rows() - before - savedSingle
+            assertEquals(2, savedBatch.size)
+            fun digest(data: ByteArray) =
+                java.security.MessageDigest.getInstance("SHA-256").digest(data).toList()
+            val expected =
+                ids.map { digest(session.media("/api/photos/assets/$it/original")) }
+                    .sortedBy { it.toString() }
+            val actual =
+                savedBatch
+                    .map {
+                        digest(
+                            context.contentResolver.openInputStream(it)!!.use { input ->
+                                input.readBytes()
+                            }
+                        )
+                    }
+                    .sortedBy { it.toString() }
+            assertEquals(expected, actual)
+            capture("native-multi-download.png")
+            compose.onNodeWithText("完成").performClick()
+            compose.onNodeWithTag("native-download-dialog").assertDoesNotExist()
+            back()
+            compose.onNodeWithTag("native-selection-count").assertDoesNotExist()
+            val original =
+                NativeGalleryRepository(session, "download-test")
+                    .parse(session.json("GET", "/api/photos/assets/$first"), GalleryMode.PHOTO)
+            val filesBeforeWrongMode = rows()
+            val failure =
+                assertThrows(NativeSession.Failure::class.java) {
+                    NativeDownloadStore(context).save(
+                        session,
+                        GalleryMode.MATERIAL,
+                        original,
+                        NativeDownloadCancellation(),
+                    ) { _, _ ->
+                    }
+                }
+            assertEquals(404, failure.status)
+            assertEquals(filesBeforeWrongMode, rows())
+        } finally {
+            (rows() - before).forEach { context.contentResolver.delete(it, null, null) }
+        }
+    }
+
     @Test
     fun filtersAndLongPressBatchTagsTrashAndRestoreUseRealApi() {
         login()
@@ -214,6 +319,7 @@ class NativeGalleryTest {
         )
         back()
         compose.onNodeWithTag("native-selection-count").assertDoesNotExist()
+        verifyOriginalDownloads()
         compose.onNodeWithTag("mode:MATERIAL").performClick()
         compose.onNodeWithContentDescription("视图选项").performClick()
         compose.onNodeWithText("标签").assertDoesNotExist()
