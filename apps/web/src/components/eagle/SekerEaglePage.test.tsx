@@ -228,7 +228,7 @@ describe('SekerEaglePage', () => {
   it('shows the library total instead of the loaded page length in navigation and heading', async () => {
     countEagleAssetsMock.mockResolvedValue({ count: 72100 });
     renderPage();
-    expect(await screen.findByRole('button', { name: '全部素材 72100' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '全部 72100' })).toBeInTheDocument();
     expect(screen.getByText('72100 项')).toBeInTheDocument();
     expect(listEagleAssetsMock).toHaveBeenCalled();
   });
@@ -508,7 +508,7 @@ describe('SekerEaglePage', () => {
   it('keeps inspector visibility independent from the current asset selection', async () => {
     renderPage();
 
-    expect(await screen.findByRole('heading', { name: '全部素材' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '全部' })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: '素材库导航' })).toBeInTheDocument();
     expect(screen.getByRole('searchbox', { name: '搜索素材' })).toBeInTheDocument();
     const assetCard = await screen.findByRole('button', { name: /Owl Reference/ });
@@ -561,7 +561,7 @@ describe('SekerEaglePage', () => {
       </QueryClientProvider>,
     );
 
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
     fireEvent.click(
       within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole('button', {
@@ -607,7 +607,7 @@ describe('SekerEaglePage', () => {
   it('keeps processing tasks available for ordinary owners inside the pending workspace', async () => {
     renderPage();
 
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
     fireEvent.click(screen.getByRole('button', { name: '待处理 38' }));
     expect(
       within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
@@ -1908,7 +1908,7 @@ describe('SekerEaglePage', () => {
 
   it('offers file picking alongside drag-and-drop import', async () => {
     const { container } = renderPage();
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
 
     expect(screen.getByRole('button', { name: '导入' })).toBeEnabled();
     expect(container.querySelector('input[type="file"]')).toBeInTheDocument();
@@ -1930,7 +1930,7 @@ describe('SekerEaglePage', () => {
   it('keeps successful duplicate imports silent after the library refreshes', async () => {
     uploadEagleAssetMock.mockResolvedValueOnce({ duplicate: true });
     renderPage();
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
     const listCallsBeforeDrop = listEagleAssetsMock.mock.calls.length;
 
     fireEvent.drop(screen.getByRole('main'), {
@@ -1968,7 +1968,7 @@ describe('SekerEaglePage', () => {
 
   it('shows the Eagle-style quick-filter toolbar without a generic rule-builder button', async () => {
     renderPage();
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
 
     expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
@@ -1993,7 +1993,7 @@ describe('SekerEaglePage', () => {
   it('keeps the AI tag catalog unloaded until the user opens the AI tag tab', async () => {
     renderPage();
 
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
     expect(listEagleAiTagsMock).not.toHaveBeenCalled();
 
     fireEvent.click(await screen.findByRole('button', { name: '标签' }));
@@ -2013,7 +2013,7 @@ describe('SekerEaglePage', () => {
   it('reduces the feature navigation to tags, pending work, and settings', async () => {
     renderPage();
 
-    await screen.findByRole('heading', { name: '全部素材' });
+    await screen.findByRole('heading', { name: '全部' });
     const sidebar = screen.getByRole('navigation', { name: '素材库导航' });
 
     expect(within(sidebar).getByRole('button', { name: '标签' })).toBeInTheDocument();
@@ -2212,7 +2212,7 @@ describe('SekerEaglePage', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '常用素材' }));
     await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(2));
-    fireEvent.click(screen.getByRole('button', { name: /全部素材/ }));
+    fireEvent.click(screen.getByRole('button', { name: '全部' }));
     fireEvent.click(screen.getByRole('button', { name: '常用素材' }));
 
     await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(2));
