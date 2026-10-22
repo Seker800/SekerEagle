@@ -579,9 +579,24 @@ public final class MobileBackupTest {
         "photo card");
     webScript("document.querySelector('[data-asset-id]').click()");
     Thread.sleep(1500);
+    waitUntil(
+        () ->
+            webValue("Boolean(document.querySelector('[role=dialog] button[aria-label=\"返回\"]'))")
+                .equals("true"),
+        5000,
+        "mobile viewer");
     capture("audit-viewer.png");
     webScript("document.querySelector('[role=dialog] details summary')?.click()");
     capture("audit-viewer-more.png");
+    webScript(
+        "Array.from(document.querySelectorAll('[role=dialog]"
+            + " button')).find(b=>b.textContent.trim()==='编辑')?.click()");
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('[aria-label=\"关闭编辑器\"]'))").equals("true"),
+        15000,
+        "editor opened");
+    capture("audit-editor.png");
+    webScript("document.querySelector('button[aria-label=\"关闭编辑器\"]').click()");
     webScript("document.querySelector('[role=dialog] button[aria-label=\"返回\"]')?.click()");
     auditDestination("地图");
     capture("audit-map.png");
@@ -599,25 +614,81 @@ public final class MobileBackupTest {
             webValue("document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab]').length"));
     for (int index = 0; index < tabs; index++) {
       webScript(
-          "document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab])[" + index + "].click()");
+          "document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab]')[" + index + "].click()");
+      Thread.sleep(350);
+      assertEquals(
+          "true",
+          webValue(
+              "document.querySelectorAll('[aria-label=\"账号设置分类\"] [role=tab]')["
+                  + index
+                  + "].getAttribute('aria-selected') === 'true'"));
       capture("audit-account-" + index + ".png");
+    }
+    for (String label : new String[] {"人工标签推荐", "AI 内容识别"}) {
+      webScript(
+          "Array.from(document.querySelectorAll('nav[aria-label=\"设置功能\"]"
+              + " button')).find(b=>b.textContent.trim()==='"
+              + label
+              + "').click()");
+      capture(label.equals("人工标签推荐") ? "audit-tag-settings.png" : "audit-ai-settings.png");
     }
     auditMode("素材");
     capture("audit-material.png");
     auditDestination("标签");
     capture("audit-tags.png");
+    webScript(
+        "Array.from(document.querySelectorAll('nav[aria-label=\"标签功能\"]"
+            + " button')).find(b=>b.textContent.trim()==='AI 标签').click()");
+    capture("audit-ai-tags.png");
     auditDestination("素材");
     webScript("document.querySelector('button[aria-label=\"视图与筛选\"]').click()");
     capture("audit-filters.png");
     webScript(
         "Array.from(document.querySelectorAll('dialog[open]"
             + " button')).find(b=>b.textContent.trim()==='完成').click()");
+    for (String label : new String[] {"待处理", "回收站"}) {
+      webScript("document.querySelector('button[aria-label=\"更多操作\"]').click()");
+      Thread.sleep(200);
+      webScript(
+          "Array.from(document.querySelectorAll('dialog[open]"
+              + " summary')).find(b=>b.textContent.trim()==='图库管理').click()");
+      webScript(
+          "Array.from(document.querySelectorAll('dialog[open]"
+              + " button')).find(b=>(b.getAttribute('aria-label')||'').startsWith('"
+              + label
+              + "')).click()");
+      capture(label.equals("待处理") ? "audit-pending.png" : "audit-trash.png");
+      if (label.equals("待处理"))
+        for (String tab : new String[] {"待分类", "处理任务"}) {
+          webScript(
+              "Array.from(document.querySelectorAll('nav[aria-label=\"待处理功能\"]"
+                  + " button')).find(b=>b.textContent.trim().startsWith('"
+                  + tab
+                  + "')).click()");
+          capture(tab.equals("待分类") ? "audit-unclassified.png" : "audit-processing.png");
+        }
+    }
     getInstrumentation().runOnMainSync(() -> activity.show("backup"));
     capture("audit-backup.png");
     getInstrumentation().runOnMainSync(() -> activity.show("cleanup"));
     capture("audit-cleanup.png");
     getInstrumentation().runOnMainSync(() -> activity.show("server"));
     capture("audit-connection.png");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              activity.show("library");
+              findWorkspace(activity.findViewById(android.R.id.content))
+                  .loadUrl(origin.replace("localhost", "127.0.0.1"));
+            });
+    waitUntil(
+        () -> webValue("Boolean(document.querySelector('input[type=password]'))").equals("true"),
+        10000,
+        "login layout");
+    capture("audit-login.png");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> findWorkspace(activity.findViewById(android.R.id.content)).loadUrl(origin));
     getInstrumentation().runOnMainSync(() -> activity.show("library"));
   }
 

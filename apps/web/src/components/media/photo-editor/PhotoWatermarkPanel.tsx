@@ -80,7 +80,7 @@ function WatermarkSettingsEditor({
       >
         <div className={styles.watermarkSettingsHeading}>
           <strong>{t('水印设置')}</strong>
-          <button type="button" aria-label={t('关闭水印设置')} onClick={onClose}>
+          <button type="button" data-mobile-back aria-label={t('关闭水印设置')} onClick={onClose}>
             <IconX size={18} />
           </button>
         </div>

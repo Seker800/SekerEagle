@@ -1,3 +1,4 @@
+import { useMobileBack } from '../../lib/mobile-back';
 import { BackupPanel } from './BackupPanel';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
@@ -120,6 +121,11 @@ export function AccountHome({
   } = useLibraryWorkspace();
 
   const [activeSection, setActiveSection] = useState<AccountSection>('PRIVACY');
+  useMobileBack(() => {
+    if (activeSection === 'PRIVACY') return false;
+    setActiveSection('PRIVACY');
+    return true;
+  }, 10);
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [tokensLoading, setTokensLoading] = useState(true);
   const [tokenError, setTokenError] = useState('');

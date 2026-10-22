@@ -167,6 +167,7 @@ try {
           '.html': 'text/html',
           '.js': 'application/javascript',
           '.css': 'text/css',
+          '.wasm': 'application/wasm',
           '.svg': 'image/svg+xml',
           '.png': 'image/png',
         }[extname(file)] ?? 'application/octet-stream',

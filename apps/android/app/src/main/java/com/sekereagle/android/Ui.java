@@ -12,12 +12,12 @@ import com.google.android.material.card.MaterialCardView;
 
 /** Native presentation tokens shared by the app bar, account and backup surfaces. */
 final class Ui {
-  static final int BG = 0xff111214,
-      SURFACE = 0xff1b1d21,
-      LINE = 0xff2a2d32,
+  static final int BG = 0xff09090b,
+      SURFACE = 0xff1c1c20,
+      LINE = 0xff323238,
       TEXT = 0xfff0f1f3,
       MUTED = 0xff9ca1ab,
-      ACCENT = 0xffeabd80;
+      ACCENT = 0xff82aaff;
 
   static int dp(Context context, int value) {
     return (int) (value * context.getResources().getDisplayMetrics().density + .5f);

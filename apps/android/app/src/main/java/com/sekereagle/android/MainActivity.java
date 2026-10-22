@@ -23,7 +23,8 @@ public final class MainActivity extends Activity {
   private BackupScreen backup;
   private CleanupScreen cleanup;
   private String currentTab = "library", activeScope = "", pendingTreeScope = "";
-  private boolean resumed, checking, autoPending;
+  private boolean resumed, checking, autoPending, backPending;
+  private final java.util.ArrayDeque<String> nativeBackStack = new java.util.ArrayDeque<>();
   private long nextCheck;
   private ValueCallback<Uri[]> chooser;
   private final Runnable tick =
@@ -85,7 +86,7 @@ public final class MainActivity extends Activity {
     WebSettings config = web.getSettings();
     config.setJavaScriptEnabled(true);
     config.setDomStorageEnabled(true);
-    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/0.1.3");
+    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/0.1.4");
     config.setAllowFileAccess(false);
     config.setAllowContentAccess(false);
     config.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
@@ -175,6 +176,13 @@ public final class MainActivity extends Activity {
   }
 
   void show(String tab) {
+    if (tab.equals("library")) nativeBackStack.clear();
+    else if (!tab.equals(currentTab) && !settings.origin().isEmpty())
+      nativeBackStack.push(currentTab);
+    renderTab(tab);
+  }
+
+  private void renderTab(String tab) {
     getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     currentTab = tab;
     renderAppBar();
@@ -202,7 +210,7 @@ public final class MainActivity extends Activity {
     boolean home = currentTab.equals("library");
     appBar.setVisibility(home ? View.GONE : View.VISIBLE);
     if (home) return;
-    ImageButton back = Ui.iconButton(this, R.drawable.ic_back, "返回图库", () -> show("library"));
+    ImageButton back = Ui.iconButton(this, R.drawable.ic_back, "返回", this::back);
     back.setTag("back-action");
     appBar.addView(back);
     TextView title =
@@ -537,8 +545,31 @@ public final class MainActivity extends Activity {
   }
 
   private void back() {
-    if (!currentTab.equals("library")) show("library");
-    else if (web.canGoBack()) web.goBack();
+    if (backPending) return;
+    if (!currentTab.equals("library")) {
+      if (!nativeBackStack.isEmpty()) renderTab(nativeBackStack.pop());
+      else if (!settings.origin().isEmpty()) renderTab("library");
+      else finish();
+      return;
+    }
+    if (web.getUrl() == null || !sameOrigin(Uri.parse(web.getUrl()))) {
+      browserBack();
+      return;
+    }
+    backPending = true;
+    web.evaluateJavascript(
+        "!window.dispatchEvent(new Event('sekereagle:back',{cancelable:true}))",
+        handled -> {
+          backPending = false;
+          if (!isFinishing()
+              && !isDestroyed()
+              && currentTab.equals("library")
+              && !"true".equals(handled)) browserBack();
+        });
+  }
+
+  private void browserBack() {
+    if (web.canGoBack()) web.goBack();
     else finish();
   }
 

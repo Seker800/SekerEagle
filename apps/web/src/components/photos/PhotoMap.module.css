@@ -96,3 +96,22 @@
 .frame :global(a.leaflet-popup-close-button) {
   color: var(--eagle-accent, #d69b48);
 }
+
+@media (max-width: 720px) {
+  .panel {
+    padding: 72px 16px 100px;
+    overflow: auto;
+  }
+  .heading button,
+  .caption button,
+  .photoLink {
+    min-height: 42px;
+    padding: 8px 16px;
+    border-radius: 22px;
+  }
+  .frame {
+    border-radius: 24px;
+    height: 58dvh;
+    min-height: 280px;
+  }
+}

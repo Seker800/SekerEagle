@@ -116,7 +116,7 @@ export function EagleBatchTagPicker({
               {' ' + t('项素材')}
             </span>
           </div>
-          <button type="button" aria-label={t('关闭标签选择')} onClick={onClose}>
+          <button type="button" data-mobile-back aria-label={t('关闭标签选择')} onClick={onClose}>
             <IconX size={18} />
           </button>
         </header>

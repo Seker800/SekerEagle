@@ -608,3 +608,11 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+@media (max-width: 720px) {
+  .workspace {
+    --accent: #82aaff;
+    padding: 20px 16px 100px;
+    background: #09090b;
+  }
+}

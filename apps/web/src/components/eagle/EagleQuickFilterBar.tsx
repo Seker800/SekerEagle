@@ -312,6 +312,7 @@ function FieldPopover({
           ) : null}
           <button
             type="button"
+            data-mobile-back
             aria-label={t('关闭{{value1}}筛选', {
               value1: label,
             })}
@@ -798,7 +799,7 @@ function FilterManager({
     >
       <header>
         <strong>{t('快捷筛选器')}</strong>
-        <button type="button" aria-label={t('关闭筛选器管理')} onClick={onClose}>
+        <button type="button" data-mobile-back aria-label={t('关闭筛选器管理')} onClick={onClose}>
           <IconX size={15} />
         </button>
       </header>

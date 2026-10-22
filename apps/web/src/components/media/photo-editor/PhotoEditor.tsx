@@ -550,6 +550,7 @@ export function PhotoEditor({
         <button
           type="button"
           className={styles.iconButton}
+          data-mobile-back
           aria-label={t('关闭编辑器')}
           disabled={busy}
           onClick={requestClose}
@@ -828,7 +829,7 @@ export function PhotoEditor({
                 ? t('关闭后保留编辑草稿，原图不会改变。')
                 : t('原图不会改变，关闭后本次调整将丢失。')}
             </p>
-            <button type="button" autoFocus onClick={() => setConfirmClose(false)}>
+            <button data-mobile-back type="button" autoFocus onClick={() => setConfirmClose(false)}>
               {t('继续编辑')}
             </button>
             <button

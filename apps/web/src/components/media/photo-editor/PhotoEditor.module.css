@@ -1309,3 +1309,20 @@
   height: 1px;
   pointer-events: none;
 }
+
+@media (max-width: 720px) {
+  .editor {
+    --photo-accent: #82aaff;
+    --photo-line: rgb(255 255 255 / 12%);
+  }
+  .toolScrollViewport {
+    scrollbar-color: #555861 transparent;
+  }
+  .toolScrollViewport::-webkit-scrollbar-thumb {
+    background: #555861;
+  }
+  .editor button {
+    border-radius: 20px;
+    min-height: 38px;
+  }
+}

@@ -1,0 +1,139 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  padding: max(14px, env(safe-area-inset-top)) 14px 24px;
+  color: #f4f4f6;
+  background: #000;
+  overflow: auto;
+}
+.dialog::backdrop {
+  background: #000;
+}
+.dialog header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dialog form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  min-height: 46px;
+  border-radius: 28px;
+  padding: 0 16px;
+  background: #202023;
+  color: #88888f;
+}
+.dialog input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 15px;
+  border: 0;
+  outline: 0;
+  color: #f4f4f6;
+  background: transparent;
+}
+.dialog button {
+  font: inherit;
+  cursor: pointer;
+}
+.close {
+  composes: surface from './EagleGlass.module.css';
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  padding: 0;
+}
+.content {
+  padding-top: 28px;
+}
+.content section {
+  margin-bottom: 32px;
+}
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 12px 18px;
+}
+.caption h2 {
+  margin: 0;
+  color: #90909b;
+  font-size: 13px;
+  font-weight: 400;
+}
+.caption button {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: #6b9cff;
+  font-size: 13px;
+}
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.suggestions button {
+  min-height: 42px;
+  padding: 8px 22px;
+  border: 0;
+  border-radius: 24px;
+  color: #eeeef2;
+  background: #242426;
+  font-size: 15px;
+}
+.history {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.history button {
+  width: 112px;
+  flex-shrink: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  border: 0;
+  color: #eeeef2;
+  background: transparent;
+  font-size: 14px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.historyTile {
+  display: grid;
+  place-items: center;
+  height: 84px;
+  border-radius: 18px;
+  color: #666670;
+  background: #1c1c1f;
+}
+.content p {
+  margin: 12px;
+  color: #757580;
+  font-size: 13px;
+}
+.dialog button:focus-visible {
+  outline: 2px solid #7ba6ff;
+  outline-offset: 2px;
+}
+
+.dialog input:focus-visible {
+  outline: none;
+}

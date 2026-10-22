@@ -1,5 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { IconChevronLeft, IconChevronRight, IconX } from '@tabler/icons-react';
+import { IconChevronLeft, IconChevronRight, IconX, IconRotateClockwise } from '@tabler/icons-react';
 import { t } from '../../i18n';
 import styles from './EagleViewerShell.module.css';
 export interface EagleViewerNavigation {
@@ -7,8 +7,15 @@ export interface EagleViewerNavigation {
   next?: () => void;
   position: { current: number; total: number };
 }
+export interface EagleMobileViewerPresentation {
+  date: string;
+  time?: string;
+  onRotate?: () => void;
+  actions: ReactNode;
+}
 export function EagleViewerShell({
   title,
+  mobile,
   subtitle,
   children,
   actions,
@@ -17,6 +24,7 @@ export function EagleViewerShell({
   onClose,
 }: {
   title: string;
+  mobile?: EagleMobileViewerPresentation;
   subtitle?: string;
   children: ReactNode;
   actions?: ReactNode;
@@ -37,7 +45,11 @@ export function EagleViewerShell({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopImmediatePropagation();
-        latest.current.onClose();
+        const expanded = dialog.current?.querySelector<HTMLDetailsElement>('details[open]');
+        if (expanded) {
+          expanded.open = false;
+          expanded.querySelector('summary')?.focus();
+        } else latest.current.onClose();
         return;
       }
       if (
@@ -68,7 +80,7 @@ export function EagleViewerShell({
     <div className={styles.backdrop} onClick={onClose} role="presentation">
       <section
         ref={dialog}
-        className={styles.dialog}
+        className={`${styles.dialog} ${mobile ? styles.mobile : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -84,6 +96,7 @@ export function EagleViewerShell({
             (element) =>
               element.tabIndex >= 0 &&
               !element.closest('[hidden]') &&
+              (!element.closest('details:not([open])') || element.tagName === 'SUMMARY') &&
               getComputedStyle(element).display !== 'none',
           );
           const first = controls[0],
@@ -104,25 +117,39 @@ export function EagleViewerShell({
         }}
       >
         <header className={styles.header}>
+          {mobile && (
+            <button type="button" data-mobile-back aria-label={t('返回')} onClick={onClose}>
+              <IconChevronLeft size={27} />
+            </button>
+          )}
           <div className={styles.information}>
-            <strong title={title}>{title}</strong>
-            {subtitle && <span>{subtitle}</span>}
+            <strong title={title}>{mobile?.date ?? title}</strong>
+            {(mobile?.time ?? subtitle) && <span>{mobile?.time ?? subtitle}</span>}
           </div>
-          {navigation && (
+          {!mobile && navigation && (
             <span className={styles.counter} aria-live="polite" aria-atomic="true">
               {navigation.position.current}
               <span> / {navigation.position.total}</span>
             </span>
           )}
-          <button
-            className={styles.close}
-            type="button"
-            aria-label={t('关闭')}
-            title={t('关闭')}
-            onClick={onClose}
-          >
-            <IconX size={21} />
-          </button>
+          {mobile ? (
+            mobile.onRotate && (
+              <button type="button" aria-label={t('旋转照片')} onClick={mobile.onRotate}>
+                <IconRotateClockwise size={26} />
+              </button>
+            )
+          ) : (
+            <button
+              className={styles.close}
+              type="button"
+              data-mobile-back
+              aria-label={t('关闭')}
+              title={t('关闭')}
+              onClick={onClose}
+            >
+              <IconX size={21} />
+            </button>
+          )}
         </header>
         <div className={styles.stage}>
           {children}
@@ -148,12 +175,14 @@ export function EagleViewerShell({
           )}
         </div>
         <footer className={styles.footer}>
-          {collection}
-          {actions && (
-            <div className={styles.actions} role="toolbar" aria-label={t('图片操作')}>
-              {actions}
-            </div>
-          )}
+          {!mobile && collection}
+          {mobile
+            ? mobile.actions
+            : actions && (
+                <div className={styles.actions} role="toolbar" aria-label={t('图片操作')}>
+                  {actions}
+                </div>
+              )}
         </footer>
       </section>
     </div>

@@ -561,3 +561,11 @@
     flex-direction: column;
   }
 }
+
+@media (max-width: 720px) {
+  .section {
+    --accent: #82aaff;
+    padding: 20px 16px 100px;
+    background: #09090b;
+  }
+}

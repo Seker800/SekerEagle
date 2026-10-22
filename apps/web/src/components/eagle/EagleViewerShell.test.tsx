@@ -48,15 +48,29 @@ describe('EagleViewerShell', () => {
 });
 
 it('presents a photo date, back and rotate controls with a separate mobile toolbar', () => {
-  const close=vi.fn(), rotate=vi.fn();
-  render(<EagleViewerShell title="photo.jpg" onClose={close} actions={<button>desktop action</button>}
-    mobile={{date:'2026年10月19日', time:'15:05', onRotate:rotate, actions:<button>发送</button>}}><div>photo</div></EagleViewerShell>);
+  const close = vi.fn(),
+    rotate = vi.fn();
+  render(
+    <EagleViewerShell
+      title="photo.jpg"
+      onClose={close}
+      actions={<button>desktop action</button>}
+      mobile={{
+        date: '2026年10月19日',
+        time: '15:05',
+        onRotate: rotate,
+        actions: <button>发送</button>,
+      }}
+    >
+      <div>photo</div>
+    </EagleViewerShell>,
+  );
   expect(screen.getByText('2026年10月19日')).toBeVisible();
   expect(screen.getByText('15:05')).toBeVisible();
-  fireEvent.click(screen.getByRole('button',{name:'旋转照片'}));
+  fireEvent.click(screen.getByRole('button', { name: '旋转照片' }));
   expect(rotate).toHaveBeenCalledOnce();
-  fireEvent.click(screen.getByRole('button',{name:'返回'}));
+  fireEvent.click(screen.getByRole('button', { name: '返回' }));
   expect(close).toHaveBeenCalledOnce();
-  expect(screen.queryByRole('button',{name:'desktop action'})).toBeNull();
-  expect(screen.getByRole('button',{name:'发送'})).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'desktop action' })).toBeNull();
+  expect(screen.getByRole('button', { name: '发送' })).toBeVisible();
 });

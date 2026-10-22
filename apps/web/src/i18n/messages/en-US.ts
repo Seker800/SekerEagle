@@ -1,4 +1,35 @@
 export const enUS = {
+  全家福: 'Family portraits',
+  海边日落: 'Sunset by the sea',
+  宠物: 'Pets',
+  城市夜景: 'City at night',
+  花与植物: 'Flowers and plants',
+  雪景: 'Snow',
+  美食: 'Food',
+  山川: 'Mountains',
+
+  下载原文件: 'Download original',
+  使用收藏标签: 'Uses the Favorites tag',
+  发送: 'Send',
+  已收藏: 'Favorited',
+  '当前环境不支持系统分享，可先下载原文件。':
+    'System sharing is unavailable here. Download the original to share it.',
+  您可以搜: 'You can search',
+  换一换: 'Refresh',
+  搜索历史: 'Search history',
+  收藏: 'Favorite',
+  '收藏标签被设为私密，请先在设置中调整。':
+    'The Favorites tag is private. Change its privacy setting first.',
+  旋转照片: 'Rotate photo',
+  '无法读取原文件，请重试。': 'Unable to read the original. Try again.',
+  暂无搜索历史: 'No search history',
+  清空搜索历史: 'Clear search history',
+  '移入当前图库回收站？可以在回收站恢复。':
+    'Move to this library’s trash? You can restore it later.',
+  编辑: 'Edit',
+  '输入名称、标签或描述画面内容': 'Search by name, tag or description',
+  返回: 'Back',
+
   更多操作: 'More actions',
   文件上传脚本: 'Upload script',
   '开启显示隐私内容后，可管理全部私密标签。':

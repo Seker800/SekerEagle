@@ -1,3 +1,5 @@
+import { useMobileBack } from '../../lib/mobile-back';
+import { EagleMobileSearch } from './EagleMobileSearch';
 import {
   EagleMobileChrome,
   EagleMobileNavigation,
@@ -322,10 +324,6 @@ export function SekerEaglePage({
   const compact = useCompactLayout();
   const [mobileMore, setMobileMore] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
-  const mobileSearchRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (compact && mobileSearch) mobileSearchRef.current?.focus();
-  }, [compact, mobileSearch]);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
@@ -1330,6 +1328,30 @@ export function SekerEaglePage({
       </button>
     </>
   );
+  useMobileBack(() => {
+    if (mobileSearch) {
+      setMobileSearch(false);
+      return true;
+    }
+    if (mobileMore) {
+      setMobileMore(false);
+      return true;
+    }
+    if (workspaceSection === 'SETTINGS') {
+      changeLibraryView('ACTIVE');
+      setMobileMore(true);
+      return true;
+    }
+    if (libraryView !== 'ACTIVE' || photoView !== 'timeline') {
+      changeLibraryView('ACTIVE');
+      return true;
+    }
+    if (search) {
+      setSearch('');
+      return true;
+    }
+    return false;
+  }, 0);
   const navigateMobile = (destination: MobileDestination) => {
     setMobileMore(destination === 'more');
     setMobileSearch(false);
@@ -1532,6 +1554,20 @@ export function SekerEaglePage({
             {null}
           </EagleMobileChrome>
         )}
+        {compact && mobileSearch && (
+          <EagleMobileSearch
+            key={`${storeScope}:${privateVisible}`}
+            scopeKey={storeScope}
+            persist={!privateVisible}
+            value={search}
+            suggestions={privateVisible ? [] : manualTags.map((tag) => tag.name)}
+            onClose={() => setMobileSearch(false)}
+            onSearch={(value) => {
+              setSearch(value);
+              setMobileSearch(false);
+            }}
+          />
+        )}
         {compact && mobileMore && (
           <EagleMobileMore
             email={accountSummary?.email ?? ownerId}
@@ -1593,7 +1629,7 @@ export function SekerEaglePage({
             <EagleWorkspaceNavigation
               title={t('设置')}
               ariaLabel={t('设置功能')}
-              layout="sidebar"
+              layout={compact ? 'tabs' : 'sidebar'}
               activeView={libraryView}
               items={[
                 ...(accountView ? [{ view: 'ACCOUNT' as const, label: t('账号') }] : []),
@@ -1714,10 +1750,9 @@ export function SekerEaglePage({
                 )}
                 {showsAssetControls && (
                   <>
-                    <label className={styles.searchBox} hidden={compact && !mobileSearch}>
+                    <label className={styles.searchBox} hidden={compact}>
                       <IconSearch size={17} aria-hidden="true" />
                       <input
-                        ref={mobileSearchRef}
                         type="search"
                         aria-label={libraryMode === 'PHOTO' ? t('搜索照片') : t('搜索素材')}
                         placeholder={t('搜索名称或描述画面内容')}
@@ -2632,6 +2667,8 @@ export function SekerEaglePage({
       )}
       {imagePreview.previewImage ? (
         <EagleImageViewer
+          asset={previewImageAsset ?? undefined}
+          readOnly={libraryView === 'TRASH'}
           image={imagePreview.previewImage}
           subtitle={previewImageAsset ? eagleViewerMetadata(previewImageAsset) : undefined}
           navigation={previewNavigation}

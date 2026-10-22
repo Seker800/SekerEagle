@@ -66,8 +66,8 @@ function isTranslationMessage(node: ts.StringLiteralLike): boolean {
   return (
     (ts.isCallExpression(node.parent) &&
       ts.isIdentifier(node.parent.expression) &&
-      ((['t', 'tForLocale'].includes(node.parent.expression.text) &&
-        node.parent.arguments[0] === node) ||
+      ((node.parent.expression.text === 't' && node.parent.arguments[0] === node) ||
+        (node.parent.expression.text === 'tForLocale' && node.parent.arguments[1] === node) ||
         (node.parent.expression.text === 'errorFromResponse' &&
           node.parent.arguments[1] === node))) ||
     isErrorCodeMessage(node)
@@ -91,3 +91,21 @@ function isPropertyName(node: ts.StringLiteralLike): boolean {
     parent.name === node
   );
 }
+
+it('recognizes the message argument of the fixed-locale translator without exempting other strings', () => {
+  const source = ts.createSourceFile(
+    'example.ts',
+    "tForLocale('zh-CN', '收藏'); other('收藏');",
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const calls: ts.CallExpression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node)) calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  expect(isTranslationMessage(calls[0].arguments[1] as ts.StringLiteral)).toBe(true);
+  expect(isTranslationMessage(calls[0].arguments[0] as ts.StringLiteral)).toBe(false);
+  expect(isTranslationMessage(calls[1].arguments[0] as ts.StringLiteral)).toBe(false);
+});

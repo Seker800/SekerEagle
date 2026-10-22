@@ -254,3 +254,26 @@
     align-items: flex-start;
   }
 }
+
+@media (max-width: 720px) {
+  .eyebrow {
+    color: #82aaff;
+  }
+  .startButton,
+  .switch[aria-checked='true'] {
+    background: #82aaff;
+    border-color: #82aaff;
+  }
+  .startButton,
+  .stopButton,
+  .timeSettings button,
+  .footer button {
+    border-radius: 22px;
+    min-height: 40px;
+  }
+  .panel {
+    --accent: #82aaff;
+    padding: 20px 16px 100px;
+    background: #09090b;
+  }
+}

@@ -1,3 +1,6 @@
+import { useCompactLayout } from '../../hooks/useCompactLayout';
+import { mobileViewerPresentation } from './EagleMobileViewer';
+import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { EagleViewerShell, type EagleViewerNavigation } from './EagleViewerShell';
 import { t } from '../../i18n';
 import { IconAdjustments, IconRefresh } from '@tabler/icons-react';
@@ -49,6 +52,8 @@ interface ViewerViewport {
   deltaPointsFromPixels(point: ViewerPoint): ViewerPoint;
   getCenter(current?: boolean): ViewerPoint;
   getZoom(current?: boolean): number;
+  getHomeZoom?(): number;
+  setRotation?(degrees: number, immediately?: boolean): void;
   panBy(point: ViewerPoint, immediately?: boolean): void;
   panTo(point: ViewerPoint, immediately?: boolean): void;
   pointFromPixel(point: ViewerPoint, current?: boolean): ViewerPoint;
@@ -112,6 +117,8 @@ export function preloadEagleImageViewer(): void {
 }
 export function EagleImageViewer({
   image,
+  asset,
+  readOnly = false,
   descriptor,
   onLocate,
   onClose,
@@ -126,6 +133,8 @@ export function EagleImageViewer({
   onRetry,
 }: {
   image: PreviewImage;
+  asset?: EagleAssetListItem;
+  readOnly?: boolean;
   descriptor?: EaglePyramidDescriptor;
   onLocate?: (assetId: string) => Promise<void>;
   onClose: () => void;
@@ -139,6 +148,11 @@ export function EagleImageViewer({
   error?: string;
   onRetry?: () => void;
 }) {
+  const compact = useCompactLayout();
+  const rotation = useRef(0);
+  useEffect(() => {
+    rotation.current = 0;
+  }, [image.assetId, image.src]);
   const source = useMemo(
     () =>
       descriptor ? createEagleTileSource(descriptor) : createEaglePreviewTileSource(image.src),
@@ -331,8 +345,34 @@ export function EagleImageViewer({
     viewer.open(sourceRef.current);
   };
   const displayStatus = error ? 'error' : loading ? 'loading' : status;
+  const secondary = (
+    <>
+      {!loading && !error && onLocate && image.assetId && (
+        <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
+      )}
+      <EagleImageCopyButton sourceUrl={image.src} />
+      {actions}
+      {collection}
+    </>
+  );
   return (
     <EagleViewerShell
+      mobile={
+        compact && asset
+          ? mobileViewerPresentation(
+              asset,
+              onClose,
+              onEdit,
+              secondary,
+              () => {
+                rotation.current = (rotation.current + 90) % 360;
+                viewerRef.current?.viewport.setRotation?.(rotation.current, true);
+                viewerRef.current?.viewport.goHome(true);
+              },
+              readOnly || loading || Boolean(error),
+            )
+          : undefined
+      }
       title={loading ? t('正在加载…') : image.alt}
       subtitle={loading ? undefined : subtitle}
       navigation={navigation}

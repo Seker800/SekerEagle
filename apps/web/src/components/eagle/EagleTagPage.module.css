@@ -563,3 +563,48 @@
     max-width: 115px;
   }
 }
+
+@media (max-width: 720px) {
+  .page {
+    background: #09090b;
+    padding-bottom: 90px;
+  }
+  .scopePanel {
+    background: #09090b;
+  }
+  .scopePanel nav button {
+    border-radius: 20px;
+    min-height: 40px;
+  }
+  .toolbar,
+  .managementBar {
+    background: #09090b;
+  }
+  .searchBox {
+    border-radius: 24px;
+    background: #1c1c20;
+    min-height: 42px;
+  }
+  .layoutSwitch {
+    height: 44px;
+    border-radius: 24px;
+    flex-shrink: 0;
+  }
+  .createForm {
+    height: 40px;
+    border-radius: 22px;
+    background: #1c1c20;
+  }
+  .createForm button {
+    color: #82aaff;
+  }
+  .createForm:focus-within,
+  .searchBox:focus-within {
+    border-color: #82aaff;
+  }
+  .toolbar button,
+  .toolbar select {
+    border-radius: 18px;
+    min-height: 38px;
+  }
+}

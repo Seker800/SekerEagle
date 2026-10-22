@@ -1244,3 +1244,117 @@ select:focus-visible {
 .photo-private-people-list button {
   flex-shrink: 0;
 }
+
+/* Shared small-screen surfaces, including account and authentication subpages. */
+@media (max-width: 720px) {
+  :root {
+    background: #09090b;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline-color: #82aaff;
+  }
+  .account-page {
+    background: #09090b;
+    padding: 20px 16px 100px;
+    gap: 20px;
+  }
+  .account-page-header {
+    gap: 12px;
+    min-width: 0;
+  }
+  .account-page-header > div {
+    min-width: 0;
+  }
+  .account-page-header h1 {
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .account-page-header p {
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .account-panel {
+    border-radius: 22px;
+    background: #1c1c20;
+    border-color: rgb(255 255 255 / 10%);
+  }
+  .account-page {
+    grid-auto-rows: max-content;
+  }
+  .account-section-tabs {
+    min-height: 38px;
+    border-radius: 24px;
+    overflow-x: auto;
+    min-width: 0;
+  }
+  .account-section-tabs button {
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .token-create-form .primary-button,
+  .primary-button {
+    border-radius: 24px;
+    background: #82aaff;
+    border-color: #82aaff;
+    color: #101827;
+    font-weight: 500;
+  }
+  .primary-button:hover:not(:disabled) {
+    background: #9bbaff;
+    border-color: #9bbaff;
+  }
+  .quiet-button {
+    min-height: 42px;
+    border-radius: 22px;
+    font-size: 13px;
+  }
+  .auth-shell {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: 28px 20px;
+    background: #09090b;
+  }
+  .auth-intro {
+    display: none;
+  }
+  .auth-card {
+    width: min(100%, 420px);
+    margin: 0;
+    padding: 28px;
+    border-radius: 28px;
+    background: #1c1c20;
+    border-color: rgb(255 255 255 / 12%);
+  }
+  .auth-card input,
+  .account-panel input,
+  .account-panel select {
+    border-radius: 16px;
+  }
+  .auth-card input:focus,
+  .account-panel input:focus {
+    border-color: #82aaff;
+    box-shadow: 0 0 0 3px rgb(130 170 255 / 12%);
+  }
+  .photo-collections {
+    padding: 72px 18px 100px;
+  }
+  .photo-collections h2 {
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .photo-collections button,
+  .photo-collections input,
+  .photo-collections select {
+    min-height: 42px;
+    border-radius: 22px;
+    border-color: rgb(255 255 255 / 12%);
+  }
+  .photo-person-card {
+    background: #1c1c20;
+    border-radius: 22px;
+  }
+}

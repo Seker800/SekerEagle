@@ -1,3 +1,5 @@
+import { useCompactLayout } from '../../hooks/useCompactLayout';
+import { mobileViewerPresentation } from './EagleMobileViewer';
 import { isCameraVideoMime } from '@sekereagle/library-core';
 import type { ReactNode } from 'react';
 import type { EagleAssetListItem, EaglePyramidDescriptor } from '../../lib/eagle-api';
@@ -39,6 +41,7 @@ export function EagleAssetLightbox({
   onRetry,
   descriptor,
 }: EagleAssetLightboxProps) {
+  const compact = useCompactLayout();
   const previewUrl = getEaglePreviewContentUrl(asset);
   const navigationProps = navigation
     ? {
@@ -50,6 +53,8 @@ export function EagleAssetLightbox({
   if (asset.mimeType.startsWith('image/') && previewUrl)
     return (
       <EagleImageViewer
+        asset={asset}
+        readOnly={Boolean(asset.deletedAt)}
         image={{
           src: previewUrl,
           alt: asset.displayName,
@@ -73,6 +78,18 @@ export function EagleAssetLightbox({
   const videoUrl = getEagleVideoContentUrl(asset);
   return (
     <EagleViewerShell
+      mobile={
+        compact
+          ? mobileViewerPresentation(
+              asset,
+              onClose,
+              undefined,
+              actions,
+              undefined,
+              Boolean(asset.deletedAt) || loading,
+            )
+          : undefined
+      }
       title={loading ? t('正在加载…') : asset.displayName}
       subtitle={loading ? undefined : eagleViewerMetadata(asset)}
       navigation={navigationProps}

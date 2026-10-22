@@ -198,7 +198,9 @@ export function EaglePhotoEditorDialog({
       fallback={
         <div className={styles.loading} role="dialog" aria-label={t('编辑照片')}>
           <p role="status">{t('正在读取照片…')}</p>
-          <button onClick={onClose}>{t('关闭')}</button>
+          <button data-mobile-back onClick={onClose}>
+            {t('关闭')}
+          </button>
         </div>
       }
     >
@@ -243,7 +245,9 @@ function ResolvedPhotoEditor(
       <div className={styles.loading} role="dialog" aria-label={t('编辑照片')}>
         <p role={error ? 'alert' : 'status'}>{error || t('正在读取照片…')}</p>
         {error && <button onClick={() => setAttempt((value) => value + 1)}>{t('重试')}</button>}
-        <button onClick={props.onClose}>{t('关闭')}</button>
+        <button data-mobile-back onClick={props.onClose}>
+          {t('关闭')}
+        </button>
       </div>
     );
   return <PhotoEditor {...resolved} onClose={props.onClose} onOpenSaved={props.onOpenSaved} />;

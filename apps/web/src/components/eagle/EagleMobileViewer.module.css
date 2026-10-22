@@ -1,0 +1,99 @@
+.root {
+  position: relative;
+  width: min(360px, 100%);
+}
+.bar {
+  composes: surface from './EagleGlass.module.css';
+  display: flex;
+  align-items: center;
+  padding: 7px 8px;
+  border-radius: 40px;
+  gap: 2px;
+}
+.root .bar > button,
+.more {
+  flex: 1;
+  min-width: 0;
+}
+.root .bar > button,
+.root .more > summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  height: 46px;
+  min-height: 46px;
+  padding: 0 2px;
+  color: #eeeeef;
+  background: transparent;
+  font-size: 11px;
+  border-radius: 24px;
+  cursor: pointer;
+}
+.bar svg {
+  width: 24px;
+  height: 24px;
+  stroke-width: 1.65;
+}
+.root .bar > button[aria-pressed='true'] {
+  color: #ff718c;
+}
+.more {
+  position: relative;
+}
+.more summary {
+  list-style: none;
+}
+.more summary::-webkit-details-marker {
+  display: none;
+}
+.menu {
+  composes: surface from './EagleGlass.module.css';
+  --eagle-glass-tint: rgb(28 28 32 / 85%);
+  position: absolute;
+  bottom: 64px;
+  right: -6px;
+  width: min(290px, calc(100vw - 48px));
+  max-height: 65dvh;
+  overflow: auto;
+  padding: 18px;
+  border-radius: 24px;
+  box-sizing: border-box;
+}
+.menu strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 500;
+}
+.menu p {
+  font-size: 12px;
+  color: #a7a7b0;
+}
+.root .menu button {
+  display: flex;
+  width: 100%;
+  padding: 8px;
+  justify-content: flex-start;
+  font-size: 14px;
+}
+.menu svg {
+  width: 19px;
+  height: 19px;
+}
+.notice {
+  position: absolute;
+  bottom: 74px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 18px;
+  background: #242428;
+  color: #eee;
+  font-size: 13px;
+}

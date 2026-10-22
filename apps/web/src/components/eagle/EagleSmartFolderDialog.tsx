@@ -103,6 +103,7 @@ export function EagleSmartFolderDialog({
           <button
             className={styles.closeButton}
             type="button"
+            data-mobile-back
             aria-label={t('关闭智能文件夹窗口')}
             onClick={onClose}
           >
