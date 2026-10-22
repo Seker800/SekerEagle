@@ -29,4 +29,14 @@ public class NativeUploadPolicyTest {
     assertFalse(first.contains("scope:MATERIAL:hash"));
     assertFalse(new NativeUploadPolicy.Journal().contains("scope:PHOTO:hash"));
   }
+  @Test public void changedBytesCannotReuseOldMultipartParts() {
+    NativeUploadPolicy.Journal journal = new NativeUploadPolicy.Journal();
+    BackupEngine.Checkpoint cp = new BackupEngine.Checkpoint(); cp.hash = "a".repeat(64); cp.session = "old";
+    journal.save("key", cp);
+    journal.verifyContent("key", cp.hash);
+    assertSame(cp, journal.load("key"));
+    journal.verifyContent("key", "b".repeat(64));
+    assertNull(journal.load("key"));
+    journal.verifyContent("missing", "b".repeat(64));
+  }
 }
