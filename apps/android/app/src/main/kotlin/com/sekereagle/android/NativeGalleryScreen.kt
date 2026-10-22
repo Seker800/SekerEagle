@@ -351,18 +351,6 @@ private fun NativeLibrary(
                                 }
                             }
                         } else {
-                            MenuRow("照片", Icons.Outlined.Image) {
-                                model.switchMode(GalleryMode.PHOTO)
-                                menu = ""
-                            }
-                            MenuRow("素材", Icons.Outlined.GridView) {
-                                model.switchMode(GalleryMode.MATERIAL)
-                                menu = ""
-                            }
-                            HorizontalDivider(
-                                Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
-                                color = Color.White.copy(alpha = 0.1f),
-                            )
                             MenuRow("最近删除", Icons.Outlined.DeleteOutline) {
                                 menu = ""
                                 model.openTrash()
