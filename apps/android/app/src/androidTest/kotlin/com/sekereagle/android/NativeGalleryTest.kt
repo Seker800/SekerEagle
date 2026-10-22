@@ -428,6 +428,56 @@ class NativeGalleryTest {
     }
 
     @Test
+    fun dateOrderingIsIndependentPersistentAndSearchHasNoExampleSuggestions() {
+        login()
+        firstAsset()
+        val model = androidx.lifecycle.ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+        val session = NativeSession.open(context, credentials.getString("origin"))
+        fun choose(label: String) {
+            compose.onNodeWithContentDescription("视图选项").performClick()
+            compose.onNodeWithText(label).performClick()
+            compose.waitUntil(15_000) { !model.state.value.loading }
+        }
+        fun verify(mode: String, sort: String) {
+            val base = com.sekereagle.android.core.NativeGalleryPolicy.base(mode)
+            val expected = session.json("GET", "$base/assets?limit=60&sort=$sort").getJSONArray("items")
+            compose.waitUntil(15_000) { !model.state.value.loading }
+            assertEquals((0 until expected.length()).map { expected.getJSONObject(it).getString("id") }, model.state.value.items.map { it.id })
+        }
+        choose("按添加时间排序")
+        verify("PHOTO", "ADDED_AT")
+        compose.onNodeWithContentDescription("切换到素材").performClick()
+        firstAsset()
+        choose("按拍摄时间排序")
+        verify("MATERIAL", "CAPTURED_AT")
+        compose.onNodeWithContentDescription("切换到照片").performClick()
+        firstAsset()
+        verify("PHOTO", "ADDED_AT")
+        compose.activityRule.scenario.recreate()
+        firstAsset()
+        val restored = androidx.lifecycle.ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+        assertEquals(GallerySort.ADDED_AT, restored.state.value.sort)
+        compose.onNodeWithContentDescription("切换到素材").performClick()
+        firstAsset()
+        assertEquals(GallerySort.CAPTURED_AT, restored.state.value.sort)
+        verify("MATERIAL", "CAPTURED_AT")
+        compose.onNodeWithContentDescription("搜索").performClick()
+        compose.onNodeWithText("试试搜索").assertDoesNotExist()
+        compose.onNodeWithText("旅行").assertDoesNotExist()
+        compose.onNodeWithText("搜索历史").assertExists()
+        capture("native-search-without-suggestions.png")
+        back()
+        compose.onNodeWithContentDescription("视图选项").performClick()
+        capture("native-date-order-menu.png")
+        back()
+        // Leave defaults for unrelated journeys, while retaining real preferences across recreation.
+        choose("按添加时间排序")
+        compose.onNodeWithContentDescription("切换到照片").performClick()
+        firstAsset()
+        choose("按拍摄时间排序")
+    }
+
+    @Test
     fun modesUseIndependentResourcesAndLogoutClearsNativeFlow() {
         login()
         firstAsset()

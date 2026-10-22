@@ -108,3 +108,36 @@ test('embedding client refuses unversioned or incompatible model output', async 
     else process.env.MLX_EMBEDDING_TOKEN = oldToken;
   }
 });
+
+test('explicit search date order uses date and ID for both ORDER BY and continuation', async () => {
+  for (const sort of ['CAPTURED_AT', 'ADDED_AT'] as const) {
+    let sql = '';
+    const service = new EagleImageSearchService(
+      {
+        $queryRaw: async (q: { sql: string }) => {
+          sql = q.sql;
+          return [];
+        },
+      } as never,
+      {} as never,
+    );
+    await service.rankPage(
+      'owner',
+      '猫',
+      { status: 'UNAVAILABLE', spaceId: 'test' },
+      { assetId: 'last', tier: 5, similarity: 1, libraryAddedAt: '2026-10-01T00:00:00Z' },
+      60,
+      false,
+      false,
+      undefined,
+      sort,
+    );
+    const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
+    assert.ok(sql.includes(`ORDER BY asset."${field}" DESC,ranked."assetId" DESC`));
+    assert.ok(sql.includes(`WHERE (asset."${field}", ranked."assetId") <`));
+    assert.ok(sql.includes(`asset."${field}" AS "libraryAddedAt"`));
+    assert.ok(sql.includes('asset."ownerId"='));
+    assert.ok(sql.includes('asset."libraryMode"='));
+    assert.ok(sql.includes('asset."isPrivate"=false'));
+  }
+});

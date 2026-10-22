@@ -378,3 +378,47 @@ test('changing only a smart folder color preserves its stored query definition',
   assert.equal(updateData?.queryJson, undefined);
   assert.equal(updateData?.color, '#112233');
 });
+
+test('both libraries support independent explicit date ordering with matching keyset boundaries', async () => {
+  const { encodeEagleAssetCursor } = await import('./eagle-cursor');
+  for (const mode of ['PHOTO', 'MATERIAL'] as const) {
+    for (const sort of ['CAPTURED_AT', 'ADDED_AT'] as const) {
+      const queries: any[] = [];
+      const service = new EagleService(
+        {
+          eagleAsset: {
+            findMany: async (q: any) => {
+              queries.push(q);
+              return [];
+            },
+          },
+        } as never,
+        undefined,
+        mode,
+      );
+      const date = new Date('2026-10-01');
+      const cursor = encodeEagleAssetCursor(
+        { id: 'last', libraryAddedAt: date },
+        { ownerId: 'owner', libraryMode: mode },
+        sort,
+      );
+      await service.listAssets('owner', { limit: 60, sort, cursor });
+      const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
+      assert.deepEqual(queries[0].orderBy, [{ [field]: 'desc' }, { id: 'desc' }]);
+      assert.equal(queries[0].where.libraryMode, mode);
+      assert.ok(JSON.stringify(queries[0].where).includes('owner'));
+      assert.deepEqual(queries[0].where.AND[1].OR, [
+        { [field]: { lt: date } },
+        { [field]: date, id: { lt: 'last' } },
+      ]);
+      await assert.rejects(() => service.listAssets('other', { limit: 60, sort, cursor }));
+      await assert.rejects(() =>
+        service.listAssets('owner', {
+          limit: 60,
+          sort: sort === 'ADDED_AT' ? 'CAPTURED_AT' : 'ADDED_AT',
+          cursor,
+        }),
+      );
+    }
+  }
+});

@@ -34,3 +34,19 @@ test('scoped cursor cannot cross library mode or owner', () => {
   assert.throws(() => decodeEagleAssetCursor(legacy, photo));
   assert.equal(decodeEagleAssetCursor(legacy, material).id, 'asset');
 });
+
+test('explicit time ordering binds a cursor to owner, mode and effective date field', () => {
+  const scope = { ownerId: 'owner-a', libraryMode: 'PHOTO' as const };
+  const value = { id: 'asset', libraryAddedAt: new Date('2026-10-01') };
+  const cursor = encodeEagleAssetCursor(value, scope, 'ADDED_AT');
+  assert.deepEqual(decodeEagleAssetCursor(cursor, scope, 'ADDED_AT'), value);
+  assert.throws(() => decodeEagleAssetCursor(cursor, scope, 'CAPTURED_AT'));
+  assert.throws(() => decodeEagleAssetCursor(cursor, scope));
+  assert.throws(() => decodeEagleAssetCursor(cursor, { ...scope, ownerId: 'other' }, 'ADDED_AT'));
+  assert.throws(() =>
+    decodeEagleAssetCursor(cursor, { ...scope, libraryMode: 'MATERIAL' }, 'ADDED_AT'),
+  );
+  const legacy = encodeEagleAssetCursor(value, scope);
+  assert.deepEqual(decodeEagleAssetCursor(legacy, scope, 'CAPTURED_AT'), value);
+  assert.throws(() => decodeEagleAssetCursor(legacy, scope, 'ADDED_AT'));
+});
