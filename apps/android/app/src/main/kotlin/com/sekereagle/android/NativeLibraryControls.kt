@@ -9,7 +9,7 @@ data class NativeFilters(
     val tags: Set<String> = emptySet(),
     val camera: String = "",
     val lens: String = "",
-    val format: String = "",
+    val formats: Set<String> = emptySet(),
     val from: String = "",
     val to: String = "",
     val rating: Int? = null,
@@ -30,11 +30,11 @@ data class NativeFilters(
         return buildMap {
             if (tags.isNotEmpty()) {
                 put("manualTagIds", tags.sorted().joinToString(","))
-                put("tagMatch", "ALL")
+                put("tagMatch", "ANY")
             }
             if (camera.isNotBlank()) put("cameraModel", camera)
             if (lens.isNotBlank()) put("lensModel", lens)
-            if (format.isNotBlank()) put("format", format)
+            if (formats.isNotEmpty()) put("formats", formats.sorted().joinToString(","))
             if (from.isNotBlank())
                 put("createdFrom", LocalDate.parse(from).atStartOfDay(zone).toInstant().toString())
             if (to.isNotBlank())
@@ -50,6 +50,28 @@ data class NativeFilters(
             rating?.let { put("rating", it.toString()) }
             if (gps.isNotBlank()) put("gps", gps)
         }
+    }
+
+    fun without(key: String): NativeFilters = when {
+        key.startsWith("tag:") -> copy(tags = tags - key.removePrefix("tag:"))
+        key.startsWith("format:") -> copy(formats = formats - key.removePrefix("format:"))
+        key == "camera" -> copy(camera = "")
+        key == "lens" -> copy(lens = "")
+        key == "date" -> copy(from = "", to = "")
+        key == "rating" -> copy(rating = null)
+        key == "gps" -> copy(gps = "")
+        else -> this
+    }
+
+    fun tokens(availableTags: List<NativeTag>): List<NativeFilterToken> = buildList {
+        val names = availableTags.associate { it.id to it.name }
+        tags.sorted().forEach { add(NativeFilterToken("tag:$it", "标签：${names[it] ?: "已选标签"}")) }
+        if (camera.isNotEmpty()) add(NativeFilterToken("camera", "相机：$camera"))
+        if (lens.isNotEmpty()) add(NativeFilterToken("lens", "镜头：$lens"))
+        formats.sorted().forEach { add(NativeFilterToken("format:$it", "格式：${it.uppercase(java.util.Locale.ROOT)}")) }
+        if (from.isNotEmpty() || to.isNotEmpty()) add(NativeFilterToken("date", "导入：${from.ifEmpty { "不限" }} 至 ${to.ifEmpty { "不限" }}"))
+        rating?.let { add(NativeFilterToken("rating", "至少 $it 星")) }
+        if (gps.isNotEmpty()) add(NativeFilterToken("gps", if (gps == "WITH") "有 GPS" else "无 GPS"))
     }
 
     val active: Boolean
@@ -74,6 +96,8 @@ object NativeSelection {
             else -> selected + id
         }
 }
+
+data class NativeFilterToken(val key: String, val label: String)
 
 data class NativeTag(val id: String, val name: String)
 

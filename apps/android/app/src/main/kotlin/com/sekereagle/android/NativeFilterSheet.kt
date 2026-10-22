@@ -41,7 +41,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 TextButton({ model.openFilters(panel) }) { Text("重新加载选项") }
             }
             if (panel == "标签" || editingTags || panel == "筛选") {
-                Text(if (editingTags) "选择要${panel}的标签" else "标签 · 同时包含", color = NativeMuted)
+                Text(if (editingTags) "选择要${panel}的标签" else "标签 · 任意一个即可", color = NativeMuted)
                 if (state.options.tags.isEmpty() && !state.optionsLoading)
                     Text("当前模式暂无可用标签", color = NativeMuted)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -77,10 +77,16 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                         draft = draft.copy(lens = it)
                     }
             }
-            if (panel == "格式" || panel == "筛选")
-                ChoiceList("格式", state.options.formats, draft.format) {
-                    draft = draft.copy(format = it)
+            if (panel == "格式" || panel == "筛选") {
+                Text("格式 · 任意一种即可", color = NativeMuted)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NativeChoiceChip(draft.formats.isEmpty(), { draft = draft.copy(formats = emptySet()) }, { Text("不限") })
+                    state.options.formats.forEach { format ->
+                        val selected = format in draft.formats
+                        NativeChoiceChip(selected, { draft = draft.copy(formats = if (selected) draft.formats - format else draft.formats + format) }, { Text(format.uppercase(java.util.Locale.ROOT)) })
+                    }
                 }
+            }
             if (panel == "时间" || panel == "筛选") {
                 Text("导入时间", style = MaterialTheme.typography.titleMedium)
                 Text("按手机所在时区筛选导入日期；照片首页仍按拍摄时间排列。", color = NativeMuted)
