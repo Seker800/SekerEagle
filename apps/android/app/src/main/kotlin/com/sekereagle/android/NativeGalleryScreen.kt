@@ -45,6 +45,7 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                             if (state.moreOpen) NativeMore(state.identity!!, model, openNative)
                             if (state.searchOpen) NativeSearch(state, model)
                             if (state.viewerId != null) NativeViewer(state, repo, model)
+                            if (state.filterPanel != null) NativeFilterSheet(state, model)
                         }
                     }
                 }
@@ -52,7 +53,12 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     state.searchOpen ||
                         state.moreOpen ||
                         state.viewerId != null ||
-                        state.query.isNotEmpty()
+                        state.query.isNotEmpty() ||
+                        state.selecting ||
+                        state.filters.active ||
+                        state.trash ||
+                        state.filterPanel != null ||
+                        state.busy
                 ) {
                     model.back()
                 }
@@ -65,16 +71,18 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun NativeLibrary(
     state: GalleryState,
     model: NativeGalleryViewModel,
     repo: NativeGalleryRepository,
 ) {
+    val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val grid = rememberLazyGridState()
     val backdrop = rememberGraphicsLayer()
     var sourceOffset by remember { mutableStateOf(Offset.Zero) }
     var menu by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(state.mode, state.query) { grid.scrollToItem(0) }
+    LaunchedEffect(state.mode, state.query, state.filters, state.trash) { grid.scrollToItem(0) }
     LaunchedEffect(grid, state.cursor, state.loading) {
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .distinctUntilChanged()
@@ -104,6 +112,21 @@ private fun NativeLibrary(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                if (state.filters.active || state.trash)
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Row(
+                            Modifier.padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(if (state.trash) "最近删除" else "筛选已生效", Modifier.weight(1f))
+                            TextButton({
+                                if (state.trash) model.openTrash(false)
+                                else model.applyFilters(NativeFilters())
+                            }) {
+                                Text(if (state.trash) "返回图库" else "清除筛选")
+                            }
+                        }
+                    }
                 if (state.query.isNotEmpty())
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Row(
@@ -128,7 +151,20 @@ private fun NativeLibrary(
                         item(key = "date:${asset.id}", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 asset.date,
-                                Modifier.padding(start = 16.dp, top = 18.dp, bottom = 14.dp),
+                                Modifier.fillMaxWidth()
+                                    .then(
+                                        if (state.selecting)
+                                            Modifier.clickable {
+                                                model.selectLoaded(
+                                                    state.items
+                                                        .filter { it.date == asset.date }
+                                                        .map { it.id }
+                                                        .toSet()
+                                                )
+                                            }
+                                        else Modifier
+                                    )
+                                    .padding(start = 16.dp, top = 18.dp, bottom = 14.dp),
                                 fontSize = 17.sp,
                             )
                         }
@@ -136,7 +172,16 @@ private fun NativeLibrary(
                         Box(
                             Modifier.aspectRatio(1f)
                                 .background(Color(0xFF171719))
-                                .clickable { model.openAsset(asset.id) }
+                                .combinedClickable(
+                                    onClick = { model.openAsset(asset.id) },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(
+                                            androidx.compose.ui.hapticfeedback.HapticFeedbackType
+                                                .LongPress
+                                        )
+                                        model.startSelection(asset.id)
+                                    },
+                                )
                                 .testTag("asset:${asset.id}")
                         ) {
                             NativeImage(
@@ -147,6 +192,21 @@ private fun NativeLibrary(
                                 Modifier.fillMaxSize(),
                                 ContentScale.Crop,
                             )
+                            if (state.selecting) {
+                                Icon(
+                                    if (asset.id in state.selected) Icons.Outlined.CheckCircle
+                                    else Icons.Outlined.RadioButtonUnchecked,
+                                    if (asset.id in state.selected) "已选择" else "未选择",
+                                    Modifier.align(Alignment.TopEnd)
+                                        .padding(7.dp)
+                                        .size(24.dp)
+                                        .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                                    tint =
+                                        if (asset.id in state.selected)
+                                            MaterialTheme.colorScheme.primary
+                                        else Color.White,
+                                )
+                            }
                             if (asset.video)
                                 Text(
                                     "视频",
@@ -200,58 +260,72 @@ private fun NativeLibrary(
                     )
                 }
         }
-        Row(
-            Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
-                RoundAction(Icons.Outlined.Tune, "视图选项") { menu = "view" }
+        if (!state.selecting)
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
+                    RoundAction(Icons.Outlined.Tune, "视图选项") { menu = "view" }
+                }
+                GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
+                    RoundAction(Icons.Outlined.MoreVert, "更多操作") { menu = "more" }
+                }
             }
-            GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
-                RoundAction(Icons.Outlined.MoreVert, "更多操作") { menu = "more" }
-            }
-        }
-        Row(
-            Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            GlassSurface(Modifier.width(184.dp).height(54.dp), backdrop, sourceOffset) {
-                Row(Modifier.fillMaxSize().padding(3.dp)) {
-                    GalleryMode.entries.forEach { mode ->
-                        Column(
-                            Modifier.weight(1f)
-                                .fillMaxHeight()
-                                .clip(CircleShape)
-                                .background(
-                                    if (mode == state.mode) Color.White.copy(alpha = 0.18f)
-                                    else Color.Transparent
+        if (!state.selecting)
+            Row(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                GlassSurface(Modifier.width(184.dp).height(54.dp), backdrop, sourceOffset) {
+                    Row(Modifier.fillMaxSize().padding(3.dp)) {
+                        GalleryMode.entries.forEach { mode ->
+                            Column(
+                                Modifier.weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (mode == state.mode) Color.White.copy(alpha = 0.18f)
+                                        else Color.Transparent
+                                    )
+                                    .clickable { model.switchMode(mode) }
+                                    .testTag("mode:${mode.name}"),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Icon(
+                                    if (mode == GalleryMode.PHOTO) Icons.Outlined.Image
+                                    else Icons.Outlined.GridView,
+                                    null,
+                                    Modifier.size(21.dp),
+                                    tint = if (mode == state.mode) Color.White else NativeMuted,
                                 )
-                                .clickable { model.switchMode(mode) }
-                                .testTag("mode:${mode.name}"),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Icon(
-                                if (mode == GalleryMode.PHOTO) Icons.Outlined.Image
-                                else Icons.Outlined.GridView,
-                                null,
-                                Modifier.size(21.dp),
-                                tint = if (mode == state.mode) Color.White else NativeMuted,
-                            )
-                            Text(
-                                mode.title,
-                                fontSize = 11.sp,
-                                color = if (mode == state.mode) Color.White else NativeMuted,
-                            )
+                                Text(
+                                    mode.title,
+                                    fontSize = 11.sp,
+                                    color = if (mode == state.mode) Color.White else NativeMuted,
+                                )
+                            }
                         }
                     }
                 }
+                GlassSurface(Modifier.size(48.dp), backdrop, sourceOffset) {
+                    RoundAction(Icons.Outlined.Search, "搜索", model::openSearch)
+                }
             }
-            GlassSurface(Modifier.size(48.dp), backdrop, sourceOffset) {
-                RoundAction(Icons.Outlined.Search, "搜索", model::openSearch)
+        if (state.selecting)
+            NativeSelectionControls(state, model, Modifier.fillMaxSize(), backdrop, sourceOffset)
+        if (!state.selecting && state.message != null)
+            Surface(
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 82.dp).clickable {
+                    model.dismissMessage()
+                },
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xEE29292C),
+            ) {
+                Text(state.message, Modifier.padding(14.dp))
             }
-        }
         if (menu.isNotEmpty())
             Popup(
                 alignment = Alignment.TopEnd,
@@ -262,6 +336,17 @@ private fun NativeLibrary(
                 GlassSurface(Modifier.width(228.dp), radius = 26) {
                     Column(Modifier.padding(vertical = 12.dp)) {
                         if (menu == "view") {
+                            (listOf("标签") +
+                                    (if (state.mode == GalleryMode.PHOTO) listOf("相机", "镜头")
+                                    else emptyList()) +
+                                    listOf("时间", "格式", "筛选"))
+                                .forEach { label ->
+                                    MenuRow(label, Icons.Outlined.Tune) {
+                                        menu = ""
+                                        model.openFilters(label)
+                                    }
+                                }
+                            HorizontalDivider()
                             Text(
                                 "视图",
                                 Modifier.padding(20.dp, 8.dp),
@@ -291,6 +376,10 @@ private fun NativeLibrary(
                                 Modifier.padding(horizontal = 18.dp, vertical = 6.dp),
                                 color = Color.White.copy(alpha = 0.1f),
                             )
+                            MenuRow("最近删除", Icons.Outlined.DeleteOutline) {
+                                menu = ""
+                                model.openTrash()
+                            }
                             MenuRow("更多", Icons.Outlined.MoreHoriz) {
                                 menu = ""
                                 model.openMore()

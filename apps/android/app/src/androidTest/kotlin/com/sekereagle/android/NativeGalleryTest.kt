@@ -89,6 +89,128 @@ class NativeGalleryTest {
     }
 
     @Test
+    fun filtersAndLongPressBatchTagsTrashAndRestoreUseRealApi() {
+        login()
+        val first = firstAsset()
+        val session = NativeSession.open(context, credentials.getString("origin"))
+        val tag =
+            session.json(
+                "POST",
+                "/api/photos/manual-tags",
+                JSONObject().put("name", "原生多选测试-${System.nanoTime()}"),
+            )
+        val name = tag.getString("name")
+        val tagId = tag.getString("id")
+        compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
+        compose.onNodeWithTag("native-selection-count").assertTextEquals("已选择 1 项")
+        capture("native-selection.png")
+        compose.onNodeWithText("加标签").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithText(name).performScrollTo().performClick()
+        compose.onNodeWithText("应用").performScrollTo().performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
+        compose.onNodeWithText("评分").performClick()
+        compose.onNodeWithText("3 ★").performScrollTo().performClick()
+        compose.onNodeWithText("应用").performScrollTo().performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(3, session.json("GET", "/api/photos/assets/$first").getInt("rating"))
+        val filtered = session.json("GET", "/api/photos/assets?manualTagIds=$tagId")
+        assertTrue(
+            (0 until filtered.getJSONArray("items").length()).any {
+                filtered.getJSONArray("items").getJSONObject(it).getString("id") == first
+            }
+        )
+        compose.onNodeWithContentDescription("视图选项").performClick()
+        compose.onNodeWithText("标签").performClick()
+        compose.waitUntil { compose.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(name).performScrollTo().performClick()
+        capture("native-filter.png")
+        compose.onNodeWithText("应用").performScrollTo().performClick()
+        compose.waitUntil { compose.onAllNodesWithText("筛选已生效").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(first, firstAsset())
+        compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
+        compose.onNodeWithText("删除").performClick()
+        compose.onNodeWithText("移入回收站").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(
+            0,
+            session
+                .json("GET", "/api/photos/assets?manualTagIds=$tagId")
+                .getJSONArray("items")
+                .length(),
+        )
+        back() // clear active filter
+        compose.onNodeWithContentDescription("更多操作").performClick()
+        compose.onNodeWithText("最近删除").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("asset:$first").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
+        compose.onNodeWithText("恢复").performClick()
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
+        }
+        assertEquals(
+            1,
+            session
+                .json("GET", "/api/photos/assets?manualTagIds=$tagId")
+                .getJSONArray("items")
+                .length(),
+        )
+        back()
+        val restored = firstAsset()
+        compose.onNodeWithTag("asset:$restored").performTouchInput { longClick() }
+        compose.onNodeWithText("全选已加载").performClick()
+        assertTrue(
+            compose
+                .onNodeWithTag("native-selection-count")
+                .fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.Text]
+                .joinToString()
+                .contains("项")
+        )
+        back()
+        compose.onNodeWithTag("native-selection-count").assertDoesNotExist()
+        compose.onNodeWithTag("mode:MATERIAL").performClick()
+        compose.onNodeWithContentDescription("视图选项").performClick()
+        compose.onNodeWithText("相机").assertDoesNotExist()
+        compose.onNodeWithText("标签").assertExists()
+        back()
+        assertFalse(compose.activity.isFinishing)
+        val repo = NativeGalleryRepository(session, "instrumentation")
+        val asset = repo.parse(session.json("GET", "/api/photos/assets/$first"), GalleryMode.PHOTO)
+        try {
+            kotlinx.coroutines.runBlocking {
+                repo.change(GalleryMode.MATERIAL, listOf(asset), "trash")
+            }
+            fail("Cross-mode batch mutation must be rejected")
+        } catch (e: NativeSession.Failure) {
+            assertEquals(404, e.status)
+        }
+        kotlinx.coroutines.runBlocking {
+            repo.change(GalleryMode.PHOTO, listOf(asset), "rating", rating = 4)
+        }
+        try {
+            kotlinx.coroutines.runBlocking {
+                repo.change(GalleryMode.PHOTO, listOf(asset), "rating", rating = 2)
+            }
+            fail("Stale row versions must be rejected")
+        } catch (e: NativeSession.Failure) {
+            assertEquals(409, e.status)
+        }
+        assertEquals(4, session.json("GET", "/api/photos/assets/$first").getInt("rating"))
+    }
+
+    @Test
     fun nativeLoginListZoomSwipeSearchAndBack() {
         login()
         val first = firstAsset()

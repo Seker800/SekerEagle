@@ -31,6 +31,7 @@ data class NativeAsset(
     val preview: String?,
     val video: Boolean,
     val revision: Int,
+    val rowVersion: Int = 1,
 )
 
 data class NativePage(val items: List<NativeAsset>, val cursor: String?)
@@ -43,18 +44,116 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             override fun sizeOf(key: String, value: Bitmap) = value.allocationByteCount
         }
 
-    suspend fun page(mode: GalleryMode, search: String, cursor: String? = null): NativePage =
+    suspend fun page(
+        mode: GalleryMode,
+        search: String,
+        cursor: String? = null,
+        filters: NativeFilters = NativeFilters(),
+        trash: Boolean = false,
+    ): NativePage =
         withContext(Dispatchers.IO) {
             val result =
                 session.json(
                     "GET",
-                    NativeGalleryPolicy.listPath(mode.name, search, cursor.orEmpty()),
+                    NativeGalleryPolicy.listPath(mode.name, search, cursor.orEmpty()).let {
+                        if (trash) it.replace("/assets?", "/trash?") else it
+                    } + filters.parameters().querySuffix(),
                 )
             val items = result.getJSONArray("items")
             NativePage(
                 (0 until items.length()).map { parse(items.getJSONObject(it), mode) },
                 result.optString("nextCursor").takeUnless { it.isEmpty() || it == "null" },
             )
+        }
+
+    suspend fun options(mode: GalleryMode): NativeOptions =
+        withContext(Dispatchers.IO) {
+            val base = NativeGalleryPolicy.base(mode.name)
+            val tags = session.array("$base/manual-tags")
+            val capabilities = session.json("GET", "$base/media-capabilities")
+            val facets =
+                if (mode == GalleryMode.PHOTO) session.json("GET", "$base/photography/facets")
+                else JSONObject()
+            fun strings(json: JSONObject, key: String): List<String> =
+                json
+                    .optJSONArray(key)
+                    ?.let { a -> (0 until a.length()).map { a.getString(it) } }
+                    .orEmpty()
+            NativeOptions(
+                (0 until tags.length()).map {
+                    tags.getJSONObject(it).let { t ->
+                        NativeTag(t.getString("id"), t.getString("name"))
+                    }
+                },
+                strings(facets, "cameras"),
+                strings(facets, "lenses"),
+                (strings(capabilities.getJSONObject("images"), "extensions") +
+                        strings(capabilities.getJSONObject("videos"), "extensions"))
+                    .map { it.removePrefix(".") }
+                    .distinct()
+                    .sorted(),
+            )
+        }
+
+    suspend fun change(
+        mode: GalleryMode,
+        assets: List<NativeAsset>,
+        action: String,
+        tagIds: Set<String> = emptySet(),
+        rating: Int? = null,
+    ) =
+        withContext(Dispatchers.IO) {
+            require(assets.isNotEmpty() && assets.size <= NativeSelection.LIMIT)
+            val base = NativeGalleryPolicy.base(mode.name)
+            val ids = org.json.JSONArray(assets.map { NativeGalleryPolicy.identifier(it.id) })
+            when (action) {
+                "trash",
+                "restore" ->
+                    session.json(
+                        "POST",
+                        "$base/assets/batch/$action",
+                        JSONObject().put("assetIds", ids),
+                    )
+                "tags",
+                "removeTags" ->
+                    session.json(
+                        "POST",
+                        "$base/assets/batch/manual-tags",
+                        JSONObject()
+                            .put("assetIds", ids)
+                            .put(
+                                "addTagIds",
+                                org.json.JSONArray(
+                                    if (action == "tags") tagIds.toList() else emptyList<String>()
+                                ),
+                            )
+                            .put(
+                                "removeTagIds",
+                                org.json.JSONArray(
+                                    if (action == "removeTags") tagIds.toList()
+                                    else emptyList<String>()
+                                ),
+                            ),
+                    )
+                "rating" ->
+                    session.json(
+                        "PATCH",
+                        "$base/assets/batch",
+                        JSONObject()
+                            .put(
+                                "assets",
+                                org.json.JSONArray(
+                                    assets.map {
+                                        JSONObject()
+                                            .put("assetId", it.id)
+                                            .put("rowVersion", it.rowVersion)
+                                    }
+                                ),
+                            )
+                            .put("rating", rating ?: JSONObject.NULL),
+                    )
+                else -> error("未知操作")
+            }
         }
 
     suspend fun image(path: String, full: Boolean): Bitmap =
@@ -127,6 +226,7 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             path("PREVIEW") ?: path("POSTER") ?: path("THUMBNAIL"),
             json.optString("mimeType").startsWith("video/"),
             json.optInt("mediaRevision"),
+            json.optInt("rowVersion", 1),
         )
     }
 }

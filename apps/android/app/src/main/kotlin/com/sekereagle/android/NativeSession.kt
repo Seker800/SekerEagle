@@ -57,6 +57,12 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         return if (bytes.isEmpty()) JSONObject() else JSONObject(String(bytes, Charsets.UTF_8))
     }
 
+    @Synchronized
+    fun array(path: String): org.json.JSONArray =
+        org.json.JSONArray(
+            String(request("GET", path, null, 2 * 1024 * 1024, true), Charsets.UTF_8)
+        )
+
     override fun request(method: String, path: String, body: JSONObject?): JSONObject =
         json(method, path, body)
 
