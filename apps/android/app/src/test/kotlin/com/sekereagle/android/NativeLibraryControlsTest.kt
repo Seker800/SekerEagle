@@ -7,7 +7,7 @@ import java.time.LocalDate
 class NativeLibraryControlsTest {
     @Test fun filtersEncodeValuesWithoutChangingTheApiScope() {
         val filter = NativeFilters(camera = "Sony & α", lens = "50/1.4", tags = setOf("tag-a"), format = "dng", rating = 4, gps = "WITH", from = "2026-10-01", to = "2026-10-22")
-        val query = filter.parameters()
+        val query = filter.parameters(java.time.ZoneOffset.UTC)
         assertEquals("Sony & α", query["cameraModel"])
         assertEquals("50/1.4", query["lensModel"])
         assertEquals("tag-a", query["manualTagIds"])
