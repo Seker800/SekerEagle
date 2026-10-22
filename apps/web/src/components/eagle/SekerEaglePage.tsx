@@ -1206,7 +1206,7 @@ export function SekerEaglePage({
         }}
       >
         <IconPhoto size={17} />
-        {' ' + (libraryMode === 'PHOTO' ? t('照片时间线') : t('全部素材')) + ' '}
+        {' ' + t('全部') + ' '}
         {libraryView === 'ACTIVE' && !activeSmartFolderId && (
           <span>{libraryCount.data ?? '…'}</span>
         )}
@@ -1729,8 +1729,8 @@ export function SekerEaglePage({
                                   ? t('人物')
                                   : photoView === 'agent'
                                     ? t('智能整理')
-                                    : t('照片时间线')
-                              : t('全部素材')))}
+                                    : t('全部')
+                              : t('全部')))}
                     </h1>
                     {showsAssetControls && (
                       <span>
