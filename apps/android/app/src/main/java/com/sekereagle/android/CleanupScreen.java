@@ -74,9 +74,9 @@ final class CleanupScreen extends ScrollView {
         || settings.flag(scope, "running", false)) throw new IOException("清理已取消，请确认账号和备份状态后重新检查");
   }
 
-  private ApiClient identity(int token) throws Exception {
+  private SessionApi identity(int token) throws Exception {
     guard(token);
-    ApiClient api = new ApiClient(settings.value(scope, "origin", ""), "");
+    SessionApi api = activity.sessionApi();
     JSONObject me = api.request("GET", "/api/auth/me", null);
     if (!me.getJSONObject("user").getString("id").equals(settings.value(scope, "owner", ""))
         || !me.getJSONObject("desktopCache")
@@ -87,7 +87,7 @@ final class CleanupScreen extends ScrollView {
     return api;
   }
 
-  private CleanupEngine engine(BackupJournal journal, ApiClient api, int token) {
+  private CleanupEngine engine(BackupJournal journal, SessionApi api, int token) {
     return new CleanupEngine(
         journal,
         (mode, hash, size) ->
@@ -160,7 +160,7 @@ final class CleanupScreen extends ScrollView {
     io.execute(
         () -> {
           try (BackupJournal journal = new BackupJournal(activity)) {
-            ApiClient api = identity(token);
+            SessionApi api = identity(token);
             MediaCatalog catalog = new MediaCatalog(activity);
             CleanupEngine engine = engine(journal, api, token);
             Map<String, Entry> entries = new LinkedHashMap<>();
@@ -202,7 +202,7 @@ final class CleanupScreen extends ScrollView {
   }
 
   private List<Entry> validate(List<Entry> entries, int token) throws Exception {
-    ApiClient api = identity(token);
+    SessionApi api = identity(token);
     MediaCatalog catalog = new MediaCatalog(activity);
     List<Entry> result = new ArrayList<>();
     try (BackupJournal journal = new BackupJournal(activity)) {

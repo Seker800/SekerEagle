@@ -43,6 +43,8 @@ PhotoAgentService 属于摄影应用服务，不替换共用 provider。回收�
 
 ## Android client and mobile backup
 
+0.2.0 原生实现由 NativeActivity／Compose 作为唯一对外主入口；NativeGalleryViewModel 统一导航与状态，NativeGalleryRepository 统一 PHOTO／MATERIAL 的列表和有界派生媒体读取。NativeSession 独立使用既有浏览器会话 HTTP 契约与 Keystore，不导入 WebView Cookie；原生和旧预览的备份／清理通过 SessionApi 接口复用原业务实现。旧 MainActivity 不对外导出，仅保留已有备份原生宿主和测试预览；原生核心页面不创建 WebView，未完成的高级功能不展示入口。网页源码保持不变。注销立即失效本机凭据和在途响应，服务器撤销为后续尽力执行；刷新单实例协调，媒体请求不占用 UI 或列表请求的网络锁。
+
 本节记录已交付预览版。2026-10-22 后续路线以北极星及 [安卓原生计划](android-native-plan.md) 为准，现有备份安全语义保留。
 
 2026-10-21 用户授权建设安卓版，仅在新建的本机隔离环境测试，禁止访问生产或群晖。安卓原生外壳加载同一 Web 工作区，不复制图库、编辑器或摄影能力；原生模块负责目录授权、媒体枚举、SQLite 备份检查点与前台上传服务。无 JavaScript 文件系统桥，远程页面不能调用原生备份能力。

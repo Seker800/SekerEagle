@@ -1,4 +1,4 @@
-plugins { id 'com.android.application'; id 'jacoco' }
+plugins { id 'com.android.application'; id 'jacoco'; id 'org.jetbrains.kotlin.plugin.compose' }
 android {
     namespace 'com.sekereagle.android'
     compileSdk 36
@@ -6,11 +6,11 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 5
-        versionName '0.1.4'
+        versionCode 6
+        versionName '0.2.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
-    buildFeatures { buildConfig true }
+    buildFeatures { buildConfig true; compose true }
     buildTypes {
         debug { applicationIdSuffix '.debug'; enableUnitTestCoverage true }
         release { minifyEnabled false }
@@ -43,3 +43,16 @@ tasks.register('verifyCoreCoverage', JacocoCoverageVerification) {
 
 tasks.register('generateDeviceFixtures', Exec) { workingDir rootProject.projectDir; commandLine 'node', 'scripts/generate-test-fixtures.mjs' }
 tasks.matching { it.name == 'mergeDebugAndroidTestAssets' }.configureEach { dependsOn 'generateDeviceFixtures' }
+
+dependencies {
+    implementation platform('androidx.compose:compose-bom:2026.03.00')
+    implementation 'androidx.activity:activity-compose:1.12.3'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.10.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+    androidTestImplementation platform('androidx.compose:compose-bom:2026.03.00')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}

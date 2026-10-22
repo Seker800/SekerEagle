@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/gradle.mjs assembleDebug",
-    "typecheck": "node scripts/gradle.mjs compileDebugJavaWithJavac",
-    "test": "node scripts/gradle.mjs testDebugUnitTest",
+    "typecheck": "node scripts/gradle.mjs compileDebugKotlin compileDebugJavaWithJavac",
+    "test": "node --test scripts/native-boundary.test.mjs && node scripts/gradle.mjs testDebugUnitTest",
     "lint": "node scripts/gradle.mjs lintDebug",
     "test:device": "node scripts/gradle.mjs connectedDebugAndroidTest",
     "install:device": "node scripts/gradle.mjs installDebug",

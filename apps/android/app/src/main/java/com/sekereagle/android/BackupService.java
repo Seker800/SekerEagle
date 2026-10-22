@@ -199,7 +199,7 @@ public final class BackupService extends Service {
         PendingIntent.getActivity(
             this,
             0,
-            new Intent(this, MainActivity.class),
+            new Intent(this, NativeActivity.class),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     PendingIntent pause =
         PendingIntent.getService(

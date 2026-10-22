@@ -18,6 +18,7 @@ public final class MainActivity extends Activity {
   private final Handler handler = new Handler(Looper.getMainLooper());
   private final ExecutorService io = Executors.newSingleThreadExecutor();
   private BackupSettings settings;
+  private boolean nativeHost;
   private LinearLayout root, body, appBar;
   private WebView web;
   private BackupScreen backup;
@@ -45,6 +46,7 @@ public final class MainActivity extends Activity {
   public void onCreate(Bundle state) {
     super.onCreate(state);
     settings = new BackupSettings(this);
+    nativeHost = getIntent().getBooleanExtra("nativeHost", false);
     activeScope = settings.active();
     autoPending = true;
     if (!settings.active().isEmpty() && !BackupService.isRunning(settings.active())) {
@@ -72,6 +74,10 @@ public final class MainActivity extends Activity {
       getOnBackInvokedDispatcher()
           .registerOnBackInvokedCallback(
               android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
+    if (nativeHost) {
+      show("cleanup".equals(getIntent().getStringExtra("screen")) ? "cleanup" : "backup");
+      return;
+    }
     setupWeb();
     if (settings.origin().isEmpty()) show("server");
     else {
@@ -175,10 +181,25 @@ public final class MainActivity extends Activity {
     }
   }
 
+  SessionApi sessionApi() {
+    return nativeHost
+        ? NativeSession.open(this, settings.origin())
+        : new ApiClient(settings.origin(), "");
+  }
+
+  private JSONObject sessionRequest(String method, String path, JSONObject body) throws Exception {
+    return sessionApi().request(method, path, body);
+  }
+
   void show(String tab) {
+    if (nativeHost && (tab.equals("library") || tab.equals("server"))) {
+      finish();
+      return;
+    }
     if (tab.equals("library")) nativeBackStack.clear();
-    else if (!tab.equals(currentTab) && !settings.origin().isEmpty())
-      nativeBackStack.push(currentTab);
+    else if (!tab.equals(currentTab)
+        && !settings.origin().isEmpty()
+        && (!nativeHost || !currentTab.equals("library"))) nativeBackStack.push(currentTab);
     renderTab(tab);
   }
 
@@ -304,7 +325,7 @@ public final class MainActivity extends Activity {
     io.execute(
         () -> {
           try {
-            JSONObject me = new ApiClient(origin, "").request("GET", "/api/auth/me", null);
+            JSONObject me = sessionRequest("GET", "/api/auth/me", null);
             String owner = me.getJSONObject("user").getString("id");
             String deployment = me.getJSONObject("desktopCache").getString("deploymentId");
             String scope = BackupPolicy.digest(origin + "\n" + deployment + "\n" + owner);
@@ -335,9 +356,11 @@ public final class MainActivity extends Activity {
                 () -> {
                   checking = false;
                   if (!origin.equals(settings.origin())) return;
-                  if (e instanceof ApiClient.Failure
-                      && (((ApiClient.Failure) e).status == 401
-                          || ((ApiClient.Failure) e).status == 403)) {
+                  if ((e instanceof ApiClient.Failure
+                          && (((ApiClient.Failure) e).status == 401
+                              || ((ApiClient.Failure) e).status == 403))
+                      || (e instanceof NativeSession.Failure
+                          && ((NativeSession.Failure) e).getStatus() == 401)) {
                     pause();
                     activeScope = "";
                     settings.active("");
@@ -367,13 +390,12 @@ public final class MainActivity extends Activity {
           try {
             if (settings.token(scope).isEmpty()) {
               JSONObject response =
-                  new ApiClient(settings.value(scope, "origin", ""), "")
-                      .request(
-                          "POST",
-                          "/api/tokens",
-                          new JSONObject()
-                              .put("name", "Android 手机备份")
-                              .put("scopes", new JSONArray().put("asset:write")));
+                  sessionRequest(
+                      "POST",
+                      "/api/tokens",
+                      new JSONObject()
+                          .put("name", "Android 手机备份")
+                          .put("scopes", new JSONArray().put("asset:write")));
               settings.saveToken(scope, response.getString("token"));
             }
             runOnUiThread(
@@ -528,7 +550,7 @@ public final class MainActivity extends Activity {
     resumed = false;
     handler.removeCallbacks(tick);
     if (web != null) web.onPause();
-    CookieManager.getInstance().flush();
+    if (!nativeHost) CookieManager.getInstance().flush();
     super.onPause();
   }
 
@@ -548,6 +570,7 @@ public final class MainActivity extends Activity {
     if (backPending) return;
     if (!currentTab.equals("library")) {
       if (!nativeBackStack.isEmpty()) renderTab(nativeBackStack.pop());
+      else if (nativeHost) finish();
       else if (!settings.origin().isEmpty()) renderTab("library");
       else finish();
       return;

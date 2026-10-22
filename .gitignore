@@ -17,3 +17,6 @@ __pycache__/
 *.pyc
 apps/api/prisma/dev.db
 .omx/
+
+# Kotlin incremental compiler session cache
+apps/android/.kotlin/

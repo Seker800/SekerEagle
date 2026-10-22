@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, writeFile, rm } from 'node:fs/promises';
 import { createServer, request as proxyRequest } from 'node:http';
 import { extname, resolve, join } from 'node:path';
 import { Buffer } from 'node:buffer';
@@ -65,6 +65,8 @@ function child(path, env, label) {
   return process;
 }
 async function cleanup() {
+  if (process.env.PHOTO_WORKBENCH_NATIVE === '1')
+    await rm(join(artifacts, 'native-test-credentials.json'), { force: true });
   for (const timer of timers) clearTimeout(timer);
   for (const child of children) child.kill('SIGTERM');
   if (gateway) await new Promise((resolve) => gateway.close(resolve));
@@ -304,6 +306,13 @@ try {
     .slice('sekereagle_access='.length);
   assert.ok(accessToken, 'login writes an access cookie');
   assert.ok(browserCookies.some((cookie) => cookie.startsWith('sekereagle_refresh=')));
+  if (process.env.PHOTO_WORKBENCH_NATIVE === '1') {
+    await writeFile(
+      join(artifacts, 'native-test-credentials.json'),
+      JSON.stringify({ origin, email: owner.email, password: testPassword }),
+      { mode: 0o600 },
+    );
+  }
   const api = async (path, body, method = body ? 'POST' : 'GET', attempt = 0) => {
     await sleep(200);
     const response = await fetch(`${origin}/api${path}`, {

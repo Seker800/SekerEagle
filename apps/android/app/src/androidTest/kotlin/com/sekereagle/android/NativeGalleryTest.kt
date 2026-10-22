@@ -1,0 +1,478 @@
+package com.sekereagle.android
+
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.WebView
+import androidx.compose.ui.test.*
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.test.platform.app.InstrumentationRegistry
+import org.json.JSONObject
+import org.junit.*
+import org.junit.Assert.*
+import org.junit.rules.ExternalResource
+
+/** Real Compose + existing HTTP auth/API, isolated workbench only. No fixture login in the app. */
+class NativeGalleryTest {
+    private val instrumentation = InstrumentationRegistry.getInstrumentation()
+    private val context = instrumentation.targetContext
+    private lateinit var credentials: JSONObject
+    @get:Rule(order = 0)
+    val preparation =
+        object : ExternalResource() {
+            override fun before() {
+                credentials =
+                    JSONObject(
+                        instrumentation.context.assets
+                            .open("native-test-credentials.json")
+                            .bufferedReader()
+                            .use { it.readText() }
+                    )
+                val origin = InstrumentationRegistry.getArguments().getString("origin")
+                assertTrue(origin.orEmpty().matches(Regex("http://localhost:[0-9]+")))
+                assertEquals(origin, credentials.getString("origin"))
+                BackupSettings(context).origin(origin!!)
+                NativeSession.open(context, origin).clear()
+            }
+        }
+    @get:Rule(order = 1) val compose = createAndroidComposeRule<NativeActivity>()
+
+    private fun login() {
+        compose.waitUntil(15_000) {
+            compose.onAllNodesWithTag("native-origin").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose
+            .onNodeWithTag("native-origin")
+            .performTextReplacement(credentials.getString("origin"))
+        compose.onNodeWithTag("native-email").performTextInput(credentials.getString("email"))
+        compose.onNodeWithTag("native-password").performTextInput(credentials.getString("password"))
+        compose.onNodeWithTag("native-login").performClick()
+        compose.waitUntil(20_000) {
+            compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty()
+        }
+        assertFalse(
+            "The native launcher must never create a WebView",
+            hasWebView(compose.activity.window.decorView),
+        )
+    }
+
+    private fun hasWebView(view: View): Boolean =
+        view is WebView ||
+            (view is ViewGroup && (0 until view.childCount).any { hasWebView(view.getChildAt(it)) })
+
+    private fun back() {
+        instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        compose.waitForIdle()
+    }
+
+    private fun firstAsset(): String {
+        compose.waitUntil(20_000) {
+            compose.onAllNodes(hasTestTagPrefix("asset:")).fetchSemanticsNodes().isNotEmpty()
+        }
+        return compose
+            .onAllNodes(hasTestTagPrefix("asset:"))
+            .fetchSemanticsNodes()
+            .first()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.TestTag]
+            .removePrefix("asset:")
+    }
+
+    private fun capture(name: String) {
+        compose.waitForIdle()
+        instrumentation.waitForIdleSync()
+        Thread.sleep(250)
+        val bitmap = instrumentation.uiAutomation.takeScreenshot()
+        java.io.File(context.getExternalFilesDir(null), name).outputStream().use {
+            bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
+        }
+        bitmap.recycle()
+    }
+
+    @Test
+    fun nativeLoginListZoomSwipeSearchAndBack() {
+        login()
+        val first = firstAsset()
+        capture("native-home.png")
+        compose.onNodeWithTag("asset:$first").performClick()
+        compose.onNodeWithTag("native-viewer").assertExists()
+        compose.onNodeWithTag("viewer-photo:$first").performTouchInput { doubleClick() }
+        compose.waitUntil {
+            compose
+                .onNodeWithTag("viewer-photo:$first")
+                .fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription] ==
+                "zoom:2.5"
+        }
+        compose.onNodeWithTag("viewer-photo:$first").performTouchInput { doubleClick() }
+        compose.waitUntil {
+            compose
+                .onNodeWithTag("viewer-photo:$first")
+                .fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription] ==
+                "zoom:1.0"
+        }
+        compose.onNodeWithTag("viewer-photo:$first").performTouchInput {
+            pinch(
+                start0 = center + androidx.compose.ui.geometry.Offset(-80f, 0f),
+                end0 = center + androidx.compose.ui.geometry.Offset(-210f, 0f),
+                start1 = center + androidx.compose.ui.geometry.Offset(80f, 0f),
+                end1 = center + androidx.compose.ui.geometry.Offset(210f, 0f),
+            )
+        }
+        compose.waitUntil {
+            compose
+                .onNodeWithTag("viewer-photo:$first")
+                .fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.StateDescription]
+                .removePrefix("zoom:")
+                .toFloat() > 1.2f
+        }
+        compose.onNodeWithTag("viewer-photo:$first").performTouchInput { doubleClick() }
+        compose.waitForIdle()
+        capture("native-viewer.png")
+        compose.onNodeWithTag("native-viewer").performTouchInput { swipeLeft() }
+        compose.waitUntil {
+            compose.onAllNodes(hasText("2 /", substring = true)).fetchSemanticsNodes().isNotEmpty()
+        }
+        back()
+        compose.onNodeWithTag("native-viewer").assertDoesNotExist()
+        assertFalse(compose.activity.isFinishing)
+        compose.onNodeWithContentDescription("搜索").performClick()
+        compose.onNodeWithTag("search-input").performTextInput("public-sample")
+        compose.onNodeWithTag("search-input").performImeAction()
+        compose.onNodeWithTag("native-search").assertDoesNotExist()
+        back()
+        compose.onNodeWithTag("native-library").assertExists()
+        compose.onNodeWithTag("mode:MATERIAL").performClick()
+        firstAsset()
+        compose.onNodeWithTag("mode:PHOTO").performClick()
+        firstAsset()
+        compose.onNodeWithContentDescription("搜索").performClick()
+        compose.onNodeWithTag("native-search").assertIsDisplayed()
+        capture("native-search.png")
+        compose.onNodeWithContentDescription("关闭搜索").performClick()
+        compose.onNodeWithContentDescription("更多操作").performClick()
+        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("native-more").assertExists()
+        capture("native-more.png")
+        back()
+        assertFalse(compose.activity.isFinishing)
+        compose.onNodeWithTag("native-library").assertExists()
+    }
+
+    @Test
+    fun modesUseIndependentResourcesAndLogoutClearsNativeFlow() {
+        login()
+        firstAsset()
+        val session = NativeSession.open(context, credentials.getString("origin"))
+        val photos = session.json("GET", "/api/photos/assets?limit=60")
+        val materials = session.json("GET", "/api/eagle/assets?limit=60")
+        val photoIds =
+            (0 until photos.getJSONArray("items").length())
+                .map { photos.getJSONArray("items").getJSONObject(it).getString("id") }
+                .toSet()
+        val materialIds =
+            (0 until materials.getJSONArray("items").length())
+                .map { materials.getJSONArray("items").getJSONObject(it).getString("id") }
+                .toSet()
+        assertTrue(photoIds.isNotEmpty())
+        assertTrue(materialIds.isNotEmpty())
+        assertTrue(photoIds.intersect(materialIds).isEmpty())
+        val settings = BackupSettings(context)
+        val encrypted =
+            settings.value("native-session:${credentials.getString("origin")}", "credential", "")
+        assertTrue(encrypted.isNotEmpty())
+        assertFalse(encrypted.contains("sekereagle_access"))
+        assertFalse(encrypted.contains(credentials.getString("password")))
+        compose.onNodeWithContentDescription("更多操作").performClick()
+        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("退出登录").performClick()
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithTag("native-login").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("native-library").assertDoesNotExist()
+        assertEquals("", settings.active())
+        assertEquals(
+            "",
+            settings.value("native-session:${credentials.getString("origin")}", "credential", ""),
+        )
+    }
+
+    @Test
+    fun backupAndCleanupReuseNativeScreensWithoutCreatingWebView() {
+        login()
+        compose.onNodeWithContentDescription("更多操作").performClick()
+        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
+        for (label in listOf("手机备份", "释放手机空间")) {
+            compose.onNodeWithText(label).performClick()
+            var child: android.app.Activity? = null
+            compose.waitUntil(10000) {
+                instrumentation.runOnMainSync {
+                    child =
+                        androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+                            .getInstance()
+                            .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                            .firstOrNull { it is MainActivity }
+                }
+                child != null
+            }
+            instrumentation.runOnMainSync { assertFalse(hasWebView(child!!.window.decorView)) }
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+            compose.waitUntil(10000) {
+                compose.onAllNodesWithTag("native-more").fetchSemanticsNodes().isNotEmpty()
+            }
+            assertFalse(compose.activity.isFinishing)
+        }
+    }
+
+    @Test
+    fun nativeRefreshRotatesCookiesAndRestrictsTheirPaths() {
+        val server = java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
+        val failure = java.util.concurrent.atomic.AtomicReference<Throwable>()
+        val worker = Thread {
+            try {
+                val paths =
+                    listOf(
+                        "/api/auth/login",
+                        "/api/auth/me",
+                        "/api/photos/assets",
+                        "/api/auth/refresh",
+                        "/api/photos/assets",
+                        "/api/auth/logout",
+                    )
+                paths.forEachIndexed { index, expected ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10000
+                        val input = socket.getInputStream().bufferedReader()
+                        val line = input.readLine()
+                        assertEquals(expected, line.split(" ")[1])
+                        val headers = mutableMapOf<String, String>()
+                        while (true) {
+                            val header = input.readLine()
+                            if (header.isEmpty()) break
+                            headers[header.substringBefore(":").lowercase()] =
+                                header.substringAfter(":").trim()
+                        }
+                        repeat(headers["content-length"]?.toInt() ?: 0) { input.read() }
+                        if (index == 3)
+                            assertEquals(
+                                "sekereagle_access=old-access; sekereagle_refresh=old-refresh",
+                                headers["cookie"],
+                            )
+                        if (index == 4)
+                            assertEquals("sekereagle_access=new-access", headers["cookie"])
+                        val body =
+                            if (index == 1)
+                                "{\"user\":{\"id\":\"owner\"},\"desktopCache\":{\"deploymentId\":\"test\"}}"
+                            else "{}"
+                        val cookies =
+                            when (index) {
+                                0 ->
+                                    "Set-Cookie: sekereagle_access=old-access; Path=/\r\nSet-Cookie: sekereagle_refresh=old-refresh; Path=/api/auth\r\n"
+                                3 ->
+                                    "Set-Cookie: sekereagle_access=new-access; Path=/\r\nSet-Cookie: sekereagle_refresh=new-refresh; Path=/api/auth\r\n"
+                                else -> ""
+                            }
+                        val response =
+                            "HTTP/1.1 ${if(index==2)"401 Unauthorized" else "200 OK"}\r\nContent-Type: application/json\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n$cookies\r\n$body"
+                        socket.getOutputStream().write(response.toByteArray())
+                    }
+                }
+            } catch (error: Throwable) {
+                failure.set(error)
+            } finally {
+                server.close()
+            }
+        }
+        worker.start()
+        try {
+            val session = NativeSession.open(context, "http://127.0.0.1:${server.localPort}")
+            session.login("test@example.invalid", "test-only")
+            session.json("GET", "/api/photos/assets")
+            session.logout()
+            worker.join(15000)
+            failure.get()?.let { throw AssertionError("Session protocol failed", it) }
+            assertFalse(worker.isAlive)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun derivedMediaRejectsRedirectsHtmlAndOversizedBodies() {
+        val server = java.net.ServerSocket(0, 8, java.net.InetAddress.getByName("127.0.0.1"))
+        val error = java.util.concurrent.atomic.AtomicReference<Throwable>()
+        val worker = Thread {
+            try {
+                repeat(3) { index ->
+                    server.accept().use { socket ->
+                        socket.soTimeout = 10000
+                        val reader = socket.getInputStream().bufferedReader()
+                        while (reader.readLine().isNotEmpty()) {}
+                        val response =
+                            when (index) {
+                                0 ->
+                                    "HTTP/1.1 302 Found\r\nLocation: https://foreign.invalid/secret\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                1 ->
+                                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                                else ->
+                                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: 17825792\r\nConnection: close\r\n\r\n"
+                            }
+                        socket.getOutputStream().write(response.toByteArray())
+                    }
+                }
+            } catch (reason: Throwable) {
+                error.set(reason)
+            } finally {
+                server.close()
+            }
+        }
+        worker.start()
+        try {
+            val session = NativeSession.open(context, "http://127.0.0.1:${server.localPort}")
+            repeat(3) {
+                try {
+                    session.media("/api/photos/assets/image/renditions/preview/content")
+                    fail("Unsafe media accepted")
+                } catch (expected: java.io.IOException) {
+                    assertTrue(expected.message.orEmpty().isNotEmpty())
+                }
+            }
+            worker.join(15000)
+            error.get()?.let { throw AssertionError(it) }
+            assertFalse(worker.isAlive)
+        } finally {
+            server.close()
+        }
+    }
+
+    @Test
+    fun logoutImmediatelyInvalidatesAnInflightResponse() {
+        val server = java.net.ServerSocket(0, 1, java.net.InetAddress.getByName("127.0.0.1"))
+        val accepted = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val worker = Thread {
+            try {
+                server.accept().use { socket ->
+                    socket.soTimeout = 10000
+                    val reader = socket.getInputStream().bufferedReader()
+                    while (reader.readLine().isNotEmpty()) {}
+                    accepted.countDown()
+                    release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                    socket
+                        .getOutputStream()
+                        .write(
+                            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nSet-Cookie: sekereagle_access=stale; Path=/\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"
+                                .toByteArray()
+                        )
+                }
+            } finally {
+                server.close()
+            }
+        }
+        worker.start()
+        val origin = "http://127.0.0.1:${server.localPort}"
+        val session = NativeSession.open(context, origin)
+        val error = java.util.concurrent.atomic.AtomicReference<Throwable>()
+        val client = Thread {
+            try {
+                session.json("GET", "/api/photos/assets")
+            } catch (reason: Throwable) {
+                error.set(reason)
+            }
+        }
+        client.start()
+        try {
+            assertTrue(accepted.await(10, java.util.concurrent.TimeUnit.SECONDS))
+            session.invalidateLocally()
+            assertEquals(
+                "",
+                BackupSettings(context).value("native-session:$origin", "credential", ""),
+            )
+            release.countDown()
+            client.join(10000)
+            worker.join(10000)
+            assertFalse(client.isAlive)
+            assertTrue(error.get() is NativeSession.Failure)
+            assertEquals(
+                "",
+                BackupSettings(context).value("native-session:$origin", "credential", ""),
+            )
+        } finally {
+            release.countDown()
+            server.close()
+        }
+    }
+
+    @Test
+    fun previewSelectionUsesOnlyCurrentNonEditingRenditions() {
+        val repo =
+            NativeGalleryRepository(
+                NativeSession.open(context, credentials.getString("origin")),
+                "test-scope",
+            )
+        val asset =
+            JSONObject()
+                .put("id", "photo")
+                .put("displayName", "Portrait")
+                .put("mediaRevision", 2)
+                .put("width", 1000)
+                .put("height", 2000)
+                .put("libraryAddedAt", "2026-10-22T01:00:00Z")
+                .put(
+                    "renditions",
+                    org.json
+                        .JSONArray()
+                        .put(
+                            JSONObject()
+                                .put("id", "old")
+                                .put("revision", 1)
+                                .put("kind", "PREVIEW")
+                                .put("mimeType", "image/webp")
+                        )
+                        .put(
+                            JSONObject()
+                                .put("id", "edit")
+                                .put("revision", 2)
+                                .put("kind", "PREVIEW")
+                                .put("variant", "edit")
+                                .put("mimeType", "image/webp")
+                        )
+                        .put(
+                            JSONObject()
+                                .put("id", "preview")
+                                .put("revision", 2)
+                                .put("kind", "PREVIEW")
+                                .put("mimeType", "image/webp")
+                        ),
+                )
+        val photo = repo.parse(asset, GalleryMode.PHOTO)
+        val material = repo.parse(asset, GalleryMode.MATERIAL)
+        assertEquals("/api/photos/assets/photo/renditions/preview/content", photo.preview)
+        assertEquals("/api/eagle/assets/photo/renditions/preview/content", material.preview)
+        assertEquals(1000, photo.width)
+        assertEquals(2000, photo.height)
+    }
+
+    @Test
+    fun foregroundRevalidationClosesARevokedSession() {
+        login()
+        firstAsset()
+        NativeSession.open(context, credentials.getString("origin"))
+            .json("POST", "/api/auth/logout", JSONObject())
+        compose.activityRule.scenario.recreate()
+        compose.waitUntil(15000) {
+            compose.onAllNodesWithTag("native-login").fetchSemanticsNodes().isNotEmpty()
+        }
+        compose.onNodeWithTag("native-library").assertDoesNotExist()
+        assertEquals("", BackupSettings(context).active())
+    }
+
+    private fun hasTestTagPrefix(prefix: String) =
+        SemanticsMatcher("tag begins $prefix") {
+            it.config.contains(androidx.compose.ui.semantics.SemanticsProperties.TestTag) &&
+                it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag].startsWith(
+                    prefix
+                )
+        }
+}
