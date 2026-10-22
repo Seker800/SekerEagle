@@ -25,6 +25,10 @@ public final class NativeUploadPolicy {
     public void save(String key, BackupEngine.Checkpoint value) { files.put(key, value); }
     public boolean contains(String key) { return receipts.contains(key); }
     public void confirm(String key, String content, BackupEngine.Checkpoint value) { save(key, value); receipts.add(content); }
+    public void verifyContent(String key, String hash) {
+      BackupEngine.Checkpoint previous = files.get(key);
+      if (previous != null && !previous.hash.equals(hash)) files.remove(key);
+    }
     public void retryFailures() { files.entrySet().removeIf(entry -> !entry.getValue().terminalError.isEmpty()); }
   }
 }
