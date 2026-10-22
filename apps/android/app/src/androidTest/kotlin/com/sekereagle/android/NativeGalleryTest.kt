@@ -320,6 +320,7 @@ class NativeGalleryTest {
         back()
         compose.onNodeWithTag("native-selection-count").assertDoesNotExist()
         verifyOriginalDownloads()
+        NativeUploadJourney(compose, context, session).verify()
         compose.onNodeWithTag("mode:MATERIAL").performClick()
         compose.onNodeWithContentDescription("视图选项").performClick()
         compose.onNodeWithText("标签").assertDoesNotExist()

@@ -60,10 +60,41 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             if (session === expired) expire()
         }
 
+    val uploads =
+        NativeUploads(
+            application,
+            viewModelScope,
+            { expired -> if (session === expired) expire() },
+            { target, mode ->
+                if (state.value.identity?.scope == target && state.value.mode == mode) load()
+            },
+        )
+    private var uploadPickerTarget: Pair<String, GalleryMode>? = null
+
+    fun prepareUploadSelection(): Boolean {
+        val current = state.value
+        val identity = current.identity ?: return false
+        if (current.busy || downloads.state.value != null || uploads.state.value != null)
+            return false
+        uploadPickerTarget = identity.scope to current.mode
+        return true
+    }
+
+    fun acceptUploadSelection(uris: List<android.net.Uri>) {
+        val target = uploadPickerTarget.also { uploadPickerTarget = null } ?: return
+        if (uris.isEmpty()) return
+        if (state.value.identity?.scope != target.first || state.value.mode != target.second) {
+            mutable.value = state.value.copy(message = "账号或模式已变化，请重新选择上传文件")
+            return
+        }
+        val connection = session ?: return
+        uploads.prepare(connection, target.first, target.second, uris)
+    }
+
     fun downloadAssets(assets: List<NativeAsset>) {
         val current = state.value
         val connection = session ?: return
-        if (current.busy || current.trash || assets.isEmpty()) return
+        if (current.busy || current.trash || assets.isEmpty() || uploads.state.value != null) return
         if (assets.any { candidate -> current.items.none { it.id == candidate.id } }) return
         downloads.start(connection, current.mode, assets.toList())
     }
@@ -102,6 +133,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     private fun authenticate(origin: String, email: String?, password: String?) {
         downloads.clear()
+        uploads.clear()
+        uploadPickerTarget = null
         sessionJob?.cancel()
         operation?.cancel()
         val request = ++generation
@@ -164,6 +197,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun switchMode(mode: GalleryMode) {
         if (state.value.busy || mode == state.value.mode) return
         downloads.clear()
+        uploads.clear()
+        uploadPickerTarget = null
         operation?.cancel()
         optionsJob?.cancel()
         generation++
@@ -492,6 +527,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     private fun expire() {
         downloads.clear()
+        uploads.clear()
+        uploadPickerTarget = null
         operation?.cancel()
         generation++
         settings.active("")
@@ -562,6 +599,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     override fun onCleared() {
         downloads.clear()
+        uploads.clear()
+        uploadPickerTarget = null
         repository?.clear()
     }
 }

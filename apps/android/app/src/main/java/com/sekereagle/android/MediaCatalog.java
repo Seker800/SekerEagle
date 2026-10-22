@@ -186,6 +186,45 @@ final class MediaCatalog {
     if (item.size <= 0 || item.size > maximum) throw new IOException("文件为空或超过支持的大小");
   }
 
+  /** Reads only a URI explicitly granted by the system picker; never scans a folder. */
+  Item selected(Uri uri) throws Exception {
+    com.sekereagle.android.core.NativeUploadPolicy.picked(java.util.List.of(uri.toString()));
+    try (Cursor cursor = resolver.query(uri, null, null, null, null)) {
+      if (cursor == null || !cursor.moveToFirst()) throw new IOException("无法读取所选文件，请重新选择");
+      int nameColumn = cursor.getColumnIndex("_display_name"),
+          sizeColumn = cursor.getColumnIndex("_size");
+      if (nameColumn < 0 || cursor.isNull(nameColumn))
+        throw new IOException("无法读取文件名，请先保存到手机后重新选择");
+      String name = cursor.getString(nameColumn);
+      JSONObject entry = format(name);
+      if (entry == null) throw new IOException("暂不支持该格式，请选择照片、视频或 RAW");
+      long size = sizeColumn >= 0 && !cursor.isNull(sizeColumn) ? cursor.getLong(sizeColumn) : -1;
+      if (size < 0)
+        try (android.content.res.AssetFileDescriptor descriptor =
+            resolver.openAssetFileDescriptor(uri, "r")) {
+          if (descriptor != null) size = descriptor.getLength();
+        }
+      if (size < 0) throw new IOException("无法确定文件大小，请先保存到手机后重新选择");
+      int modifiedColumn = cursor.getColumnIndex("last_modified");
+      boolean document = modifiedColumn >= 0;
+      if (modifiedColumn < 0) modifiedColumn = cursor.getColumnIndex("date_modified");
+      long modified =
+          modifiedColumn >= 0 && !cursor.isNull(modifiedColumn)
+              ? cursor.getLong(modifiedColumn) * (document ? 1 : 1000)
+              : 0;
+      Item item = new Item(uri, name, "", entry.getString("mimeType"), size, modified, document);
+      checkSize(item);
+      return item;
+    }
+  }
+
+  boolean selectedStable(Item item) throws Exception {
+    Item current = selected(item.uri);
+    return current.size == item.size
+        && current.modified == item.modified
+        && current.name.equals(item.name);
+  }
+
   boolean stable(Item item) {
     String[] columns = {"_size", item.document ? "last_modified" : "date_modified"};
     try (Cursor cursor = resolver.query(item.uri, columns, null, null, null)) {

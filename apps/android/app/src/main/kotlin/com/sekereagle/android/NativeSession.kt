@@ -63,6 +63,27 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             String(request("GET", path, null, 2 * 1024 * 1024, true), Charsets.UTF_8)
         )
 
+    internal fun authorizationEpoch(): Int =
+        synchronized(credentialLock) {
+            if (blocked) throw Failure(401)
+            epoch
+        }
+
+    @Synchronized
+    internal fun jsonAtEpoch(
+        ticket: Int,
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+    ): JSONObject {
+        ensureActive(ticket)
+        return json(method, path, body)
+    }
+
+    internal fun checkAuthorization(ticket: Int) {
+        ensureActive(ticket)
+    }
+
     override fun request(method: String, path: String, body: JSONObject?): JSONObject =
         json(method, path, body)
 

@@ -1,6 +1,8 @@
 package com.sekereagle.android
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -33,6 +35,12 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val download by model.downloads.state.collectAsStateWithLifecycle()
+    val upload by model.uploads.state.collectAsStateWithLifecycle()
+    val uploadPicker =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenMultipleDocuments(),
+            model::acceptUploadSelection,
+        )
     NativeTheme {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) {
@@ -41,7 +49,10 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     key(state.identity!!.scope) {
                         val repo = model.repository
                         if (repo != null) {
-                            NativeLibrary(state, model, repo)
+                            NativeLibrary(state, model, repo) {
+                                if (model.prepareUploadSelection())
+                                    uploadPicker.launch(arrayOf("*/*"))
+                            }
                             if (state.moreOpen) NativeMore(state.identity!!, model, openNative)
                             if (state.searchOpen) NativeSearch(state, model)
                             if (state.viewerId != null) NativeViewer(state, repo, model)
@@ -51,6 +62,8 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                 }
                 if (state.identity != null && download != null)
                     NativeDownloadDialog(download!!, model.downloads)
+                if (state.identity != null && upload != null)
+                    NativeUploadDialog(upload!!, model.uploads)
                 BackHandler(
                     state.searchOpen ||
                         state.moreOpen ||
@@ -78,6 +91,7 @@ private fun NativeLibrary(
     state: GalleryState,
     model: NativeGalleryViewModel,
     repo: NativeGalleryRepository,
+    chooseUpload: () -> Unit,
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val grid = rememberLazyGridState()
@@ -354,6 +368,10 @@ private fun NativeLibrary(
                                 }
                             }
                         } else {
+                            MenuRow("上传", Icons.Outlined.FileUpload) {
+                                menu = ""
+                                chooseUpload()
+                            }
                             MenuRow("最近删除", Icons.Outlined.DeleteOutline) {
                                 menu = ""
                                 model.openTrash()
