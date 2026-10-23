@@ -50,3 +50,28 @@ test('explicit time ordering binds a cursor to owner, mode and effective date fi
   assert.deepEqual(decodeEagleAssetCursor(legacy, scope, 'CAPTURED_AT'), value);
   assert.throws(() => decodeEagleAssetCursor(legacy, scope, 'ADDED_AT'));
 });
+
+test('newer navigation cursor preserves owner, mode and date-order fences', () => {
+  const scope = { ownerId: 'owner-a', libraryMode: 'PHOTO' as const };
+  const payload = {
+    v: 5,
+    ...scope,
+    sort: 'CAPTURED_AT',
+    direction: 'NEWER',
+    libraryAddedAt: '2026-01-02T00:00:00.000Z',
+    id: 'anchor',
+  };
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  assert.deepEqual(decodeEagleAssetCursor(encode(payload), scope), {
+    id: 'anchor',
+    libraryAddedAt: new Date(payload.libraryAddedAt),
+    direction: 'NEWER',
+  });
+  assert.throws(() => decodeEagleAssetCursor(encode(payload), { ...scope, ownerId: 'other' }));
+  assert.throws(() =>
+    decodeEagleAssetCursor(encode(payload), { ...scope, libraryMode: 'MATERIAL' }),
+  );
+  assert.throws(() => decodeEagleAssetCursor(encode(payload), scope, 'ADDED_AT'));
+  assert.throws(() => decodeEagleAssetCursor(encode({ ...payload, direction: 'INVALID' }), scope));
+  assert.throws(() => decodeEagleAssetCursor(encode(payload)));
+});
