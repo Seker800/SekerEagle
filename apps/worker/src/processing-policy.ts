@@ -69,7 +69,7 @@ export function processingLaneForKind(
 
 export function taskBlocksAssetReady(kind: EagleMediaJobKind, processorVersion?: string): boolean {
   return (
-    processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION && ASSET_READY_BLOCKING_KINDS.has(kind)
+    processorVersion !== 'photo-source-details-v1' && processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION && ASSET_READY_BLOCKING_KINDS.has(kind)
   );
 }
 
@@ -129,6 +129,7 @@ export function terminalAssetFailure(
   processorVersion: string,
   message: string,
 ): { lifecycleStatus?: 'FAILED'; mediaErrorCode: string } | null {
+  if (processorVersion === 'photo-source-details-v1') return { mediaErrorCode: 'PHOTO_SOURCE_DETAILS_FAILED' };
   if (kind === 'GENERATE_PREVIEW' && processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION)
     return { mediaErrorCode: 'VIDEO_PLAYBACK_FAILED' };
   return taskBlocksAssetReady(kind, processorVersion)
