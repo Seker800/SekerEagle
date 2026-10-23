@@ -65,7 +65,8 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                 if (state.identity != null && state.transfersOpen)
                     NativeTransferScreen(state, model, openNative)
                 BackHandler(
-                    state.transfersOpen || state.searchOpen ||
+                    state.transfersOpen ||
+                        state.searchOpen ||
                         state.moreOpen ||
                         state.viewerId != null ||
                         state.query.isNotEmpty() ||

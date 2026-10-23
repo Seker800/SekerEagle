@@ -26,6 +26,7 @@ public final class NativeUploadPolicy {
 
   public interface ManualStore extends BackupEngine.Store {
     void verifyContent(String key, String hash);
+
     void retryFailures();
   }
 

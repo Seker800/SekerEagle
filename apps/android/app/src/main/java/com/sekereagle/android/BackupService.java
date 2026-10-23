@@ -110,7 +110,8 @@ public final class BackupService extends Service {
               BackupEngine.Result result = engine.process(scope, mode, source);
               if (result == BackupEngine.Result.UPLOADED) uploaded++;
               else skipped++;
-              recordTransfer(item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
+              recordTransfer(
+                  item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
             } catch (Hold e) {
               throw e;
             } catch (ApiClient.Failure e) {
@@ -153,8 +154,10 @@ public final class BackupService extends Service {
 
   private void recordTransfer(String name, String mode, String result) throws Exception {
     JSONArray recent = new JSONArray();
-    for (int i = Math.max(0, transferRows.length() - 99); i < transferRows.length(); i++) recent.put(transferRows.get(i));
-    recent.put(name + (mode.isEmpty() ? "" : mode.equals("PHOTO") ? " · 照片" : " · 素材") + " · " + result);
+    for (int i = Math.max(0, transferRows.length() - 99); i < transferRows.length(); i++)
+      recent.put(transferRows.get(i));
+    recent.put(
+        name + (mode.isEmpty() ? "" : mode.equals("PHOTO") ? " · 照片" : " · 素材") + " · " + result);
     transferRows = recent;
     settings.setValue(scope, "transferRows", transferRows.toString());
   }
@@ -210,7 +213,8 @@ public final class BackupService extends Service {
         PendingIntent.getActivity(
             this,
             0,
-            new Intent(this, NativeActivity.class).putExtra("transfers", true)
+            new Intent(this, NativeActivity.class)
+                .putExtra("transfers", true)
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     PendingIntent pause =

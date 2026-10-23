@@ -59,7 +59,8 @@ class NativeUploads(
     private var session: NativeSession? = null
     private var identity = ""
     private var sessionEpoch = 0
-    private var journal: NativeUploadPolicy.ManualStore = journalStore ?: NativeUploadPolicy.Journal()
+    private var journal: NativeUploadPolicy.ManualStore =
+        journalStore ?: NativeUploadPolicy.Journal()
     private var cancelled = AtomicBoolean()
     private var requestCancellation = NativeTransferCancellation()
     private var job: Job? = null
@@ -107,8 +108,19 @@ class NativeUploads(
                     }
                     publish(ticket, NativeUploadState(mode, NativeUploadPhase.READY, entries))
                 } catch (reason: CancellationException) {
-                    val remaining = selected.map { NativeUploadEntry(it, it.lastPathSegment ?: "所选文件") }
-                    publish(ticket, NativeUploadState(mode, NativeUploadPhase.FINISHED, remaining, remaining = remaining, cancelled = true))
+                    val remaining = selected.map {
+                        NativeUploadEntry(it, it.lastPathSegment ?: "所选文件")
+                    }
+                    publish(
+                        ticket,
+                        NativeUploadState(
+                            mode,
+                            NativeUploadPhase.FINISHED,
+                            remaining,
+                            remaining = remaining,
+                            cancelled = true,
+                        ),
+                    )
                 } catch (reason: Exception) {
                     publish(
                         ticket,
@@ -126,7 +138,15 @@ class NativeUploads(
     fun start(uploaded: Int = 0, skipped: Int = 0, done: Set<Uri> = emptySet()) {
         val current = mutable.value ?: return
         if (current.phase != NativeUploadPhase.READY) return
-        run(current.entries, current.copy(phase = NativeUploadPhase.RUNNING, uploaded = uploaded, skipped = skipped, completedEntries = done))
+        run(
+            current.entries,
+            current.copy(
+                phase = NativeUploadPhase.RUNNING,
+                uploaded = uploaded,
+                skipped = skipped,
+                completedEntries = done,
+            ),
+        )
     }
 
     private fun run(entries: List<NativeUploadEntry>, initial: NativeUploadState) {
@@ -221,7 +241,8 @@ class NativeUploads(
                                 if (outcome == BackupEngine.Result.UPLOADED && !api.duplicate)
                                     result.copy(uploaded = result.uploaded + 1)
                                 else result.copy(skipped = result.skipped + 1)
-                            result = result.copy(completedEntries = result.completedEntries + entry.uri)
+                            result =
+                                result.copy(completedEntries = result.completedEntries + entry.uri)
                         } catch (reason: Exception) {
                             if (cancellation.get() || reason is CancellationException) {
                                 result =
@@ -290,7 +311,9 @@ class NativeUploads(
         requestCancellation.cancel()
     }
 
-    internal suspend fun awaitStopped() { job?.join() }
+    internal suspend fun awaitStopped() {
+        job?.join()
+    }
 
     fun dismiss() {
         val phase = mutable.value?.phase

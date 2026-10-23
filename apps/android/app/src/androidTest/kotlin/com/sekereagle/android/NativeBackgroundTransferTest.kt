@@ -231,11 +231,18 @@ class NativeBackgroundTransferTest {
         compose.runOnUiThread { manager.clear() }
         compose.waitUntil(5000) { manager.state.value.batches.isEmpty() }
         compose.runOnUiThread {
-            context.startForegroundService(android.content.Intent(context, NativeUploadService::class.java).putExtra("scope", identity.scope))
+            context.startForegroundService(
+                android.content
+                    .Intent(context, NativeUploadService::class.java)
+                    .putExtra("scope", identity.scope)
+            )
         }
         Thread.sleep(300)
         compose.waitUntil(5000) {
-            context.getSystemService(android.app.ActivityManager::class.java).getRunningServices(Int.MAX_VALUE).none { it.service.className == NativeUploadService::class.java.name }
+            context
+                .getSystemService(android.app.ActivityManager::class.java)
+                .getRunningServices(Int.MAX_VALUE)
+                .none { it.service.className == NativeUploadService::class.java.name }
         }
     }
 

@@ -6,8 +6,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.lifecycle.ViewModelProvider
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** The exported launcher contains no WebView. Legacy Java screens only host backup/cleanup. */
@@ -24,7 +24,10 @@ class NativeActivity : ComponentActivity() {
         model = ViewModelProvider(this)[NativeGalleryViewModel::class.java]
         setContent {
             val state by model.state.collectAsStateWithLifecycle()
-            androidx.compose.runtime.LaunchedEffect(state.identity, intent.getBooleanExtra("transfers", false)) {
+            androidx.compose.runtime.LaunchedEffect(
+                state.identity,
+                intent.getBooleanExtra("transfers", false),
+            ) {
                 if (state.identity != null && intent.getBooleanExtra("transfers", false)) {
                     intent.removeExtra("transfers")
                     model.openTransfers()
@@ -43,7 +46,7 @@ class NativeActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra("transfers", false)) {
+        if (intent.getBooleanExtra("transfers", false) && model.state.value.identity != null) {
             model.openTransfers()
             intent.removeExtra("transfers")
         }

@@ -588,7 +588,7 @@ class NativeGalleryTest {
         login()
         compose.onNodeWithContentDescription("更多操作").performClick()
         compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
-        for (label in listOf("手机备份", "释放手机空间")) {
+        for (label in listOf("备份设置", "释放手机空间")) {
             compose.onNodeWithText(label).performClick()
             var child: android.app.Activity? = null
             compose.waitUntil(10000) {

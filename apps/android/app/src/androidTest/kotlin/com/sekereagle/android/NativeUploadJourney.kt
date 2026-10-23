@@ -32,6 +32,7 @@ internal class NativeUploadJourney(
 
     private val sources = mutableListOf<Source>()
     private var batchId = ""
+
     private fun model() = ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
 
     private fun create(suffix: String): Source {
@@ -104,11 +105,23 @@ internal class NativeUploadJourney(
     private fun finish(uploaded: Int, skipped: Int) {
         compose.runOnUiThread { model().openTransfers() }
         compose.waitUntil(30000) {
-            model().transfers.state.value.batches.firstOrNull { it.id == batchId }?.let {
-                !it.waiting && it.progress?.phase == NativeUploadPhase.FINISHED && it.progress.uploaded == uploaded && it.progress.skipped == skipped
-            } == true
+            model()
+                .transfers
+                .state
+                .value
+                .batches
+                .firstOrNull { it.id == batchId }
+                ?.let {
+                    !it.waiting &&
+                        it.progress?.phase == NativeUploadPhase.FINISHED &&
+                        it.progress.uploaded == uploaded &&
+                        it.progress.skipped == skipped
+                } == true
         }
-        compose.onNodeWithTag("upload-summary:$batchId").performScrollTo().assertTextEquals("已上传 $uploaded · 重复跳过 $skipped")
+        compose
+            .onNodeWithTag("upload-summary:$batchId")
+            .performScrollTo()
+            .assertTextEquals("已上传 $uploaded · 重复跳过 $skipped")
     }
 
     private fun dismiss() {
@@ -149,7 +162,10 @@ internal class NativeUploadJourney(
             val second = create("two.png")
             val invalid = create("invalid.pdf")
             choose(listOf(first, first, second), "照片")
-            assertEquals(2, model.transfers.state.value.batches.first { it.id == batchId }.entries.size)
+            assertEquals(
+                2,
+                model.transfers.state.value.batches.first { it.id == batchId }.entries.size,
+            )
             capture("native-upload-confirm.png")
             finish(2, 0)
             val photo = list(GalleryMode.PHOTO)

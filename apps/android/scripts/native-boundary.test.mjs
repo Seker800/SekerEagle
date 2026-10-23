@@ -21,6 +21,35 @@ files.set(
 test('native launcher and scoped shared repository satisfy the boundary', () =>
   assertNativeBoundary(files));
 for (const [name, mutate] of [
+  [
+    'viewmodel-owned upload',
+    (f) =>
+      f.set(
+        'app/src/main/kotlin/com/sekereagle/android/NativeGalleryViewModel.kt',
+        'NativeUploads(context)',
+      ),
+  ],
+  [
+    'modal upload progress',
+    (f) =>
+      f.set(
+        'app/src/main/kotlin/com/sekereagle/android/NativeGalleryScreen.kt',
+        'NativeUploadDialog(state, uploads)',
+      ),
+  ],
+  [
+    'exported upload service',
+    (f) =>
+      f.set(
+        'app/src/main/AndroidManifest.xml',
+        files
+          .get('app/src/main/AndroidManifest.xml')
+          .replace(
+            'name=".NativeUploadService" android:exported="false"',
+            'name=".NativeUploadService" android:exported="true"',
+          ),
+      ),
+  ],
   ['WebView import', (f) => f.set('app/src/main/kotlin/Bad.kt', 'import android.webkit.WebView')],
   ['WebView creation', (f) => f.set('app/src/main/kotlin/Bad.kt', 'val view = WebView(context)')],
   [
@@ -65,11 +94,19 @@ for (const [name, mutate] of [
 test('manual uploads use a service-owned queue and a shared nonmodal transfer screen', () => {
   const model = files.get('app/src/main/kotlin/com/sekereagle/android/NativeGalleryViewModel.kt');
   const screen = files.get('app/src/main/kotlin/com/sekereagle/android/NativeGalleryScreen.kt');
-  assert.ok(model.includes('NativeTransferManager.get('), 'The gallery must observe a service-owned transfer queue');
+  assert.ok(
+    model.includes('NativeTransferManager.get('),
+    'The gallery must observe a service-owned transfer queue',
+  );
   assert.ok(!/\bNativeUploads\s*\(/.test(model), 'The gallery must not own the upload worker');
-  assert.ok(!screen.includes('NativeUploadDialog('), 'Upload progress must not block gallery browsing');
+  assert.ok(
+    !screen.includes('NativeUploadDialog('),
+    'Upload progress must not block gallery browsing',
+  );
   assert.ok(manualService(files.get('app/src/main/AndroidManifest.xml')));
 });
 function manualService(manifest) {
-  return /<service\b[^>]*android:name="\.NativeUploadService"[^>]*android:exported="false"[^>]*android:foregroundServiceType="dataSync"/.test(manifest);
+  return /<service\b[^>]*android:name="\.NativeUploadService"[^>]*android:exported="false"[^>]*android:foregroundServiceType="dataSync"/.test(
+    manifest,
+  );
 }

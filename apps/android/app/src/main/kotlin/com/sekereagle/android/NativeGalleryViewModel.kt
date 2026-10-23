@@ -72,12 +72,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun prepareUploadSelection(): Boolean {
         val current = state.value
         val identity = current.identity ?: return false
-        if (
-            current.busy ||
-                current.trash ||
-                downloads.state.value != null
-        )
-            return false
+        if (current.busy || current.trash || downloads.state.value != null) return false
         uploadPickerTarget = identity.scope to current.mode
         return true
     }
@@ -118,6 +113,22 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     private var timelineJob: Job? = null
     private var mutation: Job? = null
     private var generation = 0
+    private var transferRefreshPending = false
+
+    private fun refreshTransfersWhenIdle() {
+        val current = state.value
+        if (
+            transferRefreshPending &&
+                current.viewerId == null &&
+                !current.selecting &&
+                !current.busy &&
+                !current.loading
+        ) {
+            transferRefreshPending = false
+            refresh()
+        }
+    }
+
     val serverOrigin: String
         get() = settings.origin()
 
@@ -126,7 +137,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             transfers.events.collect { event ->
                 if (state.value.identity?.scope == event.scope) {
                     if (event.unauthorized) expire()
-                    else if (state.value.mode == event.mode) refresh()
+                    else if (state.value.mode == event.mode) {
+                        transferRefreshPending = true
+                        refreshTransfersWhenIdle()
+                    }
                 }
             }
         }
@@ -224,6 +238,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun switchMode(mode: GalleryMode) {
         val identity = state.value.identity ?: return
         if (state.value.busy || mode == state.value.mode) return
+        transferRefreshPending = false
         downloads.clear()
         uploadPickerTarget = null
         operation?.cancel()
@@ -313,6 +328,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         cursor = page.cursor,
                         loading = false,
                     )
+                refreshTransfersWhenIdle()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -333,6 +349,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         if (snapshot.busy || snapshot.loading) return
         operation?.cancel()
         val request = ++generation
+        transferRefreshPending = false
         mutable.value = snapshot.copy(loading = true, error = null)
         loadTimeline(snapshot, repo)
         operation = viewModelScope.launch {
@@ -369,6 +386,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         selected = state.value.selected.intersect(items.map { it.id }.toSet()),
                         loading = false,
                     )
+                refreshTransfersWhenIdle()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -416,6 +434,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         windowOffset = start,
                         loading = false,
                     )
+                refreshTransfersWhenIdle()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -534,7 +553,14 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun openTransfers() {
-        if (state.value.identity != null) mutable.value = state.value.copy(transfersOpen = true, moreOpen = false, searchOpen = false, viewerId = null)
+        if (state.value.identity != null)
+            mutable.value =
+                state.value.copy(
+                    transfersOpen = true,
+                    moreOpen = false,
+                    searchOpen = false,
+                    viewerId = null,
+                )
     }
 
     fun openMore() {
@@ -580,6 +606,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 }
                 else -> return false
             }
+        refreshTransfersWhenIdle()
         return true
     }
 
@@ -744,6 +771,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun expire() {
+        transferRefreshPending = false
         downloads.clear()
         transfers.clear()
         uploadPickerTarget = null
