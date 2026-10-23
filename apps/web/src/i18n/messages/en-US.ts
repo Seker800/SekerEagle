@@ -111,7 +111,8 @@ export const enUS = {
   '照片组，共 {{value1}} 张': 'Photo group, {{value1}} photos',
   '拍摄时间 · 最新优先': 'Capture time · Newest first',
   '添加时间 · 最新优先': 'Date added · Newest first',
-  无拍摄时间时使用添加时间: 'Uses date added when capture time is missing',
+  拍摄时间缺失时使用来源日期或添加时间:
+    'Uses source date or date added when capture time is missing',
   原片: 'Original',
 
   '参数已复制，可返回图库多选后套用。':

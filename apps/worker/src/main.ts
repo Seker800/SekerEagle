@@ -387,7 +387,10 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       );
       return;
     }
-    const renditionSpecs = imageRenditionSpecs(sourceDetails.mimeType);
+    const sourceDetailsOnly = job.processorVersion === 'photo-source-details-v1';
+    const renditionSpecs = imageRenditionSpecs(sourceDetails.mimeType).filter(
+      (spec) => !sourceDetailsOnly || spec.variant === 'edit',
+    );
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
       return;
@@ -435,19 +438,20 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           });
         }
         const photoAnalysis =
-          asset.libraryMode === 'PHOTO'
+          asset.libraryMode === 'PHOTO' && !sourceDetailsOnly
             ? {
                 ...(await readPhotoExif(metadata.exif, originalPath)),
                 ...(await analyzePhotoPixels(source)),
               }
             : null;
         const livePhoto =
-          originalPath && taskBlocksAssetReady(job.kind, job.processorVersion)
+          originalPath &&
+          (taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly)
             ? await inspectLivePhotoImage(originalPath)
             : null;
         return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
       },
-      taskBlocksAssetReady(job.kind, job.processorVersion),
+      taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly,
     );
     if (sourceDetails.verifiesOriginalHash) {
       assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);

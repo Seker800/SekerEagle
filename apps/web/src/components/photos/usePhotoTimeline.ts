@@ -11,5 +11,7 @@ export function usePhotoTimeline(
     queryFn: ({ signal }) => getPhotoTimeline(signal),
     enabled,
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   });
 }

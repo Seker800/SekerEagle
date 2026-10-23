@@ -3,6 +3,8 @@ import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
 import { readFile } from 'node:fs/promises';
 import sharp from 'sharp';
+import { readPhotoMetadataTags } from '@sekereagle/media-core';
+import { cachedPhotoPolicy } from './cached-photo-policy';
 import { loadCachedImage, verifyCachedImageSource, type CachedImageSource } from './cached-image';
 import {
   validatePhotoMaintenanceManifest,
@@ -11,7 +13,7 @@ import {
 } from './photo-maintenance-scope';
 import { claimNextMediaJob } from './job-claim';
 import { publishImage } from './image-publication';
-import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
+import { analyzePhotoPixels, normalizePhotoExif } from './photo-analysis';
 import { inspectLivePhotoImage } from './live-photo';
 
 interface Manifest {
@@ -56,27 +58,22 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
         renditions: { where: { status: 'READY', kind: 'PREVIEW', variant: 'default' } },
       },
     });
-    assertPhotoMaintenanceCandidates(scope, assets);
     for (const item of manifest.items) {
       const started = Date.now();
-      const asset = assets.find((x) => x.id === item.assetId)!;
+      const asset = assets.find((x) => x.id === item.assetId);
+      if (!asset) {
+        report.push({ assetId: item.assetId, status: 'SKIPPED', reason: 'SOURCE_SCOPE_CHANGED' });
+        continue;
+      }
       try {
-        if (asset.renditions.length) {
+        assertPhotoMaintenanceCandidates([item], [asset]);
+        if (asset.renditions.some((r) => r.revision === item.mediaRevision)) {
           report.push({ assetId: asset.id, status: 'ALREADY_READY' });
           continue;
         }
         const cached = await loadCachedImage(root, item.source);
-        if (
-          !asset.width ||
-          !asset.height ||
-          Math.abs(
-            cached.renditions[2]!.width /
-              cached.renditions[2]!.height /
-              (asset.width / asset.height) -
-              1,
-          ) > 0.02
-        )
-          throw new Error('SOURCE_CACHE_ASPECT');
+        const tags = await readPhotoMetadataTags(cached.originalPath);
+        const policy = cachedPhotoPolicy(asset.mimeType, asset, tags, cached.renditions[2]!);
         const details = {
           assetId: asset.id,
           dimensions: cached.renditions.map((x) => ({
@@ -95,9 +92,6 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
           });
           continue;
         }
-        // This initial pilot deliberately leaves RAW editing semantics to the existing decoder.
-        if (!['image/jpeg', 'image/heic', 'image/heif'].includes(asset.mimeType))
-          throw new Error('PILOT_FORMAT');
         if (!asset.originalObjectKey.startsWith(`users/${asset.ownerId}/`))
           throw new Error('ORIGINAL_SCOPE');
         const head = await storage.send(
@@ -105,10 +99,17 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
         );
         if (BigInt(head.ContentLength ?? -1) !== asset.byteSize)
           throw new Error('MANAGED_ORIGINAL_SIZE');
-        const livePhoto = await inspectLivePhotoImage(cached.originalPath);
-        if (livePhoto.motion) throw new Error('PILOT_MOTION_DEFERRED');
+        let motionPending = false;
+        const livePhoto = await inspectLivePhotoImage(cached.originalPath, false).catch(
+          (error: unknown) => {
+            if (!(error instanceof Error) || error.message !== 'MOTION_COMPONENT_DEFERRED')
+              throw error;
+            motionPending = true;
+            return { identifier: asset.livePhotoIdentifier, motion: null };
+          },
+        );
         const photoAnalysis = {
-          ...(await readPhotoExif(undefined, cached.originalPath)),
+          ...normalizePhotoExif(tags),
           ...(await analyzePhotoPixels(sharp(cached.renditions[2]!.data))),
         };
         const jobScope = {
@@ -120,8 +121,8 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
         };
         // Explicit retry of these exact revisions only; retain attempt and lease history.
         await prisma.eagleAssetProcessingJob.updateMany({
-          where: { ...jobScope, status: 'PENDING' },
-          data: { availableAt: new Date() },
+          where: { ...jobScope, status: { in: ['PENDING', 'FAILED'] } },
+          data: { status: 'PENDING', availableAt: new Date() },
         });
         const job = await claimNextMediaJob(
           {
@@ -146,6 +147,22 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
         );
         if (!job) throw new Error('NO_ELIGIBLE_RENDITION_LEASE');
         try {
+          if (policy.deferRawEditing || motionPending)
+            await prisma.eagleAssetProcessingJob.createMany({
+              data: [
+                {
+                  ownerId: asset.ownerId,
+                  libraryMode: 'PHOTO',
+                  assetId: asset.id,
+                  assetRevision: item.mediaRevision,
+                  kind: 'GENERATE_RENDITIONS',
+                  processorVersion: 'photo-source-details-v1',
+                  lane: 'MAINTENANCE',
+                  dependsOnJobId: job.id,
+                },
+              ],
+              skipDuplicates: true,
+            });
           const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
           for (const image of cached.renditions) {
             const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${item.mediaRevision}/${image.kind.toLowerCase()}-${image.variant}.jpg`;
@@ -178,7 +195,7 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
             job,
             renditions,
             sha256: item.sha256,
-            dimensions: { width: asset.width, height: asset.height },
+            dimensions: { width: policy.width, height: policy.height },
             photoAnalysis,
             livePhoto,
             scheduleFaces: false,
