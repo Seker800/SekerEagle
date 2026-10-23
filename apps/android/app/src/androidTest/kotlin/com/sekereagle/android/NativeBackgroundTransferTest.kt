@@ -97,12 +97,26 @@ class NativeBackgroundTransferTest {
                 manager.enqueue(session, identity, GalleryMode.MATERIAL, listOf(uri))
             }
             assertTrue(server.entered.await(10, TimeUnit.SECONDS))
+            val photoId = manager.state.value.batches.first { it.mode == GalleryMode.PHOTO }.id
+            val materialId = manager.state.value.batches.first { it.mode == GalleryMode.MATERIAL }.id
+            compose.runOnUiThread { manager.pause(materialId) }
+            compose.waitUntil(5000) { manager.state.value.batches.first { it.id == materialId }.paused }
+            compose.runOnUiThread { manager.remove(materialId) }
+            compose.waitUntil(5000) { manager.state.value.batches.none { it.id == materialId } }
+            compose.runOnUiThread {
+                manager.enqueue(NativeSession.open(context, server.origin), identity, GalleryMode.MATERIAL, listOf(uri))
+                manager.pause(photoId)
+            }
+            compose.waitUntil(5000) { manager.state.value.batches.first { it.id == photoId }.progress?.cancelled == true }
+            compose.runOnUiThread { manager.resume(photoId) }
+            compose.waitUntil(5000) { manager.state.value.batches.first { it.id == photoId }.waiting }
             compose.onNodeWithTag("native-upload-dialog").assertDoesNotExist()
             compose.onNodeWithTag("mode:MATERIAL").performClick()
             compose.onNodeWithContentDescription("更多操作").performClick()
             compose.onNodeWithText("传输列表").performClick()
             compose.onNodeWithTag("native-transfers").assertExists()
             compose.onNodeWithText("自动备份").assertExists()
+            captureNativeEvidence("native-shared-transfers.png")
             compose.onNodeWithContentDescription("返回图库").performClick()
             compose.onNodeWithTag("native-transfers").assertDoesNotExist()
             compose.activityRule.scenario.recreate()
@@ -132,7 +146,7 @@ class NativeBackgroundTransferTest {
         val batch = java.util.UUID.randomUUID().toString()
         NativeManualJournal(context, identity.scope, batch).use { it.confirm(key, content, checkpoint) }
         NativeManualJournal(context, identity.scope, batch).use {
-            assertTrue(it.contains(content)); assertTrue(it.load(key)!!.confirmed)
+            assertFalse("Manual tasks must recheck server existence instead of trusting backup receipts", it.contains(content)); assertFalse(it.load(key)!!.confirmed)
             it.verifyContent(key, "b".repeat(64)); assertFalse(it.load(key)!!.confirmed)
         }
         BackupJournal(context).use { assertNull(it.load(key)); assertFalse(it.contains(content)) }
