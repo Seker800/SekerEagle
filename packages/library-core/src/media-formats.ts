@@ -1,6 +1,6 @@
 /** Shared format policy for both libraries and every ingestion client. */
-export const CAMERA_MAX_IMAGE_BYTES = 250 * 1024 * 1024;
-export const CAMERA_MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024;
+export const CAMERA_MAX_IMAGE_BYTES = 500_000_000;
+export const CAMERA_MAX_VIDEO_BYTES = 5_000_000_000;
 export const CAMERA_MAX_VIDEO_DURATION_MS = 4 * 3600 * 1000;
 export const CAMERA_MAX_IMAGE_PIXELS = 120_000_000;
 export const CAMERA_MAX_DECODED_RAW_PIXELS = 50_000_000;
