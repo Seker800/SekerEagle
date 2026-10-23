@@ -196,14 +196,7 @@ export function PhotoTimelineRail({
               <span
                 key={year}
                 data-ruler-year={year}
-                className={`${styles.year} ${styles.calendarYear}`}
-                onPointerMove={(event) => {
-                  const index = months.findIndex((month) => month.month.startsWith(`${year}-`));
-                  if (index >= 0) {
-                    event.stopPropagation();
-                    selectHover(index);
-                  }
-                }}
+                className={styles.year}
                 style={{
                   top: `${top}%`,
                   opacity: hovered !== null && Math.abs(top - (hoverPosition ?? 0)) < 3 ? 0 : 1,

@@ -77,9 +77,6 @@
   pointer-events: none;
   font-variant-numeric: tabular-nums;
 }
-.calendarYear {
-  pointer-events: auto;
-}
 .hoverDate {
   position: absolute;
   right: 28px;

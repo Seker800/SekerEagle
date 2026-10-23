@@ -82,7 +82,7 @@ describe('PhotoTimelineRail', () => {
   });
 });
 
-it('renders calendar month ruler marks and magnifies only the ticks near the pointer without a popup', () => {
+it('renders year-segment ruler marks and magnifies only the ticks near the pointer without a popup', () => {
   render(
     <PhotoTimelineRail months={months} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />,
   );
