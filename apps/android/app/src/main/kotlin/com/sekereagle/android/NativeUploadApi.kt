@@ -11,15 +11,20 @@ internal class NativeUploadApi(
     private val epoch: Int,
     private val stage: (String) -> Unit,
     private val progress: (Long) -> Unit,
+    private val cancellation: NativeDownloadCancellation? = null,
 ) : UploadApi {
     private val signedParts = ApiClient(session.origin, "")
     private var transferred = 0L
+    var duplicate = false
+        private set
 
     override fun request(method: String, path: String, body: JSONObject?): JSONObject {
         if (path.endsWith("/check-content")) stage("检查重复文件")
         if (path.endsWith("/complete")) stage("服务器确认入库")
         try {
-            return session.jsonAtEpoch(epoch, method, path, body)
+            val result = session.jsonAtEpoch(epoch, method, path, body, cancellation)
+            if (path.endsWith("/complete")) duplicate = result.optBoolean("duplicate")
+            return result
         } catch (error: NativeSession.Failure) {
             throw ApiClient.Failure(error.status)
         }
@@ -32,6 +37,7 @@ internal class NativeUploadApi(
         guard: BackupEngine.Guard,
     ): String {
         fun check() {
+            cancellation?.check()
             try {
                 session.checkAuthorization(epoch)
             } catch (reason: NativeSession.Failure) {

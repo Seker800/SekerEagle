@@ -45,7 +45,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         )
 
     @Synchronized
-    fun json(method: String, path: String, body: JSONObject? = null): JSONObject {
+    fun json(method: String, path: String, body: JSONObject? = null, cancellation: NativeDownloadCancellation? = null): JSONObject {
         val bytes =
             request(
                 method,
@@ -53,6 +53,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 body?.toString()?.toByteArray(Charsets.UTF_8),
                 2 * 1024 * 1024,
                 true,
+                cancellation,
             )
         return if (bytes.isEmpty()) JSONObject() else JSONObject(String(bytes, Charsets.UTF_8))
     }
@@ -75,9 +76,10 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         method: String,
         path: String,
         body: JSONObject? = null,
+        cancellation: NativeDownloadCancellation? = null,
     ): JSONObject {
         ensureActive(ticket)
-        return json(method, path, body)
+        return json(method, path, body, cancellation)
     }
 
     internal fun checkAuthorization(ticket: Int) {
@@ -208,6 +210,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         body: ByteArray?,
         limit: Int,
         refresh: Boolean,
+        cancellation: NativeDownloadCancellation? = null,
     ): ByteArray =
         exchange(
             method,
@@ -215,6 +218,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             body,
             refresh,
             if (limit > 2 * 1024 * 1024) "image/*" else "application/json",
+            cancellation = cancellation,
         ) { connection, checkActive ->
             if (connection.contentLengthLong > limit) throw IOException("媒体超过本次读取预算")
             if (limit > 2 * 1024 * 1024 && !connection.contentType.orEmpty().startsWith("image/"))
@@ -275,6 +279,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         refresh: Boolean,
         accept: String,
         onConnection: (HttpURLConnection) -> Unit = {},
+        cancellation: NativeDownloadCancellation? = null,
         consume: (HttpURLConnection, () -> Unit) -> T,
     ): T {
         NativeGalleryPolicy.safePath(path)
@@ -285,6 +290,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             }
         val connection = URL(origin + path).openConnection() as HttpURLConnection
         try {
+            cancellation?.bind(connection)
             onConnection(connection)
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
@@ -300,6 +306,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 connection.outputStream.use { it.write(body) }
             }
             val status = connection.responseCode
+            cancellation?.check()
             ensureActive(ticket)
             if (
                 status == 401 &&
@@ -318,9 +325,10 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                             "{}".toByteArray(),
                             2 * 1024 * 1024,
                             false,
+                            cancellation,
                         )
                 }
-                return exchange(method, path, body, false, accept, onConnection, consume)
+                return exchange(method, path, body, false, accept, onConnection, cancellation, consume)
             }
             if (status !in 200..299) {
                 if (status == 401) clear()
@@ -338,7 +346,13 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 }
                 if (changed) settings.saveToken(storageKey, JSONObject(jar.snapshot()).toString())
             }
-            return consume(connection) { ensureActive(ticket) }
+            return consume(connection) {
+                cancellation?.check()
+                ensureActive(ticket)
+            }
+        } catch (reason: Exception) {
+            cancellation?.check()
+            throw reason
         } finally {
             connection.disconnect()
         }

@@ -35,11 +35,11 @@ final class BackupSettings {
         .edit()
         .putString("origin", BackupPolicy.origin(value, BuildConfig.DEBUG))
         .putString("active", "")
-        .commit();
+        .apply();
   }
 
   void active(String value) {
-    preferences.edit().putString("active", value).commit();
+    preferences.edit().putString("active", value).apply();
   }
 
   String value(String scope, String key, String fallback) {
@@ -47,7 +47,10 @@ final class BackupSettings {
   }
 
   void setValue(String scope, String key, String value) {
-    preferences.edit().putString(scope + ":" + key, value).commit();
+    SharedPreferences.Editor editor = preferences.edit().putString(scope + ":" + key, value);
+    // Credential erasure must survive process death; ordinary preferences never block UI writes.
+    if (key.equals("credential")) editor.commit();
+    else editor.apply();
   }
 
   boolean flag(String scope, String key, boolean fallback) {
@@ -55,7 +58,7 @@ final class BackupSettings {
   }
 
   void setFlag(String scope, String key, boolean value) {
-    preferences.edit().putBoolean(scope + ":" + key, value).commit();
+    preferences.edit().putBoolean(scope + ":" + key, value).apply();
   }
 
   JSONArray rules(String scope) {

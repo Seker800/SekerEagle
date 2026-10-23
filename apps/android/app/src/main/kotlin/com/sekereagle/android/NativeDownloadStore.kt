@@ -58,7 +58,7 @@ class NativeDownloadStore(context: Context) {
                 "/assets/" +
                 NativeGalleryPolicy.identifier(asset.id)
         cancellation.check()
-        val metadata = session.json("GET", base)
+        val metadata = session.json("GET", base, cancellation = cancellation)
         if (metadata.getInt("mediaRevision") != asset.revision) throw IOException("原件已更新，请刷新图库后下载")
         val size = metadata.getLong("byteSize")
         val mime = metadata.getString("mimeType")
@@ -88,7 +88,7 @@ class NativeDownloadStore(context: Context) {
                 }
             } ?: throw IOException("无法写入下载目录")
             cancellation.check()
-            val current = session.json("GET", base)
+            val current = session.json("GET", base, cancellation = cancellation)
             if (
                 current.getInt("mediaRevision") != asset.revision ||
                     current.getLong("byteSize") != size

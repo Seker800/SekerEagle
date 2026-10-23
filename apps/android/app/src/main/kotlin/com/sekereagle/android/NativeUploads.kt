@@ -59,6 +59,7 @@ class NativeUploads(
     private var sessionEpoch = 0
     private var journal = NativeUploadPolicy.Journal()
     private var cancelled = AtomicBoolean()
+    private var requestCancellation = NativeDownloadCancellation()
     private var job: Job? = null
 
     fun prepare(session: NativeSession, identity: String, mode: GalleryMode, uris: List<Uri>) {
@@ -132,6 +133,7 @@ class NativeUploads(
         val taskJournal = journal
         val ticket = generation.incrementAndGet()
         val cancellation = AtomicBoolean().also { cancelled = it }
+        val requestGuard = NativeDownloadCancellation().also { requestCancellation = it }
         mutable.value = initial
         fun check() {
             if (cancellation.get() || generation.get() != ticket) throw CancellationException()
@@ -142,7 +144,7 @@ class NativeUploads(
                 var result = initial
                 try {
                     check()
-                    val me = connection.jsonAtEpoch(authEpoch, "GET", "/api/auth/me")
+                    val me = connection.jsonAtEpoch(authEpoch, "GET", "/api/auth/me", cancellation = requestGuard)
                     val actual =
                         com.sekereagle.android.core.BackupPolicy.digest(
                             "${connection.origin}\n${me.getJSONObject("desktopCache").getString("deploymentId")}\n${me.getJSONObject("user").getString("id")}"
@@ -184,6 +186,7 @@ class NativeUploads(
                                             )
                                         }
                                     },
+                                    requestGuard,
                                 )
                             val hash = catalog.hash(item, ::check)
                             val source =
@@ -206,7 +209,7 @@ class NativeUploads(
                                     )
                                     .process(target, initial.mode.name, source)
                             result =
-                                if (outcome == BackupEngine.Result.UPLOADED)
+                                if (outcome == BackupEngine.Result.UPLOADED && !api.duplicate)
                                     result.copy(uploaded = result.uploaded + 1)
                                 else result.copy(skipped = result.skipped + 1)
                         } catch (reason: Exception) {
@@ -239,8 +242,9 @@ class NativeUploads(
                         }
                         return@launch
                     }
-                    if (!cancellation.get())
-                        result = result.copy(current = safeMessage(reason), remaining = entries)
+                    result = if (cancellation.get() || reason is CancellationException)
+                        result.copy(cancelled = true, remaining = entries)
+                    else result.copy(current = safeMessage(reason), remaining = entries)
                 } finally {
                     publish(ticket, result.copy(phase = NativeUploadPhase.FINISHED))
                     if (generation.get() == ticket && (result.uploaded > 0 || result.skipped > 0))
@@ -271,7 +275,10 @@ class NativeUploads(
 
     fun cancel() {
         val current = mutable.value ?: return
-        if (current.phase == NativeUploadPhase.PREPARING) clear() else cancelled.set(true)
+        if (current.phase == NativeUploadPhase.PREPARING) clear() else {
+            cancelled.set(true)
+            requestCancellation.cancel()
+        }
     }
 
     fun dismiss() {
@@ -282,6 +289,7 @@ class NativeUploads(
     fun clear() {
         generation.incrementAndGet()
         cancelled.set(true)
+        requestCancellation.cancel()
         job?.cancel()
         session = null
         identity = ""
