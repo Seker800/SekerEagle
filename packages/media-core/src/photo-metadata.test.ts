@@ -24,6 +24,9 @@ test('original tag reader bounds its command, signs GPS coordinates and rejects 
       JSON.stringify([
         {
           Model: 'Camera',
+          ImageWidth: 8192,
+          ImageHeight: 6144,
+          Orientation: 6,
           GPSLatitude: 30,
           GPSLongitude: 120,
           GPSLatitudeRef: 'N',
@@ -35,6 +38,9 @@ test('original tag reader bounds its command, signs GPS coordinates and rejects 
       ]),
     );
     const tags = await readPhotoMetadataTags('./original');
+    assert.equal(tags.ImageWidth, 8192);
+    assert.equal(tags.ImageHeight, 6144);
+    assert.equal(tags.Orientation, 6);
     assert.equal(tags.latitude, 30);
     assert.equal(tags.longitude, 120);
     assert.equal(tags.GPSAltitude, -10);
