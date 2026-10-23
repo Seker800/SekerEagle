@@ -40,6 +40,9 @@ vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
 vi.mock('../media/loading/thumbnailLoadService', () => ({
   ThumbnailLoadError: class ThumbnailLoadError extends Error {},
   ThumbnailLoadService: class ThumbnailLoadService {
+    acquireCached() {
+      return null;
+    }
     async load(_key: string, url: string) {
       return { url, release: () => undefined };
     }

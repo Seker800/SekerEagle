@@ -264,14 +264,50 @@ describe('EagleAssetThumbnail', () => {
 });
 
 it('shows a previously loaded thumbnail immediately even while cold images occupy the scheduler', async () => {
- const fetchMock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(new Blob(['image']),{headers:{'content-type':'image/webp'}}));
- vi.stubGlobal('URL',{createObjectURL:()=> 'blob:warm',revokeObjectURL:vi.fn()});
- const service=new ThumbnailLoadService();const source=getEagleAssetThumbnailUrls(imageAsset,240)[0]!;
- const warm=await service.load(`${imageAsset.id}:${imageAsset.mediaRevision}:${source}`,source,new AbortController().signal);warm.release();
- const scheduler=new MediaLoadScheduler({maxConcurrent:1});let finish!:()=>void;
- scheduler.enqueue({id:'cold-image',priority:'visible',order:1,run:()=>new Promise<void>(resolve=>{finish=resolve;})});
- await act(async()=>undefined);
- const view=render(<EagleAssetThumbnail asset={imageAsset} scheduler={scheduler} loadService={service} order={0} displayWidth={240}/>);
- try {expect(view.container.querySelector('img')).toHaveAttribute('src','blob:warm');expect(view.queryByLabelText('正在加载缩略图')).not.toBeInTheDocument();expect(fetchMock).toHaveBeenCalledTimes(1);}
- finally {view.unmount();finish();service.dispose();vi.restoreAllMocks();vi.unstubAllGlobals();}
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(
+      new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+    );
+  vi.stubGlobal('URL', { createObjectURL: () => 'blob:warm', revokeObjectURL: vi.fn() });
+  const service = new ThumbnailLoadService();
+  const source = getEagleAssetThumbnailUrls(imageAsset, 240)[0]!;
+  const warm = await service.load(
+    `${imageAsset.id}:${imageAsset.mediaRevision}:${source}`,
+    source,
+    new AbortController().signal,
+  );
+  warm.release();
+  const scheduler = new MediaLoadScheduler({ maxConcurrent: 1 });
+  let finish!: () => void;
+  scheduler.enqueue({
+    id: 'cold-image',
+    priority: 'visible',
+    order: 1,
+    run: () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  await act(async () => undefined);
+  const view = render(
+    <EagleAssetThumbnail
+      asset={imageAsset}
+      scheduler={scheduler}
+      loadService={service}
+      order={0}
+      displayWidth={240}
+    />,
+  );
+  try {
+    expect(view.container.querySelector('img')).toHaveAttribute('src', 'blob:warm');
+    expect(view.queryByLabelText('正在加载缩略图')).not.toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  } finally {
+    view.unmount();
+    finish();
+    service.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
 });

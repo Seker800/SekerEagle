@@ -127,7 +127,14 @@ export function EagleAssetThumbnail({
       setActiveSource(cached.url);
       break;
     }
-  }, [asset.id, asset.mediaRevision, clearLoadTimeout, loadService, releaseLoadedThumbnail, sourceKey]);
+  }, [
+    asset.id,
+    asset.mediaRevision,
+    clearLoadTimeout,
+    loadService,
+    releaseLoadedThumbnail,
+    sourceKey,
+  ]);
   const handleFailure = useCallback(
     (failedSource: string, skipRemainingAttempts = false) => {
       clearLoadTimeout();
