@@ -13,5 +13,5 @@ test('cache dimensions never masquerade as original resolution', () => {
 test('deferred original-source details never block a usable imported cover', async () => {
  const { taskBlocksAssetReady, terminalAssetFailure } = await import('./processing-policy');
  assert.equal(taskBlocksAssetReady('GENERATE_RENDITIONS','photo-source-details-v1'),false);
- assert.deepEqual(terminalAssetFailure('GENERATE_RENDITIONS','photo-source-details-v1'),{mediaErrorCode:'PHOTO_SOURCE_DETAILS_FAILED'});
+ assert.deepEqual(terminalAssetFailure('GENERATE_RENDITIONS','photo-source-details-v1','failure'),{mediaErrorCode:'PHOTO_SOURCE_DETAILS_FAILED'});
 });
