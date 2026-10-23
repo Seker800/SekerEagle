@@ -61,3 +61,15 @@ for (const [name, mutate] of [
     mutate(copy);
     assert.throws(() => assertNativeBoundary(copy));
   });
+
+test('manual uploads use a service-owned queue and a shared nonmodal transfer screen', () => {
+  const model = files.get('app/src/main/kotlin/com/sekereagle/android/NativeGalleryViewModel.kt');
+  const screen = files.get('app/src/main/kotlin/com/sekereagle/android/NativeGalleryScreen.kt');
+  assert.ok(model.includes('NativeTransferManager.get('), 'The gallery must observe a service-owned transfer queue');
+  assert.ok(!/\bNativeUploads\s*\(/.test(model), 'The gallery must not own the upload worker');
+  assert.ok(!screen.includes('NativeUploadDialog('), 'Upload progress must not block gallery browsing');
+  assert.ok(manualService(files.get('app/src/main/AndroidManifest.xml')));
+});
+function manualService(manifest) {
+  return /<service\b[^>]*android:name="\.NativeUploadService"[^>]*android:exported="false"[^>]*android:foregroundServiceType="dataSync"/.test(manifest);
+}
