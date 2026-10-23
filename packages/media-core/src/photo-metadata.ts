@@ -13,6 +13,12 @@ function singleRecord(text: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 const fields = [
+  'ImageWidth',
+  'ImageHeight',
+  'ExifImageWidth',
+  'ExifImageHeight',
+  'Orientation',
+  'Rotation',
   'Make',
   'Model',
   'LensModel',
