@@ -568,9 +568,15 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       });
     }
     await publishImage(prisma, {
-      asset, job, renditions, sha256,
-      dimensions: catalogImageDimensions(processed.metadata, 'originalDimensions' in processed ? processed.originalDimensions : undefined),
-      photoAnalysis: 'photoAnalysis' in processed ? processed.photoAnalysis ?? null : null,
+      asset,
+      job,
+      renditions,
+      sha256,
+      dimensions: catalogImageDimensions(
+        processed.metadata,
+        'originalDimensions' in processed ? processed.originalDimensions : undefined,
+      ),
+      photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
       livePhoto: livePhoto ?? null,
       scheduleFaces: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
     });
