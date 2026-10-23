@@ -23,45 +23,76 @@ class NativeUploadTest {
         val accepted = java.util.concurrent.CountDownLatch(1)
         val release = java.util.concurrent.CountDownLatch(1)
         val errors = AtomicReference<Throwable>()
-        val worker = Thread {
-            try {
-                repeat(2) { index -> server.accept().use { client ->
-                    val reader = client.getInputStream().bufferedReader()
-                    reader.readLine()
-                    var length = 0
-                    while (true) {
-                        val line = reader.readLine()
-                        if (line.isEmpty()) break
-                        if (line.startsWith("Content-Length:", true)) length = line.substringAfter(':').trim().toInt()
+        val worker =
+            Thread {
+                    try {
+                        repeat(3) { index ->
+                            server.accept().use { client ->
+                                val reader = client.getInputStream().bufferedReader()
+                                reader.readLine()
+                                var length = 0
+                                while (true) {
+                                    val line = reader.readLine()
+                                    if (line.isEmpty()) break
+                                    if (line.startsWith("Content-Length:", true))
+                                        length = line.substringAfter(':').trim().toInt()
+                                }
+                                repeat(length) { reader.read() }
+                                if (index == 2) {
+                                    accepted.countDown()
+                                    release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                                } else {
+                                    val body = if (index == 0) """{"assetId":"private-existing","duplicate":true}""" else """{"status":"COMPLETED","eagleAssetId":"private-existing"}"""
+                                    client
+                                        .getOutputStream()
+                                        .write(
+                                            "HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body"
+                                                .toByteArray()
+                                        )
+                                }
+                            }
+                        }
+                    } catch (reason: Throwable) {
+                        if (!server.isClosed) errors.set(reason)
                     }
-                    repeat(length) { reader.read() }
-                    if (index == 1) { accepted.countDown(); release.await(10, java.util.concurrent.TimeUnit.SECONDS) }
-                    else {
-                        val body = """{"assetId":"private-existing","duplicate":true}"""
-                        client.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body".toByteArray())
-                    }
-                } }
-            } catch (reason: Throwable) { if (!server.isClosed) errors.set(reason) }
-        }.apply { start() }
+                }
+                .apply { start() }
         try {
             val session = NativeSession.open(context, "http://127.0.0.1:${server.localPort}")
             val cancel = NativeDownloadCancellation()
             val api = NativeUploadApi(session, session.authorizationEpoch(), {}, {}, cancel)
             api.request("POST", "/api/photos/uploads/test/complete", JSONObject())
             assertTrue(api.duplicate)
+            val recovered = NativeUploadApi(session, session.authorizationEpoch(), {}, {})
+            recovered.request("GET", "/api/photos/uploads/test", null)
+            assertTrue("Already finalized uploads must be counted as existing on retry", recovered.duplicate)
             val finished = java.util.concurrent.CountDownLatch(1)
-            val interrupted = Thread {
-                try { api.request("POST", "/api/photos/uploads/check-content", JSONObject()); errors.set(AssertionError("Cancelled request accepted")) }
-                catch (_: java.util.concurrent.CancellationException) {}
-                catch (reason: Throwable) { errors.set(reason) }
-                finally { finished.countDown() }
-            }.apply { start() }
+            val interrupted =
+                Thread {
+                        try {
+                            api.request("POST", "/api/photos/uploads/check-content", JSONObject())
+                            errors.set(AssertionError("Cancelled request accepted"))
+                        } catch (_: java.util.concurrent.CancellationException) {} catch (
+                            reason: Throwable) {
+                            errors.set(reason)
+                        } finally {
+                            finished.countDown()
+                        }
+                    }
+                    .apply { start() }
             assertTrue(accepted.await(5, java.util.concurrent.TimeUnit.SECONDS))
             cancel.cancel()
-            assertTrue("Cancellation must not wait for HTTP timeout", finished.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            assertTrue(
+                "Cancellation must not wait for HTTP timeout",
+                finished.await(3, java.util.concurrent.TimeUnit.SECONDS),
+            )
             errors.get()?.let { throw AssertionError(it) }
             interrupted.join(1000)
-        } finally { release.countDown(); server.close(); worker.join(5000) }
+        } finally {
+            release.countDown()
+            server.close()
+            worker.join(5000)
+        }
     }
 
     @Test
