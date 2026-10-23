@@ -24,6 +24,13 @@ internal class NativeUploadApi(
         try {
             val result = session.jsonAtEpoch(epoch, method, path, body, cancellation)
             if (path.endsWith("/complete")) duplicate = result.optBoolean("duplicate")
+            // A completed checkpoint is an existing server copy, even if its final reply was lost.
+            if (
+                method == "GET" &&
+                    result.optString("status") == "COMPLETED" &&
+                    result.optString("eagleAssetId").let { it.isNotEmpty() && it != "null" }
+            )
+                duplicate = true
             return result
         } catch (error: NativeSession.Failure) {
             throw ApiClient.Failure(error.status)

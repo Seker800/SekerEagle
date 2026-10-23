@@ -42,7 +42,11 @@ class NativeUploadTest {
                                     accepted.countDown()
                                     release.await(10, java.util.concurrent.TimeUnit.SECONDS)
                                 } else {
-                                    val body = if (index == 0) """{"assetId":"private-existing","duplicate":true}""" else """{"status":"COMPLETED","eagleAssetId":"private-existing"}"""
+                                    val body =
+                                        if (index == 0)
+                                            """{"assetId":"private-existing","duplicate":true}"""
+                                        else
+                                            """{"status":"COMPLETED","eagleAssetId":"private-existing"}"""
                                     client
                                         .getOutputStream()
                                         .write(
@@ -65,7 +69,10 @@ class NativeUploadTest {
             assertTrue(api.duplicate)
             val recovered = NativeUploadApi(session, session.authorizationEpoch(), {}, {})
             recovered.request("GET", "/api/photos/uploads/test", null)
-            assertTrue("Already finalized uploads must be counted as existing on retry", recovered.duplicate)
+            assertTrue(
+                "Already finalized uploads must be counted as existing on retry",
+                recovered.duplicate,
+            )
             val finished = java.util.concurrent.CountDownLatch(1)
             val interrupted =
                 Thread {
