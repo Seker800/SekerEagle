@@ -31,6 +31,12 @@ class NativeActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Rotation retains the same ViewModel and is not a user leaving the task.
+        if (::model.isInitialized && !isChangingConfigurations) model.onBackground()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::model.isInitialized) model.onForeground()

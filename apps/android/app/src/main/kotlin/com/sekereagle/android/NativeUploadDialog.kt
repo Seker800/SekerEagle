@@ -30,6 +30,7 @@ internal fun NativeUploadDialog(state: NativeUploadState, uploads: NativeUploads
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text("上传到：${state.mode.title}", Modifier.testTag("upload-target"))
+                Text("请保持应用在前台；切到后台会停止传输，可在本次打开期间重试未完成项。关闭或重启应用后需重新选择文件。", color = NativeMuted)
                 if (state.phase == NativeUploadPhase.READY) {
                     Text(
                         "已选 ${state.entries.size} 个文件，${state.entries.count { it.error == null }} 个可上传"
@@ -41,7 +42,7 @@ internal fun NativeUploadDialog(state: NativeUploadState, uploads: NativeUploads
                             Spacer(Modifier.height(8.dp))
                         }
                     }
-                    Text("重复内容会跳过，手机原文件会保留。", color = NativeMuted)
+                    Text("重复内容会跳过，沿用服务器现有分类；私密内容不会出现在本机图库。手机原文件会保留。", color = NativeMuted)
                 } else {
                     if (state.phase != NativeUploadPhase.PREPARING)
                         Text(

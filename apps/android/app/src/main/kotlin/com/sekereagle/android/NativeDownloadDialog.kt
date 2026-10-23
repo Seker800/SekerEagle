@@ -34,6 +34,7 @@ internal fun NativeDownloadDialog(state: NativeDownloadState, downloads: NativeD
                     } else LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 Text("保存到：Download/SekerEagle", color = NativeMuted)
+                Text("请保持应用在前台；切到后台会停止传输，可在本次打开期间重试未完成项。关闭或重启应用后需重新选择。", color = NativeMuted)
                 if (state.failures.isNotEmpty())
                     Column(Modifier.heightIn(max = 180.dp).verticalScroll(rememberScrollState())) {
                         Text("${state.failures.size} 项失败", color = MaterialTheme.colorScheme.error)

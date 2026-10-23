@@ -103,7 +103,7 @@ fun NativeLogin(state: GalleryState, model: NativeGalleryViewModel) {
                     Modifier.padding(top = 16.dp).testTag("native-error"),
                     color = MaterialTheme.colorScheme.error,
                 )
-                TextButton(model::restore) { Text("重试连接") }
+                if (state.restoreFailed) TextButton(model::restore) { Text("重试连接") }
             }
         }
     }
@@ -121,6 +121,7 @@ fun NativeMore(
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
             Text(identity.email, fontSize = 21.sp)
+            Text("当前原生版仅显示公开图库；私密内容请在网页解锁查看。", color = NativeMuted, modifier = Modifier.padding(top = 12.dp))
             Text(
                 identity.origin,
                 Modifier.padding(top = 8.dp, bottom = 28.dp),
