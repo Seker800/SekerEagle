@@ -61,3 +61,13 @@ test('AI tag partition remains available only when explicitly allowed', async ()
   );
   assert.ok(kinds.includes('GENERATE_AI_TAGS'));
 });
+
+test('wake-up queries use the same selection and group every selected job version', async () => {
+  const { buildMediaWakeQuery } = await import('./job-wakeup-query');
+  const query = buildMediaWakeQuery(['GENERATE_RENDITIONS','GENERATE_EMBEDDING']);
+  assert.match(query.sql, /WHERE candidate.kind IN/);
+  assert.deepEqual(query.values, ['GENERATE_RENDITIONS','GENERATE_EMBEDDING']);
+  assert.match(query.sql, /GROUP BY[^;]*candidate\."processorVersion"/);
+  assert.doesNotMatch(buildMediaWakeQuery().sql, /WHERE candidate.kind IN/);
+  assert.match(buildMediaWakeQuery([]).sql, /WHERE false/);
+});
