@@ -1,3 +1,4 @@
+import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
 import {
   VIDEO_PLAYBACK_PROCESSOR_VERSION,
@@ -102,6 +103,7 @@ const runBackgroundProcessing = backgroundProcessingEnabled(
   process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
 );
 const allowedJobKinds = parseProcessingJobKinds(process.env.EAGLE_PROCESSING_JOB_KINDS);
+const runTagBuilds = runBackgroundProcessing && allowedJobKinds === undefined;
 const runVideoTranscoding = videoTranscodingEnabled(process.env.EAGLE_VIDEO_TRANSCODING_ENABLED);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
@@ -185,7 +187,11 @@ async function canClaimBackgroundForOwner(
 }
 
 async function reconcileEnabledAiTagJobs(): Promise<void> {
-  if (!runBackgroundProcessing) return;
+  if (
+    !runBackgroundProcessing ||
+    (allowedJobKinds && !allowedJobKinds.includes('GENERATE_AI_TAGS'))
+  )
+    return;
   const settings = await prisma.eagleProcessingSetting.findMany({
     where: { OR: [{ aiTagManualEnabled: true }, { aiTagScheduleEnabled: true }] },
     select: {
@@ -1523,7 +1529,7 @@ async function poll(): Promise<void> {
         deletingObjects = false;
       });
   }
-  if (!stopping && runBackgroundProcessing && activeTagBuildCount === 0) {
+  if (!stopping && runTagBuilds && activeTagBuildCount === 0) {
     const build = await claimNextTagBuild(prisma);
     if (build) {
       activeTagBuildCount++;
@@ -1550,29 +1556,14 @@ interface PendingMediaWakeRow {
 
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
   const [mediaCandidates, nextTagBuild, settings] = await Promise.all([
-    prisma.$queryRaw<PendingMediaWakeRow[]>(Prisma.sql`
-      SELECT candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind, candidate."processorVersion",
-             MIN(candidate."availableAt") AS "availableAt"
-      FROM (
-        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind, job."processorVersion",
-               job."availableAt" AS "availableAt"
-        FROM "EagleMediaJob" AS job
-        LEFT JOIN "EagleMediaJob" AS dependency ON dependency.id = job."dependsOnJobId"
-        WHERE job.status = 'PENDING'
-          AND (job."dependsOnJobId" IS NULL OR dependency.status = 'COMPLETED')
-        UNION ALL
-        SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind, job."processorVersion",
-               job."lockedAt" + INTERVAL '10 minutes' AS "availableAt"
-        FROM "EagleMediaJob" AS job
-        WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
-      ) AS candidate
-      GROUP BY candidate."ownerId", candidate."libraryMode", candidate.lane, candidate.kind
-    `),
-    prisma.eagleTagSemanticBuild.findFirst({
-      where: { status: 'PENDING' },
-      orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
-      select: { availableAt: true },
-    }),
+    prisma.$queryRaw<PendingMediaWakeRow[]>(buildMediaWakeQuery(allowedJobKinds)),
+    runTagBuilds
+      ? prisma.eagleTagSemanticBuild.findFirst({
+          where: { status: 'PENDING' },
+          orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+          select: { availableAt: true },
+        })
+      : Promise.resolve(null),
     prisma.eagleProcessingSetting.findMany(),
   ]);
   const settingsByOwner = new Map(
@@ -1581,7 +1572,7 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
     ),
   );
-  let earliest = runBackgroundProcessing ? (nextTagBuild?.availableAt ?? null) : null;
+  let earliest = runTagBuilds ? (nextTagBuild?.availableAt ?? null) : null;
   for (const candidate of mediaCandidates) {
     if (candidate.processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION && !runVideoTranscoding)
       continue;
