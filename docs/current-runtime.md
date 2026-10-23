@@ -1,6 +1,10 @@
 # 现用运行状态与交接
 
-核验时间：2026-10-23 19:25（北京时间）。这是当前部署快照，不是实时监控；修改运行位置、镜像、模型路由、处理开关或长期任务后，应更新本页并重新核验。安全边界以 [AGENTS](../AGENTS.md)、[架构北极星](architecture.md#north-star)为准。
+核验时间：2026-10-23 19:47（北京时间）。这是当前部署快照，不是实时监控；修改运行位置、镜像、模型路由、处理开关或长期任务后，应更新本页并重新核验。安全边界以 [AGENTS](../AGENTS.md)、[架构北极星](architecture.md#north-star)为准。
+
+## 当前临时关停状态
+
+2026-10-23 19:47，用户为群晖关机明确要求停止相关任务。**SekerEagle 的六个常驻服务及独立封面复制容器已全部手动停止**，各容器退出码均为 0、无 OOM；数据库日志确认完成关停。下文描述部署结构与此前启用的配置，不代表这些服务此刻正在运行。Mac 模型、群晖其他应用和 DSM 系统服务未改动；用户通过 DSM 正常关机，不能将应用已停止当成直接断电的依据。
 
 ## 接手先看这几件事
 
@@ -152,3 +156,19 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 现用完整 Compose 参数仍从 `maintenance/processing-upgrade-20261023/release-compose.json` 的 `command` 读取，已追加本次 `bidirectional-release-20261023/runtime-override.yml`；不可只沿用旧 timeline override，否则会退回旧网页。两个新镜像均在群晖以已有对应镜像为基础替换编译产物构建，没有重新创建本机 Docker 图库。
 
 验证：网页 650 项测试通过；API 322 项通过、1 项条件测试跳过；lint、类型检查、构建、共用架构及契约检查通过。锚点 hook 为 100% 行覆盖、86.66% 分支覆盖。API／web 健康与完整 HTTPS 首页、健康接口通过；真实已登录页面点击 2017 年 6 月刻度，向上补页显示 7 月、8 月，再向下回到 6 月，最后恢复最新照片。老照片未完成的封面仍显示处理中，不因分页修复宣称全库封面已完成。独立封面任务检查点持续推进，重启次数未增加。
+
+## 2026-10-23 关机准备与恢复
+
+先停止 gateway、API 和 web 以阻止新写入，再给独立封面进程和 worker 发送正常停止信号，等待当前批次／任务完成；两者退出码为 0 后，依次停止 MinIO、PostgreSQL 并执行 sync。没有删除容器、卷、文件或任务，没有修改重启策略。PostgreSQL 日志包含正常关停完成记录。
+
+最终封面检查点：`offset=13300`、`total=53403`，其中 `COPIED=12253`、`ALREADY_READY=1041`、`SKIPPED=6`；`complete=false`，不是全库完成。已核对清单 SHA256 与检查点 manifestHash 一致、计数之和等于 offset。该数量仅代表此次关停断点，后续恢复后的实时进度仍读原检查点。NAS 私有 `maintenance/shutdown-20261023/` 保存停止前服务身份／镜像／重启策略、停止前后检查点及 `shutdown-result.json`。
+
+再次开机后，**先检查实际状态，不要假定会自动恢复**：常驻服务原策略为 unless-stopped，封面任务为 on-failure:3，显式手动停止后的行为不能当作普通崩溃重试。只启动原容器即可沿用当前镜像、配置和卷，不重建安装目录，不执行恢复、migration、seed 或全量导入。
+
+恢复顺序：
+
+1. 启动既有 `sekereagle-nas-staging-postgres-1` 和 `sekereagle-nas-staging-minio-1`，等待各自健康检查通过，核对原卷和部署身份。
+2. 启动既有 API、web、gateway，验证 HTTPS 访问及登录，保留全部现用覆盖配置；若发生容器丢失或需要重建，改用本页记录的完整 Compose 参数链，而不是基础模板。
+3. 核对 Mac 2B 服务路由和鉴权，再启动普通 worker；保留现有任务白名单及视频／8B／人脸暂停配置。
+4. 核对原 `cover-manifest.json` 与 `cover-state/progress.json` 的哈希和断点，启动 `sekereagle-cover-copy-20261023`；从原检查点继续，不运行旧 launch 脚本重新生成清单，不另起第二个写同一状态目录的进程。
+5. 观察检查点推进和新增错误，更新本页临时关停状态。未获用户恢复授权时，保持本次停止状态。
