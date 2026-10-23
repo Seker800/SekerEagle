@@ -2,6 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import type * as WorkspaceModule from '../../lib/library-workspace';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SekerEaglePage } from './SekerEaglePage';
@@ -36,6 +37,34 @@ vi.mock('../media/photo-editor/PhotoEditor', () => ({
 }));
 
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
+const testWorkspaceMode = vi.hoisted(() => ({ value: 'MATERIAL' as 'MATERIAL' | 'PHOTO' }));
+vi.mock('../../lib/library-workspace', async (original) => {
+  const actual = await original<typeof WorkspaceModule>();
+  return {
+    ...actual,
+    useLibraryWorkspace: () => ({
+      ...actual.useLibraryWorkspace(),
+      libraryMode: testWorkspaceMode.value,
+    }),
+  };
+});
+vi.mock('../photos/PhotoMap', () => ({
+  PhotoMap: ({
+    onOpen,
+  }: {
+    onOpen: (item: typeof asset, context?: Array<typeof asset>) => void;
+  }) => {
+    const first = { ...asset, id: 'map-photo-a', displayName: 'Map Photo A' };
+    const second = { ...asset, id: 'map-photo-b', displayName: 'Map Photo B' };
+    const video = { ...asset, id: 'map-video', displayName: 'Map Video', mimeType: 'video/mp4' };
+    return (
+      <>
+        <button onClick={() => onOpen(first, [first, second])}>测试地图组照片</button>
+        <button onClick={() => onOpen(video, [video])}>测试地图组视频</button>
+      </>
+    );
+  },
+}));
 
 vi.mock('../media/loading/thumbnailLoadService', () => ({
   ThumbnailLoadError: class ThumbnailLoadError extends Error {},
@@ -238,6 +267,7 @@ describe('SekerEaglePage', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    testWorkspaceMode.value = 'MATERIAL';
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
     window.localStorage.clear();
     intersectionCallback = null;
@@ -2690,5 +2720,22 @@ describe('SekerEaglePage', () => {
     fireEvent.keyDown(menu, { key: 'Escape' });
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+  it('opens photos and videos outside the loaded timeline through the shared viewer and uses location-page navigation', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '地图' }));
+    fireEvent.click(await screen.findByRole('button', { name: '测试地图组照片' }));
+    expect(await screen.findByRole('dialog', { name: 'Map Photo A' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '下一张' }));
+    expect(await screen.findByRole('dialog', { name: 'Map Photo B' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    fireEvent.click(screen.getByRole('button', { name: '测试地图组视频' }));
+    expect(await screen.findByRole('dialog', { name: 'Map Video' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '载入更多照片' })).not.toBeInTheDocument();
+    view.rerender(view.renderForOwner('another-owner'));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Map Video' })).not.toBeInTheDocument(),
+    );
   });
 });

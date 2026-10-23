@@ -216,3 +216,20 @@ test('rejects dynamic Prisma import from browser code', () => {
     'server-persistence-boundary',
   );
 });
+
+test('map aggregation is a named photography extension, never an alternative generic asset service', () => {
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        '    PhotoMapService,',
+        '    PhotoMapService,\n    { provide: EagleService, useClass: PhotoMapService },',
+      ),
+    'shared-providers',
+  );
+  rejectsMutation(
+    photoModule,
+    (s) => s.replace('    PhotoMapService,', '    ArbitraryMapProvider,'),
+    'shared-providers',
+  );
+});

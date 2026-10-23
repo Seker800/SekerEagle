@@ -28,6 +28,8 @@ import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
+import { PhotoMapService } from './photo-map.service';
+import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
 import { PhotoManagementService } from './photo-management.service';
 class PeopleQueryDto {
   @ApiPropertyOptional({ maxLength: 1024 })
@@ -69,7 +71,22 @@ class UpdateGroupDto {
 @Controller('photos/photography')
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
 export class PhotoManagementController {
-  constructor(private readonly photos: PhotoManagementService) {}
+  constructor(
+    private readonly photos: PhotoManagementService,
+    private readonly map: PhotoMapService,
+  ) {}
+  @Get('map')
+  mapClusters(@CurrentPrincipal() p: AuthPrincipal, @Query() query: MapViewportDto) {
+    return this.map.clusters(p.sub, p.canViewPrivate, query);
+  }
+  @Get('map/:cell/photos')
+  mapPhotos(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('cell') cell: string,
+    @Query() query: MapPhotosDto,
+  ) {
+    return this.map.photos(p.sub, p.canViewPrivate, cell, query.after);
+  }
   @Get('timeline')
   timeline(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.timeline(p.sub, p.canViewPrivate);

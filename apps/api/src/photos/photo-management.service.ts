@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { encodeEagleAssetCursor } from '../eagle/eagle-cursor';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
+import { previewSelect, serializePreview } from './photo-preview';
 import { suggestPhotoGroups } from './photo-grouping';
 
 const MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
@@ -17,48 +18,6 @@ const visible = (ownerId: string, includePrivate: boolean): Prisma.EagleAssetWhe
   libraryMode: 'PHOTO',
   deletedAt: null,
   ...(!includePrivate ? { isPrivate: false } : {}),
-});
-const previewSelect = {
-  id: true,
-  displayName: true,
-  libraryMode: true,
-  originalName: true,
-  mimeType: true,
-  format: true,
-  mediaRevision: true,
-  libraryAddedAt: true,
-  createdAt: true,
-  updatedAt: true,
-  deletedAt: true,
-  lifecycleStatus: true,
-  mediaErrorCode: true,
-  rowVersion: true,
-  rating: true,
-  width: true,
-  height: true,
-  durationMs: true,
-  byteSize: true,
-  renditions: {
-    where: { status: 'READY' as const },
-    select: {
-      id: true,
-      kind: true,
-      revision: true,
-      mimeType: true,
-      byteSize: true,
-      width: true,
-      height: true,
-    },
-  },
-  photoMetadata: true,
-} satisfies Prisma.EagleAssetSelect;
-const serializePreview = (
-  asset: Prisma.EagleAssetGetPayload<{ select: typeof previewSelect }>,
-) => ({
-  ...asset,
-  byteSize: Number(asset.byteSize),
-  renditions: asset.renditions.map((row) => ({ ...row, byteSize: Number(row.byteSize) })),
-  manualTags: [],
 });
 
 @Injectable()

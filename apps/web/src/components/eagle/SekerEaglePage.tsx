@@ -321,6 +321,10 @@ export function SekerEaglePage({
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
+  const [previewContext, setPreviewContext] = useState<{
+    scope: string;
+    items: EagleAssetListItem[];
+  } | null>(null);
   const [isBatchSelection, setIsBatchSelection] = useState(false);
   const compact = useCompactLayout();
   const [mobileMore, setMobileMore] = useState(false);
@@ -395,8 +399,7 @@ export function SekerEaglePage({
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const photoFieldOptions = usePhotoFilterOptions(privateVisible);
-  const showsAssetControls =
-    libraryMode !== 'PHOTO' || (photoView !== 'people' && photoView !== 'agent');
+  const showsAssetControls = libraryMode !== 'PHOTO' || photoView === 'timeline';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
   const isPhotoTimeline =
@@ -420,6 +423,7 @@ export function SekerEaglePage({
       setPhotoView('timeline');
       setTimelineCursor('');
       setPreviewAssetId(null);
+      setPreviewContext(null);
       imagePreview.closePreview();
       setAssetContextMenu(null);
     },
@@ -514,6 +518,7 @@ export function SekerEaglePage({
     thumbnailLoadService.dispose();
     assetStore.clear();
     setPreviewAssetId(null);
+    setPreviewContext(null);
     imagePreview.closePreview();
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
@@ -558,6 +563,7 @@ export function SekerEaglePage({
     onAssetPrivacyChanged: resetAssetPrivacyState,
     onSelectionMutationCompleted: () => {
       setPreviewAssetId(null);
+      setPreviewContext(null);
       imagePreview.closePreview();
       setSelectedAssetIds([]);
       setSelectedAssetId(null);
@@ -785,9 +791,11 @@ export function SekerEaglePage({
   const manualTagGroups = manualTagGroupsQuery.data ?? [];
   const aiTags = aiTagsQuery.data ?? [];
   const smartFolders = smartFoldersQuery.data ?? [];
-  const previewAsset = assets.find((asset) => asset.id === previewAssetId) ?? null;
+  const previewScopeValid = !previewContext || previewContext.scope === editingScope;
+  const previewAssets = previewContext ? (previewScopeValid ? previewContext.items : []) : assets;
+  const previewAsset = previewAssets.find((asset) => asset.id === previewAssetId) ?? null;
   const previewImageAsset = imagePreview.previewImage?.assetId
-    ? (assetsById.get(imagePreview.previewImage.assetId) ?? null)
+    ? (previewAssets.find((asset) => asset.id === imagePreview.previewImage?.assetId) ?? null)
     : null;
   const previewCanHavePyramid = Boolean(
     previewImageAsset && needsEagleImagePyramid(previewImageAsset.width, previewImageAsset.height),
@@ -1101,7 +1109,9 @@ export function SekerEaglePage({
     enabled: hasAssetLocation && !assetsQuery.isFetching,
     onSelect: (id) => selectAsset(id, 'single'),
   });
-  const openAssetPreview = (asset: EagleAssetListItem) => {
+  const openAssetPreview = (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => {
+    const items = context ?? (assetsById.has(asset.id) ? [] : [asset]);
+    setPreviewContext(items.length ? { scope: editingScope, items } : null);
     if (photoStacks.some((stack) => stack.assetIds.includes(asset.id))) {
       setPreviewAssetId(asset.id);
       return;
@@ -1121,8 +1131,13 @@ export function SekerEaglePage({
       });
     }
   };
+  useEffect(() => {
+    setPreviewContext(null);
+    setPreviewAssetId(null);
+    imagePreview.closePreview();
+  }, [editingScope, imagePreview.closePreview]);
   const previewNavigation = useEaglePreviewNavigation(
-    assets,
+    previewAssets,
     imagePreview.previewImage,
     imagePreview.setPreviewImage,
   );
@@ -1878,18 +1893,12 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <>
-                  <PhotoMap assets={assets} onOpen={openAssetPreview} />
-                  {assetsQuery.hasNextPage && (
-                    <button
-                      type="button"
-                      disabled={assetsQuery.isFetchingNextPage}
-                      onClick={() => void assetsQuery.fetchNextPage()}
-                    >
-                      {t('载入更多照片')}
-                    </button>
-                  )}
-                </>
+                <PhotoMap
+                  key={`${ownerId}:${privateVisible}`}
+                  ownerId={ownerId}
+                  includePrivate={privateVisible}
+                  onOpen={openAssetPreview}
+                />
               )}
               <div
                 className={styles.assetBrowser}
@@ -2695,7 +2704,7 @@ export function SekerEaglePage({
           />
         )
       )}
-      {imagePreview.previewImage ? (
+      {imagePreview.previewImage && previewScopeValid ? (
         <EagleImageViewer
           asset={previewImageAsset ?? undefined}
           readOnly={libraryView === 'TRASH'}

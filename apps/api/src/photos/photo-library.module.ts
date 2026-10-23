@@ -1,3 +1,4 @@
+import { PhotoMapService } from './photo-map.service';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
 import { PhotoManagementController } from './photo-management.controller';
@@ -94,6 +95,7 @@ export class PhotoPrivacyVisibilityController {
   ],
   providers: [
     PhotoManagementService,
+    PhotoMapService,
     PhotoAgentService,
     PhotoRevisionObserver,
     { provide: LIBRARY_REVISION_OBSERVER, useExisting: PhotoRevisionObserver },

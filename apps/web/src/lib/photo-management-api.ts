@@ -96,3 +96,33 @@ export const updatePhotoPersonPrivacy = (
       body: JSON.stringify({ marksAssetsPrivate, rowVersion: person.rowVersion }),
     },
   );
+
+export interface PhotoMapViewport {
+  west: number;
+  east: number;
+  south: number;
+  north: number;
+  zoom: number;
+}
+export interface PhotoMapCluster {
+  id: string;
+  latitude: number;
+  longitude: number;
+  count: number;
+}
+export interface PhotoMapData {
+  total: number;
+  bounds: Omit<PhotoMapViewport, 'zoom'> | null;
+  level: number;
+  clusters: PhotoMapCluster[];
+}
+export const getPhotoMap = (view: PhotoMapViewport, signal?: AbortSignal) =>
+  request<PhotoMapData>(
+    `${base}/map?${new URLSearchParams(Object.entries(view).map(([key, value]) => [key, String(value)]))}`,
+    { signal },
+  );
+export const getPhotoMapPhotos = (cell: string, after?: string, signal?: AbortSignal) =>
+  request<{ items: EagleAssetListItem[]; nextCursor: string | null }>(
+    `${base}/map/${encodeURIComponent(cell)}/photos${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+    { signal },
+  );

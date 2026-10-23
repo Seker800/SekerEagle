@@ -1381,4 +1381,17 @@ export const enUS = {
   相册: 'Albums',
   '视频播放副本生成失败，原片已保存，可在处理任务中重试':
     'Video playback generation failed. The original is saved; retry in processing tasks.',
+  '全库 {{value1}} 张带位置照片': '{{value1}} geotagged photos in your library',
+  此位置的照片: 'Photos at this location',
+  '约 {{value1}} 张 · 按拍摄时间排序': 'About {{value1}} photos · Capture date order',
+  '正在加载照片…': 'Loading photos…',
+  '位置照片加载失败。': 'Could not load photos at this location.',
+  '此位置暂无可见照片。': 'No visible photos at this location.',
+  位置照片翻页: 'Location photo pages',
+  '第 {{value1}} 页': 'Page {{value1}}',
+  '查看此位置的 {{value1}} 张照片': 'View {{value1}} photos at this location',
+  '正在统计照片位置…': 'Loading photo locations…',
+  '照片位置加载失败。': 'Could not load photo locations.',
+  '圆圈大小表示照片数量；放大查看附近位置，点击浏览该组全部照片。':
+    'Circle size reflects the number of photos. Zoom in for nearby groups; select a circle to browse all its photos.',
 } as const;

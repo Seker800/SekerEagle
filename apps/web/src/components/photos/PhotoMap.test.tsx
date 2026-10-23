@@ -1,4 +1,5 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
 import { PhotoMap } from './PhotoMap';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
@@ -7,98 +8,75 @@ const mocks = vi.hoisted(() => {
     setView: vi.fn().mockReturnThis(),
     fitBounds: vi.fn(),
     remove: vi.fn(),
+    invalidateSize: vi.fn(),
     createPane: vi.fn(() => ({ style: {} })),
     on: vi.fn(),
     off: vi.fn(),
     getZoom: vi.fn(() => 5),
-    getBounds: vi.fn(() => ({ contains: () => true })),
+    getBounds: vi.fn(() => ({
+      contains: () => true,
+      getWest: () => 120,
+      getEast: () => 122,
+      getSouth: () => 30,
+      getNorth: () => 32,
+    })),
     latLngToContainerPoint: vi.fn(() => ({ x: 100, y: 100 })),
     attributionControl: { setPrefix: vi.fn(), addAttribution: vi.fn() },
   };
-  const popup = vi.fn();
-  const marker = {
-    addTo: vi.fn().mockReturnThis(),
-    bindPopup: popup,
-    bindTooltip: vi.fn().mockReturnThis(),
-  };
-  return {
-    map,
-    popup,
-    marker,
-    tiles: vi.fn(),
-    circleMarker: vi.fn<(...args: unknown[]) => typeof marker>(() => marker),
-  };
+  return { map, icons: vi.fn(), tiles: vi.fn(), getMap: vi.fn(), getPhotos: vi.fn() };
 });
+vi.mock('../../lib/photo-management-api', () => ({
+  getPhotoMap: mocks.getMap,
+  getPhotoMapPhotos: mocks.getPhotos,
+}));
+vi.mock('../eagle/EagleAssetThumbnail', () => ({
+  EagleAssetThumbnail: () => <span>shared thumbnail</span>,
+}));
 vi.mock('leaflet', () => ({
   map: () => mocks.map,
   tileLayer: mocks.tiles,
-  circleMarker: mocks.circleMarker,
-  latLngBounds: () => ({}),
   geoJSON: () => ({ addTo: vi.fn() }),
   layerGroup: () => ({ addTo: vi.fn().mockReturnThis(), clearLayers: vi.fn(), remove: vi.fn() }),
-  marker: () => mocks.marker,
-  divIcon: vi.fn(),
-  canvas: vi.fn(),
+  marker: () => ({ addTo: vi.fn().mockReturnThis() }),
+  divIcon: mocks.icons,
 }));
-beforeEach(() => vi.clearAllMocks());
-afterEach(() => vi.unstubAllGlobals());
-describe('local night map', () => {
-  it('loads only packaged same-origin data and keeps photo popup labels as text', async () => {
-    const fetch = vi.fn(async (..._args: unknown[]) => ({
-      ok: true,
-      json: async () => ({ type: 'FeatureCollection', features: [], cities: [] }),
-    }));
-    vi.stubGlobal('fetch', fetch);
-    const asset = {
-      id: 'photo',
-      displayName: '<img src=x onerror=alert(1)>',
-      photoMetadata: { latitude: 31.23, longitude: 121.47 },
-    } as EagleAssetListItem;
-    render(<PhotoMap assets={[asset]} onOpen={vi.fn()} />);
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect(
-      fetch.mock.calls.every(
-        ([url]) => new URL(String(url), window.location.href).origin === window.location.origin,
-      ),
-    ).toBe(true);
-    expect(mocks.tiles).not.toHaveBeenCalled();
-    const label = mocks.popup.mock.calls.at(-1)?.[0] as HTMLElement;
-    expect(label.textContent).toBe(asset.displayName);
-    expect(label.querySelector('img')).toBeNull();
-    expect(mocks.circleMarker.mock.calls.at(-1)?.[1]).toMatchObject({ color: '#d69b48' });
-    expect(screen.getByText('离线概览 · 不含街道级细节')).toBeInTheDocument();
+const first = { id: '5/20/12', latitude: 31, longitude: 121, count: 10000 };
+const asset = {
+  id: 'photo',
+  displayName: '<img src=x onerror=alert(1)>',
+  mediaRevision: 1,
+  renditions: [],
+} as unknown as EagleAssetListItem;
+function mount(onOpen = vi.fn()) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const renderMap = (privateVisible = false, callback = onOpen) => (
+    <QueryClientProvider client={client}>
+      <PhotoMap
+        key={String(privateVisible)}
+        ownerId="owner"
+        includePrivate={privateVisible}
+        onOpen={callback}
+      />
+    </QueryClientProvider>
+  );
+  const view = render(renderMap());
+  return { ...view, client, renderMap, onOpen };
+}
+function markerButtons() {
+  return mocks.icons.mock.calls
+    .map(([options]) => (options as { html: HTMLElement }).html)
+    .filter((html) => html instanceof HTMLButtonElement) as HTMLButtonElement[];
+}
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.map.getZoom.mockReturnValue(5);
+  mocks.getMap.mockResolvedValue({
+    total: 10001,
+    bounds: { west: 120, east: 122, south: 30, north: 32 },
+    level: 5,
+    clusters: [first, { ...first, id: '5/21/12', longitude: 122, count: 1 }],
   });
-});
-
-it('retries local resource failures and keeps the latest photo-open callback without recreating the map', async () => {
-  const fetch = vi
-    .fn<(...args: unknown[]) => Promise<{ ok: boolean; json: () => Promise<unknown> }>>()
-    .mockRejectedValue(new Error('offline'));
-  vi.stubGlobal('fetch', fetch);
-  const asset = {
-    id: 'photo',
-    displayName: '照片',
-    photoMetadata: { latitude: 0, longitude: 0 },
-  } as EagleAssetListItem;
-  const onOpen = vi.fn(),
-    latest = vi.fn();
-  const view = render(<PhotoMap assets={[asset]} onOpen={onOpen} />);
-  expect(await screen.findByRole('alert')).toHaveTextContent('本地地图加载失败。');
-  view.rerender(<PhotoMap assets={[asset]} onOpen={latest} />);
-  (mocks.popup.mock.calls.at(-1)?.[0] as HTMLButtonElement).click();
-  expect(latest).toHaveBeenCalledWith(asset);
-  expect(onOpen).not.toHaveBeenCalled();
-  expect(mocks.map.remove).not.toHaveBeenCalled();
-  fetch.mockResolvedValue({
-    ok: true,
-    json: async () => ({ type: 'FeatureCollection', features: [], cities: [] }),
-  });
-  fireEvent.click(screen.getByRole('button', { name: '重试' }));
-  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-  expect(mocks.map.remove).toHaveBeenCalledTimes(1);
-});
-
-it('labels city representatives as approximate and ignores supplemental positions from an older media revision', async () => {
+  mocks.getPhotos.mockResolvedValue({ items: [asset], nextCursor: null });
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => ({
@@ -106,27 +84,128 @@ it('labels city representatives as approximate and ignores supplemental position
       json: async () => ({ type: 'FeatureCollection', features: [], cities: [] }),
     })),
   );
-  const city = {
-    assetRevision: 1,
-    cityId: 'hangzhou',
-    name: '杭州',
-    country: '中国',
-    region: '浙江',
-    latitude: 30.25,
-    longitude: 120.15,
-    source: 'INFERRED',
-  };
-  const assets = [
-    { id: 'current', displayName: 'City photo', mediaRevision: 1, photoLocation: city },
-    { id: 'stale', displayName: 'Old photo', mediaRevision: 2, photoLocation: city },
-  ] as EagleAssetListItem[];
-  render(<PhotoMap assets={assets} onOpen={vi.fn()} />);
-  await waitFor(() => expect(mocks.circleMarker).toHaveBeenCalledTimes(1));
-  expect(mocks.circleMarker.mock.calls[0]?.[1]).toMatchObject({
-    dashArray: '4 4',
-    fillOpacity: 0.15,
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe('whole-library location map', () => {
+  it('shows all-library counts without depending on loaded asset pages, scales circles and uses no external tiles', async () => {
+    mount();
+    expect(await screen.findByText('全库 10001 张带位置照片')).toBeInTheDocument();
+    expect(screen.queryByText('载入更多照片')).not.toBeInTheDocument();
+    expect(markerButtons()).toHaveLength(2);
+    expect(parseFloat(markerButtons()[0]!.style.width)).toBeGreaterThan(
+      parseFloat(markerButtons()[1]!.style.width),
+    );
+    expect(parseFloat(markerButtons()[1]!.style.width)).toBeGreaterThanOrEqual(44);
+    expect(mocks.tiles).not.toHaveBeenCalled();
+    expect(
+      (vi.mocked(fetch).mock.calls as unknown[][]).every(
+        ([url]) => new URL(String(url), window.location.href).origin === window.location.origin,
+      ),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '显示全部照片位置' }));
+    expect(mocks.map.fitBounds).toHaveBeenCalledTimes(2);
   });
-  expect((mocks.popup.mock.calls.at(-1)?.[0] as HTMLElement).textContent).toContain(
-    '城市级位置，非拍摄坐标',
-  );
+  it('opens every group through bounded member pages and the shared viewer callback, treating names as text', async () => {
+    const view = mount();
+    await waitFor(() => expect(markerButtons()).toHaveLength(2));
+    act(() => markerButtons()[0]!.click());
+    const photo = await screen.findByRole('button', { name: asset.displayName });
+    expect(photo.querySelector('img')).toBeNull();
+    const latest = vi.fn();
+    view.rerender(view.renderMap(false, latest));
+    fireEvent.click(photo);
+    expect(latest).toHaveBeenCalledWith(asset, [asset]);
+    expect(view.onOpen).not.toHaveBeenCalled();
+    expect(mocks.getPhotos).toHaveBeenCalledWith(first.id, undefined, expect.any(AbortSignal));
+    expect(mocks.map.remove).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }));
+    expect(screen.queryByRole('region', { name: '此位置的照片' })).not.toBeInTheDocument();
+  });
+  it('queries the new zoom and viewport after moving and retains the selected group membership', async () => {
+    mount();
+    await waitFor(() => expect(markerButtons()).toHaveLength(2));
+    act(() => markerButtons()[0]!.click());
+    await screen.findByRole('button', { name: asset.displayName });
+    mocks.map.getZoom.mockReturnValue(10);
+    const move = mocks.map.on.mock.calls.find(([events]) => events === 'moveend')![1] as () => void;
+    act(move);
+    await waitFor(() =>
+      expect(mocks.getMap).toHaveBeenLastCalledWith(
+        { west: 120, east: 122, south: 30, north: 32, zoom: 10 },
+        expect.any(AbortSignal),
+      ),
+    );
+    expect(screen.getByRole('button', { name: asset.displayName })).toBeInTheDocument();
+  });
+  it('isolates private cache keys and removes open members on privacy scope changes', async () => {
+    const view = mount();
+    await waitFor(() => expect(markerButtons()).toHaveLength(2));
+    act(() => markerButtons()[0]!.click());
+    await screen.findByRole('button', { name: asset.displayName });
+    view.rerender(view.renderMap(true));
+    await waitFor(() => expect(mocks.getMap).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: asset.displayName })).not.toBeInTheDocument();
+    expect(
+      view.client.getQueryCache().findAll({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }),
+    ).toHaveLength(2);
+  });
+  it('paginates within a selected location rather than limiting the map index', async () => {
+    mocks.getPhotos.mockImplementation(async (_cell, after) => ({
+      items: [asset],
+      nextCursor: after ? null : 'next',
+    }));
+    mount();
+    await waitFor(() => expect(markerButtons()).toHaveLength(2));
+    act(() => markerButtons()[0]!.click());
+    await screen.findByRole('button', { name: asset.displayName });
+    fireEvent.click(screen.getByRole('button', { name: '下一页' }));
+    await waitFor(() =>
+      expect(mocks.getPhotos).toHaveBeenLastCalledWith(first.id, 'next', expect.any(AbortSignal)),
+    );
+    expect(screen.getByText('第 2 页')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: '上一页' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: '上一页' }));
+    expect(screen.getByText('第 1 页')).toBeInTheDocument();
+  });
+  it('reports and retries map index and local basemap failures independently', async () => {
+    mocks.getMap.mockRejectedValueOnce(new Error('index unavailable'));
+    mount();
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('照片位置加载失败。');
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByText('全库 10001 张带位置照片')).toBeInTheDocument();
+  });
+  it('retries local basemap failures without losing the all-library index', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('offline'));
+    mount();
+    expect(await screen.findByRole('alert')).toHaveTextContent('本地地图加载失败。');
+    expect(await screen.findByText('全库 10001 张带位置照片')).toBeInTheDocument();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ type: 'FeatureCollection', features: [], cities: [] }),
+    } as Response);
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(mocks.map.remove).toHaveBeenCalledTimes(1);
+  });
+  it('shows an empty state and disables fitting when the whole library has no valid positions', async () => {
+    mocks.getMap.mockResolvedValue({ total: 0, bounds: null, level: 5, clusters: [] });
+    mount();
+    expect(await screen.findByText('当前照片没有 GPS 信息。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '显示全部照片位置' })).toBeDisabled();
+    expect(markerButtons()).toHaveLength(0);
+  });
+  it('retries member failures and handles groups whose photos have since become invisible', async () => {
+    mocks.getPhotos
+      .mockRejectedValueOnce(new Error('unavailable'))
+      .mockResolvedValue({ items: [], nextCursor: null });
+    mount();
+    await waitFor(() => expect(markerButtons()).toHaveLength(2));
+    act(() => markerButtons()[0]!.click());
+    expect(await screen.findByRole('alert')).toHaveTextContent('位置照片加载失败。');
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    expect(await screen.findByText('此位置暂无可见照片。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
+  });
 });

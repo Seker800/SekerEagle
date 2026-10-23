@@ -1,46 +1,58 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getLocale, t } from '../../i18n';
+import { useQuery } from '@tanstack/react-query';
+import {
+  getPhotoMap,
+  type PhotoMapCluster,
+  type PhotoMapViewport,
+} from '../../lib/photo-management-api';
+import { PhotoMapPhotos } from './PhotoMapPhotos';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { loadLocalBasemap, selectCityLabels } from './local-basemap';
 import styles from './PhotoMap.module.css';
 
 export function PhotoMap({
-  assets,
+  ownerId,
+  includePrivate,
   onOpen,
 }: {
-  assets: EagleAssetListItem[];
-  onOpen: (asset: EagleAssetListItem) => void;
+  ownerId: string | null;
+  includePrivate: boolean;
+  onOpen: (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => void;
 }) {
   const container = useRef<HTMLDivElement>(null),
     mapRef = useRef<L.Map | null>(null);
-  const onOpenRef = useRef(onOpen),
-    framed = useRef(false);
+  const framed = useRef(false);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'ERROR'>('LOADING');
   const [reload, setReload] = useState(0);
-  const points = useMemo(
-    () =>
-      assets.flatMap((asset) => {
-        const raw = asset.photoMetadata?.latitude != null && asset.photoMetadata?.longitude != null;
-        const supplemental =
-          asset.photoLocation?.assetRevision === asset.mediaRevision ? asset.photoLocation : null;
-        const latitude = raw ? asset.photoMetadata?.latitude : supplemental?.latitude,
-          longitude = raw ? asset.photoMetadata?.longitude : supplemental?.longitude;
-        return typeof latitude === 'number' &&
-          Number.isFinite(latitude) &&
-          Math.abs(latitude) <= 90 &&
-          typeof longitude === 'number' &&
-          Number.isFinite(longitude) &&
-          Math.abs(longitude) <= 180
-          ? [{ asset, cityLevel: !raw, coordinate: [latitude, longitude] as L.LatLngTuple }]
-          : [];
-      }),
-    [assets],
-  );
-  useEffect(() => {
-    onOpenRef.current = onOpen;
-  }, [onOpen]);
+  const [viewport, setViewport] = useState<PhotoMapViewport>({
+    west: -180,
+    east: 180,
+    south: -90,
+    north: 90,
+    zoom: 3,
+  });
+  const [selected, setSelected] = useState<PhotoMapCluster | null>(null);
+  const locations = useQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'map', includePrivate, viewport],
+    queryFn: ({ signal }) => getPhotoMap(viewport, signal),
+    staleTime: 30000,
+  });
+  const points = locations.data?.clusters;
+  const bounds = locations.data?.bounds;
+  const showAll = () => {
+    if (bounds)
+      mapRef.current?.fitBounds(
+        [
+          [bounds.south, bounds.west],
+          [bounds.north, bounds.east],
+        ],
+        { maxZoom: 7, padding: [48, 48] },
+      );
+  };
+
   useEffect(() => {
     if (!container.current) return;
     const map = L.map(container.current, {
@@ -55,6 +67,21 @@ export function PhotoMap({
     }).setView([30, 105], 3);
     mapRef.current = map;
     framed.current = false;
+    let moveTimer: ReturnType<typeof setTimeout> | undefined;
+    const updateViewport = () => {
+      clearTimeout(moveTimer);
+      moveTimer = setTimeout(() => {
+        const current = map.getBounds();
+        setViewport({
+          west: Math.max(-180, current.getWest()),
+          east: Math.min(180, current.getEast()),
+          south: Math.max(-90, current.getSouth()),
+          north: Math.min(90, current.getNorth()),
+          zoom: Math.round(map.getZoom()),
+        });
+      }, 180);
+    };
+    map.on('moveend', updateViewport);
     const resize =
       typeof ResizeObserver === 'function'
         ? new ResizeObserver(() => map.invalidateSize({ animate: false }))
@@ -110,6 +137,8 @@ export function PhotoMap({
         if (!controller.signal.aborted) setStatus('ERROR');
       });
     return () => {
+      clearTimeout(moveTimer);
+      map.off('moveend', updateViewport);
       controller.abort();
       resize?.disconnect();
       if (updateLabels) map.off('moveend zoomend', updateLabels);
@@ -124,68 +153,96 @@ export function PhotoMap({
     const accent = container.current
       ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#d69b48'
       : '#d69b48';
-    for (const { asset, coordinate, cityLevel } of points) {
+    const largest = Math.max(100, ...(points ?? []).map((cluster) => cluster.count));
+    for (const cluster of points ?? []) {
+      const diameter = 44 + 20 * Math.sqrt(cluster.count / largest);
       const label = document.createElement('button');
       label.type = 'button';
-      label.className = styles.photoLink;
-      label.textContent = cityLevel
-        ? `${asset.displayName} · ${asset.photoLocation?.name} · ${t('城市级位置，非拍摄坐标')}`
-        : asset.displayName;
-      label.onclick = () => onOpenRef.current(asset);
-      L.circleMarker(coordinate, {
+      label.className = styles.cluster;
+      label.style.width = `${diameter}px`;
+      label.style.height = `${diameter}px`;
+      label.style.borderColor = accent;
+      label.textContent = cluster.count.toLocaleString();
+      label.setAttribute(
+        'aria-label',
+        t('查看此位置的 {{value1}} 张照片', { value1: cluster.count }),
+      );
+      label.onclick = () => setSelected(cluster);
+      L.marker([cluster.latitude, cluster.longitude], {
         pane: 'photoLocations',
-        radius: 8,
-        color: accent,
-        weight: 2,
-        fillColor: accent,
-        fillOpacity: cityLevel ? 0.15 : 0.85,
-        ...(cityLevel ? { dashArray: '4 4', radius: 12 } : {}),
-      })
-        .addTo(markers)
-        .bindPopup(label);
-    }
-    if (points.length && !framed.current) {
-      map.fitBounds(L.latLngBounds(points.map((point) => point.coordinate)), {
-        maxZoom: 6,
-        padding: [48, 48],
-      });
-      framed.current = true;
+        keyboard: false,
+        icon: L.divIcon({
+          className: styles.clusterIcon,
+          html: label,
+          iconSize: [diameter, diameter],
+          iconAnchor: [diameter / 2, diameter / 2],
+        }),
+      }).addTo(markers);
     }
     return () => {
       markers.remove();
     };
   }, [points, reload]);
+  useEffect(() => {
+    if (bounds && !framed.current && mapRef.current) {
+      mapRef.current.fitBounds(
+        [
+          [bounds.south, bounds.west],
+          [bounds.north, bounds.east],
+        ],
+        { maxZoom: 7, padding: [48, 48] },
+      );
+      framed.current = true;
+    }
+  }, [bounds, reload]);
   return (
     <section className={styles.panel}>
-      <div className={styles.heading}>
-        <p>{t('已加载 {{value1}} 张带位置照片', { value1: points.length })}</p>
-        <button
-          type="button"
-          disabled={!points.length}
-          onClick={() =>
-            mapRef.current?.fitBounds(L.latLngBounds(points.map((point) => point.coordinate)), {
-              maxZoom: 6,
-              padding: [48, 48],
-            })
-          }
-        >
-          {t('显示全部照片位置')}
-        </button>
-      </div>
-      <div className={styles.frame} ref={container} aria-label={t('照片地图')} />
-      <div className={styles.caption}>
-        <span>{t('离线概览 · 不含街道级细节')}</span>
-        {status === 'LOADING' && <span role="status">{t('正在加载本地地图…')}</span>}
-        {status === 'ERROR' && (
-          <span role="alert">
-            {t('本地地图加载失败。')}{' '}
-            <button type="button" onClick={() => setReload((value) => value + 1)}>
-              {t('重试')}
+      <div className={styles.mapLayout} data-selected={Boolean(selected)}>
+        <div className={styles.mapArea}>
+          <div className={styles.heading}>
+            <p>{t('全库 {{value1}} 张带位置照片', { value1: locations.data?.total ?? '—' })}</p>
+            <button type="button" disabled={!bounds} onClick={showAll}>
+              {t('显示全部照片位置')}
             </button>
-          </span>
+          </div>
+          <div className={styles.frame} ref={container} aria-label={t('照片地图')} />
+          <div className={styles.caption}>
+            <span>{t('离线概览 · 不含街道级细节')}</span>
+            {status === 'LOADING' && <span role="status">{t('正在加载本地地图…')}</span>}
+            {status === 'ERROR' && (
+              <span role="alert">
+                {t('本地地图加载失败。')}{' '}
+                <button type="button" onClick={() => setReload((value) => value + 1)}>
+                  {t('重试')}
+                </button>
+              </span>
+            )}
+          </div>
+          {locations.isPending && <p role="status">{t('正在统计照片位置…')}</p>}
+          {locations.isError && (
+            <p role="alert">
+              {t('照片位置加载失败。')}{' '}
+              <button type="button" onClick={() => void locations.refetch()}>
+                {t('重试')}
+              </button>
+            </p>
+          )}
+          {locations.data?.total === 0 && <p>{t('当前照片没有 GPS 信息。')}</p>}
+          <p className={styles.hint}>
+            {t('圆圈大小表示照片数量；放大查看附近位置，点击浏览该组全部照片。')}
+          </p>
+        </div>
+        {selected && (
+          <PhotoMapPhotos
+            key={selected.id}
+            cluster={selected}
+            ownerId={ownerId}
+            includePrivate={includePrivate}
+            onOpen={onOpen}
+            onClose={() => setSelected(null)}
+          />
         )}
       </div>
-      {!points.length && <p>{t('当前照片没有 GPS 信息。')}</p>}
     </section>
   );
 }

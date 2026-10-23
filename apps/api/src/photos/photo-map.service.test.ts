@@ -21,17 +21,31 @@ test('map grid remains bounded for a world query even at maximum zoom and refine
 
 test('viewport and cell DTOs reject malformed coordinates, owner overrides and unbounded pages', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
-  for (const value of [{ ...world, zoom: 20 }, { ...world, south: 100 }, { ...world, ownerId: 'other' }, { ...world, west: 'NaN' }]) {
+  for (const value of [
+    { ...world, zoom: 20 },
+    { ...world, south: 100 },
+    { ...world, ownerId: 'other' },
+    { ...world, west: 'NaN' },
+  ]) {
     await assert.rejects(pipe.transform(value, { type: 'query', metatype: MapViewportDto }));
   }
-  await assert.rejects(pipe.transform({ after: 'a'.repeat(2049) }, { type: 'query', metatype: MapPhotosDto }));
+  await assert.rejects(
+    pipe.transform({ after: 'a'.repeat(2049) }, { type: 'query', metatype: MapPhotosDto }),
+  );
 });
 
 test('member cursors bind owner, privacy, cell and photography mode', () => {
   const scope = { ownerId: 'owner', includePrivate: false, cell: '5/20/12' };
-  const encoded = mapCursor(scope, { id: '00000000-0000-4000-8000-000000000001', at: new Date('2024-01-02Z') });
+  const encoded = mapCursor(scope, {
+    id: '00000000-0000-4000-8000-000000000001',
+    at: new Date('2024-01-02Z'),
+  });
   assert.equal(readMapCursor(encoded, scope).at.toISOString(), '2024-01-02T00:00:00.000Z');
-  for (const other of [{ ...scope, ownerId: 'other' }, { ...scope, includePrivate: true }, { ...scope, cell: '5/20/13' }]) {
+  for (const other of [
+    { ...scope, ownerId: 'other' },
+    { ...scope, includePrivate: true },
+    { ...scope, cell: '5/20/13' },
+  ]) {
     assert.throws(() => readMapCursor(encoded, other));
   }
   assert.throws(() => readMapCursor('bad', scope));
@@ -39,11 +53,21 @@ test('member cursors bind owner, privacy, cell and photography mode', () => {
 
 test('all-library map aggregation is owner scoped, current revision only, private safe and not list limited', async () => {
   const queries: Array<{ text: string; values: unknown[] }> = [];
-  const service = new PhotoMapService({ $queryRaw: async (query: { text: string; values: unknown[] }) => {
-    queries.push(query);
-    return [{ total: 10000n, west: 120, east: 121, south: 30, north: 31,
-      clusters: [{ x: 20, y: 12, latitude: 30.5, longitude: 120.5, count: 10000 }] }];
-  }} as never);
+  const service = new PhotoMapService({
+    $queryRaw: async (query: { text: string; values: unknown[] }) => {
+      queries.push(query);
+      return [
+        {
+          total: 10000n,
+          west: 120,
+          east: 121,
+          south: 30,
+          north: 31,
+          clusters: [{ x: 20, y: 12, latitude: 30.5, longitude: 120.5, count: 10000 }],
+        },
+      ];
+    },
+  } as never);
   const result = await service.clusters('owner', false, world);
   assert.equal(result.total, 10000);
   assert.equal(result.clusters[0]!.count, 10000);
@@ -64,10 +88,21 @@ test('all-library map aggregation is owner scoped, current revision only, privat
 test('location photos use the exact cluster membership and stable bounded keyset pagination', async () => {
   let query: { text: string; values: unknown[] } | undefined;
   let where: unknown;
-  const records = Array.from({ length: 61 }, (_, i) => ({ id: 'photo-' + i, at: new Date('2024-01-02Z') }));
+  const records = Array.from({ length: 61 }, (_, i) => ({
+    id: 'photo-' + i,
+    at: new Date('2024-01-02Z'),
+  }));
   const service = new PhotoMapService({
-    $queryRaw: async (input: typeof query) => { query = input; return records; },
-    eagleAsset: { findMany: async (input: { where: unknown }) => { where = input.where; return []; } },
+    $queryRaw: async (input: typeof query) => {
+      query = input;
+      return records;
+    },
+    eagleAsset: {
+      findMany: async (input: { where: unknown }) => {
+        where = input.where;
+        return [];
+      },
+    },
   } as never);
   const result = await service.photos('owner', false, '5/20/12');
   assert.ok(result.nextCursor);
@@ -79,4 +114,30 @@ test('location photos use the exact cluster membership and stable bounded keyset
   assert.match(JSON.stringify(where), /"libraryMode":"PHOTO"/);
   assert.match(JSON.stringify(where), /"isPrivate":false/);
   await assert.rejects(service.photos('other', false, '5/20/12', result.nextCursor!));
+});
+
+test('map endpoints retain browser authentication and cannot take owner or private flags from the request', async () => {
+  const { PhotoManagementController } = await import('./photo-management.controller');
+  const { GUARDS_METADATA } = await import('@nestjs/common/constants');
+  const { AccessAuthGuard } = await import('../auth/access-auth.guard');
+  const { BrowserPrincipalGuard } = await import('../auth/browser-principal.guard');
+  const guards = Reflect.getMetadata(GUARDS_METADATA, PhotoManagementController) as unknown[];
+  assert.ok(guards.includes(AccessAuthGuard) && guards.includes(BrowserPrincipalGuard));
+  const calls: unknown[][] = [];
+  const controller = new PhotoManagementController(
+    {} as never,
+    {
+      clusters: (...args: unknown[]) => {
+        calls.push(args);
+      },
+      photos: (...args: unknown[]) => {
+        calls.push(args);
+      },
+    } as never,
+  );
+  const principal = { sub: 'authenticated-owner', canViewPrivate: false } as never;
+  controller.mapClusters(principal, world);
+  controller.mapPhotos(principal, '5/20/12', {});
+  assert.deepEqual(calls[0], ['authenticated-owner', false, world]);
+  assert.deepEqual(calls[1], ['authenticated-owner', false, '5/20/12', undefined]);
 });

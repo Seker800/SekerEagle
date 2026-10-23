@@ -357,6 +357,7 @@ export function checkLibrarySharing(sources) {
     // Only photography providers and immutable scope bindings may supplement the common list.
     const allowed = new Set([
       'PhotoManagementService',
+      'PhotoMapService',
       'PhotoRevisionObserver',
       'PhotoAgentService',
     ]);
