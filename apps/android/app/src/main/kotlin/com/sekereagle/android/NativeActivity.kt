@@ -7,6 +7,8 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.ViewModelProvider
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 /** The exported launcher contains no WebView. Legacy Java screens only host backup/cleanup. */
 class NativeActivity : ComponentActivity() {
@@ -21,6 +23,13 @@ class NativeActivity : ComponentActivity() {
         window.isNavigationBarContrastEnforced = false
         model = ViewModelProvider(this)[NativeGalleryViewModel::class.java]
         setContent {
+            val state by model.state.collectAsStateWithLifecycle()
+            androidx.compose.runtime.LaunchedEffect(state.identity, intent.getBooleanExtra("transfers", false)) {
+                if (state.identity != null && intent.getBooleanExtra("transfers", false)) {
+                    intent.removeExtra("transfers")
+                    model.openTransfers()
+                }
+            }
             NativeGalleryApp(model) { screen ->
                 startActivity(
                     Intent(this, MainActivity::class.java)
@@ -28,6 +37,15 @@ class NativeActivity : ComponentActivity() {
                         .putExtra("screen", screen)
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra("transfers", false)) {
+            model.openTransfers()
+            intent.removeExtra("transfers")
         }
     }
 

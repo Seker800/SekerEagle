@@ -31,6 +31,8 @@ internal class NativeUploadJourney(
     private data class Source(val uri: Uri, val name: String, val bytes: ByteArray)
 
     private val sources = mutableListOf<Source>()
+    private var batchId = ""
+    private fun model() = ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
 
     private fun create(suffix: String): Source {
         val bitmap =
@@ -81,29 +83,37 @@ internal class NativeUploadJourney(
                 Instrumentation.ActivityResult(Activity.RESULT_OK, result),
                 true,
             )
+        val previous = model().transfers.state.value.batches.map { it.id }.toSet()
         try {
             compose.onNodeWithContentDescription("更多操作").performClick()
             compose.onNodeWithText("上传").performClick()
             compose.waitUntil(15000) {
-                compose.onAllNodesWithText("确认上传").fetchSemanticsNodes().isNotEmpty()
+                model().transfers.state.value.batches.any { it.id !in previous }
             }
             assertTrue(monitor.hits > 0)
-            compose.onNodeWithTag("upload-target").assertTextEquals("上传到：$mode")
+            val batch = model().transfers.state.value.batches.first { it.id !in previous }
+            batchId = batch.id
+            assertEquals(mode, batch.mode.title)
+            compose.onNodeWithTag("native-upload-dialog").assertDoesNotExist()
+            compose.onNodeWithTag("native-library").assertExists()
         } finally {
             instrumentation.removeMonitor(monitor)
         }
     }
 
     private fun finish(uploaded: Int, skipped: Int) {
+        compose.runOnUiThread { model().openTransfers() }
         compose.waitUntil(30000) {
-            compose.onAllNodesWithText("上传结果").fetchSemanticsNodes().isNotEmpty()
+            model().transfers.state.value.batches.firstOrNull { it.id == batchId }?.let {
+                !it.waiting && it.progress?.phase == NativeUploadPhase.FINISHED && it.progress.uploaded == uploaded && it.progress.skipped == skipped
+            } == true
         }
-        compose.onNodeWithTag("upload-summary").assertTextEquals("已上传 $uploaded · 重复跳过 $skipped")
+        compose.onNodeWithTag("upload-summary:$batchId").performScrollTo().assertTextEquals("已上传 $uploaded · 重复跳过 $skipped")
     }
 
     private fun dismiss() {
-        compose.onNodeWithText("完成").performClick()
-        compose.onNodeWithTag("native-upload-dialog").assertDoesNotExist()
+        compose.runOnUiThread { model().back() }
+        compose.onNodeWithTag("native-transfers").assertDoesNotExist()
     }
 
     private fun list(mode: GalleryMode): List<JSONObject> {
@@ -139,9 +149,8 @@ internal class NativeUploadJourney(
             val second = create("two.png")
             val invalid = create("invalid.pdf")
             choose(listOf(first, first, second), "照片")
-            compose.onNodeWithText("已选 2 个文件，2 个可上传").assertExists()
+            assertEquals(2, model.transfers.state.value.batches.first { it.id == batchId }.entries.size)
             capture("native-upload-confirm.png")
-            compose.onNodeWithText("开始上传").performClick()
             finish(2, 0)
             val photo = list(GalleryMode.PHOTO)
             assertEquals(2, photo.size)
@@ -152,7 +161,6 @@ internal class NativeUploadJourney(
             capture("native-upload-result.png")
             dismiss()
             choose(listOf(first, second), "照片")
-            compose.onNodeWithText("开始上传").performClick()
             finish(0, 2)
             dismiss()
             val old = photo.first { it.getString("originalName") == first.name }.getString("id")
@@ -162,7 +170,6 @@ internal class NativeUploadJourney(
                 JSONObject().put("assetIds", JSONArray(listOf(old))),
             )
             choose(listOf(first), "照片")
-            compose.onNodeWithText("开始上传").performClick()
             finish(1, 0)
             dismiss()
             assertFalse(
@@ -171,7 +178,6 @@ internal class NativeUploadJourney(
                     .getString("id") == old
             )
             choose(listOf(second, invalid), "照片")
-            compose.onNodeWithText("开始上传").performClick()
             finish(0, 1)
             compose.onNodeWithText("1 项失败").assertExists()
             context.contentResolver.update(
@@ -188,12 +194,11 @@ internal class NativeUploadJourney(
                 null,
                 null,
             ) // Retry must not read an already successful input again.
-            compose.onNodeWithText("重试未完成项").performClick()
+            compose.onNodeWithText("重试未完成项").performScrollTo().performClick()
             finish(1, 1)
             dismiss()
             compose.onNodeWithTag("mode:MATERIAL").performClick()
             choose(listOf(first), "素材")
-            compose.onNodeWithText("开始上传").performClick()
             finish(1, 0)
             dismiss()
             val material = list(GalleryMode.MATERIAL).single()

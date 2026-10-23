@@ -24,7 +24,12 @@ public final class NativeUploadPolicy {
     return new ArrayList<>(unique);
   }
 
-  public static final class Journal implements BackupEngine.Store {
+  public interface ManualStore extends BackupEngine.Store {
+    void verifyContent(String key, String hash);
+    void retryFailures();
+  }
+
+  public static final class Journal implements ManualStore {
     private final Map<String, BackupEngine.Checkpoint> files = new HashMap<>();
     private final Set<String> receipts = new HashSet<>();
 

@@ -17,6 +17,7 @@
         </activity>
         <activity android:name=".MainActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
         </activity>
+        <service android:name=".NativeUploadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".BackupService" android:exported="false" android:foregroundServiceType="dataSync" />
     </application>
 </manifest>

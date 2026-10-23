@@ -65,6 +65,7 @@ final class BackupScreen extends ScrollView {
     pauseParams.leftMargin = Ui.dp(activity, 8);
     actions.addView(pause, pauseParams);
     summary.addView(actions);
+    summary.addView(Ui.row(activity, R.drawable.ic_cloud, "传输列表", "查看手动上传和自动备份", () -> activity.startActivity(new Intent(activity, NativeActivity.class).putExtra("transfers", true).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP))));
     Ui.section(panel, "自动备份");
     LinearLayout automation = Ui.card(activity, panel);
     toggle(automation, "启用手机备份", "将原文件保存到当前账号", "enabled", false, activity::enable);

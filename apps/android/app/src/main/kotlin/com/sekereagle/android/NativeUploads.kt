@@ -41,6 +41,7 @@ internal data class NativeUploadState(
     val bytes: Long = 0,
     val size: Long = 0,
     val cancelled: Boolean = false,
+    val completedEntries: Set<Uri> = emptySet(),
 )
 
 /** A selected-file queue reuses the backup engine, without enabling or editing automatic backup. */
@@ -49,6 +50,7 @@ class NativeUploads(
     private val scope: CoroutineScope,
     private val unauthorized: (NativeSession) -> Unit,
     private val completed: (String, GalleryMode) -> Unit,
+    private val journalStore: NativeUploadPolicy.ManualStore? = null,
 ) {
     private val app = context.applicationContext
     private val generation = AtomicInteger()
@@ -57,7 +59,7 @@ class NativeUploads(
     private var session: NativeSession? = null
     private var identity = ""
     private var sessionEpoch = 0
-    private var journal = NativeUploadPolicy.Journal()
+    private var journal: NativeUploadPolicy.ManualStore = journalStore ?: NativeUploadPolicy.Journal()
     private var cancelled = AtomicBoolean()
     private var requestCancellation = NativeTransferCancellation()
     private var job: Job? = null
@@ -73,7 +75,7 @@ class NativeUploads(
         }
         this.session = session
         this.identity = identity
-        journal = NativeUploadPolicy.Journal()
+        journal = journalStore ?: NativeUploadPolicy.Journal()
         val ticket = generation.get()
         val guard = cancelled
         val selected =
@@ -105,7 +107,8 @@ class NativeUploads(
                     }
                     publish(ticket, NativeUploadState(mode, NativeUploadPhase.READY, entries))
                 } catch (reason: CancellationException) {
-                    throw reason
+                    val remaining = selected.map { NativeUploadEntry(it, it.lastPathSegment ?: "所选文件") }
+                    publish(ticket, NativeUploadState(mode, NativeUploadPhase.FINISHED, remaining, remaining = remaining, cancelled = true))
                 } catch (reason: Exception) {
                     publish(
                         ticket,
@@ -120,10 +123,10 @@ class NativeUploads(
             }
     }
 
-    fun start() {
+    fun start(uploaded: Int = 0, skipped: Int = 0, done: Set<Uri> = emptySet()) {
         val current = mutable.value ?: return
         if (current.phase != NativeUploadPhase.READY) return
-        run(current.entries, current.copy(phase = NativeUploadPhase.RUNNING))
+        run(current.entries, current.copy(phase = NativeUploadPhase.RUNNING, uploaded = uploaded, skipped = skipped, completedEntries = done))
     }
 
     private fun run(entries: List<NativeUploadEntry>, initial: NativeUploadState) {
@@ -218,6 +221,7 @@ class NativeUploads(
                                 if (outcome == BackupEngine.Result.UPLOADED && !api.duplicate)
                                     result.copy(uploaded = result.uploaded + 1)
                                 else result.copy(skipped = result.skipped + 1)
+                            result = result.copy(completedEntries = result.completedEntries + entry.uri)
                         } catch (reason: Exception) {
                             if (cancellation.get() || reason is CancellationException) {
                                 result =
@@ -282,12 +286,11 @@ class NativeUploads(
 
     fun cancel() {
         val current = mutable.value ?: return
-        if (current.phase == NativeUploadPhase.PREPARING) clear()
-        else {
-            cancelled.set(true)
-            requestCancellation.cancel()
-        }
+        cancelled.set(true)
+        requestCancellation.cancel()
     }
+
+    internal suspend fun awaitStopped() { job?.join() }
 
     fun dismiss() {
         val phase = mutable.value?.phase
@@ -302,7 +305,7 @@ class NativeUploads(
         session = null
         identity = ""
         sessionEpoch = 0
-        journal = NativeUploadPolicy.Journal()
+        journal = journalStore ?: NativeUploadPolicy.Journal()
         mutable.value = null
     }
 

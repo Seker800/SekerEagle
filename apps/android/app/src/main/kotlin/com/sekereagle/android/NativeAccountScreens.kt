@@ -134,6 +134,7 @@ fun NativeMore(
             )
             GlassSurface(Modifier.fillMaxWidth(), radius = 24) {
                 Column {
+                    MenuRow("传输列表", Icons.Outlined.SyncAlt, model::openTransfers)
                     MenuRow("手机备份", Icons.Outlined.CloudUpload) { openNative("backup") }
                     MenuRow("释放手机空间", Icons.Outlined.CleaningServices) { openNative("cleanup") }
                     MenuRow("退出登录", Icons.AutoMirrored.Outlined.Logout, model::logout)

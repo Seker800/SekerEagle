@@ -36,7 +36,6 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val download by model.downloads.state.collectAsStateWithLifecycle()
-    val upload by model.uploads.state.collectAsStateWithLifecycle()
     val uploadPicker =
         rememberLauncherForActivityResult(
             ActivityResultContracts.OpenMultipleDocuments(),
@@ -63,10 +62,10 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                 }
                 if (state.identity != null && download != null)
                     NativeDownloadDialog(download!!, model.downloads)
-                if (state.identity != null && upload != null)
-                    NativeUploadDialog(upload!!, model.uploads)
+                if (state.identity != null && state.transfersOpen)
+                    NativeTransferScreen(state, model, openNative)
                 BackHandler(
-                    state.searchOpen ||
+                    state.transfersOpen || state.searchOpen ||
                         state.moreOpen ||
                         state.viewerId != null ||
                         state.query.isNotEmpty() ||
@@ -417,6 +416,10 @@ private fun NativeLibrary(
                                     menu = ""
                                     chooseUpload()
                                 }
+                            MenuRow("传输列表", Icons.Outlined.SyncAlt) {
+                                menu = ""
+                                model.openTransfers()
+                            }
                             MenuRow("刷新", Icons.Outlined.Refresh) {
                                 menu = ""
                                 model.refresh()
