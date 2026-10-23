@@ -368,7 +368,15 @@ class NativeGalleryTest {
     @Test
     fun nativeLoginListZoomSwipeSearchAndBack() {
         login()
-        val first = firstAsset()
+        firstAsset()
+        val current =
+            androidx.lifecycle
+                .ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+                .state
+                .value
+        val startIndex = current.items.indexOfFirst { !it.video }
+        assertTrue("The seeded gallery must contain a photo for zoom gestures", startIndex >= 0)
+        val first = current.items[startIndex].id
         capture("native-home.png")
         compose.onNodeWithTag("asset:$first").performClick()
         compose.onNodeWithTag("native-viewer").assertExists()
@@ -409,7 +417,10 @@ class NativeGalleryTest {
         capture("native-viewer.png")
         compose.onNodeWithTag("native-viewer").performTouchInput { swipeLeft() }
         compose.waitUntil {
-            compose.onAllNodes(hasText("2 /", substring = true)).fetchSemanticsNodes().isNotEmpty()
+            compose
+                .onAllNodes(hasText("${startIndex + 2} /", substring = true))
+                .fetchSemanticsNodes()
+                .isNotEmpty()
         }
         back()
         compose.onNodeWithTag("native-viewer").assertDoesNotExist()
