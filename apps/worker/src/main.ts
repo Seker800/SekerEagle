@@ -1,3 +1,4 @@
+import { publishEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
 import {
@@ -709,37 +710,7 @@ async function processEmbeddingJob(
   });
   const bytes = await readBoundedBytes(source, 20 * 1024 * 1024);
   const { embedding } = await embeddingClient.embedImage(bytes, mimeType);
-  const vector = `[${embedding.join(',')}]`;
-  await prisma.$transaction(async (transaction) => {
-    const completed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-    });
-    if (completed.count !== 1) return;
-    await transaction.eagleAssetEmbedding.updateMany({
-      where: {
-        ownerId: asset.ownerId,
-        libraryMode: asset.libraryMode,
-        assetId: asset.id,
-        isCurrent: true,
-      },
-      data: { isCurrent: false, status: 'SUPERSEDED' },
-    });
-    await transaction.eagleAssetEmbedding.update({
-      where: { id: record.id },
-      data: {
-        status: 'READY',
-        isCurrent: true,
-        l2Norm: 1,
-        errorCode: null,
-        completedAt: new Date(),
-      },
-    });
-    await transaction.$executeRaw(
-      Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode" AND "id" = ${record.id}`,
-    );
-    await createTopSuggestion(transaction, asset.ownerId, asset.libraryMode, asset.id, record.id);
-  });
+  await publishEmbedding(prisma, job, record.id, embedding, createTopSuggestion);
 }
 
 async function processAiTaggingJob(
