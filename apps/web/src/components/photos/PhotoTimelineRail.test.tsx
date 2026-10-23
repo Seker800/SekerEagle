@@ -59,7 +59,7 @@ describe('PhotoTimelineRail', () => {
     expect(props.onJump).toHaveBeenLastCalledWith(months[0]);
     fireEvent.keyDown(slider, { key: 'Escape' });
   });
-  it('uses the real photo date range for both endpoints and proportional month positions', () => {
+  it('keeps real endpoints while compressing empty years', () => {
     const onJump = vi.fn();
     render(
       <PhotoTimelineRail months={months} onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />,
@@ -70,8 +70,9 @@ describe('PhotoTimelineRail', () => {
     expect(earliest).toHaveAttribute('dateTime', '2001-01');
     expect(latest).toHaveStyle({ top: '0%' });
     expect(earliest).toHaveStyle({ top: '100%' });
-    const middleYear = screen.getByText('2023');
-    expect(parseFloat(middleYear.style.top)).toBeCloseTo(14.56, 1);
+    expect(screen.queryByText('2023')).not.toBeInTheDocument();
+    expect(screen.getByText('2024')).toBeInTheDocument();
+    expect(screen.getAllByTestId('timeline-break')).toHaveLength(2);
     const slider = screen.getByRole('slider');
     vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
     fireEvent.click(slider, { clientY: 0 });
@@ -81,7 +82,7 @@ describe('PhotoTimelineRail', () => {
   });
 });
 
-it('renders calendar month ruler marks and magnifies only the ticks near the pointer without a popup', () => {
+it('renders year-segment ruler marks and magnifies only the ticks near the pointer without a popup', () => {
   render(
     <PhotoTimelineRail months={months} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />,
   );
@@ -93,7 +94,7 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   const major = slider.querySelector('[data-ruler-month="2001-01"]')!;
   const minor = slider.querySelector('[data-ruler-month="2024-03"]')!;
   expect(major).toHaveAttribute('data-major', 'true');
-  expect(minor).toHaveAttribute('data-major', 'false');
+  expect(minor).toHaveAttribute('data-major', 'true');
   const restingWidth = parseFloat((major as HTMLElement).style.width);
   fireEvent.pointerMove(slider, {
     clientY: 100 + parseFloat((major as HTMLElement).style.top) * 5,
@@ -105,22 +106,67 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   fireEvent.pointerLeave(slider);
   expect((major as HTMLElement).style.width).toBe(`${restingWidth}px`);
 });
-it('keeps calendar year labels equally spaced with uneven photo dates', () => {
+it('uses the same compressed positions for hover, click and the current month indicator', () => {
+  const onJump = vi.fn();
   render(
     <PhotoTimelineRail
-      months={[
-        { month: '2026-10', count: 1, cursor: 'new' },
-        { month: '2025-11', count: 1, cursor: 'middle' },
-        { month: '2024-03', count: 1, cursor: 'older' },
-        { month: '2023-01', count: 1, cursor: 'old' },
-      ]}
-      onJump={vi.fn()}
+      months={months}
+      currentMonth="2024-03"
+      onJump={onJump}
       onLatest={vi.fn()}
       onRetry={vi.fn()}
     />,
   );
-  const positions = ['2026', '2025', '2024'].map((year) =>
-    parseFloat(screen.getByText(year).style.top),
+  const slider = screen.getByRole('slider');
+  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
+  for (const month of months) {
+    const tick = slider.querySelector<HTMLElement>(`[data-ruler-month="${month.month}"]`)!;
+    const clientY = 100 + parseFloat(tick.style.top) * 5;
+    fireEvent.pointerMove(slider, { clientY });
+    expect(screen.getByRole('tooltip')).toHaveAttribute('dateTime', month.month);
+    fireEvent.click(slider, { clientY });
+    expect(onJump).toHaveBeenLastCalledWith(month);
+  }
+  const current = slider.querySelector<HTMLElement>('[data-ruler-month="2024-03"]')!;
+  expect(slider.querySelector('[data-current-month]')).toHaveStyle({ top: current.style.top });
+});
+
+it('limits labels in a long library without dropping any navigable month', () => {
+  const manyMonths = Array.from({ length: 100 }, (_, index) => ({
+    month: `${2026 - index}-06`,
+    count: 1,
+    cursor: `${index}`,
+  }));
+  render(
+    <PhotoTimelineRail months={manyMonths} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />,
   );
-  expect(positions[1] - positions[0]).toBeCloseTo(positions[2] - positions[1]);
+  const slider = screen.getByRole('slider');
+  expect(slider.querySelectorAll('[data-ruler-month]')).toHaveLength(100);
+  expect(slider.querySelectorAll('[data-ruler-year]').length).toBeLessThanOrEqual(13);
+  expect(slider).toHaveAttribute('aria-valuemax', '99');
+});
+
+it('previews the same month that clicking a year label will open', () => {
+  const onJump = vi.fn();
+  render(
+    <PhotoTimelineRail
+      months={[
+        { month: '2026-12', count: 300, cursor: 'dec' },
+        { month: '2026-06', count: 300, cursor: 'jun' },
+        { month: '2026-01', count: 300, cursor: 'jan' },
+        { month: '1970-01', count: 1, cursor: 'old' },
+      ]}
+      onJump={onJump}
+      onLatest={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
+  const slider = screen.getByRole('slider');
+  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
+  const label = screen.getByText('2026');
+  const clientY = 100 + parseFloat(label.style.top) * 5;
+  fireEvent.pointerMove(label, { clientY });
+  const preview = screen.getByRole('tooltip').getAttribute('dateTime');
+  fireEvent.click(label, { clientY });
+  expect(onJump.mock.lastCall?.[0].month).toBe(preview);
 });

@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { IconArrowUp, IconRefresh } from '@tabler/icons-react';
 import { getLocale, t } from '../../i18n';
 import type { PhotoTimelineMonth } from '../../lib/photo-management-api';
 import styles from './PhotoTimelineRail.module.css';
+import { buildPhotoTimelineScale } from './photo-timeline-scale';
 
 interface Props {
   months: PhotoTimelineMonth[];
@@ -34,15 +35,8 @@ export function PhotoTimelineRail({
     months.findIndex((month) => month.month === currentMonth),
   );
   const selected = Math.min(hovered ?? current, Math.max(0, months.length - 1));
-  const monthNumber = (month: string) => {
-    const [year, number] = month.split('-').map(Number);
-    return year * 12 + number - 1;
-  };
-  const latest = months.length ? monthNumber(months[0].month) : 0;
-  const earliest = months.length ? monthNumber(months[months.length - 1].month) : latest;
-  const calendarPosition = (month: string) =>
-    latest > earliest ? ((latest - monthNumber(month)) / (latest - earliest)) * 100 : 0;
-  const position = (index: number) => calendarPosition(months[index].month);
+  const scale = useMemo(() => buildPhotoTimelineScale(months), [months]);
+  const position = (index: number) => scale.positions[index];
   const dateFormat = new Intl.DateTimeFormat(getLocale(), {
     year: 'numeric',
     month: 'long',
@@ -59,20 +53,20 @@ export function PhotoTimelineRail({
       0,
     );
   };
-  // Calendar boundaries, not the first available photo in each year, define the scale.
-  const newestYear = Math.floor(latest / 12);
-  const oldestYear = Math.floor(earliest / 12);
-  const stride = Math.max(1, Math.ceil((newestYear - oldestYear + 1) / 12));
-  const labels = Array.from(
-    { length: Math.floor((newestYear - oldestYear) / stride) + 1 },
-    (_, index) => {
-      const year = newestYear - index * stride;
-      return { year, top: calendarPosition(`${year}-01`) };
-    },
-  ).filter(({ top }) => top > 6.5 && top < 93.5);
+  // Reserve room for endpoint dates and avoid collisions without removing navigable ticks.
+  const labels = scale.years.reduce<typeof scale.years>((visible, label) => {
+    const previous = visible.at(-1)?.top ?? 0;
+    if (label.top > 6.5 && label.top < 93.5 && label.top - previous >= 7) visible.push(label);
+    return visible;
+  }, []);
   const ticks = months
-    .filter((month) => month.count > 0)
-    .map(({ month }) => ({ month, major: month.endsWith('-01') }));
+    .map(({ month, count }, index) => ({
+      month,
+      count,
+      top: position(index),
+      major: index === 0 || !month.startsWith(months[index - 1].month.slice(0, 4)),
+    }))
+    .filter(({ count }) => count > 0);
   const influenceAt = (top: number) =>
     hoverPosition === null ? 0 : Math.max(0, 1 - Math.abs(top - hoverPosition) / 8) ** 2;
   const selectHover = (index: number, top = position(index)) => {
@@ -159,8 +153,7 @@ export function PhotoTimelineRail({
               onJump(months[next]);
             }}
           >
-            {ticks.map(({ month, major }) => {
-              const top = calendarPosition(month);
+            {ticks.map(({ month, major, top }) => {
               const influence = influenceAt(top);
               return (
                 <i
@@ -188,17 +181,22 @@ export function PhotoTimelineRail({
                 {months[index].month.replace('-', '/')}
               </time>
             ))}
+            {scale.breaks.map(({ newerYear, olderYear, top }) => (
+              <span
+                key={`${newerYear}-${olderYear}`}
+                className={styles.break}
+                data-testid="timeline-break"
+                style={{ top: `${top}%` }}
+                aria-hidden="true"
+              >
+                ≈
+              </span>
+            ))}
             {labels.map(({ year, top }) => (
               <span
                 key={year}
-                className={`${styles.year} ${styles.calendarYear}`}
-                onPointerMove={(event) => {
-                  const index = months.findIndex((month) => month.month.startsWith(`${year}-`));
-                  if (index >= 0) {
-                    event.stopPropagation();
-                    selectHover(index);
-                  }
-                }}
+                data-ruler-year={year}
+                className={styles.year}
                 style={{
                   top: `${top}%`,
                   opacity: hovered !== null && Math.abs(top - (hoverPosition ?? 0)) < 3 ? 0 : 1,
@@ -210,6 +208,7 @@ export function PhotoTimelineRail({
             ))}
             <i
               className={styles.indicator}
+              data-current-month={currentMonth}
               style={{ top: `${position(current)}%` }}
               aria-hidden="true"
             />

@@ -12,7 +12,6 @@ import { EagleResponsiveTools } from './EagleResponsiveTools';
 import { EagleResponsiveDetails } from './EagleResponsiveDetails';
 import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
-import { EagleSortSummary } from './EagleSortSummary';
 import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
@@ -600,10 +599,6 @@ export function SekerEaglePage({
     privateVisible,
     privacyRulesRevision,
   );
-  const displayedAssetCount =
-    libraryView === 'ACTIVE' && !deferredSearch && !activeFilterCount && !activeSmartFolderId
-      ? (libraryCount.data ?? '…')
-      : loadedAssets.length;
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();
     for (const page of assetsQuery.data?.pages ?? [])
@@ -1171,25 +1166,27 @@ export function SekerEaglePage({
         />
       </div>
     ) : null;
-  const selectionToolbar = showsAssetControls && photoView === 'timeline' && (
-    <EagleSelectionToolbar
-      selecting={selectionMode}
-      count={selectedAssetIds.length}
-      onToggle={() => (selectionMode ? clearAssetSelection() : setSelectionMode(true))}
-      onActions={(event) => {
-        const bounds = event.currentTarget.getBoundingClientRect();
-        openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
-      }}
-      onBatchEdit={
-        photoEditing.clipboard ? () => setBatchEditIds([...selectedAssetIds]) : undefined
-      }
-      onPreview={
-        selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
-          ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
-          : undefined
-      }
-    />
-  );
+  const selectionToolbar = showsAssetControls &&
+    photoView === 'timeline' &&
+    (selectionMode || isBatchSelection) && (
+      <EagleSelectionToolbar
+        selecting={selectionMode}
+        count={selectedAssetIds.length}
+        onToggle={() => (selectionMode ? clearAssetSelection() : setSelectionMode(true))}
+        onActions={(event) => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          openAssetContextMenu(bounds.right - 220, bounds.bottom + 6);
+        }}
+        onBatchEdit={
+          photoEditing.clipboard ? () => setBatchEditIds([...selectedAssetIds]) : undefined
+        }
+        onPreview={
+          selectedAssetIds.length === 1 && assetsById.has(selectedAssetIds[0])
+            ? () => openAssetPreview(assetsById.get(selectedAssetIds[0])!)
+            : undefined
+        }
+      />
+    );
   const libraryNavigation = (closeNavigation: () => void) => (
     <>
       <button
@@ -1420,12 +1417,13 @@ export function SekerEaglePage({
             title={
               activeFilterCount
                 ? t('已启用 {{value1}} 项筛选', { value1: activeFilterCount })
-                : undefined
+                : filtersExpanded
+                  ? t('收起筛选')
+                  : t('展开筛选')
             }
             onClick={() => setFiltersExpanded((current) => !current)}
           >
             <IconFilter size={18} aria-hidden="true" />
-            {filtersExpanded ? t('收起筛选') : t('展开筛选')}
             {activeFilterCount > 0 && <span>{activeFilterCount}</span>}
             {filtersExpanded ? (
               <IconChevronUp size={14} aria-hidden="true" />
@@ -1507,12 +1505,12 @@ export function SekerEaglePage({
               ? t('显示照片详情')
               : t('显示素材详情')
         }
+        title={t('详情')}
         data-dismiss-tools
         aria-pressed={isInspectorOpen}
         onClick={() => setIsInspectorVisible((value) => !value)}
       >
-        <IconLayoutSidebarRight size={18} />
-        {' ' + t('详情') + ' '}
+        <IconLayoutSidebarRight size={18} aria-hidden="true" />
       </button>
     </EagleResponsiveTools>
   );
@@ -1714,7 +1712,14 @@ export function SekerEaglePage({
               <div className={`${styles.toolbar} ${compact ? styles.mobileToolbar : ''}`}>
                 <div className={styles.heading} hidden={compact}>
                   <div className={styles.titleBlock}>
-                    <h1 id="eagle-library-title">
+                    <h1
+                      id="eagle-library-title"
+                      className={
+                        libraryView === 'ACTIVE' && !activeSmartFolderId && photoView === 'timeline'
+                          ? styles.visuallyHidden
+                          : undefined
+                      }
+                    >
                       {libraryView === 'TRASH'
                         ? t('回收站')
                         : libraryView === 'PRIVATE'
@@ -1732,12 +1737,6 @@ export function SekerEaglePage({
                                     : t('全部')
                               : t('全部')))}
                     </h1>
-                    {showsAssetControls && (
-                      <span>
-                        {displayedAssetCount}
-                        {' ' + t('项')}
-                      </span>
-                    )}
                     {privateVisible && privacyVisibility?.expiresAt ? (
                       <span className={styles.privacyStatus}>
                         <IconLock size={12} />
@@ -1745,14 +1744,6 @@ export function SekerEaglePage({
                       </span>
                     ) : null}
                   </div>
-                  {showsAssetControls &&
-                    !search &&
-                    !activeFilterCount &&
-                    !activeSmartFolderId &&
-                    !compact &&
-                    libraryView !== 'TRASH' && (
-                      <EagleSortSummary dateKind={libraryMode === 'PHOTO' ? 'capture' : 'added'} />
-                    )}
                 </div>
                 {!compact && libraryView !== 'TRASH' && (
                   <EagleImportButton onImport={importFiles} />
@@ -1796,7 +1787,7 @@ export function SekerEaglePage({
                   {transferStatus}
                 </div>
               )}
-              {(!compact || selectionMode || selectedAssetIds.length > 0) && selectionToolbar}
+              {selectionToolbar}
               {uploadStatus && (
                 <div className={styles.statusBar} role="status">
                   {uploadStatus}
