@@ -1,3 +1,4 @@
+import { publishImage } from './image-publication';
 import { publishEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
@@ -14,8 +15,6 @@ import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
 import { CAMERA_MAX_IMAGE_BYTES, isCameraVideoMime } from '@sekereagle/library-core';
-import { persistPhotoAnalysis } from './photo-analysis-persistence';
-import { groupAnalyzedPhoto } from './photo-grouping';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,7 +48,7 @@ import {
   taskBlocksAssetReady,
   terminalAssetFailure,
 } from './processing-policy';
-import { inferPhotoFaces, persistPhotoFaces, FACE_MODEL_VERSION } from './photo-faces';
+import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
 import { inspectLivePhotoImage } from './live-photo';
 import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
@@ -568,75 +567,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         status: 'READY',
       });
     }
-    await prisma.$transaction(async (transaction) => {
-      await lockOwnerPrivacyProjection(transaction, asset.ownerId, asset.libraryMode);
-      // Global lock order: privacy, group, asset/projections.
-      if (asset.libraryMode === 'PHOTO')
-        await transaction.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-groups:${asset.ownerId}`}))`;
-      const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-      });
-      if (completed.count !== 1) return;
-      for (const rendition of renditions) {
-        await transaction.eagleAssetRendition.upsert({
-          where: {
-            assetId_kind_revision_variant: {
-              assetId: rendition.assetId,
-              kind: rendition.kind,
-              revision: rendition.revision,
-              variant: rendition.variant ?? 'default',
-            },
-          },
-          create: rendition,
-          update: rendition,
-        });
-      }
-      if (
-        asset.libraryMode === 'PHOTO' &&
-        process.env.PHOTO_FACE_PYTHON &&
-        process.env.PHOTO_FACE_MODEL_DIR
-      ) {
-        await transaction.eagleAssetProcessingJob.createMany({
-          data: [
-            {
-              ownerId: asset.ownerId,
-              libraryMode: 'PHOTO',
-              assetId: asset.id,
-              assetRevision: job.assetRevision,
-              kind: 'ANALYZE_PHOTO_FACES',
-              processorVersion: FACE_MODEL_VERSION,
-              lane: 'BACKGROUND',
-              dependsOnJobId: job.id,
-            },
-          ],
-          skipDuplicates: true,
-        });
-      }
-      if ('photoAnalysis' in processed && processed.photoAnalysis) {
-        await persistPhotoAnalysis(transaction, asset, processed.photoAnalysis, job.assetRevision);
-        await groupAnalyzedPhoto(transaction, asset.ownerId, asset.id);
-      }
-      await transaction.eagleAsset.updateMany({
-        where: {
-          id: asset.id,
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          mediaRevision: job.assetRevision,
-        },
-        data: {
-          lifecycleStatus: 'READY',
-          mediaErrorCode: null,
-          sha256,
-          ...catalogImageDimensions(
-            processed.metadata,
-            'originalDimensions' in processed ? processed.originalDimensions : undefined,
-          ),
-          livePhotoIdentifier: livePhoto?.identifier ?? null,
-          livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
-        },
-      });
-      await syncAssetPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
+    await publishImage(prisma, {
+      asset, job, renditions, sha256,
+      dimensions: catalogImageDimensions(processed.metadata, 'originalDimensions' in processed ? processed.originalDimensions : undefined),
+      photoAnalysis: 'photoAnalysis' in processed ? processed.photoAnalysis ?? null : null,
+      livePhoto: livePhoto ?? null,
+      scheduleFaces: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
     });
     return;
   }
