@@ -2,7 +2,7 @@ import { isCameraVideoMime } from '@sekereagle/library-core';
 import { getEagleVideoContentUrl } from './eagle-media-sources';
 import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { t } from '../../i18n';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
@@ -107,7 +107,7 @@ export function EagleAssetThumbnail({
     loadedThumbnailRef.current?.release();
     loadedThumbnailRef.current = null;
   }, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     clearLoadTimeout();
     clearRetryTimer();
     settleRef.current?.();
@@ -118,7 +118,16 @@ export function EagleAssetThumbnail({
     setFailed(false);
     transientRetriesRef.current = 0;
     setIsVideoPreviewActive(false);
-  }, [clearLoadTimeout, releaseLoadedThumbnail, sourceKey]);
+    for (const [index, candidate] of sourceKey.split('\u0000').entries()) {
+      if (!loadService || !candidate.startsWith('/api/')) continue;
+      const cached = loadService.acquireCached(`${asset.id}:${asset.mediaRevision}:${candidate}`);
+      if (!cached) continue;
+      loadedThumbnailRef.current = cached;
+      setAttempt(index * ATTEMPTS_PER_RENDITION);
+      setActiveSource(cached.url);
+      break;
+    }
+  }, [asset.id, asset.mediaRevision, clearLoadTimeout, loadService, releaseLoadedThumbnail, sourceKey]);
   const handleFailure = useCallback(
     (failedSource: string, skipRemainingAttempts = false) => {
       clearLoadTimeout();
@@ -177,13 +186,14 @@ export function EagleAssetThumbnail({
     scheduler.reprioritize(taskId, { priority: 'visible', order });
   }, [order, scheduler, taskId]);
   useEffect(() => {
-    if (!source || failed) return undefined;
+    if (!source || failed || loadedThumbnailRef.current) return undefined;
     return scheduler.enqueue({
       id: taskId,
       priority: 'visible',
       order,
       run: async (signal) => {
         let displaySource = source;
+        let ownedThumbnail: LoadedThumbnail | null = null;
         if (loadService && source.startsWith('/api/')) {
           try {
             const loaded = await loadService.load(
@@ -197,6 +207,7 @@ export function EagleAssetThumbnail({
             }
             releaseLoadedThumbnail();
             loadedThumbnailRef.current = loaded;
+            ownedThumbnail = loaded;
             transientRetriesRef.current = 0;
             displaySource = loaded.url;
           } catch (error) {
@@ -216,7 +227,7 @@ export function EagleAssetThumbnail({
           };
           const handleAbort = () => {
             setActiveSource((current) => (current === displaySource ? null : current));
-            releaseLoadedThumbnail();
+            if (loadedThumbnailRef.current === ownedThumbnail) releaseLoadedThumbnail();
             settle();
           };
           if (signal.aborted) {

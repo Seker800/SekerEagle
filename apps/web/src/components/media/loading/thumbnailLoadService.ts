@@ -58,10 +58,15 @@ export class ThumbnailLoadService {
     this.maxIdleMs = options.maxIdleMs ?? DEFAULT_MAX_IDLE_MS;
   }
 
-  async load(key: string, url: string, signal: AbortSignal): Promise<LoadedThumbnail> {
+  acquireCached(key: string): LoadedThumbnail | null {
     this.evictExpired();
-    const cached = this.objectUrls.get(key);
-    if (cached) return this.retain(key, cached);
+    const entry = this.objectUrls.get(key);
+    return entry ? this.retain(key, entry) : null;
+  }
+
+  async load(key: string, url: string, signal: AbortSignal): Promise<LoadedThumbnail> {
+    const cached = this.acquireCached(key);
+    if (cached) return cached;
 
     let load = this.inFlight.get(key);
     if (!load) {
