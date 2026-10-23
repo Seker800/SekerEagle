@@ -1164,3 +1164,7 @@
     color: #fff;
   }
 }
+
+.assetViewport[data-bidirectional='true'] {
+  overflow-anchor: none;
+}

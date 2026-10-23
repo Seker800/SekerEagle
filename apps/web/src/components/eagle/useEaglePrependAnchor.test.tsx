@@ -44,3 +44,22 @@ it('does not move the viewport for append-only updates or a vanished anchor', ()
   rerender({ items: [{ id: 'c', top: 0, height: 100 }] });
   expect(element.scrollTo).not.toHaveBeenCalled();
 });
+
+it('retains the pending anchor through an intermediate entity or append render', () => {
+  const element = { scrollTop: 20, scrollTo: vi.fn() };
+  const viewport = { elementRef: { current: element }, handleScroll: vi.fn() };
+  const items = [{ id: 'a', top: 0, height: 100 }];
+  const { result, rerender } = renderHook(
+    ({ items }) => useEaglePrependAnchor(items, viewport as never, 'scope'),
+    { initialProps: { items } },
+  );
+  act(() => result.current.capture());
+  rerender({ items: [...items, { id: 'b', top: 100, height: 100 }] });
+  rerender({
+    items: [
+      { id: 'new', top: 0, height: 100 },
+      { id: 'a', top: 100, height: 100 },
+    ],
+  });
+  expect(element.scrollTo).toHaveBeenCalledWith({ top: 120, behavior: 'instant' });
+});

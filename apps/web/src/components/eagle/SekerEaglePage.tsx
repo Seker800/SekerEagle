@@ -1,3 +1,4 @@
+import { useEaglePrependAnchor } from './useEaglePrependAnchor';
 import { useEagleLibraryCount } from './useEagleLibraryCount';
 import { useMobileBack } from '../../lib/mobile-back';
 import { EagleMobileSearch } from './EagleMobileSearch';
@@ -503,6 +504,7 @@ export function SekerEaglePage({
     },
     initialPageParam: browserCursor,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    getPreviousPageParam: (firstPage) => firstPage.previousCursor ?? undefined,
     enabled: isAssetView && showsAssetControls,
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
@@ -707,6 +709,28 @@ export function SekerEaglePage({
     strategy: compact ? 'square' : isPhotoTimeline ? 'justified' : 'masonry',
     sectionKeys: timelineSectionKeys,
   });
+  const prependAnchor = useEaglePrependAnchor(
+    masonryLayout.items,
+    assetViewport,
+    JSON.stringify(queryKeys.assetList(libraryView, assetFilters)),
+  );
+  const loadPreviousPage = useCallback(() => {
+    if (!browserCursor || !assetsQuery.hasPreviousPage || assetsQuery.isFetching) return;
+    prependAnchor.capture();
+    void assetsQuery.fetchPreviousPage({ cancelRefetch: false }).then((result) => {
+      if (result.isError) prependAnchor.clear();
+    });
+  }, [
+    browserCursor,
+    assetsQuery.hasPreviousPage,
+    assetsQuery.isFetching,
+    assetsQuery.fetchPreviousPage,
+    prependAnchor.capture,
+    prependAnchor.clear,
+  ]);
+  useEffect(() => {
+    if (scrollTop <= 600 && !assetsQuery.isFetchPreviousPageError) loadPreviousPage();
+  }, [scrollTop, assetsQuery.isFetchPreviousPageError, loadPreviousPage]);
   const masonryViewportIndex = useMemo(
     () => buildMasonryViewportIndex(masonryLayout.items),
     [masonryLayout.items],
@@ -1880,10 +1904,16 @@ export function SekerEaglePage({
                   className={`${styles.assetViewport} ${isPhotoTimeline ? styles.horizontalViewport : ''}`}
                   role="region"
                   aria-label={libraryMode === 'PHOTO' ? t('照片时间线') : t('素材瀑布流')}
+                  data-bidirectional={Boolean(browserCursor)}
                   onClick={clearAssetSelection}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
                   <div className={styles.scrollContent}>
+                    {assetsQuery.isFetchPreviousPageError && (
+                      <button type="button" onClick={loadPreviousPage}>
+                        {t('重试')}
+                      </button>
+                    )}
                     {assetsQuery.isLoading && (
                       <div className={styles.emptyState}>{t('正在加载个人素材库…')}</div>
                     )}

@@ -281,14 +281,16 @@ export class EagleService {
       ? decodeEagleAssetCursor(query.cursor, { ownerId, libraryMode: this.libraryMode }, query.sort)
       : null;
     const dateField = assetDateField(this.libraryMode, query.sort);
+    const newer = cursor?.direction === 'NEWER';
+    const comparison = newer ? 'gt' : 'lt';
     const where: Prisma.EagleAssetWhereInput = cursor
       ? {
           AND: [
             queryWhere,
             {
               OR: [
-                { [dateField]: { lt: cursor.libraryAddedAt } },
-                { [dateField]: cursor.libraryAddedAt, id: { lt: cursor.id } },
+                { [dateField]: { [comparison]: cursor.libraryAddedAt } },
+                { [dateField]: cursor.libraryAddedAt, id: { [comparison]: cursor.id } },
               ],
             },
           ],
@@ -298,7 +300,7 @@ export class EagleService {
       this.prisma.eagleAsset.findMany({
         where: inLibrary(this.libraryMode, where),
         include: assetListInclude,
-        orderBy: [{ [dateField]: 'desc' }, { id: 'desc' }],
+        orderBy: [{ [dateField]: newer ? 'asc' : 'desc' }, { id: newer ? 'asc' : 'desc' }],
         take: query.limit + 1,
         ...(query.offset ? { skip: query.offset } : {}),
       }),
@@ -332,6 +334,7 @@ export class EagleService {
     ]);
     const hasMore = rows.length > query.limit;
     const page = rows.slice(0, query.limit);
+    if (newer) page.reverse();
     return {
       items: await this.withLivePhotoMotions(ownerId, page, includePrivate),
       ...(this.libraryMode === 'PHOTO' && !trash
@@ -344,8 +347,17 @@ export class EagleService {
             ),
           }
         : {}),
+      previousCursor:
+        page.length && (newer ? hasMore : Boolean(cursor))
+          ? encodeEagleAssetCursor(
+              { id: page[0]!.id, libraryAddedAt: page[0]![dateField] },
+              { ownerId, libraryMode: this.libraryMode },
+              query.sort,
+              'NEWER',
+            )
+          : null,
       nextCursor:
-        hasMore && page.length
+        (hasMore || newer) && page.length
           ? encodeEagleAssetCursor(
               { id: page.at(-1)!.id, libraryAddedAt: page.at(-1)![dateField] },
               { ownerId, libraryMode: this.libraryMode },

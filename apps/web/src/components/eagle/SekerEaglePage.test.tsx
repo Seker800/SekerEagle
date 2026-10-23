@@ -455,6 +455,34 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it('loads newer neighbors after locating into the middle without discarding the current page', async () => {
+    const newer = { ...asset, id: 'newer-asset', displayName: 'Newer neighbor' };
+    getEagleAssetLocationMock.mockResolvedValue({ assetId: asset.id, cursor: 'middle' });
+    listEagleAssetsMock.mockImplementation((_token, filters) =>
+      Promise.resolve(
+        filters.cursor === 'newer'
+          ? { items: [newer], nextCursor: 'back', previousCursor: null }
+          : {
+              items: [asset],
+              nextCursor: null,
+              previousCursor: filters.cursor === 'middle' ? 'newer' : null,
+            },
+      ),
+    );
+    renderPage();
+    fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(await screen.findByRole('button', { name: '定位到时间线' }));
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(
+        'token',
+        expect.objectContaining({ cursor: 'newer' }),
+        expect.anything(),
+      ),
+    );
+    expect(await screen.findByRole('button', { name: /Newer neighbor/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+  });
+
   it('returns from a search preview to the unfiltered dated neighborhood', async () => {
     getEagleAssetLocationMock.mockResolvedValue({ assetId: asset.id, cursor: 'nearby-cursor' });
     renderPage();

@@ -256,6 +256,7 @@ export interface EaglePhotoStack {
   cover: EagleAssetListItem;
 }
 export interface EagleAssetPage {
+  previousCursor?: string | null;
   photoStacks?: EaglePhotoStack[];
   items: EagleAssetListItem[];
   nextCursor: string | null;

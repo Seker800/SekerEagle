@@ -8,7 +8,15 @@ test('jumped lists can prepend nearest newer rows without crossing owner, privac
     const scope = { ownerId: 'owner', libraryMode: mode };
     const date = new Date('2026-01-02T00:00:00.000Z');
     let query: Record<string, unknown> = {};
-    let rows = ['b', 'c', 'd'].map((id) => ({ id, libraryAddedAt: date, chronologicalAt: date }));
+    let rows = ['b', 'c', 'd'].map((id) => ({
+      id,
+      libraryAddedAt: date,
+      chronologicalAt: date,
+      renditions: [],
+      manualTagLinks: [],
+      byteSize: 0n,
+      libraryMode: mode,
+    }));
     const service = new EagleService(
       {
         eagleAsset: {
