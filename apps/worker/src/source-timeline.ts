@@ -4,7 +4,8 @@ export type SourceTimelineItem = RefreshItem & { sourceDate: string; dateSource:
 const sources = new Set(['DateTimeOriginal','CreateDate','MediaCreateDate','TrackCreateDate','FileModifyTime']);
 /** One atomic bounded batch; existing capture metadata and edited inheritance remain authoritative. */
 export async function refreshSourceTimeline(client: Pick<PrismaClient, '$queryRaw'>, ownerId: string, items: SourceTimelineItem[]): Promise<Array<{id:string}>> {
-  validatePhotoMaintenanceManifest(items.map(({assetId,sha256,mediaRevision})=>({assetId,sha256,mediaRevision})));
+  if (!Array.isArray(items) || items.length < 1 || items.length > 1000 || new Set(items.map(x=>x.assetId)).size !== items.length) throw new Error('INVALID_SOURCE_BATCH');
+  for (let i=0;i<items.length;i+=100) validatePhotoMaintenanceManifest(items.slice(i,i+100).map(({assetId,sha256,mediaRevision})=>({assetId,sha256,mediaRevision})));
   if (!ownerId || items.some(x => !sources.has(x.dateSource) || !Number.isFinite(Date.parse(x.sourceDate)) || new Date(x.sourceDate).getUTCFullYear()<1900 || new Date(x.sourceDate).getUTCFullYear()>2200)) throw new Error('INVALID_SOURCE_DATE');
   const evidence = JSON.stringify(items.map(x=>({...x,sourceDate:new Date(x.sourceDate).toISOString()})));
   return client.$queryRaw<Array<{id:string}>>(Prisma.sql`
