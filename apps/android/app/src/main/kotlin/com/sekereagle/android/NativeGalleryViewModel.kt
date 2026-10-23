@@ -79,7 +79,12 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun prepareUploadSelection(): Boolean {
         val current = state.value
         val identity = current.identity ?: return false
-        if (current.busy || current.trash || downloads.state.value != null || uploads.state.value != null)
+        if (
+            current.busy ||
+                current.trash ||
+                downloads.state.value != null ||
+                uploads.state.value != null
+        )
             return false
         uploadPickerTarget = identity.scope to current.mode
         return true
@@ -127,7 +132,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun restore() {
         val origin = settings.origin()
-        if (origin.isEmpty() || settings.value("native-session:$origin", "credential", "").isEmpty()) {
+        if (
+            origin.isEmpty() || settings.value("native-session:$origin", "credential", "").isEmpty()
+        ) {
             mutable.value = GalleryState(restoring = false)
             return
         }
@@ -157,7 +164,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             try {
                 signingOut?.join()
                 val normalized = BackupPolicy.origin(origin, BuildConfig.DEBUG)
-                val connection = withContext(Dispatchers.IO) { NativeSession.open(getApplication(), normalized) }
+                val connection =
+                    withContext(Dispatchers.IO) { NativeSession.open(getApplication(), normalized) }
                 val result =
                     withContext(Dispatchers.IO) {
                         if (email == null) connection.json("GET", "/api/auth/me")
@@ -198,8 +206,12 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     mutable.value =
                         GalleryState(
                             restoring = false,
-                            restoreFailed = email == null && !(e is NativeSession.Failure && e.status == 401),
-                            error = if (e is NativeSession.Failure && e.status == 401 && email != null) "邮箱或密码错误" else e.message ?: "无法连接，请检查网络后重试",
+                            restoreFailed =
+                                email == null && !(e is NativeSession.Failure && e.status == 401),
+                            error =
+                                if (e is NativeSession.Failure && e.status == 401 && email != null)
+                                    "邮箱或密码错误"
+                                else e.message ?: "无法连接，请检查网络后重试",
                         )
                 }
             }
@@ -326,20 +338,43 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 val items = mutableListOf<NativeAsset>()
                 var cursor: String? = null
                 do {
-                    val page = repo.page(snapshot.mode, snapshot.query, cursor, snapshot.filters,
-                        snapshot.trash, snapshot.sort,
-                        offset = if (cursor == null && snapshot.query.isBlank() && !snapshot.filters.active && !snapshot.trash) snapshot.windowOffset else 0)
+                    val page =
+                        repo.page(
+                            snapshot.mode,
+                            snapshot.query,
+                            cursor,
+                            snapshot.filters,
+                            snapshot.trash,
+                            snapshot.sort,
+                            offset =
+                                if (
+                                    cursor == null &&
+                                        snapshot.query.isBlank() &&
+                                        !snapshot.filters.active &&
+                                        !snapshot.trash
+                                )
+                                    snapshot.windowOffset
+                                else 0,
+                        )
                     items.addAll(page.items)
                     cursor = page.cursor
                 } while (cursor != null && items.size < maxOf(60, snapshot.items.size))
                 if (request != generation) return@launch
-                mutable.value = state.value.copy(items = items.distinctBy { it.id }, cursor = cursor,
-                    selected = state.value.selected.intersect(items.map { it.id }.toSet()), loading = false)
-            } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
+                mutable.value =
+                    state.value.copy(
+                        items = items.distinctBy { it.id },
+                        cursor = cursor,
+                        selected = state.value.selected.intersect(items.map { it.id }.toSet()),
+                        loading = false,
+                    )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
                 if (request == generation) {
                     if (e is NativeSession.Failure && e.status == 401) expire()
-                    else mutable.value = state.value.copy(loading = false, error = e.message ?: "刷新失败，请重试")
+                    else
+                        mutable.value =
+                            state.value.copy(loading = false, error = e.message ?: "刷新失败，请重试")
                 }
             }
         }
@@ -638,7 +673,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 selected =
                     if (allSelected) s.selected - available
                     else NativeSelection.all(s.selected + available),
-                message = if (!allSelected && (s.selected + available).size > NativeSelection.LIMIT) "每次最多选择 100 项，超出部分未选择" else null,
+                message =
+                    if (!allSelected && (s.selected + available).size > NativeSelection.LIMIT)
+                        "每次最多选择 100 项，超出部分未选择"
+                    else null,
             )
     }
 
@@ -733,7 +771,17 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 } else {
                     automaticallyBackup()
                     val current = state.value
-                    if (!current.loading && !current.busy && !current.selecting && current.viewerId == null && !current.searchOpen && current.filterPanel == null && downloads.state.value?.running != true && uploads.state.value?.phase != NativeUploadPhase.RUNNING) refresh()
+                    if (
+                        !current.loading &&
+                            !current.busy &&
+                            !current.selecting &&
+                            current.viewerId == null &&
+                            !current.searchOpen &&
+                            current.filterPanel == null &&
+                            downloads.state.value?.running != true &&
+                            uploads.state.value?.phase != NativeUploadPhase.RUNNING
+                    )
+                        refresh()
                 }
             } catch (reason: CancellationException) {
                 throw reason

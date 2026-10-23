@@ -31,7 +31,7 @@ class NativeDownloads(
     private val generation = AtomicInteger()
     private val mutable = MutableStateFlow<NativeDownloadState?>(null)
     internal val state = mutable.asStateFlow()
-    private var cancellation: NativeDownloadCancellation? = null
+    private var cancellation: NativeTransferCancellation? = null
     private var job: Job? = null
     private var connection: NativeSession? = null
     private var mode = GalleryMode.PHOTO
@@ -50,7 +50,7 @@ class NativeDownloads(
         this.connection = session
         this.mode = mode
         val ticket = generation.incrementAndGet()
-        val cancel = NativeDownloadCancellation().also { cancellation = it }
+        val cancel = NativeTransferCancellation().also { cancellation = it }
         val initial = NativeDownloadState(total = completed + assets.size, completed = completed)
         mutable.value = initial
         fun publish(value: NativeDownloadState) {

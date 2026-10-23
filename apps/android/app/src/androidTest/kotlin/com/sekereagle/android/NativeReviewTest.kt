@@ -4,11 +4,11 @@ import android.app.Application
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
-import java.net.ServerSocket
 import java.net.InetAddress
+import java.net.ServerSocket
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.*
 import org.json.JSONObject
@@ -20,81 +20,136 @@ import org.junit.Test
 class NativeReviewTest {
     @get:Rule val compose = createComposeRule()
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val app get() = instrumentation.targetContext.applicationContext as Application
+    private val app
+        get() = instrumentation.targetContext.applicationContext as Application
+
     private fun main(block: () -> Unit) = instrumentation.runOnMainSync(block)
+
     private fun await(condition: () -> Boolean) = compose.waitUntil(15000, condition)
 
     private class Server : AutoCloseable {
         val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
-        var version = 1
-        private val thread = Thread {
-            try {
-                while (!socket.isClosed) socket.accept().use { client ->
-                    client.soTimeout = 5000
-                    val reader = client.getInputStream().bufferedReader()
-                    val first = reader.readLine().split(" ")
-                    val path = first[1]
-                    paths.add(path)
-                    var length = 0
-                    while (true) {
-                        val line = reader.readLine()
-                        if (line.isEmpty()) break
-                        if (line.startsWith("Content-Length:", true)) length = line.substringAfter(':').trim().toInt()
-                    }
-                    repeat(length) { reader.read() }
-                    val status = if (path == "/api/auth/login") 401 else 200
-                    val body = when {
-                        path == "/api/auth/me" -> """{"user":{"id":"owner","email":"test@example.invalid"},"desktopCache":{"deploymentId":"review"}}"""
-                        path.contains("/timeline") -> """{"days":[],"total":180}"""
-                        path.contains("/assets?") -> {
-                            val start = Regex("(?:cursor|offset)=([0-9]+)").find(path)?.groupValues?.get(1)?.toInt() ?: 0
-                            val items = (start until minOf(start + 60, 180)).joinToString(",") { i ->
-                                """{"id":"asset$i","displayName":"item$i","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
+        @Volatile var version = 1
+        private val thread =
+            Thread {
+                    try {
+                        while (!socket.isClosed) socket.accept().use { client ->
+                            client.soTimeout = 5000
+                            val reader = client.getInputStream().bufferedReader()
+                            val first = reader.readLine().split(" ")
+                            val path = first[1]
+                            paths.add(path)
+                            var length = 0
+                            while (true) {
+                                val line = reader.readLine()
+                                if (line.isEmpty()) break
+                                if (line.startsWith("Content-Length:", true))
+                                    length = line.substringAfter(':').trim().toInt()
                             }
-                            """{"items":[$items],"nextCursor":${if (start + 60 < 180) "\"${start+60}\"" else "null"}}"""
+                            repeat(length) { reader.read() }
+                            val status = if (path == "/api/auth/login") 401 else 200
+                            val body =
+                                when {
+                                    path == "/api/auth/me" ->
+                                        """{"user":{"id":"owner","email":"test@example.invalid"},"desktopCache":{"deploymentId":"review"}}"""
+                                    path.contains("/timeline") -> """{"days":[],"total":180}"""
+                                    path.contains("/assets?") -> {
+                                        val start =
+                                            Regex("(?:cursor|offset)=([0-9]+)")
+                                                .find(path)
+                                                ?.groupValues
+                                                ?.get(1)
+                                                ?.toInt() ?: 0
+                                        val items =
+                                            (start until minOf(start + 60, 180)).joinToString(
+                                                ","
+                                            ) { i ->
+                                                """{"id":"asset$i","displayName":"item$i","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
+                                            }
+                                        """{"items":[$items],"nextCursor":${if (start + 60 < 180) "\"${start+60}\"" else "null"}}"""
+                                    }
+                                    else -> "{}"
+                                }
+                            client
+                                .getOutputStream()
+                                .write(
+                                    "HTTP/1.1 $status Test\r\nContent-Type: application/json\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body"
+                                        .toByteArray()
+                                )
                         }
-                        else -> "{}"
-                    }
-                    client.getOutputStream().write("HTTP/1.1 $status Test\r\nContent-Type: application/json\r\nContent-Length: ${body.toByteArray().size}\r\nConnection: close\r\n\r\n$body".toByteArray())
+                    } catch (_: java.io.IOException) {}
                 }
-            } catch (_: java.io.IOException) {}
-        }.apply { start() }
-        override fun close() { socket.close(); thread.join(6000) }
+                .apply { start() }
+
+        override fun close() {
+            socket.close()
+            thread.join(6000)
+        }
     }
 
     private fun model(server: Server, credential: Boolean = true): NativeGalleryViewModel {
         val settings = BackupSettings(app)
         settings.origin(server.origin)
-        if (credential) settings.saveToken("native-session:${server.origin}", JSONObject().put("sekereagle_access", "fixture").toString())
+        if (credential)
+            settings.saveToken(
+                "native-session:${server.origin}",
+                JSONObject().put("sekereagle_access", "fixture").toString(),
+            )
         lateinit var result: NativeGalleryViewModel
         main { result = NativeGalleryViewModel(app) }
         await { !result.state.value.restoring }
-        if (credential) await { !result.state.value.loading && result.state.value.items.isNotEmpty() }
+        if (credential)
+            await { !result.state.value.loading && result.state.value.items.isNotEmpty() }
         return result
     }
 
-    @Test fun refreshAndMutationKeepAllLoadedPagesAndVersions() {
+    @Test
+    fun refreshAndMutationKeepAllLoadedPagesAndVersions() {
         Server().use { server ->
             val model = model(server)
-            repeat(2) { main { model.load(true) }; await { !model.state.value.loading } }
+            repeat(2) {
+                main { model.load(true) }
+                await { !model.state.value.loading }
+            }
             assertEquals(180, model.state.value.items.size)
+            main {
+                model.startSelection("asset0")
+                model.selectLoaded((0 until 80).map { "asset$it" }.toSet())
+                model.selectLoaded((80 until 160).map { "asset$it" }.toSet())
+                assertEquals(100, model.state.value.selected.size)
+                assertTrue(model.state.value.message.orEmpty().contains("100"))
+                model.back()
+            }
             server.version = 2
-            main { model.startSelection("asset130"); model.changeSelection("rating", rating = 3) }
+            main {
+                model.startSelection("asset130")
+                model.changeSelection("rating", rating = 3)
+            }
             await { !model.state.value.busy && !model.state.value.loading }
-            assertEquals("Mutation must retain the loaded window", 180, model.state.value.items.size)
+            assertEquals(
+                "Mutation must retain the loaded window",
+                180,
+                model.state.value.items.size,
+            )
             assertEquals(2, model.state.value.items[130].rowVersion)
             main { model.refresh() }
             await { !model.state.value.loading }
             assertEquals(180, model.state.value.items.size)
-            main { model.openTrash(); }
+            main {
+                model.openTrash()
+            }
             await { !model.state.value.loading }
-            main { assertFalse(model.prepareUploadSelection()); model.logout() }
+            main {
+                assertFalse(model.prepareUploadSelection())
+                model.logout()
+            }
         }
     }
 
-    @Test fun cleanLaunchAndBadPasswordHaveDifferentLoginStates() {
+    @Test
+    fun cleanLaunchAndBadPasswordHaveDifferentLoginStates() {
         Server().use { server ->
             val model = model(server, false)
             assertNull(model.state.value.identity)
@@ -104,22 +159,38 @@ class NativeReviewTest {
             await { !model.state.value.authenticating }
             assertEquals("邮箱或密码错误", model.state.value.error)
             assertFalse(model.state.value.restoreFailed)
-            main { model.logout(); model.restore() }
+            main {
+                model.logout()
+                model.restore()
+            }
             await { !model.state.value.restoring }
             assertNull(model.state.value.error)
         }
     }
 
-    @Test fun filterDraftAndBatchTagSelectionSurviveRecreation() {
+    @Test
+    fun filterDraftAndBatchTagSelectionSurviveRecreation() {
         Server().use { server ->
             val model = model(server)
             val restore = StateRestorationTester(compose)
+            val snapshot = model.state.value
             var panel by androidx.compose.runtime.mutableStateOf("筛选")
             restore.setContent {
-                NativeTheme { androidx.compose.material3.Surface {
-                    NativeFilterSheet(model.state.value.copy(filterPanel = panel,
-                        options = NativeOptions(tags = listOf(NativeTag("tag", "保留标签")), formats = listOf("png"))), model)
-                } }
+                NativeTheme {
+                    androidx.compose.material3.Surface {
+                        NativeFilterSheet(
+                            snapshot.copy(
+                                filterPanel = panel,
+                                options =
+                                    NativeOptions(
+                                        tags = listOf(NativeTag("tag", "保留标签")),
+                                        formats = listOf("png"),
+                                    ),
+                            ),
+                            model,
+                        )
+                    }
+                }
             }
             compose.onNodeWithText("PNG").performScrollTo().performClick()
             restore.emulateSavedInstanceStateRestore()

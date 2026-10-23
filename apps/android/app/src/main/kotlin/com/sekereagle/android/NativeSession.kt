@@ -45,7 +45,12 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         )
 
     @Synchronized
-    fun json(method: String, path: String, body: JSONObject? = null, cancellation: NativeDownloadCancellation? = null): JSONObject {
+    fun json(
+        method: String,
+        path: String,
+        body: JSONObject? = null,
+        cancellation: NativeTransferCancellation? = null,
+    ): JSONObject {
         val bytes =
             request(
                 method,
@@ -76,7 +81,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         method: String,
         path: String,
         body: JSONObject? = null,
-        cancellation: NativeDownloadCancellation? = null,
+        cancellation: NativeTransferCancellation? = null,
     ): JSONObject {
         ensureActive(ticket)
         return json(method, path, body, cancellation)
@@ -210,7 +215,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         body: ByteArray?,
         limit: Int,
         refresh: Boolean,
-        cancellation: NativeDownloadCancellation? = null,
+        cancellation: NativeTransferCancellation? = null,
     ): ByteArray =
         exchange(
             method,
@@ -243,7 +248,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         size: Long,
         mime: String,
         output: java.io.OutputStream,
-        cancellation: NativeDownloadCancellation,
+        cancellation: NativeTransferCancellation,
         progress: (Long) -> Unit,
     ) {
         require(path.matches(Regex("/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/original")))
@@ -279,7 +284,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         refresh: Boolean,
         accept: String,
         onConnection: (HttpURLConnection) -> Unit = {},
-        cancellation: NativeDownloadCancellation? = null,
+        cancellation: NativeTransferCancellation? = null,
         consume: (HttpURLConnection, () -> Unit) -> T,
     ): T {
         NativeGalleryPolicy.safePath(path)
@@ -328,7 +333,16 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                             cancellation,
                         )
                 }
-                return exchange(method, path, body, false, accept, onConnection, cancellation, consume)
+                return exchange(
+                    method,
+                    path,
+                    body,
+                    false,
+                    accept,
+                    onConnection,
+                    cancellation,
+                    consume,
+                )
             }
             if (status !in 200..299) {
                 if (status == 401) clear()

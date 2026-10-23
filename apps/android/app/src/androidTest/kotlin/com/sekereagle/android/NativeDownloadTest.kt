@@ -137,7 +137,7 @@ class NativeDownloadTest {
                     3,
                     "image/png",
                     output,
-                    NativeDownloadCancellation(),
+                    NativeTransferCancellation(),
                 ) {}
                 assertArrayEquals(data, output.toByteArray())
                 assertEquals(
@@ -179,7 +179,7 @@ class NativeDownloadTest {
                         session,
                         GalleryMode.PHOTO,
                         asset,
-                        NativeDownloadCancellation(),
+                        NativeTransferCancellation(),
                     ) { _, _ ->
                     }
                 }
@@ -195,7 +195,7 @@ class NativeDownloadTest {
             val data = ByteArray(200_000)
             Server(listOf(Reply(metadata(data.size)), Reply(data, "image/png"))).use { server ->
                 val session = NativeSession.open(context, server.origin)
-                val cancel = NativeDownloadCancellation()
+                val cancel = NativeTransferCancellation()
                 assertThrows(Exception::class.java) {
                     NativeDownloadStore(context).save(session, GalleryMode.PHOTO, asset, cancel) {
                         bytes,

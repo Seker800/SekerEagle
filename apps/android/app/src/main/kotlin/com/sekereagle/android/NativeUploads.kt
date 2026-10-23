@@ -59,7 +59,7 @@ class NativeUploads(
     private var sessionEpoch = 0
     private var journal = NativeUploadPolicy.Journal()
     private var cancelled = AtomicBoolean()
-    private var requestCancellation = NativeDownloadCancellation()
+    private var requestCancellation = NativeTransferCancellation()
     private var job: Job? = null
 
     fun prepare(session: NativeSession, identity: String, mode: GalleryMode, uris: List<Uri>) {
@@ -133,7 +133,7 @@ class NativeUploads(
         val taskJournal = journal
         val ticket = generation.incrementAndGet()
         val cancellation = AtomicBoolean().also { cancelled = it }
-        val requestGuard = NativeDownloadCancellation().also { requestCancellation = it }
+        val requestGuard = NativeTransferCancellation().also { requestCancellation = it }
         mutable.value = initial
         fun check() {
             if (cancellation.get() || generation.get() != ticket) throw CancellationException()
@@ -144,7 +144,13 @@ class NativeUploads(
                 var result = initial
                 try {
                     check()
-                    val me = connection.jsonAtEpoch(authEpoch, "GET", "/api/auth/me", cancellation = requestGuard)
+                    val me =
+                        connection.jsonAtEpoch(
+                            authEpoch,
+                            "GET",
+                            "/api/auth/me",
+                            cancellation = requestGuard,
+                        )
                     val actual =
                         com.sekereagle.android.core.BackupPolicy.digest(
                             "${connection.origin}\n${me.getJSONObject("desktopCache").getString("deploymentId")}\n${me.getJSONObject("user").getString("id")}"
@@ -242,9 +248,10 @@ class NativeUploads(
                         }
                         return@launch
                     }
-                    result = if (cancellation.get() || reason is CancellationException)
-                        result.copy(cancelled = true, remaining = entries)
-                    else result.copy(current = safeMessage(reason), remaining = entries)
+                    result =
+                        if (cancellation.get() || reason is CancellationException)
+                            result.copy(cancelled = true, remaining = entries)
+                        else result.copy(current = safeMessage(reason), remaining = entries)
                 } finally {
                     publish(ticket, result.copy(phase = NativeUploadPhase.FINISHED))
                     if (generation.get() == ticket && (result.uploaded > 0 || result.skipped > 0))
@@ -275,7 +282,8 @@ class NativeUploads(
 
     fun cancel() {
         val current = mutable.value ?: return
-        if (current.phase == NativeUploadPhase.PREPARING) clear() else {
+        if (current.phase == NativeUploadPhase.PREPARING) clear()
+        else {
             cancelled.set(true)
             requestCancellation.cancel()
         }

@@ -118,7 +118,7 @@ fun NativeViewer(
             text = {
                 Text(
                     if (asset.video) "视频\n${asset.date} ${asset.time}"
-                    else "${asset.date} ${asset.time}"
+                    else "${asset.date} ${asset.time}\n当前显示预览图，放大不增加原片细节；查看原片请下载。"
                 )
             },
             confirmButton = { TextButton({ info = false }) { Text("完成") } },

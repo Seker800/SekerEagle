@@ -92,7 +92,8 @@ public final class MainActivity extends Activity {
     WebSettings config = web.getSettings();
     config.setJavaScriptEnabled(true);
     config.setDomStorageEnabled(true);
-    config.setUserAgentString(config.getUserAgentString() + " SekerEagleAndroid/" + BuildConfig.VERSION_NAME + "");
+    config.setUserAgentString(
+        config.getUserAgentString() + " SekerEagleAndroid/" + BuildConfig.VERSION_NAME + "");
     config.setAllowFileAccess(false);
     config.setAllowContentAccess(false);
     config.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);

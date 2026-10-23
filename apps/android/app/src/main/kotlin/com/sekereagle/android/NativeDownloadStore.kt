@@ -8,39 +8,6 @@ import android.provider.MediaStore
 import com.sekereagle.android.core.NativeDownloadPolicy
 import com.sekereagle.android.core.NativeGalleryPolicy
 import java.io.IOException
-import java.net.HttpURLConnection
-import java.util.concurrent.CancellationException
-
-/** Explicit cancellation disconnects a blocked read as well as checking between chunks. */
-class NativeDownloadCancellation {
-    @Volatile
-    var cancelled = false
-        private set
-
-    private var connection: HttpURLConnection? = null
-
-    @Synchronized
-    fun bind(value: HttpURLConnection) {
-        check()
-        connection = value
-    }
-
-    @Synchronized
-    fun cancel() {
-        cancelled = true
-        connection?.disconnect()
-    }
-
-    fun check() {
-        if (cancelled || Thread.currentThread().isInterrupted) throw CancellationException()
-    }
-
-    @Synchronized
-    fun <T> commit(block: () -> T): T {
-        check()
-        return block()
-    }
-}
 
 /** Pending MediaStore rows prevent incomplete originals from appearing as completed downloads. */
 class NativeDownloadStore(context: Context) {
@@ -50,7 +17,7 @@ class NativeDownloadStore(context: Context) {
         session: NativeSession,
         mode: GalleryMode,
         asset: NativeAsset,
-        cancellation: NativeDownloadCancellation,
+        cancellation: NativeTransferCancellation,
         progress: (Long, Long) -> Unit,
     ): Uri {
         val base =

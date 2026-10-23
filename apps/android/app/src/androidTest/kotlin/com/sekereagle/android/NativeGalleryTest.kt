@@ -192,7 +192,7 @@ class NativeGalleryTest {
                         session,
                         GalleryMode.MATERIAL,
                         original,
-                        NativeDownloadCancellation(),
+                        NativeTransferCancellation(),
                     ) { _, _ ->
                     }
                 }

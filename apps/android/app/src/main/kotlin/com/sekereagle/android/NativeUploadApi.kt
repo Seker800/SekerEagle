@@ -11,7 +11,7 @@ internal class NativeUploadApi(
     private val epoch: Int,
     private val stage: (String) -> Unit,
     private val progress: (Long) -> Unit,
-    private val cancellation: NativeDownloadCancellation? = null,
+    private val cancellation: NativeTransferCancellation? = null,
 ) : UploadApi {
     private val signedParts = ApiClient(session.origin, "")
     private var transferred = 0L

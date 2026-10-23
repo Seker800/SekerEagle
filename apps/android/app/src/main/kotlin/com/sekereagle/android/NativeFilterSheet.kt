@@ -6,8 +6,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -18,14 +18,50 @@ import java.time.LocalDate
 @Composable
 fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
     val panel = state.filterPanel ?: return
-    var draft by rememberSaveable(panel, stateSaver = listSaver<NativeFilters, Any>(
-        save = { listOf(ArrayList(it.tags), it.camera, it.lens, ArrayList(it.formats), it.from, it.to, it.rating ?: 0, it.gps) },
-        restore = { NativeFilters((it[0] as List<*>).filterIsInstance<String>().toSet(), it[1] as String, it[2] as String,
-            (it[3] as List<*>).filterIsInstance<String>().toSet(), it[4] as String, it[5] as String, (it[6] as Int).takeIf { n -> n > 0 }, it[7] as String) }
-    )) { mutableStateOf(state.filters) }
-    var tags by rememberSaveable(panel, stateSaver = listSaver<Set<String>, String>(
-        save = { it.toList() }, restore = { it.toSet() }
-    )) { mutableStateOf(emptySet<String>()) }
+    var draft by
+        rememberSaveable(
+            panel,
+            stateSaver =
+                listSaver<NativeFilters, Any>(
+                    save = {
+                        listOf(
+                            ArrayList(it.tags),
+                            it.camera,
+                            it.lens,
+                            ArrayList(it.formats),
+                            it.from,
+                            it.to,
+                            it.rating ?: 0,
+                            it.gps,
+                        )
+                    },
+                    restore = {
+                        NativeFilters(
+                            (it[0] as List<*>).filterIsInstance<String>().toSet(),
+                            it[1] as String,
+                            it[2] as String,
+                            (it[3] as List<*>).filterIsInstance<String>().toSet(),
+                            it[4] as String,
+                            it[5] as String,
+                            (it[6] as Int).takeIf { n -> n > 0 },
+                            it[7] as String,
+                        )
+                    },
+                ),
+        ) {
+            mutableStateOf(state.filters)
+        }
+    var tags by
+        rememberSaveable(
+            panel,
+            stateSaver =
+                listSaver<Set<String>, String>(
+                    save = { it.toList() },
+                    restore = { it.toSet() },
+                ),
+        ) {
+            mutableStateOf(emptySet<String>())
+        }
     val editingTags = panel == "添加标签" || panel == "移除标签"
     val context = LocalContext.current
     val error = draft.validationError()

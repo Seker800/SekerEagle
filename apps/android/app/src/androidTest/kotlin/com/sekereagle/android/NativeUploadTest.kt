@@ -63,7 +63,7 @@ class NativeUploadTest {
                 .apply { start() }
         try {
             val session = NativeSession.open(context, "http://127.0.0.1:${server.localPort}")
-            val cancel = NativeDownloadCancellation()
+            val cancel = NativeTransferCancellation()
             val api = NativeUploadApi(session, session.authorizationEpoch(), {}, {}, cancel)
             api.request("POST", "/api/photos/uploads/test/complete", JSONObject())
             assertTrue(api.duplicate)

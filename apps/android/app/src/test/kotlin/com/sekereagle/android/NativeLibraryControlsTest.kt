@@ -5,6 +5,13 @@ import org.junit.Test
 
 class NativeLibraryControlsTest {
     @Test
+    fun dateOrderDefaultsAndPreferenceKeysStayIndependent() {
+        assertEquals(GallerySort.CAPTURED_AT, GallerySort.default(GalleryMode.PHOTO))
+        assertEquals(GallerySort.ADDED_AT, GallerySort.default(GalleryMode.MATERIAL))
+        assertNotEquals(GallerySort.key(GalleryMode.PHOTO), GallerySort.key(GalleryMode.MATERIAL))
+    }
+
+    @Test
     fun filtersEncodeValuesWithoutChangingTheApiScope() {
         val filter =
             NativeFilters(

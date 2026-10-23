@@ -412,10 +412,11 @@ private fun NativeLibrary(
                                 }
                             }
                         } else {
-                            if (!state.trash) MenuRow("上传", Icons.Outlined.FileUpload) {
-                                menu = ""
-                                chooseUpload()
-                            }
+                            if (!state.trash)
+                                MenuRow("上传", Icons.Outlined.FileUpload) {
+                                    menu = ""
+                                    chooseUpload()
+                                }
                             MenuRow("刷新", Icons.Outlined.Refresh) {
                                 menu = ""
                                 model.refresh()
