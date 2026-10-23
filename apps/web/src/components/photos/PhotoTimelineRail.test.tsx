@@ -145,3 +145,28 @@ it('limits labels in a long library without dropping any navigable month', () =>
   expect(slider.querySelectorAll('[data-ruler-year]').length).toBeLessThanOrEqual(13);
   expect(slider).toHaveAttribute('aria-valuemax', '99');
 });
+
+it('previews the same month that clicking a year label will open', () => {
+  const onJump = vi.fn();
+  render(
+    <PhotoTimelineRail
+      months={[
+        { month: '2026-12', count: 300, cursor: 'dec' },
+        { month: '2026-06', count: 300, cursor: 'jun' },
+        { month: '2026-01', count: 300, cursor: 'jan' },
+        { month: '1970-01', count: 1, cursor: 'old' },
+      ]}
+      onJump={onJump}
+      onLatest={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
+  const slider = screen.getByRole('slider');
+  vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
+  const label = screen.getByText('2026');
+  const clientY = 100 + parseFloat(label.style.top) * 5;
+  fireEvent.pointerMove(label, { clientY });
+  const preview = screen.getByRole('tooltip').getAttribute('dateTime');
+  fireEvent.click(label, { clientY });
+  expect(onJump.mock.lastCall?.[0].month).toBe(preview);
+});
