@@ -84,7 +84,7 @@ public final class BackupService extends Service {
           getSystemService(PowerManager.class)
               .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SekerEagle:MobileBackup");
       wake.acquire(30 * 60 * 1000L);
-      JSONArray rules = settings.rules(scope);
+      JSONArray rules = settings.scanRules(scope);
       if (rules.length() == 0) throw new Hold("请先选择备份目录");
       MediaCatalog catalog = new MediaCatalog(this);
       update("正在扫描所选目录");

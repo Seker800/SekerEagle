@@ -30,8 +30,8 @@ test('daily fast navigation scopes the complete library and uses the chosen date
       assert.ok(values.includes(libraryMode));
       assert.ok(values.includes('Asia/Shanghai'));
       assert.equal(result.total, 65);
-      assert.equal(result.days[1].offset, 61);
-      assert.equal(result.days[0].before, '2026-10-21T16:00:00.000Z');
+      assert.equal(result.days[1]!.offset, 61);
+      assert.equal(result.days[0]!.before, '2026-10-21T16:00:00.000Z');
     }
   }
 });

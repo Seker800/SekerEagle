@@ -56,6 +56,7 @@ public final class BackupPolicy {
   }
 
   public static boolean inFolder(String folder, String path, boolean recursive) {
+    if (folder.isEmpty()) return path != null && !path.isEmpty();
     String prefix = folder.endsWith("/") ? folder : folder + "/";
     return path.equals(prefix) || (recursive && path.startsWith(prefix));
   }

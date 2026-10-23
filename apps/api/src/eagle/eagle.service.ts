@@ -40,7 +40,8 @@ import type {
 } from './eagle.dto';
 import { buildColorAnalysisWhere, COLOR_PROCESSOR_VERSION } from './eagle-color-search';
 import { createEagleTagPhonetics } from './eagle-tag-phonetics';
-import { assetDateField } from './eagle-asset-order';
+import { readAssetTimeline } from './eagle-asset-timeline';
+import { assetDateField, type EagleAssetSort } from './eagle-asset-order';
 import { decodeEagleAssetCursor, encodeEagleAssetCursor } from './eagle-cursor';
 import {
   refreshUnclassifiedSuggestions,
@@ -160,6 +161,15 @@ export class EagleService {
       includePrivate,
     );
   }
+  assetTimeline(ownerId: string, sort: EagleAssetSort | undefined, timeZone: string) {
+    return readAssetTimeline(
+      this.prisma,
+      { ownerId, libraryMode: this.libraryMode },
+      sort,
+      timeZone,
+    );
+  }
+
   async listAssets(ownerId: string, query: ListEagleAssetsDto, options: AssetListOptions = {}) {
     const { trash = false, includePrivate = false } = options;
     const smartFolder = query.smartFolderId
@@ -228,6 +238,15 @@ export class EagleService {
           this.libraryMode,
         ),
       );
+    if (query.offset !== undefined && (query.cursor || query.search))
+      throw new BadRequestException('位置定位不能与搜索或游标同时使用。');
+    if (query.before) {
+      if (query.cursor || query.search)
+        throw new BadRequestException('日期定位不能与搜索或游标同时使用。');
+      baseConditions.push({
+        [assetDateField(this.libraryMode, query.sort)]: { lt: new Date(query.before) },
+      });
+    }
     const baseWhere: Prisma.EagleAssetWhereInput = { AND: baseConditions };
     const folderConditions = folderEntries.flatMap(({ where }) => (where ? [where] : []));
     const folderWhere = !smartFolder
@@ -281,6 +300,7 @@ export class EagleService {
         include: assetListInclude,
         orderBy: [{ [dateField]: 'desc' }, { id: 'desc' }],
         take: query.limit + 1,
+        ...(query.offset ? { skip: query.offset } : {}),
       }),
       filterColor
         ? this.prisma.eagleAsset.count({

@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
@@ -95,10 +96,28 @@ private fun NativeLibrary(
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val grid = rememberLazyGridState()
+    val draggingGrid by grid.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(state.windowOffset, state.loading, state.timeline, state.error, draggingGrid) {
+        snapshotFlow {
+                grid.firstVisibleItemIndex < 6 &&
+                    grid.lastScrolledBackward &&
+                    draggingGrid &&
+                    state.error == null
+            }
+            .distinctUntilChanged()
+            .collect { if (it) model.loadPrevious() }
+    }
     val backdrop = rememberGraphicsLayer()
     var sourceOffset by remember { mutableStateOf(Offset.Zero) }
     var menu by rememberSaveable { mutableStateOf("") }
-    LaunchedEffect(state.mode, state.sort, state.query, state.filters, state.trash) {
+    LaunchedEffect(
+        state.mode,
+        state.sort,
+        state.query,
+        state.filters,
+        state.trash,
+        state.scrollRequest,
+    ) {
         grid.scrollToItem(0)
     }
     LaunchedEffect(grid, state.cursor, state.loading) {
@@ -343,6 +362,15 @@ private fun NativeLibrary(
             ) {
                 Text(state.message, Modifier.padding(14.dp))
             }
+        if (state.timeline != null && !state.searchOpen && !state.selecting)
+            NativeFastScroll(
+                state,
+                grid,
+                model::jumpToDay,
+                Modifier.align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 90.dp, bottom = 110.dp),
+            )
         if (menu.isNotEmpty())
             Popup(
                 alignment = Alignment.TopEnd,

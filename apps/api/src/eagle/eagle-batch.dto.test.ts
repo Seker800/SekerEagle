@@ -70,3 +70,25 @@ test('date sorting accepts only declared values and cannot smuggle an owner', as
   );
   assert.ok(errors.some(({ property }) => property === 'ownerId'));
 });
+
+test('date navigation validates boundaries and bounds expensive offsets', async () => {
+  const { ListEagleAssetsDto } = await import('./eagle.dto');
+  for (const offset of [-1, 1.5, 10000001, 'NaN']) {
+    assert.ok(
+      (await validate(Object.assign(new ListEagleAssetsDto(), { offset }))).some(
+        (e) => e.property === 'offset',
+      ),
+    );
+  }
+  assert.ok(
+    (
+      await validate(Object.assign(new ListEagleAssetsDto(), { before: '2026-02-30T00:00:00Z' }))
+    ).some((e) => e.property === 'before'),
+  );
+  assert.deepEqual(
+    await validate(
+      Object.assign(new ListEagleAssetsDto(), { offset: 99, before: '2026-10-21T16:00:00Z' }),
+    ),
+    [],
+  );
+});

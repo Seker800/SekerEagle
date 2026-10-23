@@ -33,7 +33,27 @@ data class NativeAsset(
     val revision: Int,
     val rowVersion: Int = 1,
     val groupDate: String = date,
+    val playback: String? = null,
+    val playbackSize: Long = 0,
 )
+
+data class NativeDay(val date: String, val before: String, val count: Long, val offset: Long) {
+    val label: String
+        get() = java.time.LocalDate.parse(date).format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
+}
+
+data class NativeTimeline(val days: List<NativeDay>, val total: Long) {
+    fun dayAt(position: Long): NativeDay? {
+        if (days.isEmpty()) return null
+        var low = 0
+        var high = days.size
+        while (low < high) {
+            val middle = low + (high - low) / 2
+            if (days[middle].offset <= position) low = middle + 1 else high = middle
+        }
+        return days[(low - 1).coerceAtLeast(0)]
+    }
+}
 
 data class NativePage(val items: List<NativeAsset>, val cursor: String?)
 
@@ -52,6 +72,8 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
         filters: NativeFilters = NativeFilters(),
         trash: Boolean = false,
         sort: GallerySort = GallerySort.default(mode),
+        before: String? = null,
+        offset: Long = 0,
     ): NativePage =
         withContext(Dispatchers.IO) {
             val result =
@@ -59,7 +81,12 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                     "GET",
                     NativeGalleryPolicy.listPath(mode.name, search, cursor.orEmpty()).let {
                         if (trash) it.replace("/assets?", "/trash?") else it
-                    } + "&sort=${sort.name}" + filters.parameters().querySuffix(),
+                    } +
+                        "&sort=${sort.name}" +
+                        (before?.let { "&before=" + java.net.URLEncoder.encode(it, "UTF-8") }
+                            ?: "") +
+                        (if (offset > 0) "&offset=$offset" else "") +
+                        filters.parameters().querySuffix(),
                 )
             val items = result.getJSONArray("items")
             NativePage(
@@ -67,6 +94,35 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                 result.optString("nextCursor").takeUnless { it.isEmpty() || it == "null" },
             )
         }
+
+    suspend fun timeline(mode: GalleryMode, sort: GallerySort): NativeTimeline =
+        withContext(Dispatchers.IO) {
+            val zone = java.net.URLEncoder.encode(ZoneId.systemDefault().id, "UTF-8")
+            val json =
+                session.json(
+                    "GET",
+                    "${NativeGalleryPolicy.base(mode.name)}/assets/timeline?sort=${sort.name}&timeZone=$zone",
+                )
+            val days = json.getJSONArray("days")
+            NativeTimeline(
+                (0 until days.length()).map {
+                    days.getJSONObject(it).let { day ->
+                        NativeDay(
+                            day.getString("date"),
+                            day.getString("before"),
+                            day.getLong("count"),
+                            day.getLong("offset"),
+                        )
+                    }
+                },
+                json.getLong("total"),
+            )
+        }
+
+    internal fun videoSource(asset: NativeAsset): NativeVideoSource {
+        require(asset.video && asset.playback != null && asset.playbackSize > 0)
+        return NativeVideoSource(session, asset.playback, asset.playbackSize)
+    }
 
     suspend fun options(mode: GalleryMode): NativeOptions =
         withContext(Dispatchers.IO) {
@@ -212,6 +268,15 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                 ?.let {
                     NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id"))
                 }
+        val movie =
+            (0 until renditions.length())
+                .map { renditions.getJSONObject(it) }
+                .firstOrNull {
+                    it.optInt("revision") == json.optInt("mediaRevision") &&
+                        it.optString("kind") == "PREVIEW" &&
+                        it.optString("mimeType") == "video/mp4" &&
+                        it.optLong("byteSize") > 0
+                }
         val rawDate =
             json.optJSONObject("photoMetadata")?.let {
                 it.optString("capturedLocal").takeUnless { v -> v.isEmpty() || v == "null" }
@@ -241,6 +306,8 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             json.optInt("mediaRevision"),
             json.optInt("rowVersion", 1),
             groupDate?.format(DateTimeFormatter.ofPattern("yyyy年M月d日")) ?: "日期未知",
+            movie?.let { NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id")) },
+            movie?.optLong("byteSize") ?: 0,
         )
     }
 }

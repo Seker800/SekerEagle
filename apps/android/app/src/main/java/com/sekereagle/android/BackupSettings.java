@@ -66,6 +66,26 @@ final class BackupSettings {
     }
   }
 
+  JSONArray scanRules(String scope) {
+    JSONArray configured = rules(scope);
+    if (!flag(scope, "allMedia", false)) return configured;
+    JSONArray result = new JSONArray();
+    try {
+      result.put(
+          new JSONObject()
+              .put("type", "media")
+              .put("path", "")
+              .put("mode", value(scope, "allMediaMode", "PHOTO"))
+              .put("recursive", true));
+      for (int i = 0; i < configured.length(); i++)
+        if (configured.getJSONObject(i).getString("type").equals("tree"))
+          result.put(configured.getJSONObject(i));
+      return result;
+    } catch (org.json.JSONException e) {
+      throw new IllegalStateException(e);
+    }
+  }
+
   void rules(String scope, JSONArray rules) {
     setValue(scope, "rules", rules.toString());
   }

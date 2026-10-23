@@ -78,16 +78,76 @@ final class BackupScreen extends ScrollView {
         value -> settings.setFlag(scope, "auto", value));
     Ui.section(panel, "备份文件夹");
     LinearLayout folders = Ui.card(activity, panel);
+    toggle(
+        folders,
+        "备份全部照片和视频",
+        "包含新增相册及下载图片；未收录的 RAW 仍需授权目录",
+        "allMedia",
+        false,
+        value -> {
+          if (!scope.equals(settings.active())) return;
+          if (value)
+            activity.withMediaPermission(
+                () -> {
+                  if (!scope.equals(settings.active())) return;
+                  activity.pause();
+                  settings.setFlag(scope, "allMedia", true);
+                  activity.show("backup");
+                });
+          else {
+            activity.pause();
+            settings.setFlag(scope, "allMedia", false);
+            activity.show("backup");
+          }
+        });
+    if (settings.flag(scope, "allMedia", false)) {
+      String target = settings.value(scope, "allMediaMode", "PHOTO").equals("PHOTO") ? "照片" : "素材";
+      folders.addView(
+          Ui.row(
+              activity,
+              R.drawable.ic_cloud,
+              "全部手机相册 → " + target,
+              "关闭全部备份后恢复下面的自选目录",
+              () ->
+                  new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+                      .setTitle("全部相册备份到")
+                      .setSingleChoiceItems(
+                          new String[] {"照片", "素材"},
+                          target.equals("照片") ? 0 : 1,
+                          (dialog, which) -> {
+                            if (!scope.equals(settings.active())) {
+                              dialog.dismiss();
+                              return;
+                            }
+                            activity.pause();
+                            settings.setValue(
+                                scope, "allMediaMode", which == 0 ? "PHOTO" : "MATERIAL");
+                            dialog.dismiss();
+                            activity.show("backup");
+                          })
+                      .setNegativeButton("取消", null)
+                      .show()));
+    }
     JSONArray rules = settings.rules(scope);
     if (rules.length() == 0) {
-      folders.addView(Ui.row(activity, R.drawable.ic_folder, "选择想备份的文件夹", "仅检查你选中的目录", null));
+      folders.addView(
+          Ui.row(
+              activity,
+              R.drawable.ic_folder,
+              settings.flag(scope, "allMedia", false) ? "全部手机相册已包含" : "选择想备份的文件夹",
+              settings.flag(scope, "allMedia", false) ? "未收录的 RAW 可另外添加目录" : "勾选多个目录后添加到列表",
+              null));
     }
     for (int i = 0; i < rules.length(); i++) {
       final int index = i;
       JSONObject rule = rules.optJSONObject(i);
       String location = rule.optString("path");
-      if (rule.optString("type").equals("tree"))
+      if (rule.optString("type").equals("tree")) {
         location = Uri.decode(location.substring(location.lastIndexOf('/') + 1));
+        if (location.startsWith("primary:")) location = "内部存储/" + location.substring(8);
+        else if (location.contains(":"))
+          location = "存储卡/" + location.substring(location.indexOf(':') + 1);
+      }
       String trimmed = location.replaceAll("/+$", "");
       String title =
           trimmed.substring(Math.max(trimmed.lastIndexOf('/'), trimmed.lastIndexOf(':')) + 1);
@@ -95,17 +155,25 @@ final class BackupScreen extends ScrollView {
           (rule.optString("mode").equals("PHOTO") ? "照片" : "素材")
               + " · "
               + (rule.optBoolean("recursive", true) ? "包含子文件夹" : "仅此文件夹");
-      folders.addView(Ui.row(activity, R.drawable.ic_folder, title, detail, () -> editRule(index)));
+      if (settings.flag(scope, "allMedia", false) && rule.optString("type").equals("media"))
+        detail = "全部备份已覆盖 · 自选设置已保留";
+      folders.addView(
+          Ui.row(
+              activity,
+              R.drawable.ic_folder,
+              title,
+              detail + " · " + location,
+              () -> editRule(index)));
       if (i < rules.length() - 1) Ui.divider(folders);
     }
     Ui.space(folders, 12);
     LinearLayout add = new LinearLayout(activity);
     add.addView(
-        Ui.secondary(activity, "手机相册", () -> activity.loadFolders(this::folderPicker)),
+        Ui.secondary(activity, "添加手机相册", () -> activity.loadFolders(this::folderPicker)),
         new LinearLayout.LayoutParams(0, Ui.dp(activity, 44), 1));
     LinearLayout.LayoutParams extra = new LinearLayout.LayoutParams(0, Ui.dp(activity, 44), 1);
     extra.leftMargin = Ui.dp(activity, 8);
-    add.addView(Ui.secondary(activity, "其他文件夹", activity::pickTree), extra);
+    add.addView(Ui.secondary(activity, "添加其他文件夹", activity::pickTree), extra);
     folders.addView(add);
     Ui.section(panel, "备份条件");
     LinearLayout conditions = Ui.card(activity, panel);
@@ -228,7 +296,9 @@ final class BackupScreen extends ScrollView {
             () ->
                 new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
                     .setTitle("选择备份目录")
-                    .setMessage("下载图片可在手机相册目录中选择 Download。未进入媒体库的 RAW 可通过系统选择器授权所在目录。只有选择的目录会参与备份。")
+                    .setMessage(
+                        "手机相册可多选后追加到列表；其他文件夹每次授权一个目录，可反复添加。备份全部会包含以后新增的手机相册及下载图片。系统未收录的 RAW"
+                            + " 仍需单独授权目录。关闭全部备份后恢复原来的自选列表。")
                     .setPositiveButton("知道了", null)
                     .show()));
     Ui.divider(content);
@@ -288,7 +358,9 @@ final class BackupScreen extends ScrollView {
 
   void refreshStatus() {
     if (status == null) return;
-    status.setText(settings.value(scope, "status", "选择目录后即可开始"));
+    status.setText(
+        settings.value(
+            scope, "status", settings.flag(scope, "allMedia", false) ? "已选择全部手机相册" : "选择目录后即可开始"));
     counts.setText(settings.value(scope, "counts", "原片备份 · 尚未开始"));
     boolean running = settings.flag(scope, "running", false);
     primary.setText(running ? "正在备份…" : "立即备份");
@@ -312,35 +384,49 @@ final class BackupScreen extends ScrollView {
       activity.toast("未发现支持的媒体，请确认权限或通过系统授权添加目录");
       return;
     }
-    boolean[] selected = new boolean[folders.size()];
+    // Only new choices are shown. Unchecked items never remove an existing rule.
     JSONArray rules = settings.rules(scope);
-    for (int i = 0; i < folders.size(); i++)
+    List<String> candidates = new ArrayList<>();
+    for (String path : folders) {
+      boolean exists = false;
       for (int j = 0; j < rules.length(); j++)
         if (rules.optJSONObject(j).optString("type").equals("media")
-            && rules.optJSONObject(j).optString("path").equals(folders.get(i))) selected[i] = true;
-    new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
-        .setTitle("选择需要备份的目录")
-        .setMultiChoiceItems(
-            folders.toArray(new String[0]), selected, (d, w, value) -> selected[w] = value)
-        .setNegativeButton("取消", null)
-        .setPositiveButton(
-            "保存",
-            (d, w) -> {
-              if (!scope.equals(settings.active())) return;
-              activity.pause();
-              JSONArray next = new JSONArray();
-              for (int i = 0; i < rules.length(); i++) {
-                JSONObject rule = rules.optJSONObject(i);
-                int index = folders.indexOf(rule.optString("path"));
-                if (!rule.optString("type").equals("media") || index < 0 || selected[index])
-                  next.put(rule);
-              }
-              settings.rules(scope, next);
-              for (int i = 0; i < folders.size(); i++)
-                if (selected[i]) addRule(settings, scope, "media", folders.get(i));
-              activity.show("backup");
-            })
-        .show();
+            && rules.optJSONObject(j).optString("path").equals(path)) exists = true;
+      if (!exists) candidates.add(path);
+    }
+    if (candidates.isEmpty()) {
+      activity.toast("这些相册都已添加，可在列表中管理");
+      return;
+    }
+    boolean[] selected = new boolean[candidates.size()];
+    androidx.appcompat.app.AlertDialog dialog =
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+            .setTitle("添加手机相册")
+            .setMultiChoiceItems(
+                candidates.toArray(new String[0]),
+                selected,
+                (d, which, value) -> {
+                  selected[which] = value;
+                  int count = 0;
+                  for (boolean checked : selected) if (checked) count++;
+                  ((androidx.appcompat.app.AlertDialog) d).getButton(-1).setEnabled(count > 0);
+                  ((androidx.appcompat.app.AlertDialog) d)
+                      .getButton(-1)
+                      .setText("添加（" + count + "）");
+                })
+            .setNegativeButton("取消", null)
+            .setPositiveButton(
+                "添加（0）",
+                (d, which) -> {
+                  if (!scope.equals(settings.active())) return;
+                  activity.pause();
+                  for (int i = 0; i < candidates.size(); i++)
+                    if (selected[i]) addRule(settings, scope, "media", candidates.get(i));
+                  activity.show("backup");
+                })
+            .create();
+    dialog.setOnShowListener(d -> dialog.getButton(-1).setEnabled(false));
+    dialog.show();
   }
 
   static void addRule(BackupSettings settings, String scope, String type, String path) {

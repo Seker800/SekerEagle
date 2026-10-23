@@ -112,13 +112,17 @@ final class MediaCatalog {
       media(
           item -> {
             guard.check();
+            JSONObject selected = null;
             for (int i = 0; i < rules.length(); i++) {
               JSONObject rule = rules.getJSONObject(i);
               if (rule.getString("type").equals("media")
                   && BackupPolicy.inFolder(
-                      rule.getString("path"), item.path, rule.optBoolean("recursive", true)))
-                visitor.visit(item, rule.getString("mode"));
+                      rule.getString("path"), item.path, rule.optBoolean("recursive", true))
+                  && (selected == null
+                      || rule.getString("path").length() > selected.getString("path").length()))
+                selected = rule;
             }
+            if (selected != null) visitor.visit(item, selected.getString("mode"));
           });
     for (int i = 0; i < rules.length(); i++) {
       guard.check();

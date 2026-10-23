@@ -94,6 +94,7 @@ public final class MobileBackupTest {
     settings.setFlag(scope, "wifi", false);
     path = "Pictures/SekerEagleTest-" + UUID.randomUUID() + "/";
     settings.rules(scope, new JSONArray());
+    settings.setFlag(scope, "allMedia", false);
     try (BackupJournal journal = new BackupJournal(context)) {
       journal.forget(scope);
     }
@@ -864,6 +865,69 @@ public final class MobileBackupTest {
     assertTrue(exists(first, "photos"));
     getInstrumentation().runOnMainSync(() -> activity.show("backup"));
     getInstrumentation().waitForIdleSync();
+  }
+
+  @Test
+  public void testFolderSelectionAddsWithoutRemovingAndAllIncludesNewAlbums() throws Exception {
+    image("chosen-folder.png", 0xff123456, true);
+    final String first = path;
+    BackupScreen.addRule(settings, scope, "media", first);
+    JSONArray initial = settings.rules(scope);
+    initial.getJSONObject(0).put("mode", "MATERIAL");
+    settings.rules(scope, initial);
+    path = "Download/SekerEagleFuture-" + UUID.randomUUID() + "/";
+    final String second = path;
+    final String future = "future-" + UUID.randomUUID() + ".png";
+    image(future, 0xff663322, true);
+    getInstrumentation().runOnMainSync(() -> activity.show("backup"));
+    androidx.test.espresso.Espresso.onView(
+            androidx.test.espresso.matcher.ViewMatchers.withText("添加手机相册"))
+        .perform(
+            androidx.test.espresso.action.ViewActions.scrollTo(),
+            androidx.test.espresso.action.ViewActions.click());
+    androidx.test.espresso.Espresso.onData(org.hamcrest.Matchers.equalTo(second))
+        .perform(androidx.test.espresso.action.ViewActions.click());
+    androidx.test.espresso.Espresso.onView(
+            androidx.test.espresso.matcher.ViewMatchers.withText("添加（1）"))
+        .perform(androidx.test.espresso.action.ViewActions.click());
+    assertEquals(2, settings.rules(scope).length());
+    assertEquals("MATERIAL", settings.rules(scope).getJSONObject(0).getString("mode"));
+    assertEquals(first, settings.rules(scope).getJSONObject(0).getString("path"));
+    // All is a reversible override, not a destructive replacement of the chosen list.
+    getInstrumentation().runOnMainSync(() -> activity.show("backup"));
+    androidx.test.espresso.Espresso.onView(
+            androidx.test.espresso.matcher.ViewMatchers.withContentDescription("备份全部照片和视频"))
+        .perform(
+            androidx.test.espresso.action.ViewActions.scrollTo(),
+            androidx.test.espresso.action.ViewActions.click());
+    assertTrue(settings.flag(scope, "allMedia", false));
+    if (InstrumentationRegistry.getArguments().getString("screenshots", "false").equals("true")) {
+      androidx.test.espresso.Espresso.onView(
+              androidx.test.espresso.matcher.ViewMatchers.withText("添加手机相册"))
+          .perform(androidx.test.espresso.action.ViewActions.scrollTo());
+      capture("native-backup-folders.png");
+    }
+    String third = "Pictures/SekerEagleNew-" + UUID.randomUUID() + "/";
+    path = third;
+    String addedLater = "new-album-" + UUID.randomUUID() + ".png";
+    image(addedLater, 0xff998833, true);
+    try {
+      Map<String, String> scanned = new HashMap<>();
+      new MediaCatalog(context)
+          .scan(settings.scanRules(scope), (item, mode) -> scanned.put(item.name, mode), () -> {});
+      assertEquals("PHOTO", scanned.get(addedLater));
+      assertEquals(2, settings.rules(scope).length());
+      assertEquals("MATERIAL", settings.rules(scope).getJSONObject(0).getString("mode"));
+      settings.setFlag(scope, "allMedia", false);
+      scanned.clear();
+      new MediaCatalog(context)
+          .scan(settings.scanRules(scope), (item, mode) -> scanned.put(item.name, mode), () -> {});
+      assertFalse(scanned.containsKey(addedLater));
+      assertTrue(scanned.containsKey(future));
+      assertFalse(new BackupSettings(context).flag("another-identity", "allMedia", false));
+    } finally {
+      settings.setFlag(scope, "allMedia", false);
+    }
   }
 
   @Test

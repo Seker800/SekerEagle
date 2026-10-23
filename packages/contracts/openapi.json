@@ -390,6 +390,26 @@
         "operationId": "EagleController_listAssets",
         "parameters": [
           {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Initial navigation offset within the selected date boundary; incompatible with cursor and search.",
+            "schema": {
+              "minimum": 0,
+              "maximum": 10000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive date boundary for native timeline navigation; not combinable with search or cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "required": false,
             "in": "query",
@@ -687,6 +707,53 @@
                   "items": {
                     "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/assets/timeline": {
+      "get": {
+        "operationId": "EagleController_assetTimeline",
+        "parameters": [
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
+          {
+            "name": "timeZone",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "UTC",
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetTimelineResponseDto"
                 }
               }
             }
@@ -1202,6 +1269,26 @@
       "get": {
         "operationId": "EagleController_listTrash",
         "parameters": [
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Initial navigation offset within the selected date boundary; incompatible with cursor and search.",
+            "schema": {
+              "minimum": 0,
+              "maximum": 10000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive date boundary for native timeline navigation; not combinable with search or cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "sort",
             "required": false,
@@ -3544,6 +3631,26 @@
         "operationId": "PhotosController_listAssets",
         "parameters": [
           {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Initial navigation offset within the selected date boundary; incompatible with cursor and search.",
+            "schema": {
+              "minimum": 0,
+              "maximum": 10000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive date boundary for native timeline navigation; not combinable with search or cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "required": false,
             "in": "query",
@@ -3841,6 +3948,53 @@
                   "items": {
                     "$ref": "#/components/schemas/EagleAssetUpdateResponseDto"
                   }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/timeline": {
+      "get": {
+        "operationId": "PhotosController_assetTimeline",
+        "parameters": [
+          {
+            "name": "sort",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["CAPTURED_AT", "ADDED_AT"]
+            }
+          },
+          {
+            "name": "timeZone",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "UTC",
+              "allOf": [
+                {
+                  "$ref": "#/components/schemas/Object"
+                }
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssetTimelineResponseDto"
                 }
               }
             }
@@ -4356,6 +4510,26 @@
       "get": {
         "operationId": "PhotosController_listTrash",
         "parameters": [
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "description": "Initial navigation offset within the selected date boundary; incompatible with cursor and search.",
+            "schema": {
+              "minimum": 0,
+              "maximum": 10000000,
+              "type": "number"
+            }
+          },
+          {
+            "name": "before",
+            "required": false,
+            "in": "query",
+            "description": "Exclusive date boundary for native timeline navigation; not combinable with search or cursor.",
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "sort",
             "required": false,
@@ -6961,6 +7135,43 @@
         },
         "required": ["assetIds"]
       },
+      "Object": {
+        "type": "object",
+        "properties": {}
+      },
+      "AssetTimelineDayResponseDto": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "count": {
+            "type": "number"
+          },
+          "offset": {
+            "type": "number"
+          }
+        },
+        "required": ["date", "before", "count", "offset"]
+      },
+      "AssetTimelineResponseDto": {
+        "type": "object",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetTimelineDayResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          }
+        },
+        "required": ["days", "total"]
+      },
       "BatchUpdateEagleAssetsDto": {
         "type": "object",
         "properties": {}
@@ -7370,10 +7581,6 @@
           }
         },
         "required": ["exists"]
-      },
-      "Object": {
-        "type": "object",
-        "properties": {}
       },
       "CreateEagleImportRunDto": {
         "type": "object",

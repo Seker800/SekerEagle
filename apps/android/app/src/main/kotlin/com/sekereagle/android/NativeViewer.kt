@@ -63,9 +63,10 @@ fun NativeViewer(
                 Text(asset.date, fontSize = 20.sp)
                 Text(asset.time, fontSize = 13.sp, color = NativeMuted)
             }
-            IconButton({ rotation = (rotation + 90) % 360 }) {
-                Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
-            }
+            if (!asset.video)
+                IconButton({ rotation = (rotation + 90) % 360 }) {
+                    Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
+                }
         }
         HorizontalPager(
             pager,
@@ -76,9 +77,11 @@ fun NativeViewer(
         ) { page ->
             val entry = state.items[page]
             key(entry.id) {
-                ZoomPhoto(entry, repo, if (page == pager.currentPage) rotation else 0f) {
-                    if (page == pager.currentPage) zoomed = it
-                }
+                if (entry.video && page == pager.currentPage) NativeVideo(entry, repo)
+                else
+                    ZoomPhoto(entry, repo, if (page == pager.currentPage) rotation else 0f) {
+                        if (page == pager.currentPage) zoomed = it
+                    }
             }
         }
         Row(
@@ -100,7 +103,9 @@ fun NativeViewer(
                             }
                         }
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        RoundAction(Icons.Outlined.MoreHoriz, "照片信息") { info = true }
+                        RoundAction(Icons.Outlined.MoreHoriz, if (asset.video) "视频信息" else "照片信息") {
+                            info = true
+                        }
                     }
                 }
             }
@@ -112,7 +117,7 @@ fun NativeViewer(
             title = { Text(asset.name) },
             text = {
                 Text(
-                    if (asset.video) "视频封面\n${asset.date} ${asset.time}"
+                    if (asset.video) "视频\n${asset.date} ${asset.time}"
                     else "${asset.date} ${asset.time}"
                 )
             },

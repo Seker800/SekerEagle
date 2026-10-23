@@ -165,7 +165,7 @@ final class CleanupScreen extends ScrollView {
             CleanupEngine engine = engine(journal, api, token);
             Map<String, Entry> entries = new LinkedHashMap<>();
             catalog.scan(
-                settings.rules(scope),
+                settings.scanRules(scope),
                 (item, mode) -> {
                   guard(token);
                   if (entries.size() >= 500

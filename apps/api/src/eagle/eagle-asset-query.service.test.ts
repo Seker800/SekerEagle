@@ -422,3 +422,71 @@ test('both libraries support independent explicit date ordering with matching ke
     }
   }
 });
+
+test('timeline seek uses the selected field and cannot reuse a cursor or semantic search', async () => {
+  for (const mode of ['PHOTO', 'MATERIAL'] as const) {
+    for (const sort of ['CAPTURED_AT', 'ADDED_AT'] as const) {
+      let where: any;
+      const service = new EagleService(
+        {
+          eagleAsset: {
+            findMany: async (q: any) => {
+              where = q.where;
+              return [];
+            },
+          },
+        } as never,
+        undefined,
+        mode,
+      );
+      await service.listAssets('owner', { limit: 60, sort, before: '2020-01-01T00:00:00Z' });
+      assert.ok(
+        JSON.stringify(where).includes(
+          sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt',
+        ),
+      );
+      assert.ok(JSON.stringify(where).includes('2020-01-01T00:00:00.000Z'));
+      assert.equal(where.libraryMode, mode);
+      await assert.rejects(() =>
+        service.listAssets('owner', {
+          limit: 60,
+          sort,
+          before: '2020-01-01T00:00:00Z',
+          cursor: 'old',
+        }),
+      );
+      await assert.rejects(() =>
+        service.listAssets('owner', {
+          limit: 60,
+          sort,
+          before: '2020-01-01T00:00:00Z',
+          search: 'cat',
+        }),
+      );
+    }
+  }
+});
+
+test('date navigation can seek inside a large day and resumes ordinary keyset paging', async () => {
+  let input: any;
+  const service = new EagleService({
+    eagleAsset: {
+      findMany: async (q: any) => {
+        input = q;
+        return [];
+      },
+    },
+  } as never);
+  await service.listAssets('owner', {
+    limit: 60,
+    sort: 'ADDED_AT',
+    before: '2026-10-24T00:00:00Z',
+    offset: 9999,
+  });
+  assert.equal(input.skip, 9999);
+  assert.equal(input.take, 61);
+  assert.equal(input.where.libraryMode, 'MATERIAL');
+  assert.ok(JSON.stringify(input.where).includes('owner'));
+  await assert.rejects(() => service.listAssets('owner', { limit: 60, offset: 1, cursor: 'old' }));
+  await assert.rejects(() => service.listAssets('owner', { limit: 60, offset: 1, search: 'cat' }));
+});

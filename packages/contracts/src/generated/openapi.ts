@@ -308,6 +308,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/timeline': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_assetTimeline'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/{assetId}/location': {
     parameters: {
       query?: never;
@@ -1630,6 +1646,22 @@ export interface paths {
     get: operations['PhotosController_listAssetUpdates'];
     put?: never;
     post: operations['PhotosController_listAssetUpdatesByBody'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/timeline': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotosController_assetTimeline'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -3175,6 +3207,17 @@ export interface components {
     EagleAssetIdsDto: {
       assetIds: string[];
     };
+    Object: Record<string, never>;
+    AssetTimelineDayResponseDto: {
+      date: string;
+      before: string;
+      count: number;
+      offset: number;
+    };
+    AssetTimelineResponseDto: {
+      days: components['schemas']['AssetTimelineDayResponseDto'][];
+      total: number;
+    };
     BatchUpdateEagleAssetsDto: Record<string, never>;
     UpdateEagleAssetDto: {
       rowVersion: number;
@@ -3289,7 +3332,6 @@ export interface components {
       /** @description Content exists within the authenticated owner, library and visible scope. */
       exists: boolean;
     };
-    Object: Record<string, never>;
     CreateEagleImportRunDto: Record<string, never>;
     EagleImportManifestChunkDto: Record<string, never>;
     FinishEagleImportItemDto: {
@@ -3738,6 +3780,10 @@ export interface operations {
   EagleController_listAssets: {
     parameters: {
       query?: {
+        /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
+        offset?: number;
+        /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
+        before?: string;
         /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
@@ -3841,6 +3887,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
+      };
+    };
+  };
+  EagleController_assetTimeline: {
+    parameters: {
+      query?: {
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
+        timeZone?: components['schemas']['Object'];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssetTimelineResponseDto'];
         };
       };
     };
@@ -4180,6 +4248,10 @@ export interface operations {
   EagleController_listTrash: {
     parameters: {
       query?: {
+        /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
+        offset?: number;
+        /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
+        before?: string;
         /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
@@ -5825,6 +5897,10 @@ export interface operations {
   PhotosController_listAssets: {
     parameters: {
       query?: {
+        /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
+        offset?: number;
+        /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
+        before?: string;
         /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;
@@ -5928,6 +6004,28 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['EagleAssetUpdateResponseDto'][];
+        };
+      };
+    };
+  };
+  PhotosController_assetTimeline: {
+    parameters: {
+      query?: {
+        sort?: 'CAPTURED_AT' | 'ADDED_AT';
+        timeZone?: components['schemas']['Object'];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AssetTimelineResponseDto'];
         };
       };
     };
@@ -6267,6 +6365,10 @@ export interface operations {
   PhotosController_listTrash: {
     parameters: {
       query?: {
+        /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
+        offset?: number;
+        /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
+        before?: string;
         /** @description Newest first. Missing capture time falls back to import time. Omitted preserves mode defaults and search relevance. */
         sort?: 'CAPTURED_AT' | 'ADDED_AT';
         personId?: string;

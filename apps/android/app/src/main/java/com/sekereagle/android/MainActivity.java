@@ -434,7 +434,7 @@ public final class MainActivity extends Activity {
   }
 
   boolean hasMediaRules(String scope) {
-    JSONArray rules = settings.rules(scope);
+    JSONArray rules = settings.scanRules(scope);
     for (int i = 0; i < rules.length(); i++)
       if (rules.optJSONObject(i).optString("type").equals("media")) return true;
     return false;
@@ -475,9 +475,22 @@ public final class MainActivity extends Activity {
     startActivityForResult(intent, 73);
   }
 
+  private Runnable pendingMediaAction;
+  private String pendingMediaScope = "";
+
+  void withMediaPermission(Runnable action) {
+    if (mediaPermission()) {
+      action.run();
+      return;
+    }
+    pendingMediaAction = action;
+    pendingMediaScope = activeScope;
+    requestMediaPermission();
+  }
+
   void loadFolders(java.util.function.Consumer<java.util.List<String>> done) {
     if (!mediaPermission()) {
-      requestMediaPermission();
+      withMediaPermission(() -> loadFolders(done));
       return;
     }
     io.execute(
@@ -495,6 +508,12 @@ public final class MainActivity extends Activity {
   public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
     super.onRequestPermissionsResult(requestCode, permissions, results);
     if (requestCode == 72) {
+      Runnable action = pendingMediaAction;
+      pendingMediaAction = null;
+      if (mediaPermission() && pendingMediaScope.equals(activeScope) && action != null) {
+        action.run();
+        return;
+      }
       show(currentTab.equals("cleanup") ? "cleanup" : "backup");
       if (!mediaPermission()) toast("请允许访问全部照片和视频，以免自动备份遗漏文件");
     }

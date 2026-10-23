@@ -509,6 +509,29 @@ class NativeGalleryTest {
         compose.onNodeWithText("照片", useUnmergedTree = true).performClick()
         firstAsset()
         choose("按拍摄时间排序")
+        compose.waitUntil(15000) { currentModel().state.value.timeline != null }
+        val index = currentModel().state.value.timeline!!
+        val oldest = index.days.last()
+        compose.runOnUiThread { currentModel().jumpToDay(oldest) }
+        compose.waitUntil(15000) {
+            !currentModel().state.value.loading && currentModel().state.value.items.isNotEmpty()
+        }
+        assertEquals(oldest.label, currentModel().state.value.items.first().groupDate)
+        assertEquals(oldest.offset, currentModel().state.value.windowOffset)
+        capture("native-timeline-position.png")
+        if (oldest.offset > 0) {
+            compose.waitUntil(15000) { currentModel().state.value.timeline != null }
+            val anchor = currentModel().state.value.items.first().id
+            compose.runOnUiThread { currentModel().loadPrevious() }
+            compose.waitUntil(15000) { !currentModel().state.value.loading }
+            assertTrue(currentModel().state.value.items.any { it.id == anchor })
+            assertEquals(
+                (oldest.offset - 60).coerceAtLeast(0),
+                currentModel().state.value.windowOffset,
+            )
+        }
+        compose.runOnUiThread { currentModel().load() }
+        firstAsset()
     }
 
     @Test

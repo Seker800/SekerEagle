@@ -22,6 +22,9 @@ data class GalleryState(
     val authenticating: Boolean = false,
     val mode: GalleryMode = GalleryMode.PHOTO,
     val sort: GallerySort = GallerySort.CAPTURED_AT,
+    val timeline: NativeTimeline? = null,
+    val windowOffset: Long = 0,
+    val scrollRequest: Int = 0,
     val items: List<NativeAsset> = emptyList(),
     val cursor: String? = null,
     val query: String = "",
@@ -111,6 +114,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     private var signingOut: Job? = null
     private var foregroundJob: Job? = null
     private var optionsJob: Job? = null
+    private var timelineJob: Job? = null
     private var mutation: Job? = null
     private var generation = 0
     val serverOrigin: String
@@ -137,6 +141,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         uploads.clear()
         uploadPickerTarget = null
         sessionJob?.cancel()
+        timelineJob?.cancel()
         operation?.cancel()
         val request = ++generation
         repository?.clear()
@@ -203,6 +208,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         uploadPickerTarget = null
         operation?.cancel()
         optionsJob?.cancel()
+        timelineJob?.cancel()
         generation++
         val current = state.value
         mutable.value =
@@ -250,14 +256,20 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         load()
     }
 
-    fun load(next: Boolean = false) {
+    fun load(next: Boolean = false, before: String? = null, offset: Long = 0) {
         if (state.value.busy) return
         val snapshot = state.value
         val repo = repository ?: return
         if (next && (snapshot.loading || snapshot.cursor == null)) return
         operation?.cancel()
         val request = ++generation
-        mutable.value = snapshot.copy(loading = true, error = null)
+        mutable.value =
+            snapshot.copy(
+                loading = true,
+                error = null,
+                windowOffset = if (!next && before == null) 0 else snapshot.windowOffset,
+            )
+        if (!next) loadTimeline(snapshot, repo)
         operation = viewModelScope.launch {
             try {
                 val page =
@@ -268,6 +280,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         snapshot.filters,
                         snapshot.trash,
                         snapshot.sort,
+                        before,
+                        offset,
                     )
                 if (request != generation) return@launch
                 mutable.value =
@@ -290,6 +304,102 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 }
             }
         }
+    }
+
+    fun loadPrevious() {
+        val snapshot = state.value
+        val repo = repository ?: return
+        val index = snapshot.timeline ?: return
+        if (
+            snapshot.loading ||
+                snapshot.busy ||
+                snapshot.windowOffset <= 0 ||
+                snapshot.query.isNotBlank() ||
+                snapshot.filters.active ||
+                snapshot.trash
+        )
+            return
+        val start = (snapshot.windowOffset - 60).coerceAtLeast(0)
+        val day = index.dayAt(start) ?: return
+        val request = ++generation
+        mutable.value = snapshot.copy(loading = true, error = null)
+        operation = viewModelScope.launch {
+            try {
+                val page =
+                    repo.page(
+                        snapshot.mode,
+                        "",
+                        sort = snapshot.sort,
+                        before = day.before,
+                        offset = start - day.offset,
+                    )
+                if (request != generation) return@launch
+                mutable.value =
+                    state.value.copy(
+                        items = (page.items + snapshot.items).distinctBy { it.id },
+                        windowOffset = start,
+                        loading = false,
+                    )
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (request == generation) {
+                    if (e is NativeSession.Failure && e.status == 401) expire()
+                    else
+                        mutable.value =
+                            state.value.copy(loading = false, error = e.message ?: "加载较新照片失败，请重试")
+                }
+            }
+        }
+    }
+
+    private fun loadTimeline(snapshot: GalleryState, repo: NativeGalleryRepository) {
+        timelineJob?.cancel()
+        mutable.value = state.value.copy(timeline = null)
+        if (snapshot.query.isNotBlank() || snapshot.filters.active || snapshot.trash) return
+        timelineJob = viewModelScope.launch {
+            try {
+                val timeline = repo.timeline(snapshot.mode, snapshot.sort)
+                val current = state.value
+                if (
+                    current.identity == snapshot.identity &&
+                        current.mode == snapshot.mode &&
+                        current.sort == snapshot.sort &&
+                        current.query.isBlank() &&
+                        !current.filters.active &&
+                        !current.trash
+                )
+                    mutable.value = current.copy(timeline = timeline)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                /* Ordinary cursor paging remains available if navigation cannot load. */
+            }
+        }
+    }
+
+    fun jumpToDay(day: NativeDay, ordinal: Long = day.offset) {
+        val current = state.value
+        if (
+            current.busy ||
+                current.timeline?.days?.contains(day) != true ||
+                current.query.isNotBlank() ||
+                current.filters.active ||
+                current.trash
+        )
+            return
+        val position = ordinal.coerceIn(day.offset, day.offset + day.count - 1)
+        mutable.value =
+            current.copy(
+                items = emptyList(),
+                cursor = null,
+                windowOffset = position,
+                scrollRequest = current.scrollRequest + 1,
+                selecting = false,
+                selected = emptySet(),
+                viewerId = null,
+            )
+        load(before = day.before, offset = position - day.offset)
     }
 
     fun search(value: String, filters: NativeFilters = state.value.filters) {

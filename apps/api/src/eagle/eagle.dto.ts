@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsArray,
   IsInt,
+  IsISO8601,
   IsIn,
   IsObject,
   IsOptional,
@@ -29,7 +30,51 @@ function optionalTrimmed(value: unknown): unknown {
   return typeof value === 'string' ? value.trim() || undefined : value;
 }
 
+export class AssetTimelineDayResponseDto {
+  @ApiProperty() date!: string;
+  @ApiProperty() before!: string;
+  @ApiProperty() count!: number;
+  @ApiProperty() offset!: number;
+}
+export class AssetTimelineResponseDto {
+  @ApiProperty({ type: [AssetTimelineDayResponseDto] }) days!: AssetTimelineDayResponseDto[];
+  @ApiProperty() total!: number;
+}
+
+export class AssetTimelineDto {
+  @ApiPropertyOptional({ enum: ['CAPTURED_AT', 'ADDED_AT'] })
+  @IsOptional()
+  @IsIn(['CAPTURED_AT', 'ADDED_AT'])
+  sort?: EagleAssetSort;
+  @ApiPropertyOptional({ default: 'UTC' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  timeZone = 'UTC';
+}
+
 export class ListEagleAssetsDto {
+  @ApiPropertyOptional({
+    minimum: 0,
+    maximum: 10000000,
+    description:
+      'Initial navigation offset within the selected date boundary; incompatible with cursor and search.',
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(10000000)
+  offset?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Exclusive date boundary for native timeline navigation; not combinable with search or cursor.',
+  })
+  @IsOptional()
+  @IsISO8601({ strict: true })
+  before?: string;
+
   @ApiPropertyOptional({
     enum: ['CAPTURED_AT', 'ADDED_AT'],
     description:

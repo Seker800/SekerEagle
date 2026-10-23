@@ -34,6 +34,28 @@ execFileSync(
   { stdio: 'inherit' },
 );
 
+execFileSync(
+  process.env.FFMPEG_PATH || 'ffmpeg',
+  [
+    '-nostdin',
+    '-v',
+    'error',
+    '-y',
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=320x240:rate=10',
+    '-t',
+    '5',
+    '-c:v',
+    'libx264',
+    '-pix_fmt',
+    'yuv420p',
+    resolve(output, 'playback.mp4'),
+  ],
+  { stdio: 'inherit' },
+);
+
 // Ephemeral login fixture belongs only to androidTest assets, never the application APK.
 const nativeFixture = resolve(root, '.omx/artifacts/native-test-credentials.json');
 const targetFixture = resolve(output, 'native-test-credentials.json');

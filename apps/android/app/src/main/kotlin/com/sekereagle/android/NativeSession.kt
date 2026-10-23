@@ -89,6 +89,59 @@ class NativeSession private constructor(context: Context, val origin: String) : 
 
     fun media(path: String): ByteArray = request("GET", path, null, 16 * 1024 * 1024, true)
 
+    internal fun videoRange(
+        path: String,
+        position: Long,
+        length: Int,
+        size: Long,
+        ticket: Int,
+        bind: (HttpURLConnection) -> Unit,
+    ): ByteArray {
+        require(
+            path.matches(
+                Regex(
+                    "/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/renditions/[a-zA-Z0-9_-]{1,100}/content"
+                )
+            )
+        )
+        require(position >= 0 && position < size && length in 1..524288)
+        ensureActive(ticket)
+        val end = minOf(size - 1, position + length - 1)
+        return exchange(
+            "GET",
+            path,
+            null,
+            true,
+            "video/mp4",
+            { connection ->
+                ensureActive(ticket)
+                bind(connection)
+                connection.setRequestProperty("Range", "bytes=$position-$end")
+            },
+        ) { connection, active ->
+            if (
+                connection.responseCode != 206 ||
+                    connection.getHeaderField("Content-Range") != "bytes $position-$end/$size" ||
+                    connection.contentType.orEmpty().substringBefore(';') != "video/mp4"
+            )
+                throw IOException("播放副本暂不可用")
+            val bytes = ByteArray((end - position + 1).toInt())
+            connection.inputStream.use { input ->
+                var offset = 0
+                while (offset < bytes.size) {
+                    ensureActive(ticket)
+                    active()
+                    val count = input.read(bytes, offset, bytes.size - offset)
+                    if (count < 0) throw IOException("播放数据不完整")
+                    offset += count
+                }
+            }
+            ensureActive(ticket)
+            active()
+            bytes
+        }
+    }
+
     @Synchronized
     fun login(email: String, password: String): JSONObject {
         clear()

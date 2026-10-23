@@ -1,3 +1,4 @@
+import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
@@ -136,6 +137,12 @@ export class EagleController {
     @Body() input: EagleAssetIdsDto,
   ) {
     return this.eagle.listUpdates(principal.sub, input.assetIds, principal.canViewPrivate);
+  }
+
+  @ApiOkResponse({ type: AssetTimelineResponseDto })
+  @Get('assets/timeline')
+  assetTimeline(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: AssetTimelineDto) {
+    return this.eagle.assetTimeline(principal.sub, query.sort, query.timeZone);
   }
 
   @Get('assets/:assetId/location')
