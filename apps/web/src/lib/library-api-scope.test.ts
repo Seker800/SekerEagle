@@ -31,3 +31,27 @@ it('uses a distinct photo privacy grant and maps only recognized API prefixes', 
     '/api/admin/photo-processing/jobs',
   );
 });
+
+it('uses the same semantic intent, preview and cached-ranking contract in both libraries', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async () => Response.json({ items: [], count: null }));
+  const query = {
+    version: 2 as const,
+    conditions: [],
+    semantic: { text: '海边日落', breadth: 'BALANCED' as const },
+  };
+  for (const mode of ['PHOTO', 'MATERIAL'] as const) {
+    const api = createEagleApi(mode);
+    await api.createEagleSmartFolder('', { name: '海边', query });
+    await api.countEagleAssets('', query);
+    await api.listEagleAssets('', { smartFolderId: 'folder', smartFolderOrder: 'RELEVANCE' });
+  }
+  const calls = fetchMock.mock.calls;
+  expect(calls[0][0]).toBe('/api/photos/smart-folders');
+  expect(calls[3][0]).toBe('/api/eagle/smart-folders');
+  expect(calls[0][1]?.body).toBe(calls[3][1]?.body);
+  expect(calls[1][1]?.body).toBe(calls[4][1]?.body);
+  expect(calls[2][0]).toEqual(expect.stringContaining('smartFolderOrder=RELEVANCE'));
+  expect(calls[5][0]).toEqual(expect.stringContaining('smartFolderOrder=RELEVANCE'));
+});

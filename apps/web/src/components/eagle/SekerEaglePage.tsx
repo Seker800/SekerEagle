@@ -818,6 +818,7 @@ export function SekerEaglePage({
   const semanticSignature = smartFolders
     .filter(
       (folder) =>
+        activeSmartFolderId !== null &&
         folder.semanticState &&
         (folder.id === activeSmartFolderId || folder.parentId === activeSmartFolderId),
     )

@@ -1,3 +1,5 @@
+import { readSmartFolderPage } from './eagle-smart-folder-page';
+import { encodeImageSearchCursor, decodeImageSearchCursor } from './eagle-search-cursor';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
 import {
   scheduleSmartFolderSnapshot,
@@ -11,7 +13,7 @@ import {
 } from './eagle-edit-recipe';
 import { locateEagleAsset } from './eagle-asset-location';
 import type { LibraryMode } from '@prisma/client';
-import { LIBRARY_MODE, inLibrary, type LibraryIdentity } from './library-mode';
+import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
   BadRequestException,
   ConflictException,
@@ -655,107 +657,23 @@ export class EagleService {
     trash: boolean,
   ) {
     const scope = { ownerId, libraryMode: this.libraryMode };
-    const snapshots = await this.prisma.eagleSmartFolderSemanticSnapshot.findMany({
-      where: {
-        ownerId,
-        libraryMode: this.libraryMode,
-        folderId: { in: folderIds },
-        isActive: true,
-      },
-      select: { id: true, folder: { select: { rowVersion: true } } },
-      orderBy: { id: 'asc' },
-    });
-    const searchKey = createHash('sha256')
-      .update(
-        JSON.stringify([
-          'smart-folder-relevance',
-          scope,
-          query.smartFolderId,
-          folderDefinitionKey,
-          { ...query, cursor: undefined, limit: undefined },
-          includePrivate,
-          trash,
-          snapshots.map((snapshot) => [snapshot.id, snapshot.folder.rowVersion]),
-        ]),
-      )
-      .digest('hex');
-    let after = decodeImageSearchCursor(query.cursor, searchKey, scope);
-    const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
-    while (after?.tier !== 0 && ranked.length <= query.limit) {
-      const candidates = await rankSmartFolderMatches(
-        this.prisma,
-        scope,
-        folderIds,
-        after,
-        250,
-        includePrivate,
-        trash,
-      );
-      if (!candidates.length) break;
-      const rows = await this.prisma.eagleAsset.findMany({
-        where: inLibrary(this.libraryMode, {
-          AND: [where, { id: { in: candidates.map((candidate) => candidate.assetId) } }],
+    const page = await readSmartFolderPage(
+      this.prisma,
+      { scope, query, folderIds, folderDefinitionKey, includePrivate, trash },
+      (extraWhere, options) =>
+        this.prisma.eagleAsset.findMany({
+          where: inLibrary(this.libraryMode, { AND: [where, extraWhere] }),
+          include: assetListInclude,
+          ...options,
         }),
-        include: assetListInclude,
-      });
-      const byId = new Map(rows.map((row) => [row.id, row]));
-      for (const position of candidates) {
-        const row = byId.get(position.assetId);
-        if (row) ranked.push({ row, position });
-        if (ranked.length > query.limit) break;
-      }
-      after = candidates.at(-1);
-      if (candidates.length < 250) break;
-    }
-    if (ranked.length <= query.limit) {
-      // A parent may union semantic and ordinary-only children. Keep those members too,
-      // after cached relevance matches, in the mode's normal date order.
-      const dateField = assetDateField(this.libraryMode);
-      const remainder = await this.prisma.eagleAsset.findMany({
-        where: inLibrary(this.libraryMode, {
-          AND: [
-            where,
-            { NOT: { OR: folderIds.map((folderId) => smartFolderMatchWhere(scope, folderId)) } },
-            ...(after?.tier === 0
-              ? [
-                  {
-                    OR: [
-                      { [dateField]: { lt: new Date(after.libraryAddedAt) } },
-                      { [dateField]: new Date(after.libraryAddedAt), id: { lt: after.assetId } },
-                    ],
-                  },
-                ]
-              : []),
-          ],
-        }),
-        include: assetListInclude,
-        orderBy: [{ [dateField]: 'desc' }, { id: 'desc' }],
-        take: query.limit + 1 - ranked.length,
-      });
-      ranked.push(
-        ...remainder.map((row) => ({
-          row,
-          position: {
-            assetId: row.id,
-            tier: 0,
-            similarity: 0,
-            libraryAddedAt: row[dateField].toISOString(),
-          },
-        })),
-      );
-    }
-    const page = ranked.slice(0, query.limit);
+    );
     return {
-      items: await this.withLivePhotoMotions(
-        ownerId,
-        page.map(({ row }) => row),
-        includePrivate,
-      ),
+      items: await this.withLivePhotoMotions(ownerId, page.rows, includePrivate),
       ...(this.libraryMode === 'PHOTO' && !trash
         ? {
             photoStacks: await this.readPhotoStacks(
               ownerId,
-              page.map(({ row }) => row.id),
+              page.rows.map((row) => row.id),
               where,
               includePrivate,
               (ids) =>
@@ -772,10 +690,7 @@ export class EagleService {
             ),
           }
         : {}),
-      nextCursor:
-        ranked.length > query.limit && page.length
-          ? encodeImageSearchCursor(searchKey, page.at(-1)!.position, scope)
-          : null,
+      nextCursor: page.nextCursor,
       colorCoverage: null,
     };
   }
@@ -2107,51 +2022,6 @@ function readSemanticIntent(query: Prisma.InputJsonValue | Prisma.JsonValue) {
 
 function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {
   return { ownerId, id: { in: [] } };
-}
-
-function encodeImageSearchCursor(
-  query: string,
-  position: ImageSearchPosition,
-  scope: LibraryIdentity,
-): string {
-  return `image:${Buffer.from(JSON.stringify({ version: 4, query, position, ...scope })).toString('base64url')}`;
-}
-
-function decodeImageSearchCursor(
-  cursor: string | undefined,
-  query: string,
-  scope: LibraryIdentity,
-): ImageSearchPosition | undefined {
-  if (!cursor) return undefined;
-  if (!cursor.startsWith('image:')) throw new BadRequestException('搜索游标无效。');
-  try {
-    const payload = JSON.parse(Buffer.from(cursor.slice(6), 'base64url').toString('utf8')) as {
-      version?: unknown;
-      ownerId?: unknown;
-      libraryMode?: unknown;
-      query?: unknown;
-      position?: Partial<ImageSearchPosition>;
-    };
-    if (
-      payload.version !== 4 ||
-      payload.ownerId !== scope.ownerId ||
-      payload.libraryMode !== scope.libraryMode ||
-      payload.query !== query ||
-      !payload.position ||
-      typeof payload.position.assetId !== 'string' ||
-      !payload.position.assetId ||
-      payload.position.assetId.length > 128 ||
-      !Number.isInteger(payload.position.tier) ||
-      !Number.isFinite(payload.position.similarity) ||
-      typeof payload.position.libraryAddedAt !== 'string' ||
-      !Number.isFinite(Date.parse(payload.position.libraryAddedAt))
-    ) {
-      throw new Error('invalid semantic cursor');
-    }
-    return payload.position as ImageSearchPosition;
-  } catch {
-    throw new BadRequestException('搜索游标无效。');
-  }
 }
 
 function buildAssetWhere(

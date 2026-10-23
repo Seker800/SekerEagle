@@ -242,6 +242,15 @@ try {
   assert.equal(ranked1.items.length, 100);
   assert.equal(ranked2.items.length, 100);
   assert.equal(new Set([...ranked1.items, ...ranked2.items].map((row) => row.id)).size, 200);
+  await assert.rejects(
+    service.listAssets(ownerId, {
+      smartFolderId: folder.id,
+      smartFolderOrder: 'RELEVANCE',
+      limit: 10,
+      cursor: 'invalid',
+    }),
+    /游标无效/,
+  );
   // Dynamic ordinary rules do not trigger a new vector build.
   const withRating = {
     ...intent(),
@@ -259,6 +268,15 @@ try {
     query: withRating,
   });
   assert.equal(await client.eagleSmartFolderSemanticSnapshot.count(), 1);
+  await assert.rejects(
+    service.listAssets(ownerId, {
+      smartFolderId: folder.id,
+      smartFolderOrder: 'RELEVANCE',
+      limit: 100,
+      cursor: ranked1.nextCursor,
+    }),
+    /游标无效/,
+  );
   assert.equal(
     (await service.listAssets(ownerId, { smartFolderId: folder.id, limit: 10 })).items.length,
     0,
@@ -401,6 +419,22 @@ try {
   );
   // Mixed parent trees keep ordinary-only child members after cached relevance hits.
   await client.eagleAsset.update({ where: { id: 'non-match' }, data: { rating: 5 } });
+  await client.eagleAsset.createMany({
+    data: Array.from({ length: 105 }, (_, index) => ({
+      id: `ordinary-only-${index}`,
+      ownerId,
+      libraryMode: 'PHOTO',
+      originalName: `${index}.jpg`,
+      displayName: `${index}`,
+      normalizedDisplayName: `${index}`,
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 42,
+      mediaRevision: 1,
+      rating: 5,
+      originalObjectKey: `users/${ownerId}/ordinary/${index}.jpg`,
+    })),
+  });
   const child = await service.createSmartFolder(ownerId, {
     name: '高评分',
     parentId: folder.id,
