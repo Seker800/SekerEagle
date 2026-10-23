@@ -15,5 +15,10 @@ test('timeline repair is bounded and fenced by owner, PHOTO, original hash, revi
 });
 test('invalid, duplicate or oversized repair evidence fails before database access', async () => {
  const db={ $queryRaw:()=>{throw Error('UNEXPECTED_WRITE');} };
- for(const items of [[],Array.from({length:101},()=>item),[item,item],[{...item,sourceDate:'bad'}],[{...item,dateSource:'ImportTime'}],[{...item,sha256:'bad'}]]) await assert.rejects(refreshSourceTimeline(db as never,'owner',items));
+ for(const items of [[],Array.from({length:1001},()=>item),[item,item],[{...item,sourceDate:'bad'}],[{...item,dateSource:'ImportTime'}],[{...item,sha256:'bad'}]]) await assert.rejects(refreshSourceTimeline(db as never,'owner',items));
+});
+
+test('a bounded thousand-row date batch reduces NAS commit overhead', async () => {
+ const rows=Array.from({length:1000},(_,i)=>({...item,assetId:`d8fb6228-3a17-4f12-8f63-${String(i).padStart(12,'0')}`}));
+ let calls=0; await refreshSourceTimeline({$queryRaw:()=>{calls++;return Promise.resolve([]);}} as never,'owner',rows); assert.equal(calls,1);
 });
