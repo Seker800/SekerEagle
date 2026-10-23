@@ -66,6 +66,30 @@ export interface EagleFilterCondition {
 export interface EagleFilterQuery {
   version: typeof EAGLE_FILTER_QUERY_VERSION;
   conditions: EagleFilterCondition[];
+  /** Persistent smart-folder intent; ordinary filters remain live. */
+  semantic?: EagleSemanticIntent;
+}
+
+export interface EagleSemanticIntent {
+  text: string;
+  breadth: 'STRICT' | 'BALANCED' | 'BROAD';
+}
+
+// Similarity thresholds are retrieval policy, not probabilities of correctness.
+export const EAGLE_SEMANTIC_THRESHOLDS = { STRICT: 0.35, BALANCED: 0.3, BROAD: 0.25 } as const;
+
+export function parseEagleSemanticIntent(value: unknown): EagleSemanticIntent {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => !['text', 'breadth'].includes(key)) ||
+    typeof value.text !== 'string' ||
+    typeof value.breadth !== 'string' ||
+    !['STRICT', 'BALANCED', 'BROAD'].includes(String(value.breadth))
+  )
+    throw new Error('画面内容条件无效。');
+  const text = value.text.normalize('NFKC').trim();
+  if (!text || text.length > 500) throw new Error('画面描述需要 1 至 500 个字符。');
+  return { text, breadth: value.breadth as EagleSemanticIntent['breadth'] };
 }
 
 export interface LegacyEagleFilterQuery {
@@ -359,6 +383,7 @@ export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
     throw new Error('筛选条件组无效。');
   return {
     version: EAGLE_FILTER_QUERY_VERSION,
+    ...(value.semantic === undefined ? {} : { semantic: parseEagleSemanticIntent(value.semantic) }),
     conditions: value.conditions.map((condition, conditionIndex) =>
       parseCondition(condition, conditionIndex),
     ),

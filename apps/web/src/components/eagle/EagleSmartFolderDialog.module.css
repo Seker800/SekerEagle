@@ -328,3 +328,43 @@
     white-space: nowrap;
   }
 }
+
+.semanticPanel {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+}
+.semanticPanel select {
+  color: inherit;
+  background: #17181c;
+  padding: 9px;
+  border: 1px solid #474b52;
+  border-radius: 6px;
+}
+.semanticPanel > button {
+  justify-self: start;
+  color: inherit;
+  background: #272a30;
+  border: 1px solid #474b52;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.semanticPanel p {
+  margin: 0;
+  color: #aeb4bf;
+  font-size: 12px;
+}
+.semanticPreview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+.semanticPreview > div {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: 6px;
+}

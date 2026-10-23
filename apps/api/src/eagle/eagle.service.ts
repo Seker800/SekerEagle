@@ -1,3 +1,8 @@
+import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
+import {
+  scheduleSmartFolderSnapshot,
+  smartFolderMatchWhere,
+} from '@sekereagle/library-persistence';
 import { setEagleTrash } from './eagle-trash';
 import {
   readEagleEditRecipe,
@@ -16,7 +21,11 @@ import {
   Inject,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { EAGLE_FILTER_QUERY_VERSION, type EagleFilterQuery } from '@sekereagle/eagle-filter-core';
+import {
+  EAGLE_FILTER_QUERY_VERSION,
+  EAGLE_SEMANTIC_THRESHOLDS,
+  type EagleFilterQuery,
+} from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   EagleImageSearchService,
@@ -176,19 +185,18 @@ export class EagleService {
       ? await this.prisma.eagleSmartFolder.findFirst({
           where: { ownerId, id: query.smartFolderId, libraryMode: this.libraryMode },
           select: {
+            id: true,
             queryJson: true,
             children: {
               orderBy: [{ position: 'asc' }, { id: 'asc' }],
-              select: { queryJson: true },
+              select: { id: true, queryJson: true },
             },
           },
         })
       : null;
     if (query.smartFolderId && !smartFolder) throw new NotFoundException('智能文件夹不存在。');
-    const folderQueries = smartFolder
-      ? [smartFolder.queryJson, ...smartFolder.children.map(({ queryJson }) => queryJson)]
-      : [];
-    const folderEntries = folderQueries.map((storedQuery) => ({
+    const folderQueries = smartFolder ? [smartFolder, ...smartFolder.children] : [];
+    const folderEntries = folderQueries.map(({ id, queryJson: storedQuery }) => ({
       storedQuery,
       where: buildStoredSmartFolderWhere(
         ownerId,
@@ -196,6 +204,7 @@ export class EagleService {
         trash,
         includePrivate,
         this.libraryMode,
+        id,
       ),
     }));
     const activeFolderQueries = folderEntries
@@ -257,6 +266,19 @@ export class EagleService {
           ? folderConditions[0]
           : { OR: folderConditions };
     const queryWhere = folderWhere ? { AND: [baseWhere, folderWhere] } : baseWhere;
+    if (query.smartFolderOrder && !query.search) {
+      if (!smartFolder || query.sort || query.before || query.offset !== undefined)
+        throw new BadRequestException('相关度排序只能用于智能文件夹。');
+      return this.listSemanticFolderAssets(
+        ownerId,
+        query,
+        queryWhere,
+        folderQueries.map((folder) => folder.id),
+        JSON.stringify(folderQueries),
+        includePrivate,
+        trash,
+      );
+    }
     if (filters.search && this.imageSearch) {
       const context = await this.imageSearch.prepare(ownerId, filters.search);
       const semanticBaseConditions: Prisma.EagleAssetWhereInput[] = [
@@ -623,6 +645,141 @@ export class EagleService {
     };
   }
 
+  private async listSemanticFolderAssets(
+    ownerId: string,
+    query: ListEagleAssetsDto,
+    where: Prisma.EagleAssetWhereInput,
+    folderIds: string[],
+    folderDefinitionKey: string,
+    includePrivate: boolean,
+    trash: boolean,
+  ) {
+    const scope = { ownerId, libraryMode: this.libraryMode };
+    const snapshots = await this.prisma.eagleSmartFolderSemanticSnapshot.findMany({
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        folderId: { in: folderIds },
+        isActive: true,
+      },
+      select: { id: true, folder: { select: { rowVersion: true } } },
+      orderBy: { id: 'asc' },
+    });
+    const searchKey = createHash('sha256')
+      .update(
+        JSON.stringify([
+          'smart-folder-relevance',
+          scope,
+          query.smartFolderId,
+          folderDefinitionKey,
+          { ...query, cursor: undefined, limit: undefined },
+          includePrivate,
+          trash,
+          snapshots.map((snapshot) => [snapshot.id, snapshot.folder.rowVersion]),
+        ]),
+      )
+      .digest('hex');
+    let after = decodeImageSearchCursor(query.cursor, searchKey, scope);
+    const ranked: Array<{ row: AssetListRecord; position: ImageSearchPosition }> = [];
+    while (after?.tier !== 0 && ranked.length <= query.limit) {
+      const candidates = await rankSmartFolderMatches(
+        this.prisma,
+        scope,
+        folderIds,
+        after,
+        250,
+        includePrivate,
+        trash,
+      );
+      if (!candidates.length) break;
+      const rows = await this.prisma.eagleAsset.findMany({
+        where: inLibrary(this.libraryMode, {
+          AND: [where, { id: { in: candidates.map((candidate) => candidate.assetId) } }],
+        }),
+        include: assetListInclude,
+      });
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      for (const position of candidates) {
+        const row = byId.get(position.assetId);
+        if (row) ranked.push({ row, position });
+        if (ranked.length > query.limit) break;
+      }
+      after = candidates.at(-1);
+      if (candidates.length < 250) break;
+    }
+    if (ranked.length <= query.limit) {
+      // A parent may union semantic and ordinary-only children. Keep those members too,
+      // after cached relevance matches, in the mode's normal date order.
+      const dateField = assetDateField(this.libraryMode);
+      const remainder = await this.prisma.eagleAsset.findMany({
+        where: inLibrary(this.libraryMode, {
+          AND: [
+            where,
+            { NOT: { OR: folderIds.map((folderId) => smartFolderMatchWhere(scope, folderId)) } },
+            ...(after?.tier === 0
+              ? [
+                  {
+                    OR: [
+                      { [dateField]: { lt: new Date(after.libraryAddedAt) } },
+                      { [dateField]: new Date(after.libraryAddedAt), id: { lt: after.assetId } },
+                    ],
+                  },
+                ]
+              : []),
+          ],
+        }),
+        include: assetListInclude,
+        orderBy: [{ [dateField]: 'desc' }, { id: 'desc' }],
+        take: query.limit + 1 - ranked.length,
+      });
+      ranked.push(
+        ...remainder.map((row) => ({
+          row,
+          position: {
+            assetId: row.id,
+            tier: 0,
+            similarity: 0,
+            libraryAddedAt: row[dateField].toISOString(),
+          },
+        })),
+      );
+    }
+    const page = ranked.slice(0, query.limit);
+    return {
+      items: await this.withLivePhotoMotions(
+        ownerId,
+        page.map(({ row }) => row),
+        includePrivate,
+      ),
+      ...(this.libraryMode === 'PHOTO' && !trash
+        ? {
+            photoStacks: await this.readPhotoStacks(
+              ownerId,
+              page.map(({ row }) => row.id),
+              where,
+              includePrivate,
+              (ids) =>
+                rankSmartFolderMatches(
+                  this.prisma,
+                  scope,
+                  folderIds,
+                  undefined,
+                  ids.length,
+                  includePrivate,
+                  trash,
+                  ids,
+                ).then((rows) => rows.map((row) => row.assetId)),
+            ),
+          }
+        : {}),
+      nextCursor:
+        ranked.length > query.limit && page.length
+          ? encodeImageSearchCursor(searchKey, page.at(-1)!.position, scope)
+          : null,
+      colorCoverage: null,
+    };
+  }
+
   private async withLivePhotoMotions(
     ownerId: string,
     rows: AssetListRecord[],
@@ -642,6 +799,7 @@ export class EagleService {
   async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
     const query = readEagleFilterQuery(input);
     assertFilterMode(query, this.libraryMode);
+    if (query.semantic) return this.previewSemanticFolder(ownerId, query, includePrivate);
     return {
       count: await this.prisma.eagleAsset.count({
         where: {
@@ -652,6 +810,51 @@ export class EagleService {
           libraryMode: this.libraryMode,
         },
       }),
+    };
+  }
+
+  private async previewSemanticFolder(
+    ownerId: string,
+    query: EagleFilterQuery,
+    includePrivate: boolean,
+  ) {
+    const context = await this.imageSearch?.prepare(ownerId, query.semantic!.text);
+    if (context?.status !== 'READY')
+      return { count: null, semanticStatus: 'UNAVAILABLE', previewItems: [] };
+    const threshold = EAGLE_SEMANTIC_THRESHOLDS[query.semantic!.breadth];
+    // Preview is explicitly sampled, never a truncated membership list or an asserted total.
+    const candidates = await this.prisma.$queryRaw<
+      Array<{ id: string; mediaRevision: number }>
+    >(Prisma.sql`
+      SELECT a.id, a."mediaRevision" FROM "EagleAssetEmbedding" e JOIN "EagleAsset" a
+        ON a.id=e."assetId" AND a."ownerId"=e."ownerId" AND a."libraryMode"=e."libraryMode" AND a."mediaRevision"=e."assetRevision"
+      WHERE a."ownerId"=${ownerId} AND a."libraryMode"=${this.libraryMode}::"LibraryMode"
+        AND a."deletedAt" IS NULL ${includePrivate ? Prisma.empty : Prisma.sql`AND NOT a."isPrivate"`}
+        AND e."spaceId"=${context.spaceId} AND e."isCurrent" AND e.status='READY'
+        AND e.embedding IS NOT NULL AND 1-(e.embedding <=> ${context.vector}::vector)>=${threshold}
+      ORDER BY e.embedding <=> ${context.vector}::vector, a.id LIMIT 100
+    `);
+    const rows = await this.prisma.eagleAsset.findMany({
+      where: {
+        ownerId,
+        libraryMode: this.libraryMode,
+        deletedAt: null,
+        ...privateVisibilityWhere(includePrivate),
+        AND: [
+          { OR: candidates.map(({ id, mediaRevision }) => ({ id, mediaRevision })) },
+          buildEagleFilterWhere({ ...query, semantic: undefined }, this.libraryMode),
+        ],
+      },
+      include: assetListInclude,
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const preview = candidates
+      .flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : []))
+      .slice(0, 12);
+    return {
+      count: null,
+      semanticStatus: 'READY',
+      previewItems: await this.withLivePhotoMotions(ownerId, preview, includePrivate),
     };
   }
 
@@ -1356,11 +1559,32 @@ export class EagleService {
     return { affectedAssetCount: 1, privacyChangedAssetCount };
   }
 
-  listSmartFolders(ownerId: string) {
-    return this.prisma.eagleSmartFolder.findMany({
+  async listSmartFolders(ownerId: string) {
+    const rows = await this.prisma.eagleSmartFolder.findMany({
       where: { ownerId, libraryMode: this.libraryMode },
       orderBy: [{ parentId: 'asc' }, { position: 'asc' }, { id: 'asc' }],
+      include: {
+        semanticSnapshots: {
+          orderBy: [{ isActive: 'asc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            status: true,
+            isActive: true,
+            completedAt: true,
+            updatedAt: true,
+          },
+        },
+      },
     });
+    return rows.map(({ semanticSnapshots, ...folder }) => ({
+      ...folder,
+      semanticState: semanticSnapshots.length
+        ? {
+            ...semanticSnapshots[0],
+            hasResults: semanticSnapshots.some((snapshot) => snapshot.isActive),
+          }
+        : null,
+    }));
   }
 
   async createSmartFolder(ownerId: string, input: CreateSmartFolderDto) {
@@ -1391,6 +1615,18 @@ export class EagleService {
           },
         });
         await this.replaceSmartFolderDependencies(transaction, ownerId, folder.id, dependencies);
+        const semantic = isEagleFilterQuery(queryJson)
+          ? readEagleFilterQuery(queryJson).semantic
+          : undefined;
+        if (semantic)
+          await scheduleSmartFolderSnapshot(
+            transaction,
+            { ownerId, libraryMode: this.libraryMode },
+            folder.id,
+            semantic,
+            process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1',
+            EAGLE_SEMANTIC_THRESHOLDS[semantic.breadth],
+          );
         return folder;
       });
     } catch (error) {
@@ -1460,6 +1696,17 @@ export class EagleService {
             }),
           ]);
           await this.replaceSmartFolderDependencies(transaction, ownerId, folderId, dependencies);
+        }
+        if (queryJson && (readSemanticIntent(queryJson) || readSemanticIntent(current.queryJson))) {
+          const semantic = readSemanticIntent(queryJson);
+          await scheduleSmartFolderSnapshot(
+            transaction,
+            { ownerId, libraryMode: this.libraryMode },
+            folderId,
+            semantic,
+            process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1',
+            semantic ? EAGLE_SEMANTIC_THRESHOLDS[semantic.breadth] : undefined,
+          );
         }
         return transaction.eagleSmartFolder.findFirstOrThrow({
           where: { ownerId, id: folderId, libraryMode: this.libraryMode },
@@ -1820,9 +2067,21 @@ function buildStoredSmartFolderWhere(
   trash: boolean,
   includePrivate: boolean,
   libraryMode: LibraryMode,
+  folderId?: string,
 ): Prisma.EagleAssetWhereInput | null {
   if (isEagleFilterQuery(query)) {
-    const ruleWhere = buildEagleFilterWhere(readEagleFilterQuery(query), libraryMode);
+    const parsed = readEagleFilterQuery(query);
+    const ordinaryWhere = buildEagleFilterWhere({ ...parsed, semantic: undefined }, libraryMode);
+    const ruleWhere = parsed.semantic
+      ? {
+          AND: [
+            ordinaryWhere,
+            folderId
+              ? smartFolderMatchWhere({ ownerId, libraryMode }, folderId)
+              : buildNoAssetsWhere(ownerId),
+          ],
+        }
+      : ordinaryWhere;
     if (Object.keys(ruleWhere).length === 0) return null;
     return {
       ownerId,
@@ -1840,6 +2099,10 @@ function buildStoredSmartFolderWhere(
     includePrivate,
   );
   return Array.isArray(filterWhere.AND) && filterWhere.AND.length > 0 ? filterWhere : null;
+}
+
+function readSemanticIntent(query: Prisma.InputJsonValue | Prisma.JsonValue) {
+  return isEagleFilterQuery(query) ? readEagleFilterQuery(query).semantic : undefined;
 }
 
 function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {

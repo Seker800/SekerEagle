@@ -390,6 +390,15 @@
         "operationId": "EagleController_listAssets",
         "parameters": [
           {
+            "name": "smartFolderOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["RELEVANCE"]
+            }
+          },
+          {
             "name": "offset",
             "required": false,
             "in": "query",
@@ -1269,6 +1278,15 @@
       "get": {
         "operationId": "EagleController_listTrash",
         "parameters": [
+          {
+            "name": "smartFolderOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["RELEVANCE"]
+            }
+          },
           {
             "name": "offset",
             "required": false,
@@ -3631,6 +3649,15 @@
         "operationId": "PhotosController_listAssets",
         "parameters": [
           {
+            "name": "smartFolderOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["RELEVANCE"]
+            }
+          },
+          {
             "name": "offset",
             "required": false,
             "in": "query",
@@ -4510,6 +4537,15 @@
       "get": {
         "operationId": "PhotosController_listTrash",
         "parameters": [
+          {
+            "name": "smartFolderOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["RELEVANCE"]
+            }
+          },
           {
             "name": "offset",
             "required": false,

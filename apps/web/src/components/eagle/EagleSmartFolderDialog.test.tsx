@@ -57,6 +57,73 @@ function renderDialog(
 }
 
 describe('EagleSmartFolderDialog', () => {
+  it('saves semantic-only folders and preserves the intent while editing ordinary rules', () => {
+    const { onSave } = renderDialog();
+    fireEvent.change(screen.getByRole('textbox', { name: '画面描述' }), {
+      target: { value: '海边日落' },
+    });
+    fireEvent.change(screen.getByRole('combobox', { name: '匹配范围' }), {
+      target: { value: 'STRICT' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ semantic: { text: '海边日落', breadth: 'STRICT' } }),
+      }),
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('保存后在后台生成');
+  });
+
+  it('restores semantic-only intent and can explicitly remove it', () => {
+    const { onSave } = renderDialog(vi.fn(), {
+      initialQuery: { version: 2, conditions: [], semantic: { text: '雨天', breadth: 'BROAD' } },
+    });
+    expect(screen.getByRole('textbox', { name: '画面描述' })).toHaveValue('雨天');
+    expect(screen.getByRole('combobox', { name: '匹配范围' })).toHaveValue('BROAD');
+    fireEvent.change(screen.getByRole('textbox', { name: '画面描述' }), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
+    expect(onSave).toHaveBeenCalledWith({ name: 'KIT', query: { version: 2, conditions: [] } });
+  });
+
+  it('only requests a semantic preview after an explicit click and reports model unavailability', async () => {
+    countEagleAssetsMock.mockClear();
+    countEagleAssetsMock.mockResolvedValueOnce({
+      count: null,
+      semanticStatus: 'UNAVAILABLE',
+      previewItems: [],
+    });
+    renderDialog(vi.fn(), {
+      initialQuery: { version: 2, conditions: [], semantic: { text: '海边', breadth: 'BALANCED' } },
+    });
+    expect(countEagleAssetsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '预览匹配照片' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('可以保存并等待后台重试');
+    expect(countEagleAssetsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('discards semantic preview results when the dialog closes', async () => {
+    countEagleAssetsMock.mockResolvedValueOnce({
+      count: null,
+      semanticStatus: 'READY',
+      previewItems: [],
+    });
+    const options = {
+      initialQuery: {
+        version: 2 as const,
+        conditions: [],
+        semantic: { text: '海边', breadth: 'BALANCED' as const },
+      },
+    };
+    const first = renderDialog(vi.fn(), options);
+    fireEvent.click(screen.getByRole('button', { name: '预览匹配照片' }));
+    expect(await screen.findByText('匹配预览，最多显示 12 张，不代表全部结果。')).toBeVisible();
+    first.unmount();
+    renderDialog(vi.fn(), options);
+    expect(
+      screen.queryByText('匹配预览，最多显示 12 张，不代表全部结果。'),
+    ).not.toBeInTheDocument();
+  });
+
   it.each(['create', 'edit'] as const)(
     'turns an empty %s query into an editable blank filter rule',
     (mode) => {

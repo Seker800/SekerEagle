@@ -191,6 +191,13 @@ export interface EagleSmartFolder {
   name: string;
   color: string | null;
   parentId: string | null;
+  semanticState?: {
+    id: string;
+    status: 'PENDING' | 'BUILDING' | 'READY' | 'FAILED';
+    hasResults: boolean;
+    completedAt: string | null;
+    updatedAt: string;
+  } | null;
   queryVersion: number;
   queryJson: EagleFilterQuery | LegacyEagleFilterQuery;
   position: number;
@@ -217,6 +224,7 @@ export interface EagleAssetFilters {
   limit?: number;
   cursor?: string;
   smartFolderId?: string;
+  smartFolderOrder?: 'RELEVANCE';
   search?: string;
   formats?: string[];
   manualTagIds?: string[];
@@ -309,6 +317,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
       'gps',
       'cursor',
       'smartFolderId',
+      'smartFolderOrder',
       'search',
       'createdFrom',
       'createdTo',
@@ -547,7 +556,9 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
 
   async function countEagleAssets(_token: string, query: EagleFilterQuery) {
     return api<{
-      count: number;
+      count: number | null;
+      semanticStatus?: 'READY' | 'UNAVAILABLE';
+      previewItems?: EagleAssetListItem[];
     }>('/eagle/assets/filter-count', {
       method: 'POST',
       body: JSON.stringify({ query }),

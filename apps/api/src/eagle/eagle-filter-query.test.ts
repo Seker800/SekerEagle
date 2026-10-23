@@ -100,3 +100,15 @@ test('photography rules share the compiler and reject material mode', () => {
   assert.match(JSON.stringify(where), /Test Camera/);
   assert.match(JSON.stringify(where), /null/);
 });
+
+test('ordinary rule compilation rejects semantic intent instead of silently broadening results', () => {
+  assert.throws(
+    () =>
+      buildEagleFilterWhere({
+        version: 2,
+        conditions: [],
+        semantic: { text: '海边', breadth: 'BALANCED' },
+      }),
+    /智能文件夹/,
+  );
+});

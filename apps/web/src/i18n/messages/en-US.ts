@@ -1,4 +1,35 @@
 export const enUS = {
+  画面内容: 'Image content',
+  '画面内容（可选）': 'Image content (optional)',
+  画面描述: 'Describe the image',
+  '例如：海边日落、雨天的城市、街头人像':
+    'For example: sunset at the beach, a rainy city, street portraits',
+  匹配范围: 'Match range',
+  严格: 'Strict',
+  适中: 'Balanced',
+  宽泛: 'Broad',
+  '保存后自动整理匹配结果，新照片处理完成后自动加入。其他筛选条件同时生效。':
+    'Matches are saved and updated as new photos finish processing. Other filters also apply.',
+  '正在预览…': 'Loading preview…',
+  预览匹配照片: 'Preview matching photos',
+  '画面搜索暂时不可用，可以保存并等待后台重试。':
+    'Image search is unavailable. Save to retry in the background.',
+  '匹配预览，最多显示 12 张，不代表全部结果。':
+    'Sample preview of up to 12 photos; this is not the complete result.',
+  '暂未找到匹配照片，尚未生成向量的照片会在处理完成后补入。':
+    'No matches yet. Photos awaiting vectors will be included after processing.',
+  '保存后在后台生成，之后打开直接读取结果':
+    'Builds in the background after saving; later visits load saved results',
+  '正在更新匹配结果，仍可浏览上一版。': 'Updating matches. Previous results remain available.',
+  '正在生成匹配结果…': 'Building matches…',
+  '匹配更新失败，已保留上一版。': 'Update failed. Previous results are preserved.',
+  '匹配生成失败，请重试。': 'Build failed. Please retry.',
+  重新生成匹配结果: 'Rebuild matches',
+  新照片会自动加入: 'New photos are added automatically',
+  按相关度: 'By relevance',
+  按日期: 'By date',
+  智能文件夹排序: 'Smart folder sort order',
+
   全家福: 'Family portraits',
   海边日落: 'Sunset by the sea',
   宠物: 'Pets',

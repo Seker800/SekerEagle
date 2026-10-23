@@ -837,6 +837,7 @@ model EagleAssetEmbedding {
   updatedAt     DateTime                     @updatedAt
   asset         EagleAsset                   @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   space         EagleEmbeddingSpace          @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  smartFolderMatches EagleSmartFolderSemanticMatch[]
   suggestions   EagleVectorTagSuggestion[]
 
   @@unique([assetId, assetRevision, spaceId])
@@ -1110,6 +1111,7 @@ model EagleSmartFolder {
   owner          User                                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   parent         EagleSmartFolder?                     @relation("EagleSmartFolderTree", fields: [ownerId, libraryMode, parentId], references: [ownerId, libraryMode, id], onDelete: Restrict)
   children       EagleSmartFolder[]                    @relation("EagleSmartFolderTree")
+  semanticSnapshots EagleSmartFolderSemanticSnapshot[]
   manualTagDeps  EagleSmartFolderManualTagDependency[]
   aiTagDeps      EagleSmartFolderAiTagDependency[]
 
@@ -1443,4 +1445,51 @@ model EaglePhotoLocation {
   asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   @@unique([ownerId,libraryMode,assetId])
   @@index([ownerId,libraryMode,cityId])
+}
+
+// Only active snapshots are read. Pending builds preserve the previous usable snapshot.
+model EagleSmartFolderSemanticSnapshot {
+  id           String                          @id @default(uuid())
+  ownerId      String
+  libraryMode  LibraryMode
+  folderId     String
+  intentKey    String
+  text         String
+  breadth      String
+  threshold    Float
+  spaceId      String
+  queryVector  Unsupported("vector(1024)")?
+  status       String                          @default("PENDING")
+  isActive     Boolean                         @default(false)
+  cursor       String                          @default("")
+  scannedCount Int                             @default(0)
+  attempts     Int                             @default(0)
+  leaseToken   String?
+  lockedUntil  DateTime?
+  availableAt  DateTime                        @default(now())
+  errorCode    String?
+  completedAt  DateTime?
+  createdAt    DateTime                        @default(now())
+  updatedAt    DateTime                        @updatedAt
+  folder       EagleSmartFolder                @relation(fields: [ownerId, libraryMode, folderId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  matches      EagleSmartFolderSemanticMatch[]
+
+  @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, folderId, intentKey])
+  @@index([status, availableAt, lockedUntil])
+  @@index([ownerId, libraryMode, folderId, isActive])
+}
+
+model EagleSmartFolderSemanticMatch {
+  ownerId     String
+  libraryMode LibraryMode
+  snapshotId  String
+  embeddingId String
+  similarity  Float
+  snapshot    EagleSmartFolderSemanticSnapshot @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  embedding   EagleAssetEmbedding              @relation(fields: [ownerId, libraryMode, embeddingId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+
+  @@id([snapshotId, embeddingId])
+  @@index([ownerId, libraryMode, embeddingId])
+  @@index([ownerId, libraryMode, snapshotId, similarity, embeddingId])
 }

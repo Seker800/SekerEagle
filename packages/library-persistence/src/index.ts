@@ -141,3 +141,9 @@ export async function preserveReplacementPrivacy(
   }
   return targets.map(({ id }) => id);
 }
+
+export {
+  scheduleSmartFolderSnapshot,
+  matchSmartFoldersForEmbedding,
+  smartFolderMatchWhere,
+} from './smart-folder-semantics';

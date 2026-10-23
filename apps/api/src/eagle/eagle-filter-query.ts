@@ -25,6 +25,7 @@ export function buildEagleFilterWhere(
   libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
 ): Prisma.EagleAssetWhereInput {
   assertFilterMode(query, libraryMode);
+  if (query.semantic) throw new BadRequestException('画面内容需要通过智能文件夹或预览查询。');
   const conditions = query.conditions
     .map(buildConditionWhere)
     .filter((where): where is Prisma.EagleAssetWhereInput => where !== null);

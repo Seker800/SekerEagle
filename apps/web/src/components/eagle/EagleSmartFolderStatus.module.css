@@ -1,0 +1,17 @@
+.status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #aeb4bf;
+  font-size: 12px;
+}
+.status select,
+.status button {
+  padding: 6px 9px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 6px;
+  color: #e5e7eb;
+  background: #25282e;
+  font: inherit;
+}

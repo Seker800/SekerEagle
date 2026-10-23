@@ -1,3 +1,4 @@
+import { matchSmartFoldersForEmbedding } from '@sekereagle/library-persistence';
 import {
   Prisma,
   type PrismaClient,
@@ -27,6 +28,12 @@ export async function publishEmbedding(
 ): Promise<void> {
   await client.$transaction(
     async (transaction) => {
+      // Asset-first ordering matches replacement. Never publish a superseded media revision.
+      const visible = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM "EagleAsset" WHERE id=${job.assetId} AND "ownerId"=${job.ownerId}
+          AND "libraryMode"=${job.libraryMode}::"LibraryMode" AND "mediaRevision"=${job.assetRevision}
+        FOR SHARE`);
+      if (!visible.length) return;
       const scope = {
         ownerId: job.ownerId,
         libraryMode: job.libraryMode,
@@ -62,6 +69,7 @@ export async function publishEmbedding(
       await transaction.$executeRaw(
         Prisma.sql`UPDATE "EagleAssetEmbedding" SET "embedding" = ${vector}::vector WHERE "ownerId" = ${job.ownerId} AND "libraryMode" = ${job.libraryMode}::"LibraryMode" AND "id" = ${recordId}`,
       );
+      await matchSmartFoldersForEmbedding(transaction, job, recordId);
       await suggest(transaction, job.ownerId, job.libraryMode, job.assetId, recordId);
     },
     { maxWait: 5_000, timeout: 30_000 },

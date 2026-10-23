@@ -3812,6 +3812,7 @@ export interface operations {
   EagleController_listAssets: {
     parameters: {
       query?: {
+        smartFolderOrder?: 'RELEVANCE';
         /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
@@ -4280,6 +4281,7 @@ export interface operations {
   EagleController_listTrash: {
     parameters: {
       query?: {
+        smartFolderOrder?: 'RELEVANCE';
         /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
@@ -5929,6 +5931,7 @@ export interface operations {
   PhotosController_listAssets: {
     parameters: {
       query?: {
+        smartFolderOrder?: 'RELEVANCE';
         /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */
@@ -6397,6 +6400,7 @@ export interface operations {
   PhotosController_listTrash: {
     parameters: {
       query?: {
+        smartFolderOrder?: 'RELEVANCE';
         /** @description Initial navigation offset within the selected date boundary; incompatible with cursor and search. */
         offset?: number;
         /** @description Exclusive date boundary for native timeline navigation; not combinable with search or cursor. */

@@ -30,6 +30,8 @@ export function useEagleReferenceData(
   const smartFoldersQuery = useQuery({
     queryKey: queryKeys.smartFolders,
     queryFn: () => listEagleSmartFolders(accessToken),
+    refetchInterval: (query) =>
+      query.state.data?.some((folder) => folder.semanticState) ? 10_000 : false,
   });
 
   return { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery };

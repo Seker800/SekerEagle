@@ -22,7 +22,8 @@
     "sharp": "^0.35.5",
     "@sekereagle/library-core": "*",
     "@sekereagle/media-core": "*",
-    "@sekereagle/library-persistence": "*"
+    "@sekereagle/library-persistence": "*",
+    "@sekereagle/eagle-filter-core": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

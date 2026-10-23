@@ -1,7 +1,7 @@
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
-import { useState, type FormEvent } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { IconFolderBolt, IconX } from '@tabler/icons-react';
 import {
   countActiveEagleFilterRules,
@@ -13,6 +13,8 @@ import type { EagleAiTag, EagleManualTag } from '../../lib/eagle-api';
 
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { EagleRuleBuilder, type EagleFilterOptions } from './EagleRuleBuilder';
+import { EagleAssetThumbnail } from './EagleAssetThumbnail';
+import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './EagleSmartFolderDialog.module.css';
 interface EagleSmartFolderDialogProps {
   fieldOptions?: EagleFilterOptions;
@@ -28,7 +30,7 @@ interface EagleSmartFolderDialogProps {
   onSave: (input: { name: string; query: EagleFilterQuery }) => void;
 }
 function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
-  if (countActiveEagleFilterRules(query) > 0) return query;
+  if (query.semantic || countActiveEagleFilterRules(query) > 0) return query;
   const emptyQuery = createEmptyEagleFilterQuery();
   return {
     ...emptyQuery,
@@ -59,20 +61,39 @@ export function EagleSmartFolderDialog({
 
   const [name, setName] = useState(initialName);
   const [query, setQuery] = useState(() => createEditableQuery(initialQuery));
-  const deferredQuery = useDebouncedValue(query, 250);
+  const [semanticText, setSemanticText] = useState(initialQuery.semantic?.text ?? '');
+  const [breadth, setBreadth] = useState(initialQuery.semantic?.breadth ?? 'BALANCED');
+  const scheduler = useMemo(() => new MediaLoadScheduler(), []);
+  useEffect(() => () => scheduler.clear({ abortActive: true }), [scheduler]);
+  const { semantic: _semantic, ...ordinaryQuery } = query;
+  void _semantic;
+  const semantic = semanticText.trim()
+    ? { text: semanticText.normalize('NFKC').trim(), breadth }
+    : undefined;
+  const savedQuery = { ...ordinaryQuery, ...(semantic ? { semantic } : {}) };
+  const deferredQuery = useDebouncedValue(ordinaryQuery, 250);
+  // Preview media belongs only to this dialog/privacy session, never the shared query cache.
+  const previewQuery = useMutation({
+    mutationFn: (input: EagleFilterQuery) => countEagleAssets(accessToken, input),
+    retry: false,
+    gcTime: 0,
+  });
+  const previewKey = JSON.stringify(savedQuery);
+  const resetPreview = previewQuery.reset;
+  useEffect(() => resetPreview(), [previewKey, resetPreview]);
   const activeConditionCount = countActiveEagleFilterRules(query);
   const hasActiveDeferredCondition = countActiveEagleFilterRules(deferredQuery) > 0;
   const countQuery = useQuery({
     queryKey: ['eagle', ownerId, libraryMode, 'smart-folder-preview', deferredQuery],
     queryFn: () => countEagleAssets(accessToken, deferredQuery),
-    enabled: hasActiveDeferredCondition,
+    enabled: hasActiveDeferredCondition && !semantic,
     staleTime: 10000,
   });
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const normalized = name.normalize('NFKC').trim();
     if (!normalized) return;
-    onSave({ name: normalized, query });
+    onSave({ name: normalized, query: savedQuery });
   };
   return (
     <div
@@ -124,6 +145,64 @@ export function EagleSmartFolderDialog({
           <p className={styles.explainer}>
             {' ' + t('智能文件夹会依据筛选条件，自动把符合条件的素材显示在一起。') + ' '}
           </p>
+          <section className={styles.semanticPanel} aria-label={t('画面内容')}>
+            <label className={styles.nameField}>
+              <span>{t('画面内容（可选）')}</span>
+              <input
+                aria-label={t('画面描述')}
+                maxLength={500}
+                value={semanticText}
+                placeholder={t('例如：海边日落、雨天的城市、街头人像')}
+                onChange={(event) => setSemanticText(event.target.value)}
+              />
+            </label>
+            <label className={styles.nameField}>
+              <span>{t('匹配范围')}</span>
+              <select
+                aria-label={t('匹配范围')}
+                value={breadth}
+                onChange={(event) => setBreadth(event.target.value as typeof breadth)}
+              >
+                <option value="STRICT">{t('严格')}</option>
+                <option value="BALANCED">{t('适中')}</option>
+                <option value="BROAD">{t('宽泛')}</option>
+              </select>
+            </label>
+            <p className={styles.explainer}>
+              {t('保存后自动整理匹配结果，新照片处理完成后自动加入。其他筛选条件同时生效。')}
+            </p>
+            <button
+              type="button"
+              disabled={!semantic || previewQuery.isPending}
+              onClick={() => previewQuery.mutate(savedQuery)}
+            >
+              {previewQuery.isPending ? t('正在预览…') : t('预览匹配照片')}
+            </button>
+            {previewQuery.isError || previewQuery.data?.semanticStatus === 'UNAVAILABLE' ? (
+              <p role="alert">{t('画面搜索暂时不可用，可以保存并等待后台重试。')}</p>
+            ) : null}
+            {previewQuery.data?.semanticStatus === 'READY' ? (
+              <>
+                <p>{t('匹配预览，最多显示 12 张，不代表全部结果。')}</p>
+                <div className={styles.semanticPreview}>
+                  {previewQuery.data.previewItems?.map((asset, order) => (
+                    <div key={asset.id}>
+                      <EagleAssetThumbnail
+                        asset={asset}
+                        scheduler={scheduler}
+                        order={order}
+                        displayWidth={120}
+                        alt={asset.displayName}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {!previewQuery.data.previewItems?.length ? (
+                  <p>{t('暂未找到匹配照片，尚未生成向量的照片会在处理完成后补入。')}</p>
+                ) : null}
+              </>
+            ) : null}
+          </section>
           <EagleRuleBuilder
             fieldOptions={fieldOptions}
             value={query}
@@ -135,17 +214,19 @@ export function EagleSmartFolderDialog({
         </div>
         <footer>
           <span className={styles.conditionSummary} role="status" aria-live="polite">
-            {activeConditionCount === 0
-              ? t('找到 0 项符合规则的素材')
-              : countQuery.isLoading
-                ? t('正在计算符合规则的素材…')
-                : countQuery.isError
-                  ? t('已启用 {{value1}} 条规则', {
-                      value1: activeConditionCount,
-                    })
-                  : t('找到 {{value1}} 项符合规则的素材', {
-                      value1: countQuery.data?.count ?? 0,
-                    })}
+            {semantic
+              ? t('保存后在后台生成，之后打开直接读取结果')
+              : activeConditionCount === 0
+                ? t('找到 0 项符合规则的素材')
+                : countQuery.isLoading
+                  ? t('正在计算符合规则的素材…')
+                  : countQuery.isError
+                    ? t('已启用 {{value1}} 条规则', {
+                        value1: activeConditionCount,
+                      })
+                    : t('找到 {{value1}} 项符合规则的素材', {
+                        value1: countQuery.data?.count ?? 0,
+                      })}
           </span>
           <div className={styles.footerActions}>
             <button type="button" onClick={onClose}>

@@ -68,7 +68,8 @@
     "android:build": "npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/android",
     "android:check": "npm run build --workspace @sekereagle/library-core && npm run typecheck --workspace @sekereagle/android && npm run test --workspace @sekereagle/android && npm run lint --workspace @sekereagle/android && npm run build --workspace @sekereagle/android",
     "android:install": "npm run install:device --workspace @sekereagle/android",
-    "android:check:device": "npm run android:check && node apps/android/scripts/verify-device.mjs"
+    "android:check:device": "npm run android:check && node apps/android/scripts/verify-device.mjs",
+    "test:smart-folders": "npm run db:generate && npm run build && node --experimental-test-coverage --test-coverage-include=apps/worker/dist/smart-folder-build.js --test-coverage-include=packages/library-persistence/dist/smart-folder-semantics.js --test-coverage-include=apps/api/dist/eagle/eagle-smart-folder-ranking.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test scripts/testing/semantic-smart-folders.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

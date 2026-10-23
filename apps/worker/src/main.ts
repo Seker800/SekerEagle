@@ -1,3 +1,4 @@
+import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { publishImage } from './image-publication';
 import { publishEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
@@ -95,6 +96,8 @@ let heartbeatTimer: NodeJS.Timeout | undefined;
 let aiTagReconcileTimer: NodeJS.Timeout | undefined;
 let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
+let smartFolderTimer: NodeJS.Timeout | undefined;
+let buildingSmartFolder = false;
 let stopping = false;
 let activeJobCount = 0;
 let activeTagBuildCount = 0;
@@ -1636,12 +1639,13 @@ function assertExpectedHash(expected: string | null | undefined, actual: string)
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
+  if (smartFolderTimer) clearInterval(smartFolderTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (aiTagReconcileTimer) clearInterval(aiTagReconcileTimer);
   wakeScheduler?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
-  while (activeJobCount > 0 || activeTagBuildCount > 0 || deletingObjects)
+  while (activeJobCount > 0 || activeTagBuildCount > 0 || buildingSmartFolder || deletingObjects)
     await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
@@ -1666,6 +1670,38 @@ async function main(): Promise<void> {
   );
   aiTagReconcileTimer.unref();
   await reconcileEnabledAiTagJobs();
+  // Semantic folders use 2B only, independent of the disabled 8B/tag-build lane.
+  if (
+    runBackgroundProcessing &&
+    (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))
+  ) {
+    const tick = async () => {
+      if (stopping || buildingSmartFolder) return;
+      buildingSmartFolder = true;
+      try {
+        await reconcileSmartFolderSpaces(prisma, embeddingSpaceId);
+        await runSmartFolderBuildStep(prisma, embeddingSpaceId, async (text) => {
+          await prisma.$transaction((tx) =>
+            ensureCompatibleEmbeddingSpace(tx, {
+              id: embeddingSpaceId,
+              model: embeddingModel,
+              revision: embeddingRevision,
+              dimensions: embeddingDimensions,
+              normalized: true,
+              instructionVersion: 'image-retrieval-v1',
+              preprocessingVersion: 'preview-webp-v1',
+            }),
+          );
+          return embeddingClient.embedText(text);
+        });
+      } finally {
+        buildingSmartFolder = false;
+      }
+    };
+    smartFolderTimer = setInterval(() => void tick().catch(reportLoopError), 5_000);
+    smartFolderTimer.unref();
+    void tick().catch(reportLoopError);
+  }
   wakeScheduler.wakeNow();
 }
 

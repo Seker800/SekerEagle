@@ -11,10 +11,11 @@ const job = {
   leaseVersion: 3,
 };
 
-function fixture(leaseCount = 1, recordCount = 1) {
+function fixture(leaseCount = 1, recordCount = 1, currentRevision = true) {
   const calls: Array<{ operation: string; input: unknown }> = [];
   let options: { timeout?: number; maxWait?: number } | undefined;
   const tx = {
+    $queryRaw: async () => (currentRevision ? [{ id: job.assetId }] : []),
     eagleAssetProcessingJob: {
       updateMany: async (input: unknown) => {
         calls.push({ operation: 'lease', input });
@@ -52,7 +53,7 @@ test('publishes a vector and job atomically with a bounded NAS index-write budge
   await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
   assert.deepEqual(
     f.calls.map((x) => x.operation),
-    ['lease', 'embedding', 'embedding', 'vector', 'suggest'],
+    ['lease', 'embedding', 'embedding', 'vector', 'vector', 'suggest'],
   );
   assert.deepEqual((f.calls[0]!.input as { where: unknown }).where, {
     id: job.id,
@@ -93,4 +94,10 @@ test('a missing or differently scoped vector record aborts publication', async (
     assetId: job.assetId,
     assetRevision: job.assetRevision,
   });
+});
+
+test('a superseded media revision cannot publish into smart folders', async () => {
+  const f = fixture(1, 1, false);
+  await publishEmbedding(f.client as never, job, 'vector-1', [1, 0], f.suggest);
+  assert.deepEqual(f.calls, []);
 });

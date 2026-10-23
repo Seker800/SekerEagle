@@ -54,6 +54,10 @@ export class AssetTimelineDto {
 }
 
 export class ListEagleAssetsDto {
+  @ApiPropertyOptional({ enum: ['RELEVANCE'] })
+  @IsOptional()
+  @IsIn(['RELEVANCE'])
+  smartFolderOrder?: 'RELEVANCE';
   @ApiPropertyOptional({
     minimum: 0,
     maximum: 10000000,

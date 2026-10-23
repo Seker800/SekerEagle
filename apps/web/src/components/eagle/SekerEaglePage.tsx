@@ -1,3 +1,4 @@
+import { EagleSmartFolderStatus } from './EagleSmartFolderStatus';
 import { useEaglePrependAnchor } from './useEaglePrependAnchor';
 import { useEagleLibraryCount } from './useEagleLibraryCount';
 import { useMobileBack } from '../../lib/mobile-back';
@@ -317,6 +318,7 @@ export function SekerEaglePage({
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
+  const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>('DATE');
   const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(null);
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
@@ -481,6 +483,8 @@ export function SekerEaglePage({
     search: deferredSearch || undefined,
     rules: activeFilterCount ? filterQuery : undefined,
     smartFolderId: activeSmartFolderId ?? undefined,
+    smartFolderOrder:
+      activeSmartFolderId && smartFolderOrder === 'RELEVANCE' ? 'RELEVANCE' : undefined,
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
   const assetStore = useMemo(() => getEagleAssetEntityStore(storeScope), [storeScope]);
@@ -811,6 +815,25 @@ export function SekerEaglePage({
   const isInspectorOpen = isAssetView && isInspectorVisible;
   const activeSmartFolder =
     smartFolders.find((folder) => folder.id === activeSmartFolderId) ?? null;
+  const semanticSignature = smartFolders
+    .filter(
+      (folder) =>
+        folder.semanticState &&
+        (folder.id === activeSmartFolderId || folder.parentId === activeSmartFolderId),
+    )
+    .map(
+      (folder) =>
+        `${folder.semanticState?.id}:${folder.semanticState?.status}:${folder.semanticState?.updatedAt}`,
+    )
+    .join('|');
+  const semanticRefreshRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    const key = `${storeScope}:${activeSmartFolderId}`;
+    const previous = semanticRefreshRef.current.get(key);
+    semanticRefreshRef.current.set(key, semanticSignature);
+    if (semanticSignature && previous !== undefined && previous !== semanticSignature)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.assets });
+  }, [semanticSignature, activeSmartFolderId, queryClient, queryKeys.assets, storeScope]);
   const color = quickFilters.color;
   useEffect(() => {
     if (!isInspectorVisible || !selectedAsset) return;
@@ -899,6 +922,7 @@ export function SekerEaglePage({
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setPhotoView('timeline');
     setLibraryView('ACTIVE');
+    setSmartFolderOrder('DATE');
     setActiveSmartFolderId(folder.id);
     resetFilters();
     setSelectedAssetId(null);
@@ -1784,6 +1808,22 @@ export function SekerEaglePage({
                     ) : null}
                   </div>
                 </div>
+                <EagleSmartFolderStatus
+                  state={activeSmartFolder?.semanticState}
+                  order={smartFolderOrder}
+                  pending={updateSmartFolderMutation.isPending}
+                  onRetry={() =>
+                    activeSmartFolder &&
+                    updateSmartFolderMutation.mutate({
+                      folder: activeSmartFolder,
+                      changes: { query: toEagleFilterQuery(activeSmartFolder.queryJson) },
+                    })
+                  }
+                  onOrderChange={(order) => {
+                    setSmartFolderOrder(order);
+                    assetLocator.clearLocation();
+                  }}
+                />
                 {!compact && libraryView !== 'TRASH' && (
                   <EagleImportButton onImport={importFiles} />
                 )}
@@ -2740,6 +2780,7 @@ export function SekerEaglePage({
       />
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
+          key={editingScope}
           fieldOptions={photoFieldOptions}
           accessToken={accessToken}
           initialQuery={
