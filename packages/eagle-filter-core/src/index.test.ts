@@ -6,6 +6,21 @@ import {
   parseEagleFilterQuery,
 } from './index';
 
+test('smart-folder semantic intent survives parsing independently of ordinary rules', () => {
+  assert.deepEqual(parseEagleFilterQuery({ version: 2, conditions: [],
+    semantic: { text: '  海边日落  ', breadth: 'BALANCED' },
+  }), { version: 2, conditions: [], semantic: { text: '海边日落', breadth: 'BALANCED' } });
+});
+
+test('semantic intent rejects empty, oversized, malformed and client-controlled vector inputs', () => {
+  for (const semantic of [null, {}, { text: '', breadth: 'BALANCED' },
+    { text: 'x'.repeat(501), breadth: 'BALANCED' }, { text: '海边', breadth: 'UNKNOWN' },
+    { text: '海边', breadth: 'BALANCED', ownerId: 'someone' },
+    { text: '海边', breadth: 'BALANCED', vector: [1, 0] }]) {
+    assert.throws(() => parseEagleFilterQuery({ version: 2, conditions: [], semantic }));
+  }
+});
+
 test('empty text rows are editable placeholders rather than active rules', () => {
   assert.equal(countActiveEagleFilterRules(createEmptyEagleFilterQuery()), 0);
 });
