@@ -49,12 +49,16 @@ class NativeBackgroundTransferTest {
                     if (path.endsWith("/check-content") && !held) { held = true; entered.countDown(); release.await(20, TimeUnit.SECONDS) }
                     val body = when {
                         path == "/api/auth/me" -> """{"user":{"id":"owner","email":"fixture@example.invalid"},"desktopCache":{"deploymentId":"background"}}"""
-                        path.endsWith("/check-content") -> """{"exists":true}"""
+                        path.endsWith("/check-content") -> """{"exists":false}"""
+                        path.endsWith("/uploads") -> """{"id":"11111111-1111-4111-8111-111111111111","partSize":5242880}"""
+                        path.endsWith("/parts") -> """{"parts":[]}"""
+                        path.endsWith("/parts/1") -> """{"uploadUrl":"$origin/sekereagle-assets/test/part?X-Amz-Signature=abc"}"""
+                        path.endsWith("/complete") -> """{"assetId":"uploaded","duplicate":false}"""
                         path.contains("/timeline") -> """{"days":[],"total":0}"""
                         path.contains("/assets?") -> """{"items":[],"nextCursor":null}"""
                         else -> "{}"
                     }
-                    runCatching { client.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body".toByteArray()) }
+                    runCatching { client.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: test-etag\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body".toByteArray()) }
                 }
             } catch (_: java.io.IOException) {}
         }.apply { start() }
@@ -125,9 +129,10 @@ class NativeBackgroundTransferTest {
             compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
             assertNotNull(manager.state.value.activeId)
             server.release.countDown()
-            compose.waitUntil(15000) { manager.state.value.batches.size == 2 && manager.state.value.batches.all { it.progress?.skipped == 1 && it.progress.phase == NativeUploadPhase.FINISHED } && !manager.state.value.busy }
+            compose.waitUntil(15000) { manager.state.value.batches.size == 2 && manager.state.value.batches.all { it.progress?.uploaded == 1 && it.progress.phase == NativeUploadPhase.FINISHED } && !manager.state.value.busy }
             assertTrue(server.paths.contains("/api/photos/uploads/check-content"))
             assertTrue(server.paths.contains("/api/eagle/uploads/check-content"))
+            assertEquals(2, server.paths.count { it.contains("/sekereagle-assets/test/part?") })
             val saved = NativeTransferStore(context).load()
             compose.waitUntil(5000) { saved.size == 2 || NativeTransferStore(context).load().size == 2 }
             assertEquals(setOf(GalleryMode.PHOTO, GalleryMode.MATERIAL), NativeTransferStore(context).load().map { it.mode }.toSet())
