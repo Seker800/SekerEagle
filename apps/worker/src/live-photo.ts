@@ -13,7 +13,7 @@ import {
   LIVE_PHOTO_MAX_VIDEO_BYTES,
 } from '@sekereagle/media-core';
 
-export async function inspectLivePhotoImage(path: string) {
+export async function inspectLivePhotoImage(path: string, extractMotion = true) {
   let identifier: string | null = null;
   try {
     const metadata: unknown = await parse(path, {
@@ -52,6 +52,7 @@ export async function inspectLivePhotoImage(path: string) {
         ? await heicMotionRange(path)
         : null;
   if (!range) return base;
+  if (!extractMotion) throw new Error('MOTION_COMPONENT_DEFERRED');
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-motion-photo-'));
   try {
     const input = join(directory, 'source.mp4'),
