@@ -53,3 +53,14 @@ test('rendering edited pixels preserves inherited capture data and the original 
   assert.ok(time instanceof Date);
   assert.equal(time.toISOString(), capturedAt.toISOString());
 });
+
+test('optional metadata failure preserves a date already established during import', async () => {
+  const importedCapture = new Date('2020-05-13T05:17:40Z');
+  let result: Date | undefined;
+  const tx = {
+    eaglePhotoMetadata: { findFirst: () => Promise.resolve(null), upsert: () => Promise.resolve({}) },
+    eagleAsset: { updateMany: ({ data }: { data: { chronologicalAt: Date } }) => { result = data.chronologicalAt; return Promise.resolve({ count: 1 }); } },
+  };
+  await persistPhotoAnalysis(tx as never, { id:'asset', ownerId:'owner', libraryMode:'PHOTO', chronologicalAt:importedCapture, libraryAddedAt:new Date('2026-10-23T00:00:00Z') }, { ...normalizePhotoExif({}), sharpnessScore:1, perceptualHash:'hash' }, 0);
+  assert.equal(result?.toISOString(), importedCapture.toISOString());
+});
