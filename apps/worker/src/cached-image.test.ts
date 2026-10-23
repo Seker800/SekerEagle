@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdtemp, mkdir, writeFile, stat, symlink, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, stat, symlink, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -23,7 +23,7 @@ test('copies JPEG bytes without re-encoding, reports actual dimensions and prese
   const f = await fixture();
   try {
     const result = await loadCachedImage(f.root, f.item);
-    assert.equal(result.originalPath, f.original);
+    assert.equal(result.originalPath, await realpath(f.original));
     assert.equal(result.renditions.length, 3);
     for (const rendition of result.renditions) {
       assert.deepEqual(rendition.data, f.preview);
