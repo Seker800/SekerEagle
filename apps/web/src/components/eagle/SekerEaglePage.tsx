@@ -599,10 +599,6 @@ export function SekerEaglePage({
     privateVisible,
     privacyRulesRevision,
   );
-  const displayedAssetCount =
-    libraryView === 'ACTIVE' && !deferredSearch && !activeFilterCount && !activeSmartFolderId
-      ? (libraryCount.data ?? '…')
-      : loadedAssets.length;
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();
     for (const page of assetsQuery.data?.pages ?? [])

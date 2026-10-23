@@ -225,11 +225,11 @@ async function selectAssetAndOpenInspector() {
 }
 
 describe('SekerEaglePage', () => {
-  it('shows the library total instead of the loaded page length in navigation and heading', async () => {
+  it('shows the library total in navigation without repeating it in the heading', async () => {
     countEagleAssetsMock.mockResolvedValue({ count: 72100 });
     renderPage();
     expect(await screen.findByRole('button', { name: '全部 72100' })).toBeInTheDocument();
-    expect(screen.getByText('72100 项')).toBeInTheDocument();
+    expect(screen.queryByText('72100 项')).not.toBeInTheDocument();
     expect(listEagleAssetsMock).toHaveBeenCalled();
   });
 
