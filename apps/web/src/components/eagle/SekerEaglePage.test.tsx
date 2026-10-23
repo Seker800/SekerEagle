@@ -470,6 +470,10 @@ describe('SekerEaglePage', () => {
       ),
     );
     renderPage();
+    Object.defineProperty(screen.getByRole('region', { name: '素材瀑布流' }), 'scrollTo', {
+      configurable: true,
+      value: vi.fn(),
+    });
     fireEvent.doubleClick(await screen.findByRole('button', { name: /Owl Reference/ }));
     fireEvent.click(await screen.findByRole('button', { name: '定位到时间线' }));
     await waitFor(() =>
