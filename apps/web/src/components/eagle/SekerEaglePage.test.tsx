@@ -1623,8 +1623,11 @@ describe('SekerEaglePage', () => {
     const firstCard = await screen.findByRole('button', { name: /Owl Reference/ });
     const secondCard = screen.getByRole('button', { name: /Second Asset/ });
     const thirdCard = screen.getByRole('button', { name: /Third Asset/ });
+    expect(screen.queryByRole('toolbar', { name: '图片选择' })).not.toBeInTheDocument();
     fireEvent.click(firstCard);
+    expect(screen.queryByRole('toolbar', { name: '图片选择' })).not.toBeInTheDocument();
     fireEvent.click(secondCard, { ctrlKey: true });
+    expect(screen.getByRole('toolbar', { name: '图片选择' })).toBeInTheDocument();
     fireEvent.click(thirdCard, { metaKey: true });
 
     expect(firstCard).toHaveAttribute('aria-pressed', 'true');
@@ -1634,6 +1637,10 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(thirdCard);
     expect(screen.getByRole('menu', { name: '素材操作' })).toHaveTextContent('已选择 3 项');
     expect(screen.queryByRole('button', { name: '进入多选' })).not.toBeInTheDocument();
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.click(screen.getByRole('button', { name: '选择' }));
+    fireEvent.click(screen.getByRole('button', { name: '取消选择' }));
+    expect(screen.queryByRole('toolbar', { name: '图片选择' })).not.toBeInTheDocument();
   });
 
   it('batch-downloads selected originals from the desktop context menu in library order', async () => {
@@ -2476,7 +2483,7 @@ describe('SekerEaglePage', () => {
       expect(screen.queryByRole('dialog', { name: '编辑照片' })).not.toBeInTheDocument(),
     );
   });
-  it('offers explicit touch selection and opens the shared management menu without modifiers', async () => {
+  it('enters explicit selection after a modifier gesture and opens the shared management menu', async () => {
     listEagleAssetsMock.mockResolvedValue({
       items: [asset, { ...asset, id: 'asset-2', displayName: 'Second Asset' }],
       nextCursor: null,
@@ -2484,8 +2491,9 @@ describe('SekerEaglePage', () => {
     renderPage();
     const first = await screen.findByRole('button', { name: /Owl Reference/ });
     const second = screen.getByRole('button', { name: /Second Asset/ });
+    expect(screen.queryByRole('toolbar', { name: '图片选择' })).not.toBeInTheDocument();
+    fireEvent.click(first, { ctrlKey: true });
     fireEvent.click(screen.getByRole('button', { name: '选择' }));
-    fireEvent.click(first);
     fireEvent.click(second);
     expect(first).toHaveAttribute('aria-pressed', 'true');
     expect(second).toHaveAttribute('aria-pressed', 'true');
@@ -2634,7 +2642,9 @@ describe('SekerEaglePage', () => {
   });
   it('focuses the explicit action menu, supports menu keys and returns focus to its trigger', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }), {
+      ctrlKey: true,
+    });
     const trigger = screen.getByRole('button', { name: '操作' });
     trigger.focus();
     fireEvent.click(trigger);

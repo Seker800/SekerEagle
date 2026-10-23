@@ -28,11 +28,11 @@ export function EagleImportButton({ onImport }: { onImport: (files: File[]) => P
         className={styles.button}
         type="button"
         aria-label={t('导入')}
+        title={t('导入')}
         aria-controls={id}
         onClick={() => input.current?.click()}
       >
-        <IconUpload size={18} />
-        <span className={styles.label}>{t('导入')}</span>
+        <IconUpload size={18} aria-hidden="true" />
       </button>
     </>
   );
