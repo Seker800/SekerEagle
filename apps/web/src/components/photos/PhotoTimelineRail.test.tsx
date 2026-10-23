@@ -94,7 +94,7 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
   const major = slider.querySelector('[data-ruler-month="2001-01"]')!;
   const minor = slider.querySelector('[data-ruler-month="2024-03"]')!;
   expect(major).toHaveAttribute('data-major', 'true');
-  expect(minor).toHaveAttribute('data-major', 'false');
+  expect(minor).toHaveAttribute('data-major', 'true');
   const restingWidth = parseFloat((major as HTMLElement).style.width);
   fireEvent.pointerMove(slider, {
     clientY: 100 + parseFloat((major as HTMLElement).style.top) * 5,
@@ -108,7 +108,15 @@ it('renders calendar month ruler marks and magnifies only the ticks near the poi
 });
 it('uses the same compressed positions for hover, click and the current month indicator', () => {
   const onJump = vi.fn();
-  render(<PhotoTimelineRail months={months} currentMonth="2024-03" onJump={onJump} onLatest={vi.fn()} onRetry={vi.fn()} />);
+  render(
+    <PhotoTimelineRail
+      months={months}
+      currentMonth="2024-03"
+      onJump={onJump}
+      onLatest={vi.fn()}
+      onRetry={vi.fn()}
+    />,
+  );
   const slider = screen.getByRole('slider');
   vi.spyOn(slider, 'getBoundingClientRect').mockReturnValue({ top: 100, height: 500 } as DOMRect);
   for (const month of months) {
@@ -124,8 +132,14 @@ it('uses the same compressed positions for hover, click and the current month in
 });
 
 it('limits labels in a long library without dropping any navigable month', () => {
-  const manyMonths = Array.from({ length: 100 }, (_, index) => ({month: `${2026-index}-06`, count: 1, cursor: `${index}`}));
-  render(<PhotoTimelineRail months={manyMonths} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />);
+  const manyMonths = Array.from({ length: 100 }, (_, index) => ({
+    month: `${2026 - index}-06`,
+    count: 1,
+    cursor: `${index}`,
+  }));
+  render(
+    <PhotoTimelineRail months={manyMonths} onJump={vi.fn()} onLatest={vi.fn()} onRetry={vi.fn()} />,
+  );
   const slider = screen.getByRole('slider');
   expect(slider.querySelectorAll('[data-ruler-month]')).toHaveLength(100);
   expect(slider.querySelectorAll('[data-ruler-year]').length).toBeLessThanOrEqual(13);

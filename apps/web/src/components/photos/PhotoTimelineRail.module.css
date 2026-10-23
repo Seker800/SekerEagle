@@ -114,3 +114,13 @@
     font-size: 10px;
   }
 }
+
+.break {
+  position: absolute;
+  right: 1px;
+  color: #96969c;
+  font-size: 15px;
+  line-height: 1;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
