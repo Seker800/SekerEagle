@@ -43,6 +43,7 @@ import {
 import {
   canClaimAiTagJobs,
   canClaimBackgroundJobs,
+  parseProcessingJobKinds,
   taskBlocksAssetReady,
   terminalAssetFailure,
 } from './processing-policy';
@@ -100,6 +101,7 @@ let deletingObjects = false;
 const runBackgroundProcessing = backgroundProcessingEnabled(
   process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
 );
+const allowedJobKinds = parseProcessingJobKinds(process.env.EAGLE_PROCESSING_JOB_KINDS);
 const runVideoTranscoding = videoTranscodingEnabled(process.env.EAGLE_VIDEO_TRANSCODING_ENABLED);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
@@ -145,6 +147,7 @@ let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   return claimNextMediaJob(prisma, {
     canClaimBackground: canClaimBackgroundForOwner,
+    allowedJobKinds,
     excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
     laneOrder: mediaLaneOrder(claimSequence++),
   });

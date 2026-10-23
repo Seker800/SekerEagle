@@ -38,6 +38,17 @@ const LANE_BY_KIND: Record<EagleMediaJobKind, EagleProcessingLane> = {
   PURGE_ASSET: 'MAINTENANCE',
 };
 
+/** Optional deployment profile. Invalid or empty selections fail closed at startup. */
+export function parseProcessingJobKinds(
+  value: string | undefined,
+): readonly EagleMediaJobKind[] | undefined {
+  if (value === undefined) return undefined;
+  const kinds = value.split(',').map((kind) => kind.trim());
+  if (!kinds.length || kinds.some((kind) => !Object.hasOwn(LANE_BY_KIND, kind)))
+    throw new Error('EAGLE_PROCESSING_JOB_KINDS must contain supported, nonempty job kinds');
+  return Object.freeze([...new Set(kinds as EagleMediaJobKind[])]);
+}
+
 export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] = [
   'GENERATE_RENDITIONS',
   'GENERATE_THUMBNAIL',

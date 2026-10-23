@@ -1,6 +1,7 @@
 import type {
   EagleAssetProcessingJob,
   EagleMediaJobStatus,
+  EagleMediaJobKind,
   EagleProcessingLane,
 } from '@prisma/client';
 
@@ -12,7 +13,7 @@ interface ClaimFindManyInput {
   where: {
     lane: EagleProcessingLane;
     processorVersion?: { notIn: string[] };
-    kind?: { not: 'GENERATE_AI_TAGS' } | 'GENERATE_AI_TAGS';
+    kind?: { not?: EagleMediaJobKind; in?: EagleMediaJobKind[] } | EagleMediaJobKind;
     AND: [
       {
         OR: Array<{ dependsOnJobId: null } | { dependsOnJob: { status: 'COMPLETED' } }>;
@@ -56,6 +57,7 @@ export interface MediaJobClaimClient {
 interface ClaimMediaJobOptions {
   now?: Date;
   excludedProcessorVersions?: string[];
+  allowedJobKinds?: readonly EagleMediaJobKind[];
   laneOrder?: readonly EagleProcessingLane[];
   canClaimBackground(
     ownerId: string,
@@ -76,13 +78,23 @@ export async function claimNextMediaJob(
     const kindPartitions: Array<ClaimFindManyInput['where']['kind']> =
       lane === 'BACKGROUND' ? [{ not: 'GENERATE_AI_TAGS' }, 'GENERATE_AI_TAGS'] : [undefined];
     for (const kind of kindPartitions) {
+      if (
+        typeof kind === 'string' &&
+        options.allowedJobKinds &&
+        !options.allowedJobKinds.includes(kind)
+      )
+        continue;
+      const kindFilter =
+        options.allowedJobKinds && typeof kind !== 'string'
+          ? { ...kind, in: [...options.allowedJobKinds] }
+          : kind;
       const candidates = await client.eagleAssetProcessingJob.findMany({
         where: {
           lane,
           ...(options.excludedProcessorVersions?.length
             ? { processorVersion: { notIn: options.excludedProcessorVersions } }
             : {}),
-          ...(kind ? { kind } : {}),
+          ...(kindFilter ? { kind: kindFilter } : {}),
           AND: [
             { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
             {
