@@ -245,3 +245,20 @@
     min-height: 44px;
   }
 }
+
+.cluster {
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px;
+  box-sizing: border-box;
+}
+.clusterPlace {
+  display: block;
+  max-width: 100%;
+  color: var(--eagle-text, #f0f1f3);
+  font: 500 10px/1.2 system-ui;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

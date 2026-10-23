@@ -208,4 +208,43 @@ describe('whole-library location map', () => {
     expect(await screen.findByText('此位置暂无可见照片。')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '下一页' })).toBeDisabled();
   });
+  it('labels a Weihai group from photo coordinates even below the basemap city zoom threshold and carries it into the photo panel', async () => {
+    const city = {
+      name: 'Weihai',
+      nameZh: '威海',
+      latitude: 37.5,
+      longitude: 122.1,
+      population: 560255,
+      minZoom: 6,
+    };
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ type: 'FeatureCollection', features: [], cities: [city] }),
+    } as Response);
+    mocks.getMap.mockResolvedValue({
+      total: 10000,
+      bounds: { west: 122, east: 122.2, south: 37.4, north: 37.6 },
+      level: 5,
+      clusters: [
+        {
+          ...first,
+          photoLatitude: 37.5,
+          photoLongitude: 122.1,
+          west: 122.09,
+          east: 122.11,
+          south: 37.49,
+          north: 37.51,
+        },
+      ],
+    });
+    mount();
+    await waitFor(() =>
+      expect(markerButtons().some((button) => button.title === '威海附近')).toBe(true),
+    );
+    const marker = markerButtons().find((button) => button.title === '威海附近')!;
+    expect(marker.getAttribute('aria-label')).toContain('威海附近');
+    act(() => marker.click());
+    expect(await screen.findByRole('heading', { name: '威海附近' })).toBeInTheDocument();
+    expect(mocks.map.remove).not.toHaveBeenCalled();
+  });
 });

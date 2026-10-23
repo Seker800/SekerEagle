@@ -109,6 +109,12 @@ export interface PhotoMapCluster {
   latitude: number;
   longitude: number;
   count: number;
+  photoLatitude?: number;
+  photoLongitude?: number;
+  south?: number;
+  north?: number;
+  west?: number;
+  east?: number;
 }
 export interface PhotoMapData {
   total: number;

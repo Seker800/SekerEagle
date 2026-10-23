@@ -1394,4 +1394,10 @@ export const enUS = {
   '照片位置加载失败。': 'Could not load photo locations.',
   '圆圈大小表示照片数量；放大查看附近位置，点击浏览该组全部照片。':
     'Circle size reflects the number of photos. Zoom in for nearby groups; select a circle to browse all its photos.',
+  附近区域: 'Nearby area',
+  多地合并区域: 'Combined areas',
+  '{{value1}}附近': 'Near {{value1}}',
+  '{{value1}}周边 · 多地合并': 'Around {{value1}} · Combined areas',
+  '查看{{value1}}的 {{value2}} 张照片': 'View {{value2}} photos near {{value1}}',
+  '{{value1}}等': '{{value1}} +',
 } as const;

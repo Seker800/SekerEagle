@@ -36,6 +36,12 @@ interface ClusterRow {
   count: number;
   latitude: number;
   longitude: number;
+  photoLatitude: number;
+  photoLongitude: number;
+  south: number;
+  north: number;
+  west: number;
+  east: number;
 }
 interface SummaryRow {
   total: bigint;
@@ -52,12 +58,27 @@ export class PhotoMapService {
     const grid = mapGrid(view);
     const ranges = grid.xRanges.map(([min, max]) => Prisma.sql`x BETWEEN ${min} AND ${max}`);
     const [summary] = await this.prisma.$queryRaw<SummaryRow[]>(Prisma.sql`
-      ${locations(ownerId, includePrivate, grid.n)}, grouped AS (
+      ${locations(ownerId, includePrivate, grid.n)}, visible_cells AS (
+        SELECT * FROM cells WHERE y BETWEEN ${grid.yMin} AND ${grid.yMax}
+          AND (${Prisma.join(ranges, ' OR ')})
+      ), label_buckets AS (
+        SELECT x, y, FLOOR(latitude * ${grid.n * 4} / 180) AS sy,
+          FLOOR(longitude * ${grid.n * 4} / 360) AS sx, count(*) AS weight,
+          AVG(latitude) AS "photoLatitude", AVG(longitude) AS "photoLongitude"
+        FROM visible_cells GROUP BY x, y, sx, sy
+      ), representatives AS (
+        SELECT DISTINCT ON (x, y) x, y, "photoLatitude", "photoLongitude"
+        FROM label_buckets ORDER BY x, y, weight DESC, sx, sy
+      ), counts AS (
         SELECT x, y, count(*)::int AS count,
+          MIN(latitude) AS south, MAX(latitude) AS north,
+          MIN(longitude) AS west, MAX(longitude) AS east,
           DEGREES(ATAN(SINH(PI() * (1 - 2 * (y + 0.5) / ${grid.n})))) AS latitude,
           (x + 0.5) / ${grid.n} * 360 - 180 AS longitude
-        FROM cells WHERE y BETWEEN ${grid.yMin} AND ${grid.yMax}
-          AND (${Prisma.join(ranges, ' OR ')}) GROUP BY x, y
+        FROM visible_cells GROUP BY x, y
+      ), grouped AS (
+        SELECT counts.*, representatives."photoLatitude", representatives."photoLongitude"
+        FROM counts JOIN representatives USING (x, y)
       ), summary AS (
         SELECT count(*) AS total, MIN(longitude) AS west, MAX(longitude) AS east,
           MIN(latitude) AS south, MAX(latitude) AS north FROM valid

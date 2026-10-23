@@ -79,6 +79,8 @@ test('all-library map aggregation is owner scoped, current revision only, privat
   assert.match(text, /m\."assetRevision" = a\."mediaRevision"/);
   assert.match(text, /l\."assetRevision" = a\."mediaRevision"/);
   assert.match(text, /GROUP BY/);
+  assert.match(text, /AVG\(latitude\) AS "photoLatitude"/);
+  assert.match(text, /MAX\(longitude\) AS east/);
   assert.doesNotMatch(text, /LIMIT/);
   assert.ok(queries[0]!.values.includes('owner'));
   await service.clusters('owner', true, world);

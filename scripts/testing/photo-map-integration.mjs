@@ -173,6 +173,10 @@ try {
   );
   const cluster = overview.clusters.find((c) => c.count === 131);
   assert.ok(cluster);
+  assert.ok(Math.abs(cluster.photoLatitude - 30.25) < 0.0001);
+  assert.ok(Math.abs(cluster.photoLongitude - 120.15) < 0.0001);
+  assert.equal(cluster.west, 120.15);
+  assert.equal(cluster.east, 120.15);
   const seen = [],
     cursors = [];
   let cursor;
@@ -215,6 +219,13 @@ try {
   assert.equal((await service.photos(owner, false, poleCluster.id)).items[0].id, pole);
   await prisma.eagleAsset.deleteMany({ where: { id: { in: [...expected] } } });
   assert.equal((await service.clusters(owner, false, world)).total, 2);
+  for (let i = 0; i < 20; i++) await make({}, 37.5, 122.1);
+  for (let i = 0; i < 7; i++) await make({}, 39.9, 116.4);
+  const merged = await service.clusters(owner, false, { ...world, zoom: 1 });
+  const cityGroup = merged.clusters.find((c) => c.count === 27);
+  assert.ok(cityGroup);
+  assert.ok(Math.abs(cityGroup.photoLatitude - 37.5) < 1e-9);
+  assert.ok(Math.abs(cityGroup.photoLongitude - 122.1) < 1e-9);
   log(
     'Real PostgreSQL map counts, privacy/mode/version isolation, membership, pagination, zoom and coordinate edges passed.',
   );

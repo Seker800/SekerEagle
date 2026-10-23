@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getLocale, t } from '../../i18n';
@@ -10,8 +10,22 @@ import {
 } from '../../lib/photo-management-api';
 import { PhotoMapPhotos } from './PhotoMapPhotos';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
-import { loadLocalBasemap, selectCityLabels } from './local-basemap';
+import { describeClusterPlace } from './photo-map-place';
+import { loadLocalBasemap, selectCityLabels, type MapCity } from './local-basemap';
 import styles from './PhotoMap.module.css';
+
+function clusterPlaceName(cluster: PhotoMapCluster, cities: readonly MapCity[]) {
+  const place = describeClusterPlace(cluster, cities);
+  if (!place.city)
+    return { label: place.regional ? t('多地合并区域') : t('附近区域'), shortLabel: t('附近区域') };
+  const city = getLocale() === 'zh-CN' ? place.city.nameZh : place.city.name;
+  return {
+    label: place.regional
+      ? t('{{value1}}周边 · 多地合并', { value1: city })
+      : t('{{value1}}附近', { value1: city }),
+    shortLabel: place.regional ? t('{{value1}}等', { value1: city }) : city,
+  };
+}
 
 export function PhotoMap({
   ownerId,
@@ -27,6 +41,7 @@ export function PhotoMap({
   const framed = useRef(false);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'ERROR'>('LOADING');
   const [reload, setReload] = useState(0);
+  const [cities, setCities] = useState<readonly MapCity[]>([]);
   const [viewport, setViewport] = useState<PhotoMapViewport>({
     west: -180,
     east: 180,
@@ -42,6 +57,14 @@ export function PhotoMap({
   });
   const points = locations.data?.clusters;
   const bounds = locations.data?.bounds;
+  const placeNames = useMemo(
+    () => new Map((points ?? []).map((cluster) => [cluster.id, clusterPlaceName(cluster, cities)])),
+    [points, cities],
+  );
+  const selectedPlace = useMemo(
+    () => (selected ? clusterPlaceName(selected, cities).label : ''),
+    [selected, cities],
+  );
   const showAll = () => {
     if (bounds)
       mapRef.current?.fitBounds(
@@ -105,6 +128,7 @@ export function PhotoMap({
     void loadLocalBasemap(controller.signal)
       .then((data) => {
         if (controller.signal.aborted) return;
+        if (data.cities.length) setCities(data.cities);
         L.geoJSON(data.land, {
           interactive: false,
           style: { color: accent, weight: 0.7, opacity: 0.25, fillColor: land, fillOpacity: 1 },
@@ -162,10 +186,23 @@ export function PhotoMap({
       label.style.width = `${diameter}px`;
       label.style.height = `${diameter}px`;
       label.style.borderColor = accent;
-      label.textContent = cluster.count.toLocaleString();
+      const count = document.createElement('span');
+      count.textContent = cluster.count.toLocaleString();
+      const place = document.createElement('span');
+      place.className = styles.clusterPlace;
+      const placeInfo = placeNames.get(cluster.id) ?? {
+        label: t('附近区域'),
+        shortLabel: t('附近区域'),
+      };
+      place.textContent = placeInfo.shortLabel;
+      label.append(count, place);
+      label.title = placeInfo.label;
       label.setAttribute(
         'aria-label',
-        t('查看此位置的 {{value1}} 张照片', { value1: cluster.count }),
+        t('查看{{value1}}的 {{value2}} 张照片', {
+          value1: placeInfo.label,
+          value2: cluster.count,
+        }),
       );
       label.onclick = () => setSelected(cluster);
       L.marker([cluster.latitude, cluster.longitude], {
@@ -182,7 +219,7 @@ export function PhotoMap({
     return () => {
       markers.remove();
     };
-  }, [points, reload]);
+  }, [points, placeNames, reload]);
   useEffect(() => {
     if (bounds && !framed.current && mapRef.current) {
       mapRef.current.fitBounds(
@@ -236,6 +273,7 @@ export function PhotoMap({
           <PhotoMapPhotos
             key={selected.id}
             cluster={selected}
+            placeName={selectedPlace}
             ownerId={ownerId}
             includePrivate={includePrivate}
             onOpen={onOpen}

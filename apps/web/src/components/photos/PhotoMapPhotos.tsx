@@ -11,12 +11,14 @@ import styles from './PhotoMap.module.css';
 /** A bounded page of members; media loading and the photo viewer remain shared. */
 export function PhotoMapPhotos({
   cluster,
+  placeName,
   ownerId,
   includePrivate,
   onOpen,
   onClose,
 }: {
   cluster: PhotoMapCluster;
+  placeName?: string;
   ownerId: string | null;
   includePrivate: boolean;
   onOpen: (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => void;
@@ -45,7 +47,7 @@ export function PhotoMapPhotos({
     <section ref={panel} className={styles.selection} aria-label={t('此位置的照片')}>
       <div className={styles.heading}>
         <div>
-          <h2>{t('此位置的照片')}</h2>
+          <h2>{placeName || t('此位置的照片')}</h2>
           <p>{t('约 {{value1}} 张 · 按拍摄时间排序', { value1: cluster.count })}</p>
         </div>
         <button type="button" onClick={onClose}>
