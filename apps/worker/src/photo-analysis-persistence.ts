@@ -45,7 +45,7 @@ export async function persistPhotoAnalysis(
     data: {
       chronologicalAt: inherited
         ? asset.chronologicalAt
-        : (metadata.capturedAt ?? asset.libraryAddedAt),
+        : (metadata.capturedAt ?? asset.chronologicalAt),
     },
   });
 }
