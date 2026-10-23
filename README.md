@@ -335,6 +335,7 @@ flowchart LR
 | ---------------------------------------------------- | ----------------------------------------------- |
 | [安卓客户端与手机备份](docs/android-client.md)       | 构建 APK、配置目录和隔离模拟器验收              |
 | [维护者接手指南](docs/maintainer-guide.md)           | 第一次接手代码库、理解目录职责和发布流程        |
+| [现用运行状态与交接](docs/current-runtime.md)        | 接手当前群晖图库、模块职责、后台任务与发布边界  |
 | [本机运行手册](docs/operations-runbook.md)           | 安装、启动、诊断、备份与向量服务运维            |
 | [架构文档](docs/architecture.md)                     | 理解服务边界、数据流和长期不变量                |
 | [环境模型](docs/environment-model.md)                | 区分开发、测试、生产目标并理解 fail-closed 规则 |

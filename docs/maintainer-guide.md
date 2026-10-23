@@ -14,6 +14,8 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 当前项目处于 `0.1.x` 早期公开阶段。macOS + Apple Silicon 是完整验证路径；Linux/x64
 尚不在完整支持矩阵内。API 和数据模型在次版本中仍可能变化，生产升级前必须备份。
 
+接手当前部署时，先读 [现用运行状态与交接](current-runtime.md)。该文档区分设计、已部署服务和尚未发布的本地改动；本指南的通用安装流程不代表当前用户的运行位置。
+
 先阅读：
 
 1. [`architecture.md`](architecture.md)：北极星、依赖方向和核心不变量。
@@ -41,21 +43,28 @@ Silicon 上可以启用独立的 MLX HTTP sidecar，生成本地多模态向量�
 
 ## 目录地图
 
-| 目录                         | 职责                                     | 常见改动入口                                    |
-| ---------------------------- | ---------------------------------------- | ----------------------------------------------- |
-| `apps/api`                   | NestJS API、认证、Prisma、素材与导入领域 | `src/eagle`、`src/auth`、`prisma/schema.prisma` |
-| `apps/worker`                | 可重试媒体任务和对象存储派生资源         | `src/main.ts` 与媒体策略模块                    |
-| `apps/web`                   | React/Vite 用户界面                      | `src/components/eagle`、`src/lib/eagle-api.ts`  |
-| `apps/eagle-migrator`        | 独立 Eagle library/backup 导入 CLI       | `src/runner.ts`、journal 与 snapshot            |
-| `packages/config`            | 运行时配置与安全目标校验                 | `src/index.ts`                                  |
-| `packages/contracts`         | OpenAPI 生成契约                         | `openapi.json`、`src/generated/openapi.ts`      |
-| `packages/eagle-filter-core` | API、Web 共用的筛选规则                  | `src/index.ts`                                  |
-| `packages/vector-core`       | 向量校验、聚类和标签建议算法             | `src/index.ts`                                  |
-| `plugins/eagle-importer`     | Eagle 桌面端导入插件                     | `js/` 与 `tests/`                               |
-| `plugins/browser-capture`    | 浏览器采集扩展                           | `src/` 与 `tests/`                              |
-| `services/mlx-embedding`     | 独立 GPLv3 MLX embedding sidecar         | `app/`、`tests/`、`pyproject.toml`              |
-| `deploy/mac`                 | 本机 Compose 部署                        | `docker-compose.yml`                            |
-| `scripts`                    | 安全门禁、生成、smoke、性能和维护脚本    | 先确认脚本是否已有对应流程                      |
+| 目录                           | 职责                                         | 常见改动入口                                    |
+| ------------------------------ | -------------------------------------------- | ----------------------------------------------- |
+| `apps/api`                     | NestJS API、认证、Prisma、素材与导入领域     | `src/eagle`、`src/auth`、`prisma/schema.prisma` |
+| `apps/worker`                  | 可重试媒体任务和对象存储派生资源             | `src/main.ts` 与媒体策略模块                    |
+| `apps/web`                     | React/Vite 用户界面                          | `src/components/eagle`、`src/lib/eagle-api.ts`  |
+| `apps/android`                 | Kotlin／Jetpack Compose 安卓客户端与本机备份 | `docs/android-native-plan.md`、客户端生命周期   |
+| `apps/desktop`                 | 桌面壳与客户端集成，不承载图库数据库         | 客户端启动、服务连接及桌面能力                  |
+| `apps/photo-agent-mcp`         | 通过受限应用能力对接照片助手的 MCP 适配器    | `server.mjs`、凭据边界及工具契约                |
+| `apps/eagle-migrator`          | 独立 Eagle library/backup 导入 CLI           | `src/runner.ts`、journal 与 snapshot            |
+| `packages/library-core`        | 共用图库领域规则与窄接口                     | 模式／资源／任务规则，不依赖 UI                 |
+| `packages/library-persistence` | 共用业务持久化与事务适配                     | 发布、隔离与数据库并发语义                      |
+| `packages/media-core`          | 共用媒体格式、摄影信息读取及派生工具         | 格式识别、ExifTool 与受限解码边界               |
+| `packages/config`              | 运行时配置与安全目标校验                     | `src/index.ts`                                  |
+| `packages/contracts`           | OpenAPI 生成契约                             | `openapi.json`、`src/generated/openapi.ts`      |
+| `packages/eagle-filter-core`   | API、Web 共用的筛选规则                      | `src/index.ts`                                  |
+| `packages/vector-core`         | 向量校验、聚类和标签建议算法                 | `src/index.ts`                                  |
+| `plugins/eagle-importer`       | Eagle 桌面端导入插件                         | `js/` 与 `tests/`                               |
+| `plugins/browser-capture`      | 浏览器采集扩展                               | `src/` 与 `tests/`                              |
+| `services/mlx-embedding`       | 独立 GPLv3 MLX embedding sidecar             | `app/`、`tests/`、`pyproject.toml`              |
+| `deploy/nas`                   | NAS 镜像与配置覆盖模板                       | 初始部署模板；现用覆盖链见 `current-runtime.md` |
+| `deploy/mac`                   | 本机 Compose 部署                            | `docker-compose.yml`                            |
+| `scripts`                      | 安全门禁、生成、smoke、性能和维护脚本        | 先确认脚本是否已有对应流程                      |
 
 依赖方向应保持为“适配器 → 应用服务 → 领域规则与窄端口 → 基础设施实现”。不要让领域
 规则反向依赖 Controller、React、Prisma 或 MinIO 细节。
