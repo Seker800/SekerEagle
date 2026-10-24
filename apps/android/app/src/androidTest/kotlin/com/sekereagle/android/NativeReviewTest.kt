@@ -439,7 +439,7 @@ class NativeReviewTest {
             assertNull(model.state.value.error)
             assertTrue(server.paths.isEmpty())
             main { model.login(server.origin, "test@example.invalid", "incorrect") }
-            await { !model.state.value.authenticating }
+            await { !model.state.value.authenticating && model.state.value.error != null }
             assertEquals("邮箱或密码错误", model.state.value.error)
             assertFalse(model.state.value.restoreFailed)
             main {
@@ -481,7 +481,7 @@ class NativeReviewTest {
             compose.runOnIdle { panel = "添加标签" }
             compose.onNodeWithText("保留标签").performScrollTo().performClick()
             restore.emulateSavedInstanceStateRestore()
-            compose.onNodeWithText("保留标签").assertIsSelected()
+            compose.onNodeWithText("保留标签").assertIsOn()
             main { model.logout() }
         }
     }

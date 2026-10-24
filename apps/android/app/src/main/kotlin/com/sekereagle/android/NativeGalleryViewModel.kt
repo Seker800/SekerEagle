@@ -90,6 +90,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         )
 
     private fun clearLibraries() {
+        cancelOptions()
         prefetchJob?.cancel()
         retained.value = emptyMap()
         staleLibraries.clear()
@@ -199,6 +200,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     private var signingOut: Job? = null
     private var foregroundJob: Job? = null
     private var optionsJob: Job? = null
+    private var optionsGeneration = 0
+    private var optionsCancellation: NativeTransferCancellation? = null
     private var timelineJob: Job? = null
     private var mutation: Job? = null
     private var generation = 0
@@ -351,7 +354,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         downloads.clear()
         uploadPickerTarget = null
         operation?.cancel()
-        optionsJob?.cancel()
+        cancelOptions()
         timelineJob?.cancel()
         prefetchJob?.cancel()
         generation++
@@ -618,6 +621,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun search(value: String, filters: NativeFilters = state.value.filters) {
         if (state.value.busy || filters.validationError() != null) return
+        cancelOptions()
         val query = value.trim().take(200)
         val current = state.value
         val history =
@@ -678,10 +682,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         else applyFilters(current.filters.without(key))
     }
 
-    fun submitSearch() = search(state.value.searchDraft, state.value.searchFilters)
-
     fun confirmFilters(filters: NativeFilters) {
         if (state.value.busy || filters.validationError() != null) return
+        cancelOptions()
         if (state.value.searchOpen)
             mutable.value = state.value.copy(searchFilters = filters, filterPanel = null)
         else applyFilters(filters)
@@ -763,7 +766,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 s.busy -> return true
                 s.cacheOpen -> s.copy(cacheOpen = false)
                 s.transfersOpen -> s.copy(transfersOpen = false)
-                s.filterPanel != null -> s.copy(filterPanel = null)
+                s.filterPanel != null -> {
+                    closePanel()
+                    return true
+                }
                 s.selecting -> s.copy(selecting = false, selected = emptySet())
                 s.viewerId != null -> s.copy(viewerId = null)
                 s.searchOpen ->
@@ -783,7 +789,20 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         return true
     }
 
-    private var optionsGeneration = 0
+    private fun cancelOptions() {
+        optionsCancellation?.cancel()
+        optionsCancellation = null
+        optionsJob?.cancel()
+        optionsGeneration++
+        if (state.value.optionsLoading)
+            mutable.value =
+                state.value.copy(
+                    optionStatus =
+                        state.value.optionStatus.mapValues { (_, value) ->
+                            value.copy(loading = false)
+                        }
+                )
+    }
 
     fun openFilters(panel: String) {
         val repo = repository ?: return
@@ -806,8 +825,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         .toSet()
                 else -> emptySet()
             }
-        optionsJob?.cancel()
-        val request = ++optionsGeneration
+        cancelOptions()
+        val request = optionsGeneration
+        val cancellation = NativeTransferCancellation().also { optionsCancellation = it }
         mutable.value =
             current.copy(
                 filterPanel = panel,
@@ -820,7 +840,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             sections.forEach { section ->
                 launch {
                     try {
-                        val options = repo.options(current.mode, section)
+                        val options = repo.options(current.mode, section, cancellation)
                         if (
                             optionsGeneration == request &&
                                 state.value.identity == current.identity &&
@@ -830,7 +850,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                                 state.value.copy(
                                     options = state.value.options.merge(section, options),
                                     optionStatus =
-                                        state.value.optionStatus + (section to NativeOptionStatus()),
+                                        state.value.optionStatus +
+                                            (section to NativeOptionStatus()),
                                 )
                     } catch (reason: CancellationException) {
                         throw reason
@@ -860,8 +881,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun closePanel() {
         if (state.value.busy) return
-        optionsJob?.cancel()
-        optionsGeneration++
+        cancelOptions()
         mutable.value =
             state.value.copy(
                 filterPanel = null,
@@ -1012,7 +1032,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         settings.active("")
         getApplication<Application>()
             .stopService(Intent(getApplication(), BackupService::class.java))
-        optionsJob?.cancel()
+        cancelOptions()
         mutation?.cancel()
         repository?.clear()
         repository = null
@@ -1146,6 +1166,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             .getOrDefault(emptyList())
 
     override fun onCleared() {
+        cancelOptions()
         downloads.clear()
         uploadPickerTarget = null
         repository?.clear()

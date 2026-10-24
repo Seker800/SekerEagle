@@ -162,7 +162,11 @@ class NativeGalleryRepository(
         return NativeVideoSource(session, asset.playback, asset.playbackSize)
     }
 
-    suspend fun options(mode: GalleryMode, section: NativeOptionSection): NativeOptions =
+    suspend fun options(
+        mode: GalleryMode,
+        section: NativeOptionSection,
+        cancellation: NativeTransferCancellation? = null,
+    ): NativeOptions =
         withContext(Dispatchers.IO) {
             val base = NativeGalleryPolicy.base(mode.name)
             fun strings(json: JSONObject, key: String): List<String> =
@@ -176,11 +180,12 @@ class NativeGalleryRepository(
                 NativeOptionSection.TAGS -> {
                     // Legacy catalogs include counts and groups for every tag. Keep this larger
                     // read budget local to catalogs; ordinary JSON and media budgets are unchanged.
-                    val rows = session.array("$base/manual-tags", 16 * 1024 * 1024)
+                    val rows = session.array("$base/manual-tags", 16 * 1024 * 1024, cancellation)
                     NativeOptions(
                         tags =
                             (0 until rows.length())
                                 .map { i ->
+                                    cancellation?.check()
                                     val row = rows.getJSONObject(i)
                                     val name = row.getString("name")
                                     NativeTag(
@@ -195,7 +200,8 @@ class NativeGalleryRepository(
                     )
                 }
                 NativeOptionSection.FORMATS -> {
-                    val json = session.json("GET", "$base/media-capabilities")
+                    val json =
+                        session.json("GET", "$base/media-capabilities", cancellation = cancellation)
                     fun formats(part: JSONObject) =
                         strings(part, "formats")
                             .ifEmpty { strings(part, "extensions") }
@@ -211,12 +217,14 @@ class NativeGalleryRepository(
                 NativeOptionSection.PHOTOGRAPHY -> {
                     if (mode != GalleryMode.PHOTO) NativeOptions()
                     else
-                        session.json("GET", "$base/photography/facets").let {
-                            NativeOptions(
-                                cameras = strings(it, "cameras"),
-                                lenses = strings(it, "lenses"),
-                            )
-                        }
+                        session
+                            .json("GET", "$base/photography/facets", cancellation = cancellation)
+                            .let {
+                                NativeOptions(
+                                    cameras = strings(it, "cameras"),
+                                    lenses = strings(it, "lenses"),
+                                )
+                            }
                 }
             }
         }

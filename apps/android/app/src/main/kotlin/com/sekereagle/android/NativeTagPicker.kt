@@ -24,6 +24,7 @@ internal fun NativeTagPicker(
     status: NativeOptionStatus,
     maxHeight: Dp,
     enabled: Boolean,
+    matchAny: Boolean,
     change: (Set<String>) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -35,7 +36,10 @@ internal fun NativeTagPicker(
                     choices.filter { it.matches(normalized) }
                 }
         }
-    Text("标签 · 任意一个即可（已选 ${selected.size}／100）", color = NativeMuted)
+    Text(
+        if (matchAny) "标签 · 任意一个即可（已选 ${selected.size}／100）" else "选择标签（已选 ${selected.size}／100）",
+        color = NativeMuted,
+    )
     OutlinedTextField(
         query,
         { query = it.take(200) },
@@ -89,4 +93,46 @@ internal fun NativeOptionFeedback(
         Text("$label：$it", color = MaterialTheme.colorScheme.error)
         TextButton({ model.openFilters(panel) }) { Text("重新加载$label") }
     }
+}
+
+@Composable
+internal fun NativeValuePicker(
+    label: String,
+    values: List<String>,
+    selected: String,
+    change: (String) -> Unit,
+) {
+    var query by rememberSaveable(label) { mutableStateOf("") }
+    val matches =
+        remember(values, query) {
+            values.filter { normalizeTagSearch(it).contains(normalizeTagSearch(query)) }
+        }
+    Text("$label · 单选", color = NativeMuted)
+    OutlinedTextField(
+        query,
+        { query = it.take(200) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().testTag("option-search:$label"),
+        label = { Text("搜索$label") },
+    )
+    FilterChip(selected.isEmpty(), { change("") }, { Text("全部") })
+    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp).testTag("option-choices:$label")) {
+        items(matches, key = { it }) { value ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .toggleable(
+                        value == selected,
+                        role = Role.RadioButton,
+                        onValueChange = { change(if (value == selected) "" else value) },
+                    )
+                    .padding(vertical = 4.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                RadioButton(value == selected, null)
+                Text(value, Modifier.weight(1f))
+            }
+        }
+    }
+    if (matches.isEmpty())
+        Text(if (values.isEmpty()) "暂无可用$label 信息" else "没有匹配的$label", color = NativeMuted)
 }

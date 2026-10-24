@@ -99,6 +99,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                         state.optionStatus[NativeOptionSection.TAGS] ?: NativeOptionStatus(),
                         if (panel == "筛选") 240.dp else height * 0.45f,
                         !state.busy,
+                        matchAny = !editingTags,
                     ) { selected ->
                         if (editingTags) tags = selected else draft = draft.copy(tags = selected)
                     }
@@ -115,11 +116,11 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                         model,
                     )
                     if (panel != "镜头")
-                        ChoiceList("相机", state.options.cameras, draft.camera) {
+                        NativeValuePicker("相机", state.options.cameras, draft.camera) {
                             draft = draft.copy(camera = it)
                         }
                     if (panel != "相机")
-                        ChoiceList("镜头", state.options.lenses, draft.lens) {
+                        NativeValuePicker("镜头", state.options.lenses, draft.lens) {
                             draft = draft.copy(lens = it)
                         }
                 }

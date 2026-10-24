@@ -251,6 +251,8 @@ class NativeGalleryTest {
         compose.onNodeWithText(name).performScrollTo().performClick()
         capture("native-filter.png")
         compose.onNodeWithTag("filter-submit").performScrollTo().performClick()
+        compose.onNodeWithTag("native-search").assertExists()
+        compose.onNodeWithTag("search-submit").performScrollTo().performClick()
         compose.waitUntil {
             compose.onAllNodesWithTag("native-search-results").fetchSemanticsNodes().isNotEmpty()
         }
@@ -268,6 +270,8 @@ class NativeGalleryTest {
         compose.onNodeWithText("PNG").performScrollTo().performClick()
         compose.onNodeWithText("JPEG").performScrollTo().performClick()
         compose.onNodeWithTag("filter-submit").performScrollTo().performClick()
+        compose.onNodeWithTag("native-search").assertExists()
+        compose.onNodeWithTag("search-submit").performScrollTo().performClick()
         compose.waitUntil {
             compose.onAllNodesWithTag("native-search-results").fetchSemanticsNodes().isNotEmpty()
         }

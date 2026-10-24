@@ -64,9 +64,15 @@ class NativeSession private constructor(context: Context, val origin: String) : 
     }
 
     @Synchronized
-    fun array(path: String, limit: Int = 2 * 1024 * 1024): org.json.JSONArray {
+    fun array(
+        path: String,
+        limit: Int = 2 * 1024 * 1024,
+        cancellation: NativeTransferCancellation? = null,
+    ): org.json.JSONArray {
         require(limit in 1..16 * 1024 * 1024)
-        return org.json.JSONArray(String(request("GET", path, null, limit, true), Charsets.UTF_8))
+        return org.json.JSONArray(
+            String(request("GET", path, null, limit, true, cancellation), Charsets.UTF_8)
+        )
     }
 
     internal fun authorizationEpoch(): Int =
@@ -227,7 +233,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             if (image) "image/*" else "application/json",
             cancellation = cancellation,
         ) { connection, checkActive ->
-            if (connection.contentLengthLong > limit) throw IOException("媒体超过本次读取预算")
+            if (connection.contentLengthLong > limit) throw IOException("响应超过本次读取预算")
             if (image && !connection.contentType.orEmpty().startsWith("image/"))
                 throw IOException("预览暂不可用")
             connection.inputStream.use { input ->
