@@ -14,7 +14,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1116.0",
     "@nestjs/common": "^11.1.29",
-    "@prisma/client": "6.19.3",
+    "@prisma/client": "7.10.1",
     "@sekereagle/config": "*",
     "@sekereagle/vector-core": "*",
     "exifr": "^7.1.3",
