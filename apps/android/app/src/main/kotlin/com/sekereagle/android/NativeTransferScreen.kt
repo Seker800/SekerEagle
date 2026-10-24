@@ -62,13 +62,26 @@ fun NativeTransferScreen(
                 delay(1000)
             }
         }
+    var notificationsAllowed by remember {
+        mutableStateOf(
+            androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        )
+    }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        notificationsAllowed =
+            androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+    }
+    val notificationPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+            notificationsAllowed =
+                androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
+        }
     var permissionMessage by remember(identity.scope) { mutableStateOf<String?>(null) }
     fun startBackup() {
         permissionMessage = null
         runCatching {
                 context.startForegroundService(
-                    Intent(context, BackupService::class.java)
-                        .putExtra("scope", identity.scope)
+                    Intent(context, BackupService::class.java).putExtra("scope", identity.scope)
                 )
             }
             .onFailure { permissionMessage = "系统暂不允许启动备份，请回到应用后重试" }
@@ -98,6 +111,37 @@ fun NativeTransferScreen(
         ) {
             if (queue.error != null)
                 item { Text(queue.error.orEmpty(), color = MaterialTheme.colorScheme.error) }
+            if (!notificationsAllowed)
+                item {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("通知未开启，后台传输进度仍可在此查看")
+                        TextButton({
+                            if (
+                                android.os.Build.VERSION.SDK_INT >= 33 &&
+                                    !BackupSettings(context)
+                                        .flag("notifications", "requested", false)
+                            ) {
+                                BackupSettings(context).setFlag("notifications", "requested", true)
+                                notificationPermission.launch(
+                                    android.Manifest.permission.POST_NOTIFICATIONS
+                                )
+                            } else {
+                                context.startActivity(
+                                    Intent(
+                                            android.provider.Settings
+                                                .ACTION_APP_NOTIFICATION_SETTINGS
+                                        )
+                                        .putExtra(
+                                            android.provider.Settings.EXTRA_APP_PACKAGE,
+                                            context.packageName,
+                                        )
+                                )
+                            }
+                        }) {
+                            Text("开启传输通知")
+                        }
+                    }
+                }
             item {
                 GlassSurface(Modifier.fillMaxWidth(), radius = 22) {
                     Column(
@@ -127,8 +171,7 @@ fun NativeTransferScreen(
                             }) {
                                 Text("暂停备份")
                             }
-                        } else if (backup.enabled)
-                            TextButton({ scanAndBackup() }) { Text("扫描并备份") }
+                        } else if (backup.enabled) TextButton({ scanAndBackup() }) { Text("扫描并备份") }
                         permissionMessage?.let {
                             Text(
                                 it,

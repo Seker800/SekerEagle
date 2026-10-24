@@ -55,8 +55,7 @@ final class BackupSettings {
     // Credential erasure must survive process death; ordinary preferences never block UI writes.
     if (key.equals("credential")) {
       if (!editor.commit()) throw new IllegalStateException("凭据未能安全保存，请检查手机存储后重试");
-    }
-    else editor.apply();
+    } else editor.apply();
   }
 
   boolean flag(String scope, String key, boolean fallback) {
@@ -120,9 +119,16 @@ final class BackupSettings {
     if (raw.isEmpty()) return "";
     JSONObject record = new JSONObject(raw);
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+    boolean legacy = record.optInt("keyVersion") != 2;
+    if (legacy) {
+      KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+      store.load(null);
+      if (store.containsAlias(alias(scope) + "-legacy-revoked"))
+        throw new java.security.KeyStoreException("凭据已清除，请重新登录或授权");
+    }
     cipher.init(
         Cipher.DECRYPT_MODE,
-        key(record.optInt("keyVersion") == 2 ? alias(scope) : "sekereagle-backup-v1", false),
+        key(legacy ? "sekereagle-backup-v1" : alias(scope), false),
         new GCMParameterSpec(128, Base64.decode(record.getString("iv"), Base64.NO_WRAP)));
     cipher.updateAAD(scope.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     return new String(
@@ -131,13 +137,11 @@ final class BackupSettings {
   }
 
   void clearToken(String scope) throws Exception {
-    String raw = value(scope, "credential", "");
     KeyStore store = KeyStore.getInstance("AndroidKeyStore");
     store.load(null);
+    // A durable scope marker also rejects an old v1 file without destroying other scopes' keys.
+    key(alias(scope) + "-legacy-revoked", true);
     store.deleteEntry(alias(scope));
-    // Old versions shared one key. Erase it only when clearing an unmigrated credential.
-    if (!raw.isEmpty() && new JSONObject(raw).optInt("keyVersion") != 2)
-      store.deleteEntry("sekereagle-backup-v1");
     setValue(scope, "credential", "");
   }
 

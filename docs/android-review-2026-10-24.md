@@ -28,7 +28,11 @@
 
 相关文档同步：`docs/android-client.md` 更新到 0.8.0 并补充后台传输说明；README 安卓定位改为独立原生 App；OpenAPI 生成文件随 media capabilities 字段更新。
 
-## 仍需处理或实机确认
+## 后续复核修订
+
+本报告中的“改密码／停用后旧 PAT 仍可能继续上传”及“注销并发刷新可能留下新令牌”不能按一般路径成立：PasswordService 已事务撤销全部 PAT，SessionTokenService 已按 family 加锁撤销。后续复核确认并修复了另一个实际问题：旧认证请求在改密之后签发新 PAT 的竞态，并补齐凭据失败、旧任务迁移、撤销入口、通知及补页锚点。以下残余列表属于本轮历史快照，最新结论以 [后续复核](android-review-followup-2026-10-24.md) 为准。
+
+## 仍需处理或实机确认（历史快照）
 
 - **备份 PAT 生命周期**：PAT 目前无过期时间，服务端 authenticate 不比对创建时的 authVersion，应用内也没有撤销入口；改密码或停用账号后，已保存的 `asset:write` 令牌仍可能继续上传。这需要服务端设计调整（过期、authVersion 绑定或注销撤销），本轮未改。
 - **凭据落盘的失败语义**：`BackupSettings` 仍忽略 `commit()` 返回值；刷新令牌轮换时若加密落盘失败，理论上存在假注销或旧 refresh token 触发整族撤销的风险，属于磁盘/IO 异常下的残余风险。

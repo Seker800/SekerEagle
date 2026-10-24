@@ -85,11 +85,40 @@ internal class NativeUploadJourney(
                 true,
             )
         val previous = model().transfers.state.value.batches.map { it.id }.toSet()
+        val expectNotificationPrompt =
+            android.os.Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                    android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                !BackupSettings(context).flag("notifications", "requested", false)
         try {
             compose.onNodeWithContentDescription("更多操作").performClick()
             compose.onNodeWithText("上传").performClick()
             compose.waitUntil(15000) {
                 model().transfers.state.value.batches.any { it.id !in previous }
+            }
+            if (expectNotificationPrompt) {
+                // Exercise a real notification denial: it must not cancel the submitted upload.
+                compose.waitUntil(10000) {
+                    val buttons =
+                        instrumentation.uiAutomation.rootInActiveWindow
+                            ?.findAccessibilityNodeInfosByViewId(
+                                "com.android.permissioncontroller:id/permission_deny_button"
+                            )
+                    buttons
+                        ?.firstOrNull()
+                        ?.performAction(
+                            android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK
+                        ) == true
+                }
+                assertNotEquals(
+                    android.content.pm.PackageManager.PERMISSION_GRANTED,
+                    context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS),
+                )
+            }
+            compose.waitUntil(10000) {
+                compose.activity.lifecycle.currentState.isAtLeast(
+                    androidx.lifecycle.Lifecycle.State.RESUMED
+                )
             }
             assertTrue(monitor.hits > 0)
             val batch = model().transfers.state.value.batches.first { it.id !in previous }

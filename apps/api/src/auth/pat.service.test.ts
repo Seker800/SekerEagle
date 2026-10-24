@@ -195,17 +195,26 @@ void test('账号停用或令牌过期时拒绝 PAT，且不更新使用记录',
 void test('PAT 签发锁定当前账号版本，拒绝密码变更后的旧认证快照', async () => {
   let created = false;
   const prisma = {
-    $transaction: async (fn: (tx: unknown) => unknown) => fn({
-      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
-        assert.match(query.sql, /FOR SHARE/);
-        assert.match(query.sql, /"authVersion"/);
-        assert.match(query.sql, /"disabledAt" IS NULL/);
-        assert.deepEqual(query.values, ['owner-1', 3]);
-        return [];
-      },
-      personalAccessToken: { create: async () => { created = true; return {}; } },
-    }),
+    $transaction: async (fn: (tx: unknown) => unknown) =>
+      fn({
+        $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+          assert.match(query.sql, /FOR SHARE/);
+          assert.match(query.sql, /"authVersion"/);
+          assert.match(query.sql, /"disabledAt" IS NULL/);
+          assert.deepEqual(query.values, ['owner-1', 3]);
+          return [];
+        },
+        personalAccessToken: {
+          create: async () => {
+            created = true;
+            return {};
+          },
+        },
+      }),
   } as unknown as PrismaService;
-  await assert.rejects(new PatService(prisma).create('owner-1', 'backup', ['asset:write'], 3), /登录状态已失效/);
+  await assert.rejects(
+    new PatService(prisma).create('owner-1', 'backup', ['asset:write'], 3),
+    /登录状态已失效/,
+  );
   assert.equal(created, false);
 });

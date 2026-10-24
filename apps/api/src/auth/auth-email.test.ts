@@ -217,3 +217,29 @@ void test('所有新密码入口按 UTF-8 拒绝 bcrypt 会截断的密码', asy
     );
   }
 });
+
+void test('管理员重置密码及停用／恢复账号均撤销全部 PAT 与刷新令牌', async () => {
+  for (const action of ['reset', 'disable', 'enable'] as const) {
+    const revoked: string[] = [];
+    const prisma = {
+      user: { findUnique: async () => ({ id: 'owner' }), update: async () => ({ id: 'owner' }) },
+      refreshToken: {
+        updateMany: async () => {
+          revoked.push('refresh');
+          return { count: 1 };
+        },
+      },
+      personalAccessToken: {
+        updateMany: async () => {
+          revoked.push('pat');
+          return { count: 1 };
+        },
+      },
+      $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+    } as unknown as PrismaService;
+    const service = new PasswordService(prisma);
+    if (action === 'reset') await service.resetPassword('owner', 'new-valid-password');
+    else await service.setDisabled('owner', action === 'disable');
+    assert.deepEqual(revoked.sort(), ['pat', 'refresh']);
+  }
+});

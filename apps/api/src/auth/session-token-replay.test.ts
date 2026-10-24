@@ -163,3 +163,26 @@ test('refresh locks and rechecks the account before family and token rows, inclu
     }
   }
 });
+
+test('logout with the pre-rotation proof revokes replacement tokens in the same family only', async () => {
+  let revoked: Record<string, unknown> | undefined;
+  const order: string[] = [];
+  const db = {
+    refreshToken: {
+      findUnique: async () => ({ userId: 'owner', familyId: 'family', revokedAt: new Date() }),
+      updateMany: async (input: { where: Record<string, unknown> }) => {
+        order.push('revoke');
+        revoked = input.where;
+        return { count: 1 };
+      },
+    },
+    $executeRaw: async () => {
+      order.push('family-lock');
+      return 1;
+    },
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(db),
+  };
+  await new SessionTokenService(db as never, {} as never, {} as never).revoke('old-proof');
+  assert.deepEqual(order, ['family-lock', 'revoke']);
+  assert.deepEqual(revoked, { userId: 'owner', familyId: 'family', revokedAt: null });
+});

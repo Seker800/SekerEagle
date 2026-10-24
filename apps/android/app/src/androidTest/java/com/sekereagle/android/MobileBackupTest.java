@@ -103,6 +103,31 @@ public final class MobileBackupTest {
     }
   }
 
+  @Test
+  public void revokingPhoneBackupAuthorizationInvalidatesOnlyItsSavedToken() throws Exception {
+    String token = settings.token(scope);
+    JSONObject other =
+        new ApiClient(origin, "")
+            .request(
+                "POST",
+                "/api/tokens",
+                new JSONObject()
+                    .put("name", "Independent acceptance token")
+                    .put("scopes", new JSONArray().put("asset:write")));
+    getInstrumentation().runOnMainSync(() -> activity.revokeBackupAuthorization());
+    waitUntil(() -> settings.token(scope).isEmpty(), 15000, "server revocation confirmation");
+    assertFalse(settings.flag(scope, "enabled", true));
+    assertFalse(settings.flag(scope, "auto", true));
+    ApiClient.Failure failure =
+        assertThrows(
+            ApiClient.Failure.class,
+            () -> new ApiClient(origin, token).request("GET", "/api/auth/me", null));
+    assertEquals(401, failure.status);
+    assertNotNull(
+        new ApiClient(origin, other.getString("token")).request("GET", "/api/auth/me", null));
+    new ApiClient(origin, other.getString("token")).request("DELETE", "/api/tokens/current", null);
+  }
+
   private void launch() {
     activity =
         (MainActivity)

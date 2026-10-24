@@ -241,6 +241,18 @@
         "tags": ["auth"]
       }
     },
+    "/api/tokens/current": {
+      "delete": {
+        "operationId": "AuthController_revokeCurrentToken",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["auth"]
+      }
+    },
     "/api/tokens/{tokenId}": {
       "delete": {
         "operationId": "AuthController_revokeToken",

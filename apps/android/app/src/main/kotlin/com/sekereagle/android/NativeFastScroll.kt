@@ -44,14 +44,19 @@ internal fun NativeFastScroll(
     var visible by remember { mutableStateOf(false) }
     var fraction by remember(state.mode, state.sort) { mutableFloatStateOf(0f) }
     var target by remember { mutableStateOf<NativeDay?>(null) }
-    val assetIndex by remember(grid, state.mode, state.items) {
-        derivedStateOf {
-            val key = grid.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.key.toString().startsWith("${state.mode}:") }?.key?.toString()
-            state.items.indexOfFirst { "${state.mode}:${it.id}" == key }.coerceAtLeast(0)
+    val assetIndex by
+        remember(grid, state.mode, state.items) {
+            derivedStateOf {
+                val key =
+                    grid.layoutInfo.visibleItemsInfo
+                        .firstOrNull { it.key.toString().startsWith("${state.mode}:") }
+                        ?.key
+                        ?.toString()
+                state.items.indexOfFirst { "${state.mode}:${it.id}" == key }.coerceAtLeast(0)
+            }
         }
-    }
-    val actual = ((state.windowOffset + assetIndex).toFloat() / (timeline.total - 1)).coerceIn(0f, 1f)
+    val actual =
+        ((state.windowOffset + assetIndex).toFloat() / (timeline.total - 1)).coerceIn(0f, 1f)
     val currentDay = timeline.dayAt(state.windowOffset + assetIndex) ?: timeline.days.first()
     LaunchedEffect(grid.isScrollInProgress, dragging) {
         if (grid.isScrollInProgress || dragging) visible = true
@@ -100,8 +105,10 @@ internal fun NativeFastScroll(
                         stateDescription = currentDay.label
                         progressBarRangeInfo = ProgressBarRangeInfo(actual, 0f..1f)
                         setProgress { requested ->
-                            if (!requested.isFinite()) false else {
-                                val ordinal = (requested.coerceIn(0f, 1f) * (timeline.total - 1)).toLong()
+                            if (!requested.isFinite()) false
+                            else {
+                                val ordinal =
+                                    (requested.coerceIn(0f, 1f) * (timeline.total - 1)).toLong()
                                 timeline.dayAt(ordinal)?.let { jump(it, ordinal) }
                                 true
                             }

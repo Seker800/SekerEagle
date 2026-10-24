@@ -2379,3 +2379,28 @@ test('edited-photo grouping never crosses ownership, library or privacy boundari
     true,
   );
 });
+
+test('PAT issuance rejects stale accounts and self-revocation preserves other credentials in PostgreSQL', async () => {
+  const { PatService } = await import('../../apps/api/dist/auth/pat.service.js');
+  const { PasswordService } = await import('../../apps/api/dist/auth/password.service.js');
+  const f = await fixtures();
+  const service = new PatService(prisma);
+  const first = await service.create(f.ownerId, 'phone', ['asset:write'], 0);
+  const second = await service.create(f.ownerId, 'other-client', ['capture:write'], 0);
+  await service.revokeCurrent(randomUUID(), first.token);
+  assert.equal((await service.authenticate(first.token)).sub, f.ownerId);
+  await service.revokeCurrent(f.ownerId, first.token);
+  await assert.rejects(service.authenticate(first.token), /PAT 无效或已过期/);
+  assert.equal((await service.authenticate(second.token)).sub, f.ownerId);
+  const passwords = new PasswordService(prisma);
+  await passwords.resetPassword(f.ownerId, 'isolated-new-password');
+  await assert.rejects(service.authenticate(second.token), /PAT 无效或已过期/);
+  await assert.rejects(
+    service.create(f.ownerId, 'stale-request', ['asset:write'], 0),
+    /登录状态已失效/,
+  );
+  const current = await service.create(f.ownerId, 'fresh-request', ['asset:write'], 1);
+  await passwords.setDisabled(f.ownerId, true);
+  await assert.rejects(service.authenticate(current.token), /PAT 无效或已过期/);
+  await assert.rejects(service.create(f.ownerId, 'disabled', ['asset:write'], 2), /登录状态已失效/);
+});

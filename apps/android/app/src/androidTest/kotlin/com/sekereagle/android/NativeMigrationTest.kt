@@ -8,7 +8,8 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class NativeMigrationTest {
-    @Test fun restoredLegacyTaskMustEnterNativeMigrationBeforeLoadingTheWeb() {
+    @Test
+    fun restoredLegacyTaskMustEnterNativeMigrationBeforeLoadingTheWeb() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val settings = BackupSettings(context)

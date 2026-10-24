@@ -25,15 +25,15 @@ export class PatService {
       `);
       if (accounts.length !== 1) throw new UnauthorizedException('登录状态已失效，请重新登录。');
       return tx.personalAccessToken.create({
-      data: {
-        userId,
-        name,
-        scopes: uniqueScopes,
-        tokenHash: this.hash(token),
-        expiresAt: null,
-      },
-      select: { id: true, name: true, scopes: true, expiresAt: true, createdAt: true },
-    });
+        data: {
+          userId,
+          name,
+          scopes: uniqueScopes,
+          tokenHash: this.hash(token),
+          expiresAt: null,
+        },
+        select: { id: true, name: true, scopes: true, expiresAt: true, createdAt: true },
+      });
     });
     return { ...record, token };
   }

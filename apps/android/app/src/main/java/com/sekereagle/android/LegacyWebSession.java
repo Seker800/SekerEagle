@@ -5,8 +5,8 @@ import android.webkit.WebStorage;
 
 /**
  * Removes authentication state left by the 0.1 WebView preview. The native app never reads these
- * cookies, but an activity restored from Recents after an upgrade could otherwise resurrect the
- * old unencrypted session. Web storage is cleared with the cookie jar for the same reason.
+ * cookies, but an activity restored from Recents after an upgrade could otherwise resurrect the old
+ * unencrypted session. Web storage is cleared with the cookie jar for the same reason.
  */
 final class LegacyWebSession {
   private LegacyWebSession() {}
@@ -18,12 +18,13 @@ final class LegacyWebSession {
       return;
     }
     CookieManager cookies = CookieManager.getInstance();
-    cookies.removeAllCookies(removed -> {
-      cookies.flush();
-      WebStorage.getInstance().deleteAllData();
-      settings.setFlag("legacy", "web-session-cleared-v1", true);
-      complete.run();
-    });
+    cookies.removeAllCookies(
+        removed -> {
+          cookies.flush();
+          WebStorage.getInstance().deleteAllData();
+          settings.setFlag("legacy", "web-session-cleared-v1", true);
+          complete.run();
+        });
   }
 
   static void clear() {
