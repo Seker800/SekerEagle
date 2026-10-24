@@ -882,12 +882,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun closePanel() {
         if (state.value.busy) return
         cancelOptions()
-        mutable.value =
-            state.value.copy(
-                filterPanel = null,
-                optionStatus =
-                    state.value.optionStatus.mapValues { (_, v) -> v.copy(loading = false) },
-            )
+        mutable.value = state.value.copy(filterPanel = null)
     }
 
     fun applyFilters(filters: NativeFilters) {
@@ -1032,7 +1027,6 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         settings.active("")
         getApplication<Application>()
             .stopService(Intent(getApplication(), BackupService::class.java))
-        cancelOptions()
         mutation?.cancel()
         repository?.clear()
         repository = null

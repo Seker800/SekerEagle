@@ -25,6 +25,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -79,9 +80,13 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     key(state.identity!!.scope) {
                         val repo = model.repository
                         if (repo != null) {
-                            NativeLibraryPager(state, model, repo, openNative) {
-                                if (model.prepareUploadSelection())
-                                    uploadPicker.launch(arrayOf("*/*"))
+                            Box(
+                                if (state.searchOpen) Modifier.clearAndSetSemantics {} else Modifier
+                            ) {
+                                NativeLibraryPager(state, model, repo, openNative) {
+                                    if (model.prepareUploadSelection())
+                                        uploadPicker.launch(arrayOf("*/*"))
+                                }
                             }
                             if (state.accountOpen) NativeAccount(state.identity!!, model)
                             if (state.searchOpen) NativeSearch(state, model)

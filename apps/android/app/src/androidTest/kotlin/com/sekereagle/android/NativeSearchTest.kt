@@ -379,6 +379,7 @@ class NativeSearchTest {
                 model.state.value.viewerId,
             )
             assertTrue(model.state.value.searchOpen)
+            compose.onNodeWithTag("native-grid").assertDoesNotExist()
             main { model.logout() }
         }
     }

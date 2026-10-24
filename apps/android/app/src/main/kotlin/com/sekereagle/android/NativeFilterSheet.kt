@@ -116,11 +116,23 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                         model,
                     )
                     if (panel != "镜头")
-                        NativeValuePicker("相机", state.options.cameras, draft.camera) {
+                        NativeValuePicker(
+                            "相机",
+                            state.options.cameras,
+                            draft.camera,
+                            state.optionStatus[NativeOptionSection.PHOTOGRAPHY]
+                                ?: NativeOptionStatus(),
+                        ) {
                             draft = draft.copy(camera = it)
                         }
                     if (panel != "相机")
-                        NativeValuePicker("镜头", state.options.lenses, draft.lens) {
+                        NativeValuePicker(
+                            "镜头",
+                            state.options.lenses,
+                            draft.lens,
+                            state.optionStatus[NativeOptionSection.PHOTOGRAPHY]
+                                ?: NativeOptionStatus(),
+                        ) {
                             draft = draft.copy(lens = it)
                         }
                 }

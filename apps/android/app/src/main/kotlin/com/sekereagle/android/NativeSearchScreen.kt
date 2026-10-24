@@ -1,6 +1,7 @@
 package com.sekereagle.android
 
 import androidx.compose.foundation.*
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -13,6 +14,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -36,6 +38,14 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
     Column(
         Modifier.fillMaxSize()
             .background(Color.Black)
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = {
+                        keyboard?.hide()
+                        focusManager.clearFocus()
+                    }
+                )
+            }
             .imePadding()
             .testTag("native-search")
             .padding(14.dp)

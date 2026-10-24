@@ -4,6 +4,7 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -100,6 +101,7 @@ internal fun NativeValuePicker(
     label: String,
     values: List<String>,
     selected: String,
+    status: NativeOptionStatus = NativeOptionStatus(),
     change: (String) -> Unit,
 ) {
     var query by rememberSaveable(label) { mutableStateOf("") }
@@ -120,10 +122,10 @@ internal fun NativeValuePicker(
         items(matches, key = { it }) { value ->
             Row(
                 Modifier.fillMaxWidth()
-                    .toggleable(
-                        value == selected,
+                    .selectable(
+                        selected = value == selected,
                         role = Role.RadioButton,
-                        onValueChange = { change(if (value == selected) "" else value) },
+                        onClick = { change(value) },
                     )
                     .padding(vertical = 4.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
@@ -133,6 +135,6 @@ internal fun NativeValuePicker(
             }
         }
     }
-    if (matches.isEmpty())
+    if (matches.isEmpty() && !status.loading && status.error == null)
         Text(if (values.isEmpty()) "暂无可用$label 信息" else "没有匹配的$label", color = NativeMuted)
 }
