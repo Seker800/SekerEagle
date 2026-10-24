@@ -121,7 +121,7 @@ export function PhotoMap({
     const labels = L.layerGroup().addTo(map),
       controller = new AbortController();
     const palette = getComputedStyle(container.current);
-    const accent = palette.getPropertyValue('--eagle-accent').trim() || '#d69b48';
+    const accent = palette.getPropertyValue('--eagle-accent').trim() || '#94a5b4';
     const land = palette.getPropertyValue('--eagle-panel-raised').trim() || '#1d1f23';
     setStatus('LOADING');
     let updateLabels: (() => void) | undefined;
@@ -175,8 +175,8 @@ export function PhotoMap({
     if (!map) return;
     const markers = L.layerGroup().addTo(map);
     const accent = container.current
-      ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#d69b48'
-      : '#d69b48';
+      ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#94a5b4'
+      : '#94a5b4';
     const largest = Math.max(100, ...(points ?? []).map((cluster) => cluster.count));
     for (const cluster of points ?? []) {
       const diameter = 44 + 20 * Math.sqrt(cluster.count / largest);

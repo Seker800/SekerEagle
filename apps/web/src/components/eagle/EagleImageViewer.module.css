@@ -38,7 +38,7 @@
   width: 45%;
   height: 100%;
   border-radius: inherit;
-  background: #d69b48;
+  background: var(--ui-accent);
   animation: progress 1s ease-in-out infinite alternate;
 }
 

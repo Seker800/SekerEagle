@@ -5,6 +5,6 @@
   display: grid;
   place-content: center;
   gap: 16px;
-  color: #eeeff1;
+  color: var(--ui-text);
   background: #080808;
 }

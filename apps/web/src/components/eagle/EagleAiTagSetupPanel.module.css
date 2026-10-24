@@ -41,7 +41,7 @@
 }
 
 .eyebrow {
-  color: #d69b48;
+  color: var(--ui-accent);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -129,14 +129,14 @@
 .stopButton {
   flex: none;
   min-width: 94px;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   font-weight: 700;
 }
 
 .startButton {
-  border-color: #d69b48;
-  color: #17120b;
-  background: #d69b48;
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
 }
 
 .stopButton {
@@ -167,7 +167,7 @@
 }
 
 .switch[aria-checked='true'] {
-  background: #d69b48;
+  background: var(--ui-accent);
 }
 
 .switch[aria-checked='true'] span {
@@ -230,7 +230,7 @@
 .notice,
 .error {
   padding: 7px 9px;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: #a8dfba;
   background: rgb(75 174 111 / 10%);
   font-size: 12px;
@@ -257,12 +257,12 @@
 
 @media (max-width: 720px) {
   .eyebrow {
-    color: #82aaff;
+    color: var(--ui-accent);
   }
   .startButton,
   .switch[aria-checked='true'] {
-    background: #82aaff;
-    border-color: #82aaff;
+    background: var(--ui-accent);
+    border-color: var(--ui-accent);
   }
   .startButton,
   .stopButton,
@@ -272,7 +272,7 @@
     min-height: 40px;
   }
   .panel {
-    --accent: #82aaff;
+    --accent: var(--ui-accent);
     padding: 20px 16px 100px;
     background: #09090b;
   }

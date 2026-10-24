@@ -2,9 +2,9 @@
   --photo-bg: #080808;
   --photo-panel: #080808;
   --photo-line: #2b2b2b;
-  --photo-text: #eeeff1;
+  --photo-text: var(--ui-text);
   --photo-muted: #93979f;
-  --photo-accent: #e8b26c;
+  --photo-accent: var(--ui-accent);
   position: fixed;
   inset: 0;
   z-index: 100;
@@ -269,7 +269,7 @@
 }
 .cropOrientation {
   border: 1px solid var(--photo-line);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   padding: 2px;
 }
 .editor .cropOrientation button {
@@ -313,7 +313,7 @@
   padding: 5px 3px;
   gap: 5px;
   border: 1px solid var(--photo-line);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   color: var(--photo-muted);
   font-size: 11px;
   scroll-snap-align: start;
@@ -321,7 +321,7 @@
 .editor .cropRatios > button[aria-pressed='true'] {
   color: var(--photo-accent);
   border-color: var(--photo-accent);
-  background: #e8b26c12;
+  background: rgb(var(--ui-accent-rgb) / 7%);
 }
 .ratioPreview {
   display: flex;
@@ -382,8 +382,8 @@
 }
 .editor button[aria-pressed='true'] {
   color: var(--photo-accent);
-  background: #e8b26c12;
-  border-color: #e8b26c55;
+  background: rgb(var(--ui-accent-rgb) / 7%);
+  border-color: rgb(var(--ui-accent-rgb) / 33%);
 }
 .renderState {
   min-width: 86px;
@@ -424,7 +424,7 @@
   display: none;
 }
 .editor .tabs button[aria-pressed='true'] {
-  color: #20180b;
+  color: var(--ui-on-accent);
   background: var(--photo-accent);
   border-color: transparent;
 }
@@ -536,7 +536,7 @@
   position: relative;
   gap: 6px;
   padding: 0 0 5px;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   color: var(--photo-muted);
   font-size: 11px;
   scroll-snap-align: start;
@@ -557,7 +557,7 @@
   width: 60px;
   height: 60px;
   border: 2px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   background: linear-gradient(150deg, #a7c3d3 10%, #71847e 48%, #344a40 49%, #b9ad89 80%);
 }
 .filters button[aria-pressed='true'] .swatch {
@@ -591,7 +591,7 @@
 .ratioLabel select {
   min-height: 44px;
   border: 1px solid var(--photo-line);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   background: var(--photo-bg);
   color: inherit;
   padding: 8px 12px;
@@ -628,7 +628,7 @@
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
-  scrollbar-color: #82715a #ffffff0a;
+  scrollbar-color: var(--ui-muted) #ffffff0a;
   user-select: none;
 }
 .toolScrollViewport::-webkit-scrollbar {
@@ -637,7 +637,7 @@
 }
 .toolScrollViewport::-webkit-scrollbar-thumb {
   border-radius: 4px;
-  background: #82715a;
+  background: var(--ui-muted);
 }
 .toolScrollViewport > button {
   flex-shrink: 0;
@@ -705,10 +705,10 @@
 .editor .adjustmentOptions button[aria-pressed='true'] {
   border-color: transparent;
   background: var(--photo-accent);
-  color: #21180c;
+  color: var(--ui-on-accent);
 }
 .editor .adjustmentOptions button[aria-pressed='true'] > span {
-  color: #21180c;
+  color: var(--ui-on-accent);
 }
 .optionName {
   overflow: hidden;
@@ -829,7 +829,7 @@
   width: max-content;
   max-width: calc(100% - 32px);
   padding: 12px 18px;
-  border: 1px solid #e8b26c55;
+  border: 1px solid rgb(var(--ui-accent-rgb) / 33%);
   border-radius: 10px;
   background: #23221ef5;
   color: var(--photo-accent);
@@ -920,7 +920,7 @@
   height: 82px;
   padding: 0;
   gap: 0;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   overflow: hidden;
   border: 2px solid transparent;
   background: #202020;
@@ -1016,7 +1016,7 @@
 }
 .editor .watermarkApply {
   background: var(--photo-accent);
-  color: #21180c;
+  color: var(--ui-on-accent);
 }
 @media (max-width: 760px) {
   .editor {
@@ -1218,7 +1218,7 @@
   gap: 4px;
   min-width: 44px;
   padding: 4px 7px;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   font-size: 11px;
   color: var(--photo-muted);
 }
@@ -1232,7 +1232,7 @@
 .editor .advancedFamilies button[aria-pressed='true'] {
   color: var(--photo-accent);
   border-color: var(--photo-accent);
-  background: #e8b26c12;
+  background: rgb(var(--ui-accent-rgb) / 7%);
 }
 .advancedAxes {
   display: flex;
@@ -1246,7 +1246,7 @@
   min-height: 40px;
   gap: 2px;
   padding: 4px 9px;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   font-size: 11px;
   background: #ffffff09;
 }
@@ -1312,7 +1312,7 @@
 
 @media (max-width: 720px) {
   .editor {
-    --photo-accent: #82aaff;
+    --photo-accent: var(--ui-accent);
     --photo-line: rgb(255 255 255 / 12%);
   }
   .toolScrollViewport {

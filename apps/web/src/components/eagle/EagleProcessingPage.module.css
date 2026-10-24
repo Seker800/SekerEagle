@@ -2,20 +2,20 @@
   --text-dim: #a9aeb7;
   --text-muted: #747a83;
   --text-soft: #d4d7db;
-  --text-strong: #f0f1f3;
-  --line-subtle: rgb(255 255 255 / 8%);
-  --bg-input: #101114;
-  --accent: #d69b48;
+  --text-strong: var(--ui-text);
+  --line-subtle: var(--ui-line);
+  --bg-input: var(--ui-input);
+  --accent: var(--ui-accent);
   --danger: #e85f64;
   min-width: 0;
   min-height: 0;
   flex: 1;
-  padding: 24px 28px 40px;
+  padding: 20px 24px 32px;
   display: grid;
   align-content: start;
-  gap: 18px;
+  gap: 12px;
   overflow: auto;
-  background: #121316;
+  background: var(--ui-bg);
 }
 .header {
   display: flex;
@@ -25,7 +25,7 @@
 }
 .header h1 {
   margin: 0;
-  font-size: 20px;
+  font-size: var(--ui-font-title);
   letter-spacing: -0.025em;
 }
 .header p {
@@ -57,9 +57,9 @@
   width: fit-content;
   padding: 3px;
   border: 1px solid var(--line-subtle);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   display: block;
-  background: #18191c;
+  background: var(--ui-panel);
 }
 .tabs {
   display: flex;
@@ -74,7 +74,7 @@
   min-height: 30px;
   padding: 0 12px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   color: var(--text-dim);
@@ -84,11 +84,11 @@
 }
 .tab:hover {
   color: var(--text-soft);
-  background: rgb(255 255 255 / 4%);
+  background: var(--ui-line-subtle);
 }
 .tabActive {
   color: var(--text-strong);
-  background: #2a2c31;
+  background: var(--ui-selected);
   box-shadow: 0 1px 2px rgb(0 0 0 / 28%);
 }
 .tab:focus-visible,
@@ -170,8 +170,8 @@
 }
 .capability[data-state='ondemand'] .capabilityState,
 .capability[data-state='automatic'] .capabilityState {
-  color: #e8c38d;
-  background: rgb(214 155 72 / 10%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
 }
 .capability[data-state='warning'] .capabilityState,
 .featureStatus[data-state='warning'] .capabilityState {
@@ -179,8 +179,8 @@
   background: rgb(242 63 67 / 10%);
 }
 .featureStatus[data-state='ondemand'] .capabilityState {
-  color: #e8c38d;
-  background: rgb(214 155 72 / 10%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
 }
 .capability[data-state='disabled'] {
   opacity: 0.72;
@@ -260,10 +260,10 @@
   width: fit-content;
   padding: 3px;
   border: 1px solid var(--line-subtle);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   gap: 3px;
-  background: #18191c;
+  background: var(--ui-panel);
 }
 .taskTabs button {
   min-height: 30px;
@@ -277,7 +277,7 @@
 .taskTabs button[data-active='true'] {
   color: var(--text-soft);
   box-shadow: 0 1px 2px rgb(0 0 0 / 28%);
-  background: #2a2c31;
+  background: var(--ui-selected);
 }
 .contentBlock[hidden] {
   display: none;
@@ -317,7 +317,7 @@
 }
 .metricActive,
 .queueActive {
-  background: rgb(214 155 72 / 8%);
+  background: rgb(var(--ui-accent-rgb) / 8%);
 }
 .queueGrid {
   display: grid;
@@ -384,7 +384,7 @@
 .filters select {
   min-height: 32px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   padding: 0 9px;
   color: var(--text-soft);
   background: var(--bg-input);
@@ -396,7 +396,7 @@
 .inlineButton {
   min-height: 32px;
   border: 1px solid var(--line-subtle);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   padding: 0 10px;
   color: var(--text-soft);
   background: transparent;
@@ -405,7 +405,7 @@
 .primaryButton {
   border-color: var(--accent);
   background: var(--accent);
-  color: white;
+  color: var(--ui-on-accent);
 }
 .dangerButton {
   color: #f1a3a6;
@@ -474,15 +474,15 @@
 .statusBadge {
   padding: 3px 6px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 7%);
+  background: var(--ui-line);
 }
 .statusBadge[data-status='FAILED'] {
   color: #f1a3a6;
   background: rgb(242 63 67 / 10%);
 }
 .statusBadge[data-status='PROCESSING'] {
-  color: #e8c38d;
-  background: rgb(214 155 72 / 10%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
 }
 .empty {
   height: 70px;
@@ -492,7 +492,7 @@
 .error,
 .notice {
   padding: 9px 11px;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   font-size: 12px;
 }
 .error {
@@ -551,7 +551,7 @@
   }
   .featureStatus {
     grid-template-columns: 1fr;
-    gap: 18px;
+    gap: 12px;
   }
   .coverageMetric {
     justify-items: start;
@@ -564,7 +564,7 @@
 
 @media (max-width: 720px) {
   .section {
-    --accent: #82aaff;
+    --accent: var(--ui-accent);
     padding: 20px 16px 100px;
     background: #09090b;
   }

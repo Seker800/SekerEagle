@@ -1,0 +1,6 @@
+.surface {
+  color: var(--ui-text);
+  background: var(--ui-raised);
+  border: 1px solid var(--ui-line);
+  box-shadow: var(--ui-shadow-popover);
+}

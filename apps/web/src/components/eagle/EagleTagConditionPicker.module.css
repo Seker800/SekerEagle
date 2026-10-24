@@ -1,7 +1,7 @@
 .picker {
   min-width: 0;
   padding: 12px !important;
-  border: 1px solid rgb(255 255 255 / 7%) !important;
+  border: 1px solid var(--ui-line) !important;
   border-radius: 10px;
   background: rgb(255 255 255 / 2%);
 }
@@ -14,11 +14,11 @@
   min-width: 18px;
   height: 18px;
   margin-left: auto;
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
-  color: #19130b;
-  background: #d69b48;
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
   font-size: 10px;
 }
 
@@ -26,16 +26,16 @@
   height: 36px;
   padding: 0 10px;
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 7px;
   color: #737983;
-  background: #101114;
+  background: var(--ui-input);
 }
 
 .searchBox:focus-within {
-  border-color: rgb(214 155 72 / 55%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
 }
 
 .searchBox input {
@@ -58,19 +58,19 @@
 .selectedTags button {
   min-height: 27px;
   padding: 0 7px 0 9px;
-  border: 1px solid rgb(214 155 72 / 35%);
+  border: 1px solid rgb(var(--ui-accent-rgb) / 35%);
   border-radius: 14px;
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #efc78e;
-  background: rgb(214 155 72 / 10%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
   cursor: pointer;
   font-size: 10px;
 }
 
 .selectedTags button:hover {
-  background: rgb(214 155 72 / 17%);
+  background: rgb(var(--ui-accent-rgb) / 17%);
 }
 
 .tagList {
@@ -78,8 +78,8 @@
   min-height: 0;
   margin-top: 7px;
   padding: 3px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 7px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
   overflow-y: auto;
   background: rgb(8 9 11 / 42%);
 }
@@ -92,7 +92,7 @@
   height: 32px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 7px;
@@ -106,14 +106,14 @@
 }
 
 .tagOption:has(input:checked) {
-  border-color: rgb(214 155 72 / 28%);
-  color: #efc78e;
-  background: rgb(214 155 72 / 9%);
+  border-color: rgb(var(--ui-accent-rgb) / 28%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 9%);
 }
 
 .tagOption input {
   flex: 0 0 auto;
-  accent-color: #d69b48;
+  accent-color: var(--ui-accent);
 }
 
 .color {
@@ -133,7 +133,7 @@
 
 .star {
   flex: 0 0 auto;
-  color: #d69b48;
+  color: var(--ui-accent);
 }
 
 .tagOption small {

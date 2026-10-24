@@ -6,7 +6,7 @@
   align-items: center;
   gap: 10px;
   overflow: visible;
-  background: #151619;
+  background: var(--ui-panel);
 }
 
 .fields {
@@ -26,7 +26,7 @@
   height: 34px;
   padding: 0 9px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -44,12 +44,12 @@
 }
 
 .entry > button[aria-expanded='true'] {
-  border-color: rgb(214 155 72 / 38%);
+  border-color: rgb(var(--ui-accent-rgb) / 38%);
 }
 
 .entry > .activeField {
-  color: #f0c78c;
-  background: rgb(214 155 72 / 9%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 9%);
 }
 
 .entry > button small {
@@ -57,7 +57,7 @@
   padding: 2px 5px;
   border-radius: 4px;
   overflow: hidden;
-  color: #1c1309;
+  color: var(--ui-on-accent);
   background: var(--eagle-accent);
   font-size: 9px;
   font-weight: 750;
@@ -82,13 +82,13 @@
   height: 28px;
   margin-left: auto;
   padding: 0 7px;
-  color: #858a92;
+  color: var(--ui-muted);
   font-size: 11px;
 }
 
 .clearAll:hover {
-  color: #f1c98f;
-  background: rgb(214 155 72 / 8%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 8%);
 }
 
 .popover {
@@ -183,13 +183,13 @@
   height: 28px;
   padding: 2px;
   border: 1px solid #45484e;
-  border-radius: 6px;
-  background: #111216;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-bg);
 }
 
 .matchModes {
   padding: 2px;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   grid-template-columns: 1fr 1fr;
   background: #121317;
@@ -207,8 +207,8 @@
 }
 
 .matchModes label:has(input:checked) {
-  color: #f1c98f;
-  background: #292b30;
+  color: var(--ui-accent-text);
+  background: var(--ui-selected);
 }
 
 .matchModes input {
@@ -226,17 +226,17 @@
   height: 32px;
   padding: 0 8px;
   border: 1px solid #3c3f45;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 7px;
   color: #7f848c;
-  background: #111216;
+  background: var(--ui-bg);
 }
 
 .popoverSearch:focus-within,
 .textControl:focus-within {
-  border-color: rgb(214 155 72 / 58%);
+  border-color: rgb(var(--ui-accent-rgb) / 58%);
 }
 
 .popoverSearch input,
@@ -303,21 +303,21 @@
   min-height: 34px;
   padding: 0 9px;
   border: 1px solid #373a40;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 8px;
   color: #aeb2b9;
-  background: #202226;
+  background: var(--ui-raised);
   cursor: pointer;
   font-size: 11px;
 }
 
 .choiceList label:has(input:checked),
 .visualChoices label:has(input:checked) {
-  border-color: rgb(214 155 72 / 55%);
-  color: #f2cb94;
-  background: rgb(214 155 72 / 10%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
 }
 
 .choiceList input,
@@ -369,7 +369,7 @@
   height: 38px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
   color: #666b73;
@@ -380,7 +380,7 @@
 .ratingControl button:hover,
 .ratingControl button[aria-pressed='true'] {
   color: var(--eagle-accent);
-  background: rgb(214 155 72 / 9%);
+  background: rgb(var(--ui-accent-rgb) / 9%);
 }
 
 .rangeControl,
@@ -415,10 +415,10 @@
   box-sizing: border-box;
   padding: 0 7px;
   border: 1px solid #3c3f45;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   outline: 0;
   color: #d1d4d9;
-  background: #111216;
+  background: var(--ui-bg);
   color-scheme: dark;
   font-size: 11px;
 }
@@ -456,7 +456,7 @@
 .managerList > div {
   min-height: 38px;
   padding: 0 5px;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
@@ -484,7 +484,7 @@
   height: 30px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
   color: #666c75;
@@ -509,12 +509,12 @@
   .clearAll {
     position: sticky;
     right: 0;
-    background: #151619;
+    background: var(--ui-panel);
   }
 }
 
 .floatingPanel {
-  --eagle-accent: #d69b48;
+  --eagle-accent: var(--ui-accent);
   position: fixed;
   z-index: 60;
   outline: none;

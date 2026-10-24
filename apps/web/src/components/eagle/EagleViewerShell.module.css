@@ -2,8 +2,8 @@
   position: fixed;
   inset: 0;
   z-index: 100;
-  color: #eeeff1;
-  background: #101113;
+  color: var(--ui-text);
+  background: var(--ui-input);
 }
 .dialog {
   width: 100%;
@@ -60,7 +60,7 @@
   min-height: 44px;
   min-width: 44px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   color: #bec1c6;
   background: transparent;
   cursor: pointer;
@@ -78,7 +78,7 @@
 }
 .dialog button:focus-visible,
 .dialog summary:focus-visible {
-  outline: 2px solid #d69b48;
+  outline: 2px solid var(--ui-accent);
   outline-offset: 2px;
 }
 .close {
@@ -119,7 +119,7 @@
   display: grid;
   justify-items: center;
   gap: 8px;
-  background: #101113;
+  background: var(--ui-input);
 }
 .actions {
   max-width: 100%;
@@ -144,13 +144,13 @@
   padding: 0 12px;
 }
 .dialog .actions [data-viewer-primary] {
-  background: #d4a15a;
-  color: #1a150f;
+  background: var(--ui-accent-text);
+  color: var(--ui-on-accent);
   font-weight: 600;
 }
 .dialog .actions [data-viewer-primary]:hover:not(:disabled) {
-  background: #e1b375;
-  color: #1a150f;
+  background: var(--ui-accent-text);
+  color: var(--ui-on-accent);
 }
 .actions small {
   position: absolute;

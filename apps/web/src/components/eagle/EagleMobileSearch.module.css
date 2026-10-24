@@ -49,7 +49,7 @@
   cursor: pointer;
 }
 .close {
-  composes: surface from './EagleGlass.module.css';
+  composes: surface from './EagleSurface.module.css';
   display: grid;
   place-items: center;
   width: 46px;

@@ -3,7 +3,7 @@
   width: min(360px, 100%);
 }
 .bar {
-  composes: surface from './EagleGlass.module.css';
+  composes: surface from './EagleSurface.module.css';
   display: flex;
   align-items: center;
   padding: 7px 8px;
@@ -50,8 +50,7 @@
   display: none;
 }
 .menu {
-  composes: surface from './EagleGlass.module.css';
-  --eagle-glass-tint: rgb(28 28 32 / 85%);
+  composes: surface from './EagleSurface.module.css';
   position: absolute;
   bottom: 64px;
   right: -6px;

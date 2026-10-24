@@ -7,24 +7,24 @@
   background: rgb(3 4 5 / 68%);
 }
 .dialog {
-  width: min(1440px, calc(100vw - 48px));
-  height: min(900px, calc(100dvh - 48px));
+  width: min(960px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 13px;
+  border-radius: var(--ui-radius-panel);
   display: grid;
-  grid-template-rows: 70px minmax(0, 1fr) 62px;
+  grid-template-rows: 58px minmax(0, 1fr) 54px;
   overflow: hidden;
   color: #e7e9ec;
-  background: #17181c;
+  background: var(--ui-panel);
   box-shadow: 0 28px 100px rgb(0 0 0 / 55%);
 }
 .dialog header {
   padding: 0 19px 0 20px;
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  border-bottom: 1px solid var(--ui-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #1b1c20;
+  background: var(--ui-panel);
 }
 .headerIdentity {
   display: flex;
@@ -34,12 +34,12 @@
 .headerIcon {
   width: 36px;
   height: 36px;
-  border: 1px solid rgb(214 155 72 / 22%);
-  border-radius: 9px;
+  border: 1px solid rgb(var(--ui-accent-rgb) / 22%);
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
-  color: #d69b48;
-  background: rgb(214 155 72 / 8%);
+  color: var(--ui-accent);
+  background: rgb(var(--ui-accent-rgb) / 8%);
 }
 .headerCopy {
   display: grid;
@@ -62,10 +62,10 @@
   height: 30px;
   padding: 0;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
-  color: #858b94;
+  color: var(--ui-muted);
   background: transparent;
   cursor: pointer;
 }
@@ -74,12 +74,12 @@
   background: rgb(255 255 255 / 6%);
 }
 .body {
-  padding: 24px 28px;
+  padding: 16px 20px;
   overflow: auto;
   display: grid;
   align-content: start;
   gap: 12px;
-  background: #141519;
+  background: var(--ui-bg);
 }
 .layout {
   display: grid;
@@ -97,8 +97,8 @@
 }
 .secondaryPanel {
   padding: 15px;
-  border: 1px solid rgb(255 255 255 / 7%);
-  border-radius: 11px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-panel);
   display: grid;
   gap: 14px;
   background: rgb(255 255 255 / 2.5%);
@@ -114,21 +114,21 @@
 }
 .nameField input,
 .ratingField select {
-  height: 48px;
+  height: 36px;
   padding: 0 11px;
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   outline: 0;
   color: #e5e7ea;
   background: #0f1012;
 }
 .nameField input:focus {
-  border-color: #2f91ed;
-  box-shadow: 0 0 0 2px rgb(47 145 237 / 12%);
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 2px rgb(var(--ui-accent-rgb) / 12%);
 }
 .explainer {
   margin: 2px 0 12px;
-  color: #858b94;
+  color: var(--ui-muted);
   font-size: 13px;
 }
 .sectionHeading {
@@ -152,7 +152,7 @@
 .optionalBadge {
   min-height: 20px;
   padding: 0 7px;
-  border-radius: 10px;
+  border-radius: var(--ui-radius-panel);
   display: inline-flex;
   align-items: center;
   font-size: 9px;
@@ -167,18 +167,18 @@
 .matchModeField select {
   height: 30px;
   padding: 0 26px 0 9px;
-  border: 1px solid rgb(214 155 72 / 28%);
-  border-radius: 7px;
+  border: 1px solid rgb(var(--ui-accent-rgb) / 28%);
+  border-radius: var(--ui-radius-control);
   outline: 0;
-  color: #efc78e;
+  color: var(--ui-accent-text);
   color-scheme: dark;
-  background: rgb(214 155 72 / 8%);
+  background: rgb(var(--ui-accent-rgb) / 8%);
   font-size: 10px;
   font-weight: 650;
 }
 .matchModeField select:focus {
-  border-color: rgb(214 155 72 / 55%);
-  box-shadow: 0 0 0 3px rgb(214 155 72 / 7%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
+  box-shadow: 0 0 0 3px rgb(var(--ui-accent-rgb) / 7%);
 }
 .optionalBadge {
   color: #777d86;
@@ -210,23 +210,23 @@
 .choices label {
   min-height: 29px;
   padding: 0 8px;
-  border: 1px solid rgb(255 255 255 / 8%);
-  border-radius: 6px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 6px;
   color: #aeb2b8;
-  background: rgb(255 255 255 / 3%);
+  background: var(--ui-hover);
   cursor: pointer;
   font-size: 11px;
 }
 .choices label:has(input:checked) {
-  border-color: rgb(214 155 72 / 45%);
-  color: #efc78e;
-  background: rgb(214 155 72 / 11%);
+  border-color: rgb(var(--ui-accent-rgb) / 45%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 11%);
 }
 .choices input {
-  accent-color: #d69b48;
+  accent-color: var(--ui-accent);
 }
 .choices span {
   color: #666c75;
@@ -258,19 +258,19 @@
   margin: 0;
   padding: 9px 11px;
   border: 1px solid rgb(233 140 140 / 22%);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   color: #e98c8c;
   background: rgb(233 140 140 / 6%);
   font-size: 11px;
 }
 .dialog footer {
   padding: 0 20px;
-  border-top: 1px solid rgb(255 255 255 / 8%);
+  border-top: 1px solid var(--ui-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: #1b1c20;
+  background: var(--ui-panel);
 }
 .conditionSummary {
   color: #777d86;
@@ -284,16 +284,16 @@
 .dialog footer button {
   height: 34px;
   padding: 0 13px;
-  border: 1px solid rgb(255 255 255 / 9%);
-  border-radius: 7px;
+  border: 1px solid var(--ui-selected-tint);
+  border-radius: var(--ui-radius-control);
   color: #bfc3c9;
   background: #24262a;
   cursor: pointer;
 }
 .dialog footer .primary {
-  border-color: #2f91ed;
-  color: #fff;
-  background: #2f91ed;
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+  background: var(--ui-accent);
   font-weight: 700;
 }
 .dialog footer button:disabled {
@@ -332,23 +332,23 @@
 .semanticPanel {
   display: grid;
   gap: 10px;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid rgb(255 255 255 / 10%);
-  border-radius: 10px;
+  border-radius: var(--ui-radius-panel);
 }
 .semanticPanel select {
   color: inherit;
-  background: #17181c;
+  background: var(--ui-panel);
   padding: 9px;
   border: 1px solid #474b52;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
 }
 .semanticPanel > button {
   justify-self: start;
   color: inherit;
   background: #272a30;
   border: 1px solid #474b52;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   padding: 8px 12px;
   cursor: pointer;
 }
@@ -366,5 +366,5 @@
   position: relative;
   aspect-ratio: 1;
   overflow: hidden;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
 }

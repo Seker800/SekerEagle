@@ -8,7 +8,7 @@
   flex-direction: column;
   gap: 12px;
   color: #96969c;
-  background: #121316;
+  background: var(--ui-bg);
   z-index: 3;
   height: 100%;
   box-sizing: border-box;
@@ -22,7 +22,7 @@
   background: transparent;
   color: inherit;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   cursor: pointer;
 }
 .rail > button:hover {
@@ -87,8 +87,8 @@
   white-space: nowrap;
   pointer-events: none;
   text-shadow:
-    0 1px 4px #121316,
-    0 0 8px #121316;
+    0 1px 4px var(--ui-bg),
+    0 0 8px var(--ui-bg);
 }
 .hoverDate small {
   display: block;

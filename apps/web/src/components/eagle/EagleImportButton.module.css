@@ -5,7 +5,7 @@
   min-height: 36px;
   padding: 0 10px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: var(--eagle-text);
   background: var(--eagle-panel-raised);
   cursor: pointer;
@@ -23,7 +23,7 @@
     padding: 0;
     border: 0;
     border-radius: 14px;
-    color: #eabd80;
-    background: #302a22;
+    color: var(--ui-accent-text);
+    background: var(--ui-selected);
   }
 }

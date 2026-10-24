@@ -30,11 +30,11 @@
   padding: 0;
   overflow: hidden;
   color: #686e76;
-  background: #202226;
-  border-radius: 6px;
+  background: var(--ui-raised);
+  border-radius: var(--ui-radius-control);
 }
 .root .item button[aria-pressed='true'] {
-  border-color: #d69b48;
+  border-color: var(--ui-accent);
 }
 .item img {
   width: 100%;
@@ -78,7 +78,7 @@
   display: grid;
   place-items: center;
   border-radius: 3px;
-  color: #edc17f;
+  color: var(--ui-accent-text);
   background: #0009;
 }
 .root > .page {

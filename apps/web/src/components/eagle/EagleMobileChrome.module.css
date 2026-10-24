@@ -30,7 +30,7 @@
   pointer-events: auto;
 }
 .search {
-  composes: surface from './EagleGlass.module.css';
+  composes: surface from './EagleSurface.module.css';
   display: grid;
   place-items: center;
   width: 44px;
@@ -57,24 +57,24 @@
   border-radius: 14px;
   padding: 10px 12px;
   background: transparent;
-  color: #f0f1f3;
+  color: var(--ui-text);
   font: inherit;
   font-size: 15px;
   text-align: left;
   cursor: pointer;
 }
 .destinations button:hover {
-  background: rgb(255 255 255 / 8%);
+  background: var(--ui-line);
 }
 .destinations svg {
   width: 20px;
   height: 20px;
 }
 .destinations button[aria-current='page'] {
-  color: #8bb1ff;
+  color: var(--ui-accent);
 }
 .search:focus-visible,
 .destinations button:focus-visible {
-  outline: 2px solid #8bb1ff;
+  outline: 2px solid var(--ui-accent);
   outline-offset: 3px;
 }

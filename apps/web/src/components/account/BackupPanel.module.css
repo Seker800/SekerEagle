@@ -1,12 +1,12 @@
 .details {
   display: grid;
   grid-template-columns: minmax(110px, 1fr) minmax(0, 2fr);
-  gap: 16px 24px;
-  margin: 24px 0;
+  gap: 12px 24px;
+  margin: 16px 0;
 }
 .details dt,
 .note {
-  color: var(--text-secondary, #888);
+  color: var(--ui-muted);
 }
 .details dd {
   margin: 0;
@@ -16,7 +16,7 @@
   font-weight: 600;
 }
 .warning {
-  color: var(--color-danger, #d16a43);
+  color: var(--ui-warning);
 }
 .note {
   font-size: 13px;

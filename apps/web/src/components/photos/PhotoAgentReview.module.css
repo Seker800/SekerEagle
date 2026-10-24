@@ -3,7 +3,7 @@
   min-height: 0;
   overflow: auto;
   box-sizing: border-box;
-  padding: 20px;
+  padding: 16px 24px;
   color-scheme: dark;
   color: var(--eagle-text);
 }
@@ -24,12 +24,12 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .card {
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--eagle-line);
-  border-radius: 12px;
+  border-radius: var(--ui-radius-panel);
   background: var(--eagle-panel);
   overflow-wrap: anywhere;
 }
@@ -52,9 +52,10 @@
 
 .panel h2 {
   margin-top: 0;
-  font-size: 20px;
+  font-size: var(--ui-font-title);
 }
 .panel p {
+  color: var(--ui-secondary);
   line-height: 1.6;
 }
 .panel button,
@@ -62,7 +63,7 @@
 .form select,
 .card input:not([type='checkbox']) {
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   background: var(--eagle-panel-raised);
   color: var(--eagle-text);
   padding: 7px 10px;

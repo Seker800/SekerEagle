@@ -4,7 +4,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   padding: 12px 20px;
-  color: var(--eagle-text, #f0f1f3);
+  color: var(--eagle-text, var(--ui-text));
 }
 .heading,
 .caption {
@@ -22,10 +22,10 @@
 .caption button,
 .photoLink {
   border: 1px solid var(--eagle-line, #ffffff14);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   padding: 7px 10px;
-  color: var(--eagle-accent, #d69b48);
-  background: var(--eagle-panel, #17181b);
+  color: var(--eagle-accent, var(--ui-accent));
+  background: var(--eagle-panel, var(--ui-panel));
   cursor: pointer;
 }
 .heading button:disabled {
@@ -38,7 +38,7 @@
   min-height: 320px;
   border: 1px solid var(--eagle-line, #ffffff14);
   border-radius: 12px;
-  background: var(--eagle-bg, #111214);
+  background: var(--eagle-bg, var(--ui-bg));
   isolation: isolate;
 }
 .caption {
@@ -67,38 +67,38 @@
   box-shadow: 0 4px 16px #0006;
 }
 .frame :global(.leaflet-control-zoom a) {
-  background: var(--eagle-panel, #17181b);
+  background: var(--eagle-panel, var(--ui-panel));
   border-color: var(--eagle-line, #ffffff14);
-  color: var(--eagle-accent, #d69b48);
+  color: var(--eagle-accent, var(--ui-accent));
 }
 .frame :global(.leaflet-control-zoom a:hover),
 .frame :global(.leaflet-control-zoom a:focus-visible) {
-  background: var(--eagle-panel-raised, #1d1f23);
+  background: var(--eagle-panel-raised, var(--ui-raised));
 }
 .frame :global(.leaflet-control-zoom a.leaflet-disabled) {
   color: var(--eagle-muted, #989aa2);
-  background: var(--eagle-panel, #17181b);
+  background: var(--eagle-panel, var(--ui-panel));
   opacity: 0.5;
 }
 .frame :global(.leaflet-control-attribution) {
-  background: var(--eagle-bg, #111214);
+  background: var(--eagle-bg, var(--ui-bg));
   color: var(--eagle-muted, #989aa2);
   font-size: 10px;
 }
 .frame :global(.leaflet-control-attribution a) {
-  color: var(--eagle-accent, #d69b48);
+  color: var(--eagle-accent, var(--ui-accent));
 }
 .frame :global(.leaflet-popup-content-wrapper),
 .frame :global(.leaflet-popup-tip) {
-  color: var(--eagle-text, #f0f1f3);
-  background: var(--eagle-panel-raised, #1d1f23);
+  color: var(--eagle-text, var(--ui-text));
+  background: var(--eagle-panel-raised, var(--ui-raised));
 }
 .frame :global(.leaflet-popup-content-wrapper) {
   border: 1px solid var(--eagle-line, #ffffff14);
   box-shadow: 0 8px 30px #0008;
 }
 .frame :global(a.leaflet-popup-close-button) {
-  color: var(--eagle-accent, #d69b48);
+  color: var(--eagle-accent, var(--ui-accent));
 }
 
 @media (max-width: 720px) {
@@ -128,10 +128,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--eagle-accent, #d69b48);
+  border: 2px solid var(--eagle-accent, var(--ui-accent));
   border-radius: 50%;
-  color: var(--eagle-text, #f0f1f3);
-  background: color-mix(in srgb, var(--eagle-accent, #d69b48) 35%, var(--eagle-bg, #111214));
+  color: var(--eagle-text, var(--ui-text));
+  background: color-mix(
+    in srgb,
+    var(--eagle-accent, var(--ui-accent)) 35%,
+    var(--eagle-bg, var(--ui-bg))
+  );
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -142,7 +146,7 @@
 }
 .cluster:hover,
 .cluster:focus-visible {
-  outline: 2px solid var(--eagle-text, #f0f1f3);
+  outline: 2px solid var(--eagle-text, var(--ui-text));
   outline-offset: 3px;
 }
 .hint {
@@ -169,8 +173,8 @@
   border: 0;
   overflow: hidden;
   aspect-ratio: 1;
-  border-radius: 8px;
-  background: var(--eagle-panel-raised, #1d1f23);
+  border-radius: var(--ui-radius-control);
+  background: var(--eagle-panel-raised, var(--ui-raised));
   cursor: pointer;
 }
 .photos > button img {
@@ -188,10 +192,10 @@
 }
 .pages button,
 .selection button:not(.photos button) {
-  color: var(--eagle-text, #f0f1f3);
-  background: var(--eagle-panel-raised, #1d1f23);
+  color: var(--eagle-text, var(--ui-text));
+  background: var(--eagle-panel-raised, var(--ui-raised));
   border: 1px solid var(--eagle-line, #ffffff14);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   padding: 8px 14px;
   cursor: pointer;
 }
@@ -216,7 +220,7 @@
   padding: 16px;
   border: 1px solid var(--eagle-line, #ffffff14);
   border-radius: 12px;
-  background: var(--eagle-panel, #17181b);
+  background: var(--eagle-panel, var(--ui-panel));
   max-height: calc(100dvh - 140px);
   overflow: auto;
   align-self: start;
@@ -237,7 +241,7 @@
 .panel,
 .selection {
   scrollbar-width: thin;
-  scrollbar-color: var(--eagle-muted, #989aa2) var(--eagle-panel, #17181b);
+  scrollbar-color: var(--eagle-muted, #989aa2) var(--eagle-panel, var(--ui-panel));
 }
 @media (max-width: 720px) {
   .pages button,
@@ -255,7 +259,7 @@
 .clusterPlace {
   display: block;
   max-width: 100%;
-  color: var(--eagle-text, #f0f1f3);
+  color: var(--eagle-text, var(--ui-text));
   font: 500 10px/1.2 system-ui;
   white-space: nowrap;
   overflow: hidden;

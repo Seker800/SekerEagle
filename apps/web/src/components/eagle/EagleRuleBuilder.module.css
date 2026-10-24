@@ -52,7 +52,7 @@
   box-sizing: border-box;
   min-height: 36px;
   border: 1px solid #444b54;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   outline: none;
   color: #edf0f3;
   background: #24282d;
@@ -71,8 +71,8 @@
 .builder select:focus,
 .builder input:focus,
 .tagPicker[open] > summary {
-  border-color: #2f91ed;
-  box-shadow: 0 0 0 1px #2f91ed;
+  border-color: var(--ui-accent);
+  box-shadow: 0 0 0 1px var(--ui-accent);
 }
 
 .conditionActions,
@@ -90,7 +90,7 @@
   place-items: center;
   padding: 0;
   border: 1px solid #49505a;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   color: #e8ebef;
   background: #272b30;
 }
@@ -165,7 +165,7 @@
   align-items: center;
   padding: 5px 10px;
   border: 1px solid #444b54;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   cursor: pointer;
   list-style: none;
   background: #111418;
@@ -185,7 +185,7 @@
   max-width: 120px;
   padding: 3px 7px;
   border: 1px solid #4a515a;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   overflow: hidden;
   color: #f2f4f7;
   background: #292e34;
@@ -204,7 +204,7 @@
   margin-top: 6px;
   padding: 8px;
   border: 1px solid #444b54;
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   box-shadow: 0 14px 32px rgb(0 0 0 / 38%);
   background: #20242a;
 }
@@ -215,7 +215,7 @@
   gap: 6px;
   padding: 0 8px;
   border: 1px solid #3e454e;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   color: #8f97a1;
   background: #15181c;
 }
@@ -250,7 +250,7 @@
   gap: 8px;
   min-height: 34px;
   padding: 0 7px;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
 }
 
 .tagOptions label:hover {

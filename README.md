@@ -338,6 +338,7 @@ flowchart LR
 | [现用运行状态与交接](docs/current-runtime.md)        | 接手当前群晖图库、模块职责、后台任务与发布边界  |
 | [本机运行手册](docs/operations-runbook.md)           | 安装、启动、诊断、备份与向量服务运维            |
 | [架构文档](docs/architecture.md)                     | 理解服务边界、数据流和长期不变量                |
+| [网页视觉风格](docs/visual-style.md)                 | 深石墨主题、设计变量、密度与组件视觉验收        |
 | [环境模型](docs/environment-model.md)                | 区分开发、测试、生产目标并理解 fail-closed 规则 |
 | [媒体内存操作说明](docs/media-memory-operations.md)  | 调整大图、worker 或容量配置                     |
 | [十万图库性能基线](docs/performance-100k-library.md) | 复跑规模门禁或评估元数据性能                    |

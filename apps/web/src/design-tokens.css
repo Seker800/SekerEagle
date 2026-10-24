@@ -1,0 +1,45 @@
+/* SekerEagle graphite UI. Usage and exceptions: docs/visual-style.md. */
+:root {
+  --ui-bg: #111214;
+  --ui-panel: #17181b;
+  --ui-raised: #202226;
+  --ui-input: #101114;
+  --ui-selected: #2a2d31;
+  --ui-line: rgb(255 255 255 / 8%);
+  --ui-line-subtle: rgb(255 255 255 / 4%);
+  --ui-border-strong: #42464c;
+  --ui-hover: rgb(255 255 255 / 4%);
+  --ui-selected-tint: rgb(255 255 255 / 9%);
+  --ui-text: #f0f1f3;
+  --ui-secondary: #bec4cb;
+  --ui-muted: #969ca5;
+  --ui-accent: #94a5b4;
+  --ui-accent-rgb: 148 165 180;
+  --ui-accent-text: #c6d2dc;
+  --ui-accent-hover: #b4c2ce;
+  --ui-accent-soft: rgb(148 165 180 / 12%);
+  --ui-on-accent: #111820;
+  --ui-success: #9bc5ac;
+  --ui-warning: #cbb48d;
+  --ui-danger: #d19a9e;
+  --ui-radius-control: 5px;
+  --ui-radius-panel: 6px;
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-6: 24px;
+  --ui-font-body: 12px;
+  --ui-font-section: 13px;
+  --ui-font-title: 17px;
+  --ui-control-height: 30px;
+  --ui-shadow-popover: 0 8px 28px rgb(0 0 0 / 32%);
+  /* Existing shared components consume aliases. Portals inherit them from root too. */
+  --eagle-bg: var(--ui-bg);
+  --eagle-panel: var(--ui-panel);
+  --eagle-panel-raised: var(--ui-raised);
+  --eagle-line: var(--ui-line);
+  --eagle-text: var(--ui-text);
+  --eagle-muted: var(--ui-muted);
+  --eagle-accent: var(--ui-accent);
+}

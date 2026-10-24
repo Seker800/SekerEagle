@@ -14,7 +14,7 @@
   gap: 5px;
   min-height: 36px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   padding: 0 8px;
   color: var(--eagle-text);
   background: transparent;
@@ -27,7 +27,7 @@
 }
 .root button[aria-pressed='true'],
 .root button:hover:not(:disabled) {
-  background: rgb(214 155 72 / 14%);
+  background: rgb(var(--ui-accent-rgb) / 14%);
 }
 .count {
   flex: 1;
@@ -56,7 +56,7 @@
 @media (max-width: 720px) {
   .root {
     border: 0;
-    background: #111214;
+    background: var(--ui-bg);
   }
   .root:not(.idle) {
     padding: 8px 16px;

@@ -24,10 +24,10 @@
   width: auto;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #77603a;
-  border-radius: 7px;
+  border: 1px solid var(--ui-muted);
+  border-radius: var(--ui-radius-control);
   background: #1c1a17e6;
-  color: #edc886;
+  color: var(--ui-accent-text);
   cursor: pointer;
   pointer-events: auto;
 }
@@ -38,5 +38,5 @@
   padding: 8px;
   background: #231b17;
   color: #efb6a0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
 }

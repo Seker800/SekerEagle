@@ -13,24 +13,24 @@
   width: 220px;
   padding: 6px;
   border: 1px solid rgb(255 255 255 / 11%);
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   gap: 2px;
   color: #d7d9dd;
-  background: #202226;
+  background: var(--ui-raised);
   box-shadow: 0 12px 32px rgb(0 0 0 / 42%);
 }
 .title {
   padding: 6px 8px 7px;
   border-bottom: 1px solid var(--eagle-line);
-  color: #858b94;
+  color: var(--ui-muted);
   font-size: 10px;
 }
 .menu button {
   min-height: 30px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -42,7 +42,7 @@
 }
 .menu button:hover {
   color: #fff;
-  background: rgb(255 255 255 / 7%);
+  background: var(--ui-line);
 }
 .menu button:disabled {
   opacity: 0.5;

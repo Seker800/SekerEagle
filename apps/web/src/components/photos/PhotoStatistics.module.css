@@ -35,7 +35,7 @@
   align-items: center;
   gap: 2px;
   padding: 2px;
-  background: rgb(255 255 255 / 3%);
+  background: var(--ui-hover);
   border: 1px solid var(--eagle-line);
   border-radius: 5px;
 }
@@ -50,7 +50,7 @@
 }
 .segmented button[aria-pressed='true'] {
   color: var(--eagle-text);
-  background: rgb(255 255 255 / 9%);
+  background: var(--ui-selected-tint);
 }
 .segmented button:hover {
   color: var(--eagle-text);
@@ -163,7 +163,7 @@
   border: 1px solid var(--eagle-line);
   border-radius: 4px;
   padding: 4px 7px;
-  background: rgb(255 255 255 / 4%);
+  background: var(--ui-line-subtle);
   text-align: left;
 }
 .activeFilters .reset {
@@ -207,7 +207,7 @@
 .trend {
   min-width: 0;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   padding: 12px 14px 6px;
 }
 .chartHeader {
@@ -345,14 +345,14 @@
   align-items: center;
   column-gap: 10px;
   border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 4%);
+  border-bottom: 1px solid var(--ui-line-subtle);
   padding: 7px 4px;
   background: transparent;
   text-align: left;
   border-radius: 0;
 }
 .rankRow:hover {
-  background: rgb(255 255 255 / 3%);
+  background: var(--ui-hover);
 }
 .rankRow[aria-pressed='true'] {
   background: rgb(255 255 255 / 5%);
@@ -378,7 +378,7 @@
 .rankTrack {
   height: 2px;
   width: 100%;
-  background: rgb(255 255 255 / 4%);
+  background: var(--ui-line-subtle);
   display: block;
 }
 .rankTrack > span {

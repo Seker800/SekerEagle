@@ -10,7 +10,7 @@
 .status button {
   padding: 6px 9px;
   border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: #e5e7eb;
   background: #25282e;
   font: inherit;

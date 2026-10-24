@@ -18,7 +18,7 @@
   color: var(--color-text-primary, #f1f2f4);
   border: 1px solid rgb(255 255 255 / 14%);
   background: rgb(255 255 255 / 5%);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   cursor: pointer;
 }
 .root .button:disabled {

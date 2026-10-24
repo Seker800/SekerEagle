@@ -6,7 +6,7 @@
   grid-template-columns: 210px minmax(0, 1fr);
   overflow: hidden;
   color: #cfd2d7;
-  background: #151619;
+  background: var(--ui-panel);
 }
 .visuallyHidden {
   position: absolute;
@@ -22,9 +22,9 @@
 .scopePanel {
   min-width: 0;
   padding: 10px 9px;
-  border-right: 1px solid rgb(255 255 255 / 7%);
+  border-right: 1px solid var(--ui-line);
   overflow: auto;
-  background: #18191c;
+  background: var(--ui-panel);
 }
 .scopeHeader {
   height: 38px;
@@ -35,7 +35,7 @@
   color: #eef0f3;
 }
 .scopeHeader > span {
-  color: #d69b48;
+  color: var(--ui-accent);
   display: grid;
   place-items: center;
 }
@@ -54,7 +54,7 @@
   height: 30px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   grid-template-columns: 17px minmax(0, 1fr) auto;
   align-items: center;
@@ -68,7 +68,7 @@
 .groupList button:hover,
 .scopePanel nav .scopeActive,
 .groupList .scopeActive {
-  color: #f0f1f3;
+  color: var(--ui-text);
   background: #2b2d31;
 }
 .scopePanel button span {
@@ -106,7 +106,7 @@
 }
 .sectionLabel button:hover {
   color: #fff;
-  background: #292b30;
+  background: var(--ui-selected);
 }
 .groupDot,
 .tagBullet {
@@ -124,10 +124,10 @@
   margin: 2px 3px 6px;
   height: 28px;
   border: 1px solid #3a3c42;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   overflow: hidden;
-  background: #111215;
+  background: var(--ui-bg);
 }
 .groupForm input {
   min-width: 0;
@@ -142,7 +142,7 @@
 .groupForm button {
   width: 28px;
   border: 0;
-  color: #d69b48;
+  color: var(--ui-accent);
   background: transparent;
   cursor: pointer;
 }
@@ -161,14 +161,14 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #858a92;
+  color: var(--ui-muted);
   background: transparent;
   cursor: pointer;
   font-size: 10px;
 }
 .groupActions button:hover {
   color: #dddfe3;
-  background: #292b30;
+  background: var(--ui-selected);
 }
 .directory {
   min-width: 0;
@@ -179,12 +179,12 @@
 .toolbar {
   min-height: 49px;
   padding: 7px 13px;
-  border-bottom: 1px solid rgb(255 255 255 / 7%);
+  border-bottom: 1px solid var(--ui-line);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  background: #17181b;
+  background: var(--ui-panel);
 }
 .toolbarPrimary {
   min-width: 0;
@@ -204,7 +204,7 @@
   font-size: 10px;
 }
 .toolbarPrimary em {
-  color: #d9ae70;
+  color: var(--ui-accent-text);
   font-size: 10px;
   font-style: normal;
 }
@@ -219,16 +219,16 @@
   width: min(235px, 28vw);
   height: 30px;
   padding: 0 8px;
-  border: 1px solid #303238;
-  border-radius: 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 6px;
   color: #727780;
-  background: #111215;
+  background: var(--ui-bg);
 }
 .searchBox:focus-within {
-  border-color: rgb(214 155 72 / 55%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
 }
 .searchBox input {
   min-width: 0;
@@ -243,8 +243,8 @@
 .selectionActions select {
   height: 30px;
   padding: 0 25px 0 8px;
-  border: 1px solid #303238;
-  border-radius: 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
   color: #aeb2b8;
   background: #202125;
   font-size: 10px;
@@ -252,8 +252,8 @@
 .layoutSwitch {
   height: 30px;
   padding: 2px;
-  border: 1px solid #303238;
-  border-radius: 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
   display: flex;
   background: #202125;
 }
@@ -284,15 +284,15 @@
   width: 205px;
   height: 29px;
   padding-left: 7px;
-  border: 1px solid #303238;
-  border-radius: 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   color: #727780;
-  background: #111215;
+  background: var(--ui-bg);
 }
 .createForm:focus-within {
-  border-color: rgb(214 155 72 / 55%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
 }
 .createForm input {
   min-width: 0;
@@ -308,8 +308,8 @@
   height: 100%;
   padding: 0 8px;
   border: 0;
-  border-left: 1px solid #303238;
-  color: #e2b676;
+  border-left: 1px solid var(--ui-border-strong);
+  color: var(--ui-accent-text);
   background: transparent;
   cursor: pointer;
   font-size: 10px;
@@ -329,8 +329,8 @@
 .editBar button {
   height: 29px;
   padding: 0 8px;
-  border: 1px solid #303238;
-  border-radius: 6px;
+  border: 1px solid var(--ui-border-strong);
+  border-radius: var(--ui-radius-control);
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -343,7 +343,7 @@
 .selectionActions button:hover,
 .editBar button:hover {
   color: #fff;
-  background: #2a2c31;
+  background: var(--ui-selected);
 }
 .selectionActions .danger {
   color: #dc9696;
@@ -351,11 +351,11 @@
 .editBar {
   min-height: 41px;
   padding: 6px 13px;
-  border-bottom: 1px solid rgb(214 155 72 / 18%);
+  border-bottom: 1px solid rgb(var(--ui-accent-rgb) / 18%);
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgb(214 155 72 / 6%);
+  background: rgb(var(--ui-accent-rgb) / 6%);
 }
 .editBar label {
   display: flex;
@@ -372,7 +372,7 @@
   border-radius: 5px;
   outline: 0;
   color: #e6e8eb;
-  background: #111215;
+  background: var(--ui-bg);
 }
 .error {
   margin: 0;
@@ -444,12 +444,12 @@
 }
 .catalogSection button:hover {
   color: #eef0f2;
-  background: #202226;
+  background: var(--ui-raised);
 }
 .catalogSection .tagSelected {
   color: #fff;
-  background: #303237;
-  box-shadow: inset 2px 0 #d69b48;
+  background: var(--ui-border-strong);
+  box-shadow: inset 2px 0 var(--ui-accent);
 }
 .tagName {
   overflow: hidden;
@@ -462,7 +462,7 @@
   font-size: 9px;
 }
 .star {
-  color: #d69b48;
+  color: var(--ui-accent);
 }
 .openHint {
   opacity: 0;
@@ -532,7 +532,7 @@
   .scopePanel {
     padding: 6px 8px;
     border-right: 0;
-    border-bottom: 1px solid rgb(255 255 255 / 7%);
+    border-bottom: 1px solid var(--ui-line);
     overflow-x: auto;
   }
   .scopeHeader {
@@ -596,11 +596,11 @@
     background: #1c1c20;
   }
   .createForm button {
-    color: #82aaff;
+    color: var(--ui-accent);
   }
   .createForm:focus-within,
   .searchBox:focus-within {
-    border-color: #82aaff;
+    border-color: var(--ui-accent);
   }
   .toolbar button,
   .toolbar select {

@@ -1,11 +1,4 @@
 .page {
-  --eagle-bg: #111214;
-  --eagle-panel: #17181b;
-  --eagle-panel-raised: #1d1f23;
-  --eagle-line: rgb(255 255 255 / 8%);
-  --eagle-text: #f0f1f3;
-  --eagle-muted: #8d929b;
-  --eagle-accent: #d69b48;
   height: 100dvh;
   overflow: hidden;
   color: var(--eagle-text);
@@ -57,7 +50,7 @@
   min-height: 28px;
   padding: 0 8px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 8px;
@@ -69,7 +62,7 @@
 }
 .sidebar button:hover {
   color: var(--eagle-text);
-  background: rgb(255 255 255 / 4%);
+  background: var(--ui-line-subtle);
 }
 .sidebar [data-navigation-content] > button > span,
 .navSection > button > span {
@@ -79,14 +72,14 @@
 }
 .sidebar .navActive {
   color: #fff;
-  background: rgb(214 155 72 / 14%);
+  background: rgb(var(--ui-accent-rgb) / 14%);
 }
 .sidebar .navActive svg {
   color: var(--eagle-accent);
 }
 .sidebar .navFilterActive {
-  color: #f1d2a5;
-  background: rgb(214 155 72 / 12%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 12%);
 }
 .sidebar .navFilterActive svg {
   color: var(--eagle-accent);
@@ -131,7 +124,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #121316;
+  background: var(--ui-bg);
   container-type: inline-size;
 }
 .settingsLibrary {
@@ -147,7 +140,7 @@
   align-items: center;
   gap: 24px;
   flex: 0 0 auto;
-  background: #18191c;
+  background: var(--ui-panel);
 }
 .workspaceNavigation h1 {
   min-width: 72px;
@@ -164,15 +157,15 @@
 .workspaceNavigation[data-layout='tabs'] nav {
   padding: 3px;
   border: 1px solid var(--eagle-line);
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   gap: 2px;
-  background: #121316;
+  background: var(--ui-bg);
 }
 .workspaceNavigation button {
   min-height: 30px;
   padding: 0 11px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -183,11 +176,11 @@
 }
 .workspaceNavigation button:hover {
   color: var(--eagle-text);
-  background: rgb(255 255 255 / 4%);
+  background: var(--ui-line-subtle);
 }
 .workspaceNavigation .workspaceNavigationActive {
   color: #f2f3f4;
-  background: #2a2c31;
+  background: var(--ui-selected);
   box-shadow: 0 1px 2px rgb(0 0 0 / 28%);
 }
 .workspaceNavigation button span {
@@ -195,7 +188,7 @@
   padding: 1px 5px;
   border-radius: 999px;
   color: #b7bbc2;
-  background: rgb(255 255 255 / 7%);
+  background: var(--ui-line);
   font-size: 10px;
   text-align: center;
 }
@@ -210,7 +203,7 @@
   flex-direction: column;
   align-items: stretch;
   gap: 16px;
-  background: #17181b;
+  background: var(--ui-panel);
 }
 .settingsLibrary .workspaceNavigation h1 {
   min-width: 0;
@@ -229,12 +222,12 @@
   min-height: 34px;
   padding: 0 10px;
   justify-content: flex-start;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   text-align: left;
 }
 .settingsLibrary .workspaceNavigation .workspaceNavigationActive {
   color: #f4f4f5;
-  background: rgb(255 255 255 / 8%);
+  background: var(--ui-line);
   box-shadow: none;
 }
 .settingsLibrary > :not(.workspaceNavigation) {
@@ -250,7 +243,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #18191c;
+  background: var(--ui-panel);
 }
 .visuallyHidden {
   position: absolute;
@@ -297,16 +290,16 @@
   margin-left: auto;
   padding: 0 9px;
   border: 1px solid var(--eagle-line);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 7px;
-  background: #101114;
+  background: var(--ui-input);
   color: #747a83;
 }
 .searchBox:focus-within {
-  border-color: rgb(214 155 72 / 55%);
-  box-shadow: 0 0 0 3px rgb(214 155 72 / 9%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
+  box-shadow: 0 0 0 3px rgb(var(--ui-accent-rgb) / 9%);
 }
 .searchBox input {
   width: 100%;
@@ -338,13 +331,13 @@
   height: 32px;
   padding: 0 9px;
   border: 1px solid var(--eagle-line);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 5px;
   color: #bdc1c7;
-  background: #202226;
+  background: var(--ui-raised);
   cursor: pointer;
 }
 .toolbarActions > button {
@@ -354,12 +347,12 @@
 .toolbarActions > button:hover,
 .emptyState button:hover {
   color: #fff;
-  background: #292c31;
+  background: var(--ui-selected);
 }
 .toolbarActions .filterActive {
-  border-color: rgb(214 155 72 / 55%);
-  color: #f0c78c;
-  background: rgb(214 155 72 / 10%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 10%);
 }
 .toolbarActions .dangerAction {
   color: #e7a0a0;
@@ -371,10 +364,10 @@
 .toolbarActions .filterActive span {
   min-width: 17px;
   height: 17px;
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
-  color: #1a1209;
+  color: var(--ui-on-accent);
   background: var(--eagle-accent);
   font-size: 10px;
   font-weight: 800;
@@ -383,12 +376,12 @@
   height: 32px;
   padding: 0 8px;
   border: 1px solid var(--eagle-line);
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   align-items: center;
   gap: 6px;
   color: #8e949d;
-  background: #202226;
+  background: var(--ui-raised);
 }
 .thumbnailControl input {
   width: 72px;
@@ -397,9 +390,9 @@
 }
 .statusBar {
   padding: 7px 16px;
-  border-bottom: 1px solid rgb(214 155 72 / 18%);
-  color: #e4bb7e;
-  background: rgb(214 155 72 / 7%);
+  border-bottom: 1px solid rgb(var(--ui-accent-rgb) / 18%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 7%);
   font-size: 12px;
 }
 .errorBar {
@@ -446,7 +439,7 @@
   padding: 0;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--ui-radius-control);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -457,11 +450,11 @@
 }
 .assetCard:hover {
   border-color: rgb(255 255 255 / 12%);
-  background: #1c1e22;
+  background: var(--ui-raised);
 }
 .assetCardSelected {
   border-color: transparent;
-  background: #1d1e21;
+  background: var(--ui-raised);
 }
 .assetCardSelected::after {
   content: '';
@@ -470,8 +463,8 @@
   z-index: 2;
   pointer-events: none;
   border: 2px solid var(--eagle-accent);
-  border-radius: 8px;
-  box-shadow: inset 0 0 0 1px rgb(214 155 72 / 18%);
+  border-radius: var(--ui-radius-control);
+  box-shadow: inset 0 0 0 1px rgb(var(--ui-accent-rgb) / 18%);
 }
 .preview {
   position: relative;
@@ -482,7 +475,7 @@
   place-items: center;
   overflow: hidden;
   color: #555b64;
-  background: #202226;
+  background: var(--ui-raised);
 }
 .selectionMark {
   position: absolute;
@@ -492,10 +485,10 @@
   width: 20px;
   height: 20px;
   border: 1px solid rgb(255 255 255 / 38%);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   display: grid;
   place-items: center;
-  color: #17120c;
+  color: var(--ui-on-accent);
   background: rgb(16 17 19 / 72%);
 }
 .assetCardSelected .selectionMark {
@@ -684,16 +677,16 @@
   box-sizing: border-box;
   padding: 7px 8px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   outline: 0;
   resize: vertical;
   color: #d4d7db;
-  background: #101114;
+  background: var(--ui-input);
   font-size: 11px;
 }
 .annotationForm input:focus,
 .annotationForm textarea:focus {
-  border-color: rgb(214 155 72 / 55%);
+  border-color: rgb(var(--ui-accent-rgb) / 55%);
 }
 .annotationForm fieldset {
   margin: 0;
@@ -805,16 +798,16 @@
   min-height: 27px;
   padding: 0 8px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: #92979f;
   background: #222429;
   cursor: pointer;
   font-size: 11px;
 }
 .tagEditor .tagAssigned {
-  border-color: rgb(214 155 72 / 45%);
-  color: #ecc58e;
-  background: rgb(214 155 72 / 12%);
+  border-color: rgb(var(--ui-accent-rgb) / 45%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 12%);
 }
 .tagEditor .tagAdd {
   border-style: dashed;
@@ -825,9 +818,9 @@
   background: transparent;
 }
 .tagEditor .tagAdd:hover {
-  border-color: rgb(214 155 72 / 40%);
-  color: #efc78e;
-  background: rgb(214 155 72 / 8%);
+  border-color: rgb(var(--ui-accent-rgb) / 40%);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 8%);
 }
 .batchTagSummary {
   margin: -2px 0 9px;
@@ -874,14 +867,14 @@
   position: fixed;
   inset: 70px 18px 18px;
   z-index: 20;
-  border: 2px dashed rgb(214 155 72 / 70%);
+  border: 2px dashed rgb(var(--ui-accent-rgb) / 70%);
   border-radius: 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  color: #f2d2a4;
+  color: var(--ui-accent-text);
   background: rgb(12 13 15 / 88%);
   backdrop-filter: blur(10px);
   pointer-events: none;
@@ -890,7 +883,7 @@
   font-size: 18px;
 }
 .dropOverlay span {
-  color: #a99a86;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 
@@ -977,7 +970,7 @@
   border-radius: 4px;
   font-size: 10px;
   background: #161616bb;
-  color: #f4d09b;
+  color: var(--ui-accent-text);
   pointer-events: none;
 }
 
@@ -1030,7 +1023,6 @@
 /* Phone chrome floats above the shared scroll view. */
 @media (max-width: 720px) {
   .page {
-    --eagle-bg: #09090b;
     --eagle-panel: #1c1c1e;
     --eagle-panel-raised: #29292b;
   }
@@ -1105,7 +1097,7 @@
 
 @media (max-width: 720px) {
   .page {
-    --eagle-accent: #82aaff;
+    --eagle-accent: var(--ui-accent);
     --eagle-panel: #1c1c20;
     --eagle-panel-raised: #242428;
   }

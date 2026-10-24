@@ -14,8 +14,8 @@
   height: 30px;
   padding: 2px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
-  background: #111216;
+  border-radius: var(--ui-radius-control);
+  background: var(--ui-bg);
   cursor: pointer;
 }
 .hue {
@@ -51,15 +51,15 @@
   height: 30px;
   padding: 0 8px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: #d6d9de;
-  background: #101114;
+  background: var(--ui-input);
 }
 .valueRow button {
   height: 30px;
   padding: 0 10px;
   border: 1px solid var(--eagle-line);
-  border-radius: 6px;
+  border-radius: var(--ui-radius-control);
   color: #c7cbd1;
   background: #24262b;
   cursor: pointer;

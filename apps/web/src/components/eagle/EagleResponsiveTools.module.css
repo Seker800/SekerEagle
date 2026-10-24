@@ -1,5 +1,5 @@
 .trigger {
-  composes: surface from './EagleGlass.module.css';
+  composes: surface from './EagleSurface.module.css';
   position: relative;
   display: inline-grid;
   place-items: center;
@@ -17,15 +17,14 @@
   right: 0;
   min-width: 14px;
   height: 14px;
-  border-radius: 8px;
+  border-radius: var(--ui-radius-control);
   font-size: 9px;
   color: #fff;
   background: #3479f6;
 }
 .sheet {
-  composes: surface from './EagleGlass.module.css';
-  --eagle-glass-tint: rgb(30 30 34 / 68%);
-  --eagle-text: #f0f1f3;
+  composes: surface from './EagleSurface.module.css';
+  --eagle-text: var(--ui-text);
   --eagle-muted: #a6a6ad;
   --eagle-line: rgb(255 255 255 / 12%);
   --eagle-bg: #19191c;
@@ -64,7 +63,7 @@
   min-width: 44px;
   min-height: 36px;
   border: 0;
-  color: #8bb1ff;
+  color: var(--ui-accent);
   background: transparent;
   font: inherit;
   font-size: 13px;
@@ -100,11 +99,11 @@
 }
 .sheet .controls > button:hover,
 .sheet .controls summary:hover {
-  background: rgb(255 255 255 / 8%);
+  background: var(--ui-line);
 }
 .sheet .controls > button[aria-expanded='true'],
 .sheet .controls > button[aria-pressed='true'] {
-  color: #8bb1ff;
+  color: var(--ui-accent);
 }
 .sheet .controls input[type='range'] {
   width: auto;
@@ -118,7 +117,7 @@
   padding-top: 12px;
 }
 .trigger:focus-visible {
-  outline: 2px solid #8bb1ff;
+  outline: 2px solid var(--ui-accent);
   outline-offset: 3px;
 }
 @keyframes reveal {

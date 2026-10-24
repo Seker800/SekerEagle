@@ -9,7 +9,7 @@
   gap: 18px;
   padding: 14px 0;
   border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  border-bottom: 1px solid var(--ui-line);
   border-radius: 0;
   background: transparent;
 }
@@ -24,7 +24,7 @@
   font-size: 12px;
 }
 .eyebrow {
-  color: #d69b48;
+  color: var(--ui-accent);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -35,7 +35,7 @@
   text-align: right;
 }
 .coverage strong {
-  color: #f2d09b;
+  color: var(--ui-accent-text);
   font-size: 25px;
 }
 .coverage span,
@@ -63,7 +63,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  border-block: 1px solid rgb(255 255 255 / 8%);
+  border-block: 1px solid var(--ui-line);
 }
 .metrics article {
   min-width: 0;
@@ -71,7 +71,7 @@
   gap: 5px;
   padding: 12px;
   border: 0;
-  border-right: 1px solid rgb(255 255 255 / 8%);
+  border-right: 1px solid var(--ui-line);
   border-radius: 0;
   background: transparent;
 }
@@ -90,10 +90,10 @@
 .actions button {
   min-height: 32px;
   padding: 0 11px;
-  border: 1px solid rgb(214 155 72 / 30%);
-  border-radius: 7px;
-  color: #e4bc7e;
-  background: rgb(214 155 72 / 7%);
+  border: 1px solid rgb(var(--ui-accent-rgb) / 30%);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-accent-text);
+  background: rgb(var(--ui-accent-rgb) / 7%);
   cursor: pointer;
 }
 .actions button:disabled {
@@ -103,7 +103,7 @@
 .error,
 .notice {
   padding: 8px 10px;
-  border-radius: 7px;
+  border-radius: var(--ui-radius-control);
   font-size: 11px;
 }
 .error {
