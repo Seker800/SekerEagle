@@ -22,14 +22,16 @@ export function PhotoStatistics({
   ownerId: string | null;
   includePrivate: boolean;
 }) {
-  const [input, setInput] = useState<PhotoStatisticsQuery>({
-    grain: 'week',
+  const [dates, setDates] = useState(() => statisticsDateRange(3));
+  const [input, setInput] = useState<PhotoStatisticsQuery>(() => ({
+    start: dates.start,
+    end: dates.end,
+    grain: 'month',
     groupBy: 'camera',
     cameras: [],
     lenses: [],
-  });
-  const [dates, setDates] = useState({ start: '', end: '' });
-  const [preset, setPreset] = useState<StatisticsRange | 'custom'>('all');
+  }));
+  const [preset, setPreset] = useState<StatisticsRange | 'custom'>(3);
   const [panel, setPanel] = useState<Panel>(null);
   const [search, setSearch] = useState('');
   const [rangeError, setRangeError] = useState(false);

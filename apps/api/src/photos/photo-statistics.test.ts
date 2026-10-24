@@ -142,7 +142,7 @@ test('all query variants keep empty results explicit and build only parameterize
   assert.ok(queries[0]!.values.includes('L'));
 });
 
-test('statistics defaults to weekly camera series and preserves explicit total queries', async () => {
+test('statistics defaults to monthly camera series and preserves explicit total queries', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
   await pipe.transform({ groupBy: 'total' }, { type: 'query', metatype: PhotoStatisticsQueryDto });
   let text = '';
@@ -166,8 +166,9 @@ test('statistics defaults to weekly camera series and preserves explicit total q
   } as never);
   const result = await service.get('owner', false, {});
   assert.equal(result.groupBy, 'camera');
-  assert.equal(result.grain, 'week');
+  assert.equal(result.grain, 'month');
   assert.match(text, /camera AS device/);
+  await service.get('owner', false, { grain: 'week' });
   assert.match(text, /date_trunc/);
   await service.get('owner', false, { groupBy: 'total', grain: 'month' });
   assert.match(text, /''::text AS device/);

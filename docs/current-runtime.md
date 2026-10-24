@@ -230,6 +230,8 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 
 ## 2026-10-24 照片统计周周期修订
 
-按最新用户反馈，本地 API／web 默认同步为按相机、按周显示，提供最近 1／3／5 个日历年与所有时长（默认），保留自定义日期和年／月切换。周一为周起点，周中日期范围不计入范围外照片；悬浮框跟随指针，浏览器实测 160×42px。工作台复用原有 27 张私有照片样本和 4 张合成照片重新导入，未重新连接群晖；地图归档保留。进程／容器从 `.omx/artifacts/photo-workbench.json` 核验，当前轮工作台日志为 `statistics-week-workbench.log`。
+按最新用户反馈，本地 API／web 默认同步为按相机、按周显示，提供最近 1／3／5 个日历年与所有时长（最新默认最近 3 年、按月），保留自定义日期和年／月切换。周一为周起点，周中日期范围不计入范围外照片；悬浮框跟随指针，浏览器实测 160×42px。工作台复用原有 27 张私有照片样本和 4 张合成照片重新导入，未重新连接群晖；地图归档保留。进程／容器从 `.omx/artifacts/photo-workbench.json` 核验，当前轮工作台日志为 `statistics-week-workbench.log`。
 
 完整 `npm run ci:check` 通过，网页 696 项、API 341 项通过（1 项既有条件跳过）；统计聚焦测试为 API 8 项、网页及日期／曲线 20 项。真实 PostgreSQL 验证周跨年、周中范围、补零和原有 owner／模式／私密／版本隔离。浏览器核对四档范围、年／月／周切换、默认相机曲线与小型提示，实际鼠标命中仅显示一条设备数据。证据位于 `.omx/artifacts/statistics-week-*`，截图为 `statistics-week-final.png`。本轮未推送或部署生产，群晖图库和后台任务不变。
+
+同日后续默认值已改为「最近 3 年＋按月＋按相机」。页面首次请求即携带最近三年的起止日期，日期输入框与按钮同源初始化；API 默认粒度同步为 month。工作台复用原有样本重建，最新本地日志为 `statistics-defaults-workbench.log`；真实数据库回归与工程核验为 `statistics-defaults-*`，未重新读取群晖或部署生产。

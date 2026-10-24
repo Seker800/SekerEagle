@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
 import { PhotoStatistics } from './PhotoStatistics';
+import { statisticsDateRange } from './photo-statistics-range';
 import { PhotoUsageChart, PhotoTimeChart } from './PhotoStatisticsCharts';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../lib/photo-statistics-api', () => ({ getPhotoStatistics: get }));
@@ -285,13 +286,18 @@ it('does not keep another owner or privacy scope visible while a new query loads
   expect(screen.getByRole('status')).toHaveTextContent('正在加载统计…');
 });
 
-it('defaults to camera curves and weekly buckets, and offers year/month/week', async () => {
+it('defaults to the last three years with monthly camera curves, and offers year/month/week', async () => {
   get.mockResolvedValue(data);
   const view = mount();
   await screen.findByRole('img', { name: '拍摄量曲线图' });
-  expect(get.mock.calls[0][0]).toMatchObject({ groupBy: 'camera', grain: 'week' });
+  expect(get.mock.calls[0][0]).toMatchObject({
+    ...statisticsDateRange(3),
+    groupBy: 'camera',
+    grain: 'month',
+  });
+  expect(screen.getByRole('button', { name: '最近3年' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '按相机' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: '周' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '月' })).toHaveAttribute('aria-pressed', 'true');
   for (const name of ['年', '月', '周'])
     expect(screen.getByRole('button', { name })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '日' })).not.toBeInTheDocument();
@@ -301,7 +307,7 @@ it('defaults to camera curves and weekly buckets, and offers year/month/week', a
   );
 });
 
-it('offers rolling calendar-year ranges without changing equipment or weekly grain', async () => {
+it('offers rolling calendar-year ranges without changing equipment or monthly grain', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date(2026, 9, 24, 12));
   try {
@@ -310,13 +316,20 @@ it('offers rolling calendar-year ranges without changing equipment or weekly gra
     await screen.findByRole('img', { name: '拍摄量曲线图' });
     for (const years of [1, 3, 5]) {
       fireEvent.click(screen.getByRole('button', { name: `最近${years}年` }));
+      expect(screen.getByRole('button', { name: `最近${years}年` })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
       await waitFor(() =>
-        expect(get.mock.calls.at(-1)?.[0]).toMatchObject({
-          start: `${2026 - years}-10-24`,
-          end: '2026-10-24',
-          grain: 'week',
-          groupBy: 'camera',
-        }),
+        expect(
+          get.mock.calls.some(
+            ([query]) =>
+              query.start === `${2026 - years}-10-24` &&
+              query.end === '2026-10-24' &&
+              query.grain === 'month' &&
+              query.groupBy === 'camera',
+          ),
+        ).toBe(true),
       );
     }
     fireEvent.click(screen.getByRole('button', { name: '所有时长' }));

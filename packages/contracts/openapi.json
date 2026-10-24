@@ -5932,7 +5932,7 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": "week",
+              "default": "month",
               "type": "string",
               "enum": ["day", "week", "month", "year"]
             }

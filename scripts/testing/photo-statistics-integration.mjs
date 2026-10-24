@@ -146,7 +146,10 @@ try {
     data.points.map((p) => p.period),
     ['2024-02', '2024-04'],
   );
-  const weekly = await service.get(owner, false, {});
+  const defaults = await service.get(owner, false, {});
+  assert.equal(defaults.grain, 'month');
+  assert.equal(defaults.groupBy, 'camera');
+  const weekly = await service.get(owner, false, { grain: 'week' });
   assert.equal(weekly.grain, 'week');
   assert.equal(weekly.groupBy, 'camera');
   assert.equal(weekly.periods[0], '2024-01-29');

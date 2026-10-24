@@ -26,7 +26,7 @@ function CalendarDate() {
     });
 }
 export class PhotoStatisticsQueryDto {
-  @ApiPropertyOptional({ enum: ['day', 'week', 'month', 'year'], default: 'week' })
+  @ApiPropertyOptional({ enum: ['day', 'week', 'month', 'year'], default: 'month' })
   @IsOptional()
   @IsIn(['day', 'week', 'month', 'year'])
   grain?: 'day' | 'week' | 'month' | 'year';

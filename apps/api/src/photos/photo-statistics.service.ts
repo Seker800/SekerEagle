@@ -58,7 +58,7 @@ interface Summary {
 export class PhotoStatisticsService {
   constructor(private readonly prisma: PrismaService) {}
   async get(ownerId: string, includePrivate: boolean, query: PhotoStatisticsQueryDto) {
-    const grain = query.grain ?? 'week';
+    const grain = query.grain ?? 'month';
     const groupBy = query.groupBy ?? 'camera';
     const dimension =
       groupBy === 'lens'
