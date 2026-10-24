@@ -59,6 +59,25 @@ describe('unified task center', () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(summary);
     vi.mocked(api.updateEagleTaskSchedule).mockResolvedValue(summary.settings);
   });
+  it('explains dependencies, computation and the actual schedule in compact rows', async () => {
+    mount();
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
+    const card = within(screen.getByRole('article'));
+    expect(card.getByText('预览图 + Mac 2B 模型')).toBeVisible();
+    expect(card.getByText('Mac · 较重')).toBeVisible();
+    expect(card.getByText('23:00–06:00')).toBeVisible();
+    expect(screen.queryByText('按后台安排执行')).not.toBeInTheDocument();
+    expect(screen.queryByText('自动维护')).not.toBeInTheDocument();
+  });
+  it('shows a family pause instead of the global processing window', async () => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+      ...summary,
+      groups: [{ ...summary.groups[0]!, policy: { paused: true, priority: 0 } }],
+    });
+    mount();
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
+    expect(within(screen.getByRole('article')).getByText('已暂停')).toBeVisible();
+  });
   it('shows remaining work including failures and keeps completed counts in details', async () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
       ...summary,
