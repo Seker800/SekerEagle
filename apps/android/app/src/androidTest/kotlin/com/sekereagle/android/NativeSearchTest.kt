@@ -23,12 +23,13 @@ class NativeSearchTest {
 
     private fun await(condition: () -> Boolean) = compose.waitUntil(20_000, condition)
 
-    private class Server(val tagCount: Int = 3) : AutoCloseable {
+    private class Server(val tagCount: Int = 3, val assetCount: Int = 1) : AutoCloseable {
         val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
         @Volatile var mediaStatus = 200
         @Volatile var photoStatus = 200
+        @Volatile var assetStatus = 200
         @Volatile var tagDelay = 0L
         private val workers = CopyOnWriteArrayList<Thread>()
         private val tags =
@@ -51,12 +52,14 @@ class NativeSearchTest {
                                         accepted.use { client ->
                                             client.soTimeout = 5000
                                             val reader = client.getInputStream().bufferedReader()
-                                            val path = reader.readLine().split(" ")[1]
+                                            val path =
+                                                (reader.readLine() ?: return@use).split(" ")[1]
                                             paths.add(path)
                                             while (!reader.readLine().isNullOrEmpty()) {}
                                             if (path.contains("manual-tags")) Thread.sleep(tagDelay)
                                             val status =
                                                 when {
+                                                    path.contains("/assets?") -> assetStatus
                                                     path.endsWith("media-capabilities") ->
                                                         mediaStatus
                                                     path.endsWith("photography/facets") ->
@@ -74,8 +77,20 @@ class NativeSearchTest {
                                                         """{"cameras":["Camera A"],"lenses":["Lens B"]}"""
                                                     path.contains("/timeline") ->
                                                         """{"days":[],"total":1}"""
-                                                    path.contains("/assets?") ->
-                                                        """{"items":[{"id":"asset","displayName":"photo","mediaRevision":1,"rowVersion":1,"renditions":[]}],"nextCursor":null}"""
+                                                    path.contains("/assets?") -> {
+                                                        val start =
+                                                            if (path.contains("cursor=")) 60 else 0
+                                                        val rows =
+                                                            (start until
+                                                                    minOf(start + 60, assetCount))
+                                                                .joinToString(",") { i ->
+                                                                    val id =
+                                                                        if (assetCount == 1) "asset"
+                                                                        else "asset$i"
+                                                                    """{"id":"$id","displayName":"photo$i","mediaRevision":1,"rowVersion":1,"renditions":[]}"""
+                                                                }
+                                                        """{"items":[$rows],"nextCursor":${if (assetCount > start + 60) "\"60\"" else "null"}}"""
+                                                    }
                                                     else -> "{}"
                                                 }
                                             val bytes = body.toByteArray()
@@ -381,6 +396,57 @@ class NativeSearchTest {
             assertTrue(model.state.value.searchOpen)
             compose.onNodeWithTag("native-grid").assertDoesNotExist()
             main { model.logout() }
+        }
+    }
+
+    @Test
+    fun refreshFailureRetriesTheCurrentSearchEvenWhenThereIsNoNextPage() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { model.search("flower", NativeFilters(formats = setOf("png"))) }
+            await { !model.state.value.loading }
+            server.assetStatus = 503
+            main { model.refresh() }
+            await { model.state.value.error != null }
+            assertEquals(1, model.state.value.items.size)
+            assertNull(model.state.value.cursor)
+            server.assetStatus = 200
+            compose.onNodeWithText("重试").performScrollTo().performClick()
+            compose.waitUntil(1500) {
+                model.state.value.error == null && !model.state.value.loading
+            }
+            assertEquals("flower", model.state.value.query)
+            assertEquals(setOf("png"), model.state.value.filters.formats)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun failingNextSearchPageWaitsForAnExplicitRetry() {
+        Server(assetCount = 120).use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { model.search("flower") }
+            await { !model.state.value.loading }
+            server.assetStatus = 503
+            compose.onNodeWithTag("native-grid").performScrollToIndex(50)
+            await {
+                server.paths.any {
+                    it.startsWith("/api/photos/assets?") && it.contains("cursor=60")
+                }
+            }
+            Thread.sleep(500)
+            val failures =
+                server.paths.count {
+                    it.startsWith("/api/photos/assets?") && it.contains("cursor=60")
+                }
+            main { model.logout() }
+            assertEquals(
+                "An unavailable server must not trigger an automatic retry loop",
+                1,
+                failures,
+            )
         }
     }
 
