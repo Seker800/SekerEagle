@@ -1042,6 +1042,67 @@ try {
       `Real NAS samples imported into isolated workbench: ${fixture.samples.length}; statistics HTTP validation passed.`,
     );
   }
+  if (process.env.PHOTO_WORKBENCH_APPROVAL_SAMPLES === '1') {
+    const portrait = aspectAssetIds.get('photos:portrait');
+    const landscape = aspectAssetIds.get('photos:landscape');
+    assert.ok(portrait && landscape);
+    const demos = [
+      {
+        kind: 'CITY',
+        title: '本地演示 · 补充拍摄城市',
+        rationale: '这是一份本地合成照片的审批演示，杭州只是演示位置，并非真实拍摄地点。',
+        ids: [b.assetId, portrait],
+        city: {
+          id: 'demo-hangzhou',
+          name: '杭州',
+          country: '中国',
+          region: '浙江',
+          latitude: 30.25,
+          longitude: 120.15,
+          precision: 'CITY',
+        },
+      },
+      {
+        kind: 'SEND_TO_MATERIAL',
+        title: '本地演示 · 发送示例图到素材',
+        rationale: '这份演示申请仅包含合成示例图片，用于验证发送审批，不涉及真实照片。',
+        ids: [landscape],
+      },
+      {
+        kind: 'DELETE',
+        title: '本地演示 · 移入照片回收站',
+        rationale: '这是本地合成示例照片的删除申请演示。这里只提出申请，不会自动删除。',
+        ids: [a.assetId],
+      },
+    ];
+    await waitFor(
+      async () =>
+        (await db.eagleAsset.count({
+          where: { id: { in: demos.flatMap((item) => item.ids) }, lifecycleStatus: 'READY' },
+        })) === 4,
+      'approval sample previews',
+      720,
+    );
+    for (const demo of demos)
+      await api('/photos/agent/requests', {
+        kind: demo.kind,
+        title: demo.title,
+        rationale: demo.rationale,
+        items: demo.ids.map((assetId) => ({
+          assetId,
+          ...(demo.city ? { city: demo.city } : {}),
+          evidenceIds: [],
+          visualReviewed: true,
+          rationale: demo.rationale,
+        })),
+      });
+    assert.equal(
+      await db.eaglePhotoAgentSuggestion.count({ where: { ownerId: owner.id, status: 'PENDING' } }),
+      4,
+    );
+    assert.equal(await db.eaglePhotoLocation.count({ where: { ownerId: owner.id } }), 0);
+    console.log('Seeded three synthetic approval requests; no photo operation was applied.');
+  }
   if (basic) {
     console.log(
       'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',

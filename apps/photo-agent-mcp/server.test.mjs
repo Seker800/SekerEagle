@@ -75,8 +75,30 @@ test('all proposal tools use fixed API paths and never accept a human decision',
   };
   try {
     for (const [name, args, suffix] of [
+      [
+        'photo_request_submit',
+        {
+          kind: 'DELETE',
+          title: 'Test request',
+          rationale: 'Agent defined test request.',
+          items: [
+            {
+              assetId,
+              evidenceIds: [],
+              rationale: 'Reviewed the test photo.',
+              visualReviewed: true,
+            },
+          ],
+        },
+        '/requests',
+      ],
       ['photo_task_create', { kind: 'CITY', assetIds: [assetId] }, '/tasks'],
       ['photo_task', { taskId }, `/tasks/${taskId}`],
+      [
+        'photo_request_history',
+        { taskId, limit: 20, after: assetId },
+        `/tasks/${taskId}/history?after=${assetId}&limit=20`,
+      ],
       [
         'photo_city_candidates',
         { taskId, cities: [city], offsetSeconds: 0 },
@@ -103,6 +125,13 @@ test('all proposal tools use fixed API paths and never accept a human decision',
       if (body) assert.equal(JSON.parse(body).taskId, undefined);
     }
     const tools = (await client.listTools()).tools;
+    assert.equal(
+      tools.find((t) => t.name === 'photo_request_history').annotations.readOnlyHint,
+      true,
+    );
+    const historyCall = calls.find((call) => call.url.includes('/history?'));
+    assert.equal(historyCall.init.method, 'GET');
+    assert.equal(historyCall.init.body, undefined);
     assert.equal(
       tools.find((t) => t.name === 'photo_task_create').annotations.idempotentHint,
       false,
@@ -176,7 +205,7 @@ test('stdio entry point completes a real client handshake without starting or co
   const client = new Client({ name: 'stdio-test', version: '1' });
   try {
     await client.connect(transport);
-    assert.equal((await client.listTools()).tools.length, 7);
+    assert.equal((await client.listTools()).tools.length, 9);
   } finally {
     await client.close();
   }

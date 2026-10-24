@@ -1,30 +1,51 @@
 import { useState } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  IconArrowLeft,
+  IconArrowRight,
+  IconInbox,
+  IconRefresh,
+  IconShieldCheck,
+} from '@tabler/icons-react';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
   listPhotoAgentTasks,
   getPhotoAgentTask,
-  reviewPhotoAgentSuggestion,
+  getPhotoAgentHistory,
+  reviewPhotoRequest,
   undoPhotoAgentSuggestion,
-  cancelPhotoAgentTask,
-  createPhotoAgentTask,
-  type PhotoAgentSuggestion,
   type PhotoAgentTask,
+  type PhotoAgentTaskSummary,
+  type PhotoAgentSuggestion,
   type PhotoCity,
+  type PhotoRequestReviewResult,
 } from '../../lib/photo-agent-api';
 import styles from './PhotoAgentReview.module.css';
+
+const kindLabel = (kind: PhotoAgentTaskSummary['kind']) =>
+  kind === 'CITY' ? t('补充位置') : kind === 'SEND_TO_MATERIAL' ? t('发送到素材') : t('移入回收站');
+const statusLabel = (status: PhotoAgentSuggestion['status']) =>
+  ({
+    PENDING: t('待审批'),
+    APPLYING: t('执行中，可手动重试'),
+    FAILED: t('执行失败，可手动重试'),
+    ACCEPTED: t('已同意并执行'),
+    REJECTED: t('已拒绝'),
+    UNDONE: t('已撤销'),
+  })[status];
+const previewUrl = (id: string) => `/api/photos/agent/photos/${encodeURIComponent(id)}/preview`;
+const pending = (row: PhotoAgentTaskSummary) =>
+  row.status === 'OPEN' &&
+  !(row.expiresAt && Date.parse(row.expiresAt) <= Date.now()) &&
+  (row.pendingCount ?? 0) + (row.retryCount ?? 0) > 0;
+
 export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }) {
   const { ownerId } = useLibraryWorkspace();
   const client = useQueryClient();
   const key = ['eagle', ownerId, 'PHOTO', 'agent', includePrivate];
-  const [taskId, setTaskId] = useState(''),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
-  const [from, setFrom] = useState(''),
-    [to, setTo] = useState(''),
-    [kind, setKind] = useState<'CITY' | 'NON_PHOTO'>('CITY');
-  const [selected, setSelected] = useState<string[]>([]);
+  const [taskId, setTaskId] = useState('');
+  const [filter, setFilter] = useState<'pending' | 'done' | 'all'>('pending');
   const tasks = useInfiniteQuery({
     queryKey: [...key, 'tasks'],
     queryFn: ({ pageParam, signal }) => listPhotoAgentTasks(pageParam, signal),
@@ -38,316 +59,414 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     enabled: Boolean(taskId),
     refetchInterval: 10000,
   });
-  const task = detail.data;
-  const expired = task ? new Date(task.expiresAt).getTime() <= Date.now() : false;
-  async function perform(action: () => Promise<unknown>) {
-    setError('');
-    setBusy(true);
-    try {
-      await action();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t('操作失败'));
-    } finally {
-      await client.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO'] });
-      setBusy(false);
-    }
-  }
-  async function batch(action: 'ACCEPT' | 'REJECT') {
-    if (!task) return;
-    const errors: string[] = [];
-    for (const id of selected) {
-      try {
-        await reviewPhotoAgentSuggestion(task.id, id, action);
-        setSelected((current) => current.filter((x) => x !== id));
-      } catch (reason) {
-        errors.push(reason instanceof Error ? reason.message : t('操作失败'));
-      }
-    }
-    if (errors.length) throw new Error(errors.join('；'));
+  const rows =
+    tasks.data?.pages.flatMap((page) => page.items).filter((row) => row.assetCount > 0) ?? [];
+  const visible = rows.filter(
+    (row) => filter === 'all' || (filter === 'pending' ? pending(row) : !pending(row)),
+  );
+  async function refresh() {
+    await client.invalidateQueries({ queryKey: ['eagle', ownerId] });
   }
   return (
-    <section className={styles.panel} aria-label={t('智能整理')}>
-      <h2>{t('智能整理')}</h2>
-      <p>
-        {t('Agent 提交建议后在这里审核。原始 GPS 和原文件保持不变，接受的城市仅表示城市级位置。')}
-      </p>
-      <form
-        className={styles.form}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void perform(async () => {
-            const start = new Date(`${from}T00:00:00`),
-              end = new Date(`${to}T00:00:00`);
-            end.setDate(end.getDate() + 1);
-            const created = await createPhotoAgentTask(
-              start.toISOString(),
-              end.toISOString(),
-              kind,
-            );
-            setTaskId(created.id);
-            setSelected([]);
-          });
-        }}
-      >
-        <label>
-          {t('开始日期')}
-          <input required type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-        </label>
-        <label>
-          {t('结束日期')}
-          <input
-            required
-            type="date"
-            min={from}
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        <label>
-          {t('整理类型')}
-          <select value={kind} onChange={(e) => setKind(e.target.value as 'CITY' | 'NON_PHOTO')}>
-            <option value="CITY">{t('城市定位')}</option>
-            <option value="NON_PHOTO">{t('非照片清理')}</option>
-          </select>
-        </label>
-        <button disabled={busy}>{t('创建整理任务')}</button>
-      </form>
-      <p>{t('一次任务最多 200 张。创建后交给已连接的 Agent 分析，不会自动修改照片。')}</p>
-      {(error || tasks.error || detail.error) && (
-        <p role="alert">{error || tasks.error?.message || detail.error?.message}</p>
-      )}
-      <div className={styles.tasks}>
-        {tasks.data?.pages
-          .flatMap((p) => p.items)
-          .map((row) => (
-            <button
-              type="button"
-              key={row.id}
-              aria-pressed={taskId === row.id}
-              onClick={() => {
-                setTaskId(row.id);
-                setSelected([]);
-                setError('');
-              }}
-            >
-              {row.kind === 'CITY' ? t('城市定位') : t('非照片清理')} · {row.assetCount} ·{' '}
-              {row.status === 'CANCELLED' ? t('已取消') : t('查看建议')}
-            </button>
-          ))}
-      </div>
-      {tasks.hasNextPage && (
-        <button disabled={tasks.isFetchingNextPage} onClick={() => void tasks.fetchNextPage()}>
-          {t('载入更多任务')}
+    <section className={styles.panel} aria-label={t('整理审批')}>
+      <header className={styles.intro}>
+        <IconShieldCheck size={21} aria-hidden />
+        <div>
+          <h2>{t('由 Agent 提议，由你决定')}</h2>
+          <p>{t('申请不会自动执行。只有你手动点击同意，才会补充位置、发送到素材或移入回收站。')}</p>
+        </div>
+      </header>
+      {taskId ? (
+        <button className={styles.back} type="button" onClick={() => setTaskId('')}>
+          <IconArrowLeft size={14} aria-hidden />
+          {t('返回申请列表')}
         </button>
-      )}
-      {tasks.isPending && <p role="status">{t('正在加载…')}</p>}
-      {task && (
-        <>
-          <p>
-            {t('任务编号')}：<code>{task.id}</code>
-          </p>
-          {(expired || task.status === 'CANCELLED') && (
-            <p role="status">{t('任务已取消或过期，不能应用新建议；已应用项目仍可撤销。')}</p>
-          )}
-          <div className={styles.actions}>
-            <button
-              type="button"
-              disabled={busy || !selected.length || expired || task.status !== 'OPEN'}
-              onClick={() => void perform(() => batch('ACCEPT'))}
-            >
-              {t('接受所选建议')}
-            </button>
-            <button
-              type="button"
-              disabled={busy || !selected.length || expired || task.status !== 'OPEN'}
-              onClick={() => void perform(() => batch('REJECT'))}
-            >
-              {t('拒绝所选建议')}
-            </button>
-            <button
-              type="button"
-              disabled={busy || task.status === 'CANCELLED'}
-              onClick={() => void perform(() => cancelPhotoAgentTask(task.id))}
-            >
-              {t('取消任务')}
-            </button>
-          </div>
-          {!task.suggestions.length && (
-            <p>{t('尚无建议。请让 Agent 读取此任务、查看照片并提交建议。')}</p>
-          )}
-          <div className={styles.grid}>
-            {task.suggestions.map((s) => (
-              <Suggestion
-                key={s.id}
-                task={task}
-                suggestion={s}
-                busy={busy}
-                disabled={expired || task.status !== 'OPEN'}
-                selected={selected.includes(s.id)}
-                onSelect={(checked) =>
-                  setSelected((current) =>
-                    checked ? [...current, s.id] : current.filter((id) => id !== s.id),
-                  )
-                }
-                perform={perform}
-              />
+      ) : (
+        <div className={styles.toolbar}>
+          <div role="group" aria-label={t('申请状态')} className={styles.tabs}>
+            {(['pending', 'done', 'all'] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {value === 'pending' ? t('待处理') : value === 'done' ? t('已处理') : t('全部')}
+              </button>
             ))}
           </div>
-        </>
+          <span>{t('已加载 {{value1}} 份申请', { value1: rows.length })}</span>
+          <button type="button" aria-label={t('刷新申请')} onClick={() => void refresh()}>
+            <IconRefresh size={15} aria-hidden />
+          </button>
+        </div>
+      )}
+      {(tasks.error || detail.error) && (
+        <p role="alert">{tasks.error?.message || detail.error?.message}</p>
+      )}
+      {!taskId && tasks.isPending && <p role="status">{t('正在加载申请…')}</p>}
+      {!taskId && !tasks.isPending && !tasks.isError && !visible.length && (
+        <div className={styles.empty}>
+          <IconInbox size={32} aria-hidden />
+          <h3>{t('这里暂时没有申请')}</h3>
+          <p>
+            {t(
+              '让 Agent 将整理建议按批提交到这里。你可以整批同意，也可以排除部分照片；无需逐张回复 Agent。',
+            )}
+          </p>
+        </div>
+      )}
+      {!taskId && (
+        <div className={styles.requests}>
+          {visible.map((row) => (
+            <button
+              type="button"
+              className={styles.request}
+              key={row.id}
+              onClick={() => setTaskId(row.id)}
+            >
+              <div className={styles.requestTop}>
+                <span className={styles.kind}>{kindLabel(row.kind)}</span>
+                <span>{t('{{value1}} 张', { value1: row.assetCount })}</span>
+                <span className={styles.badge}>{pending(row) ? t('待处理') : t('已处理')}</span>
+              </div>
+              <h3>{row.title || kindLabel(row.kind)}</h3>
+              <p>{row.rationale || t('查看 Agent 提交的逐项理由和依据。')}</p>
+              {!!row.coverIds?.length && (
+                <div className={styles.covers}>
+                  {row.coverIds.map((id) => (
+                    <img key={id} src={previewUrl(id)} loading="lazy" alt="" />
+                  ))}
+                </div>
+              )}
+              <div className={styles.requestBottom}>
+                <span>
+                  {t('待审批 {{value1}} · 已执行 {{value2}}', {
+                    value1: row.pendingCount ?? 0,
+                    value2: row.acceptedCount ?? 0,
+                  })}
+                </span>
+                <span>
+                  {t('查看申请')} <IconArrowRight size={13} aria-hidden />
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+      {!taskId && tasks.hasNextPage && (
+        <button
+          type="button"
+          className={styles.more}
+          disabled={tasks.isFetchingNextPage}
+          onClick={() => void tasks.fetchNextPage()}
+        >
+          {t('载入更多申请')}
+        </button>
+      )}
+      {taskId && detail.isPending && <p role="status">{t('正在加载申请…')}</p>}
+      {taskId && detail.data && (
+        <RequestDetail
+          key={`${ownerId}:${includePrivate}:${taskId}`}
+          task={detail.data}
+          includePrivate={includePrivate}
+          refresh={refresh}
+        />
       )}
     </section>
   );
 }
-function Suggestion({
+function RequestDetail({
   task,
-  suggestion: s,
-  busy,
-  disabled,
-  selected,
-  onSelect,
-  perform,
+  refresh,
+  includePrivate,
 }: {
   task: PhotoAgentTask;
-  suggestion: PhotoAgentSuggestion;
-  busy: boolean;
-  disabled: boolean;
-  selected: boolean;
-  onSelect: (value: boolean) => void;
-  perform: (action: () => Promise<unknown>) => Promise<void>;
+  refresh: () => Promise<void>;
+  includePrivate: boolean;
 }) {
-  const asset = task.assets.find((a) => a.id === s.assetId);
-  const [city, setCity] = useState<PhotoCity | null>(
-    s.kind === 'CITY' ? (s.value as PhotoCity) : null,
+  const closed =
+    task.status !== 'OPEN' || Boolean(task.expiresAt && Date.parse(task.expiresAt) <= Date.now());
+  const eligible = task.suggestions.filter((item) =>
+    ['PENDING', 'FAILED', 'APPLYING'].includes(item.status),
   );
-  const [edited, setEdited] = useState(false);
+  const [selected, setSelected] = useState(() => new Set(eligible.map((item) => item.id)));
+  const [expanded, setExpanded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [result, setResult] = useState<PhotoRequestReviewResult | null>(null);
+  const chosen = eligible.filter((item) => selected.has(item.id));
+  const shown = expanded ? task.suggestions : task.suggestions.slice(0, 12);
+  async function review(action: 'ACCEPT' | 'REJECT') {
+    const ids = chosen
+      .filter((item) => action === 'ACCEPT' || item.status === 'PENDING')
+      .map((item) => item.id);
+    if (!ids.length) return;
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      const accumulated: PhotoRequestReviewResult = { results: [], succeeded: 0, failed: 0 };
+      for (let offset = 0; offset < ids.length; offset += 5) {
+        const outcome = await reviewPhotoRequest(task.id, ids.slice(offset, offset + 5), action);
+        accumulated.results.push(...outcome.results);
+        accumulated.succeeded += outcome.succeeded;
+        accumulated.failed += outcome.failed;
+        setResult({ ...accumulated, results: [...accumulated.results] });
+        setSelected(
+          (current) =>
+            new Set(
+              [...current].filter(
+                (id) => !outcome.results.some((item) => item.id === id && item.status !== 'ERROR'),
+              ),
+            ),
+        );
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('操作失败'));
+    } finally {
+      await refresh();
+      setBusy(false);
+    }
+  }
+  async function undo(id: string) {
+    setBusy(true);
+    setError('');
+    setResult(null);
+    try {
+      await undoPhotoAgentSuggestion(task.id, id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('操作失败'));
+    } finally {
+      await refresh();
+      setBusy(false);
+    }
+  }
   return (
-    <article className={styles.card}>
-      <h3>{asset?.displayName ?? t('照片')}</h3>
-      {asset?.previewId && !asset.deletedAt && (
-        <img
-          loading="lazy"
-          src={`/api/photos/agent/photos/${encodeURIComponent(asset.id)}/preview`}
-          alt={asset.displayName}
-        />
-      )}
-      <p>
-        {s.kind === 'CITY'
-          ? `${city?.country} · ${city?.region} · ${city?.name} · ${t('城市级推断')}`
-          : t('建议移入照片回收站')}
+    <section className={styles.detail} aria-label={t('申请详情')}>
+      <div className={styles.requestTop}>
+        <span className={styles.kind}>{kindLabel(task.kind)}</span>
+        <span>{t('{{value1}} 张', { value1: task.suggestions.length })}</span>
+      </div>
+      <h2>{task.title || kindLabel(task.kind)}</h2>
+      <p className={styles.reason}>
+        {task.rationale || t('查看下方逐项理由和依据，再决定是否同意。')}
       </p>
-      <p>{s.rationale}</p>
-      <p>
-        {s.status === 'PENDING'
-          ? t('待确认')
-          : s.status === 'ACCEPTED'
-            ? t('已应用')
-            : s.status === 'UNDONE'
-              ? t('已撤销')
-              : t('已拒绝')}
-      </p>
-      <details>
-        <summary>{t('查看参考照片')}</summary>
-        {s.evidence.length ? (
-          s.evidence.map((e) => {
-            const reference = task.assets.find((a) => a.id === e.id);
-            return (
-              <figure key={e.id}>
-                <figcaption>{reference?.displayName ?? t('照片')}</figcaption>
-                {reference?.previewId && !reference.deletedAt && (
-                  <img
-                    loading="lazy"
-                    src={`/api/photos/agent/photos/${encodeURIComponent(e.id)}/preview`}
-                    alt={reference.displayName}
-                  />
-                )}
-              </figure>
-            );
-          })
-        ) : (
-          <p>{t('此项依据当前照片画面和文件名，请核对后决定。')}</p>
-        )}
-      </details>
-      {s.status === 'PENDING' && (
-        <>
+      <div className={styles.effect}>
+        {task.kind === 'CITY'
+          ? t('同意后补充带有精度和来源的位置记录，原始 GPS 与文件保持不变。')
+          : task.kind === 'SEND_TO_MATERIAL'
+            ? t('同意后发送到素材模式，成功的图片不再显示在照片模式中。')
+            : t('同意后移入照片回收站，可在回收站恢复。')}
+      </div>
+      {closed && <p role="status">{t('申请已关闭或过期，不能执行新操作。')}</p>}
+      {!!eligible.length && !closed && (
+        <div className={styles.approvalBar}>
           <label>
             <input
               type="checkbox"
-              checked={selected}
-              disabled={busy || disabled || edited}
-              onChange={(e) => onSelect(e.target.checked)}
+              disabled={busy}
+              checked={chosen.length === eligible.length}
+              onChange={(event) =>
+                setSelected(new Set(event.target.checked ? eligible.map((item) => item.id) : []))
+              }
             />
-            {t('选择此建议')}
+            {t('全选待处理项')}
           </label>
-          {city && (
-            <details>
-              <summary>{t('修改城市')}</summary>
-              {(['id', 'name', 'country', 'region', 'latitude', 'longitude'] as const).map(
-                (field) => (
-                  <label key={field}>
-                    {field === 'id'
-                      ? t('城市标识')
-                      : field === 'name'
-                        ? t('城市名称')
-                        : field === 'country'
-                          ? t('国家')
-                          : field === 'region'
-                            ? t('省份或地区')
-                            : field === 'latitude'
-                              ? t('城市代表纬度')
-                              : t('城市代表经度')}
-                    <input
-                      type={field === 'latitude' || field === 'longitude' ? 'number' : 'text'}
-                      step="any"
-                      value={city[field]}
-                      onChange={(e) => {
-                        setEdited(true);
-                        onSelect(false);
-                        setCity({
-                          ...city,
-                          [field]:
-                            field === 'latitude' || field === 'longitude'
-                              ? Number(e.target.value)
-                              : e.target.value,
-                        });
-                      }}
-                    />
-                  </label>
-                ),
-              )}
-            </details>
-          )}
-          <div className={styles.actions}>
-            <button
-              disabled={busy || disabled}
-              onClick={() =>
-                void perform(() =>
-                  edited && city
-                    ? reviewPhotoAgentSuggestion(task.id, s.id, 'ACCEPT', city)
-                    : reviewPhotoAgentSuggestion(task.id, s.id, 'ACCEPT'),
-                )
-              }
-            >
-              {t('接受建议')}
-            </button>
-            <button
-              disabled={busy || disabled}
-              onClick={() =>
-                void perform(() => reviewPhotoAgentSuggestion(task.id, s.id, 'REJECT'))
-              }
-            >
-              {t('拒绝建议')}
-            </button>
-          </div>
-        </>
+          <span>
+            {t('已选 {{value1}} / {{value2}} 张', {
+              value1: chosen.length,
+              value2: eligible.length,
+            })}
+          </span>
+          <button
+            className={styles.agree}
+            type="button"
+            disabled={busy || !chosen.length}
+            onClick={() => void review('ACCEPT')}
+          >
+            {busy ? t('正在执行…') : t('同意选中申请')}
+          </button>
+          <button
+            type="button"
+            disabled={busy || !chosen.some((item) => item.status === 'PENDING')}
+            onClick={() => void review('REJECT')}
+          >
+            {t('拒绝选中申请')}
+          </button>
+        </div>
       )}
-      {s.status === 'ACCEPTED' && (
-        <button
-          disabled={busy}
-          onClick={() => void perform(() => undoPhotoAgentSuggestion(task.id, s.id))}
-        >
-          {t('撤销本项操作')}
+      {error && <p role="alert">{error}</p>}
+      {result && (
+        <div className={styles.result} role={result.failed ? 'alert' : 'status'}>
+          <p>
+            {t('本次成功 {{value1}} 项，失败 {{value2}} 项。', {
+              value1: result.succeeded,
+              value2: result.failed,
+            })}
+          </p>
+          {result.results
+            .filter((item) => item.error)
+            .map((item) => (
+              <p key={item.id}>
+                {
+                  task.assets.find(
+                    (asset) =>
+                      asset.id ===
+                      task.suggestions.find((suggestion) => suggestion.id === item.id)?.assetId,
+                  )?.displayName
+                }
+                : {item.error}
+              </p>
+            ))}
+        </div>
+      )}
+      <div className={styles.photoGrid}>
+        {shown.map((item) => {
+          const asset = task.assets.find((asset) => asset.id === item.assetId);
+          const location = item.kind === 'CITY' ? (item.value as PhotoCity) : null;
+          return (
+            <article className={styles.photo} key={item.id}>
+              <div className={styles.image}>
+                {asset?.previewId && !asset.deletedAt ? (
+                  <img loading="lazy" src={previewUrl(asset.id)} alt={asset.displayName} />
+                ) : (
+                  <span>{t('预览暂不可用')}</span>
+                )}
+                {['PENDING', 'FAILED', 'APPLYING'].includes(item.status) && !closed && (
+                  <input
+                    type="checkbox"
+                    disabled={busy}
+                    aria-label={t('选择 {{value1}}', { value1: asset?.displayName || t('照片') })}
+                    checked={selected.has(item.id)}
+                    onChange={(event) =>
+                      setSelected((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(item.id);
+                        else next.delete(item.id);
+                        return next;
+                      })
+                    }
+                  />
+                )}
+              </div>
+              <div className={styles.photoBody}>
+                <h3>{asset?.displayName || t('照片')}</h3>
+                <span className={styles.itemStatus}>{statusLabel(item.status)}</span>
+                {location && (
+                  <p>
+                    {location.name} ·{' '}
+                    {location.precision === 'EXACT'
+                      ? t('精确坐标 · 精度 {{value1}} 米', {
+                          value1: location.accuracyMeters ?? '—',
+                        })
+                      : t('城市级位置')}
+                    <br />
+                    {location.latitude}, {location.longitude}
+                  </p>
+                )}
+                <p>{item.rationale}</p>
+                <details>
+                  <summary>{t('查看参考依据')}</summary>
+                  {item.evidence
+                    .filter((reference) => reference.id !== item.assetId)
+                    .map((reference) => {
+                      const photo = task.assets.find((asset) => asset.id === reference.id);
+                      return photo?.previewId && !photo.deletedAt ? (
+                        <figure key={reference.id}>
+                          <img loading="lazy" src={previewUrl(photo.id)} alt={photo.displayName} />
+                          <figcaption>{photo.displayName}</figcaption>
+                        </figure>
+                      ) : null;
+                    })}
+                  <p>{t('理由由 Agent 提交，请结合照片内容判断。')}</p>
+                </details>
+                {item.status === 'ACCEPTED' && item.kind !== 'SEND_TO_MATERIAL' && (
+                  <button type="button" disabled={busy} onClick={() => void undo(item.id)}>
+                    {t('撤销此项操作')}
+                  </button>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {!expanded && task.suggestions.length > 12 && (
+        <button className={styles.more} type="button" onClick={() => setExpanded(true)}>
+          {t('展开全部 {{value1}} 张照片', { value1: task.suggestions.length })}
         </button>
       )}
-    </article>
+      <RequestHistory task={task} includePrivate={includePrivate} />
+    </section>
+  );
+}
+
+function RequestHistory({
+  task,
+  includePrivate,
+}: {
+  task: PhotoAgentTask;
+  includePrivate: boolean;
+}) {
+  const { ownerId } = useLibraryWorkspace();
+  const history = useInfiniteQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'agent', includePrivate, 'history', task.id],
+    queryFn: ({ pageParam, signal }) => getPhotoAgentHistory(task.id, pageParam, signal),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.next ?? undefined,
+    refetchInterval: 10000,
+  });
+  const labels = {
+    PROPOSED: t('提交申请'),
+    REJECTED: t('拒绝申请'),
+    EXECUTED: t('执行成功'),
+    EXECUTION_STARTED: t('同意并开始执行'),
+    EXECUTION_FAILED: t('执行失败'),
+    UNDONE: t('撤销成功'),
+    CANCELLED: t('取消申请'),
+    REVIEW_FAILED: t('审核执行失败'),
+    UNDO_FAILED: t('撤销失败'),
+  };
+  return (
+    <details className={styles.history}>
+      <summary>{t('操作记录')}</summary>
+      <p>{t('记录提交、人工决定、执行与撤销；撤销不会删除原记录。')}</p>
+      {history.isPending && <p role="status">{t('正在加载操作记录…')}</p>}
+      {history.error && <p role="alert">{history.error.message}</p>}
+      <ol>
+        {history.data?.pages
+          .flatMap((page) => page.items)
+          .map((event) => (
+            <li key={event.id}>
+              <time dateTime={event.createdAt}>{new Date(event.createdAt).toLocaleString()}</time>
+              <span>
+                {event.actor === 'AGENT' ? 'Agent' : event.actor === 'HUMAN' ? t('你') : t('系统')}
+              </span>
+              <strong>{labels[event.action]}</strong>
+              <span>
+                {task.assets.find((asset) => asset.id === event.assetId)?.displayName ||
+                  t('整份申请')}
+              </span>
+              {event.details.legacySnapshot && <small>{t('升级前状态快照')}</small>}
+              {event.details.value?.name && (
+                <small>
+                  {event.details.value.name} · {event.details.value.latitude},{' '}
+                  {event.details.value.longitude}
+                </small>
+              )}
+              {event.details.error && <small>{event.details.error}</small>}
+            </li>
+          ))}
+      </ol>
+      {history.hasNextPage && (
+        <button
+          type="button"
+          disabled={history.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}
+        >
+          {t('载入更早记录')}
+        </button>
+      )}
+    </details>
   );
 }

@@ -150,7 +150,7 @@ export const enUS = {
   已取消: 'Cancelled',
   已拒绝: 'Rejected',
 
-  智能整理: 'Smart organization',
+  智能整理: 'Review requests',
   'Agent 提交建议后在这里审核。原始 GPS 和原文件保持不变，接受的城市仅表示城市级位置。':
     'Review Agent proposals here. Original GPS and files are preserved. Accepted cities indicate city-level locations only.',
   开始日期: 'Start date',
@@ -1504,4 +1504,73 @@ export const enUS = {
   最近1年: 'Last year',
   最近3年: 'Last 3 years',
   最近5年: 'Last 5 years',
+  '{{value1}} 张': '{{value1}} photos',
+  全选待处理项: 'Select all pending items',
+  刷新申请: 'Refresh requests',
+  '同意后发送到素材模式，成功的图片不再显示在照片模式中。':
+    'Approval sends these images to Materials; successfully sent images leave Photos.',
+  '同意后移入照片回收站，可在回收站恢复。':
+    'Approval moves these photos to the photo trash, where they can be restored.',
+  '同意后补充带有精度和来源的位置记录，原始 GPS 与文件保持不变。':
+    'Approval adds a location with precision and source; original GPS and files stay unchanged.',
+  同意选中申请: 'Approve selected requests',
+  城市级位置: 'City-level location',
+  '展开全部 {{value1}} 张照片': 'Show all {{value1}} photos',
+  '已加载 {{value1}} 份申请': '{{value1}} requests loaded',
+  已同意并执行: 'Approved and executed',
+  已处理: 'Processed',
+  '已选 {{value1}} / {{value2}} 张': '{{value1}} / {{value2}} photos selected',
+  待审批: 'Awaiting approval',
+  '待审批 {{value1}} · 已执行 {{value2}}': 'Pending {{value1}} · Executed {{value2}}',
+  '执行中，可手动重试': 'In progress; manual retry available',
+  '执行失败，可手动重试': 'Execution failed; manual retry available',
+  拒绝选中申请: 'Reject selected requests',
+  撤销此项操作: 'Undo this operation',
+  整理审批: 'Review requests',
+  '本次成功 {{value1}} 项，失败 {{value2}} 项。': '{{value1}} succeeded, {{value2}} failed.',
+  '查看 Agent 提交的逐项理由和依据。':
+    'View the individual reasons and evidence submitted by the Agent.',
+  '查看下方逐项理由和依据，再决定是否同意。':
+    'Review the individual reasons and evidence below before approving.',
+  查看参考依据: 'View supporting evidence',
+  查看申请: 'View request',
+  '正在加载申请…': 'Loading requests…',
+  '正在执行…': 'Executing…',
+  '理由由 Agent 提交，请结合照片内容判断。':
+    'Reasons are supplied by the Agent. Assess them against the photos.',
+  '由 Agent 提议，由你决定': 'Proposed by the Agent. Decided by you.',
+  '申请不会自动执行。只有你手动点击同意，才会补充位置、发送到素材或移入回收站。':
+    'Requests never execute automatically. Only your manual approval adds locations, sends images to Materials or moves photos to trash.',
+  '申请已关闭或过期，不能执行新操作。':
+    'This request is closed or expired. New operations cannot execute.',
+  申请状态: 'Request status',
+  申请详情: 'Request details',
+  移入回收站: 'Move to trash',
+  '精确坐标 · 精度 {{value1}} 米': 'Exact coordinates · Accuracy {{value1}} m',
+  补充位置: 'Add location',
+  '让 Agent 将整理建议按批提交到这里。你可以整批同意，也可以排除部分照片；无需逐张回复 Agent。':
+    'Ask the Agent to submit grouped requests here. Approve a batch or exclude individual photos, without reviewing each one in chat.',
+  载入更多申请: 'Load more requests',
+  返回申请列表: 'Back to requests',
+  这里暂时没有申请: 'No requests here yet',
+  预览暂不可用: 'Preview unavailable',
+
+  提交申请: 'Request submitted',
+  拒绝申请: 'Request rejected',
+  执行成功: 'Execution succeeded',
+  同意并开始执行: 'Approved and execution started',
+  执行失败: 'Execution failed',
+  撤销成功: 'Operation undone',
+  取消申请: 'Request cancelled',
+  操作记录: 'Operation history',
+  '记录提交、人工决定、执行与撤销；撤销不会删除原记录。':
+    'Submissions, human decisions, execution and undo are retained. Undo does not remove earlier records.',
+  '正在加载操作记录…': 'Loading operation history…',
+  你: 'You',
+  系统: 'System',
+  整份申请: 'Entire request',
+  升级前状态快照: 'Pre-upgrade state snapshot',
+  载入更早记录: 'Load earlier records',
+  审核执行失败: 'Review failed',
+  撤销失败: 'Undo failed',
 } as const;

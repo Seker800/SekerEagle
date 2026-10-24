@@ -6131,6 +6131,113 @@
         "tags": ["photo-agent"]
       }
     },
+    "/api/photos/agent/requests": {
+      "post": {
+        "operationId": "PhotoAgentController_submitRequest",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitPhotoRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/review": {
+      "post": {
+        "operationId": "PhotoAgentController_reviewRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewPhotoRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/{id}/history": {
+      "get": {
+        "operationId": "PhotoAgentController_history",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 50,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
     "/api/photos/agent/tasks/{id}": {
       "get": {
         "operationId": "PhotoAgentController_detail",
@@ -7893,7 +8000,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "enum": ["CITY", "NON_PHOTO"]
+            "enum": ["CITY", "NON_PHOTO", "SEND_TO_MATERIAL", "DELETE"]
           },
           "assetIds": {
             "maxItems": 200,
@@ -7925,9 +8032,81 @@
           },
           "longitude": {
             "type": "number"
+          },
+          "precision": {
+            "type": "string",
+            "enum": ["CITY", "EXACT"]
+          },
+          "accuracyMeters": {
+            "type": "number"
           }
         },
         "required": ["id", "name", "country", "region", "latitude", "longitude"]
+      },
+      "ProposePhotoDto": {
+        "type": "object",
+        "properties": {
+          "assetId": {
+            "type": "string"
+          },
+          "city": {
+            "$ref": "#/components/schemas/PhotoCityDto"
+          },
+          "evidenceIds": {
+            "maxItems": 10,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "visualReviewed": {
+            "type": "boolean"
+          }
+        },
+        "required": ["assetId", "evidenceIds", "rationale", "visualReviewed"]
+      },
+      "SubmitPhotoRequestDto": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["CITY", "SEND_TO_MATERIAL", "DELETE"]
+          },
+          "title": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "items": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposePhotoDto"
+            }
+          }
+        },
+        "required": ["kind", "title", "rationale", "items"]
+      },
+      "ReviewPhotoRequestDto": {
+        "type": "object",
+        "properties": {
+          "suggestionIds": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "action": {
+            "type": "string",
+            "enum": ["ACCEPT", "REJECT"]
+          }
+        },
+        "required": ["suggestionIds", "action"]
       },
       "InferPhotoCitiesDto": {
         "type": "object",
@@ -7958,31 +8137,6 @@
           }
         },
         "required": ["description"]
-      },
-      "ProposePhotoDto": {
-        "type": "object",
-        "properties": {
-          "assetId": {
-            "type": "string"
-          },
-          "city": {
-            "$ref": "#/components/schemas/PhotoCityDto"
-          },
-          "evidenceIds": {
-            "maxItems": 10,
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "rationale": {
-            "type": "string"
-          },
-          "visualReviewed": {
-            "type": "boolean"
-          }
-        },
-        "required": ["assetId", "evidenceIds", "rationale", "visualReviewed"]
       },
       "ReviewPhotoSuggestionDto": {
         "type": "object",

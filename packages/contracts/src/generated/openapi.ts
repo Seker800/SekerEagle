@@ -2500,6 +2500,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/agent/requests': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoAgentController_submitRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/agent/tasks/{id}/review': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoAgentController_reviewRequest'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/agent/tasks/{id}/history': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoAgentController_history'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/agent/tasks/{id}': {
     parameters: {
       query?: never;
@@ -3414,7 +3462,7 @@ export interface components {
     };
     CreatePhotoTaskDto: {
       /** @enum {string} */
-      kind: 'CITY' | 'NON_PHOTO';
+      kind: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
       assetIds: string[];
     };
     PhotoCityDto: {
@@ -3424,6 +3472,28 @@ export interface components {
       region: string;
       latitude: number;
       longitude: number;
+      /** @enum {string} */
+      precision?: 'CITY' | 'EXACT';
+      accuracyMeters?: number;
+    };
+    ProposePhotoDto: {
+      assetId: string;
+      city?: components['schemas']['PhotoCityDto'];
+      evidenceIds: string[];
+      rationale: string;
+      visualReviewed: boolean;
+    };
+    SubmitPhotoRequestDto: {
+      /** @enum {string} */
+      kind: 'CITY' | 'SEND_TO_MATERIAL' | 'DELETE';
+      title: string;
+      rationale: string;
+      items: components['schemas']['ProposePhotoDto'][];
+    };
+    ReviewPhotoRequestDto: {
+      suggestionIds: string[];
+      /** @enum {string} */
+      action: 'ACCEPT' | 'REJECT';
     };
     InferPhotoCitiesDto: {
       cameraModel?: string;
@@ -3432,13 +3502,6 @@ export interface components {
     };
     ScorePhotoCandidatesDto: {
       description: string;
-    };
-    ProposePhotoDto: {
-      assetId: string;
-      city?: components['schemas']['PhotoCityDto'];
-      evidenceIds: string[];
-      rationale: string;
-      visualReviewed: boolean;
     };
     ReviewPhotoSuggestionDto: {
       /** @enum {string} */
@@ -7458,6 +7521,74 @@ export interface operations {
     };
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoAgentController_submitRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SubmitPhotoRequestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoAgentController_reviewRequest: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviewPhotoRequestDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoAgentController_history: {
+    parameters: {
+      query?: {
+        from?: string;
+        to?: string;
+        after?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };

@@ -31,6 +31,8 @@ import {
   ProposePhotoDto,
   ReviewPhotoSuggestionDto,
   ScorePhotoCandidatesDto,
+  SubmitPhotoRequestDto,
+  ReviewPhotoRequestDto,
 } from './photo-agent.dto';
 @ApiTags('photo-agent')
 @SetMetadata(LIBRARY_MODE, 'PHOTO')
@@ -64,6 +66,26 @@ export class PhotoAgentController {
     @Body() dto: CreatePhotoTaskDto,
   ) {
     return this.agent.createTask(p.sub, dto, p.canViewPrivate);
+  }
+  @Post('requests') @RequirePatScopes('photo:read', 'photo:suggest') submitRequest(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Body() dto: SubmitPhotoRequestDto,
+  ) {
+    return this.agent.submitRequest(p.sub, dto, p.canViewPrivate);
+  }
+  @Post('tasks/:id/review') @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard) reviewRequest(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: ReviewPhotoRequestDto,
+  ) {
+    return this.agent.reviewBatch(p.sub, id, dto, p.canViewPrivate);
+  }
+  @Get('tasks/:id/history') history(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() q: PhotoAgentQueryDto,
+  ) {
+    return this.agent.history(p.sub, id, q, p.canViewPrivate);
   }
   @Get('tasks/:id') detail(
     @CurrentPrincipal() p: AuthPrincipal,

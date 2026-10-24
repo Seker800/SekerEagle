@@ -5,10 +5,12 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
+import { installPhotoRequestBodyParser } from './photos/photo-request-body';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableShutdownHooks();
+  installPhotoRequestBodyParser(app);
   const config = app.get(ConfigService);
   app.set('trust proxy', 1);
   app.use(cookieParser());

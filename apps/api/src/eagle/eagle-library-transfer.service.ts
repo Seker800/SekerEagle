@@ -79,6 +79,7 @@ export class EagleLibraryTransferService {
     ownerId: string,
     input: SendEagleAssetsDto,
     includePrivate: boolean,
+    expected?: ReadonlyMap<string, { mediaRevision: number; rowVersion: number }>,
   ): Promise<LibraryTransferResult> {
     const ids = [...new Set(input.assetIds)].sort();
     if (!ids.length || ids.length !== input.assetIds.length || ids.length > 100)
@@ -95,6 +96,18 @@ export class EagleLibraryTransferService {
       where: this.libraryModeWhere(ownerId, ids, includePrivate),
     });
     if (selected.length !== ids.length) throw new NotFoundException('一个或多个图片不存在。');
+    if (
+      expected &&
+      selected.some((row) => {
+        const snapshot = expected.get(row.id);
+        return (
+          !snapshot ||
+          snapshot.mediaRevision !== row.mediaRevision ||
+          snapshot.rowVersion !== row.rowVersion
+        );
+      })
+    )
+      throw new ConflictException('照片已变化，请重新提交申请。');
     if (selected.some((row) => !row.mimeType.startsWith('image/')))
       throw new BadRequestException('请选择图片；配对实况视频会自动随照片发送。');
     if (selected.some((row) => row.lifecycleStatus !== 'READY'))

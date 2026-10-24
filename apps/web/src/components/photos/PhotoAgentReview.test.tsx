@@ -8,149 +8,186 @@ const mocks = vi.hoisted(() => ({
   undo: vi.fn(),
   detail: vi.fn(),
   list: vi.fn(),
-  cancel: vi.fn(),
-  create: vi.fn(),
+  history: vi.fn(),
 }));
 vi.mock('../../lib/photo-agent-api', () => ({
   listPhotoAgentTasks: mocks.list,
   getPhotoAgentTask: mocks.detail,
-  reviewPhotoAgentSuggestion: mocks.review,
+  getPhotoAgentHistory: mocks.history,
+  reviewPhotoRequest: mocks.review,
   undoPhotoAgentSuggestion: mocks.undo,
-  cancelPhotoAgentTask: mocks.cancel,
-  createPhotoAgentTask: mocks.create,
 }));
 function fixture(): PhotoAgentTask {
   return {
     id: 'task',
-    kind: 'CITY',
+    kind: 'DELETE',
     status: 'OPEN',
-    expiresAt: '2099-01-01',
-    assets: [
-      {
-        id: 'photo',
-        originalName: 'photo.jpg',
-        displayName: 'Test photo',
-        mediaRevision: 1,
-        rowVersion: 1,
-        deletedAt: null,
-        previewId: 'preview',
-      },
-    ],
-    suggestions: [
-      {
-        id: 'suggestion',
-        assetId: 'photo',
-        kind: 'CITY',
-        status: 'PENDING',
-        value: {
-          id: 'hangzhou',
-          name: '杭州',
-          country: '中国',
-          region: '浙江',
-          latitude: 30.25,
-          longitude: 120.15,
-        },
-        rationale: '两张手机照片提供原始位置',
-        evidence: [{ id: 'photo' }],
-      },
-    ],
+    expiresAt: null,
+    title: '示例批量申请',
+    rationale: '测试 Agent 提交的批量操作理由',
+    assets: ['one', 'two'].map((id) => ({
+      id,
+      displayName: id,
+      originalName: `${id}.jpg`,
+      mediaRevision: 1,
+      rowVersion: 1,
+      deletedAt: null,
+      previewId: 'preview',
+    })),
+    suggestions: ['one', 'two'].map((id) => ({
+      id,
+      assetId: id,
+      kind: 'DELETE',
+      status: 'PENDING',
+      value: { category: 'DELETE' },
+      rationale: `测试理由 ${id}`,
+      evidence: [{ id }],
+    })),
   };
 }
 beforeEach(() => {
   vi.resetAllMocks();
-  mocks.review.mockResolvedValue({});
-  mocks.undo.mockResolvedValue({});
-  mocks.cancel.mockResolvedValue({});
-  mocks.create.mockResolvedValue({ id: 'task' });
-  mocks.detail.mockResolvedValue(fixture());
   mocks.list.mockResolvedValue({
-    items: [{ id: 'task', kind: 'CITY', status: 'OPEN', assetCount: 1 }],
+    items: [
+      {
+        id: 'task',
+        kind: 'DELETE',
+        status: 'OPEN',
+        assetCount: 2,
+        pendingCount: 2,
+        title: '示例批量申请',
+        rationale: '测试 Agent 提交的批量操作理由',
+        coverIds: ['one', 'two'],
+      },
+    ],
     next: null,
   });
+  mocks.detail.mockResolvedValue(fixture());
+  mocks.history.mockResolvedValue({ items: [], next: null });
+  mocks.review.mockImplementation(async (_task, ids: string[]) => ({
+    succeeded: ids.length,
+    failed: 0,
+    results: ids.map((id) => ({ id, status: 'ACCEPTED' })),
+  }));
 });
-async function show() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-  render(
+function mount() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
     <QueryClientProvider client={client}>
       <PhotoAgentReview includePrivate={false} />
     </QueryClientProvider>,
   );
-  fireEvent.click(await screen.findByRole('button', { name: /城市定位/ }));
-  await screen.findByText('两张手机照片提供原始位置');
-  return client;
 }
-it('shows evidence before accepting a specific suggestion and refreshes the task', async () => {
-  await show();
-  expect(screen.getByText(/杭州/)).toBeInTheDocument();
-  expect(screen.getAllByRole('img', { name: 'Test photo' })[0]).toHaveAttribute(
-    'src',
-    '/api/photos/agent/photos/photo/preview',
-  );
-  fireEvent.click(screen.getByRole('button', { name: '接受建议' }));
-  await waitFor(() => expect(mocks.review).toHaveBeenCalledWith('task', 'suggestion', 'ACCEPT'));
+async function open() {
+  mount();
+  fireEvent.click(await screen.findByRole('button', { name: /示例批量申请/ }));
+  await screen.findByRole('region', { name: '申请详情' });
+}
+it('lists grouped requests without creating tasks or applying any operation', async () => {
+  mount();
+  await screen.findByRole('button', { name: /示例批量申请/ });
+  expect(screen.getByText('由 Agent 提议，由你决定')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '创建整理任务' })).not.toBeInTheDocument();
+  expect(mocks.review).not.toHaveBeenCalled();
 });
-it('surfaces conflicts and refreshes data even when a review request fails', async () => {
-  mocks.review.mockRejectedValue(new Error('照片版本冲突'));
-  const client = await show(),
-    invalidate = vi.spyOn(client, 'invalidateQueries');
-  fireEvent.click(screen.getByRole('button', { name: '接受建议' }));
-  expect(await screen.findByRole('alert')).toHaveTextContent('照片版本冲突');
-  await waitFor(() => expect(invalidate).toHaveBeenCalled());
+it('defaults to selecting a whole batch but excludes unchecked items from approval', async () => {
+  await open();
+  expect(screen.getByText('已选 2 / 2 张')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: '选择 two' }));
+  fireEvent.click(screen.getByRole('button', { name: '同意选中申请' }));
+  await waitFor(() => expect(mocks.review).toHaveBeenCalledWith('task', ['one'], 'ACCEPT'));
+  expect(mocks.review).toHaveBeenCalledTimes(1);
 });
-it('rejected proposals can be reviewed without applying them', async () => {
-  await show();
-  fireEvent.click(screen.getByRole('button', { name: '拒绝建议' }));
-  await waitFor(() => expect(mocks.review).toHaveBeenCalledWith('task', 'suggestion', 'REJECT'));
+it('requires an explicit manual click for rejection too, and reports partial failures accurately', async () => {
+  mocks.review.mockResolvedValue({
+    succeeded: 1,
+    failed: 1,
+    results: [
+      { id: 'one', status: 'REJECTED' },
+      { id: 'two', status: 'ERROR', error: '照片版本冲突' },
+    ],
+  });
+  await open();
+  expect(mocks.review).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '拒绝选中申请' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('本次成功 1 项，失败 1 项。');
+  expect(screen.getByRole('alert')).toHaveTextContent('照片版本冲突');
+  expect(mocks.review).toHaveBeenCalledWith('task', ['one', 'two'], 'REJECT');
+});
+it('does not automatically retry failed approved sends', async () => {
+  const task = fixture();
+  task.kind = 'SEND_TO_MATERIAL';
+  task.suggestions = task.suggestions.map((item) => ({
+    ...item,
+    kind: 'SEND_TO_MATERIAL',
+    status: 'FAILED',
+  }));
+  mocks.detail.mockResolvedValue(task);
+  await open();
+  expect(
+    screen.getByText('同意后发送到素材模式，成功的图片不再显示在照片模式中。'),
+  ).toBeInTheDocument();
+  expect(mocks.review).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '同意选中申请' }));
+  await waitFor(() => expect(mocks.review).toHaveBeenCalledWith('task', ['one', 'two'], 'ACCEPT'));
+});
+it('shows an empty inbox and keeps large requests bounded until explicitly expanded', async () => {
+  const task = fixture();
+  task.suggestions = Array.from({ length: 30 }, (_, i) => ({
+    ...task.suggestions[0],
+    id: `suggestion-${i}`,
+  }));
+  mocks.detail.mockResolvedValue(task);
+  await open();
+  expect(screen.getAllByRole('checkbox', { name: '选择 one' })).toHaveLength(12);
+  expect(screen.getByText('已选 30 / 30 张')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '展开全部 30 张照片' }));
+  expect(screen.getAllByRole('checkbox', { name: '选择 one' })).toHaveLength(30);
+});
+it('shows no pending work when the inbox is empty', async () => {
+  mocks.list.mockResolvedValue({ items: [], next: null });
+  mount();
+  expect(await screen.findByText('这里暂时没有申请')).toBeInTheDocument();
+  expect(mocks.review).not.toHaveBeenCalled();
+});
+
+it('retains executed and undone records together and viewing history performs no mutation', async () => {
+  mocks.history.mockResolvedValue({
+    items: [
+      {
+        id: 'undo-event',
+        assetId: 'one',
+        actor: 'HUMAN',
+        action: 'UNDONE',
+        createdAt: '2026-10-24T10:01:00Z',
+        details: {},
+      },
+      {
+        id: 'execute-event',
+        assetId: 'one',
+        actor: 'HUMAN',
+        action: 'EXECUTED',
+        createdAt: '2026-10-24T10:00:00Z',
+        details: {},
+      },
+    ],
+    next: null,
+  });
+  await open();
+  fireEvent.click(screen.getByText('操作记录'));
+  expect(await screen.findByText('撤销成功')).toBeInTheDocument();
+  expect(screen.getByText('执行成功')).toBeInTheDocument();
+  expect(mocks.review).not.toHaveBeenCalled();
   expect(mocks.undo).not.toHaveBeenCalled();
 });
-it('batch applies only selected proposals', async () => {
-  await show();
-  fireEvent.click(screen.getByRole('checkbox', { name: '选择此建议' }));
-  fireEvent.click(screen.getByRole('button', { name: '接受所选建议' }));
-  await waitFor(() =>
-    expect(mocks.review).toHaveBeenCalledExactlyOnceWith('task', 'suggestion', 'ACCEPT'),
-  );
-});
-it('manual city edits require individual review and cannot be silently ignored by batch apply', async () => {
-  await show();
-  fireEvent.click(screen.getByRole('checkbox', { name: '选择此建议' }));
-  fireEvent.click(screen.getByText('修改城市'));
-  fireEvent.change(screen.getByLabelText('城市名称'), { target: { value: '湖州市' } });
-  expect(screen.getByRole('checkbox', { name: '选择此建议' })).not.toBeChecked();
-  expect(screen.getByRole('checkbox', { name: '选择此建议' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '接受建议' }));
-  await waitFor(() =>
-    expect(mocks.review).toHaveBeenCalledWith(
-      'task',
-      'suggestion',
-      'ACCEPT',
-      expect.objectContaining({ name: '湖州市' }),
-    ),
-  );
-});
-it('expired tasks block new changes while allowing undo of an already applied item', async () => {
-  const task = fixture();
-  task.expiresAt = '2000-01-01';
-  task.suggestions[0]!.status = 'ACCEPTED';
-  mocks.detail.mockResolvedValue(task);
-  await show();
-  expect(screen.getByRole('button', { name: '接受所选建议' })).toBeDisabled();
-  fireEvent.click(screen.getByRole('button', { name: '撤销本项操作' }));
-  await waitFor(() => expect(mocks.undo).toHaveBeenCalledWith('task', 'suggestion'));
-});
-it('cancels future task work and presents empty suggestion state', async () => {
-  await show();
-  fireEvent.click(screen.getByRole('button', { name: '取消任务' }));
-  await waitFor(() => expect(mocks.cancel).toHaveBeenCalledWith('task'));
-});
-it('creates a task only for an explicit date range', async () => {
-  await show();
-  fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2026-10-01' } });
-  fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2026-10-02' } });
-  fireEvent.click(screen.getByRole('button', { name: '创建整理任务' }));
-  await waitFor(() =>
-    expect(mocks.create).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'CITY'),
-  );
+
+it('keeps operation history collapsed below photo cards', async () => {
+  await open();
+  const history = screen.getByText('操作记录').closest('details')!;
+  expect(history.open).toBe(false);
+  const cards = screen.getAllByRole('article');
+  expect(
+    cards.at(-1)!.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(mocks.review).not.toHaveBeenCalled();
 });

@@ -289,6 +289,9 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
   const app = await NestFactory.create(AppModule, { logger: false });
   app.setGlobalPrefix('api');
   app.use(cookieParser());
+  const { installPhotoRequestBodyParser } =
+    await import('../../apps/api/dist/photos/photo-request-body.js');
+  installPhotoRequestBodyParser(app);
   app.useGlobalPipes(
     new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
   );
@@ -311,6 +314,7 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
     );
     for (const path of [
       `tasks/${t.id}/cancel`,
+      `tasks/${t.id}/review`,
       `tasks/${t.id}/suggestions/${p.id}/review`,
       `tasks/${t.id}/suggestions/${p.id}/undo`,
     ])
@@ -334,6 +338,57 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
       ).status,
       403,
     );
+    const batchIds = Array.from({ length: 200 }, () => randomUUID());
+    await prisma.eagleAsset.createMany({
+      data: batchIds.map((id) => ({
+        id,
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        originalName: 'synthetic.jpg',
+        displayName: 'Batch sample',
+        normalizedDisplayName: 'batch sample',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        originalObjectKey: `test/${id}`,
+        lifecycleStatus: 'READY',
+      })),
+    });
+    const batchBody = {
+      kind: 'DELETE',
+      title: 'Large application',
+      rationale: 'Only a proposal for human review.',
+      items: batchIds.map((assetId) => ({
+        assetId,
+        evidenceIds: [],
+        visualReviewed: true,
+        rationale: 'Synthetic reason. '.repeat(80),
+      })),
+    };
+    const submission = await fetch(`${base}/api/photos/agent/requests`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify(batchBody),
+    });
+    assert.equal(submission.status, 201);
+    const submitted = await submission.json();
+    assert.equal(submitted.count, 200);
+    assert.equal(
+      await prisma.eagleAsset.count({ where: { id: { in: batchIds }, deletedAt: null } }),
+      200,
+    );
+    const denied = await fetch(`${base}/api/photos/agent/requests`, {
+      method: 'POST',
+      headers: { ...auth, authorization: `Bearer ${read.token}` },
+      body: JSON.stringify({ ...batchBody, items: [batchBody.items[0]] }),
+    });
+    assert.equal(denied.status, 403);
+    const oversized = await fetch(`${base}/api/photos/agent/requests`, {
+      method: 'POST',
+      headers: auth,
+      body: JSON.stringify({ ...batchBody, rationale: 'x'.repeat(3 * 1024 * 1024) }),
+    });
+    assert.equal(oversized.status, 413);
     const user = await prisma.user.findUniqueOrThrow({ where: { id: f.ownerId } }),
       session = await app.get(SessionTokenService).createSession(user);
     const response = await fetch(
@@ -498,4 +553,398 @@ test('proposal validation rejects missing GPS proof, wrong task kinds, protected
     g.service.photos(g.ownerId, { limit: 10, from: end, to: start }, false),
     /范围/,
   );
+});
+
+test('grouped requests stay proposals until human review and preserve exact-location precision', async () => {
+  const f = await fixture();
+  const second = await f.add();
+  const input = {
+    kind: 'CITY',
+    title: 'Grouped location request',
+    rationale: 'Agent supplied the grouping and location reasoning.',
+    items: [f.a, second].map((asset) => ({
+      assetId: asset.id,
+      city: { ...city, precision: 'EXACT', accuracyMeters: 25 },
+      evidenceIds: [],
+      visualReviewed: true,
+      rationale: 'Agent reviewed this image and supplied a location.',
+    })),
+  };
+  const before = await prisma.eaglePhotoAgentTask.count({ where: { ownerId: f.ownerId } });
+  await assert.rejects(
+    f.service.submitRequest(
+      f.ownerId,
+      { ...input, items: [...input.items, { ...input.items[0], assetId: randomUUID() }] },
+      false,
+    ),
+    /不存在/,
+  );
+  assert.equal(await prisma.eaglePhotoAgentTask.count({ where: { ownerId: f.ownerId } }), before);
+  const request = await f.service.submitRequest(f.ownerId, input, false);
+  const detail = await f.service.detail(f.ownerId, request.id, false);
+  assert.equal(detail.expiresAt, null);
+  assert.equal(detail.title, input.title);
+  assert.equal(detail.suggestions.length, 2);
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { ownerId: f.ownerId } }), 0);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+  const one = detail.suggestions.find((item) => item.assetId === f.a.id);
+  const two = detail.suggestions.find((item) => item.assetId === second.id);
+  await assert.rejects(
+    f.service.reviewBatch(
+      randomUUID(),
+      request.id,
+      { suggestionIds: [one.id], action: 'ACCEPT' },
+      false,
+    ),
+    /不存在/,
+  );
+  await assert.rejects(
+    f.service.reviewBatch(
+      f.ownerId,
+      request.id,
+      { suggestionIds: [one.id, randomUUID()], action: 'ACCEPT' },
+      false,
+    ),
+    /不存在/,
+  );
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { ownerId: f.ownerId } }), 0);
+  const approved = await f.service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [one.id], action: 'ACCEPT' },
+    false,
+  );
+  assert.equal(approved.succeeded, 1);
+  const location = await prisma.eaglePhotoLocation.findUniqueOrThrow({
+    where: { assetId: f.a.id },
+  });
+  assert.equal(location.precision, 'EXACT');
+  assert.equal(location.accuracyMeters, 25);
+  assert.equal(
+    (await prisma.eaglePhotoMetadata.findUniqueOrThrow({ where: { assetId: f.a.id } })).latitude,
+    null,
+  );
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: second.id } }), 0);
+  await prisma.eagleAsset.update({
+    where: { id: second.id },
+    data: { rowVersion: { increment: 1 } },
+  });
+  const stale = await f.service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [two.id], action: 'ACCEPT' },
+    false,
+  );
+  assert.equal(stale.failed, 1);
+  const rejected = await f.service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [two.id], action: 'REJECT' },
+    false,
+  );
+  assert.equal(rejected.succeeded, 1);
+  await f.service.undo(f.ownerId, request.id, one.id, false);
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 0);
+});
+
+test('send approval reuses the shared transfer, survives interruption and cannot duplicate targets', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixture();
+  await prisma.eagleAsset.update({
+    where: { id: f.a.id },
+    data: { originalObjectKey: `users/${f.ownerId}/assets/${f.a.id}/original.png` },
+  });
+  let copies = 0,
+    fail = true;
+  const transfer = new EagleLibraryTransferService(
+    prisma,
+    {
+      copyObject: async () => {
+        copies++;
+        if (fail) throw new Error('synthetic copy interruption');
+      },
+      headObject: async () => ({ ContentLength: 1 }),
+    },
+    'PHOTO',
+  );
+  const service = new PhotoAgentService(prisma, {}, transfer);
+  const request = await service.submitRequest(
+    f.ownerId,
+    {
+      kind: 'SEND_TO_MATERIAL',
+      title: 'Transfer request',
+      rationale: 'Agent proposes moving this reference image to Materials.',
+      items: [
+        {
+          assetId: f.a.id,
+          evidenceIds: [],
+          visualReviewed: true,
+          rationale: 'Agent reviewed the image and proposes a transfer.',
+        },
+      ],
+    },
+    false,
+  );
+  const suggestion = (await service.detail(f.ownerId, request.id, false)).suggestions[0];
+  assert.equal(copies, 0);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    0,
+  );
+  assert.equal(
+    (
+      await service.reviewBatch(
+        f.ownerId,
+        request.id,
+        { suggestionIds: [suggestion.id], action: 'ACCEPT' },
+        false,
+      )
+    ).failed,
+    1,
+  );
+  assert.equal(
+    (await prisma.eaglePhotoAgentSuggestion.findUniqueOrThrow({ where: { id: suggestion.id } }))
+      .status,
+    'FAILED',
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+  fail = false;
+  const success = await service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [suggestion.id], action: 'ACCEPT' },
+    false,
+  );
+  assert.equal(success.succeeded, 1);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    1,
+  );
+  assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt);
+  const before = copies;
+  await service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [suggestion.id], action: 'ACCEPT' },
+    false,
+  );
+  assert.equal(copies, before);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    1,
+  );
+  await assert.rejects(service.undo(f.ownerId, request.id, suggestion.id, false), /素材模式/);
+});
+
+test('delete requests accept Agent-defined criteria but never trash until approval', async () => {
+  const f = await fixture();
+  const request = await f.service.submitRequest(
+    f.ownerId,
+    {
+      kind: 'DELETE',
+      title: 'Delete request',
+      rationale: 'Agent has supplied its own reasons for this request.',
+      items: [
+        {
+          assetId: f.a.id,
+          evidenceIds: [],
+          visualReviewed: true,
+          rationale: 'Agent reviewed this photo; this is a synthetic test reason.',
+        },
+      ],
+    },
+    false,
+  );
+  const suggestion = (await f.service.detail(f.ownerId, request.id, false)).suggestions[0];
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+  await assert.rejects(
+    f.service.submitRequest(
+      f.ownerId,
+      {
+        kind: 'DELETE',
+        title: 'Duplicate',
+        rationale: 'Another pending application.',
+        items: [
+          {
+            assetId: f.a.id,
+            evidenceIds: [],
+            visualReviewed: true,
+            rationale: 'Duplicate proposal for the same photo.',
+          },
+        ],
+      },
+      false,
+    ),
+    /待处理申请/,
+  );
+  await f.service.reviewBatch(
+    f.ownerId,
+    request.id,
+    { suggestionIds: [suggestion.id], action: 'ACCEPT' },
+    false,
+  );
+  assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt);
+  await f.service.undo(f.ownerId, request.id, suggestion.id, false);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+});
+
+test('cancelled legacy drafts do not block a fresh grouped application', async () => {
+  const f = await fixture();
+  const draft = await f.task('NON_PHOTO');
+  await f.proposal(draft);
+  await f.service.cancel(f.ownerId, draft.id, false);
+  const application = await f.service.submitRequest(
+    f.ownerId,
+    {
+      kind: 'DELETE',
+      title: 'New application',
+      rationale: 'Agent has reconsidered this synthetic photo.',
+      items: [
+        {
+          assetId: f.a.id,
+          evidenceIds: [],
+          visualReviewed: true,
+          rationale: 'New explicit application after cancellation.',
+        },
+      ],
+    },
+    false,
+  );
+  assert.ok(application.id);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+});
+
+test('approval history is append-only, owner/private scoped and retains original execution after undo', async () => {
+  const f = await fixture(),
+    other = await fixture();
+  const task = await f.task();
+  const suggestion = await f.proposal(task);
+  let page = await f.service.history(f.ownerId, task.id, { limit: 1 }, false);
+  assert.equal(page.items[0].action, 'PROPOSED');
+  assert.equal(page.items[0].actor, 'AGENT');
+  await assert.rejects(f.service.history(other.ownerId, task.id, { limit: 20 }, true), /不存在/);
+  await assert.rejects(
+    f.service.history(f.ownerId, task.id, { limit: 20, after: randomUUID() }, false),
+    /不存在/,
+  );
+  await f.service.review(f.ownerId, task.id, suggestion.id, { action: 'ACCEPT' }, false);
+  const count = await prisma.eaglePhotoAgentEvent.count({ where: { taskId: task.id } });
+  await f.service.review(f.ownerId, task.id, suggestion.id, { action: 'ACCEPT' }, false);
+  assert.equal(await prisma.eaglePhotoAgentEvent.count({ where: { taskId: task.id } }), count);
+  await f.service.undo(f.ownerId, task.id, suggestion.id, false);
+  page = await f.service.history(f.ownerId, task.id, { limit: 1 }, false);
+  assert.equal(page.items[0].action, 'UNDONE');
+  assert.equal(page.items[0].actor, 'HUMAN');
+  assert.ok(page.items[0].details.originalOperation.assetRowVersion);
+  const older = await f.service.history(f.ownerId, task.id, { limit: 20, after: page.next }, false);
+  assert.deepEqual(new Set(older.items.map((e) => e.action)), new Set(['EXECUTED', 'PROPOSED']));
+  const applied = older.items.find((e) => e.action === 'EXECUTED');
+  assert.equal(applied.details.value.name, city.name);
+  assert.equal(applied.details.before.rowVersion, f.a.rowVersion);
+  await assert.rejects(
+    prisma.eaglePhotoAgentEvent.update({ where: { id: applied.id }, data: { details: {} } }),
+    /append-only/,
+  );
+  await assert.rejects(
+    prisma.eaglePhotoAgentEvent.delete({ where: { id: applied.id } }),
+    /append-only/,
+  );
+  await prisma.eagleAsset.update({ where: { id: f.a.id }, data: { isPrivate: true } });
+  await assert.rejects(f.service.history(f.ownerId, task.id, { limit: 20 }, false), /不存在/);
+  assert.equal((await f.service.history(f.ownerId, task.id, { limit: 20 }, true)).items.length, 3);
+  // A permanent resource purge must not cascade away the historical action snapshots.
+  await prisma.eagleAsset.delete({ where: { id: f.a.id } });
+  assert.equal(await prisma.eaglePhotoAgentEvent.count({ where: { taskId: task.id } }), 3);
+});
+
+test('later edits block undo and retain both successful execution and failed undo attempts', async () => {
+  const f = await fixture();
+  const task = await f.task();
+  const suggestion = await f.proposal(task);
+  await f.service.review(f.ownerId, task.id, suggestion.id, { action: 'ACCEPT' }, false);
+  await prisma.eagleAsset.update({ where: { id: f.a.id }, data: { rowVersion: { increment: 1 } } });
+  await assert.rejects(f.service.undo(f.ownerId, task.id, suggestion.id, false), /无法安全撤销/);
+  const history = await f.service.history(f.ownerId, task.id, { limit: 20 }, false);
+  assert.equal(history.items[0].action, 'UNDO_FAILED');
+  assert.ok(history.items.some((e) => e.action === 'EXECUTED'));
+  assert.ok(!history.items.some((e) => e.action === 'UNDONE'));
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 1);
+});
+
+test('delete audit freezes all logical photo components and undo refuses later motion edits', async () => {
+  const f = await fixture(),
+    identifier = randomUUID();
+  await prisma.eagleAsset.update({
+    where: { id: f.a.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+  });
+  const motion = await f.add('PHOTO', {
+    livePhotoIdentifier: identifier,
+    livePhotoRole: 'MOTION',
+    mimeType: 'video/quicktime',
+  });
+  await prisma.eagleAssetRendition.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: motion.id,
+      kind: 'PREVIEW',
+      status: 'READY',
+      revision: motion.mediaRevision,
+      storageKey: `test/${randomUUID()}`,
+      mimeType: 'video/mp4',
+      byteSize: 1,
+    },
+  });
+  const request = await f.service.submitRequest(
+    f.ownerId,
+    {
+      kind: 'DELETE',
+      title: 'Logical photo request',
+      rationale: 'Agent proposes removing this synthetic logical photo.',
+      items: [
+        {
+          assetId: f.a.id,
+          evidenceIds: [],
+          visualReviewed: true,
+          rationale: 'Synthetic approval test.',
+        },
+      ],
+    },
+    false,
+  );
+  const suggestion = (await f.service.detail(f.ownerId, request.id, false)).suggestions[0];
+  await f.service.review(f.ownerId, request.id, suggestion.id, { action: 'ACCEPT' }, false);
+  const history = await f.service.history(f.ownerId, request.id, { limit: 20 }, false);
+  const executed = history.items.find((event) => event.action === 'EXECUTED');
+  assert.deepEqual(
+    new Set(executed.details.operation.after.map((asset) => asset.id)),
+    new Set([f.a.id, motion.id]),
+  );
+  await prisma.eagleAsset.update({
+    where: { id: motion.id },
+    data: { rowVersion: { increment: 1 } },
+  });
+  await assert.rejects(
+    f.service.undo(f.ownerId, request.id, suggestion.id, false),
+    /关联媒体已变化/,
+  );
+  for (const id of [f.a.id, motion.id])
+    assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).deletedAt);
 });

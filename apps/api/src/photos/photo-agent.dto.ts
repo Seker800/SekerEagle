@@ -20,8 +20,9 @@ import {
   ValidateNested,
 } from 'class-validator';
 export class CreatePhotoTaskDto {
-  @ApiProperty({ enum: ['CITY', 'NON_PHOTO'] }) @IsIn(['CITY', 'NON_PHOTO']) kind!:
-    'CITY' | 'NON_PHOTO';
+  @ApiProperty({ enum: ['CITY', 'NON_PHOTO', 'SEND_TO_MATERIAL', 'DELETE'] })
+  @IsIn(['CITY', 'NON_PHOTO', 'SEND_TO_MATERIAL', 'DELETE'])
+  kind!: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
   @ApiProperty({ type: [String], maxItems: 200 })
   @IsArray()
   @ArrayMinSize(1)
@@ -49,6 +50,11 @@ export class PhotoCityDto {
   @ApiProperty() @IsString() @MinLength(1) @MaxLength(120) region!: string;
   @ApiProperty() @IsNumber() @Min(-90) @Max(90) latitude!: number;
   @ApiProperty() @IsNumber() @Min(-180) @Max(180) longitude!: number;
+  @ApiPropertyOptional({ enum: ['CITY', 'EXACT'] })
+  @IsOptional()
+  @IsIn(['CITY', 'EXACT'])
+  precision?: 'CITY' | 'EXACT';
+  @ApiPropertyOptional() @IsOptional() @IsNumber() @Min(0.01) @Max(10000) accuracyMeters?: number;
 }
 export class ProposePhotoDto {
   @ApiProperty() @IsUUID('4') assetId!: string;
@@ -97,4 +103,30 @@ export class ReviewPhotoSuggestionDto {
   @ValidateNested()
   @Type(() => PhotoCityDto)
   city?: PhotoCityDto;
+}
+
+export class SubmitPhotoRequestDto {
+  @ApiProperty({ enum: ['CITY', 'SEND_TO_MATERIAL', 'DELETE'] })
+  @IsIn(['CITY', 'SEND_TO_MATERIAL', 'DELETE'])
+  kind!: 'CITY' | 'SEND_TO_MATERIAL' | 'DELETE';
+  @ApiProperty() @IsString() @MinLength(1) @MaxLength(160) title!: string;
+  @ApiProperty() @IsString() @MinLength(8) @MaxLength(2000) rationale!: string;
+  @ApiProperty({ type: [ProposePhotoDto], maxItems: 200 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ValidateNested({ each: true })
+  @Type(() => ProposePhotoDto)
+  items!: ProposePhotoDto[];
+}
+export class ReviewPhotoRequestDto {
+  @ApiProperty({ type: [String], maxItems: 200 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  suggestionIds!: string[];
+  @ApiProperty({ enum: ['ACCEPT', 'REJECT'] }) @IsIn(['ACCEPT', 'REJECT']) action!:
+    'ACCEPT' | 'REJECT';
 }

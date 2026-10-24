@@ -13,29 +13,14 @@ export async function setEagleTrash(
   includePrivate = false,
 ) {
   const { ownerId, libraryMode } = identity;
-  const ids = [...new Set(assetIds)];
-  if (!ids.length || ids.length !== assetIds.length)
-    throw new BadRequestException('素材 ID 不能为空或重复。');
-  const sources = await transaction.eagleAsset.findMany({
-    where: {
-      ownerId,
-      libraryMode: libraryMode,
-      id: { in: ids },
-      deletedAt: restore ? { not: null } : null,
-      purgeAfter: restore ? null : undefined,
-      ...privateVisibilityWhere(includePrivate),
-    },
-    select: { id: true, mediaRevision: true, livePhotoIdentifier: true, livePhotoRole: true },
-  });
-  if (sources.length !== ids.length) throw new NotFoundException('一个或多个素材不存在。');
-  const motions = await resolveLivePhotoMotions(
+  const resources = await resolveEagleTrashTargets(
     transaction,
-    { ownerId, libraryMode: libraryMode },
-    sources,
-    includePrivate,
+    identity,
+    assetIds,
     restore,
+    includePrivate,
   );
-  const resourceIds = [...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)])];
+  const resourceIds = resources.map((resource) => resource.id);
   const result = await transaction.eagleAsset.updateMany({
     where: {
       ownerId,
@@ -75,4 +60,50 @@ export async function setEagleTrash(
     });
   }
   return result.count;
+}
+
+/** Resolve the same logical resource set for mutation, version checks and durable audit snapshots. */
+export async function resolveEagleTrashTargets(
+  transaction: Prisma.TransactionClient,
+  identity: LibraryIdentity,
+  assetIds: string[],
+  restore: boolean,
+  includePrivate = false,
+) {
+  const { ownerId, libraryMode } = identity;
+  const ids = [...new Set(assetIds)];
+  if (!ids.length || ids.length !== assetIds.length)
+    throw new BadRequestException('素材 ID 不能为空或重复。');
+  const sources = await transaction.eagleAsset.findMany({
+    where: {
+      ownerId,
+      libraryMode: libraryMode,
+      id: { in: ids },
+      deletedAt: restore ? { not: null } : null,
+      purgeAfter: restore ? null : undefined,
+      ...privateVisibilityWhere(includePrivate),
+    },
+    select: {
+      id: true,
+      mediaRevision: true,
+      rowVersion: true,
+      deletedAt: true,
+      livePhotoIdentifier: true,
+      livePhotoRole: true,
+    },
+  });
+  if (sources.length !== ids.length) throw new NotFoundException('一个或多个素材不存在。');
+  const motions = await resolveLivePhotoMotions(
+    transaction,
+    { ownerId, libraryMode: libraryMode },
+    sources,
+    includePrivate,
+    restore,
+  );
+  const resourceIds = [...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)])];
+  return transaction.eagleAsset.findMany({
+    where: { ownerId, libraryMode, id: { in: resourceIds } },
+    select: { id: true, mediaRevision: true, rowVersion: true, deletedAt: true },
+    orderBy: { id: 'asc' },
+  });
 }

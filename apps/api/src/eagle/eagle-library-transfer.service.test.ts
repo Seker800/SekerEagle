@@ -36,3 +36,31 @@ test('unauthorized or mixed source IDs fail before any object copy or operation 
   );
   assert.equal(copied, 0);
 });
+
+test('approval snapshot mismatch fails before a transfer plan or any object copy', async () => {
+  let writes = 0;
+  const db = {
+    eagleLibraryTransfer: {
+      findUnique: async () => null,
+      upsert: async () => {
+        writes++;
+      },
+    },
+    eagleAsset: { findMany: async () => [{ id: 'photo', mediaRevision: 2, rowVersion: 1 }] },
+  } as never;
+  const storage = {
+    copyObject: async () => {
+      writes++;
+    },
+  } as never;
+  await assert.rejects(
+    new EagleLibraryTransferService(db, storage, 'PHOTO').send(
+      'owner',
+      { operationId: 'op', assetIds: ['photo'] },
+      false,
+      new Map([['photo', { mediaRevision: 1, rowVersion: 1 }]]),
+    ),
+    /照片已变化/,
+  );
+  assert.equal(writes, 0);
+});

@@ -1401,10 +1401,27 @@ model EaglePhotoAgentTask {
   status String @default("OPEN")
   scope Json
   createdAt DateTime @default(now())
-  expiresAt DateTime
+  expiresAt DateTime?
+  title String?
+  rationale String?
   suggestions EaglePhotoAgentSuggestion[]
+  events EaglePhotoAgentEvent[]
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, createdAt, id])
+}
+model EaglePhotoAgentEvent {
+  id String @id @default(uuid())
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  taskId String
+  suggestionId String?
+  assetId String?
+  actor String
+  action String
+  details Json
+  createdAt DateTime @default(now())
+  task EaglePhotoAgentTask @relation(fields:[ownerId,libraryMode,taskId],references:[ownerId,libraryMode,id],onDelete:Restrict)
+  @@index([ownerId,libraryMode,taskId,createdAt,id])
 }
 model EaglePhotoAgentSuggestion {
   id String @id @default(uuid())
@@ -1439,6 +1456,8 @@ model EaglePhotoLocation {
   latitude Float
   longitude Float
   source String @default("INFERRED")
+  precision String @default("CITY")
+  accuracyMeters Float?
   suggestionId String
   rowVersion Int @default(1)
   updatedAt DateTime @updatedAt

@@ -7,6 +7,8 @@ export interface PhotoCity {
   region: string;
   latitude: number;
   longitude: number;
+  precision?: 'CITY' | 'EXACT';
+  accuracyMeters?: number;
 }
 export interface AgentPhoto {
   id: string;
@@ -21,17 +23,25 @@ export interface AgentPhoto {
 export interface PhotoAgentSuggestion {
   id: string;
   assetId: string;
-  kind: 'CITY' | 'NON_PHOTO';
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'UNDONE';
+  kind: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
+  status: 'PENDING' | 'APPLYING' | 'FAILED' | 'ACCEPTED' | 'REJECTED' | 'UNDONE';
   value: PhotoCity | { category: string };
   rationale: string;
   evidence: Array<{ id: string }>;
 }
 export interface PhotoAgentTaskSummary {
   id: string;
-  kind: 'CITY' | 'NON_PHOTO';
+  kind: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
   status: 'OPEN' | 'CANCELLED';
-  expiresAt: string;
+  expiresAt: string | null;
+  title?: string | null;
+  rationale?: string | null;
+  createdAt?: string;
+  pendingCount?: number;
+  acceptedCount?: number;
+  rejectedCount?: number;
+  retryCount?: number;
+  coverIds?: string[];
   assetCount: number;
 }
 export interface PhotoAgentTask extends Omit<PhotoAgentTaskSummary, 'assetCount'> {
@@ -82,3 +92,48 @@ export async function createPhotoAgentTask(from: string, to: string, kind: 'CITY
     body: JSON.stringify({ kind, assetIds: items.map((a) => a.id) }),
   });
 }
+
+export interface PhotoRequestReviewResult {
+  results: Array<{ id: string; status: string; error?: string }>;
+  succeeded: number;
+  failed: number;
+}
+export const reviewPhotoRequest = (
+  taskId: string,
+  suggestionIds: string[],
+  action: 'ACCEPT' | 'REJECT',
+) =>
+  request<PhotoRequestReviewResult>(`${base}/tasks/${encodeURIComponent(taskId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ suggestionIds, action }),
+  });
+
+export interface PhotoAgentEvent {
+  id: string;
+  suggestionId: string | null;
+  assetId: string | null;
+  actor: 'AGENT' | 'HUMAN' | 'SYSTEM';
+  action:
+    | 'PROPOSED'
+    | 'REJECTED'
+    | 'EXECUTED'
+    | 'EXECUTION_STARTED'
+    | 'EXECUTION_FAILED'
+    | 'UNDONE'
+    | 'CANCELLED'
+    | 'REVIEW_FAILED'
+    | 'UNDO_FAILED';
+  createdAt: string;
+  details: {
+    kind?: string;
+    legacySnapshot?: boolean;
+    value?: PhotoCity;
+    error?: string;
+    previousStatus?: string;
+  };
+}
+export const getPhotoAgentHistory = (taskId: string, after?: string, signal?: AbortSignal) =>
+  request<{ items: PhotoAgentEvent[]; next: string | null }>(
+    `${base}/tasks/${encodeURIComponent(taskId)}/history?limit=20${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    { signal },
+  );

@@ -5,7 +5,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
-import { CreatePhotoTaskDto } from './photo-agent.dto';
+import { CreatePhotoTaskDto, SubmitPhotoRequestDto } from './photo-agent.dto';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 
 test('task creation rejects partial visibility and never persists out-of-scope resources', async () => {
@@ -38,7 +38,7 @@ test('DTO rejects ownerId, excess scope and unsupported modes', async () => {
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: CreatePhotoTaskDto }));
 });
 test('accept, reject, undo and cancel are browser-only operations', () => {
-  for (const name of ['review', 'undo', 'cancel']) {
+  for (const name of ['review', 'reviewRequest', 'undo', 'cancel']) {
     const handler = Reflect.get(PhotoAgentController.prototype, name) as object;
     const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
     assert.ok(guards.includes(BrowserPrincipalGuard));
@@ -83,4 +83,31 @@ test('agent previews use the same safe media disposition as browser previews', a
   } as never);
   assert.ok(String(file.getHeaders().disposition).startsWith('attachment'));
   assert.equal(headers.get('X-Content-Type-Options'), 'nosniff');
+});
+
+test('request submission rejects decision overrides and empty or oversized batches', async () => {
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  const item = {
+    assetId: '00000000-0000-4000-8000-000000000001',
+    evidenceIds: [],
+    visualReviewed: true,
+    rationale: 'Agent supplied its own reasoning.',
+  };
+  const base = {
+    kind: 'DELETE',
+    title: 'Request',
+    rationale: 'Agent supplied reason',
+    items: [item],
+  };
+  await pipe.transform(base, { type: 'body', metatype: SubmitPhotoRequestDto });
+  for (const extra of [
+    { action: 'ACCEPT' },
+    { ownerId: 'other' },
+    { approved: true },
+    { items: [] },
+    { items: Array(201).fill(item) },
+  ])
+    await assert.rejects(
+      pipe.transform({ ...base, ...extra }, { type: 'body', metatype: SubmitPhotoRequestDto }),
+    );
 });
