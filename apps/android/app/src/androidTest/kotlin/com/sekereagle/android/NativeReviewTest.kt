@@ -133,6 +133,68 @@ class NativeReviewTest {
     }
 
     @Test
+    fun swipesAndTabsKeepIndependentScrollPositionsAcrossRecreation() {
+        Server().use { server ->
+            val model = model(server)
+            val restoration = StateRestorationTester(compose)
+            restoration.setContent { NativeGalleryApp(model) {} }
+            compose.onNodeWithTag("native-grid").performScrollToIndex(34)
+            compose.waitForIdle()
+            val photoPosition = scrollPosition()
+            compose.onNodeWithTag("native-library").performTouchInput { swipeLeft() }
+            await { model.state.value.mode == GalleryMode.MATERIAL && !model.state.value.loading }
+            compose.onNodeWithTag("native-grid").performScrollToIndex(22)
+            compose.waitForIdle()
+            val materialPosition = scrollPosition()
+            compose.onNodeWithTag("native-library").performTouchInput { swipeRight() }
+            await { model.state.value.mode == GalleryMode.PHOTO }
+            assertEquals(photoPosition, scrollPosition(), 0.01f)
+            compose.onNodeWithTag("mode:MATERIAL").performClick()
+            await { model.state.value.mode == GalleryMode.MATERIAL }
+            assertEquals(materialPosition, scrollPosition(), 0.01f)
+            restoration.emulateSavedInstanceStateRestore()
+            compose.waitForIdle()
+            assertEquals(
+                "Rotation must retain the active grid position",
+                materialPosition,
+                scrollPosition(),
+                0.01f,
+            )
+            compose.onNodeWithTag("mode:PHOTO").performClick()
+            assertEquals(photoPosition, scrollPosition(), 0.01f)
+            main { model.logout() }
+            compose.onNodeWithTag("native-library").assertDoesNotExist()
+            assertTrue(model.retainedLibraries.value.isEmpty())
+        }
+    }
+
+    private fun scrollPosition(): Float =
+        compose
+            .onNodeWithTag("native-grid")
+            .fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange]
+            .value()
+
+    @Test
+    fun authenticatedLaunchDoesNotImmediatelyRepeatValidationOrReload() {
+        Server().use { server ->
+            val model = model(server)
+            await { model.retainedLibraries.value[GalleryMode.MATERIAL]?.loaded == true }
+            val requests = server.paths.toList()
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { repeat(3) { model.onForeground() } }
+            compose.waitForIdle()
+            assertEquals(1, server.paths.count { it == "/api/auth/me" })
+            assertEquals(
+                requests.count { it.contains("/assets?") },
+                server.paths.count { it.contains("/assets?") },
+            )
+            assertTrue(model.retainedLibraries.value[GalleryMode.MATERIAL]!!.items.isNotEmpty())
+            main { model.logout() }
+        }
+    }
+
+    @Test
     fun viewerTapTogglesChromeAndOffersDirectActionsInBothModes() {
         Server().use { server ->
             val model = model(server)
