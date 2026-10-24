@@ -14,6 +14,7 @@ test('no due dirty owner means no point extraction, aggregation or gallery acces
   assert.match(query, /SKIP LOCKED/);
   assert.match(query, /"availableAt"<=now\(\)/);
   assert.match(query, /EagleMediaJob/);
-  assert.match(query, /INTERACTIVE/);
+  assert.doesNotMatch(query, /INTERACTIVE|PENDING/);
+  assert.match(query, /PROCESSING/);
   assert.doesNotMatch(query, /EaglePhotoMetadata|EaglePhotoLocation/);
 });
