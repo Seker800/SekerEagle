@@ -88,6 +88,19 @@ class EmbeddedThumbnailTests(unittest.TestCase):
         self.raw.extract_thumb.return_value=SimpleNamespace(format=SimpleNamespace(name='JPEG'), data=Oversize())
         self.assertFalse(self.module.write_raw_thumbnail(self.raw,self.path,50_000_000))
 
+    def test_browsing_preview_retains_enough_detail_and_validates_source_aspect(self):
+        self.jpeg(size=(2400,1600))
+        self.assertTrue(self.module.write_raw_thumbnail(self.raw, self.path, 50_000_000,
+                        max_size=1600, minimum_size=1600, expected_dimensions=(6000,4000)))
+        with Image.open(self.path) as result: self.assertEqual(result.size, (1600,1067))
+        Path(self.path).unlink()
+        self.jpeg(size=(800,600))
+        self.assertFalse(self.module.write_raw_thumbnail(self.raw, self.path, 50_000_000,
+                         max_size=1600, minimum_size=1600, expected_dimensions=(6000,4000)))
+        self.jpeg(size=(2400,1600))
+        self.assertFalse(self.module.write_raw_thumbnail(self.raw, self.path, 50_000_000,
+                         max_size=1600, minimum_size=1600, expected_dimensions=(4000,4000)))
+
     def test_output_errors_are_not_misreported_as_missing_preview(self):
         self.jpeg()
         Path(self.path).write_bytes(b'previous')

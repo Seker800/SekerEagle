@@ -45,3 +45,9 @@ test('only thumbnails prefer the camera JPEG; editing and ordinary previews reta
     assert.equal(renditionSource(spec, 'developed'), 'developed');
   }
 });
+
+test('browsing excludes expensive editing derivatives and details never replace browsing', () => {
+  assert.deepEqual(imageRenditionSpecs('image/x-fuji-raf', 'BROWSE').map(spec => spec.variant), ['default', '256', '512']);
+  assert.deepEqual(imageRenditionSpecs('image/x-fuji-raf', 'DETAILS').map(spec => spec.variant), ['edit']);
+  assert.deepEqual(imageRenditionSpecs('image/jpeg', 'DETAILS'), []);
+});

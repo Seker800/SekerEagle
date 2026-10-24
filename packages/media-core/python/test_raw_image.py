@@ -19,6 +19,24 @@ class RawPolicyTests(unittest.TestCase):
         self.raw.sizes = SimpleNamespace(raw_width=11664, raw_height=8750, width=11648, height=8736, flip=6)
         self.raw.postprocess.return_value = SimpleNamespace(shape=(5824, 4368, 3))
 
+    def test_browsing_uses_valid_camera_preview_before_sensor_unpack_and_development(self):
+        thumb = MagicMock(return_value=True)
+        preview = MagicMock(); preview.width = 1200; preview.height = 1600
+        self.image.open.return_value.__enter__.return_value = preview
+        with patch.dict(sys.modules, {"raw_thumbnail": SimpleNamespace(write_raw_thumbnail=thumb)}):
+            result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.png", browse=True)
+        self.raw.unpack.assert_not_called()
+        self.raw.postprocess.assert_not_called()
+        self.assertTrue(result["embeddedPreview"])
+        self.assertEqual(result["width"], 8736)
+
+    def test_browsing_falls_back_to_sensor_decode_if_embedded_preview_is_unusable(self):
+        with patch.dict(sys.modules, {"raw_thumbnail": SimpleNamespace(write_raw_thumbnail=MagicMock(return_value=False))}), patch("builtins.open", MagicMock()):
+            result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "fallback.tiff", browse=True)
+        self.raw.unpack.assert_called_once()
+        self.raw.postprocess.assert_called_once()
+        self.assertFalse(result.get("embeddedPreview", False))
+
     def test_high_resolution_original_keeps_dimensions_and_decodes_half_size(self):
         with patch("builtins.open", MagicMock()):
             result = self.module.decode_raw(self.raw, 120_000_000, 50_000_000, "preview.tiff")
