@@ -1,5 +1,7 @@
+import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { after, test } from 'node:test';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
@@ -308,6 +310,20 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
     const auth = { authorization: `Bearer ${pat.token}`, 'content-type': 'application/json' };
     assert.equal((await fetch(`${base}/api/photos/agent/photos`)).status, 401);
     assert.equal((await fetch(`${base}/api/photos/agent/photos`, { headers: auth })).status, 200);
+    // Malformed compressed bodies must fail through the parser callback, without terminating HTTP.
+    for (const path of ['requests', 'tasks']) {
+      const malformed = await fetch(`${base}/api/photos/agent/${path}`, {
+        method: 'POST',
+        headers: { ...auth, 'content-encoding': 'gzip' },
+        body: Buffer.concat([
+          gzipSync(Buffer.from('{}')),
+          Buffer.from('unexpected trailing bytes'),
+        ]),
+      });
+      assert.equal(malformed.status, 400);
+      assert.equal((await fetch(`${base}/api/photos/agent/photos`, { headers: auth })).status, 200);
+    }
+
     assert.equal(
       (await fetch(`${base}/api/photos/agent/photos?ownerId=x`, { headers: auth })).status,
       400,
