@@ -31,7 +31,7 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
     fun submit(value: String) {
         keyboard?.hide()
         focusManager.clearFocus()
-        model.search(value)
+        model.search(value, state.searchFilters)
     }
     Column(
         Modifier.fillMaxSize()
@@ -49,7 +49,7 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                 model::updateSearchDraft,
                 Modifier.weight(1f).focusRequester(focus).testTag("search-input"),
                 singleLine = true,
-                placeholder = { Text("搜索名称或描述", color = NativeMuted) },
+                placeholder = { Text("搜索名称或标签", color = NativeMuted) },
                 leadingIcon = { Icon(Icons.Outlined.Search, null, tint = NativeMuted) },
                 shape = CircleShape,
                 colors =
@@ -70,8 +70,10 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
             }
         }
         LaunchedEffect(Unit) {
-            focus.requestFocus()
-            keyboard?.show()
+            if (state.filterPanel == null) {
+                focus.requestFocus()
+                keyboard?.show()
+            }
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 30.dp)) {
             Text("按条件查找", color = NativeMuted, fontSize = 13.sp)

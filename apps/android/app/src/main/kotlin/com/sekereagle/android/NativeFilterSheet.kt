@@ -49,7 +49,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                     },
                 ),
         ) {
-            mutableStateOf(state.filters)
+            mutableStateOf(if (state.searchOpen) state.searchFilters else state.filters)
         }
     var tags by
         rememberSaveable(
@@ -64,7 +64,11 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
         }
     val editingTags = panel == "添加标签" || panel == "移除标签"
     val context = LocalContext.current
-    val error = draft.validationError()
+    val error = if (editingTags || panel == "评分") null else draft.validationError()
+    val height =
+        with(androidx.compose.ui.platform.LocalDensity.current) {
+            androidx.compose.ui.platform.LocalWindowInfo.current.containerSize.height.toDp()
+        }
     ModalBottomSheet(
         onDismissRequest = model::closePanel,
         containerColor = androidx.compose.ui.graphics.Color(0xFF1C1C1E),
@@ -72,134 +76,144 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
     ) {
         Column(
             Modifier.fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .heightIn(max = height * 0.85f)
                 .padding(horizontal = 22.dp)
-                .padding(bottom = 28.dp)
-                .testTag("native-filter-sheet"),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .testTag("native-filter-sheet")
         ) {
-            Text(if (panel == "筛选") "搜索条件" else panel, style = MaterialTheme.typography.titleLarge)
-            if (state.optionsLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
-            state.optionsError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error)
-                TextButton({ model.openFilters(panel) }) { Text("重新加载选项") }
-            }
-            if (panel == "标签" || editingTags || panel == "筛选") {
-                Text(if (editingTags) "选择要${panel}的标签" else "标签 · 任意一个即可", color = NativeMuted)
-                if (state.options.tags.isEmpty() && !state.optionsLoading)
-                    Text("当前模式暂无可用标签", color = NativeMuted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    state.options.tags.forEach { tag ->
-                        val selected = if (editingTags) tag.id in tags else tag.id in draft.tags
+            Text(
+                if (panel == "筛选") "搜索条件" else panel,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Column(
+                Modifier.fillMaxWidth()
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (panel == "标签" || editingTags || panel == "筛选") {
+                    NativeOptionFeedback(state, NativeOptionSection.TAGS, "标签", panel, model)
+                    NativeTagPicker(
+                        state.options.tags,
+                        if (editingTags) tags else draft.tags,
+                        state.optionStatus[NativeOptionSection.TAGS] ?: NativeOptionStatus(),
+                        if (panel == "筛选") 240.dp else height * 0.45f,
+                        !state.busy,
+                    ) { selected ->
+                        if (editingTags) tags = selected else draft = draft.copy(tags = selected)
+                    }
+                }
+                if (
+                    state.mode == GalleryMode.PHOTO &&
+                        (panel == "相机" || panel == "镜头" || panel == "筛选")
+                ) {
+                    NativeOptionFeedback(
+                        state,
+                        NativeOptionSection.PHOTOGRAPHY,
+                        "相机与镜头",
+                        panel,
+                        model,
+                    )
+                    if (panel != "镜头")
+                        ChoiceList("相机", state.options.cameras, draft.camera) {
+                            draft = draft.copy(camera = it)
+                        }
+                    if (panel != "相机")
+                        ChoiceList("镜头", state.options.lenses, draft.lens) {
+                            draft = draft.copy(lens = it)
+                        }
+                }
+                if (panel == "格式" || panel == "筛选") {
+                    NativeOptionFeedback(state, NativeOptionSection.FORMATS, "格式", panel, model)
+                    Text("格式 · 任意一种即可", color = NativeMuted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         NativeChoiceChip(
-                            selected,
-                            {
-                                if (editingTags)
-                                    tags = if (selected) tags - tag.id else tags + tag.id
-                                else
+                            draft.formats.isEmpty(),
+                            { draft = draft.copy(formats = emptySet()) },
+                            { Text("不限") },
+                        )
+                        state.options.formats.forEach { format ->
+                            val selected = format in draft.formats
+                            NativeChoiceChip(
+                                selected,
+                                {
                                     draft =
                                         draft.copy(
-                                            tags =
-                                                if (selected) draft.tags - tag.id
-                                                else (draft.tags + tag.id).take(100).toSet()
+                                            formats =
+                                                if (selected) draft.formats - format
+                                                else draft.formats + format
                                         )
-                            },
-                            { Text(tag.name) },
-                        )
+                                },
+                                { Text(format.uppercase(java.util.Locale.ROOT)) },
+                            )
+                        }
                     }
                 }
-            }
-            if (
-                state.mode == GalleryMode.PHOTO && (panel == "相机" || panel == "镜头" || panel == "筛选")
-            ) {
-                if (panel != "镜头")
-                    ChoiceList("相机", state.options.cameras, draft.camera) {
-                        draft = draft.copy(camera = it)
+                if (panel == "时间" || panel == "筛选") {
+                    Text("导入时间", style = MaterialTheme.typography.titleMedium)
+                    Text("按手机所在时区筛选导入日期；列表仍沿用当前所选的排序。", color = NativeMuted)
+                    fun pick(value: String, change: (String) -> Unit) {
+                        val date =
+                            runCatching { LocalDate.parse(value) }.getOrDefault(LocalDate.now())
+                        DatePickerDialog(
+                                context,
+                                { _, y, m, d -> change(LocalDate.of(y, m + 1, d).toString()) },
+                                date.year,
+                                date.monthValue - 1,
+                                date.dayOfMonth,
+                            )
+                            .show()
                     }
-                if (panel != "相机")
-                    ChoiceList("镜头", state.options.lenses, draft.lens) {
-                        draft = draft.copy(lens = it)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            { pick(draft.from) { draft = draft.copy(from = it) } },
+                            Modifier.weight(1f),
+                        ) {
+                            Text(draft.from.ifEmpty { "开始日期" })
+                        }
+                        OutlinedButton(
+                            { pick(draft.to) { draft = draft.copy(to = it) } },
+                            Modifier.weight(1f),
+                        ) {
+                            Text(draft.to.ifEmpty { "结束日期" })
+                        }
                     }
-            }
-            if (panel == "格式" || panel == "筛选") {
-                Text("格式 · 任意一种即可", color = NativeMuted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    NativeChoiceChip(
-                        draft.formats.isEmpty(),
-                        { draft = draft.copy(formats = emptySet()) },
-                        { Text("不限") },
-                    )
-                    state.options.formats.forEach { format ->
-                        val selected = format in draft.formats
-                        NativeChoiceChip(
-                            selected,
-                            {
-                                draft =
-                                    draft.copy(
-                                        formats =
-                                            if (selected) draft.formats - format
-                                            else draft.formats + format
+                    TextButton({ draft = draft.copy(from = "", to = "") }) { Text("清除日期") }
+                }
+                if (panel == "筛选" || panel == "评分") {
+                    Text(if (panel == "评分") "批量设置评分" else "最低评分", color = NativeMuted)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        (0..5).forEach { n ->
+                            NativeChoiceChip(
+                                (draft.rating ?: 0) == n,
+                                { draft = draft.copy(rating = n.takeIf { it > 0 }) },
+                                {
+                                    Text(
+                                        if (n == 0) {
+                                            if (panel == "评分") "清除评分" else "不限"
+                                        } else "$n ★"
                                     )
-                            },
-                            { Text(format.uppercase(java.util.Locale.ROOT)) },
-                        )
+                                },
+                            )
+                        }
                     }
+                    if (panel == "筛选" && state.mode == GalleryMode.PHOTO)
+                        ChoiceList(
+                            "位置信息",
+                            listOf("WITH", "WITHOUT"),
+                            draft.gps,
+                            { if (it == "WITH") "有 GPS" else "无 GPS" },
+                        ) {
+                            draft = draft.copy(gps = it)
+                        }
                 }
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                state.message?.let { Text(it, color = NativeMuted) }
             }
-            if (panel == "时间" || panel == "筛选") {
-                Text("导入时间", style = MaterialTheme.typography.titleMedium)
-                Text("按手机所在时区筛选导入日期；列表仍沿用当前所选的排序。", color = NativeMuted)
-                fun pick(value: String, change: (String) -> Unit) {
-                    val date = runCatching { LocalDate.parse(value) }.getOrDefault(LocalDate.now())
-                    DatePickerDialog(
-                            context,
-                            { _, y, m, d -> change(LocalDate.of(y, m + 1, d).toString()) },
-                            date.year,
-                            date.monthValue - 1,
-                            date.dayOfMonth,
-                        )
-                        .show()
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        { pick(draft.from) { draft = draft.copy(from = it) } },
-                        Modifier.weight(1f),
-                    ) {
-                        Text(draft.from.ifEmpty { "开始日期" })
-                    }
-                    OutlinedButton(
-                        { pick(draft.to) { draft = draft.copy(to = it) } },
-                        Modifier.weight(1f),
-                    ) {
-                        Text(draft.to.ifEmpty { "结束日期" })
-                    }
-                }
-                TextButton({ draft = draft.copy(from = "", to = "") }) { Text("清除日期") }
-            }
-            if (panel == "筛选" || panel == "评分") {
-                Text(if (panel == "评分") "批量设置评分" else "最低评分", color = NativeMuted)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    (0..5).forEach { n ->
-                        NativeChoiceChip(
-                            (draft.rating ?: 0) == n,
-                            { draft = draft.copy(rating = n.takeIf { it > 0 }) },
-                            { Text(if (n == 0) "无" else "$n ★") },
-                        )
-                    }
-                }
-                if (panel == "筛选" && state.mode == GalleryMode.PHOTO)
-                    ChoiceList(
-                        "位置信息",
-                        listOf("WITH", "WITHOUT"),
-                        draft.gps,
-                        { if (it == "WITH") "有 GPS" else "无 GPS" },
-                    ) {
-                        draft = draft.copy(gps = it)
-                    }
-            }
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            state.message?.let { Text(it, color = NativeMuted) }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
                 TextButton(model::closePanel, enabled = !state.busy) { Text("取消") }
                 if (!editingTags && panel != "评分")
                     TextButton({
@@ -225,9 +239,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                                     tags,
                                 )
                             panel == "评分" -> model.changeSelection("rating", rating = draft.rating)
-                            else ->
-                                if (state.searchOpen) model.search(state.searchDraft, draft)
-                                else model.applyFilters(draft)
+                            else -> model.confirmFilters(draft)
                         }
                     },
                     modifier = Modifier.testTag("filter-submit"),
@@ -235,7 +247,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 ) {
                     Text(
                         if (state.busy) "正在保存…"
-                        else if (state.searchOpen && !editingTags && panel != "评分") "查看结果" else "应用"
+                        else if (state.searchOpen && !editingTags && panel != "评分") "确定" else "应用"
                     )
                 }
             }
@@ -249,7 +261,7 @@ private fun ChoiceList(
     label: String,
     values: List<String>,
     selected: String,
-    display: (String) -> String = { it.uppercase() },
+    display: (String) -> String = { it },
     change: (String) -> Unit,
 ) {
     Text(if (label == "相机" || label == "镜头") "$label · 单选" else label, color = NativeMuted)

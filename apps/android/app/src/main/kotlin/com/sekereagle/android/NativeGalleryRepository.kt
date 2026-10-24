@@ -162,38 +162,63 @@ class NativeGalleryRepository(
         return NativeVideoSource(session, asset.playback, asset.playbackSize)
     }
 
-    suspend fun options(mode: GalleryMode): NativeOptions =
+    suspend fun options(mode: GalleryMode, section: NativeOptionSection): NativeOptions =
         withContext(Dispatchers.IO) {
             val base = NativeGalleryPolicy.base(mode.name)
-            val tags = session.array("$base/manual-tags")
-            val capabilities = session.json("GET", "$base/media-capabilities")
-            val facets =
-                if (mode == GalleryMode.PHOTO) session.json("GET", "$base/photography/facets")
-                else JSONObject()
             fun strings(json: JSONObject, key: String): List<String> =
                 json
                     .optJSONArray(key)
                     ?.let { a -> (0 until a.length()).map { a.getString(it) } }
                     .orEmpty()
-            fun formats(json: JSONObject): List<String> =
-                strings(json, "formats").ifEmpty {
-                    strings(json, "extensions").map {
-                        canonicalFormat(it.removePrefix("."))
-                    }
-                }
-            NativeOptions(
-                (0 until tags.length()).map {
-                    tags.getJSONObject(it).let { t ->
-                        NativeTag(t.getString("id"), t.getString("name"))
-                    }
-                },
-                strings(facets, "cameras"),
-                strings(facets, "lenses"),
-                (formats(capabilities.getJSONObject("images")) +
-                        formats(capabilities.getJSONObject("videos")))
+                    .filter { it.isNotBlank() }
                     .distinct()
-                    .sorted(),
-            )
+            when (section) {
+                NativeOptionSection.TAGS -> {
+                    // Legacy catalogs include counts and groups for every tag. Keep this larger
+                    // read budget local to catalogs; ordinary JSON and media budgets are unchanged.
+                    val rows = session.array("$base/manual-tags", 16 * 1024 * 1024)
+                    NativeOptions(
+                        tags =
+                            (0 until rows.length())
+                                .map { i ->
+                                    val row = rows.getJSONObject(i)
+                                    val name = row.getString("name")
+                                    NativeTag(
+                                        row.getString("id"),
+                                        name,
+                                        normalizeTagSearch(
+                                            "$name ${row.optString("pinyin")} ${row.optString("pinyinInitials")}"
+                                        ),
+                                    )
+                                }
+                                .distinctBy { it.id }
+                    )
+                }
+                NativeOptionSection.FORMATS -> {
+                    val json = session.json("GET", "$base/media-capabilities")
+                    fun formats(part: JSONObject) =
+                        strings(part, "formats")
+                            .ifEmpty { strings(part, "extensions") }
+                            .map(::canonicalFormat)
+                    NativeOptions(
+                        formats =
+                            (formats(json.getJSONObject("images")) +
+                                    formats(json.getJSONObject("videos")))
+                                .distinct()
+                                .sorted()
+                    )
+                }
+                NativeOptionSection.PHOTOGRAPHY -> {
+                    if (mode != GalleryMode.PHOTO) NativeOptions()
+                    else
+                        session.json("GET", "$base/photography/facets").let {
+                            NativeOptions(
+                                cameras = strings(it, "cameras"),
+                                lenses = strings(it, "lenses"),
+                            )
+                        }
+                }
+            }
         }
 
     suspend fun change(

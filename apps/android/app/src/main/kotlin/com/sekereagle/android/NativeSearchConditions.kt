@@ -27,9 +27,11 @@ fun NativeSearchConditions(
     ) {
         if (showKeyword && state.query.isNotEmpty())
             SearchCondition("关键词：${state.query}", "query") { model.search("") }
-        state.filters.tokens(state.options.tags).forEach { token ->
-            SearchCondition(token.label, token.key) { model.removeFilter(token.key) }
-        }
+        (if (state.searchOpen) state.searchFilters else state.filters)
+            .tokens(state.options.tags)
+            .forEach { token ->
+                SearchCondition(token.label, token.key) { model.removeFilter(token.key) }
+            }
     }
 }
 

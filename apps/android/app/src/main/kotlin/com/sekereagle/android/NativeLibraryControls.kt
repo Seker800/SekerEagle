@@ -16,6 +16,9 @@ data class NativeFilters(
     val gps: String = "",
 ) {
     fun validationError(): String? {
+        if (tags.size > 100) return "最多选择 100 个标签"
+        if (rating != null && rating !in 1..5) return "评分必须在 1 到 5 星之间"
+        if (gps.isNotEmpty() && gps !in setOf("WITH", "WITHOUT")) return "请选择有效的位置条件"
         return try {
             val start = from.takeIf { it.isNotBlank() }?.let(LocalDate::parse)
             val end = to.takeIf { it.isNotBlank() }?.let(LocalDate::parse)
@@ -103,7 +106,26 @@ object NativeSelection {
 
 data class NativeFilterToken(val key: String, val label: String)
 
-data class NativeTag(val id: String, val name: String)
+data class NativeTag(
+    val id: String,
+    val name: String,
+    val searchText: String = normalizeTagSearch(name),
+) {
+    fun matches(query: String) = searchText.contains(normalizeTagSearch(query))
+}
+
+internal fun normalizeTagSearch(value: String) =
+    java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFKC)
+        .lowercase(java.util.Locale.ROOT)
+        .filterNot { it.isWhitespace() }
+
+enum class NativeOptionSection {
+    TAGS,
+    FORMATS,
+    PHOTOGRAPHY,
+}
+
+data class NativeOptionStatus(val loading: Boolean = false, val error: String? = null)
 
 data class NativeOptions(
     val tags: List<NativeTag> = emptyList(),
@@ -111,3 +133,11 @@ data class NativeOptions(
     val lenses: List<String> = emptyList(),
     val formats: List<String> = emptyList(),
 )
+
+internal fun NativeOptions.merge(section: NativeOptionSection, incoming: NativeOptions) =
+    when (section) {
+        NativeOptionSection.TAGS -> copy(tags = incoming.tags)
+        NativeOptionSection.FORMATS -> copy(formats = incoming.formats)
+        NativeOptionSection.PHOTOGRAPHY ->
+            copy(cameras = incoming.cameras, lenses = incoming.lenses)
+    }

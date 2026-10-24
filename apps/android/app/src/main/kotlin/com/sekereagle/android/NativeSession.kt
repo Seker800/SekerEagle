@@ -64,10 +64,10 @@ class NativeSession private constructor(context: Context, val origin: String) : 
     }
 
     @Synchronized
-    fun array(path: String): org.json.JSONArray =
-        org.json.JSONArray(
-            String(request("GET", path, null, 2 * 1024 * 1024, true), Charsets.UTF_8)
-        )
+    fun array(path: String, limit: Int = 2 * 1024 * 1024): org.json.JSONArray {
+        require(limit in 1..16 * 1024 * 1024)
+        return org.json.JSONArray(String(request("GET", path, null, limit, true), Charsets.UTF_8))
+    }
 
     internal fun authorizationEpoch(): Int =
         synchronized(credentialLock) {
@@ -94,7 +94,8 @@ class NativeSession private constructor(context: Context, val origin: String) : 
     override fun request(method: String, path: String, body: JSONObject?): JSONObject =
         json(method, path, body)
 
-    fun media(path: String): ByteArray = request("GET", path, null, 16 * 1024 * 1024, true)
+    fun media(path: String): ByteArray =
+        request("GET", path, null, 16 * 1024 * 1024, true, image = true)
 
     internal fun videoRange(
         path: String,
@@ -216,17 +217,18 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         limit: Int,
         refresh: Boolean,
         cancellation: NativeTransferCancellation? = null,
+        image: Boolean = false,
     ): ByteArray =
         exchange(
             method,
             path,
             body,
             refresh,
-            if (limit > 2 * 1024 * 1024) "image/*" else "application/json",
+            if (image) "image/*" else "application/json",
             cancellation = cancellation,
         ) { connection, checkActive ->
             if (connection.contentLengthLong > limit) throw IOException("媒体超过本次读取预算")
-            if (limit > 2 * 1024 * 1024 && !connection.contentType.orEmpty().startsWith("image/"))
+            if (image && !connection.contentType.orEmpty().startsWith("image/"))
                 throw IOException("预览暂不可用")
             connection.inputStream.use { input ->
                 val output = ByteArrayOutputStream()
@@ -251,7 +253,13 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         cancellation: NativeTransferCancellation,
         progress: (Long) -> Unit,
     ) {
-        require(path.matches(Regex("/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/(original|renditions/[a-zA-Z0-9_-]{1,100}/content)")))
+        require(
+            path.matches(
+                Regex(
+                    "/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/(original|renditions/[a-zA-Z0-9_-]{1,100}/content)"
+                )
+            )
+        )
         com.sekereagle.android.core.NativeDownloadPolicy.validate(size, mime)
         exchange("GET", path, null, true, mime, cancellation::bind) { connection, active ->
             cancellation.check()

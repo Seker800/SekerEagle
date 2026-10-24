@@ -39,6 +39,7 @@ data class GalleryState(
     val error: String? = null,
     val searchOpen: Boolean = false,
     val searchDraft: String = "",
+    val searchFilters: NativeFilters = NativeFilters(),
     val history: List<String> = emptyList(),
     val viewerId: String? = null,
     val accountOpen: Boolean = false,
@@ -48,14 +49,19 @@ data class GalleryState(
     val filters: NativeFilters = NativeFilters(),
     val filterPanel: String? = null,
     val options: NativeOptions = NativeOptions(),
-    val optionsLoading: Boolean = false,
-    val optionsError: String? = null,
+    val optionStatus: Map<NativeOptionSection, NativeOptionStatus> = emptyMap(),
     val selecting: Boolean = false,
     val selected: Set<String> = emptySet(),
     val busy: Boolean = false,
     val message: String? = null,
     val trash: Boolean = false,
-)
+) {
+    val optionsLoading
+        get() = optionStatus.values.any { it.loading }
+
+    val optionsError
+        get() = optionStatus.values.mapNotNull { it.error }.joinToString("；").ifEmpty { null }
+}
 
 /**
  * Owns the native flow. A cancelled/replaced scope can never publish a response into another one.
@@ -355,7 +361,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 (current.mode to
                     current.copy(
                         loading = false,
-                        optionsLoading = false,
+                        optionStatus =
+                            current.optionStatus.mapValues { (_, value) ->
+                                value.copy(loading = false)
+                            },
                         filterPanel = null,
                         selecting = false,
                         selected = emptySet(),
@@ -628,6 +637,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 filters = filters,
                 filterPanel = null,
                 searchDraft = query,
+                searchFilters = filters,
                 selecting = false,
                 selected = emptySet(),
                 history = history,
@@ -652,6 +662,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             state.value.copy(
                 searchOpen = true,
                 searchDraft = state.value.query,
+                searchFilters = state.value.filters,
                 accountOpen = false,
             )
     }
@@ -661,7 +672,19 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun removeFilter(key: String) {
-        applyFilters(state.value.filters.without(key))
+        val current = state.value
+        if (current.searchOpen)
+            mutable.value = current.copy(searchFilters = current.searchFilters.without(key))
+        else applyFilters(current.filters.without(key))
+    }
+
+    fun submitSearch() = search(state.value.searchDraft, state.value.searchFilters)
+
+    fun confirmFilters(filters: NativeFilters) {
+        if (state.value.busy || filters.validationError() != null) return
+        if (state.value.searchOpen)
+            mutable.value = state.value.copy(searchFilters = filters, filterPanel = null)
+        else applyFilters(filters)
     }
 
     fun clearSearch() {
@@ -743,7 +766,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 s.filterPanel != null -> s.copy(filterPanel = null)
                 s.selecting -> s.copy(selecting = false, selected = emptySet())
                 s.viewerId != null -> s.copy(viewerId = null)
-                s.searchOpen -> s.copy(searchOpen = false, searchDraft = s.query)
+                s.searchOpen ->
+                    s.copy(searchOpen = false, searchDraft = s.query, searchFilters = s.filters)
                 s.accountOpen -> s.copy(accountOpen = false)
                 s.trash -> {
                     openTrash(false)
@@ -759,42 +783,91 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         return true
     }
 
+    private var optionsGeneration = 0
+
     fun openFilters(panel: String) {
         val repo = repository ?: return
-        if (state.value.busy) return
-        mutable.value =
-            state.value.copy(
-                filterPanel = panel,
-                optionsLoading = true,
-                optionsError = null,
-                message = null,
-            )
-        val identity = state.value.identity
-        val mode = state.value.mode
+        val current = state.value
+        if (current.busy) return
+        val sections =
+            when (panel) {
+                "标签",
+                "添加标签",
+                "移除标签" -> setOf(NativeOptionSection.TAGS)
+                "格式" -> setOf(NativeOptionSection.FORMATS)
+                "相机",
+                "镜头" -> setOf(NativeOptionSection.PHOTOGRAPHY)
+                "筛选" ->
+                    NativeOptionSection.entries
+                        .filter {
+                            it != NativeOptionSection.PHOTOGRAPHY ||
+                                current.mode == GalleryMode.PHOTO
+                        }
+                        .toSet()
+                else -> emptySet()
+            }
         optionsJob?.cancel()
+        val request = ++optionsGeneration
+        mutable.value =
+            current.copy(
+                filterPanel = panel,
+                message = null,
+                optionStatus =
+                    current.optionStatus.mapValues { (_, v) -> v.copy(loading = false) } +
+                        sections.associateWith { NativeOptionStatus(loading = true) },
+            )
         optionsJob = viewModelScope.launch {
-            try {
-                val options = repo.options(mode)
-                if (state.value.identity == identity && state.value.mode == mode)
-                    mutable.value = state.value.copy(options = options, optionsLoading = false)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                if (state.value.identity == identity && state.value.mode == mode) {
-                    if (e is NativeSession.Failure && e.status == 401) expire()
-                    else
-                        mutable.value =
-                            state.value.copy(
-                                optionsLoading = false,
-                                optionsError = e.message ?: "无法读取筛选项",
-                            )
+            sections.forEach { section ->
+                launch {
+                    try {
+                        val options = repo.options(current.mode, section)
+                        if (
+                            optionsGeneration == request &&
+                                state.value.identity == current.identity &&
+                                state.value.mode == current.mode
+                        )
+                            mutable.value =
+                                state.value.copy(
+                                    options = state.value.options.merge(section, options),
+                                    optionStatus =
+                                        state.value.optionStatus + (section to NativeOptionStatus()),
+                                )
+                    } catch (reason: CancellationException) {
+                        throw reason
+                    } catch (reason: Exception) {
+                        if (
+                            optionsGeneration == request &&
+                                state.value.identity == current.identity &&
+                                state.value.mode == current.mode
+                        ) {
+                            if (reason is NativeSession.Failure && reason.status == 401) expire()
+                            else
+                                mutable.value =
+                                    state.value.copy(
+                                        optionStatus =
+                                            state.value.optionStatus +
+                                                (section to
+                                                    NativeOptionStatus(
+                                                        error = reason.message ?: "无法读取选项"
+                                                    ))
+                                    )
+                        }
+                    }
                 }
             }
         }
     }
 
     fun closePanel() {
-        if (!state.value.busy) mutable.value = state.value.copy(filterPanel = null)
+        if (state.value.busy) return
+        optionsJob?.cancel()
+        optionsGeneration++
+        mutable.value =
+            state.value.copy(
+                filterPanel = null,
+                optionStatus =
+                    state.value.optionStatus.mapValues { (_, v) -> v.copy(loading = false) },
+            )
     }
 
     fun applyFilters(filters: NativeFilters) {
