@@ -26,7 +26,14 @@ const mocks = vi.hoisted(() => {
     })),
     attributionControl: { setPrefix: vi.fn(), addAttribution: vi.fn() },
   };
-  return { map, icons: vi.fn(), tiles: vi.fn(), getMap: vi.fn(), getPhotos: vi.fn() };
+  return {
+    map,
+    icons: vi.fn(),
+    dots: vi.fn(),
+    tiles: vi.fn(),
+    getMap: vi.fn(),
+    getPhotos: vi.fn(),
+  };
 });
 vi.mock('../../lib/photo-management-api', () => ({
   getPhotoMap: mocks.getMap,
@@ -41,6 +48,8 @@ vi.mock('leaflet', () => ({
   tileLayer: mocks.tiles,
   geoJSON: () => ({ addTo: vi.fn() }),
   layerGroup: () => ({ addTo: vi.fn().mockReturnThis(), clearLayers: vi.fn(), remove: vi.fn() }),
+  canvas: () => ({ remove: vi.fn() }),
+  circleMarker: mocks.dots,
   marker: () => ({ addTo: vi.fn().mockReturnThis(), setZIndexOffset: vi.fn() }),
   divIcon: mocks.icons,
 }));
@@ -74,13 +83,20 @@ function markerButtons() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.map.getZoom.mockReturnValue(5);
+  mocks.dots.mockImplementation(() => ({
+    addTo: vi.fn().mockReturnThis(),
+    bindTooltip: vi.fn(),
+    on: vi.fn(),
+    setStyle: vi.fn(),
+    setRadius: vi.fn(),
+  }));
   mocks.getMap.mockResolvedValue({
     total: 10001,
     bounds: { west: 120, east: 122, south: 30, north: 32 },
     level: 5,
     clusters: [
       { ...first, cover: asset },
-      { ...first, id: '5/21/12', longitude: 122, count: 1 },
+      { ...first, id: '5/21/12', longitude: 122, count: 1, cover: { ...asset, id: 'second' } },
     ],
   });
   mocks.getPhotos.mockResolvedValue({ items: [asset], nextCursor: null });
@@ -95,7 +111,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('whole-library location map', () => {
-  it('zooms into a single server cell spanning multiple places before opening photos', async () => {
+  it('opens regional locations immediately and zooms only when the user requests it', async () => {
     mocks.getMap.mockResolvedValue({
       total: 10,
       level: 6,
@@ -103,6 +119,7 @@ describe('whole-library location map', () => {
         {
           ...first,
           count: 10,
+          cover: asset,
           photoLatitude: 37.5,
           photoLongitude: 122,
           south: 36,
@@ -115,13 +132,22 @@ describe('whole-library location map', () => {
     const { onOpen } = mount();
     await screen.findByText('全库 10 张带位置照片');
     await waitFor(() => expect(markerButtons()).toHaveLength(1));
-    expect(markerButtons()[0]).toHaveAttribute('aria-label', '放大查看 10 张照片的位置');
+    expect(markerButtons()[0].getAttribute('aria-label')).toContain('10 张照片');
     fireEvent.click(markerButtons()[0]);
-    expect(mocks.map.setView).toHaveBeenLastCalledWith([37.5, 122], 7);
-    expect(mocks.getPhotos).not.toHaveBeenCalled();
+    await screen.findByRole('button', { name: '放大此位置' });
+    expect(mocks.getPhotos).toHaveBeenCalled();
+    expect(mocks.map.setView).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '放大此位置' }));
+    expect(mocks.map.fitBounds).toHaveBeenLastCalledWith(
+      [
+        [36, 120],
+        [38, 123],
+      ],
+      { maxZoom: 16, padding: [48, 48] },
+    );
     expect(onOpen).not.toHaveBeenCalled();
   });
-  it('renders all 48 distributed location thumbnails without an artificial group limit', async () => {
+  it('keeps all 48 footprints but features only nine location thumbnails', async () => {
     mocks.getMap.mockResolvedValue({
       total: 48,
       level: 12,
@@ -137,7 +163,8 @@ describe('whole-library location map', () => {
     });
     mount();
     await screen.findByText('全库 48 张带位置照片');
-    await waitFor(() => expect(markerButtons()).toHaveLength(48));
+    await waitFor(() => expect(markerButtons()).toHaveLength(9));
+    expect(mocks.dots).toHaveBeenCalledTimes(48);
     expect(markerButtons().every((button) => button.textContent?.includes('1'))).toBe(true);
   });
 
@@ -288,6 +315,7 @@ describe('whole-library location map', () => {
       clusters: [
         {
           ...first,
+          cover: asset,
           photoLatitude: 37.5,
           photoLongitude: 122.1,
           west: 122.09,
@@ -307,4 +335,97 @@ describe('whole-library location map', () => {
     expect(await screen.findByRole('heading', { name: '威海附近' })).toBeInTheDocument();
     expect(mocks.map.remove).not.toHaveBeenCalled();
   });
+});
+
+it('keeps every dense position as an interactive canvas dot when thumbnail cards overlap', async () => {
+  const points = Array.from({ length: 120 }, (_, i) => ({
+    ...first,
+    id: `12/${i}/1`,
+    count: 1,
+    photoLatitude: 30 + (i % 10) * 0.01,
+    photoLongitude: 120 + Math.floor(i / 10) * 0.01,
+    cover: { ...asset, id: `photo-${i}` },
+  }));
+  mocks.getMap.mockResolvedValue({ total: 120, level: 12, clusters: points });
+  mount();
+  await screen.findByText('全库 120 张带位置照片');
+  await waitFor(() => expect(mocks.dots).toHaveBeenCalledTimes(120));
+  expect(
+    mocks.dots.mock.calls.every(([, options]) => (options as { radius: number }).radius < 1.2),
+  ).toBe(true);
+  expect(markerButtons()).toHaveLength(9);
+  const point = mocks.dots.mock.results[70].value as { on: ReturnType<typeof vi.fn> };
+  const click = point.on.mock.calls.find(([event]) => event === 'click')![1] as () => void;
+  act(click);
+  await screen.findByRole('region', { name: '此位置的照片' });
+  expect(mocks.getPhotos).toHaveBeenLastCalledWith(
+    [...points].sort((a, b) => a.id.localeCompare(b.id))[70].id,
+    undefined,
+    expect.any(AbortSignal),
+  );
+});
+
+it('waits for a persisted snapshot without claiming a pending index means no GPS', async () => {
+  mocks.getMap.mockResolvedValue({
+    status: 'PENDING',
+    snapshotId: null,
+    total: 0,
+    bounds: null,
+    level: 7,
+    clusters: [],
+  });
+  const view = mount();
+  expect(await screen.findByText('地图正在后台整理，完成后会自动显示。')).toBeInTheDocument();
+  expect(screen.queryByText('当前照片没有 GPS 信息。')).not.toBeInTheDocument();
+  expect(mocks.getPhotos).not.toHaveBeenCalled();
+  mocks.getMap.mockResolvedValue({
+    status: 'READY',
+    snapshotId: 'snapshot',
+    updatedAt: '2026-10-24T00:00:00Z',
+    total: 1000,
+    bounds: { west: 120, east: 122, south: 30, north: 32 },
+    level: 7,
+    clusters: [{ ...first, cover: asset }],
+  });
+  await act(() => view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }));
+  expect(await screen.findByText('全库 1000 张带位置照片')).toBeInTheDocument();
+  expect(screen.queryByText('地图正在后台整理，完成后会自动显示。')).not.toBeInTheDocument();
+  expect(mocks.getPhotos).not.toHaveBeenCalled();
+});
+it('labels stale-but-readable snapshots while new photos wait for background batching', async () => {
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    snapshotId: 'snapshot',
+    total: 1000,
+    level: 7,
+    clusters: [{ ...first, cover: asset }],
+  });
+  mount();
+  expect(await screen.findByText('正在后台更新地图，当前显示上次整理结果。')).toBeInTheDocument();
+  expect(markerButtons()).toHaveLength(1);
+});
+
+it('closes an open location when a sensitive change invalidates its map snapshot', async () => {
+  mocks.getMap.mockResolvedValue({
+    status: 'READY',
+    snapshotId: 'old',
+    total: 1000,
+    level: 7,
+    clusters: [{ ...first, id: 'old:5/20/12', cover: asset }],
+  });
+  const view = mount();
+  await waitFor(() => expect(markerButtons()).toHaveLength(1));
+  act(() => markerButtons()[0].click());
+  await screen.findByRole('region', { name: '此位置的照片' });
+  mocks.getMap.mockResolvedValue({
+    status: 'PENDING',
+    snapshotId: null,
+    total: 0,
+    level: 7,
+    clusters: [],
+  });
+  await act(() => view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }));
+  await waitFor(() =>
+    expect(screen.queryByRole('region', { name: '此位置的照片' })).not.toBeInTheDocument(),
+  );
 });

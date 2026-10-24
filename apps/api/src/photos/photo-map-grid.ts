@@ -23,7 +23,7 @@ export function mapGrid(view: MapViewportDto) {
     view.zoom > 16
   )
     throw new BadRequestException('地图范围无效');
-  let level = view.zoom + 4;
+  let level = view.zoom + 5;
   while (true) {
     const n = 2 ** level,
       west = column(view.west, n),
@@ -39,16 +39,22 @@ export function mapGrid(view: MapViewportDto) {
           ];
     const cellCount =
       xRanges.reduce((sum, [min, max]) => sum + max! - min! + 1, 0) * (yMax - yMin + 1);
-    if (cellCount <= 1024) return { level, n, xRanges, yMin, yMax, cellCount };
+    if (cellCount <= 16384) return { level, n, xRanges, yMin, yMax, cellCount };
     level--;
   }
 }
 export function decodeMapCell(key: string) {
+  let snapshotId: string | undefined;
+  if (key.includes(':')) {
+    [snapshotId, key] = key.split(':') as [string, string];
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(snapshotId))
+      throw new BadRequestException('位置分组无效');
+  }
   if (!/^\d{1,2}\/\d{1,7}\/\d{1,7}$/.test(key)) throw new BadRequestException('位置分组无效');
   const [level, x, y] = key.split('/').map(Number) as [number, number, number];
   const n = 2 ** level;
-  if (level > 20 || x >= n || y >= n) throw new BadRequestException('位置分组无效');
-  return { level, n, x, y };
+  if (level > 21 || x >= n || y >= n) throw new BadRequestException('位置分组无效');
+  return { level, n, x, y, ...(snapshotId ? { snapshotId } : {}) };
 }
 interface CursorScope {
   ownerId: string;

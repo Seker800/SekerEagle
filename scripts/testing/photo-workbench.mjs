@@ -1042,6 +1042,60 @@ try {
       `Real NAS samples imported into isolated workbench: ${fixture.samples.length}; statistics HTTP validation passed.`,
     );
   }
+  if (process.env.PHOTO_WORKBENCH_MAP_DISTRIBUTION === '1') {
+    // Independent synthetic originals: never relocate or relabel the user's sample photographs.
+    const ids = [];
+    const dms = (value) => {
+      const degrees = Math.floor(value),
+        minutes = Math.floor((value - degrees) * 60);
+      return `${degrees}/1 ${minutes}/1 ${Math.round(((value - degrees) * 60 - minutes) * 600000)}/10000`;
+    };
+    for (let index = 0; index < 192; index++) {
+      const angle = index * 2.399963229728653,
+        radius = Math.sqrt((index + 0.5) / 192);
+      const latitude = 34 + 8 * radius * Math.sin(angle),
+        longitude = 114 + 13 * radius * Math.cos(angle);
+      const bytes = await sharp(source)
+        .rotate((index % 4) * 90)
+        .modulate({ hue: (index * 11) % 360 })
+        .withExif({
+          IFD0: { Make: 'Synthetic map distribution test', Model: 'Synthetic map camera' },
+          IFD3: {
+            GPSLatitudeRef: 'N',
+            GPSLatitude: dms(latitude),
+            GPSLongitudeRef: 'E',
+            GPSLongitude: dms(longitude),
+          },
+        })
+        .jpeg({ quality: 75 })
+        .toBuffer();
+      const uploaded = await upload('photos', bytes, `map-distribution-synthetic-${index + 1}.jpg`);
+      ids.push(uploaded.assetId);
+    }
+    await waitFor(
+      async () =>
+        (await db.eaglePhotoMetadata.count({
+          where: { ownerId: owner.id, assetId: { in: ids }, latitude: { not: null } },
+        })) === 192,
+      'synthetic distribution metadata',
+      720,
+    );
+    await waitFor(
+      async () => {
+        const state = await db.eaglePhotoMapState.findUnique({
+          where: { ownerId_libraryMode: { ownerId: owner.id, libraryMode: 'PHOTO' } },
+        });
+        return Boolean(state?.activeSnapshotId && state.builtVersion === state.requestedVersion);
+      },
+      'idle map snapshot publication',
+      1800,
+    );
+    const map = await api('/photos/photography/map?west=98&east=129&south=24&north=44&zoom=6');
+    assert.ok(map.clusters.length >= 160);
+    console.log(
+      `Created 192 explicitly synthetic distribution photos; ${map.clusters.length} visible locations in one viewport.`,
+    );
+  }
   if (process.env.PHOTO_WORKBENCH_APPROVAL_SAMPLES === '1') {
     const portrait = aspectAssetIds.get('photos:portrait');
     const landscape = aspectAssetIds.get('photos:landscape');

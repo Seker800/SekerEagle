@@ -8,41 +8,19 @@ export function photoMapPosition(cluster: PhotoMapCluster): [number, number] {
     hasPhotoPosition ? cluster.photoLongitude! : cluster.longitude,
   ];
 }
-export interface PhotoMapMarkerGroup {
+export interface PhotoMapMarkerPlan {
   key: string;
-  representative: PhotoMapCluster;
-  members: PhotoMapCluster[];
-  count: number;
+  cluster: PhotoMapCluster;
+  presentation: 'photo' | 'dot';
 }
-/** Presentation clustering keeps every server cell and count; selecting a merged marker zooms in. */
-export function groupPhotoMapMarkers(
-  clusters: readonly PhotoMapCluster[],
-  project: (position: [number, number]) => { x: number; y: number },
-  zoom: number,
-): PhotoMapMarkerGroup[] {
-  const groups: Array<PhotoMapMarkerGroup & { x: number; y: number }> = [];
-  for (const cluster of [...clusters].sort(
-    (a, b) => b.count - a.count || a.id.localeCompare(b.id),
-  )) {
-    const point = project(photoMapPosition(cluster));
-    const nearby =
-      zoom < 16
-        ? groups.find(
-            (group) => Math.abs(group.x - point.x) < 42 && Math.abs(group.y - point.y) < 48,
-          )
-        : undefined;
-    if (nearby) {
-      nearby.members.push(cluster);
-      nearby.count += cluster.count;
-      nearby.key += '|' + cluster.id;
-    } else
-      groups.push({
-        key: cluster.id,
-        representative: cluster,
-        members: [cluster],
-        count: cluster.count,
-        ...point,
-      });
-  }
-  return groups;
+/** Preserve real anchors and all dots; feature up to nine highest-volume covered locations. */
+export function layoutPhotoMapMarkers(clusters: readonly PhotoMapCluster[]): PhotoMapMarkerPlan[] {
+  let featured = 0;
+  return [...clusters]
+    .sort((a, b) => b.count - a.count || a.id.localeCompare(b.id))
+    .map((cluster) => ({
+      key: cluster.id,
+      cluster,
+      presentation: cluster.cover && featured++ < 9 ? 'photo' : 'dot',
+    }));
 }

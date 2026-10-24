@@ -1,3 +1,4 @@
+import { runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { publishImage } from './image-publication';
 import { publishEmbedding } from './embedding-publication';
@@ -98,6 +99,9 @@ let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
 let smartFolderTimer: NodeJS.Timeout | undefined;
 let buildingSmartFolder = false;
+let buildingPhotoMap = false;
+let photoMapTimer: NodeJS.Timeout | undefined;
+let lastPhotoMapStep = 0;
 let stopping = false;
 let activeJobCount = 0;
 let activeTagBuildCount = 0;
@@ -1457,6 +1461,25 @@ async function poll(): Promise<void> {
     }
   }
   if (stopping || activeJobCount >= workerConcurrency) return;
+  if (
+    runBackgroundProcessing &&
+    activeJobCount === 0 &&
+    activeTagBuildCount === 0 &&
+    !buildingSmartFolder &&
+    !buildingPhotoMap &&
+    Date.now() - lastPhotoMapStep >= 15000
+  ) {
+    buildingPhotoMap = true;
+    lastPhotoMapStep = Date.now();
+    try {
+      await runPhotoMapBuildStep(prisma);
+    } catch (error) {
+      reportLoopError(error);
+    } finally {
+      buildingPhotoMap = false;
+    }
+  }
+
   while (!stopping && activeJobCount < workerConcurrency) {
     const job = await claimJob();
     if (!job) return;
@@ -1640,12 +1663,19 @@ async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
   if (smartFolderTimer) clearInterval(smartFolderTimer);
+  if (photoMapTimer) clearInterval(photoMapTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   if (aiTagReconcileTimer) clearInterval(aiTagReconcileTimer);
   wakeScheduler?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
-  while (activeJobCount > 0 || activeTagBuildCount > 0 || buildingSmartFolder || deletingObjects)
+  while (
+    activeJobCount > 0 ||
+    activeTagBuildCount > 0 ||
+    buildingSmartFolder ||
+    buildingPhotoMap ||
+    deletingObjects
+  )
     await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
@@ -1676,7 +1706,7 @@ async function main(): Promise<void> {
     (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))
   ) {
     const tick = async () => {
-      if (stopping || buildingSmartFolder) return;
+      if (stopping || buildingSmartFolder || buildingPhotoMap) return;
       buildingSmartFolder = true;
       try {
         await reconcileSmartFolderSpaces(prisma, embeddingSpaceId);
@@ -1701,6 +1731,10 @@ async function main(): Promise<void> {
     smartFolderTimer = setInterval(() => void tick().catch(reportLoopError), 5_000);
     smartFolderTimer.unref();
     void tick().catch(reportLoopError);
+  }
+  if (runBackgroundProcessing) {
+    photoMapTimer = setInterval(() => wakeScheduler?.wakeNow(), 15000);
+    photoMapTimer.unref();
   }
   wakeScheduler.wakeNow();
 }

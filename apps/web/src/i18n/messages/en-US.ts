@@ -1573,4 +1573,15 @@ export const enUS = {
   载入更早记录: 'Load earlier records',
   审核执行失败: 'Review failed',
   撤销失败: 'Undo failed',
+  '正在读取地图索引…': 'Loading map index…',
+  '照片与圆点均可点击；预览重叠的位置保留圆点，不隐藏照片分布。':
+    'Click photos or dots. Overlapping previews keep their location dots visible.',
+  放大此位置: 'Zoom to this location',
+  '地图正在后台整理，完成后会自动显示。':
+    'The map is being prepared in the background and will appear automatically.',
+  '正在后台更新地图，当前显示上次整理结果。':
+    'The map is updating in the background. Showing the previous snapshot.',
+  '小点表示拍摄足迹；当前视野拍摄量最多的 9 个地点显示照片。':
+    'Dots show your photo footprint. The nine busiest places in view show photo previews.',
+  '地图更新于 {{value1}}': 'Map updated {{value1}}',
 } as const;

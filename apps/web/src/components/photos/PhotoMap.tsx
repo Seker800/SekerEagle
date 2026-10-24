@@ -64,7 +64,16 @@ export function PhotoMap({
     queryKey: ['eagle', ownerId, 'PHOTO', 'map', includePrivate, viewport],
     queryFn: ({ signal }) => getPhotoMap(viewport, signal),
     staleTime: 30000,
+    refetchInterval: 30000,
   });
+  useEffect(() => {
+    if (
+      selected &&
+      (locations.data?.status === 'PENDING' ||
+        (locations.data?.snapshotId && !selected.id.startsWith(`${locations.data.snapshotId}:`)))
+    )
+      setSelected(null);
+  }, [locations.data?.status, locations.data?.snapshotId, selected]);
   const points = useMemo(() => locations.data?.clusters ?? [], [locations.data?.clusters]);
   const bounds = locations.data?.bounds;
   const placeNames = useMemo(
@@ -126,6 +135,7 @@ export function PhotoMap({
     citiesPane.style.pointerEvents = 'none';
     citiesPane.style.zIndex = '450';
     map.createPane('photoLocations').style.zIndex = '600';
+    map.createPane('photoDistribution').style.zIndex = '550';
     const labels = L.layerGroup().addTo(map),
       controller = new AbortController();
     const palette = getComputedStyle(container.current);
@@ -207,7 +217,12 @@ export function PhotoMap({
             <div className={styles.mapSummary}>
               <IconMapPin size={18} aria-hidden="true" />
               <div>
-                <p>{t('全库 {{value1}} 张带位置照片', { value1: locations.data?.total ?? '—' })}</p>
+                <p>
+                  {t('全库 {{value1}} 张带位置照片', {
+                    value1:
+                      locations.data?.status === 'PENDING' ? '—' : (locations.data?.total ?? '—'),
+                  })}
+                </p>
                 <span>
                   {hasDetailedMap
                     ? t('中国及周边详细地图 · 其他地区为全球概览')
@@ -230,6 +245,18 @@ export function PhotoMap({
             onSelect={setSelected}
           />
           <div className={styles.caption}>
+            {locations.data?.updatedAt && (
+              <span>
+                {t('地图更新于 {{value1}}', {
+                  value1: new Date(locations.data.updatedAt).toLocaleString(getLocale(), {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                })}
+              </span>
+            )}
             <span>
               {hasDetailedMap
                 ? t('自托管矢量底图 · 道路与建筑随缩放显示')
@@ -245,7 +272,7 @@ export function PhotoMap({
               </span>
             )}
           </div>
-          {locations.isPending && <p role="status">{t('正在统计照片位置…')}</p>}
+          {locations.isPending && <p role="status">{t('正在读取地图索引…')}</p>}
           {locations.isError && (
             <p role="alert">
               {t('照片位置加载失败。')}{' '}
@@ -254,9 +281,17 @@ export function PhotoMap({
               </button>
             </p>
           )}
-          {locations.data?.total === 0 && <p>{t('当前照片没有 GPS 信息。')}</p>}
+          {locations.data?.status === 'PENDING' && (
+            <p role="status">{t('地图正在后台整理，完成后会自动显示。')}</p>
+          )}
+          {locations.data?.status === 'UPDATING' && (
+            <p>{t('正在后台更新地图，当前显示上次整理结果。')}</p>
+          )}
+          {locations.data?.total === 0 && locations.data?.status !== 'PENDING' && (
+            <p>{t('当前照片没有 GPS 信息。')}</p>
+          )}
           <p className={styles.hint}>
-            {t('地点标记显示照片数量；放大查看附近位置，点击浏览该组全部照片。')}
+            {t('小点表示拍摄足迹；当前视野拍摄量最多的 9 个地点显示照片。')}
           </p>
         </div>
         {selected && (
@@ -268,6 +303,32 @@ export function PhotoMap({
             includePrivate={includePrivate}
             onOpen={onOpen}
             onClose={() => setSelected(null)}
+            onZoom={() => {
+              const map = mapRef.current;
+              if (!map) return;
+              if (
+                selected.south != null &&
+                selected.north != null &&
+                selected.west != null &&
+                selected.east != null &&
+                (selected.south !== selected.north || selected.west !== selected.east)
+              )
+                map.fitBounds(
+                  [
+                    [selected.south, selected.west],
+                    [selected.north, selected.east],
+                  ],
+                  { maxZoom: 16, padding: [48, 48] },
+                );
+              else
+                map.setView(
+                  [
+                    selected.photoLatitude ?? selected.latitude,
+                    selected.photoLongitude ?? selected.longitude,
+                  ],
+                  Math.min(16, map.getZoom() + 2),
+                );
+            }}
           />
         )}
       </div>

@@ -1,9 +1,11 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { log } from 'node:console';
+import { performance } from 'node:perf_hooks';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { PrismaClient } from '@prisma/client';
+import { runPhotoMapBuildStep } from '../../apps/worker/dist/photo-map-build.js';
 import { PhotoMapService } from '../../apps/api/dist/photos/photo-map.service.js';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 
@@ -13,6 +15,7 @@ function run(command, args, options = {}) {
   if (result.status !== 0) throw new Error(`${command} failed: ${result.stderr}`);
   return result.stdout.trim();
 }
+const observedQueries = [];
 let started = false,
   prisma;
 try {
@@ -75,7 +78,11 @@ try {
     ],
     { env },
   );
-  prisma = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  prisma = new PrismaClient({
+    datasources: { db: { url: env.DATABASE_URL } },
+    log: [{ emit: 'event', level: 'query' }],
+  });
+  prisma.$on('query', (event) => observedQueries.push(event.query));
   const owner = randomUUID(),
     other = randomUUID();
   await prisma.user.createMany({
@@ -163,8 +170,40 @@ try {
       suggestionId: 'test',
     },
   });
-  const service = new PhotoMapService(prisma);
+  const rawService = new PhotoMapService(prisma);
+  async function refresh(ownerId = owner) {
+    await prisma.eaglePhotoMapState.update({
+      where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
+      data: { availableAt: new Date(0) },
+    });
+    for (let step = 0; step < 100; step++) {
+      const state = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+        where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
+      });
+      if (state.activeSnapshotId && state.builtVersion === state.requestedVersion) return;
+      await runPhotoMapBuildStep(prisma);
+    }
+    throw new Error('Snapshot build did not finish');
+  }
+  const service = {
+    clusters: async (ownerId, privateVisible, view) => {
+      await refresh(ownerId);
+      return rawService.clusters(ownerId, privateVisible, view);
+    },
+    photos: (...args) => rawService.photos(...args),
+  };
   const world = { west: -180, east: 180, south: -90, north: 90, zoom: 3 };
+  const unbuilt = await rawService.clusters(owner, false, world);
+  assert.equal(unbuilt.status, 'PENDING');
+  await runPhotoMapBuildStep(prisma);
+  assert.equal(
+    (
+      await prisma.eaglePhotoMapState.findUniqueOrThrow({
+        where: { ownerId_libraryMode: { ownerId: owner, libraryMode: 'PHOTO' } },
+      })
+    ).buildingSnapshotId,
+    null,
+  );
   const overview = await service.clusters(owner, false, world);
   assert.equal(overview.total, 132);
   assert.equal(
@@ -178,8 +217,11 @@ try {
   assert.equal(cluster.west, 120.15);
   assert.equal(cluster.east, 120.15);
   assert.ok(expected.has(cluster.cover.id));
-  assert.equal(cluster.cover.mediaRevision, 1);
-  assert.ok(overview.clusters.every((cell) => cell.cover?.libraryMode === 'PHOTO'));
+  const previews = await rawService.clusters(owner, false, { ...world, zoom: 12 });
+  const preview = previews.clusters.find((cell) => cell.count === 131);
+  assert.ok(expected.has(preview.cover.id));
+  assert.equal(preview.cover.mediaRevision, 1);
+  assert.ok(overview.clusters.every((cell) => !cell.cover || cell.cover.libraryMode === 'PHOTO'));
   assert.ok(!overview.clusters.some((cell) => cell.cover?.id === privateId));
   const seen = [],
     cursors = [];
@@ -197,7 +239,7 @@ try {
   assert.equal(cursors.length, 2);
   await assert.rejects(service.photos(other, false, cluster.id, cursors[0]));
   await assert.rejects(service.photos(owner, true, cluster.id, cursors[0]));
-  const unlocked = await service.clusters(owner, true, world);
+  const unlocked = await service.clusters(owner, true, { ...world, zoom: 12 });
   assert.equal(unlocked.total, 133);
   assert.ok(unlocked.clusters.some((cell) => cell.cover?.id === privateId));
   const detail = await service.clusters(owner, false, {
@@ -222,7 +264,7 @@ try {
     north: 30.251,
     zoom: 16,
   });
-  assert.equal(street.level, 20);
+  assert.equal(street.level, 21);
   assert.equal(
     street.clusters.reduce((sum, cell) => sum + cell.count, 0),
     131,
@@ -240,10 +282,223 @@ try {
   for (let i = 0; i < 20; i++) await make({}, 37.5, 122.1);
   for (let i = 0; i < 7; i++) await make({}, 39.9, 116.4);
   const merged = await service.clusters(owner, false, { ...world, zoom: 1 });
-  const cityGroup = merged.clusters.find((c) => c.count === 27);
-  assert.ok(cityGroup);
-  assert.ok(Math.abs(cityGroup.photoLatitude - 37.5) < 1e-9);
-  assert.ok(Math.abs(cityGroup.photoLongitude - 122.1) < 1e-9);
+  const weihai = merged.clusters.find((c) => Math.abs(c.photoLatitude - 37.5) < 1e-9);
+  const beijing = merged.clusters.find((c) => Math.abs(c.photoLatitude - 39.9) < 1e-9);
+  assert.equal(weihai.count, 20);
+  assert.equal(beijing.count, 7);
+  assert.notEqual(weihai.id, beijing.id);
+  // More than the old 1,024-grid budget remain independently visible in one wide view.
+  const denseOwner = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: denseOwner,
+      email: `${denseOwner}@example.invalid`,
+      passwordHash: 'synthetic-test-only',
+    },
+  });
+  const denseIds = Array.from({ length: 1500 }, () => randomUUID());
+  await prisma.eagleAsset.createMany({
+    data: denseIds.map((id) => ({
+      id,
+      ownerId: denseOwner,
+      libraryMode: 'PHOTO',
+      originalName: 'synthetic.jpg',
+      displayName: 'Synthetic distribution',
+      normalizedDisplayName: 'synthetic distribution',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: 1n,
+      originalObjectKey: `synthetic/${id}`,
+      lifecycleStatus: 'READY',
+      mediaRevision: 1,
+    })),
+  });
+  await prisma.eaglePhotoMetadata.createMany({
+    data: denseIds.map((assetId, i) => ({
+      assetId,
+      ownerId: denseOwner,
+      libraryMode: 'PHOTO',
+      assetRevision: 1,
+      processorVersion: 'test',
+      latitude: -50 + Math.floor(i / 50) * 3,
+      longitude: -170 + (i % 50) * 6.5,
+    })),
+  });
+  await refresh(denseOwner);
+  const densityStart = performance.now();
+  const distribution = await rawService.clusters(denseOwner, false, world);
+  const densityMs = performance.now() - densityStart;
+  assert.ok(densityMs < 5000, `Dense distribution query took ${densityMs} ms`);
+  log(`1,500 independent locations returned in ${Math.round(densityMs)} ms.`);
+  assert.equal(distribution.total, 1500);
+  assert.equal(distribution.clusters.length, 1500);
+  assert.equal(
+    distribution.clusters.reduce((sum, c) => sum + c.count, 0),
+    1500,
+  );
+  assert.equal(distribution.clusters.filter((c) => c.cover).length, 9);
+  const detailCovers = await rawService.clusters(denseOwner, false, { ...world, zoom: 12 });
+  assert.equal(detailCovers.clusters.filter((c) => c.cover).length, 9);
+  assert.equal(
+    (await service.photos(denseOwner, false, distribution.clusters[1000].id)).items.length,
+    1,
+  );
+
+  observedQueries.length = 0;
+  await rawService.clusters(denseOwner, false, world);
+  assert.ok(
+    observedQueries.every(
+      (sql) =>
+        !sql.includes('EaglePhotoMetadata') &&
+        !sql.includes('EaglePhotoLocation') &&
+        !/GROUP BY|INSERT|UPDATE/.test(sql),
+    ),
+  );
+  const old = await rawService.clusters(owner, false, world);
+  const added = await make({}, 42, 110);
+  const deferred = await rawService.clusters(owner, false, world);
+  assert.equal(deferred.total, old.total);
+  assert.equal(deferred.status, 'UPDATING');
+  assert.equal(deferred.snapshotId, old.snapshotId);
+  const stateKey = { ownerId_libraryMode: { ownerId: owner, libraryMode: 'PHOTO' } };
+  await prisma.eaglePhotoMapState.update({ where: stateKey, data: { availableAt: new Date(0) } });
+  await runPhotoMapBuildStep(prisma); // fixed points prepared, no partial generation is public
+  assert.equal((await rawService.clusters(owner, false, world)).snapshotId, old.snapshotId);
+  await refresh(owner);
+  const fresh = await rawService.clusters(owner, false, world);
+  assert.equal(fresh.total, old.total + 1);
+  assert.notEqual(fresh.snapshotId, old.snapshotId);
+  await prisma.eagleAsset.update({ where: { id: added }, data: { isPrivate: true } });
+  const hidden = await rawService.clusters(owner, false, world);
+  assert.equal(hidden.status, 'PENDING');
+  assert.equal(hidden.total, 0);
+  assert.equal(hidden.clusters.length, 0);
+  await assert.rejects(rawService.photos(owner, false, fresh.clusters[0].id));
+  await refresh(owner);
+  assert.equal((await rawService.clusters(owner, false, world)).total, old.total);
+  assert.equal((await rawService.clusters(owner, true, world)).total, old.total + 2);
+  const busy = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: owner,
+      libraryMode: 'PHOTO',
+      assetId: added,
+      assetRevision: 1,
+      kind: 'GENERATE_RENDITIONS',
+      lane: 'INTERACTIVE',
+      status: 'PENDING',
+      availableAt: new Date(0),
+    },
+  });
+  await prisma.eaglePhotoMetadata.update({ where: { assetId: added }, data: { latitude: 43 } });
+  await prisma.eaglePhotoMapState.update({ where: stateKey, data: { availableAt: new Date(0) } });
+  await runPhotoMapBuildStep(prisma);
+  assert.equal(
+    (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })).buildingSnapshotId,
+    null,
+  );
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: busy.id },
+    data: { status: 'COMPLETED' },
+  });
+  await refresh(owner);
+  // Bounded coalescing: continuous arrivals cannot postpone the next idle rebuild forever.
+  await prisma.eaglePhotoMapState.update({
+    where: stateKey,
+    data: { dirtyAt: new Date(Date.now() - 11 * 60000) },
+  });
+  await prisma.eagleAsset.update({
+    where: { id: added },
+    data: { chronologicalAt: new Date('2025-01-01Z') },
+  });
+  assert.ok(
+    (
+      await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })
+    ).availableAt.getTime() <= Date.now(),
+  );
+  await refresh(owner);
+  // A sensitive change during a multi-step build discards that generation.
+  await make({}, 41, 111);
+  await prisma.eaglePhotoMapState.update({ where: stateKey, data: { availableAt: new Date(0) } });
+  await runPhotoMapBuildStep(prisma);
+  const interrupted = (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey }))
+    .buildingSnapshotId;
+  assert.ok(interrupted);
+  await prisma.eaglePhotoMetadata.update({ where: { assetId: added }, data: { latitude: 44 } });
+  await runPhotoMapBuildStep(prisma);
+  assert.equal(await prisma.eaglePhotoMapSnapshot.count({ where: { id: interrupted } }), 0);
+  assert.equal((await rawService.clusters(owner, false, world)).status, 'PENDING');
+  await refresh(owner);
+  await refresh(other);
+  // A mid-step failure rolls back all levels from that step, keeps the old map, and retries safely.
+  const prior = (await rawService.clusters(owner, false, world)).snapshotId;
+  await make({}, 40, 112);
+  await prisma.eaglePhotoMapState.update({ where: stateKey, data: { availableAt: new Date(0) } });
+  await runPhotoMapBuildStep(prisma);
+  const partial = (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey }))
+    .buildingSnapshotId;
+  await prisma.$executeRaw`CREATE FUNCTION map_index_test_fault() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.level=1 THEN RAISE EXCEPTION 'synthetic map build interruption'; END IF; RETURN NEW; END; $$`;
+  await prisma.$executeRaw`CREATE TRIGGER map_index_test_fault BEFORE INSERT ON "EaglePhotoMapCell" FOR EACH ROW EXECUTE FUNCTION map_index_test_fault()`;
+  await assert.rejects(runPhotoMapBuildStep(prisma), /synthetic map build interruption/);
+  assert.equal(await prisma.eaglePhotoMapCell.count({ where: { snapshotId: partial } }), 0);
+  assert.equal((await rawService.clusters(owner, false, world)).snapshotId, prior);
+  assert.equal(
+    (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })).attempts,
+    1,
+  );
+  await prisma.$executeRaw`DROP TRIGGER map_index_test_fault ON "EaglePhotoMapCell"`;
+  await prisma.$executeRaw`DROP FUNCTION map_index_test_fault()`;
+  await refresh(owner);
+  if (process.env.PHOTO_MAP_SCALE_TEST === '1') {
+    const scaleOwner = randomUUID(),
+      scaleIds = Array.from({ length: 50000 }, () => randomUUID());
+    await prisma.user.create({
+      data: {
+        id: scaleOwner,
+        email: `${scaleOwner}@example.invalid`,
+        passwordHash: 'synthetic-scale-only',
+      },
+    });
+    for (let offset = 0; offset < scaleIds.length; offset += 500) {
+      const batch = scaleIds.slice(offset, offset + 500);
+      await prisma.eagleAsset.createMany({
+        data: batch.map((id) => ({
+          id,
+          ownerId: scaleOwner,
+          libraryMode: 'PHOTO',
+          originalName: 'synthetic.jpg',
+          displayName: 'Synthetic scale point',
+          normalizedDisplayName: 'synthetic scale point',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1n,
+          originalObjectKey: `synthetic/${id}`,
+          lifecycleStatus: 'READY',
+          mediaRevision: 1,
+        })),
+      });
+      await prisma.eaglePhotoMetadata.createMany({
+        data: batch.map((assetId, i) => ({
+          assetId,
+          ownerId: scaleOwner,
+          libraryMode: 'PHOTO',
+          assetRevision: 1,
+          processorVersion: 'test',
+          latitude: 25 + Math.floor(((offset + i) % 40) / 10) * 5,
+          longitude: 90 + ((offset + i) % 10) * 7,
+        })),
+      });
+    }
+    const started = performance.now();
+    await refresh(scaleOwner);
+    const buildMs = performance.now() - started;
+    const readStart = performance.now();
+    for (let i = 0; i < 10; i++)
+      assert.equal((await rawService.clusters(scaleOwner, false, world)).total, 50000);
+    const readMs = (performance.now() - readStart) / 10;
+    log(
+      `50,000 synthetic photos indexed in ${Math.round(buildMs)} ms; cached map read average ${Math.round(readMs)} ms.`,
+    );
+  }
   log(
     'Real PostgreSQL map counts, privacy/mode/version isolation, membership, pagination, zoom and coordinate edges passed.',
   );

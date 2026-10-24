@@ -118,6 +118,10 @@ export interface PhotoMapCluster {
   east?: number;
 }
 export interface PhotoMapData {
+  status?: 'PENDING' | 'UPDATING' | 'READY';
+  updatedAt?: string | null;
+  snapshotId?: string | null;
+  minimumPhotoCount?: number;
   total: number;
   bounds: Omit<PhotoMapViewport, 'zoom'> | null;
   level: number;
