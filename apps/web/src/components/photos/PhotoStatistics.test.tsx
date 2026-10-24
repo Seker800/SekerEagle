@@ -18,7 +18,7 @@ describe('photo statistics', () => {
     expect(screen.getByRole('img', { name: '镜头使用量柱状图' })).toBeInTheDocument();
     expect(screen.getByText('拍摄日期未知')).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText('查看时间段'), { target: { value: '1' } });
-    expect(screen.getByText('2024-02')).toBeInTheDocument();
+    expect(screen.getByText('2024-02', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Camera A：0')).toBeInTheDocument();
   });
   it('combines camera and lens filters and switches the time series dimension', async () => {

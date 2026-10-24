@@ -1,3 +1,5 @@
+import { PhotoStatistics } from '../photos/PhotoStatistics';
+import { IconChartBar } from '@tabler/icons-react';
 import { EagleSmartFolderStatus } from './EagleSmartFolderStatus';
 import { useEaglePrependAnchor } from './useEaglePrependAnchor';
 import { useEagleLibraryCount } from './useEagleLibraryCount';
@@ -314,7 +316,7 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'agent'>('timeline');
+  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'agent' | 'statistics'>('timeline');
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
@@ -1273,7 +1275,7 @@ export function SekerEaglePage({
         )}
       </button>
       {libraryMode === 'PHOTO' &&
-        (['map', 'people', 'agent'] as const).map((view) => (
+        (['map', 'people', 'agent', 'statistics'] as const).map((view) => (
           <button
             data-navigation-destination
             key={view}
@@ -1288,8 +1290,8 @@ export function SekerEaglePage({
               setPhotoView(view);
             }}
           >
-            {view === 'map' ? <IconMapPin size={17} /> : <IconUsers size={17} />}
-            {view === 'map' ? t('地图') : view === 'people' ? t('人物') : t('智能整理')}
+            {view === 'map' ? <IconMapPin size={17} /> : view === 'statistics' ? <IconChartBar size={17} /> : <IconUsers size={17} />}
+            {view === 'map' ? t('地图') : view === 'people' ? t('人物') : view === 'statistics' ? t('照片统计') : t('智能整理')}
           </button>
         ))}
       {privateVisible && (
@@ -1798,7 +1800,9 @@ export function SekerEaglePage({
                                   ? t('人物')
                                   : photoView === 'agent'
                                     ? t('智能整理')
-                                    : t('全部')
+                                    : photoView === 'statistics'
+                                      ? t('照片统计')
+                                      : t('全部')
                               : t('全部')))}
                     </h1>
                     {privateVisible && privacyVisibility?.expiresAt ? (
@@ -1912,6 +1916,9 @@ export function SekerEaglePage({
                     )?.message
                   }
                 </div>
+              )}
+              {libraryMode === 'PHOTO' && photoView === 'statistics' && (
+                <PhotoStatistics key={`${ownerId}:${privateVisible}`} ownerId={ownerId} includePrivate={privateVisible} />
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
                 <PhotoAgentReview
