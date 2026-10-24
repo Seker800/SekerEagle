@@ -58,6 +58,10 @@ data class GalleryState(
  * Owns the native flow. A cancelled/replaced scope can never publish a response into another one.
  */
 class NativeGalleryViewModel(application: Application) : AndroidViewModel(application) {
+    init {
+        NativeCity.initialize(application)
+    }
+
     private val settings = BackupSettings(application)
     private val mutable = MutableStateFlow(GalleryState())
     val state = mutable.asStateFlow()
@@ -592,6 +596,19 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             return
         }
         mutable.value = state.value.copy(viewerId = id)
+    }
+
+    fun openSavedAsset(id: String) {
+        val identity = state.value.identity
+        val mode = state.value.mode
+        refresh()
+        val refreshWork = operation
+        viewModelScope.launch {
+            refreshWork?.join()
+            if (state.value.identity != identity || state.value.mode != mode) return@launch
+            if (state.value.items.any { it.id == id }) openAsset(id)
+            else mutable.value = state.value.copy(message = "照片已保存，当前筛选或浏览位置未包含副本，请返回图库查看")
+        }
     }
 
     fun viewerPage(id: String) {

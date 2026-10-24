@@ -251,7 +251,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         cancellation: NativeTransferCancellation,
         progress: (Long) -> Unit,
     ) {
-        require(path.matches(Regex("/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/original")))
+        require(path.matches(Regex("/api/(photos|eagle)/assets/[a-zA-Z0-9_-]{1,100}/(original|renditions/[a-zA-Z0-9_-]{1,100}/content)")))
         com.sekereagle.android.core.NativeDownloadPolicy.validate(size, mime)
         exchange("GET", path, null, true, mime, cancellation::bind) { connection, active ->
             cancellation.check()

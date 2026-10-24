@@ -110,3 +110,20 @@ function manualService(manifest) {
     manifest,
   );
 }
+
+for (const [name, before, after] of [
+  ['unscoped editor origin', 'uri.host != repo.editorHost', 'false'],
+  ['editor file access', 'settings.allowFileAccess = false', 'settings.allowFileAccess = true'],
+  [
+    'editor remote page',
+    'loadUrl("$editorOrigin/native-editor.html?lang=zh-CN")',
+    'loadUrl(session.origin)',
+  ],
+])
+  test(`gate rejects ${name}`, () => {
+    const copy = new Map(files);
+    const path = 'app/src/main/kotlin/com/sekereagle/android/NativeEditor.kt';
+    assert.ok(copy.get(path).includes(before));
+    copy.set(path, copy.get(path).replace(before, after));
+    assert.throws(() => assertNativeBoundary(copy));
+  });

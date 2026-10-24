@@ -117,8 +117,8 @@ class NativeGalleryTest {
         val before = rows()
         try {
             val first = firstAsset()
-            compose.onNodeWithTag("asset:$first").performClick()
-            compose.onNodeWithContentDescription("下载原件").performClick()
+            compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
+            compose.onNodeWithText("下载").performClick()
             compose.waitUntil(15000) {
                 compose.onAllNodesWithText("下载结果").fetchSemanticsNodes().isNotEmpty()
             }
@@ -134,8 +134,8 @@ class NativeGalleryTest {
             )
             compose.onNodeWithText("完成").performClick()
             compose.onNodeWithTag("native-download-dialog").assertDoesNotExist()
-            back()
-            compose.onNodeWithTag("native-viewer").assertDoesNotExist()
+            compose.onNodeWithContentDescription("取消选择").performClick()
+            compose.onNodeWithTag("native-selection-count").assertDoesNotExist()
             val ids =
                 compose.onAllNodes(hasTestTagPrefix("asset:")).fetchSemanticsNodes().take(2).map {
                     it.config[androidx.compose.ui.semantics.SemanticsProperties.TestTag]
@@ -411,10 +411,11 @@ class NativeGalleryTest {
         capture("native-viewer.png")
         compose.onNodeWithTag("native-viewer").performTouchInput { swipeLeft() }
         compose.waitUntil {
-            compose
-                .onAllNodes(hasText("${startIndex + 2} /", substring = true))
-                .fetchSemanticsNodes()
-                .isNotEmpty()
+            androidx.lifecycle
+                .ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+                .state
+                .value
+                .viewerId == current.items[startIndex + 1].id
         }
         back()
         compose.onNodeWithTag("native-viewer").assertDoesNotExist()

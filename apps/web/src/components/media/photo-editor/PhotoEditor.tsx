@@ -47,6 +47,7 @@ type Tab = 'adjust' | 'filters' | 'crop' | 'watermark';
 type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] };
 
 export function PhotoEditor({
+  initialTab = 'adjust',
   source,
   previewSource,
   sourceSize,
@@ -59,6 +60,7 @@ export function PhotoEditor({
   onCopyEdits,
   onOpenSaved,
 }: {
+  initialTab?: Tab;
   source: string;
   previewSource?: string;
   sourceSize?: { width: number; height: number };
@@ -114,7 +116,7 @@ export function PhotoEditor({
     }, 500);
     return () => clearTimeout(timer);
   }, [edits, onDraftChange]);
-  const [tab, setTab] = useState<Tab>('adjust');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
   const imageWidth = sourceSize?.width ?? loaded?.naturalWidth ?? 1;
   const imageHeight = sourceSize?.height ?? loaded?.naturalHeight ?? 1;

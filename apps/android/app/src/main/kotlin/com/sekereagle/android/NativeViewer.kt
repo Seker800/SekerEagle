@@ -18,6 +18,7 @@ import androidx.compose.ui.*
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -41,8 +42,21 @@ fun NativeViewer(
         ) {
             state.items.size
         }
+    LaunchedEffect(state.viewerId) {
+        val target = state.items.indexOfFirst { it.id == state.viewerId }
+        if (target >= 0 && pager.currentPage != target && !pager.isScrollInProgress)
+            pager.scrollToPage(target)
+    }
     var zoomed by remember { mutableStateOf(false) }
-    var info by remember { mutableStateOf(false) }
+    var chrome by remember { mutableStateOf(true) }
+    var deleting by remember { mutableStateOf(false) }
+    var editing by remember { mutableStateOf(false) }
+    var shareBusy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val shareCancellation = remember(repo) { NativeTransferCancellation() }
+    DisposableEffect(shareCancellation) { onDispose { shareCancellation.cancel() } }
     var rotation by remember(pager.currentPage) { mutableFloatStateOf(0f) }
     LaunchedEffect(pager.settledPage) {
         state.items.getOrNull(pager.settledPage)?.let { model.viewerPage(it.id) }
@@ -50,28 +64,26 @@ fun NativeViewer(
         if (pager.settledPage >= state.items.size - 4) model.load(true)
     }
     val asset = state.items.getOrNull(pager.currentPage) ?: return
-    Column(Modifier.fillMaxSize().background(Color.Black).testTag("native-viewer")) {
-        Row(
-            Modifier.fillMaxWidth()
-                .background(Color(0xFF18181A))
-                .heightIn(min = 74.dp)
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    if (editing) {
+        NativeEditor(
+            repo,
+            state.mode,
+            asset,
+            onOpenSaved = {
+                editing = false
+                model.openSavedAsset(it)
+            },
         ) {
-            IconButton({ model.back() }) { Icon(Icons.Outlined.ArrowBackIosNew, "返回图库") }
-            Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                Text(asset.date, fontSize = 20.sp)
-                Text(asset.time, fontSize = 13.sp, color = NativeMuted)
-            }
-            if (!asset.video)
-                IconButton({ rotation = (rotation + 90) % 360 }) {
-                    Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
-                }
+            editing = false
+            model.refresh()
         }
+        return
+    }
+    Box(Modifier.fillMaxSize().background(Color.Black).testTag("native-viewer")) {
         HorizontalPager(
             pager,
-            Modifier.weight(1f).fillMaxWidth(),
-            userScrollEnabled = !zoomed,
+            Modifier.fillMaxSize(),
+            userScrollEnabled = !zoomed && !shareBusy,
             key = { state.items[it].id },
             beyondViewportPageCount = 1,
         ) { page ->
@@ -79,63 +91,176 @@ fun NativeViewer(
             key(entry.id) {
                 if (entry.video && page == pager.currentPage) NativeVideo(entry, repo)
                 else
-                    ZoomPhoto(entry, repo, if (page == pager.currentPage) rotation else 0f) {
-                        if (page == pager.currentPage) zoomed = it
-                    }
+                    ZoomPhoto(
+                        entry,
+                        repo,
+                        state.mode,
+                        page == pager.currentPage,
+                        if (page == pager.currentPage) rotation else 0f,
+                        onTap = { chrome = !chrome },
+                        onZoom = { if (page == pager.currentPage) zoomed = it },
+                    )
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(vertical = 16.dp, horizontal = 28.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                "${pager.currentPage+1} / ${state.items.size}",
-                color = NativeMuted,
-                fontSize = 13.sp,
-            )
-            GlassSurface(Modifier.width(if (state.trash) 48.dp else 104.dp).height(48.dp)) {
-                Row(Modifier.fillMaxSize()) {
-                    if (!state.trash)
-                        Box(Modifier.weight(1f).fillMaxHeight()) {
-                            RoundAction(Icons.Outlined.Download, "下载原件") {
-                                model.downloadAssets(listOf(asset))
+        if (chrome) {
+            Row(
+                Modifier.align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .background(Color(0xDE18181A))
+                    .heightIn(min = 74.dp)
+                    .padding(horizontal = 8.dp)
+                    .testTag("viewer-top-bar"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton({ model.back() }) { Icon(Icons.Outlined.ArrowBackIosNew, "返回图库") }
+                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                    Text(
+                        asset.date + (asset.city?.let { " · $it" } ?: ""),
+                        fontSize = 18.sp,
+                        maxLines = 2,
+                    )
+                    Text(asset.time, fontSize = 13.sp, color = NativeMuted)
+                }
+                if (!asset.video)
+                    IconButton({ rotation = (rotation + 90) % 360 }) {
+                        Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
+                    }
+            }
+            if (!state.trash) {
+                Row(
+                    Modifier.align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xDE18181A))
+                        .padding(vertical = 12.dp, horizontal = 24.dp)
+                        .testTag("viewer-tools"),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
+                    ViewerTool(Icons.Outlined.DeleteOutline, "删除", !state.busy && !shareBusy) {
+                        deleting = true
+                    }
+                    if (!asset.video)
+                        ViewerTool(Icons.Outlined.Edit, "编辑", !shareBusy) { editing = true }
+                    ViewerTool(Icons.Outlined.Share, "发送", !shareBusy) {
+                        shareBusy = true
+                        scope.launch {
+                            try {
+                                shareNativeAsset(
+                                    context,
+                                    repo,
+                                    state.mode,
+                                    asset,
+                                    shareCancellation,
+                                )
+                            } catch (reason: kotlinx.coroutines.CancellationException) {
+                                throw reason
+                            } catch (reason: Exception) {
+                                error = reason.message ?: "发送失败，请重试"
+                            } finally {
+                                shareBusy = false
                             }
-                        }
-                    Box(Modifier.weight(1f).fillMaxHeight()) {
-                        RoundAction(Icons.Outlined.MoreHoriz, if (asset.video) "视频信息" else "照片信息") {
-                            info = true
                         }
                     }
                 }
             }
         }
+        if (shareBusy)
+            Surface(Modifier.align(Alignment.Center), color = Color(0xEE18181A)) {
+                Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(Modifier.size(22.dp))
+                    Spacer(Modifier.width(12.dp))
+                    Text("正在准备发送原件…")
+                }
+            }
     }
-    if (info)
+    if (deleting)
         AlertDialog(
-            onDismissRequest = { info = false },
-            title = { Text(asset.name) },
-            text = {
-                Text(
-                    if (asset.video) "视频\n${asset.date} ${asset.time}"
-                    else "${asset.date} ${asset.time}\n当前显示预览图，放大不增加原片细节；查看原片请下载。"
-                )
+            onDismissRequest = { deleting = false },
+            title = { Text("移入回收站？") },
+            text = { Text("可以在最近删除中恢复此项目。") },
+            dismissButton = { TextButton({ deleting = false }) { Text("取消") } },
+            confirmButton = {
+                TextButton({
+                    deleting = false
+                    model.startSelection(asset.id)
+                    model.changeSelection("trash")
+                }) {
+                    Text("移入回收站")
+                }
             },
-            confirmButton = { TextButton({ info = false }) { Text("完成") } },
         )
+    error?.let { message ->
+        AlertDialog(
+            onDismissRequest = { error = null },
+            title = { Text("发送未完成") },
+            text = { Text(message) },
+            confirmButton = { TextButton({ error = null }) { Text("完成") } },
+        )
+    }
 }
 
 @Composable
-private fun ZoomPhoto(
+private fun ViewerTool(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    enabled: Boolean,
+    action: () -> Unit,
+) {
+    TextButton(onClick = action, enabled = enabled) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(icon, label, Modifier.size(24.dp))
+            Text(label, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+internal fun ZoomPhoto(
     asset: NativeAsset,
     repo: NativeGalleryRepository,
+    mode: GalleryMode,
+    active: Boolean,
     rotation: Float,
+    onTap: () -> Unit,
     onZoom: (Boolean) -> Unit,
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var original by remember(repo, asset.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var originalError by remember { mutableStateOf<String?>(null) }
+    var originalLoading by remember { mutableStateOf(false) }
+    var retry by remember { mutableIntStateOf(0) }
+    val demand = active && scale > 1.01f
+    val cancellation = remember(demand, repo, asset.id, retry) { NativeTransferCancellation() }
+    DisposableEffect(cancellation) { onDispose { cancellation.cancel() } }
+    LaunchedEffect(demand, repo, asset.id, retry) {
+        originalError = null
+        if (!demand) {
+            original = null
+            originalLoading = false
+            return@LaunchedEffect
+        }
+        originalLoading = true
+        try {
+            val bitmap =
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    repo.original(context, mode, asset, cancellation, normalize = true).use { source
+                        ->
+                        decodeViewerOriginal(source.file)
+                    }
+                }
+            cancellation.check()
+            original = bitmap
+        } catch (reason: kotlinx.coroutines.CancellationException) {
+            throw reason
+        } catch (reason: Exception) {
+            if (!cancellation.cancelled) originalError = reason.message ?: "原图读取失败"
+        } finally {
+            originalLoading = false
+        }
+    }
     fun clamp(value: Offset, zoom: Float): Offset {
         val width = asset.width.toFloat().coerceAtLeast(1f)
         val height = asset.height.toFloat().coerceAtLeast(1f)
@@ -171,6 +296,7 @@ private fun ZoomPhoto(
             .transformable(transform, canPan = { scale > 1.01f })
             .pointerInput(asset.id, rotation) {
                 detectTapGestures(
+                    onTap = { onTap() },
                     onDoubleTap = { point ->
                         val start = scale
                         val target = if (scale > 1.01f) 1f else 2.5f
@@ -182,16 +308,12 @@ private fun ZoomPhoto(
                                 onZoom(value > 1.01f)
                             }
                         }
-                    }
+                    },
                 )
             },
         contentAlignment = Alignment.Center,
     ) {
-        NativeImage(
-            repo,
-            asset.preview,
-            true,
-            asset.name,
+        val imageModifier =
             Modifier.fillMaxSize().graphicsLayer {
                 val fit = rotationFit(asset.width, asset.height, size.width, size.height, rotation)
                 scaleX = scale * fit
@@ -199,7 +321,27 @@ private fun ZoomPhoto(
                 translationX = offset.x
                 translationY = offset.y
                 rotationZ = rotation
-            },
-        )
+            }
+        val bitmap = original
+        if (bitmap != null)
+            androidx.compose.foundation.Image(
+                bitmap.asImageBitmap(),
+                asset.name,
+                imageModifier,
+                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+            )
+        else NativeImage(repo, asset.preview, true, asset.name, imageModifier)
+        if (demand) {
+            if (originalLoading)
+                Text(
+                    "正在加载原图…",
+                    Modifier.align(Alignment.BottomCenter).padding(bottom = 96.dp),
+                    color = Color.White,
+                    fontSize = 12.sp,
+                )
+            originalError?.let { message ->
+                TextButton({ retry++ }, Modifier.align(Alignment.Center)) { Text("$message · 重试") }
+            }
+        }
     }
 }

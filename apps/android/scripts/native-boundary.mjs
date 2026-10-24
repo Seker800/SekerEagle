@@ -15,6 +15,21 @@ export function assertNativeBoundary(files) {
     throw new Error('The legacy preview must not be exported.');
   for (const [path, source] of files) {
     if (!path.startsWith('app/src/main/kotlin/') || !path.endsWith('.kt')) continue;
+    if (path === 'app/src/main/kotlin/com/sekereagle/android/NativeEditor.kt') {
+      if (
+        !source.includes('val editorOrigin = "https://${repo.editorHost}"') ||
+        !source.includes('settings.allowFileAccess = false') ||
+        !source.includes('uri.host != repo.editorHost') ||
+        !source.includes('request.method != "GET"') ||
+        !source.includes('shouldOverrideUrlLoading') ||
+        !source.includes('context.assets.open("editor$path")') ||
+        source.includes('CookieManager') ||
+        /loadUrl\(/g[Symbol.match](source)?.length !== 1 ||
+        /loadUrl\(.*session/.test(source)
+      )
+        throw new Error('Editor must use only bundled offline content.');
+      continue;
+    }
     if (/import\s+android\.webkit\b|\bWebView\s*\(/.test(source))
       throw new Error('Native Kotlin surfaces must not import or create a WebView.');
     if (/Native(?:Photo|Material)(?:Repository|Viewer|Gallery)/.test(source))

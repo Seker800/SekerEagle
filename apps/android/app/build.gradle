@@ -6,8 +6,8 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 16
-        versionName '0.8.1'
+        versionCode 17
+        versionName '0.9.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true; compose true }
@@ -16,7 +16,7 @@ android {
         release { minifyEnabled false }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-    sourceSets { main.assets.srcDirs += layout.buildDirectory.dir('generated/media-assets') }
+    sourceSets { main.assets.srcDirs += [layout.buildDirectory.dir('generated/media-assets'), layout.buildDirectory.dir('generated/editor-assets')] }
     lint { abortOnError true; disable 'OldTargetApi', 'GradleDependency', 'NewerVersionAvailable' }
     testOptions { unitTests.returnDefaultValues = true }
 }
@@ -72,3 +72,17 @@ dependencies {
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.7.0'
     debugImplementation 'androidx.compose.ui:ui-test-manifest'
 }
+
+tasks.register('generateEditor', Exec) {
+    workingDir rootProject.projectDir
+    commandLine 'node', 'scripts/build-editor.mjs'
+    inputs.dir rootProject.file('../web/src')
+    inputs.file rootProject.file('../web/native-editor.html')
+    inputs.file rootProject.file('../web/vite.config.ts')
+    inputs.file rootProject.file('../../package-lock.json')
+    inputs.dir rootProject.file('../../packages/library-core/src')
+    inputs.dir rootProject.file('../../packages/eagle-filter-core/src')
+    inputs.file rootProject.file('scripts/build-editor.mjs')
+    outputs.dir layout.buildDirectory.dir('generated/editor-assets')
+}
+tasks.named('preBuild') { dependsOn 'generateEditor' }

@@ -117,14 +117,20 @@ class NativeReviewTest {
                 val asset = model.state.value.items.first()
                 main { model.openAsset(asset.id) }
                 compose.onNodeWithTag("viewer-top-bar").assertExists()
-                for (label in listOf("删除", "编辑", "发送")) compose.onNodeWithContentDescription(label).assertExists()
+                for (label in listOf("删除", "编辑", "发送")) compose
+                    .onNodeWithContentDescription(label)
+                    .assertExists()
                 compose.onNodeWithContentDescription("照片信息").assertDoesNotExist()
                 compose.onNodeWithText("1 / 60").assertDoesNotExist()
                 compose.onNodeWithTag("viewer-photo:${asset.id}").performTouchInput { click() }
-                compose.onNodeWithTag("viewer-top-bar").assertDoesNotExist()
+                compose.waitUntil(2000) {
+                    compose.onAllNodesWithTag("viewer-top-bar").fetchSemanticsNodes().isEmpty()
+                }
                 compose.onNodeWithTag("viewer-tools").assertDoesNotExist()
                 compose.onNodeWithTag("viewer-photo:${asset.id}").performTouchInput { click() }
-                compose.onNodeWithTag("viewer-tools").assertExists()
+                compose.waitUntil(2000) {
+                    compose.onAllNodesWithTag("viewer-tools").fetchSemanticsNodes().isNotEmpty()
+                }
                 compose.onNodeWithContentDescription("删除").performClick()
                 compose.onNodeWithText("移入回收站？").assertExists()
                 compose.onNodeWithText("取消").performClick()

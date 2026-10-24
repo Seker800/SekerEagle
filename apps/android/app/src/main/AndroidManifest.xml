@@ -17,6 +17,7 @@
         </activity>
         <activity android:name=".MainActivity" android:exported="false" android:configChanges="orientation|screenSize|keyboardHidden" android:windowSoftInputMode="adjustResize">
         </activity>
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.share" android:exported="false" android:grantUriPermissions="true"><meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/share_paths" /></provider>
         <service android:name=".NativeUploadService" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".BackupService" android:exported="false" android:foregroundServiceType="dataSync" />
     </application>

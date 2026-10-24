@@ -58,6 +58,20 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
     NativeTheme {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) {
+                BackHandler(
+                    state.transfersOpen ||
+                        state.searchOpen ||
+                        state.accountOpen ||
+                        state.viewerId != null ||
+                        state.query.isNotEmpty() ||
+                        state.selecting ||
+                        state.filters.active ||
+                        state.trash ||
+                        state.filterPanel != null ||
+                        state.busy
+                ) {
+                    model.back()
+                }
                 if (state.identity == null) NativeLogin(state, model)
                 else {
                     key(state.identity!!.scope) {
@@ -78,20 +92,6 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     NativeDownloadDialog(download!!, model.downloads)
                 if (state.identity != null && state.transfersOpen)
                     NativeTransferScreen(state, model, openNative)
-                BackHandler(
-                    state.transfersOpen ||
-                        state.searchOpen ||
-                        state.accountOpen ||
-                        state.viewerId != null ||
-                        state.query.isNotEmpty() ||
-                        state.selecting ||
-                        state.filters.active ||
-                        state.trash ||
-                        state.filterPanel != null ||
-                        state.busy
-                ) {
-                    model.back()
-                }
                 LaunchedEffect(state.identity?.scope) {
                     if (state.identity != null) model.onForeground()
                 }

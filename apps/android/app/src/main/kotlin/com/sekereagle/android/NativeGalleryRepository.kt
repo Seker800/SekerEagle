@@ -35,6 +35,7 @@ data class NativeAsset(
     val groupDate: String = date,
     val playback: String? = null,
     val playbackSize: Long = 0,
+    val city: String? = null,
 )
 
 data class NativeDay(val date: String, val before: String, val count: Long, val offset: Long) {
@@ -58,8 +59,8 @@ data class NativeTimeline(val days: List<NativeDay>, val total: Long) {
 data class NativePage(val items: List<NativeAsset>, val cursor: String?)
 
 /**
- * Older servers only expose extensions. Map the aliases whose stored inspection format differs,
- * so the list format filter still matches rather than silently returning an empty page.
+ * Older servers only expose extensions. Map the aliases whose stored inspection format differs, so
+ * the list format filter still matches rather than silently returning an empty page.
  */
 internal fun canonicalFormat(extension: String): String =
     when (val value = extension.lowercase(java.util.Locale.ROOT).removePrefix(".")) {
@@ -74,6 +75,17 @@ internal fun canonicalFormat(extension: String): String =
 
 /** One scoped implementation for both modes; only authenticated derived media enters the cache. */
 class NativeGalleryRepository(private val session: NativeSession, private val scope: String) {
+    internal val editorHost
+        get() =
+            "e" +
+                java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(scope.toByteArray())
+                    .joinToString("") { "%02x".format(it) } +
+                ".editor.sekereagle.invalid"
+
+    internal val connection
+        get() = session
+
     private val decoding = Semaphore(4)
     private val cache =
         object : LruCache<String, Bitmap>(32 * 1024 * 1024) {
@@ -328,6 +340,7 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             groupDate?.format(DateTimeFormatter.ofPattern("yyyy年M月d日")) ?: "日期未知",
             movie?.let { NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id")) },
             movie?.optLong("byteSize") ?: 0,
+            NativeCity.label(json),
         )
     }
 }
