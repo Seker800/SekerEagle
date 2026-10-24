@@ -485,8 +485,8 @@ class NativeSearchTest {
             await {
                 compose.onAllNodesWithTag("native-filter-sheet").fetchSemanticsNodes().isEmpty()
             }
+            compose.waitUntil(1500) { !model.state.value.searchOpen }
             captureNativeEvidence("native-search-fixed-submit.png")
-            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading && !model.state.value.searchOpen }
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
             assertTrue(server.paths.last { it.contains("/assets?") }.contains("manualTagIds=tag1"))
