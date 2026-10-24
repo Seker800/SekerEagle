@@ -1,26 +1,69 @@
 import { Transform } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsIn, IsOptional, IsString, Matches, MaxLength, registerDecorator } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsIn,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  registerDecorator,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 function CalendarDate() {
-  return (target: object, propertyName: string) => registerDecorator({
-    name: 'calendarDate', target: target.constructor, propertyName,
-    validator: { validate: (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value },
-  });
+  return (target: object, propertyName: string) =>
+    registerDecorator({
+      name: 'calendarDate',
+      target: target.constructor,
+      propertyName,
+      validator: {
+        validate: (value: string) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+          Number.isFinite(Date.parse(`${value}T00:00:00Z`)) &&
+          new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value,
+      },
+    });
 }
 export class PhotoStatisticsQueryDto {
   @ApiPropertyOptional({ enum: ['day', 'month', 'year'], default: 'month' })
-  @IsOptional() @IsIn(['day', 'month', 'year']) grain?: 'day' | 'month' | 'year';
+  @IsOptional()
+  @IsIn(['day', 'month', 'year'])
+  grain?: 'day' | 'month' | 'year';
   @ApiPropertyOptional({ enum: ['camera', 'lens'], default: 'camera' })
-  @IsOptional() @IsIn(['camera', 'lens']) groupBy?: 'camera' | 'lens';
+  @IsOptional()
+  @IsIn(['camera', 'lens'])
+  groupBy?: 'camera' | 'lens';
   @ApiPropertyOptional({ example: '2024-01-01' })
-  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) @CalendarDate() start?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @CalendarDate()
+  start?: string;
   @ApiPropertyOptional({ example: '2026-12-31' })
-  @IsOptional() @IsString() @Matches(/^\d{4}-\d{2}-\d{2}$/) @CalendarDate() end?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  @CalendarDate()
+  end?: string;
   @ApiPropertyOptional({ type: [String], maxItems: 50 })
-  @IsOptional() @Transform(({ value }: { value: unknown }) => Array.isArray(value) ? value : [value])
-  @IsArray() @ArrayMaxSize(50) @IsString({ each: true }) @MaxLength(240, { each: true }) cameras?: string[];
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? (value as unknown[]) : [value],
+  )
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(240, { each: true })
+  cameras?: string[];
   @ApiPropertyOptional({ type: [String], maxItems: 50 })
-  @IsOptional() @Transform(({ value }: { value: unknown }) => Array.isArray(value) ? value : [value])
-  @IsArray() @ArrayMaxSize(50) @IsString({ each: true }) @MaxLength(240, { each: true }) lenses?: string[];
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? (value as unknown[]) : [value],
+  )
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(240, { each: true })
+  lenses?: string[];
 }

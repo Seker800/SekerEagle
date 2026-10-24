@@ -1,11 +1,12 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
 import { PhotoStatistics } from './PhotoStatistics';
 import { PhotoTimeChart } from './PhotoStatisticsCharts';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../lib/photo-statistics-api', () => ({ getPhotoStatistics: get }));
-const data = {
+const data: PhotoStatisticsData = {
   total: 6,
   unknownDate: 1,
   grain: 'month',
@@ -134,10 +135,24 @@ describe('statistics interactions', () => {
 
 it('gives each visible device a distinct color and keeps long-range axis labels readable', () => {
   const devices = Array.from({ length: 10 }, (_, i) => `Camera ${i}`);
-  const periods = Array.from({ length: 121 }, (_, i) => `${2016 + Math.floor(i / 12)}-${String(i % 12 + 1).padStart(2, '0')}`);
-  const view = render(<PhotoTimeChart data={{ ...data, cameraOptions: devices, periods, points: devices.map((key) => ({ key, period: periods[0], count: 1 })) }} />);
+  const periods = Array.from(
+    { length: 121 },
+    (_, i) => `${2016 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`,
+  );
+  const view = render(
+    <PhotoTimeChart
+      data={{
+        ...data,
+        cameraOptions: devices,
+        periods,
+        points: devices.map((key) => ({ key, period: periods[0], count: 1 })),
+      }}
+    />,
+  );
   const swatches = view.container.querySelectorAll('button i');
   expect(new Set(Array.from(swatches, (element) => element.getAttribute('style'))).size).toBe(10);
-  const labels = Array.from(view.container.querySelectorAll('svg text')).filter(element => element.textContent?.includes('-'));
+  const labels = Array.from(view.container.querySelectorAll('svg text')).filter((element) =>
+    element.textContent?.includes('-'),
+  );
   expect(labels.length).toBeLessThanOrEqual(7);
 });

@@ -233,3 +233,20 @@ test('map aggregation is a named photography extension, never an alternative gen
     'shared-providers',
   );
 });
+
+test('statistics remains a named photography extension and cannot replace common services', () => {
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        '    PhotoStatisticsService,',
+        '    PhotoStatisticsService,\n    { provide: EagleService, useClass: PhotoStatisticsService },',
+      ),
+    'shared-providers',
+  );
+  rejectsMutation(
+    photoModule,
+    (s) => s.replace('    PhotoStatisticsService,', '    ArbitraryStatisticsProvider,'),
+    'shared-providers',
+  );
+});

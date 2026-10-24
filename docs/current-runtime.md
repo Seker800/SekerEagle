@@ -211,3 +211,9 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 `python3 -m unittest discover -s scripts -p test_nas_startup.py` 覆盖固定启动顺序、依赖失败阻断、错误项目拒绝、已完成任务跳过及检查点／清单校验，并纳入根测试命令。DSM 的实际运行结果为 0，HTTPS 健康恢复，封面检查点继续推进。没有做 NAS 再次重启测试；本次实测覆盖开机任务的相同执行入口和当前正常依赖。
 
 本次运维脚本修改已通过 lint、全工作区类型检查与构建；新增 4 项启动恢复单元测试通过，文档／包配置格式及 Git 空白检查通过。没有更新生产应用镜像或数据库结构。
+
+## 2026-10-24 本机照片统计验收环境
+
+本轮按用户授权新建隔离照片测试工作台，入口 `http://127.0.0.1:4188/__test/login`；在照片模式「智能整理」下面打开「照片统计」。它不是已退役的 Mac 旧图库，也不连接群晖数据库作为开发目标。独立临时 PostgreSQL／MinIO 容器名以 `sekereagle-photo-workbench-` 开头，数据库为 `sekereagle_test`，桶为 `sekereagle-assets`，均仅绑定 loopback；API、worker 和网关由测试脚本持有，模型地址指向本机不可用端口以避免调用现用模型。
+
+群晖仅只读抽取 27 张原始 JPEG 和必要摄影样本信息到本机私有目录，再经过本地上传及 worker 提取；工作台额外含 4 张合成照片。未复制线上用户凭据、未恢复完整数据库，现用群晖服务和任务未改变。浏览器、HTTP、真实数据库和工程门禁的范围见 [照片统计](photo-statistics.md)。该环境使用临时存储，不承诺重启后保留；进程、容器和运行位置从 `.omx/artifacts/photo-workbench.json` 重新核对，不把文档记录当实时状态。

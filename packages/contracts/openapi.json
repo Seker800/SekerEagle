@@ -5923,6 +5923,81 @@
         "tags": ["photo-management"]
       }
     },
+    "/api/photos/photography/statistics": {
+      "get": {
+        "operationId": "PhotoStatisticsController_get",
+        "parameters": [
+          {
+            "name": "grain",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "month",
+              "type": "string",
+              "enum": ["day", "month", "year"]
+            }
+          },
+          {
+            "name": "groupBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "camera",
+              "type": "string",
+              "enum": ["camera", "lens"]
+            }
+          },
+          {
+            "name": "start",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2024-01-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "end",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-12-31",
+              "type": "string"
+            }
+          },
+          {
+            "name": "cameras",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "lenses",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-statistics"]
+      }
+    },
     "/api/photos/agent/photos": {
       "get": {
         "operationId": "PhotoAgentController_photos",

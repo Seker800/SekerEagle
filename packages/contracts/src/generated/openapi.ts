@@ -2436,6 +2436,22 @@ export interface paths {
     patch: operations['PhotoManagementController_group'];
     trace?: never;
   };
+  '/api/photos/photography/statistics': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoStatisticsController_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/agent/photos': {
     parameters: {
       query?: never;
@@ -7332,6 +7348,30 @@ export interface operations {
         'application/json': components['schemas']['UpdateGroupDto'];
       };
     };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoStatisticsController_get: {
+    parameters: {
+      query?: {
+        grain?: 'day' | 'month' | 'year';
+        groupBy?: 'camera' | 'lens';
+        start?: string;
+        end?: string;
+        cameras?: string[];
+        lenses?: string[];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       200: {
         headers: {

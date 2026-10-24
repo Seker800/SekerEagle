@@ -232,7 +232,11 @@ export function PhotoStatistics({
                     <h2>{t('相机使用量')}</h2>
                     <span>{t('按照片数量排序')}</span>
                   </header>
-                  <PhotoUsageChart kind="camera" items={data.cameras} options={data.cameraOptions} />
+                  <PhotoUsageChart
+                    kind="camera"
+                    items={data.cameras}
+                    options={data.cameraOptions}
+                  />
                 </section>
                 <section className={styles.card}>
                   <header>

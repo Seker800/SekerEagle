@@ -1,3 +1,4 @@
+import { URLSearchParams } from 'node:url';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 /* global setTimeout, clearTimeout, console */
 import assert from 'node:assert/strict';
@@ -118,10 +119,22 @@ try {
   await new Promise((resolve) => reservation.close(resolve));
   let accessToken = '';
   let browserCookies = [];
+  let browserLogin;
   gateway = createServer(async (req, res) => {
     if (req.url === '/__test/login') {
+      if (!browserLogin) {
+        res.writeHead(503);
+        res.end('Test login is not ready');
+        return;
+      }
+      const fresh = await browserLogin();
+      if (!fresh.ok) {
+        res.writeHead(fresh.status);
+        res.end('Test login failed');
+        return;
+      }
       res.writeHead(302, {
-        'set-cookie': browserCookies,
+        'set-cookie': fresh.headers.getSetCookie(),
         location: '/',
       });
       res.end();
@@ -139,7 +152,7 @@ try {
           // including when the browser reaches this gateway via a loopback alias.
           headers: req.url.startsWith('/api/')
             ? req.headers
-            : { ...req.headers, host: new URL(origin).host },
+            : { ...req.headers, host: new URL(canonicalOrigin).host },
         },
         (response) => {
           res.writeHead(response.statusCode, response.headers);
@@ -183,18 +196,20 @@ try {
   await new Promise((resolve) =>
     gateway.listen(Number(process.env.PHOTO_WORKBENCH_PORT ?? 0), '127.0.0.1', resolve),
   );
-  const origin = `http://localhost:${gateway.address().port}`;
+  const origin = `http://${process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES ? '127.0.0.1' : 'localhost'}:${gateway.address().port}`;
+  const canonicalOrigin = `http://localhost:${gateway.address().port}`;
   const env = {
     ...process.env,
     NODE_ENV: 'test',
     PORT: String(apiPort),
-    CANONICAL_ORIGIN: origin,
+    CANONICAL_ORIGIN: canonicalOrigin,
+    BROWSER_TRUSTED_ORIGINS: origin,
     DATABASE_URL: `postgresql://sekereagle_test@127.0.0.1:${pgPort}/sekereagle_test`,
     JWT_ACCESS_SECRET: randomBytes(32).toString('hex'),
     ACCESS_TOKEN_TTL_SECONDS: '86400',
     REFRESH_TOKEN_TTL_SECONDS: '86400',
     S3_ENDPOINT: `http://127.0.0.1:${minioPort}`,
-    S3_PUBLIC_ENDPOINT: origin,
+    S3_PUBLIC_ENDPOINT: canonicalOrigin,
     S3_REGION: 'us-east-1',
     S3_BUCKET: storageBucket,
     S3_ACCESS_KEY_ID: accessKey,
@@ -252,6 +267,18 @@ try {
       role: 'ADMIN',
     },
   });
+  if (process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES)
+    await writeFile(
+      join(artifacts, 'photo-statistics-credentials.json'),
+      JSON.stringify({ origin, email: owner.email, password: testPassword }),
+      { mode: 0o600 },
+    );
+  browserLogin = () =>
+    fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: owner.email, password: testPassword }),
+    });
   const legacyAccessToken = await new JwtService({ secret: env.JWT_ACCESS_SECRET }).signAsync(
     {
       sub: owner.id,
@@ -912,6 +939,101 @@ try {
       reverse.assets.find((row) => row.sourceId !== targetId).assetId,
     );
     sendCases.push(reverse);
+  }
+  if (process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES) {
+    const fixture = JSON.parse(
+      await readFile(process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES, 'utf8'),
+    );
+    assert.equal(fixture.source, 'read-only-nas-originals');
+    assert.ok(fixture.samples.length > 0 && fixture.samples.length <= 32);
+    let sampleBytes = 0;
+    const sampleIds = [];
+    for (const [index, sample] of fixture.samples.entries()) {
+      const bytes = Buffer.from(sample.bytes, 'base64');
+      sampleBytes += bytes.length;
+      assert.ok(bytes.length <= 3 * 1024 * 1024 && sampleBytes <= 48 * 1024 * 1024);
+      const uploaded = await upload(
+        'photos',
+        bytes,
+        `nas-statistics-sample-${index + 1}.jpg`,
+        'image/jpeg',
+      );
+      sampleIds.push(uploaded.assetId);
+    }
+    await waitFor(
+      async () =>
+        (await db.eaglePhotoMetadata.count({
+          where: { ownerId: owner.id, libraryMode: 'PHOTO', assetId: { in: sampleIds } },
+        })) === new Set(sampleIds).size,
+      'sample photography metadata',
+      720,
+    );
+    const stats = await api('/photos/photography/statistics');
+    assert.ok(stats.total >= new Set(sampleIds).size);
+    assert.equal(
+      stats.cameras.reduce((n, x) => n + x.count, 0),
+      stats.total,
+    );
+    assert.equal(
+      stats.lenses.reduce((n, x) => n + x.count, 0),
+      stats.total,
+    );
+    assert.equal(
+      stats.points.reduce((n, x) => n + x.count, 0),
+      stats.total - stats.unknownDate,
+    );
+    const endpoint = '/api/photos/photography/statistics';
+    assert.equal((await fetch(`${origin}${endpoint}`)).status, 401);
+    for (const suffix of [
+      '?ownerId=other',
+      '?includePrivate=true',
+      '?start=2024-02-30',
+      '?grain=hour',
+    ]) {
+      assert.equal(
+        (
+          await fetch(`${origin}${endpoint}${suffix}`, {
+            headers: { cookie: `sekereagle_access=${accessToken}` },
+          })
+        ).status,
+        400,
+      );
+    }
+    assert.equal(
+      (
+        await fetch(`${origin}/api/eagle/photography/statistics`, {
+          headers: { cookie: `sekereagle_access=${accessToken}` },
+        })
+      ).status,
+      404,
+    );
+    const query = new URLSearchParams({
+      cameras: stats.cameras.find((x) => x.key)?.key ?? '',
+      lenses: stats.lenses.find((x) => x.key)?.key ?? '',
+      groupBy: 'lens',
+    });
+    const filtered = await api(`/photos/photography/statistics?${query}`);
+    assert.ok(filtered.total <= stats.total);
+    await writeFile(
+      join(artifacts, 'photo-statistics-real-samples.json'),
+      JSON.stringify(
+        {
+          sampleCount: fixture.samples.length,
+          photoCount: stats.total,
+          cameraCount: stats.cameras.length,
+          lensCount: stats.lenses.length,
+          periods: stats.periods.length,
+          unknownDate: stats.unknownDate,
+          checks: 'passed',
+          source: 'read-only NAS originals imported through local authenticated uploads',
+        },
+        null,
+        2,
+      ),
+    );
+    console.log(
+      `Real NAS samples imported into isolated workbench: ${fixture.samples.length}; statistics HTTP validation passed.`,
+    );
   }
   if (basic) {
     console.log(

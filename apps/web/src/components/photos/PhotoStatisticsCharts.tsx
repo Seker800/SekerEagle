@@ -31,7 +31,13 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
   const count = (period: string, key: string | null) =>
     values.get(JSON.stringify([period, key])) ?? 0;
   const options = data.groupBy === 'camera' ? data.cameraOptions : data.lensOptions;
-  const ticks = new Set(Array.from({ length: Math.min(7, data.periods.length) }, (_, i) => Math.round(i * (data.periods.length - 1) / Math.max(1, Math.min(7, data.periods.length) - 1))));
+  const ticks = new Set(
+    Array.from({ length: Math.min(7, data.periods.length) }, (_, i) =>
+      Math.round(
+        (i * (data.periods.length - 1)) / Math.max(1, Math.min(7, data.periods.length) - 1),
+      ),
+    ),
+  );
   const visible = keys.filter((key) => !hidden.has(key));
   const max = Math.max(
     1,
@@ -66,7 +72,9 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
               })
             }
           >
-            <i style={{ background: colorFor(key, options), opacity: hidden.has(key) ? 0.25 : 1 }} />
+            <i
+              style={{ background: colorFor(key, options), opacity: hidden.has(key) ? 0.25 : 1 }}
+            />
             {deviceLabel(key, data.groupBy)}
           </button>
         ))}
@@ -191,7 +199,15 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
   );
 }
 
-export function PhotoUsageChart({ items, kind, options }: { items: PhotoUsage[]; kind: 'camera' | 'lens'; options: string[] }) {
+export function PhotoUsageChart({
+  items,
+  kind,
+  options,
+}: {
+  items: PhotoUsage[];
+  kind: 'camera' | 'lens';
+  options: string[];
+}) {
   const max = Math.max(1, ...items.map((item) => item.count));
   return (
     <div
@@ -210,7 +226,10 @@ export function PhotoUsageChart({ items, kind, options }: { items: PhotoUsage[];
             <div className={styles.barTrack}>
               <div
                 className={styles.bar}
-                style={{ height: `${(item.count / max) * 100}%`, background: colorFor(item.key, options) }}
+                style={{
+                  height: `${(item.count / max) * 100}%`,
+                  background: colorFor(item.key, options),
+                }}
               />
             </div>
             <span className={styles.barLabel}>{deviceLabel(item.key, kind)}</span>

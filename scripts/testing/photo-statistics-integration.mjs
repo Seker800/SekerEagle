@@ -1,0 +1,183 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import { log } from 'node:console';
+import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import assert from 'node:assert/strict';
+import { PrismaClient } from '@prisma/client';
+import { PhotoStatisticsService } from '../../apps/api/dist/photos/photo-statistics.service.js';
+import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+
+const name = `sekereagle-statistics-test-${randomUUID()}`;
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { encoding: 'utf8', ...options });
+  if (result.status !== 0) throw new Error(`${command} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+let started = false,
+  prisma;
+try {
+  run('docker', [
+    'run',
+    '-d',
+    '--rm',
+    '--name',
+    name,
+    '-p',
+    '127.0.0.1::5432',
+    '--tmpfs',
+    '/var/lib/postgresql/data:rw',
+    '-e',
+    'POSTGRES_HOST_AUTH_METHOD=trust',
+    '-e',
+    'POSTGRES_USER=sekereagle_test',
+    '-e',
+    'POSTGRES_DB=sekereagle_test',
+    'pgvector/pgvector:0.8.6-pg16',
+  ]);
+  started = true;
+  const port = run('docker', ['port', name, '5432']).split(':').at(-1);
+  const env = {
+    ...process.env,
+    DATABASE_URL: `postgresql://sekereagle_test@127.0.0.1:${port}/sekereagle_test`,
+    S3_ENDPOINT: 'http://127.0.0.1:9000',
+    S3_BUCKET: 'sekereagle-test',
+  };
+  assertSafeRuntimeTarget({
+    databaseUrl: env.DATABASE_URL,
+    s3Endpoint: env.S3_ENDPOINT,
+    s3Bucket: env.S3_BUCKET,
+  });
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (
+      spawnSync('docker', [
+        'exec',
+        name,
+        'pg_isready',
+        '-U',
+        'sekereagle_test',
+        '-d',
+        'sekereagle_test',
+      ]).status === 0
+    )
+      break;
+    if (attempt === 99) throw new Error('Test database not ready');
+    await delay(100);
+  }
+  run(process.execPath, ['scripts/assert-safe-target.mjs'], { env });
+  run(
+    process.execPath,
+    [
+      'node_modules/prisma/build/index.js',
+      'migrate',
+      'deploy',
+      '--schema',
+      'apps/api/prisma/schema.prisma',
+    ],
+    { env },
+  );
+  prisma = new PrismaClient({ datasources: { db: { url: env.DATABASE_URL } } });
+  const owner = randomUUID(),
+    other = randomUUID();
+  await prisma.user.createMany({
+    data: [owner, other].map((id) => ({
+      id,
+      email: `${id}@example.invalid`,
+      passwordHash: 'synthetic-test-only',
+    })),
+  });
+  const make = async (options = {}, metadata = {}) => {
+    const id = randomUUID();
+    const asset = await prisma.eagleAsset.create({
+      data: {
+        id,
+        ownerId: owner,
+        libraryMode: 'PHOTO',
+        originalName: 'synthetic.jpg',
+        displayName: 'Synthetic',
+        normalizedDisplayName: 'synthetic',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1n,
+        originalObjectKey: `synthetic/${id}`,
+        lifecycleStatus: 'READY',
+        mediaRevision: 1,
+        ...options,
+      },
+    });
+    if (asset.libraryMode === 'PHOTO')
+      await prisma.eaglePhotoMetadata.create({
+        data: {
+          assetId: id,
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetRevision: 1,
+          processorVersion: 'test',
+          capturedAt: new Date('2024-01-31T20:00:00Z'),
+          capturedLocal: '2024-02-01T04:00:00',
+          cameraModel: 'A',
+          lensModel: 'L1',
+          ...metadata,
+        },
+      });
+    return id;
+  };
+  await make();
+  await make({}, { lensModel: 'L2', capturedLocal: '2024-04-01T04:00:00' });
+  await make({}, { cameraModel: 'B', capturedAt: null, capturedLocal: null });
+  await make({}, { cameraModel: null, lensModel: null, capturedAt: null });
+  await make({ isPrivate: true });
+  await make({ ownerId: other });
+  await make({ libraryMode: 'MATERIAL' });
+  await make({ deletedAt: new Date() });
+  await make({ mimeType: 'video/mp4' });
+  await make({}, { assetRevision: 0, cameraModel: 'Stale' });
+  const service = new PhotoStatisticsService(prisma);
+  const data = await service.get(owner, false, {});
+  assert.equal(data.total, 5);
+  assert.equal(data.unknownDate, 3);
+  assert.deepEqual(data.periods, ['2024-02', '2024-03', '2024-04']);
+  assert.deepEqual(
+    data.points.map((p) => p.period),
+    ['2024-02', '2024-04'],
+  );
+  assert.ok(!data.cameraOptions.includes('Stale'));
+  assert.equal(
+    data.cameras.reduce((n, x) => n + x.count, 0),
+    data.total,
+  );
+  assert.equal((await service.get(owner, true, {})).total, 6);
+  assert.equal((await service.get(other, false, {})).total, 1);
+  assert.equal((await service.get(owner, false, { cameras: ['A'], lenses: ['L2'] })).total, 1);
+  assert.equal((await service.get(owner, false, { cameras: ['A', 'B'], lenses: ['L1'] })).total, 2);
+  assert.equal((await service.get(owner, false, { cameras: [''] })).total, 2);
+  const range = await service.get(owner, false, {
+    start: '2024-02-01',
+    end: '2024-02-29',
+    grain: 'day',
+  });
+  assert.equal(range.total, 1);
+  assert.equal(range.periods.length, 29);
+  assert.equal(range.unknownDate, 0);
+  assert.equal((await service.get(owner, false, { start: '2024-05-01' })).total, 0);
+  assert.equal((await service.get(owner, false, { cameras: ["A' OR true --"] })).total, 0);
+  for (let i = 0; i < 25; i++) await make({}, { cameraModel: `Device ${i}` });
+  const crowded = await service.get(owner, false, {});
+  assert.equal(new Set(crowded.points.map((p) => p.key)).size, 24);
+  assert.ok(crowded.points.some((p) => p.key === null));
+  assert.equal(
+    crowded.points.reduce((n, x) => n + x.count, 0),
+    crowded.total - crowded.unknownDate,
+  );
+  assert.ok(crowded.cameras.length > 24);
+  await assert.rejects(service.get(owner, false, { grain: 'day', start: '2000-01-01' }));
+  assert.equal((await service.get(owner, false, { groupBy: 'lens' })).points[0].key, 'L1');
+  const beforeBulk = (await service.get(owner, false, {})).total;
+  for (let i = 0; i < 130; i++) await make();
+  assert.equal((await service.get(owner, false, {})).total, beforeBulk + 130);
+  log(
+    'Photo statistics PostgreSQL integration passed: full counts, device intersections, local dates, calendar gaps, private/owner/mode/version isolation, unknown fields and bounded series.',
+  );
+} finally {
+  await prisma?.$disconnect();
+  if (started) run('docker', ['stop', name]);
+}
