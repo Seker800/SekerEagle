@@ -434,6 +434,7 @@ class NativeGalleryTest {
         capture("native-search.png")
         compose.onNodeWithContentDescription("关闭搜索").performClick()
         compose.onNodeWithContentDescription("更多操作").performClick()
+        capture("native-flat-menu.png")
         compose.onNodeWithText("账号与连接", useUnmergedTree = true).performClick()
         compose.onNodeWithTag("native-account").assertExists()
         capture("native-account.png")

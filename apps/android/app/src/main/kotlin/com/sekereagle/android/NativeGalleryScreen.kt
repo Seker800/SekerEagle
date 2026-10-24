@@ -27,8 +27,6 @@ import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -356,7 +354,9 @@ private fun NativeLibrary(
                     RoundAction(Icons.Outlined.Tune, "视图选项") { menu = NativeLibraryMenu.VIEW }
                 }
                 GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
-                    RoundAction(Icons.Outlined.MoreVert, "更多操作") { menu = NativeLibraryMenu.ACTIONS }
+                    RoundAction(Icons.Outlined.MoreVert, "更多操作") {
+                        menu = NativeLibraryMenu.ACTIONS
+                    }
                 }
             }
         if (!state.selecting)

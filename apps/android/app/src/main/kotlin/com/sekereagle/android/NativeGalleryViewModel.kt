@@ -546,7 +546,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun openSearch() {
         mutable.value =
-            state.value.copy(searchOpen = true, searchDraft = state.value.query, accountOpen = false)
+            state.value.copy(
+                searchOpen = true,
+                searchDraft = state.value.query,
+                accountOpen = false,
+            )
     }
 
     fun updateSearchDraft(value: String) {
@@ -573,7 +577,13 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun openAccount() {
-        mutable.value = state.value.copy(accountOpen = true, transfersOpen = false, searchOpen = false, viewerId = null)
+        mutable.value =
+            state.value.copy(
+                accountOpen = true,
+                transfersOpen = false,
+                searchOpen = false,
+                viewerId = null,
+            )
     }
 
     fun openAsset(id: String) {

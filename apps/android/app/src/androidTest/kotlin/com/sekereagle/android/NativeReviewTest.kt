@@ -54,7 +54,8 @@ class NativeReviewTest {
                                 when {
                                     path == "/api/auth/me" ->
                                         """{"user":{"id":"owner","email":"test@example.invalid"},"desktopCache":{"deploymentId":"review"}}"""
-                                    path.contains("/timeline") -> """{"days":[{"date":"2026-10-20","before":"2026-10-21T00:00:00Z","count":180,"offset":0}],"total":180}"""
+                                    path.contains("/timeline") ->
+                                        """{"days":[{"date":"2026-10-20","before":"2026-10-21T00:00:00Z","count":180,"offset":0}],"total":180}"""
                                     path.contains("/assets?") -> {
                                         val start =
                                             Regex("(?:cursor|offset)=([0-9]+)")
@@ -110,7 +111,23 @@ class NativeReviewTest {
         Server().use { server ->
             val model = model(server)
             val destinations = CopyOnWriteArrayList<String>()
-            compose.setContent { NativeGalleryApp(model) { destinations.add(it) } }
+            compose.setContent {
+                val window = androidx.compose.ui.platform.LocalWindowInfo.current
+                val height =
+                    with(androidx.compose.ui.platform.LocalDensity.current) {
+                        androidx.compose.ui.unit.Dp(280f).roundToPx()
+                    }
+                val compact =
+                    object : androidx.compose.ui.platform.WindowInfo by window {
+                        override val containerSize =
+                            androidx.compose.ui.unit.IntSize(window.containerSize.width, height)
+                    }
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalWindowInfo provides compact
+                ) {
+                    NativeGalleryApp(model) { destinations.add(it) }
+                }
+            }
             for (mode in GalleryMode.entries) {
                 compose.onNodeWithTag("mode:${mode.name}").performClick()
                 await { !model.state.value.loading }
@@ -146,15 +163,23 @@ class NativeReviewTest {
             val model = model(server)
             await { model.state.value.timeline?.days?.isNotEmpty() == true }
             main { model.jumpToDay(model.state.value.timeline!!.days.first(), 60) }
-            await { !model.state.value.loading && model.state.value.items.firstOrNull()?.id == "asset60" }
+            await {
+                !model.state.value.loading && model.state.value.items.firstOrNull()?.id == "asset60"
+            }
             compose.setContent { NativeGalleryApp(model) {} }
             compose.onNodeWithTag("asset:asset60").assertIsDisplayed()
-            val before = compose.onNodeWithTag("asset:asset60").fetchSemanticsNode().boundsInRoot.top
+            val before =
+                compose.onNodeWithTag("asset:asset60").fetchSemanticsNode().boundsInRoot.top
             main { model.loadPrevious() }
             await { !model.state.value.loading && model.state.value.windowOffset == 0L }
             compose.onNodeWithTag("asset:asset60").assertIsDisplayed()
             val after = compose.onNodeWithTag("asset:asset60").fetchSemanticsNode().boundsInRoot.top
-            assertEquals("Prepending must preserve the visible photo, including its date header", before, after, 2f)
+            assertEquals(
+                "Prepending must preserve the visible photo, including its date header",
+                before,
+                after,
+                2f,
+            )
             main { model.logout() }
         }
     }
