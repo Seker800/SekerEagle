@@ -12,6 +12,15 @@ SPEC.loader.exec_module(startup)
 
 
 class NasStartupTest(unittest.TestCase):
+    def test_boot_operation_retries_but_identity_failure_is_terminal(self):
+        with patch.object(startup, 'main', side_effect=[RuntimeError('Docker operation failed: start'), None]) as main, patch.object(startup.time, 'sleep'):
+            startup.run_with_retry()
+            self.assertEqual(main.call_count, 2)
+        with patch.object(startup, 'main', side_effect=RuntimeError('Unexpected production container identity')) as main:
+            with self.assertRaisesRegex(RuntimeError, 'identity'):
+                startup.run_with_retry()
+            main.assert_called_once()
+
     def test_health_probe_tolerates_engine_restoration_errors(self):
         with patch.object(startup, 'docker', side_effect=RuntimeError('Docker operation failed: inspect')):
             self.assertFalse(startup.ready(startup.CORE[0]))
