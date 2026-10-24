@@ -44,7 +44,7 @@ export async function reconcileSmartFolderSpaces(client: PrismaClient, spaceId: 
       if (intent)
         await scheduleSmartFolderSnapshot(
           tx,
-          folder,
+          { ownerId: folder.ownerId, libraryMode: folder.libraryMode },
           folder.id,
           intent,
           spaceId,
@@ -139,6 +139,10 @@ export async function runSmartFolderBuildStep(
             },
           });
         }
+        // Queue eligibility is owned by the database clock, including immediate batches.
+        await tx.$executeRaw(Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot"
+          SET "availableAt"=clock_timestamp()+${waitingForSpace ? 30_000 : 0}*interval '1 millisecond'
+          WHERE id=${build.id}`);
         await tx.eagleSmartFolderSemanticSnapshot.update({
           where: { id: build.id },
           data: {
@@ -151,7 +155,6 @@ export async function runSmartFolderBuildStep(
             leaseToken: null,
             errorCode: null,
             attempts: 0,
-            availableAt: new Date(Date.now() + (waitingForSpace ? 30_000 : 0)),
           },
         });
       },

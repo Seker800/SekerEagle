@@ -19,7 +19,7 @@ export async function scheduleSmartFolderSnapshot(
   spaceId: string,
   threshold?: number,
 ) {
-  const where = { ...scope, folderId };
+  const where = { ownerId: scope.ownerId, libraryMode: scope.libraryMode, folderId };
   await tx.$queryRaw(Prisma.sql`SELECT id FROM "EagleSmartFolderSemanticSnapshot"
     WHERE "ownerId"=${scope.ownerId} AND "libraryMode"=${scope.libraryMode}::"LibraryMode" AND "folderId"=${folderId}
     ORDER BY id FOR NO KEY UPDATE`);
@@ -80,14 +80,15 @@ export function smartFolderMatchWhere(
   scope: SmartFolderScope,
   folderId: string,
 ): Prisma.EagleAssetWhereInput {
+  const identity = { ownerId: scope.ownerId, libraryMode: scope.libraryMode };
   return {
     embeddings: {
       some: {
-        ...scope,
+        ...identity,
         smartFolderMatches: {
           some: {
-            ...scope,
-            snapshot: { ...scope, folderId, isActive: true },
+            ...identity,
+            snapshot: { ...identity, folderId, isActive: true },
           },
         },
       },
