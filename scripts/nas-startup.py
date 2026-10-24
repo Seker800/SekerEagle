@@ -30,7 +30,11 @@ def wait_for(check, description):
 
 
 def ready(name):
-    state = json.loads(docker('inspect', '--format', '{{json .State}}', name))
+    try:
+        state = json.loads(docker('inspect', '--format', '{{json .State}}', name))
+    except (RuntimeError, subprocess.TimeoutExpired):
+        # Docker may answer info before restoring container health metadata.
+        return False
     return state.get('Running') is True and state.get('Health', {}).get('Status', 'healthy') == 'healthy'
 
 
@@ -79,5 +83,19 @@ def main():
         print('Core services ready; cover copy already complete.', flush=True)
 
 
+def run_with_retry():
+    for attempt in range(21):
+        try:
+            main()
+            return
+        except (RuntimeError, subprocess.TimeoutExpired) as error:
+            if isinstance(error, RuntimeError) and not str(error).startswith('Docker operation failed:'):
+                raise
+            if attempt == 20:
+                raise
+            print('Docker restoration not ready; retrying in 30 seconds.', flush=True)
+            time.sleep(30)
+
+
 if __name__ == '__main__':
-    main()
+    run_with_retry()

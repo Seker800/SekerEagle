@@ -1,6 +1,22 @@
 """One independent NAS process; media writes remain in the scoped worker adapter."""
-import argparse,hashlib,json,os,pathlib,signal,subprocess,sys
+import argparse,hashlib,json,os,pathlib,signal,subprocess,sys,time
 STOP=False
+
+def run_batch(command):
+ # Retry only dependency outages, never identity, manifest or validation failures.
+ for attempt in range(21):
+  if STOP:raise RuntimeError('PREVIEW_COPY_STOPPED')
+  process=subprocess.run(command,capture_output=True,text=True,timeout=900)
+  if not process.returncode:return json.loads(process.stdout)
+  temporary=any(marker in process.stderr for marker in (
+   "Can't reach database server at `postgres:5432`",'ECONNREFUSED','EAI_AGAIN','ECONNRESET'))
+  if not temporary:raise RuntimeError('PREVIEW_BATCH_FAILED')
+  if attempt==20:raise RuntimeError('PREVIEW_DEPENDENCY_UNAVAILABLE')
+  print('Preview dependency unavailable; checkpoint retained; retrying in 30 seconds.',flush=True)
+  # One-second intervals allow SIGTERM to stop promptly without advancing state.
+  for _ in range(30):
+   if STOP:raise RuntimeError('PREVIEW_COPY_STOPPED')
+   time.sleep(1)
 
 def load_checkpoint(path,digest,total):
  if not path.exists():return {'manifestHash':digest,'total':total,'offset':0,'counts':{}}
@@ -17,9 +33,7 @@ def main():
  progress=directory/'progress.json';state=load_checkpoint(progress,hashlib.sha256(raw).hexdigest(),len(manifest['items']))
  while state['offset']<state['total'] and not STOP:
   batch={'ownerId':manifest['ownerId'],'items':manifest['items'][state['offset']:state['offset']+100]};path=directory/'batch.json';path.write_text(json.dumps(batch));os.chmod(path,0o600)
-  process=subprocess.run(['node','/sekereagle/apps/worker/dist/synology-preview-pilot.js',str(path),args.source,'--apply'],capture_output=True,text=True,timeout=900)
-  if process.returncode:raise RuntimeError(process.stderr[-1000:] or 'PREVIEW_BATCH_FAILED')
-  result=json.loads(process.stdout)
+  result=run_batch(['node','/sekereagle/apps/worker/dist/synology-preview-pilot.js',str(path),args.source,'--apply'])
   if len(result['report'])!=len(batch['items']):raise RuntimeError('PREVIEW_BATCH_INCOMPLETE')
   with (directory/'results.jsonl').open('a') as log:
    for row in result['report']:

@@ -6,7 +6,7 @@ class PreviewCopyTests(unittest.TestCase):
  def test_database_boot_race_retries_same_batch(self):
   m=self.module();failed=subprocess.CompletedProcess([],1,'',"Can't reach database server at `postgres:5432`");ok=subprocess.CompletedProcess([],0,'{"report": []}','')
   with patch.object(m.subprocess,'run',side_effect=[failed,ok]) as run,patch('time.sleep') as sleep:
-   self.assertEqual(m.run_batch(['node','batch']),{'report':[]});self.assertEqual(run.call_count,2);sleep.assert_called_once()
+   self.assertEqual(m.run_batch(['node','batch']),{'report':[]});self.assertEqual(run.call_count,2);self.assertEqual(sleep.call_count,30)
  def test_permanent_error_does_not_retry(self):
   m=self.module()
   with patch.object(m.subprocess,'run',return_value=subprocess.CompletedProcess([],1,'','OWNER_MISMATCH')) as run:
