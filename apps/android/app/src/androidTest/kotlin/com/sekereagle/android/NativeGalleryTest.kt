@@ -434,9 +434,9 @@ class NativeGalleryTest {
         capture("native-search.png")
         compose.onNodeWithContentDescription("关闭搜索").performClick()
         compose.onNodeWithContentDescription("更多操作").performClick()
-        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
-        compose.onNodeWithTag("native-more").assertExists()
-        capture("native-more.png")
+        compose.onNodeWithText("账号与连接", useUnmergedTree = true).performClick()
+        compose.onNodeWithTag("native-account").assertExists()
+        capture("native-account.png")
         back()
         assertFalse(compose.activity.isFinishing)
         compose.onNodeWithTag("native-library").assertExists()
@@ -564,7 +564,7 @@ class NativeGalleryTest {
         assertFalse(encrypted.contains("sekereagle_access"))
         assertFalse(encrypted.contains(credentials.getString("password")))
         compose.onNodeWithContentDescription("更多操作").performClick()
-        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
+        compose.onNodeWithText("账号与连接", useUnmergedTree = true).performClick()
         compose.onNodeWithText("退出登录").performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithTag("native-login").fetchSemanticsNodes().isNotEmpty()
@@ -580,10 +580,9 @@ class NativeGalleryTest {
     @Test
     fun backupAndCleanupReuseNativeScreensWithoutCreatingWebView() {
         login()
-        compose.onNodeWithContentDescription("更多操作").performClick()
-        compose.onNodeWithText("更多", useUnmergedTree = true).performClick()
         for (label in listOf("备份设置", "释放手机空间")) {
-            compose.onNodeWithText(label).performClick()
+            compose.onNodeWithContentDescription("更多操作").performClick()
+            compose.onNodeWithText(label).performScrollTo().performClick()
             var child: android.app.Activity? = null
             compose.waitUntil(10000) {
                 instrumentation.runOnMainSync {
@@ -598,7 +597,7 @@ class NativeGalleryTest {
             instrumentation.runOnMainSync { assertFalse(hasWebView(child!!.window.decorView)) }
             instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
             compose.waitUntil(10000) {
-                compose.onAllNodesWithTag("native-more").fetchSemanticsNodes().isNotEmpty()
+                compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty()
             }
             assertFalse(compose.activity.isFinishing)
         }

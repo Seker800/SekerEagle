@@ -110,35 +110,24 @@ fun NativeLogin(state: GalleryState, model: NativeGalleryViewModel) {
 }
 
 @Composable
-fun NativeMore(
-    identity: NativeIdentity,
-    model: NativeGalleryViewModel,
-    openNative: (String) -> Unit,
-) {
-    Column(Modifier.fillMaxSize().background(Color.Black).testTag("native-more")) {
-        IconButton({ model.back() }, Modifier.padding(8.dp)) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回")
+fun NativeAccount(identity: NativeIdentity, model: NativeGalleryViewModel) {
+    Column(Modifier.fillMaxSize().background(Color.Black).testTag("native-account")) {
+        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton({ model.back() }) {
+                Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回")
+            }
+            Text("账号与连接", fontSize = 20.sp)
         }
         Column(Modifier.verticalScroll(rememberScrollState()).padding(20.dp)) {
             Text(identity.email, fontSize = 21.sp)
-            Text(
-                "当前原生版仅显示公开图库；私密内容请在网页解锁查看。",
-                color = NativeMuted,
-                modifier = Modifier.padding(top = 12.dp),
-            )
-            Text(
-                identity.origin,
-                Modifier.padding(top = 8.dp, bottom = 28.dp),
-                color = NativeMuted,
-                fontSize = 13.sp,
-            )
-            GlassSurface(Modifier.fillMaxWidth(), radius = 24) {
-                Column {
-                    MenuRow("传输列表", Icons.Outlined.SyncAlt, model::openTransfers)
-                    MenuRow("备份设置", Icons.Outlined.CloudUpload) { openNative("backup") }
-                    MenuRow("释放手机空间", Icons.Outlined.CleaningServices) { openNative("cleanup") }
-                    MenuRow("退出登录", Icons.AutoMirrored.Outlined.Logout, model::logout)
-                }
+            Text("服务器地址", Modifier.padding(top = 24.dp), color = NativeMuted, fontSize = 13.sp)
+            Text(identity.origin, Modifier.padding(top = 8.dp, bottom = 24.dp), fontSize = 15.sp)
+            Text("当前原生版仅显示公开图库；私密内容请在网页解锁查看。", color = NativeMuted)
+            Spacer(Modifier.height(32.dp))
+            OutlinedButton(model::logout, Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                Icon(Icons.AutoMirrored.Outlined.Logout, null, Modifier.size(20.dp))
+                Spacer(Modifier.width(10.dp))
+                Text("退出登录")
             }
         }
     }

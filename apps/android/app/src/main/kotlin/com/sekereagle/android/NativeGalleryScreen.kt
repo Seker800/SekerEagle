@@ -65,11 +65,11 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     key(state.identity!!.scope) {
                         val repo = model.repository
                         if (repo != null) {
-                            NativeLibrary(state, model, repo) {
+                            NativeLibrary(state, model, repo, openNative) {
                                 if (model.prepareUploadSelection())
                                     uploadPicker.launch(arrayOf("*/*"))
                             }
-                            if (state.moreOpen) NativeMore(state.identity!!, model, openNative)
+                            if (state.accountOpen) NativeAccount(state.identity!!, model)
                             if (state.searchOpen) NativeSearch(state, model)
                             if (state.viewerId != null) NativeViewer(state, repo, model)
                             if (state.filterPanel != null) NativeFilterSheet(state, model)
@@ -83,7 +83,7 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                 BackHandler(
                     state.transfersOpen ||
                         state.searchOpen ||
-                        state.moreOpen ||
+                        state.accountOpen ||
                         state.viewerId != null ||
                         state.query.isNotEmpty() ||
                         state.selecting ||
@@ -108,6 +108,7 @@ private fun NativeLibrary(
     state: GalleryState,
     model: NativeGalleryViewModel,
     repo: NativeGalleryRepository,
+    openNative: (String) -> Unit,
     chooseUpload: () -> Unit,
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -162,7 +163,7 @@ private fun NativeLibrary(
     }
     val backdrop = rememberGraphicsLayer()
     var sourceOffset by remember { mutableStateOf(Offset.Zero) }
-    var menu by rememberSaveable { mutableStateOf("") }
+    var menu by rememberSaveable { mutableStateOf<NativeLibraryMenu?>(null) }
     LaunchedEffect(
         state.mode,
         state.sort,
@@ -352,10 +353,10 @@ private fun NativeLibrary(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
-                    RoundAction(Icons.Outlined.Tune, "视图选项") { menu = "view" }
+                    RoundAction(Icons.Outlined.Tune, "视图选项") { menu = NativeLibraryMenu.VIEW }
                 }
                 GlassSurface(Modifier.size(46.dp), backdrop, sourceOffset) {
-                    RoundAction(Icons.Outlined.MoreVert, "更多操作") { menu = "more" }
+                    RoundAction(Icons.Outlined.MoreVert, "更多操作") { menu = NativeLibraryMenu.ACTIONS }
                 }
             }
         if (!state.selecting)
@@ -421,72 +422,9 @@ private fun NativeLibrary(
                     .fillMaxHeight()
                     .padding(top = 90.dp, bottom = 110.dp),
             )
-        if (menu.isNotEmpty())
-            Popup(
-                alignment = Alignment.TopEnd,
-                offset = androidx.compose.ui.unit.IntOffset(-16, 62),
-                onDismissRequest = { menu = "" },
-                properties = PopupProperties(focusable = true),
-            ) {
-                GlassSurface(Modifier.width(228.dp), radius = 26) {
-                    Column(Modifier.padding(vertical = 12.dp)) {
-                        if (menu == "view") {
-                            Text(
-                                "视图",
-                                Modifier.padding(20.dp, 8.dp),
-                                color = NativeMuted,
-                                fontSize = 13.sp,
-                            )
-                            GallerySort.entries.forEach { order ->
-                                MenuRow(
-                                    order.title,
-                                    if (state.sort == order) Icons.Outlined.Check
-                                    else Icons.Outlined.Schedule,
-                                ) {
-                                    model.sort(order)
-                                    menu = ""
-                                }
-                            }
-                            HorizontalDivider(
-                                Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                color = NativeMuted.copy(alpha = 0.2f),
-                            )
-                            listOf(3, 4).forEach { columns ->
-                                MenuRow(
-                                    "$columns 列网格",
-                                    if (state.columns == columns) Icons.Outlined.Check
-                                    else Icons.Outlined.GridView,
-                                ) {
-                                    model.columns(columns)
-                                    menu = ""
-                                }
-                            }
-                        } else {
-                            if (!state.trash)
-                                MenuRow("上传", Icons.Outlined.FileUpload) {
-                                    menu = ""
-                                    chooseUpload()
-                                }
-                            MenuRow("传输列表", Icons.Outlined.SyncAlt) {
-                                menu = ""
-                                model.openTransfers()
-                            }
-                            MenuRow("刷新", Icons.Outlined.Refresh) {
-                                menu = ""
-                                model.refresh()
-                            }
-                            MenuRow("最近删除", Icons.Outlined.DeleteOutline) {
-                                menu = ""
-                                model.openTrash()
-                            }
-                            MenuRow("更多", Icons.Outlined.MoreHoriz) {
-                                menu = ""
-                                model.openMore()
-                            }
-                        }
-                    }
-                }
-            }
+        menu?.let { activeMenu ->
+            NativeGalleryMenu(activeMenu, state, model, chooseUpload, openNative) { menu = null }
+        }
     }
 }
 

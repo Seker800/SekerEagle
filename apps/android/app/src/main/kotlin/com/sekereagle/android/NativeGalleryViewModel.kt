@@ -39,7 +39,7 @@ data class GalleryState(
     val searchDraft: String = "",
     val history: List<String> = emptyList(),
     val viewerId: String? = null,
-    val moreOpen: Boolean = false,
+    val accountOpen: Boolean = false,
     val transfersOpen: Boolean = false,
     val columns: Int = 3,
     val filters: NativeFilters = NativeFilters(),
@@ -273,7 +273,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 query = "",
                 viewerId = null,
                 searchOpen = false,
-                moreOpen = false,
+                accountOpen = false,
                 error = null,
                 history = history(identity.scope, mode),
             )
@@ -546,7 +546,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun openSearch() {
         mutable.value =
-            state.value.copy(searchOpen = true, searchDraft = state.value.query, moreOpen = false)
+            state.value.copy(searchOpen = true, searchDraft = state.value.query, accountOpen = false)
     }
 
     fun updateSearchDraft(value: String) {
@@ -566,14 +566,14 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             mutable.value =
                 state.value.copy(
                     transfersOpen = true,
-                    moreOpen = false,
+                    accountOpen = false,
                     searchOpen = false,
                     viewerId = null,
                 )
     }
 
-    fun openMore() {
-        mutable.value = state.value.copy(moreOpen = true)
+    fun openAccount() {
+        mutable.value = state.value.copy(accountOpen = true, transfersOpen = false, searchOpen = false, viewerId = null)
     }
 
     fun openAsset(id: String) {
@@ -604,7 +604,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 s.selecting -> s.copy(selecting = false, selected = emptySet())
                 s.viewerId != null -> s.copy(viewerId = null)
                 s.searchOpen -> s.copy(searchOpen = false, searchDraft = s.query)
-                s.moreOpen -> s.copy(moreOpen = false)
+                s.accountOpen -> s.copy(accountOpen = false)
                 s.trash -> {
                     openTrash(false)
                     return true
@@ -682,7 +682,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 items = emptyList(),
                 cursor = null,
                 viewerId = null,
-                moreOpen = false,
+                accountOpen = false,
                 selecting = false,
                 selected = emptySet(),
             )
