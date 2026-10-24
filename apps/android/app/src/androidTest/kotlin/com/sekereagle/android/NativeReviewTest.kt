@@ -107,6 +107,34 @@ class NativeReviewTest {
     }
 
     @Test
+    fun viewerTapTogglesChromeAndOffersDirectActionsInBothModes() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            for (mode in GalleryMode.entries) {
+                main { model.switchMode(mode) }
+                await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+                val asset = model.state.value.items.first()
+                main { model.openAsset(asset.id) }
+                compose.onNodeWithTag("viewer-top-bar").assertExists()
+                for (label in listOf("删除", "编辑", "发送")) compose.onNodeWithContentDescription(label).assertExists()
+                compose.onNodeWithContentDescription("照片信息").assertDoesNotExist()
+                compose.onNodeWithText("1 / 60").assertDoesNotExist()
+                compose.onNodeWithTag("viewer-photo:${asset.id}").performTouchInput { click() }
+                compose.onNodeWithTag("viewer-top-bar").assertDoesNotExist()
+                compose.onNodeWithTag("viewer-tools").assertDoesNotExist()
+                compose.onNodeWithTag("viewer-photo:${asset.id}").performTouchInput { click() }
+                compose.onNodeWithTag("viewer-tools").assertExists()
+                compose.onNodeWithContentDescription("删除").performClick()
+                compose.onNodeWithText("移入回收站？").assertExists()
+                compose.onNodeWithText("取消").performClick()
+                assertEquals(asset.id, model.state.value.viewerId)
+                main { model.back() }
+            }
+        }
+    }
+
+    @Test
     fun commonActionsOpenDirectlyFromTheOverflowMenuInBothLibraries() {
         Server().use { server ->
             val model = model(server)

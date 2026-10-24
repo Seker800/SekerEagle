@@ -932,3 +932,10 @@ it('aborts an original download when its editing scope is destroyed', async () =
   expect(images[1].onload).toBeNull();
   expect(save).not.toHaveBeenCalled();
 });
+
+it('can start Android editing on watermark without changing the web default', () => {
+  render(<PhotoEditor source="/photo.png" name="Photo.png" initialTab="watermark" onClose={vi.fn()} onSave={vi.fn()} />);
+  expect(screen.getByRole('button', { name: '水印', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '调节', exact: true }));
+  expect(screen.getByRole('button', { name: '调节', exact: true })).toHaveAttribute('aria-pressed', 'true');
+});
