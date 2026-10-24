@@ -12,6 +12,10 @@ SPEC.loader.exec_module(startup)
 
 
 class NasStartupTest(unittest.TestCase):
+    def test_health_probe_tolerates_engine_restoration_errors(self):
+        with patch.object(startup, 'docker', side_effect=RuntimeError('Docker operation failed: inspect')):
+            self.assertFalse(startup.ready(startup.CORE[0]))
+
     def test_fixed_start_order_and_completed_copy_skip(self):
         for pending in (True, False):
             with self.subTest(pending=pending):
