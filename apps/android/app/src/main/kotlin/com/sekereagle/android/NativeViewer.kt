@@ -330,7 +330,15 @@ internal fun ZoomPhoto(
                 imageModifier,
                 contentScale = androidx.compose.ui.layout.ContentScale.Fit,
             )
-        else NativeImage(repo, asset.preview, true, asset.name, imageModifier)
+        else
+            NativeImage(
+                repo,
+                asset.preview,
+                true,
+                asset.name,
+                imageModifier,
+                cacheVersion = asset.cacheVersion,
+            )
         if (demand) {
             if (originalLoading)
                 Text(

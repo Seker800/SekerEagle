@@ -21,16 +21,19 @@ fun NativeImage(
     name: String,
     modifier: Modifier = Modifier,
     scale: ContentScale = ContentScale.Fit,
+    cacheVersion: String? = null,
 ) {
-    var retry by remember(path) { mutableIntStateOf(0) }
-    var image by remember(repo, path, full) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    var error by remember(repo, path) { mutableStateOf(false) }
-    LaunchedEffect(repo, path, full, retry) {
+    val version = cacheVersion ?: repo.imageVersion(path)
+    var retry by remember(path, version) { mutableIntStateOf(0) }
+    var image by
+        remember(repo, path, full, version) { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var error by remember(repo, path, version) { mutableStateOf(false) }
+    LaunchedEffect(repo, path, full, version, retry) {
         image = null
         error = false
         if (path != null)
             try {
-                image = repo.image(path, full)
+                image = repo.image(path, full, version)
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {

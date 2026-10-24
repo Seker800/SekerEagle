@@ -59,7 +59,8 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
             Box(Modifier.fillMaxSize().safeDrawingPadding()) {
                 BackHandler(
-                    state.transfersOpen ||
+                    state.cacheOpen ||
+                        state.transfersOpen ||
                         state.searchOpen ||
                         state.accountOpen ||
                         state.viewerId != null ||
@@ -92,6 +93,12 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                     NativeDownloadDialog(download!!, model.downloads)
                 if (state.identity != null && state.transfersOpen)
                     NativeTransferScreen(state, model, openNative)
+                if (state.identity != null && state.cacheOpen)
+                    NativeCacheScreen(
+                        model.mediaCache,
+                        { model.repository?.evictImages() },
+                        { model.back() },
+                    )
                 LaunchedEffect(state.identity?.scope) {
                     if (state.identity != null) model.onForeground()
                 }
@@ -274,6 +281,7 @@ private fun NativeLibrary(
                                 asset.name,
                                 Modifier.fillMaxSize(),
                                 ContentScale.Crop,
+                                cacheVersion = asset.cacheVersion,
                             )
                             if (state.selecting) {
                                 Icon(

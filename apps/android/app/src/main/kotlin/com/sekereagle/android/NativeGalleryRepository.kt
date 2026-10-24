@@ -10,7 +10,9 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -36,6 +38,7 @@ data class NativeAsset(
     val playback: String? = null,
     val playbackSize: Long = 0,
     val city: String? = null,
+    val cacheVersion: String? = null,
 )
 
 data class NativeDay(val date: String, val before: String, val count: Long, val offset: Long) {
@@ -74,7 +77,11 @@ internal fun canonicalFormat(extension: String): String =
     }
 
 /** One scoped implementation for both modes; only authenticated derived media enters the cache. */
-class NativeGalleryRepository(private val session: NativeSession, private val scope: String) {
+class NativeGalleryRepository(
+    private val session: NativeSession,
+    private val scope: String,
+    private val disk: NativeMediaCache? = null,
+) {
     internal val editorHost
         get() =
             "e" +
@@ -86,6 +93,10 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
     internal val connection
         get() = session
 
+    private val imagesLock = Any()
+    private var memoryEpoch = 0
+    private val imageVersions = LruCache<String, String>(4096)
+    private val imageLoads = Array(32) { Mutex() }
     private val decoding = Semaphore(4)
     private val cache =
         object : LruCache<String, Bitmap>(32 * 1024 * 1024) {
@@ -246,38 +257,92 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             }
         }
 
-    suspend fun image(path: String, full: Boolean): Bitmap =
+    internal fun imageVersion(path: String?): String? = path?.let { imageVersions.get(it) }
+
+    suspend fun image(
+        path: String,
+        full: Boolean,
+        sourceVersion: String? = imageVersion(path),
+    ): Bitmap =
         withContext(Dispatchers.IO) {
-            val key = "$scope:$full:$path"
+            val epoch = session.authorizationEpoch()
+            val local = synchronized(imagesLock) { memoryEpoch }
+            val ticket = disk?.generation ?: 0
+            val version = sourceVersion
+            val key = "$scope:$full:$path:$version:$ticket"
+            val id = version?.let { disk?.identity(scope, path, it) }
+            fun checkActive() {
+                session.checkAuthorization(epoch)
+                synchronized(imagesLock) {
+                    if (memoryEpoch != local) throw kotlinx.coroutines.CancellationException()
+                }
+            }
+            checkActive()
             cache.get(key)?.let {
+                checkActive()
+                id?.let { entry -> disk?.touch(entry) }
+                checkActive()
                 return@withContext it
             }
-            decoding.withPermit {
-                val bytes = session.media(path)
-                val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-                if (
-                    options.outWidth <= 0 ||
-                        options.outHeight <= 0 ||
-                        options.outWidth.toLong() * options.outHeight > 100_000_000L
-                )
-                    throw IOException("预览尺寸不可用")
-                val edge = if (full) 2048 else 384
-                options.inSampleSize = 1
-                while (
-                    maxOf(options.outWidth, options.outHeight) / options.inSampleSize > edge
-                ) options.inSampleSize *= 2
-                options.inJustDecodeBounds = false
-                options.inPreferredConfig = Bitmap.Config.ARGB_8888
-                val bitmap =
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
-                        ?: throw IOException("预览解码失败")
-                cache.put(key, bitmap)
-                bitmap
+            imageLoads[(path.hashCode() and Int.MAX_VALUE) % imageLoads.size].withLock {
+                decoding.withPermit {
+                    checkActive()
+                    cache.get(key)?.let {
+                        return@withPermit it
+                    }
+                    val cached = id?.let { disk?.read(it) }
+                    fun decode(bytes: ByteArray): Bitmap {
+                        val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                        if (
+                            options.outWidth <= 0 ||
+                                options.outHeight <= 0 ||
+                                options.outWidth.toLong() * options.outHeight > 100_000_000L
+                        )
+                            throw IOException("预览尺寸不可用")
+                        val edge = if (full) 2048 else 384
+                        options.inSampleSize = 1
+                        while (
+                            maxOf(options.outWidth, options.outHeight) / options.inSampleSize > edge
+                        ) options.inSampleSize *= 2
+                        options.inJustDecodeBounds = false
+                        options.inPreferredConfig = Bitmap.Config.ARGB_8888
+                        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                            ?: throw IOException("预览解码失败")
+                    }
+                    var bitmap = cached?.let {
+                        try {
+                            decode(it)
+                        } catch (_: Exception) {
+                            null
+                        }
+                    }
+                    if (bitmap == null) {
+                        if (id != null && cached != null) disk?.remove(id)
+                        val bytes = session.media(path)
+                        checkActive()
+                        bitmap = decode(bytes)
+                        if (id != null) disk?.write(id, bytes, ticket)
+                    }
+                    checkActive()
+                    val result = bitmap!!
+                    synchronized(imagesLock) {
+                        checkActive()
+                        if (disk == null || ticket == disk.generation) cache.put(key, result)
+                    }
+                    result
+                }
             }
         }
 
-    fun clear() = cache.evictAll()
+    internal fun evictImages() = synchronized(imagesLock) { cache.evictAll() }
+
+    fun clear() =
+        synchronized(imagesLock) {
+            memoryEpoch++
+            cache.evictAll()
+            imageVersions.evictAll()
+        }
 
     internal fun parse(
         json: JSONObject,
@@ -294,6 +359,30 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                         it.optString("mimeType").startsWith("image/") &&
                         it.optString("variant") != "edit"
                 }
+        val stamp =
+            if (!json.optBoolean("isPrivate") && json.isNull("deletedAt"))
+                com.sekereagle.android.core.BackupPolicy.digest(
+                    "${json.optInt("mediaRevision")}:${json.optString("updatedAt")}:" +
+                        images
+                            .sortedBy { it.getString("id") }
+                            .joinToString(";") { row ->
+                                listOf(
+                                        row.getString("id"),
+                                        row.optInt("revision"),
+                                        row.optString("mimeType"),
+                                        row.optLong("byteSize"),
+                                        row.optInt("width"),
+                                        row.optInt("height"),
+                                    )
+                                    .joinToString(":")
+                            }
+                )
+            else null
+        for (row in images) {
+            val mediaPath = NativeGalleryPolicy.mediaPath(mode.name, id, row.getString("id"))
+            if (stamp != null) imageVersions.put(mediaPath, stamp)
+            else imageVersions.remove(mediaPath)
+        }
         fun path(kind: String): String? =
             images
                 .firstOrNull { it.optString("kind") == kind }
@@ -341,6 +430,7 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
             movie?.let { NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id")) },
             movie?.optLong("byteSize") ?: 0,
             NativeCity.label(json),
+            stamp,
         )
     }
 }

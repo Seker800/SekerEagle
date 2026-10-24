@@ -167,9 +167,15 @@ class NativeReviewTest {
                 await { !model.state.value.loading }
                 compose.onNodeWithContentDescription("更多操作").performClick()
                 compose.onNodeWithText("更多", useUnmergedTree = true).assertDoesNotExist()
-                for (label in listOf("上传", "传输列表", "备份设置", "释放手机空间", "最近删除", "刷新", "账号与连接")) {
+                for (label in
+                    listOf("上传", "缓存设置", "传输列表", "备份设置", "释放手机空间", "最近删除", "刷新", "账号与连接")) {
                     compose.onNodeWithText(label, useUnmergedTree = true).assertExists()
                 }
+                compose.onNodeWithText("缓存设置").performScrollTo().performClick()
+                compose.onNodeWithTag("native-cache").assertExists()
+                compose.onNodeWithContentDescription("返回图库").performClick()
+                compose.onNodeWithTag("native-cache").assertDoesNotExist()
+                compose.onNodeWithContentDescription("更多操作").performClick()
                 compose.onNodeWithText("备份设置").performScrollTo().performClick()
                 assertEquals("backup", destinations.last())
                 compose.onNodeWithTag("native-library").assertExists()

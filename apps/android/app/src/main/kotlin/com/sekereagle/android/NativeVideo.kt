@@ -27,7 +27,14 @@ import kotlinx.coroutines.delay
 internal fun NativeVideo(asset: NativeAsset, repo: NativeGalleryRepository) {
     if (asset.playback == null) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            NativeImage(repo, asset.preview, true, asset.name, Modifier.fillMaxSize())
+            NativeImage(
+                repo,
+                asset.preview,
+                true,
+                asset.name,
+                Modifier.fillMaxSize(),
+                cacheVersion = asset.cacheVersion,
+            )
             Text("视频播放副本尚未就绪，请稍后重试", Modifier.padding(24.dp))
         }
         return

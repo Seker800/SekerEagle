@@ -40,6 +40,7 @@ data class GalleryState(
     val history: List<String> = emptyList(),
     val viewerId: String? = null,
     val accountOpen: Boolean = false,
+    val cacheOpen: Boolean = false,
     val transfersOpen: Boolean = false,
     val columns: Int = 3,
     val filters: NativeFilters = NativeFilters(),
@@ -62,6 +63,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         NativeCity.initialize(application)
     }
 
+    val mediaCache = NativeMediaCache.get(application)
     private val settings = BackupSettings(application)
     private val mutable = MutableStateFlow(GalleryState())
     val state = mutable.asStateFlow()
@@ -176,7 +178,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     private fun authenticate(origin: String, email: String?, password: String?) {
         downloads.clear()
-        if (email != null) transfers.clear()
+        if (email != null) {
+            transfers.clear()
+            mediaCache.invalidate()
+            viewModelScope.launch { runCatching { mediaCache.clear() } }
+        }
         uploadPickerTarget = null
         sessionJob?.cancel()
         timelineJob?.cancel()
@@ -219,7 +225,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 }
                 if (request != generation) return@launch
                 session = connection
-                repository = NativeGalleryRepository(connection, scope)
+                repository = NativeGalleryRepository(connection, scope, mediaCache)
                 mutable.value =
                     GalleryState(
                         identity = NativeIdentity(scope, user.getString("email"), normalized),
@@ -574,16 +580,29 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             mutable.value =
                 state.value.copy(
                     transfersOpen = true,
+                    cacheOpen = false,
                     accountOpen = false,
                     searchOpen = false,
                     viewerId = null,
                 )
     }
 
+    fun openCache() {
+        mutable.value =
+            state.value.copy(
+                cacheOpen = true,
+                accountOpen = false,
+                transfersOpen = false,
+                searchOpen = false,
+                viewerId = null,
+            )
+    }
+
     fun openAccount() {
         mutable.value =
             state.value.copy(
                 accountOpen = true,
+                cacheOpen = false,
                 transfersOpen = false,
                 searchOpen = false,
                 viewerId = null,
@@ -595,7 +614,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             toggleSelection(id)
             return
         }
-        mutable.value = state.value.copy(viewerId = id)
+        mutable.value = state.value.copy(viewerId = id, cacheOpen = false)
     }
 
     fun openSavedAsset(id: String) {
@@ -626,6 +645,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             when {
                 s.busy -> return true
+                s.cacheOpen -> s.copy(cacheOpen = false)
                 s.transfersOpen -> s.copy(transfersOpen = false)
                 s.filterPanel != null -> s.copy(filterPanel = null)
                 s.selecting -> s.copy(selecting = false, selected = emptySet())
@@ -807,6 +827,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun expire() {
+        mediaCache.invalidate()
+        viewModelScope.launch { runCatching { mediaCache.clear() } }
         transferRefreshPending = false
         downloads.clear()
         transfers.clear()

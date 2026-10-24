@@ -81,6 +81,7 @@ internal fun NativeGalleryMenu(
                 } else {
                     if (!state.trash)
                         MenuRow("上传", Icons.Outlined.FileUpload) { navigate(chooseUpload) }
+                    MenuRow("缓存设置", Icons.Outlined.Storage) { navigate(model::openCache) }
                     MenuRow("传输列表", Icons.Outlined.SyncAlt) { navigate(model::openTransfers) }
                     MenuRow("备份设置", Icons.Outlined.CloudUpload) {
                         navigate { openNative("backup") }
