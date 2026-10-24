@@ -107,6 +107,29 @@ class NativeReviewTest {
     }
 
     @Test
+    fun switchingLibrariesRetainsLoadedWindowWithoutReloading() {
+        Server().use { server ->
+            val model = model(server)
+            main { model.load(true) }
+            await { !model.state.value.loading && model.state.value.items.size == 120 }
+            val photos = model.state.value.items
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+            val materials = model.state.value.items
+            val requests = server.paths.count { it.contains("/assets?") }
+            main { model.switchMode(GalleryMode.PHOTO) }
+            assertFalse("Switching back must display the retained page immediately", model.state.value.loading)
+            assertEquals(photos, model.state.value.items)
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            assertFalse(model.state.value.loading)
+            assertEquals(materials, model.state.value.items)
+            compose.waitForIdle()
+            assertEquals(requests, server.paths.count { it.contains("/assets?") })
+            main { model.logout() }
+        }
+    }
+
+    @Test
     fun viewerTapTogglesChromeAndOffersDirectActionsInBothModes() {
         Server().use { server ->
             val model = model(server)
