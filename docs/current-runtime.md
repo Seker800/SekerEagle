@@ -217,3 +217,5 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 本轮按用户授权新建隔离照片测试工作台，入口 `http://127.0.0.1:4188/__test/login`；在照片模式「智能整理」下面打开「照片统计」。它不是已退役的 Mac 旧图库，也不连接群晖数据库作为开发目标。独立临时 PostgreSQL／MinIO 容器名以 `sekereagle-photo-workbench-` 开头，数据库为 `sekereagle_test`，桶为 `sekereagle-assets`，均仅绑定 loopback；API、worker 和网关由测试脚本持有，模型地址指向本机不可用端口以避免调用现用模型。
 
 群晖仅只读抽取 27 张原始 JPEG 和必要摄影样本信息到本机私有目录，再经过本地上传及 worker 提取；工作台额外含 4 张合成照片。未复制线上用户凭据、未恢复完整数据库，现用群晖服务和任务未改变。浏览器、HTTP、真实数据库和工程门禁的范围见 [照片统计](photo-statistics.md)。该环境使用临时存储，不承诺重启后保留；进程、容器和运行位置从 `.omx/artifacts/photo-workbench.json` 重新核对，不把文档记录当实时状态。
+
+同日统计呈现已更新为低饱和紧凑布局，使用同一个本机工作台与原样本验收；只重新构建本机网页产物，没有重启 API／worker／存储、重新导入样本或修改群晖部署。

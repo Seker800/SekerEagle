@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
@@ -26,7 +26,9 @@ function mount() {
     </QueryClientProvider>,
   );
 }
-beforeEach(() => get.mockReset());
+beforeEach(() => {
+  get.mockReset();
+});
 describe('photo statistics', () => {
   it('shows three charts, calendar gaps, totals and unknown dates', async () => {
     get.mockResolvedValue(data);
@@ -48,9 +50,9 @@ describe('photo statistics', () => {
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A' }));
     fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A', exact: true }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A' }));
     fireEvent.click(screen.getByRole('button', { name: '按镜头' }));
     await waitFor(() =>
       expect(get.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -86,7 +88,7 @@ describe('statistics interactions', () => {
     await waitFor(() =>
       expect(get.mock.calls.at(-1)?.[0]).toMatchObject({ start: '2025-01-01', end: '2025-12-31' }),
     );
-    fireEvent.click(screen.getByRole('button', { name: '年', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: '年' }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].grain).toBe('year'));
     fireEvent.click(screen.getByRole('button', { name: '全部时间' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
@@ -98,14 +100,16 @@ describe('statistics interactions', () => {
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A' }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Camera A', exact: true })).not.toBeChecked());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A' }));
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Camera A' })).not.toBeChecked(),
+    );
     fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A', exact: true }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A' }));
     fireEvent.click(screen.getByRole('button', { name: '清除选择' }));
-    expect(screen.getByRole('checkbox', { name: 'Lens A', exact: true })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Lens A' })).not.toBeChecked();
   });
   it('keeps unrecognised devices and missing dates explicit', async () => {
     get.mockResolvedValue({
@@ -171,7 +175,17 @@ it('gives each visible device a distinct color and keeps long-range axis labels 
 it('shows full equipment names, shares and a direct filter action without a horizontal scroller', () => {
   const label = 'GF100-200mmF5.6 R LM OIS WR Long Equipment Name';
   const select = vi.fn();
-  const view = render(<PhotoUsageChart kind="lens" items={[{ key: label, count: 3 }, { key: 'Other', count: 1 }]} selected={[]} onSelect={select} />);
+  const view = render(
+    <PhotoUsageChart
+      kind="lens"
+      items={[
+        { key: label, count: 3 },
+        { key: 'Other', count: 1 },
+      ]}
+      selected={[]}
+      onSelect={select}
+    />,
+  );
   expect(screen.getByText(label)).toBeInTheDocument();
   expect(screen.getByText('75.0%')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: `镜头：${label}` }));
@@ -180,23 +194,89 @@ it('shows full equipment names, shares and a direct filter action without a hori
 });
 
 it('searches full device lists, exposes active filters and clears them together', async () => {
-  get.mockResolvedValue(data); mount(); await screen.findByRole('img', { name: '拍摄量折线图' });
+  get.mockResolvedValue(data);
+  mount();
+  await screen.findByRole('img', { name: '拍摄量折线图' });
   fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
   fireEvent.change(screen.getByLabelText('搜索设备'), { target: { value: 'Camera B' } });
-  expect(screen.queryByRole('checkbox', { name: 'Camera A', exact: true })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('checkbox', { name: 'Camera B', exact: true }));
+  expect(screen.queryByRole('checkbox', { name: 'Camera A' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Camera B' }));
   expect(screen.getByRole('button', { name: '移除筛选：Camera B' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '重置筛选' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument(),
+  );
   expect(screen.queryByRole('button', { name: '移除筛选：Camera B' })).not.toBeInTheDocument();
 });
 
 it('filters from a ranked device row and supports a recent-year shortcut', async () => {
-  get.mockResolvedValue(data); mount(); await screen.findByRole('img', { name: '拍摄量折线图' });
+  get.mockResolvedValue(data);
+  mount();
+  await screen.findByRole('img', { name: '拍摄量折线图' });
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
-  await waitFor(() => expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument(),
+  );
   fireEvent.click(screen.getByRole('button', { name: '最近一年' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].end).toMatch(/^\d{4}-\d{2}-\d{2}$/));
+});
+
+it('adapts the fixed-height chart to its container and supports pointer and keyboard inspection', () => {
+  let resize: ResizeObserverCallback | undefined;
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        resize = callback;
+      }
+      observe = vi.fn();
+      disconnect = disconnect;
+    },
+  );
+  vi.stubGlobal('PointerEvent', MouseEvent);
+  const view = render(<PhotoTimeChart data={data} />);
+  const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+  act(() =>
+    resize?.([{ contentRect: { width: 620 } } as ResizeObserverEntry], {} as ResizeObserver),
+  );
+  expect(chart.getAttribute('viewBox')).toBe('0 0 620 216');
+  vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 620 } as DOMRect);
+  fireEvent.pointerMove(chart, { clientX: 100 });
+  expect(screen.getByText('Camera A：5')).toBeInTheDocument();
+  fireEvent.pointerLeave(chart);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  fireEvent.focus(chart);
+  fireEvent.keyDown(chart, { key: 'End' });
+  fireEvent.keyDown(chart, { key: 'ArrowLeft' });
+  expect(screen.getByText('2024-02', { selector: 'strong' })).toBeInTheDocument();
+  fireEvent.keyDown(chart, { key: 'Tab' });
+  fireEvent.blur(chart);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  const legend = screen.getByRole('button', { name: 'Camera A' });
+  fireEvent.pointerEnter(legend);
+  fireEvent.pointerLeave(legend);
+  fireEvent.focus(legend);
+  fireEvent.blur(legend);
+  view.unmount();
+  expect(disconnect).toHaveBeenCalled();
+  vi.unstubAllGlobals();
+});
+
+it('does not keep another owner or privacy scope visible while a new query loads', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const content = (ownerId: string, includePrivate: boolean) => (
+    <QueryClientProvider client={client}>
+      <PhotoStatistics ownerId={ownerId} includePrivate={includePrivate} />
+    </QueryClientProvider>
+  );
+  get.mockResolvedValue(data);
+  const view = render(content('owner', true));
+  await screen.findByRole('img', { name: '拍摄量折线图' });
+  get.mockReturnValue(new Promise(() => {}));
+  view.rerender(content('other', false));
+  expect(screen.queryByRole('img', { name: '拍摄量折线图' })).not.toBeInTheDocument();
+  expect(screen.getByRole('status')).toHaveTextContent('正在加载统计…');
 });
