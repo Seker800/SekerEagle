@@ -16,6 +16,7 @@ class NativeActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        clearLegacyWebSessionOnce()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -41,6 +42,17 @@ class NativeActivity : ComponentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * The 0.2 upgrade made this native activity the launcher but left old WebView credentials on
+     * disk. Clear them once so a restarted legacy task cannot resurrect an unencrypted session.
+     */
+    private fun clearLegacyWebSessionOnce() {
+        val settings = BackupSettings(this)
+        if (settings.flag("legacy", "web-session-cleared-v1", false)) return
+        if (runCatching { LegacyWebSession.clear() }.isSuccess)
+            settings.setFlag("legacy", "web-session-cleared-v1", true)
     }
 
     override fun onNewIntent(intent: Intent) {

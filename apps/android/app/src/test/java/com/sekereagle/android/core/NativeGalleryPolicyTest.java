@@ -116,4 +116,18 @@ public class NativeGalleryPolicyTest {
     jar.accept("sekereagle_refresh=bad; Max-Age=9999999999999999999999999999");
     assertEquals("sekereagle_refresh=ok", jar.header("/api/auth/refresh"));
   }
+
+  @Test
+  public void expiresAttributeIsHonouredAndMaxAgeWinsWhenBothArePresent() {
+    NativeCookies jar = new NativeCookies("https://photos.example");
+    jar.accept("sekereagle_access=expired; Expires=Thu, 01 Jan 1970 00:00:00 GMT");
+    assertEquals("", jar.header("/api/photos/assets"));
+    jar.accept("sekereagle_access=future; Expires=Wed, 21 Oct 2999 07:28:00 GMT");
+    assertEquals("sekereagle_access=future", jar.header("/api/photos/assets"));
+    jar.accept("sekereagle_refresh=old; Expires=Wed, 21 Oct 2999 07:28:00 GMT; Max-Age=0");
+    jar.accept("sekereagle_refresh=future; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=3600");
+    assertEquals(
+        "sekereagle_access=future; sekereagle_refresh=future",
+        jar.header("/api/auth/refresh"));
+  }
 }

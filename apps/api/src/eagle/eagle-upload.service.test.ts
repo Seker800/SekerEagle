@@ -401,6 +401,9 @@ test('upload progress exposes bounded processing status only within authenticate
             status: 'COMPLETED',
             size: 100n,
             eagleAsset: { lifecycleStatus: 'READY', mediaErrorCode: null },
+            lastError: 'OBJECT_SIZE_MISMATCH',
+            finalizationAttempts: 10,
+            objectCleanupPending: true,
           };
         },
       },
@@ -415,11 +418,18 @@ test('upload progress exposes bounded processing status only within authenticate
     const result = await service.getSession(ownerId, sessionId);
     assert.equal(result.assetStatus, 'READY');
     assert.equal(result.assetError, null);
+    assert.equal(result.finalizationAttempts, 10);
+    assert.equal(result.objectCleanupPending, true);
+    assert.equal(result.lastError, 'OBJECT_SIZE_MISMATCH');
     assert.deepEqual((query as { where: unknown }).where, {
       id: sessionId,
       uploaderId: ownerId,
       libraryMode,
     });
+    assert.equal(
+      (query as { select: { finalizationAttempts: boolean } }).select.finalizationAttempts,
+      true,
+    );
     assert.equal('eagleAsset' in result, false);
   }
 });

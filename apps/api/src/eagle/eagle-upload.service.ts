@@ -176,6 +176,8 @@ export class EagleUploadService {
         eagleAssetId: true,
         eagleAsset: { select: { lifecycleStatus: true, mediaErrorCode: true } },
         lastError: true,
+        finalizationAttempts: true,
+        objectCleanupPending: true,
         createdAt: true,
         completedAt: true,
       },

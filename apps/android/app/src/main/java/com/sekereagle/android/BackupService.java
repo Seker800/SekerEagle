@@ -1,11 +1,14 @@
 package com.sekereagle.android;
 
+import android.Manifest;
 import android.app.*;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.net.*;
 import android.os.*;
 import com.sekereagle.android.core.BackupEngine;
+import com.sekereagle.android.core.BackupPermissionPolicy;
 import java.io.IOException;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -31,6 +34,7 @@ public final class BackupService extends Service {
   private JSONArray errors = new JSONArray();
   private JSONArray transferRows = new JSONArray();
   private PowerManager.WakeLock wake;
+  private long wakeUntil;
 
   static final class Hold extends IOException {
     Hold(String reason) {
@@ -61,7 +65,13 @@ public final class BackupService extends Service {
       return START_NOT_STICKY;
     }
     if (!working.compareAndSet(false, true)) return START_NOT_STICKY;
+    // A stopped-but-not-destroyed instance may be asked to run again; a previous pause flag or
+    // counters must never leak into the new run.
+    cancelled = false;
     scope = requested;
+    seen = uploaded = skipped = failed = 0;
+    errors = new JSONArray();
+    transferRows = new JSONArray();
     startForeground(NOTICE, notification("正在准备扫描"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
     executor.execute(() -> runBackup(startId));
     return START_NOT_STICKY;
@@ -85,8 +95,12 @@ public final class BackupService extends Service {
           getSystemService(PowerManager.class)
               .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SekerEagle:MobileBackup");
       wake.acquire(30 * 60 * 1000L);
+      wakeUntil = SystemClock.elapsedRealtime() + 25 * 60 * 1000L;
       JSONArray rules = settings.scanRules(scope);
       if (rules.length() == 0) throw new Hold("请先选择备份目录");
+      if (BackupPermissionPolicy.requiresCompleteMediaAccess(mediaRuleCount(rules))
+          && !hasMediaPermission())
+        throw new Hold("请授予完整的照片和视频访问权限，避免备份遗漏");
       MediaCatalog catalog = new MediaCatalog(this);
       update("正在扫描所选目录");
       catalog.scan(
@@ -177,6 +191,7 @@ public final class BackupService extends Service {
         || Thread.currentThread().isInterrupted()
         || !scope.equals(settings.active())
         || !settings.flag(scope, "enabled", false)) throw new Hold("备份已暂停");
+    keepAwake();
     ConnectivityManager manager = getSystemService(ConnectivityManager.class);
     NetworkCapabilities network = manager.getNetworkCapabilities(manager.getActiveNetwork());
     if (network == null || !network.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
@@ -196,6 +211,44 @@ public final class BackupService extends Service {
           scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
       if (!charging && scale > 0 && level * 100L / scale <= 15) throw new Hold("电量低于 15%，等待充电");
     }
+  }
+
+  private static int mediaRuleCount(JSONArray rules) {
+    int count = 0;
+    for (int i = 0; i < rules.length(); i++) {
+      JSONObject rule = rules.optJSONObject(i);
+      if (rule != null && "media".equals(rule.optString("type"))) count++;
+    }
+    return count;
+  }
+
+  /** A partial Android 14 photo grant must never be mistaken for a complete directory scan. */
+  private boolean hasMediaPermission() {
+    boolean images = false, video = false, storage = false;
+    if (Build.VERSION.SDK_INT >= 33) {
+      images =
+          checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES)
+              == PackageManager.PERMISSION_GRANTED;
+      video =
+          checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO)
+              == PackageManager.PERMISSION_GRANTED;
+    } else {
+      storage =
+          checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
+              == PackageManager.PERMISSION_GRANTED;
+    }
+    return BackupPermissionPolicy.hasCompleteMediaAccess(
+        Build.VERSION.SDK_INT, images, video, storage);
+  }
+
+  /** Foreground plus a partial wake lock; renew the bounded lease for long first imports. */
+  private void keepAwake() {
+    if (wake == null) return;
+    long now = SystemClock.elapsedRealtime();
+    if (wake.isHeld() && now < wakeUntil) return;
+    if (wake.isHeld()) wake.release();
+    wake.acquire(30 * 60 * 1000L);
+    wakeUntil = now + 25 * 60 * 1000L;
   }
 
   private void update(String message) {
@@ -224,7 +277,7 @@ public final class BackupService extends Service {
             new Intent(this, BackupService.class).setAction("pause"),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     return new Notification.Builder(this, CHANNEL)
-        .setSmallIcon(R.drawable.app_icon)
+        .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle("SekerEagle 手机备份")
         .setContentText(text)
         .setContentIntent(open)

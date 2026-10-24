@@ -3231,6 +3231,15 @@ export interface components {
        *     ]
        */
       extensions: string[];
+      /**
+       * @description Stored asset format values accepted by the list format filter.
+       * @example [
+       *       "jpeg",
+       *       "png",
+       *       "heif"
+       *     ]
+       */
+      formats: string[];
       /** @example 500000000 */
       maxBytes: number;
       /** @example 120000000 */
@@ -3256,6 +3265,14 @@ export interface components {
        *     ]
        */
       extensions: string[];
+      /**
+       * @description Stored asset format values accepted by the list format filter.
+       * @example [
+       *       "mp4",
+       *       "mov"
+       *     ]
+       */
+      formats: string[];
       /** @example 5000000000 */
       maxBytes: number;
       /** @example 14400000 */
@@ -3443,7 +3460,8 @@ export interface components {
         | 'SMART_FOLDERS'
         | 'TAG_INDEX';
       paused: boolean;
-      priority: number;
+      /** @deprecated */
+      priority?: number;
     };
     RetryTaskFamilyDto: {
       /** @enum {string} */

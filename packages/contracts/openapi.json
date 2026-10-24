@@ -7307,6 +7307,14 @@
               "type": "string"
             }
           },
+          "formats": {
+            "example": ["jpeg", "png", "heif"],
+            "description": "Stored asset format values accepted by the list format filter.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "maxBytes": {
             "type": "number",
             "example": 500000000
@@ -7328,6 +7336,7 @@
         "required": [
           "mimeTypes",
           "extensions",
+          "formats",
           "maxBytes",
           "maxPixels",
           "maxRawPixels",
@@ -7351,6 +7360,14 @@
               "type": "string"
             }
           },
+          "formats": {
+            "example": ["mp4", "mov"],
+            "description": "Stored asset format values accepted by the list format filter.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "maxBytes": {
             "type": "number",
             "example": 5000000000
@@ -7361,7 +7378,7 @@
             "example": 14400000
           }
         },
-        "required": ["mimeTypes", "extensions", "maxBytes", "maxDurationMs"]
+        "required": ["mimeTypes", "extensions", "formats", "maxBytes", "maxDurationMs"]
       },
       "EagleMediaCapabilitiesDto": {
         "type": "object",
@@ -7968,10 +7985,11 @@
           "priority": {
             "type": "number",
             "minimum": 0,
-            "maximum": 1
+            "maximum": 1,
+            "deprecated": true
           }
         },
-        "required": ["family", "paused", "priority"]
+        "required": ["family", "paused"]
       },
       "RetryTaskFamilyDto": {
         "type": "object",

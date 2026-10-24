@@ -1,6 +1,8 @@
 package com.sekereagle.android
 
 import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +62,27 @@ fun NativeTransferScreen(
                 delay(1000)
             }
         }
+    var permissionMessage by remember(identity.scope) { mutableStateOf<String?>(null) }
+    fun startBackup() {
+        permissionMessage = null
+        runCatching {
+                context.startForegroundService(
+                    Intent(context, BackupService::class.java)
+                        .putExtra("scope", identity.scope)
+                )
+            }
+            .onFailure { permissionMessage = "系统暂不允许启动备份，请回到应用后重试" }
+    }
+    val mediaPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            if (model.mediaPermissionGranted()) startBackup()
+            else permissionMessage = "需要允许访问全部照片和视频，避免自动备份遗漏文件"
+        }
+    fun scanAndBackup() {
+        if (model.backupNeedsMediaPermission(identity.scope) && !model.mediaPermissionGranted())
+            mediaPermission.launch(model.mediaPermissionNames())
+        else startBackup()
+    }
     Column(Modifier.fillMaxSize().background(Color.Black).testTag("native-transfers")) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 10.dp),
@@ -105,16 +128,14 @@ fun NativeTransferScreen(
                                 Text("暂停备份")
                             }
                         } else if (backup.enabled)
-                            TextButton({
-                                runCatching {
-                                    context.startForegroundService(
-                                        Intent(context, BackupService::class.java)
-                                            .putExtra("scope", identity.scope)
-                                    )
-                                }
-                            }) {
-                                Text("扫描并备份")
-                            }
+                            TextButton({ scanAndBackup() }) { Text("扫描并备份") }
+                        permissionMessage?.let {
+                            Text(
+                                it,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                         backup.rows.takeLast(8).reversed().forEach {
                             Text(
                                 it,

@@ -34,11 +34,24 @@ public final class CleanupEngine {
     if (file.size <= 0 || file.modified <= 0) return null;
     BackupEngine.Checkpoint cp = store.load(BackupEngine.fileKey(scope, mode, file));
     if (cp == null || !cp.confirmed || !cp.hash.matches("[a-f0-9]{64}")) return null;
-    String hash = file.hash.read();
-    if (!hash.equals(cp.hash) || !file.stable.check()) return null;
+    String hash;
+    try {
+      hash = file.hash.read();
+      if (!hash.equals(cp.hash) || !file.stable.check()) return null;
+    } catch (Exception unreadable) {
+      // A changed, revoked or unreadable local file is retained; only the rest of the plan
+      // should continue. Cancellation from the surrounding task still wins.
+      guard.check();
+      return null;
+    }
     guard.check();
     if (!remote.exists(mode, hash, file.size)) return null;
     guard.check();
-    return file.stable.check() ? new Candidate(file, mode, hash) : null;
+    try {
+      return file.stable.check() ? new Candidate(file, mode, hash) : null;
+    } catch (Exception unstable) {
+      guard.check();
+      return null;
+    }
   }
 }

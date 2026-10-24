@@ -10,6 +10,7 @@ import android.view.*;
 import android.webkit.*;
 import android.widget.*;
 import com.sekereagle.android.core.BackupPolicy;
+import com.sekereagle.android.core.NativeDownloadPolicy;
 import java.util.concurrent.*;
 import org.json.*;
 
@@ -35,7 +36,7 @@ public final class MainActivity extends Activity {
           if (!resumed) return;
           if (backup != null && currentTab.equals("backup")) backup.refreshStatus();
           if (System.currentTimeMillis() >= nextCheck) {
-            nextCheck = System.currentTimeMillis() + 5000;
+            nextCheck = System.currentTimeMillis() + 30_000;
             checkIdentity();
           }
           handler.postDelayed(this, 1000);
@@ -162,7 +163,8 @@ public final class MainActivity extends Activity {
             request.setNotificationVisibility(
                 android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
             request.setDestinationInExternalPublicDir(
-                Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, disposition, mime));
+                Environment.DIRECTORY_DOWNLOADS,
+                NativeDownloadPolicy.fileName(URLUtil.guessFileName(url, disposition, mime)));
             getSystemService(android.app.DownloadManager.class).enqueue(request);
           } catch (Exception e) {
             toast("下载暂不可用，请稍后重试");

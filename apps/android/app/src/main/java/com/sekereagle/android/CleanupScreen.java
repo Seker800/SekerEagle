@@ -63,7 +63,13 @@ final class CleanupScreen extends ScrollView {
     action.setTag("cleanup-action");
     card.addView(action, new LinearLayout.LayoutParams(-1, Ui.dp(activity, 48)));
     panel.addView(Ui.row(activity, R.drawable.ic_shield, "服务器备份会保留", "不会自动清理，不会删除服务器上的文件", null));
-    panel.addView(Ui.row(activity, R.drawable.ic_folder, "仅检查所选目录", "未备份、已变化或无法确认的文件会保留", null));
+    panel.addView(
+        Ui.row(
+            activity,
+            R.drawable.ic_folder,
+            settings.flag(scope, "allMedia", false) ? "仅检查全部手机媒体" : "仅检查所选目录",
+            "未备份、已变化或无法确认的文件会保留",
+            null));
   }
 
   private void guard(int token) throws IOException {
@@ -171,7 +177,13 @@ final class CleanupScreen extends ScrollView {
                   if (entries.size() >= 500
                       || entries.containsKey(item.uri.toString())
                       || !writableDocument(item)) return;
-                  catalog.checkSize(item);
+                  try {
+                    catalog.checkSize(item);
+                  } catch (Exception unusable) {
+                    // Keep the file; one unsupported or empty item must not abort the plan.
+                    guard(token);
+                    return;
+                  }
                   CleanupEngine.Candidate candidate =
                       engine.check(scope, mode, source(catalog, item, token));
                   if (candidate != null)

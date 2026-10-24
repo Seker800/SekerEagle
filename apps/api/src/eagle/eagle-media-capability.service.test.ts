@@ -84,6 +84,32 @@ test('publishes frozen camera capabilities with separate image and video budgets
     'application/mxf',
     'video/mpeg',
   ]);
+  assert.deepEqual(capabilities.images.formats, [
+    'arw',
+    'avif',
+    'cr2',
+    'cr3',
+    'crw',
+    'dng',
+    'gif',
+    'heif',
+    'jpeg',
+    'kdc',
+    'nef',
+    'nrw',
+    'orf',
+    'pef',
+    'png',
+    'raf',
+    'raw',
+    'rw2',
+    'rwl',
+    'sr2',
+    'srw',
+    'tiff',
+    'webp',
+  ]);
+  assert.deepEqual(capabilities.videos.formats, ['avi', 'mov', 'mp4', 'mpg', 'mts', 'mxf']);
   assert.equal(capabilities.images.maxBytes, 500_000_000);
   assert.equal(capabilities.videos.maxBytes, 5_000_000_000);
   assert.equal(capabilities.images.maxPixels, MAX_EAGLE_IMAGE_INPUT_PIXELS);

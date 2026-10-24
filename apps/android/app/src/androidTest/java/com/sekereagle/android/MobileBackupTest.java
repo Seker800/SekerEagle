@@ -57,6 +57,7 @@ public final class MobileBackupTest {
     if (!origin.matches("http://localhost:[0-9]+"))
       throw new IllegalArgumentException(
           "Only an explicitly supplied loopback test workbench is allowed");
+    TestLoginThrottle.await();
     HttpURLConnection connection =
         (HttpURLConnection) new URL(origin + "/__test/login").openConnection();
     connection.setInstanceFollowRedirects(false);

@@ -35,6 +35,7 @@ internal data class NativeTransferEvent(
     val scope: String,
     val mode: GalleryMode,
     val unauthorized: Boolean = false,
+    val message: String? = null,
 )
 
 /**
@@ -120,9 +121,26 @@ class NativeTransferManager private constructor(context: Context) {
         queuedAdds++
         command {
             queuedAdds--
-            if (settings.active() != identity.scope || settings.origin() != identity.origin)
+            if (settings.active() != identity.scope || settings.origin() != identity.origin) {
+                changes.tryEmit(
+                    NativeTransferEvent(
+                        identity.scope,
+                        mode,
+                        message = "账号或服务已变化，请重新选择上传文件",
+                    )
+                )
                 return@command
-            if (mutable.value.batches.size >= 20) return@command
+            }
+            if (mutable.value.batches.size >= 20) {
+                changes.tryEmit(
+                    NativeTransferEvent(
+                        identity.scope,
+                        mode,
+                        message = "传输列表已满，请先清理已完成任务",
+                    )
+                )
+                return@command
+            }
             val batch =
                 NativeTransferBatch(
                     UUID.randomUUID().toString(),

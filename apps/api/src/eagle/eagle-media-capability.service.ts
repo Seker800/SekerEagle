@@ -15,11 +15,51 @@ import {
   resolveEagleMediaType,
 } from './eagle-media-capability';
 
+/**
+ * The list filter compares the stored inspection format, which differs from the upload
+ * extension for a few aliases (jpg -> jpeg, heic -> heif, m4v -> mp4). Expose the exact values
+ * instead of making every client duplicate that mapping.
+ */
+const STORED_IMAGE_FORMAT: Record<string, string> = {
+  'image/jpeg': 'jpeg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/avif': 'avif',
+  'image/heic': 'heif',
+  'image/heif': 'heif',
+  'image/tiff': 'tiff',
+};
+
+function firstExtensionByMime(byExtension: ReadonlyMap<string, string>) {
+  const first = new Map<string, string>();
+  for (const [extension, mime] of byExtension)
+    if (!first.has(mime)) first.set(mime, extension.slice(1));
+  return first;
+}
+
+function storedFormats(
+  mimeTypes: string[],
+  firstExtension: ReadonlyMap<string, string>,
+  canonical: Record<string, string> = {},
+) {
+  return [
+    ...new Set(mimeTypes.map((mime) => canonical[mime] ?? firstExtension.get(mime) ?? mime)),
+  ].sort();
+}
+
 const CAPABILITIES: EagleMediaCapabilitiesDto = Object.freeze({
   version: 1 as const,
   images: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_IMAGE_MIME_BY_EXTENSION.values())]),
     extensions: Object.freeze([...EAGLE_IMAGE_MIME_BY_EXTENSION.keys()]),
+    formats: Object.freeze(
+      storedFormats(
+        [...new Set(EAGLE_IMAGE_MIME_BY_EXTENSION.values())],
+        firstExtensionByMime(EAGLE_IMAGE_MIME_BY_EXTENSION),
+        STORED_IMAGE_FORMAT,
+      ),
+    ),
     maxBytes: CAMERA_MAX_IMAGE_BYTES,
     maxPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS,
     maxRawPixels: CAMERA_MAX_RAW_PIXELS,
@@ -28,6 +68,12 @@ const CAPABILITIES: EagleMediaCapabilitiesDto = Object.freeze({
   videos: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_VIDEO_MIME_BY_EXTENSION.values())]),
     extensions: Object.freeze([...EAGLE_VIDEO_MIME_BY_EXTENSION.keys()]),
+    formats: Object.freeze(
+      storedFormats(
+        [...new Set(EAGLE_VIDEO_MIME_BY_EXTENSION.values())],
+        firstExtensionByMime(EAGLE_VIDEO_MIME_BY_EXTENSION),
+      ),
+    ),
     maxBytes: CAMERA_MAX_VIDEO_BYTES,
     maxDurationMs: CAMERA_MAX_VIDEO_DURATION_MS,
   }),

@@ -1,6 +1,10 @@
 package com.sekereagle.android.core;
 
 import java.net.URI;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -24,16 +28,30 @@ public final class NativeCookies {
         || !(pair[0].equals("sekereagle_access") || pair[0].equals("sekereagle_refresh"))) return;
     if (pair[1].length() > 8192 || !pair[1].matches("[a-zA-Z0-9._~+/-]*={0,2}")) return;
     boolean remove = pair[1].isEmpty();
+    Long maxAge = null;
+    String expires = null;
     for (int i = 1; i < parts.length; i++) {
       String[] attr = parts[i].trim().split("=", 2);
       if (attr[0].equalsIgnoreCase("Domain")
           && (attr.length != 2 || !attr[1].replaceFirst("^\\.", "").equalsIgnoreCase(host))) return;
       if (attr[0].equalsIgnoreCase("Max-Age") && attr.length == 2 && attr[1].matches("-?[0-9]+")) {
         try {
-          if (Long.parseLong(attr[1]) <= 0) remove = true;
+          maxAge = Long.parseLong(attr[1]);
         } catch (NumberFormatException invalid) {
           return;
         }
+      }
+      if (attr[0].equalsIgnoreCase("Expires") && attr.length == 2) expires = attr[1].trim();
+    }
+    if (maxAge != null) remove = maxAge <= 0;
+    else if (expires != null) {
+      try {
+        remove =
+            !ZonedDateTime.parse(expires, DateTimeFormatter.RFC_1123_DATE_TIME)
+                .toInstant()
+                .isAfter(Instant.now());
+      } catch (DateTimeParseException invalid) {
+        // Unknown date formats are ignored, as with most non-browser cookie clients.
       }
     }
     if (remove) values.remove(pair[0]);

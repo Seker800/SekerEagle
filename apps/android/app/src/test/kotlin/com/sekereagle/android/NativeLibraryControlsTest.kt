@@ -52,6 +52,19 @@ class NativeLibraryControlsTest {
     }
 
     @Test
+    fun formatFilterUsesStoredCanonicalValuesRatherThanUploadExtensions() {
+        assertEquals("jpeg", canonicalFormat("jpg"))
+        assertEquals("jpeg", canonicalFormat(".JPEG"))
+        assertEquals("heif", canonicalFormat("heic"))
+        assertEquals("tiff", canonicalFormat("tif"))
+        assertEquals("mp4", canonicalFormat("m4v"))
+        assertEquals("mts", canonicalFormat("m2ts"))
+        assertEquals("mpg", canonicalFormat("mpeg"))
+        assertEquals("dng", canonicalFormat("dng"))
+        assertEquals("mov", canonicalFormat("mov"))
+    }
+
+    @Test
     fun invalidTimeRangesNeverReachTheServer() {
         assertNotNull(NativeFilters(from = "bad").validationError())
         assertNotNull(NativeFilters(from = "2026-10-22", to = "2026-10-01").validationError())

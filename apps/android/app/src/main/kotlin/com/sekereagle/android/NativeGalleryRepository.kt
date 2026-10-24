@@ -57,6 +57,21 @@ data class NativeTimeline(val days: List<NativeDay>, val total: Long) {
 
 data class NativePage(val items: List<NativeAsset>, val cursor: String?)
 
+/**
+ * Older servers only expose extensions. Map the aliases whose stored inspection format differs,
+ * so the list format filter still matches rather than silently returning an empty page.
+ */
+internal fun canonicalFormat(extension: String): String =
+    when (val value = extension.lowercase(java.util.Locale.ROOT).removePrefix(".")) {
+        "jpg" -> "jpeg"
+        "heic" -> "heif"
+        "tif" -> "tiff"
+        "m4v" -> "mp4"
+        "m2ts" -> "mts"
+        "mpeg" -> "mpg"
+        else -> value
+    }
+
 /** One scoped implementation for both modes; only authenticated derived media enters the cache. */
 class NativeGalleryRepository(private val session: NativeSession, private val scope: String) {
     private val decoding = Semaphore(4)
@@ -137,6 +152,12 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                     .optJSONArray(key)
                     ?.let { a -> (0 until a.length()).map { a.getString(it) } }
                     .orEmpty()
+            fun formats(json: JSONObject): List<String> =
+                strings(json, "formats").ifEmpty {
+                    strings(json, "extensions").map {
+                        canonicalFormat(it.removePrefix("."))
+                    }
+                }
             NativeOptions(
                 (0 until tags.length()).map {
                     tags.getJSONObject(it).let { t ->
@@ -145,9 +166,8 @@ class NativeGalleryRepository(private val session: NativeSession, private val sc
                 },
                 strings(facets, "cameras"),
                 strings(facets, "lenses"),
-                (strings(capabilities.getJSONObject("images"), "extensions") +
-                        strings(capabilities.getJSONObject("videos"), "extensions"))
-                    .map { it.removePrefix(".") }
+                (formats(capabilities.getJSONObject("images")) +
+                        formats(capabilities.getJSONObject("videos")))
                     .distinct()
                     .sorted(),
             )

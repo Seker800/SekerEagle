@@ -15,6 +15,7 @@ class NativeUploadService : Service() {
     private var target = ""
     private var observe: Job? = null
     private var wake: PowerManager.WakeLock? = null
+    private var wakeUntil = 0L
     private var finished = false
 
     override fun onCreate() {
@@ -47,10 +48,7 @@ class NativeUploadService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
         )
         if (wake?.isHeld != true) {
-            wake =
-                getSystemService(PowerManager::class.java)
-                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SekerEagle:ManualTransfer")
-                    .apply { acquire(30 * 60 * 1000L) }
+            keepAwake(force = true)
         }
         manager.dispatch(scope)
         observe?.cancel()
@@ -59,6 +57,7 @@ class NativeUploadService : Service() {
                 val own = queue.batches.filter { it.scope == target }
                 val batch = own.firstOrNull { it.id == queue.activeId }
                 if (batch != null) {
+                    keepAwake()
                     val progress = batch.progress
                     val text =
                         if (progress == null) batch.message
@@ -74,6 +73,18 @@ class NativeUploadService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    /** Renew before the platform timeout; a bounded lease must not silently expire mid-upload. */
+    private fun keepAwake(force: Boolean = false) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force && wake?.isHeld == true && now < wakeUntil) return
+        if (wake?.isHeld == true) wake?.release()
+        wake =
+            getSystemService(PowerManager::class.java)
+                .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "SekerEagle:ManualTransfer")
+                .apply { acquire(30 * 60 * 1000L) }
+        wakeUntil = now + 25 * 60 * 1000L
     }
 
     private fun notification(text: String): Notification {
@@ -96,7 +107,7 @@ class NativeUploadService : Service() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
         return Notification.Builder(this, CHANNEL)
-            .setSmallIcon(R.drawable.app_icon)
+            .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("SekerEagle 传输列表")
             .setContentText(text)
             .setContentIntent(open)

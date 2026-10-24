@@ -8,6 +8,13 @@ export class EagleImageMediaCapabilityDto {
   @ApiProperty({ type: [String], example: ['.jpg', '.jpeg', '.png'] })
   extensions!: string[];
 
+  @ApiProperty({
+    type: [String],
+    example: ['jpeg', 'png', 'heif'],
+    description: 'Stored asset format values accepted by the list format filter.',
+  })
+  formats!: string[];
+
   @ApiProperty({ example: CAMERA_MAX_IMAGE_BYTES })
   maxBytes!: number;
 
@@ -30,6 +37,13 @@ export class EagleVideoMediaCapabilityDto {
 
   @ApiProperty({ type: [String], example: ['.mp4'] })
   extensions!: string[];
+
+  @ApiProperty({
+    type: [String],
+    example: ['mp4', 'mov'],
+    description: 'Stored asset format values accepted by the list format filter.',
+  })
+  formats!: string[];
 
   @ApiProperty({ example: CAMERA_MAX_VIDEO_BYTES })
   maxBytes!: number;

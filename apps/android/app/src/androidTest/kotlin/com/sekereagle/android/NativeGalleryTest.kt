@@ -14,10 +14,6 @@ import org.junit.rules.ExternalResource
 
 /** Real Compose + existing HTTP auth/API, isolated workbench only. No fixture login in the app. */
 class NativeGalleryTest {
-    private companion object {
-        var lastLoginAt = 0L
-    }
-
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val context = instrumentation.targetContext
     private lateinit var credentials: JSONObject
@@ -51,9 +47,7 @@ class NativeGalleryTest {
         compose.onNodeWithTag("native-email").performTextInput(credentials.getString("email"))
         compose.onNodeWithTag("native-password").performTextInput(credentials.getString("password"))
         // Exercise real login without exceeding the server's five-per-minute security limit.
-        val pause = 15_250L - (android.os.SystemClock.elapsedRealtime() - lastLoginAt)
-        if (pause > 0) Thread.sleep(pause)
-        lastLoginAt = android.os.SystemClock.elapsedRealtime()
+        TestLoginThrottle.await()
         compose.onNodeWithTag("native-login").performClick()
         compose.waitUntil(20_000) {
             compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty() ||
@@ -272,15 +266,15 @@ class NativeGalleryTest {
         compose.onNodeWithText("格式", useUnmergedTree = true).performScrollTo().performClick()
         compose.waitUntil { compose.onAllNodesWithText("PNG").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("PNG").performScrollTo().performClick()
-        compose.onNodeWithText("JPG").performScrollTo().performClick()
+        compose.onNodeWithText("JPEG").performScrollTo().performClick()
         compose.onNodeWithTag("filter-submit").performScrollTo().performClick()
         compose.waitUntil {
             compose.onAllNodesWithTag("native-search-results").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("condition:format:png").assertExists()
-        compose.onNodeWithTag("condition:format:jpg").assertExists()
-        compose.onNodeWithTag("condition:format:jpg").performClick()
-        compose.onNodeWithTag("condition:format:jpg").assertDoesNotExist()
+        compose.onNodeWithTag("condition:format:jpeg").assertExists()
+        compose.onNodeWithTag("condition:format:jpeg").performClick()
+        compose.onNodeWithTag("condition:format:jpeg").assertDoesNotExist()
         compose.onNodeWithTag("condition:format:png").assertExists()
         compose.onNodeWithTag("condition:format:png").performClick()
         assertEquals(first, firstAsset())

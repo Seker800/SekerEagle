@@ -1,9 +1,13 @@
 package com.sekereagle.android
 
+import android.Manifest
 import android.app.Application
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.sekereagle.android.core.BackupPermissionPolicy
 import com.sekereagle.android.core.BackupPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -137,9 +141,14 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             transfers.events.collect { event ->
                 if (state.value.identity?.scope == event.scope) {
                     if (event.unauthorized) expire()
-                    else if (state.value.mode == event.mode) {
-                        transferRefreshPending = true
-                        refreshTransfersWhenIdle()
+                    else {
+                        event.message?.let {
+                            mutable.value = state.value.copy(message = it)
+                        }
+                        if (state.value.mode == event.mode) {
+                            transferRefreshPending = true
+                            refreshTransfersWhenIdle()
+                        }
                     }
                 }
             }
@@ -785,6 +794,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         repository?.clear()
         repository = null
         session = null
+        // The legacy WebView host is retained only for migration; its unencrypted cookie jar must
+        // not outlive a native logout/session expiry.
+        runCatching { LegacyWebSession.clear() }
         mutable.value = GalleryState(restoring = false)
     }
 
@@ -835,6 +847,43 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         downloads.cancel()
     }
 
+    fun backupNeedsMediaPermission(scope: String = state.value.identity?.scope.orEmpty()): Boolean {
+        if (scope.isEmpty()) return false
+        val rules = runCatching { settings.scanRules(scope) }.getOrNull() ?: return false
+        val count =
+            (0 until rules.length()).count {
+                rules.optJSONObject(it)?.optString("type") == "media"
+            }
+        return BackupPermissionPolicy.requiresCompleteMediaAccess(count)
+    }
+
+    fun mediaPermissionGranted(): Boolean {
+        val context = getApplication<Application>()
+        val images =
+            Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) ==
+                    PackageManager.PERMISSION_GRANTED
+        val video =
+            Build.VERSION.SDK_INT >= 33 &&
+                context.checkSelfPermission(Manifest.permission.READ_MEDIA_VIDEO) ==
+                    PackageManager.PERMISSION_GRANTED
+        val storage =
+            Build.VERSION.SDK_INT < 33 &&
+                context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) ==
+                    PackageManager.PERMISSION_GRANTED
+        return BackupPermissionPolicy.hasCompleteMediaAccess(
+            Build.VERSION.SDK_INT,
+            images,
+            video,
+            storage,
+        )
+    }
+
+    fun mediaPermissionNames(): Array<String> =
+        if (Build.VERSION.SDK_INT >= 33)
+            arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+        else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+
     private fun automaticallyBackup() {
         val identity = state.value.identity ?: return
         if (
@@ -843,6 +892,12 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 !settings.flag(identity.scope, "auto", false)
         )
             return
+        // Partial photo grants are not a complete directory scan; wait for explicit consent
+        // instead of silently backing up only the selected subset.
+        if (backupNeedsMediaPermission(identity.scope) && !mediaPermissionGranted()) {
+            settings.setValue(identity.scope, "status", "等待完整的照片和视频访问权限")
+            return
+        }
         runCatching {
             getApplication<Application>()
                 .startForegroundService(

@@ -44,6 +44,10 @@ internal data class NativeUploadState(
     val completedEntries: Set<Uri> = emptySet(),
 )
 
+/** Pause/halt may arrive while the prepare job is still reading metadata. */
+internal fun uploadMayStart(phase: NativeUploadPhase, cancelled: Boolean): Boolean =
+    phase == NativeUploadPhase.READY && !cancelled
+
 /** A selected-file queue reuses the backup engine, without enabling or editing automatic backup. */
 class NativeUploads(
     context: Context,
@@ -92,7 +96,13 @@ class NativeUploads(
                     )
                 return
             }
-        if (selected.isEmpty()) return
+        if (selected.isEmpty()) {
+            publish(
+                generation.get(),
+                NativeUploadState(mode, NativeUploadPhase.FINISHED, emptyList()),
+            )
+            return
+        }
         mutable.value = NativeUploadState(mode, NativeUploadPhase.PREPARING, emptyList())
         job =
             scope.launch(Dispatchers.IO) {
@@ -138,6 +148,20 @@ class NativeUploads(
     fun start(uploaded: Int = 0, skipped: Int = 0, done: Set<Uri> = emptySet()) {
         val current = mutable.value ?: return
         if (current.phase != NativeUploadPhase.READY) return
+        // Pause/halt can arrive while metadata is still being read. The READY state is emitted
+        // afterwards by the prepare job, so this final main-thread gate must win over it.
+        if (!uploadMayStart(current.phase, cancelled.get())) {
+            publish(
+                generation.get(),
+                current.copy(
+                    phase = NativeUploadPhase.FINISHED,
+                    cancelled = true,
+                    current = "",
+                    remaining = current.entries,
+                ),
+            )
+            return
+        }
         run(
             current.entries,
             current.copy(

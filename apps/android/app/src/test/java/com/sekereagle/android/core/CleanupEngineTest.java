@@ -97,4 +97,35 @@ public class CleanupEngineTest {
                 "PHOTO",
                 new BackupEngine.File(file().uri, 100, 0, () -> hash, () -> true)));
   }
+
+  @Test
+  public void unreadableOrUnstableLocalFilesAreRetainedWithoutAbortingThePlan() throws Exception {
+    receipt();
+    BackupEngine.File unreadable =
+        new BackupEngine.File(
+            file().uri,
+            100,
+            1,
+            () -> {
+              throw new java.io.IOException("revoked");
+            },
+            () -> true);
+    assertNull(engine().check("owner", "PHOTO", unreadable));
+    assertEquals(0, checks);
+
+    BackupEngine.File unstable =
+        new BackupEngine.File(
+            file().uri,
+            100,
+            1,
+            () -> hash,
+            () -> {
+              throw new SecurityException("revoked");
+            });
+    assertNull(engine().check("owner", "PHOTO", unstable));
+    assertEquals(0, checks);
+
+    paused = true;
+    assertThrows(IllegalStateException.class, () -> engine().check("owner", "PHOTO", unreadable));
+  }
 }
