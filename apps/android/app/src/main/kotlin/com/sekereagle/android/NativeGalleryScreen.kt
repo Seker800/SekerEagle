@@ -243,20 +243,23 @@ internal fun NativeLibraryPage(
                     }
                 if (state.filters.active || state.query.isNotEmpty())
                     item(span = { GridItemSpan(maxLineSpan) }) {
-                        Column(
+                        Row(
                             Modifier.fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                                .testTag("native-search-results")
+                                .padding(horizontal = 12.dp)
+                                .testTag("native-search-results"),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
-                            Row(
-                                Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text("搜索结果", Modifier.weight(1f), fontSize = 18.sp)
-                                TextButton(model::openSearch) { Text("修改条件") }
-                                TextButton(model::clearSearch) { Text("清空") }
+                            NativeSearchConditions(
+                                state,
+                                model,
+                                modifier = Modifier.weight(1f),
+                                singleLine = true,
+                            )
+                            TextButton(model::openSearch) { Text("修改条件", fontSize = 13.sp) }
+                            IconButton(model::clearSearch) {
+                                Icon(Icons.Outlined.Close, "清空搜索", Modifier.size(20.dp))
                             }
-                            NativeSearchConditions(state, model)
                         }
                     }
                 state.items.forEach { asset ->
@@ -277,8 +280,20 @@ internal fun NativeLibraryPage(
                                             }
                                         else Modifier
                                     )
-                                    .padding(start = 16.dp, top = 18.dp, bottom = 14.dp),
-                                fontSize = 17.sp,
+                                    .padding(
+                                        start = 16.dp,
+                                        top =
+                                            if (state.filters.active || state.query.isNotEmpty())
+                                                6.dp
+                                            else 18.dp,
+                                        bottom =
+                                            if (state.filters.active || state.query.isNotEmpty())
+                                                6.dp
+                                            else 14.dp,
+                                    ),
+                                fontSize =
+                                    if (state.filters.active || state.query.isNotEmpty()) 14.sp
+                                    else 17.sp,
                             )
                         }
                     item(key = "${state.mode}:${asset.id}") {

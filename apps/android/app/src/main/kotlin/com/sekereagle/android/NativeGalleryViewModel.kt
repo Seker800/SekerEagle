@@ -855,6 +855,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 "标签",
                 "添加标签",
                 "移除标签" -> setOf(NativeOptionSection.TAGS)
+                "智能文件夹" -> setOf(NativeOptionSection.SMART_FOLDERS)
                 "格式" -> setOf(NativeOptionSection.FORMATS)
                 "相机",
                 "镜头" -> setOf(NativeOptionSection.PHOTOGRAPHY)

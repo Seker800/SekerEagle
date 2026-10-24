@@ -14,6 +14,7 @@ data class NativeFilters(
     val to: String = "",
     val rating: Int? = null,
     val gps: String = "",
+    val smartFolderId: String = "",
 ) {
     fun validationError(): String? {
         if (tags.size > 100) return "最多选择 100 个标签"
@@ -52,6 +53,7 @@ data class NativeFilters(
                 )
             rating?.let { put("rating", it.toString()) }
             if (gps.isNotBlank()) put("gps", gps)
+            if (smartFolderId.isNotBlank()) put("smartFolderId", smartFolderId)
         }
     }
 
@@ -64,11 +66,22 @@ data class NativeFilters(
             key == "date" -> copy(from = "", to = "")
             key == "rating" -> copy(rating = null)
             key == "gps" -> copy(gps = "")
+            key == "smartFolder" -> copy(smartFolderId = "")
             else -> this
         }
 
-    fun tokens(availableTags: List<NativeTag>): List<NativeFilterToken> = buildList {
+    fun tokens(
+        availableTags: List<NativeTag>,
+        folders: List<NativeChoice> = emptyList(),
+    ): List<NativeFilterToken> = buildList {
         val names = availableTags.associate { it.id to it.name }
+        if (smartFolderId.isNotEmpty())
+            add(
+                NativeFilterToken(
+                    "smartFolder",
+                    "智能文件夹：${folders.firstOrNull { it.id == smartFolderId }?.label ?: "已选文件夹"}",
+                )
+            )
         tags.sorted().forEach { add(NativeFilterToken("tag:$it", "标签：${names[it] ?: "已选标签"}")) }
         if (camera.isNotEmpty()) add(NativeFilterToken("camera", "相机：$camera"))
         if (lens.isNotEmpty()) add(NativeFilterToken("lens", "镜头：$lens"))
@@ -123,6 +136,7 @@ enum class NativeOptionSection {
     TAGS,
     FORMATS,
     PHOTOGRAPHY,
+    SMART_FOLDERS,
 }
 
 data class NativeOptionStatus(val loading: Boolean = false, val error: String? = null)
@@ -132,12 +146,34 @@ data class NativeOptions(
     val cameras: List<String> = emptyList(),
     val lenses: List<String> = emptyList(),
     val formats: List<String> = emptyList(),
+    val folders: List<NativeChoice> = emptyList(),
 )
 
 internal fun NativeOptions.merge(section: NativeOptionSection, incoming: NativeOptions) =
     when (section) {
         NativeOptionSection.TAGS -> copy(tags = incoming.tags)
+        NativeOptionSection.SMART_FOLDERS -> copy(folders = incoming.folders)
         NativeOptionSection.FORMATS -> copy(formats = incoming.formats)
         NativeOptionSection.PHOTOGRAPHY ->
             copy(cameras = incoming.cameras, lenses = incoming.lenses)
     }
+
+data class NativeChoice(val id: String, val label: String)
+
+data class NativeFolder(val id: String, val name: String, val parentId: String? = null)
+
+internal fun nativeFolderChoices(folders: List<NativeFolder>): List<NativeChoice> {
+    val byId = folders.associateBy { it.id }
+    return folders
+        .distinctBy { it.id }
+        .map { folder ->
+            val parts = mutableListOf<String>()
+            val visited = mutableSetOf<String>()
+            var current: NativeFolder? = folder
+            while (current != null && visited.add(current.id)) {
+                parts.add(current.name)
+                current = current.parentId?.let(byId::get)
+            }
+            NativeChoice(folder.id, parts.asReversed().joinToString(" / "))
+        }
+}

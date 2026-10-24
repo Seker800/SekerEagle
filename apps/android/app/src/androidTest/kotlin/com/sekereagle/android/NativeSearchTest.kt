@@ -75,7 +75,10 @@ class NativeSearchTest {
                                                     path == "/api/auth/me" ->
                                                         """{"user":{"id":"owner","email":"search@example.invalid"},"desktopCache":{"deploymentId":"search"}}"""
                                                     path.endsWith("smart-folders") -> {
-                                                        val prefix = if (path.startsWith("/api/photos/")) "photo" else "material"
+                                                        val prefix =
+                                                            if (path.startsWith("/api/photos/"))
+                                                                "photo"
+                                                            else "material"
                                                         """[{"id":"$prefix-parent","name":"收藏","parentId":null},{"id":"$prefix-child","name":"旅行","parentId":"$prefix-parent"}]"""
                                                     }
                                                     path.contains("manual-tags") -> tags
@@ -567,7 +570,13 @@ class NativeSearchTest {
             compose.onNodeWithText("收藏 / 旅行").performClick()
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             await { !model.state.value.searchOpen && !model.state.value.loading }
-            assertTrue(server.paths.any { it.contains("smartFolderId=photo-child") && it.contains("manualTagIds=tag1") && it.contains("search=flower") })
+            assertTrue(
+                server.paths.any {
+                    it.contains("smartFolderId=photo-child") &&
+                        it.contains("manualTagIds=tag1") &&
+                        it.contains("search=flower")
+                }
+            )
             compose.onNodeWithText("智能文件夹：收藏 / 旅行").assertExists()
             compose.onNodeWithTag("condition:smartFolder").performClick()
             await { !model.state.value.loading }

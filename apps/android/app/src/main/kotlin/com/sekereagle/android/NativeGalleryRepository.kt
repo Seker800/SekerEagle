@@ -199,6 +199,25 @@ class NativeGalleryRepository(
                                 .distinctBy { it.id }
                     )
                 }
+                NativeOptionSection.SMART_FOLDERS -> {
+                    val rows = session.array("$base/smart-folders", 16 * 1024 * 1024, cancellation)
+                    NativeOptions(
+                        folders =
+                            nativeFolderChoices(
+                                (0 until rows.length()).map { i ->
+                                    cancellation?.check()
+                                    val row = rows.getJSONObject(i)
+                                    NativeFolder(
+                                        row.getString("id"),
+                                        row.getString("name"),
+                                        row.optString("parentId").takeUnless {
+                                            it.isBlank() || it == "null"
+                                        },
+                                    )
+                                }
+                            )
+                    )
+                }
                 NativeOptionSection.FORMATS -> {
                     val json =
                         session.json("GET", "$base/media-capabilities", cancellation = cancellation)

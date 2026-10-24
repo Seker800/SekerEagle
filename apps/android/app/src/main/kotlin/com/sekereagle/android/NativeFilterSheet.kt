@@ -33,6 +33,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                             it.to,
                             it.rating ?: 0,
                             it.gps,
+                            it.smartFolderId,
                         )
                     },
                     restore = {
@@ -45,6 +46,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                             it[5] as String,
                             (it[6] as Int).takeIf { n -> n > 0 },
                             it[7] as String,
+                            it.getOrNull(8) as? String ?: "",
                         )
                     },
                 ),
@@ -117,6 +119,24 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (panel == "智能文件夹" || panel == "筛选") {
+                    NativeOptionFeedback(
+                        state,
+                        NativeOptionSection.SMART_FOLDERS,
+                        "智能文件夹",
+                        panel,
+                        model,
+                    )
+                    NativeSingleChoicePicker(
+                        "智能文件夹",
+                        state.options.folders,
+                        draft.smartFolderId,
+                        state.optionStatus[NativeOptionSection.SMART_FOLDERS]
+                            ?: NativeOptionStatus(),
+                    ) {
+                        draft = draft.copy(smartFolderId = it)
+                    }
+                }
                 if (panel == "标签" || editingTags || panel == "筛选") {
                     NativeOptionFeedback(state, NativeOptionSection.TAGS, "标签", panel, model)
                     NativeTagPicker(
@@ -256,6 +276,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                     TextButton({
                         draft =
                             when (panel) {
+                                "智能文件夹" -> draft.copy(smartFolderId = "")
                                 "标签" -> draft.copy(tags = emptySet())
                                 "相机" -> draft.copy(camera = "")
                                 "镜头" -> draft.copy(lens = "")

@@ -91,7 +91,7 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                (listOf("标签") +
+                (listOf("标签", "智能文件夹") +
                         (if (state.mode == GalleryMode.PHOTO) listOf("相机", "镜头") else emptyList()) +
                         listOf("时间", "格式", "更多条件"))
                     .forEach { label ->

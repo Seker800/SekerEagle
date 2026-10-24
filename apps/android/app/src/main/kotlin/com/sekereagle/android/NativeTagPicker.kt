@@ -97,10 +97,21 @@ internal fun NativeValuePicker(
     status: NativeOptionStatus = NativeOptionStatus(),
     change: (String) -> Unit,
 ) {
+    NativeSingleChoicePicker(label, values.map { NativeChoice(it, it) }, selected, status, change)
+}
+
+@Composable
+internal fun NativeSingleChoicePicker(
+    label: String,
+    values: List<NativeChoice>,
+    selected: String,
+    status: NativeOptionStatus = NativeOptionStatus(),
+    change: (String) -> Unit,
+) {
     var query by rememberSaveable(label) { mutableStateOf("") }
     val matches =
         remember(values, query) {
-            values.filter { normalizeTagSearch(it).contains(normalizeTagSearch(query)) }
+            values.filter { normalizeTagSearch(it.label).contains(normalizeTagSearch(query)) }
         }
     Text(label, color = NativeMuted)
     OutlinedTextField(
@@ -112,22 +123,22 @@ internal fun NativeValuePicker(
     )
     FilterChip(selected.isEmpty(), { change("") }, { Text("全部") })
     LazyColumn(Modifier.fillMaxWidth().heightIn(max = 220.dp).testTag("option-choices:$label")) {
-        items(matches, key = { it }) { value ->
+        items(matches, key = { it.id }) { value ->
             Row(
                 Modifier.fillMaxWidth()
                     .selectable(
-                        selected = value == selected,
+                        selected = value.id == selected,
                         role = Role.RadioButton,
-                        onClick = { change(value) },
+                        onClick = { change(value.id) },
                     )
                     .padding(vertical = 4.dp),
                 verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             ) {
-                RadioButton(value == selected, null)
-                Text(value, Modifier.weight(1f))
+                RadioButton(value.id == selected, null)
+                Text(value.label, Modifier.weight(1f))
             }
         }
     }
     if (matches.isEmpty() && !status.loading && status.error == null)
-        Text(if (values.isEmpty()) "暂无可用$label 信息" else "没有匹配的$label", color = NativeMuted)
+        Text(if (values.isEmpty()) "暂无$label" else "没有匹配的$label", color = NativeMuted)
 }

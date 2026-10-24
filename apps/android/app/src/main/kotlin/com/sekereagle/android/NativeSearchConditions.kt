@@ -1,6 +1,8 @@
 package com.sekereagle.android
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
@@ -20,19 +22,33 @@ fun NativeSearchConditions(
     state: GalleryState,
     model: NativeGalleryViewModel,
     showKeyword: Boolean = true,
+    modifier: Modifier = Modifier,
+    singleLine: Boolean = false,
 ) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-    ) {
+    val conditions: @Composable () -> Unit = {
         if (showKeyword && state.query.isNotEmpty())
             SearchCondition("关键词：${state.query}", "query") { model.search("") }
         (if (state.searchOpen) state.searchFilters else state.filters)
-            .tokens(state.options.tags)
+            .tokens(state.options.tags, state.options.folders)
             .forEach { token ->
                 SearchCondition(token.label, token.key) { model.removeFilter(token.key) }
             }
     }
+    if (singleLine)
+        Row(
+            modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            conditions()
+        }
+    else
+        FlowRow(
+            modifier,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            conditions()
+        }
 }
 
 @Composable
