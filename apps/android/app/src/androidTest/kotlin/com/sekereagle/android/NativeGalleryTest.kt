@@ -218,14 +218,14 @@ class NativeGalleryTest {
             compose.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithText(name).performScrollTo().performClick()
-        compose.onNodeWithText("应用").performScrollTo().performClick()
+        compose.onNodeWithText("应用").assertIsDisplayed().performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
         }
         compose.onNodeWithTag("asset:$first").performTouchInput { longClick() }
         compose.onNodeWithText("评分").performClick()
         compose.onNodeWithText("3 ★").performScrollTo().performClick()
-        compose.onNodeWithText("应用").performScrollTo().performClick()
+        compose.onNodeWithText("应用").assertIsDisplayed().performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithTag("native-selection-count").fetchSemanticsNodes().isEmpty()
         }
@@ -250,7 +250,7 @@ class NativeGalleryTest {
         compose.waitUntil { compose.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText(name).performScrollTo().performClick()
         capture("native-filter.png")
-        compose.onNodeWithTag("filter-submit").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
         compose.onNodeWithTag("native-search").assertExists()
         compose.onNodeWithTag("search-submit").performScrollTo().performClick()
         compose.waitUntil {
@@ -269,7 +269,7 @@ class NativeGalleryTest {
         compose.waitUntil { compose.onAllNodesWithText("PNG").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("PNG").performScrollTo().performClick()
         compose.onNodeWithText("JPEG").performScrollTo().performClick()
-        compose.onNodeWithTag("filter-submit").performScrollTo().performClick()
+        compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
         compose.onNodeWithTag("native-search").assertExists()
         compose.onNodeWithTag("search-submit").performScrollTo().performClick()
         compose.waitUntil {
