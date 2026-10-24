@@ -7361,7 +7361,7 @@ export interface operations {
     parameters: {
       query?: {
         grain?: 'day' | 'month' | 'year';
-        groupBy?: 'camera' | 'lens';
+        groupBy?: 'total' | 'camera' | 'lens';
         start?: string;
         end?: string;
         cameras?: string[];

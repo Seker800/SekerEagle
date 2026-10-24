@@ -146,7 +146,24 @@ test('statistics defaults to a single all-device total and validates the explici
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
   await pipe.transform({ groupBy: 'total' }, { type: 'query', metatype: PhotoStatisticsQueryDto });
   let text = '';
-  const service = new PhotoStatisticsService({ $queryRaw: async (query: { text: string }) => { text = query.text; return [{ total: 0, unknownDate: 0, first: null, last: null, cameras: [], lenses: [], cameraOptions: [], lensOptions: [], points: [] }]; } } as never);
+  const service = new PhotoStatisticsService({
+    $queryRaw: async (query: { text: string }) => {
+      text = query.text;
+      return [
+        {
+          total: 0,
+          unknownDate: 0,
+          first: null,
+          last: null,
+          cameras: [],
+          lenses: [],
+          cameraOptions: [],
+          lensOptions: [],
+          points: [],
+        },
+      ];
+    },
+  } as never);
   const result = await service.get('owner', false, {});
   assert.equal(result.groupBy, 'total');
   assert.match(text, /''::text AS device/);

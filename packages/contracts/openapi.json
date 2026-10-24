@@ -5942,9 +5942,9 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": "camera",
+              "default": "total",
               "type": "string",
-              "enum": ["camera", "lens"]
+              "enum": ["total", "camera", "lens"]
             }
           },
           {
