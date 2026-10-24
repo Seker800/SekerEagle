@@ -19,8 +19,9 @@ COPY packages/library-core packages/library-core
 COPY packages/library-persistence packages/library-persistence
 COPY packages/media-core packages/media-core
 COPY packages/config packages/config
+COPY packages/eagle-filter-core packages/eagle-filter-core
 COPY packages/vector-core packages/vector-core
-RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/worker
+RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/worker
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && printf '%s\n' 'deb https://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/sekereagle-media.list && apt-get update && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv libimage-exiftool-perl openssl && apt-get install -y --no-install-recommends -t bookworm-backports libheif-examples libheif-plugin-libde265 && rm -rf /var/lib/apt/lists/*
@@ -38,6 +39,7 @@ COPY --from=build /sekereagle/packages/config ./packages/config
 COPY --from=build /sekereagle/packages/library-core ./packages/library-core
 COPY --from=build /sekereagle/packages/library-persistence ./packages/library-persistence
 COPY --from=build /sekereagle/packages/media-core ./packages/media-core
+COPY --from=build /sekereagle/packages/eagle-filter-core ./packages/eagle-filter-core
 COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY package.json package-lock.json ./
 COPY services/photo-face services/photo-face
