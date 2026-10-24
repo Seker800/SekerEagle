@@ -144,13 +144,64 @@ void test('PAT last-used tracking is bounded without weakening revocation checks
 
 void test('PAT 自助撤销只匹配当前主体和令牌摘要，不撤销同账号其他令牌', async () => {
   let query: unknown;
-  const prisma = { personalAccessToken: { updateMany: async (input: unknown) => {
-    query = input; return { count: 1 };
-  } } } as unknown as PrismaService;
+  const prisma = {
+    personalAccessToken: {
+      updateMany: async (input: unknown) => {
+        query = input;
+        return { count: 1 };
+      },
+    },
+  } as unknown as PrismaService;
   await new PatService(prisma).revokeCurrent('owner-1', 'sea_pat_current');
   const { createHash } = await import('node:crypto');
   assert.deepEqual(query, {
-    where: { userId: 'owner-1', tokenHash: createHash('sha256').update('sea_pat_current').digest('hex'), revokedAt: null },
+    where: {
+      userId: 'owner-1',
+      tokenHash: createHash('sha256').update('sea_pat_current').digest('hex'),
+      revokedAt: null,
+    },
     data: { revokedAt: (query as { data: { revokedAt: Date } }).data.revokedAt },
   });
+});
+
+void test('账号停用或令牌过期时拒绝 PAT，且不更新使用记录', async () => {
+  for (const state of [
+    { disabledAt: new Date(), expiresAt: null },
+    { disabledAt: null, expiresAt: new Date(Date.now() - 1000) },
+  ]) {
+    const prisma = {
+      personalAccessToken: {
+        findUnique: async () => ({
+          revokedAt: null,
+          expiresAt: state.expiresAt,
+          user: { disabledAt: state.disabledAt },
+        }),
+        updateMany: async () => {
+          assert.fail('rejected PAT must not be used');
+        },
+      },
+    } as unknown as PrismaService;
+    await assert.rejects(
+      new PatService(prisma).authenticate('sea_pat_disabled'),
+      /PAT 无效或已过期/,
+    );
+  }
+});
+
+void test('PAT 签发锁定当前账号版本，拒绝密码变更后的旧认证快照', async () => {
+  let created = false;
+  const prisma = {
+    $transaction: async (fn: (tx: unknown) => unknown) => fn({
+      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+        assert.match(query.sql, /FOR SHARE/);
+        assert.match(query.sql, /"authVersion"/);
+        assert.match(query.sql, /"disabledAt" IS NULL/);
+        assert.deepEqual(query.values, ['owner-1', 3]);
+        return [];
+      },
+      personalAccessToken: { create: async () => { created = true; return {}; } },
+    }),
+  } as unknown as PrismaService;
+  await assert.rejects(new PatService(prisma).create('owner-1', 'backup', ['asset:write'], 3), /登录状态已失效/);
+  assert.equal(created, false);
 });
