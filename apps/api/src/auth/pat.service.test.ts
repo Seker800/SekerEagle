@@ -141,3 +141,16 @@ void test('PAT last-used tracking is bounded without weakening revocation checks
     }
   }
 });
+
+void test('PAT 自助撤销只匹配当前主体和令牌摘要，不撤销同账号其他令牌', async () => {
+  let query: unknown;
+  const prisma = { personalAccessToken: { updateMany: async (input: unknown) => {
+    query = input; return { count: 1 };
+  } } } as unknown as PrismaService;
+  await new PatService(prisma).revokeCurrent('owner-1', 'sea_pat_current');
+  const { createHash } = await import('node:crypto');
+  assert.deepEqual(query, {
+    where: { userId: 'owner-1', tokenHash: createHash('sha256').update('sea_pat_current').digest('hex'), revokedAt: null },
+    data: { revokedAt: (query as { data: { revokedAt: Date } }).data.revokedAt },
+  });
+});
