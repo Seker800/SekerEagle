@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
 import { PhotoStatistics } from './PhotoStatistics';
-import { PhotoTimeChart } from './PhotoStatisticsCharts';
+import { PhotoUsageChart, PhotoTimeChart } from './PhotoStatisticsCharts';
 const { get } = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('../../lib/photo-statistics-api', () => ({ getPhotoStatistics: get }));
 const data: PhotoStatisticsData = {
@@ -32,10 +32,14 @@ describe('photo statistics', () => {
     get.mockResolvedValue(data);
     mount();
     expect(await screen.findByRole('img', { name: '拍摄量折线图' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '相机使用量柱状图' })).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: '镜头使用量柱状图' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '相机使用量柱状图' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '镜头使用量柱状图' })).toBeInTheDocument();
     expect(screen.getByText('拍摄日期未知')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('查看时间段'), { target: { value: '1' } });
+    const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    fireEvent.focus(chart);
+    fireEvent.keyDown(chart, { key: 'Home' });
+    fireEvent.keyDown(chart, { key: 'ArrowRight' });
     expect(screen.getByText('2024-02', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Camera A：0')).toBeInTheDocument();
   });
@@ -43,9 +47,11 @@ describe('photo statistics', () => {
     get.mockResolvedValue(data);
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
+    fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
     fireEvent.click(screen.getByLabelText('Camera A'));
+    fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
     fireEvent.click(screen.getByLabelText('Lens A'));
-    fireEvent.change(screen.getByLabelText('曲线分组'), { target: { value: 'lens' } });
+    fireEvent.click(screen.getByRole('button', { name: '按镜头' }));
     await waitFor(() =>
       expect(get.mock.calls.at(-1)?.[0]).toMatchObject({
         cameras: ['Camera A'],
@@ -70,6 +76,7 @@ describe('statistics interactions', () => {
     get.mockResolvedValue(data);
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
+    fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
     fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2025-01-01' } });
     fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2024-01-01' } });
     fireEvent.click(screen.getByRole('button', { name: '应用日期' }));
@@ -79,9 +86,10 @@ describe('statistics interactions', () => {
     await waitFor(() =>
       expect(get.mock.calls.at(-1)?.[0]).toMatchObject({ start: '2025-01-01', end: '2025-12-31' }),
     );
-    fireEvent.change(screen.getByLabelText('时间粒度'), { target: { value: 'year' } });
+    fireEvent.click(screen.getByRole('button', { name: '年', exact: true }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].grain).toBe('year'));
     fireEvent.click(screen.getByRole('button', { name: '全部时间' }));
+    fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
     await waitFor(() => expect(screen.getByLabelText('开始日期')).toHaveValue(''));
     fireEvent.click(screen.getByRole('button', { name: '刷新统计' }));
   });
@@ -89,12 +97,14 @@ describe('statistics interactions', () => {
     get.mockResolvedValue(data);
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
+    fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
     fireEvent.click(screen.getByLabelText('Camera A'));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
     fireEvent.click(screen.getByLabelText('Camera A'));
     await waitFor(() => expect(screen.getByLabelText('Camera A')).not.toBeChecked());
+    fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
     fireEvent.click(screen.getByLabelText('Lens A'));
-    fireEvent.click(screen.getAllByRole('button', { name: '清除选择', hidden: true })[1]);
+    fireEvent.click(screen.getByRole('button', { name: '清除选择' }));
     expect(screen.getByLabelText('Lens A')).not.toBeChecked();
   });
   it('keeps unrecognised devices and missing dates explicit', async () => {
@@ -128,6 +138,7 @@ describe('statistics interactions', () => {
     expect(other).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(other);
     expect(other).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.focus(screen.getByRole('img', { name: '拍摄量折线图' }));
     expect(screen.getByText('其他设备（合并）：3')).toBeInTheDocument();
     expect(screen.getByText('未知相机：2')).toBeInTheDocument();
   });
@@ -155,4 +166,37 @@ it('gives each visible device a distinct color and keeps long-range axis labels 
     element.textContent?.includes('-'),
   );
   expect(labels.length).toBeLessThanOrEqual(7);
+});
+
+it('shows full equipment names, shares and a direct filter action without a horizontal scroller', () => {
+  const label = 'GF100-200mmF5.6 R LM OIS WR Long Equipment Name';
+  const select = vi.fn();
+  const view = render(<PhotoUsageChart kind="lens" items={[{ key: label, count: 3 }, { key: 'Other', count: 1 }]} selected={[]} onSelect={select} />);
+  expect(screen.getByText(label)).toBeInTheDocument();
+  expect(screen.getByText('75.0%')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: `镜头：${label}` }));
+  expect(select).toHaveBeenCalledWith(label);
+  expect(view.container.querySelector('[style*="min-width"]')).toBeNull();
+});
+
+it('searches full device lists, exposes active filters and clears them together', async () => {
+  get.mockResolvedValue(data); mount(); await screen.findByRole('img', { name: '拍摄量折线图' });
+  fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
+  fireEvent.change(screen.getByLabelText('搜索设备'), { target: { value: 'Camera B' } });
+  expect(screen.queryByLabelText('Camera A')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByLabelText('Camera B'));
+  expect(screen.getByRole('button', { name: '移除筛选：Camera B' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '重置筛选' }));
+  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual([]));
+  expect(screen.queryByRole('button', { name: '移除筛选：Camera B' })).not.toBeInTheDocument();
+});
+
+it('filters from a ranked device row and supports a recent-year shortcut', async () => {
+  get.mockResolvedValue(data); mount(); await screen.findByRole('img', { name: '拍摄量折线图' });
+  fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
+  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
+  fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
+  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual([]));
+  fireEvent.click(screen.getByRole('button', { name: '最近一年' }));
+  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].end).toMatch(/^\d{4}-\d{2}-\d{2}$/));
 });
