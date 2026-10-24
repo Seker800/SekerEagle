@@ -106,7 +106,15 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         prefetchJob = viewModelScope.launch {
             try {
                 val page = repo.page(mode, "", sort = snapshot.sort)
-                val timeline = runCatching { repo.timeline(mode, snapshot.sort) }.getOrNull()
+                val timeline =
+                    try {
+                        repo.timeline(mode, snapshot.sort)
+                    } catch (reason: CancellationException) {
+                        throw reason
+                    } catch (reason: Exception) {
+                        if (reason is NativeSession.Failure && reason.status == 401) throw reason
+                        null
+                    }
                 if (
                     repository === repo &&
                         state.value.identity == identity &&
@@ -332,6 +340,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val current = state.value
         val identity = current.identity ?: return
         if (current.busy || mode == current.mode) return
+        if (transferRefreshPending || (current.loading && current.loaded))
+            staleLibraries.add(current.mode)
         transferRefreshPending = false
         downloads.clear()
         uploadPickerTarget = null
@@ -360,7 +370,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val restored = retained.value[mode] ?: initialLibrary(identity, mode)
         mutable.value = restored
         if (!restored.loaded) load()
-        else if (staleLibraries.remove(mode)) refresh() else prefetchLibrary()
+        else if (staleLibraries.remove(mode)) refresh()
+        else {
+            if (restored.timeline == null) repository?.let { loadTimeline(restored, it) }
+            prefetchLibrary()
+        }
     }
 
     fun sort(order: GallerySort) {
@@ -373,7 +387,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 sort = order,
+                scrollRequest = current.scrollRequest + 1,
                 items = emptyList(),
+                loaded = false,
                 cursor = null,
                 selecting = false,
                 selected = emptySet(),
@@ -581,6 +597,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 items = emptyList(),
+                loaded = false,
                 cursor = null,
                 windowOffset = position,
                 scrollRequest = current.scrollRequest + 1,
@@ -608,6 +625,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 query = query,
+                scrollRequest = current.scrollRequest + 1,
                 filters = filters,
                 filterPanel = null,
                 searchDraft = query,
@@ -617,6 +635,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 searchOpen = false,
                 viewerId = null,
                 items = emptyList(),
+                loaded = false,
                 cursor = null,
             )
         load()
@@ -784,8 +803,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             state.value.copy(
                 filters = filters,
+                scrollRequest = state.value.scrollRequest + 1,
                 filterPanel = null,
                 items = emptyList(),
+                loaded = false,
                 cursor = null,
                 selecting = false,
                 selected = emptySet(),
@@ -799,9 +820,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             state.value.copy(
                 trash = value,
+                scrollRequest = state.value.scrollRequest + 1,
                 filters = NativeFilters(),
                 query = "",
                 items = emptyList(),
+                loaded = false,
                 cursor = null,
                 viewerId = null,
                 accountOpen = false,

@@ -176,23 +176,27 @@ internal fun NativeLibrary(
     val backdrop = rememberGraphicsLayer()
     var sourceOffset by remember { mutableStateOf(Offset.Zero) }
     var menu by rememberSaveable { mutableStateOf<NativeLibraryMenu?>(null) }
-    LaunchedEffect(
-        state.mode,
-        state.sort,
-        state.query,
-        state.filters,
-        state.trash,
-        state.scrollRequest,
-    ) {
-        grid.scrollToItem(0)
+    var appliedScrollRequest by rememberSaveable { mutableIntStateOf(state.scrollRequest) }
+    LaunchedEffect(state.scrollRequest) {
+        // A restored composition already has the correct saved grid position. Only explicit
+        // navigation (search, sort, filters, trash, date jump) requests a new starting position.
+        if (appliedScrollRequest != state.scrollRequest) {
+            grid.scrollToItem(0)
+            appliedScrollRequest = state.scrollRequest
+        }
     }
     LaunchedEffect(active, grid, state.cursor, state.loading) {
         if (!active) return@LaunchedEffect
-        snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
+        snapshotFlow {
+                val layout = grid.layoutInfo
+                (layout.visibleItemsInfo.lastOrNull()?.index ?: -1) to layout.totalItemsCount
+            }
             .distinctUntilChanged()
-            .collect { last ->
+            .collect { (last, total) ->
                 if (
-                    last >= grid.layoutInfo.totalItemsCount - 12 &&
+                    total > 0 &&
+                        last >= 0 &&
+                        last >= total - 12 &&
                         state.cursor != null &&
                         !state.loading
                 )
