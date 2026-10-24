@@ -4,9 +4,17 @@ import { IconChevronDown, IconRefresh, IconX } from '@tabler/icons-react';
 import { t } from '../../i18n';
 import { getPhotoStatistics, type PhotoStatisticsQuery } from '../../lib/photo-statistics-api';
 import { deviceLabel, PhotoTimeChart, PhotoUsageChart } from './PhotoStatisticsCharts';
+import { statisticsDateRange, type StatisticsRange } from './photo-statistics-range';
 import styles from './PhotoStatistics.module.css';
 
 type Panel = 'camera' | 'lens' | 'date' | null;
+const timeRanges = () =>
+  [
+    { value: 1, label: t('最近1年') },
+    { value: 3, label: t('最近3年') },
+    { value: 5, label: t('最近5年') },
+    { value: 'all', label: t('所有时长') },
+  ] as const;
 export function PhotoStatistics({
   ownerId,
   includePrivate,
@@ -15,13 +23,13 @@ export function PhotoStatistics({
   includePrivate: boolean;
 }) {
   const [input, setInput] = useState<PhotoStatisticsQuery>({
-    grain: 'month',
-    groupBy: 'total',
+    grain: 'week',
+    groupBy: 'camera',
     cameras: [],
     lenses: [],
   });
   const [dates, setDates] = useState({ start: '', end: '' });
-  const [preset, setPreset] = useState<'all' | 'year' | 'custom'>('all');
+  const [preset, setPreset] = useState<StatisticsRange | 'custom'>('all');
   const [panel, setPanel] = useState<Panel>(null);
   const [search, setSearch] = useState('');
   const [rangeError, setRangeError] = useState(false);
@@ -45,14 +53,8 @@ export function PhotoStatistics({
     setPanel((value) => (value === next ? null : next));
     setSearch('');
   }
-  function timeRange(next: 'all' | 'year') {
-    const end = new Date();
-    const start = new Date(end);
-    start.setUTCDate(start.getUTCDate() - 364);
-    const range =
-      next === 'all'
-        ? { start: '', end: '' }
-        : { start: start.toISOString().slice(0, 10), end: end.toISOString().slice(0, 10) };
+  function timeRange(next: StatisticsRange) {
+    const range = statisticsDateRange(next);
     setPreset(next);
     setDates(range);
     setPanel(null);
@@ -93,12 +95,16 @@ export function PhotoStatistics({
     >
       <div className={styles.toolbar}>
         <div className={styles.segmented} aria-label={t('时间范围')} role="group">
-          <button type="button" aria-pressed={preset === 'all'} onClick={() => timeRange('all')}>
-            {t('全部时间')}
-          </button>
-          <button type="button" aria-pressed={preset === 'year'} onClick={() => timeRange('year')}>
-            {t('最近一年')}
-          </button>
+          {timeRanges().map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={preset === value}
+              onClick={() => timeRange(value)}
+            >
+              {label}
+            </button>
+          ))}
           <button
             type="button"
             aria-label={t('自定义日期')}
@@ -306,14 +312,14 @@ export function PhotoStatistics({
                 ))}
               </div>
               <div className={styles.segmented} role="group" aria-label={t('时间粒度')}>
-                {(['year', 'month'] as const).map((grain) => (
+                {(['year', 'month', 'week'] as const).map((grain) => (
                   <button
                     key={grain}
                     type="button"
                     aria-pressed={input.grain === grain}
                     onClick={() => setInput((value) => ({ ...value, grain }))}
                   >
-                    {grain === 'year' ? t('年') : t('月')}
+                    {grain === 'year' ? t('年') : grain === 'month' ? t('月') : t('周')}
                   </button>
                 ))}
               </div>

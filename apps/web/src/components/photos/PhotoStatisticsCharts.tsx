@@ -32,7 +32,11 @@ export const deviceLabel = (key: string | null, kind: 'total' | 'camera' | 'lens
       : key || (kind === 'camera' ? t('未知相机') : t('未知镜头'));
 
 export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
-  const [selected, setSelected] = useState<{ index: number; key: string | null } | null>(null);
+  const [selected, setSelected] = useState<{
+    index: number;
+    key: string | null;
+    pointer?: { x: number; y: number };
+  } | null>(null);
   const [hidden, setHidden] = useState<Set<string | null>>(new Set());
   const [highlight, setHighlight] = useState<string | null | undefined>();
   const [width, setWidth] = useState(1000);
@@ -69,9 +73,9 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
       Math.max(
         4,
         Math.ceil(
-          Math.max(
+          data.points.reduce(
+            (maximum, point) => (hidden.has(point.key) ? maximum : Math.max(maximum, point.count)),
             1,
-            ...data.points.filter((point) => !hidden.has(point.key)).map((point) => point.count),
           ) / 4,
         ) * 4,
       ),
@@ -121,9 +125,13 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
     key: string | null,
   ) {
     const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+    const bounds = frame.current?.getBoundingClientRect();
     if (rect?.width)
       setSelected({
         key,
+        pointer: bounds
+          ? { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
+          : undefined,
         index: Math.max(
           0,
           Math.min(
@@ -137,6 +145,19 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
         ),
       });
   }
+  const anchor = selected?.pointer ?? {
+    x: x(current),
+    y: y(count(data.periods[current], selected ? selected.key : '')),
+  };
+  // Follow the pointer in CSS pixels, flipping within the chart near its edges.
+  const tooltipLeft = Math.max(
+    4,
+    Math.min(width - 164, anchor.x + (anchor.x > width - 176 ? -172 : 12)),
+  );
+  const tooltipTop = Math.max(
+    4,
+    Math.min(height - 48, anchor.y + (anchor.y > height - 60 ? -56 : 12)),
+  );
   return (
     <>
       <div className={styles.legend}>
@@ -307,11 +328,8 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
               className={styles.chartTooltip}
               role="status"
               style={{
-                left: `clamp(0px, ${(x(current) / width) * 100}% - 110px, calc(100% - 220px))`,
-                top: Math.max(
-                  4,
-                  Math.min(height - 72, y(count(data.periods[current], selected.key)) - 64),
-                ),
+                left: tooltipLeft,
+                top: tooltipTop,
               }}
             >
               <span>{deviceLabel(selected.key, data.groupBy)}</span>
@@ -327,6 +345,7 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
       )}
       <p id={description} className={styles.chartHint}>
         {t('悬停曲线查看该设备数量，方向键切换时间。')}
+        {data.grain === 'week' && ` ${t('每周从周一开始。')}`}
       </p>
       {keys.includes(null) && (
         <p className={styles.hint}>

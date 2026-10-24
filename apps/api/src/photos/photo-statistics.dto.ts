@@ -26,11 +26,11 @@ function CalendarDate() {
     });
 }
 export class PhotoStatisticsQueryDto {
-  @ApiPropertyOptional({ enum: ['day', 'month', 'year'], default: 'month' })
+  @ApiPropertyOptional({ enum: ['day', 'week', 'month', 'year'], default: 'week' })
   @IsOptional()
-  @IsIn(['day', 'month', 'year'])
-  grain?: 'day' | 'month' | 'year';
-  @ApiPropertyOptional({ enum: ['total', 'camera', 'lens'], default: 'total' })
+  @IsIn(['day', 'week', 'month', 'year'])
+  grain?: 'day' | 'week' | 'month' | 'year';
+  @ApiPropertyOptional({ enum: ['total', 'camera', 'lens'], default: 'camera' })
   @IsOptional()
   @IsIn(['total', 'camera', 'lens'])
   groupBy?: 'total' | 'camera' | 'lens';

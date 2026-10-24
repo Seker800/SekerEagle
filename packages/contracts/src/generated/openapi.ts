@@ -7360,7 +7360,7 @@ export interface operations {
   PhotoStatisticsController_get: {
     parameters: {
       query?: {
-        grain?: 'day' | 'month' | 'year';
+        grain?: 'day' | 'week' | 'month' | 'year';
         groupBy?: 'total' | 'camera' | 'lens';
         start?: string;
         end?: string;

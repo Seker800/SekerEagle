@@ -132,7 +132,7 @@ try {
   await make({ mimeType: 'video/mp4' });
   await make({}, { assetRevision: 0, cameraModel: 'Stale' });
   const service = new PhotoStatisticsService(prisma);
-  const data = await service.get(owner, false, {});
+  const data = await service.get(owner, false, { grain: 'month', groupBy: 'total' });
   assert.equal(data.total, 5);
   assert.equal(data.groupBy, 'total');
   assert.ok(data.points.every((point) => point.key === ''));
@@ -146,6 +146,54 @@ try {
     data.points.map((p) => p.period),
     ['2024-02', '2024-04'],
   );
+  const weekly = await service.get(owner, false, {});
+  assert.equal(weekly.grain, 'week');
+  assert.equal(weekly.groupBy, 'camera');
+  assert.equal(weekly.periods[0], '2024-01-29');
+  assert.equal(weekly.periods.at(-1), '2024-04-01');
+  assert.deepEqual(
+    weekly.points.map((point) => point.period),
+    ['2024-01-29', '2024-04-01'],
+  );
+  assert.ok(weekly.points.every((point) => point.key === 'A'));
+  assert.equal(
+    weekly.points.reduce((sum, point) => sum + point.count, 0),
+    2,
+  );
+  const boundary = await make(
+    {},
+    { capturedAt: new Date('2025-01-01T12:00:00Z'), capturedLocal: '2025-01-01T20:00:00' },
+  );
+  const sunday = await make(
+    {},
+    { capturedAt: new Date('2024-12-29T12:00:00Z'), capturedLocal: '2024-12-29T20:00:00' },
+  );
+  const nextSunday = await make(
+    {},
+    { capturedAt: new Date('2025-01-05T12:00:00Z'), capturedLocal: '2025-01-05T20:00:00' },
+  );
+  const crossYear = await service.get(owner, false, {
+    start: '2024-12-29',
+    end: '2025-01-05',
+    grain: 'week',
+  });
+  assert.deepEqual(
+    crossYear.points.map((point) => [point.period, point.count]),
+    [
+      ['2024-12-23', 1],
+      ['2024-12-30', 2],
+    ],
+  );
+  const partialWeek = await service.get(owner, false, {
+    start: '2025-01-01',
+    end: '2025-01-01',
+    grain: 'week',
+  });
+  assert.equal(partialWeek.points[0].count, 1);
+  assert.equal(partialWeek.points[0].period, '2024-12-30');
+  await prisma.eagleAsset.deleteMany({
+    where: { ownerId: owner, id: { in: [boundary, sunday, nextSunday] } },
+  });
   assert.ok(!data.cameraOptions.includes('Stale'));
   assert.equal(
     data.cameras.reduce((n, x) => n + x.count, 0),

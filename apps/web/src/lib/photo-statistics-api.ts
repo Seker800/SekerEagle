@@ -1,6 +1,6 @@
 import { request } from './api-client';
 export interface PhotoStatisticsQuery {
-  grain: 'day' | 'month' | 'year';
+  grain: 'day' | 'week' | 'month' | 'year';
   groupBy: 'total' | 'camera' | 'lens';
   start?: string;
   end?: string;

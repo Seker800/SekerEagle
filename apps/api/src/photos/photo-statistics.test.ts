@@ -63,7 +63,7 @@ test('statistics uses full library with current metadata and authenticated visib
       ];
     },
   } as never);
-  const result = await service.get('owner', false, { cameras: ["A' OR true --"] });
+  const result = await service.get('owner', false, { grain: 'month', cameras: ["A' OR true --"] });
   assert.equal(result.total, 4);
   assert.equal(result.unknownDate, 1);
   assert.deepEqual(result.periods, ['2024-01', '2024-02', '2024-03']);
@@ -142,7 +142,7 @@ test('all query variants keep empty results explicit and build only parameterize
   assert.ok(queries[0]!.values.includes('L'));
 });
 
-test('statistics defaults to a single all-device total and validates the explicit total dimension', async () => {
+test('statistics defaults to weekly camera series and preserves explicit total queries', async () => {
   const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
   await pipe.transform({ groupBy: 'total' }, { type: 'query', metatype: PhotoStatisticsQueryDto });
   let text = '';
@@ -165,6 +165,22 @@ test('statistics defaults to a single all-device total and validates the explici
     },
   } as never);
   const result = await service.get('owner', false, {});
-  assert.equal(result.groupBy, 'total');
+  assert.equal(result.groupBy, 'camera');
+  assert.equal(result.grain, 'week');
+  assert.match(text, /camera AS device/);
+  assert.match(text, /date_trunc/);
+  await service.get('owner', false, { groupBy: 'total', grain: 'month' });
   assert.match(text, /''::text AS device/);
+});
+
+test('weekly buckets use Mondays across ISO year boundaries and fill missing weeks', () => {
+  assert.deepEqual(statisticsPeriods('2024-12-29', '2025-01-06', 'week'), [
+    '2024-12-23',
+    '2024-12-30',
+    '2025-01-06',
+  ]);
+  assert.deepEqual(statisticsPeriods('2024-02-29', '2024-03-03', 'week'), ['2024-02-26']);
+  assert.deepEqual(statisticsPeriods('2025-01-01', '2024-01-01', 'week'), []);
+  assert.ok(statisticsPeriods('1990-01-01', '2026-10-24', 'week').length > 732);
+  assert.throws(() => statisticsPeriods('1700-01-01', '2026-01-01', 'week'), /10440/);
 });

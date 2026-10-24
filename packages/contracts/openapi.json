@@ -5932,9 +5932,9 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": "month",
+              "default": "week",
               "type": "string",
-              "enum": ["day", "month", "year"]
+              "enum": ["day", "week", "month", "year"]
             }
           },
           {
@@ -5942,7 +5942,7 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": "total",
+              "default": "camera",
               "type": "string",
               "enum": ["total", "camera", "lens"]
             }

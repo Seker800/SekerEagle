@@ -1498,4 +1498,10 @@ export const enUS = {
   '离线概览 · 详细地图尚未安装': 'Offline overview · Detailed map is not installed',
   '自托管矢量底图 · 道路与建筑随缩放显示':
     'Self-hosted vector map · Roads and buildings appear as you zoom',
+  所有时长: 'All time',
+  '每周从周一开始。': 'Weeks start on Monday.',
+  周: 'Week',
+  最近1年: 'Last year',
+  最近3年: 'Last 3 years',
+  最近5年: 'Last 5 years',
 } as const;

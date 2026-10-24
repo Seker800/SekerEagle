@@ -90,7 +90,7 @@ describe('statistics interactions', () => {
     );
     fireEvent.click(screen.getByRole('button', { name: '年' }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].grain).toBe('year'));
-    fireEvent.click(screen.getByRole('button', { name: '全部时间' }));
+    fireEvent.click(screen.getByRole('button', { name: '所有时长' }));
     fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
     await waitFor(() => expect(screen.getByLabelText('开始日期')).toHaveValue(''));
     fireEvent.click(screen.getByRole('button', { name: '刷新统计' }));
@@ -220,7 +220,7 @@ it('filters from a ranked device row and supports a recent-year shortcut', async
   await waitFor(() =>
     expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument(),
   );
-  fireEvent.click(screen.getByRole('button', { name: '最近一年' }));
+  fireEvent.click(screen.getByRole('button', { name: '最近1年' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].end).toMatch(/^\d{4}-\d{2}-\d{2}$/));
 });
 
@@ -285,26 +285,52 @@ it('does not keep another owner or privacy scope visible while a new query loads
   expect(screen.getByRole('status')).toHaveTextContent('正在加载统计…');
 });
 
-it('starts with one total curve, offers year and month intervals and uses cubic paths', async () => {
-  get.mockResolvedValue({
-    ...data,
-    groupBy: 'total',
-    points: [
-      { key: '', period: '2024-01', count: 2 },
-      { key: '', period: '2024-03', count: 3 },
-    ],
-  });
+it('defaults to camera curves and weekly buckets, and offers year/month/week', async () => {
+  get.mockResolvedValue(data);
   const view = mount();
   await screen.findByRole('img', { name: '拍摄量曲线图' });
-  expect(get.mock.calls[0][0].groupBy).toBe('total');
-  expect(screen.getByRole('button', { name: '总量' })).toHaveAttribute('aria-pressed', 'true');
-  expect(screen.getByRole('button', { name: '年' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '月' })).toBeInTheDocument();
+  expect(get.mock.calls[0][0]).toMatchObject({ groupBy: 'camera', grain: 'week' });
+  expect(screen.getByRole('button', { name: '按相机' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '周' })).toHaveAttribute('aria-pressed', 'true');
+  for (const name of ['年', '月', '周'])
+    expect(screen.getByRole('button', { name })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '日' })).not.toBeInTheDocument();
   expect(view.container.querySelector('polyline')).toBeNull();
   expect(view.container.querySelector('path[data-statistics-curve]')?.getAttribute('d')).toContain(
     ' C ',
   );
+});
+
+it('offers rolling calendar-year ranges without changing equipment or weekly grain', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 24, 12));
+  try {
+    get.mockResolvedValue(data);
+    mount();
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
+    for (const years of [1, 3, 5]) {
+      fireEvent.click(screen.getByRole('button', { name: `最近${years}年` }));
+      await waitFor(() =>
+        expect(get.mock.calls.at(-1)?.[0]).toMatchObject({
+          start: `${2026 - years}-10-24`,
+          end: '2026-10-24',
+          grain: 'week',
+          groupBy: 'camera',
+        }),
+      );
+    }
+    fireEvent.click(screen.getByRole('button', { name: '所有时长' }));
+    expect(screen.getByRole('button', { name: '所有时长' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    fireEvent.click(screen.getByRole('button', { name: '月' }));
+    await waitFor(() =>
+      expect(get.mock.calls.at(-1)?.[0]).toMatchObject({ start: undefined, end: undefined }),
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it('shows only the curve under the pointer and hides its compact tooltip when leaving', () => {
@@ -334,4 +360,36 @@ it('shows only the curve under the pointer and hides its compact tooltip when le
   fireEvent.pointerLeave(hit!);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   vi.unstubAllGlobals();
+});
+
+it('moves the compact tooltip with the mouse even within the same time bucket, and avoids chart edges', () => {
+  vi.stubGlobal('PointerEvent', MouseEvent);
+  try {
+    const view = render(<PhotoTimeChart data={data} />);
+    const chart = screen.getByRole('img', { name: '拍摄量曲线图' });
+    vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({
+      left: 20,
+      top: 100,
+      width: 1000,
+      height: 216,
+    } as DOMRect);
+    vi.spyOn(chart.parentElement!, 'getBoundingClientRect').mockReturnValue({
+      left: 20,
+      top: 100,
+      width: 1000,
+      height: 216,
+    } as DOMRect);
+    const hit = view.container.querySelector('[data-curve-hit="Camera A"]')!;
+    fireEvent.pointerMove(hit, { clientX: 120, clientY: 160 });
+    expect(screen.getByRole('status')).toHaveStyle({ left: '112px', top: '72px' });
+    fireEvent.pointerMove(hit, { clientX: 140, clientY: 180 });
+    expect(screen.getByRole('status')).toHaveStyle({ left: '132px', top: '92px' });
+    fireEvent.pointerMove(hit, { clientX: 1015, clientY: 310 });
+    const tooltip = screen.getByRole('status');
+    expect(Number.parseFloat(tooltip.style.left) + 160).toBeLessThan(1000);
+    expect(Number.parseFloat(tooltip.style.top) + 44).toBeLessThan(216);
+    expect(tooltip).not.toHaveTextContent('Camera B');
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });

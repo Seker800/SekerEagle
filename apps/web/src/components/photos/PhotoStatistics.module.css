@@ -289,24 +289,27 @@
   position: absolute;
   pointer-events: none;
   top: 6px;
-  width: min(220px, 100%);
+  width: min(160px, 100%);
   display: grid;
-  gap: 5px;
-  padding: 10px 12px;
+  gap: 2px;
+  padding: 5px 7px;
   border: 1px solid #42464c;
   border-radius: 4px;
   background: #202225f5;
   box-shadow: 0 4px 14px #0005;
   z-index: 2;
   box-sizing: border-box;
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 14px;
 }
 .chartTooltip strong {
   margin-bottom: 3px;
   font-variant-numeric: tabular-nums;
 }
 .chartTooltip span {
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: #bec4cb;
 }
 .chartHint,
@@ -466,7 +469,7 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 .chartTooltip time {
   font-size: 10px;
@@ -474,6 +477,6 @@
 }
 .chartTooltip > div strong {
   margin: 0;
-  font-size: 16px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }

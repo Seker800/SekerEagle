@@ -227,3 +227,9 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 运行身份继续从 `.omx/artifacts/photo-workbench.json` 读取；日志位于 `.omx/artifacts/apple-map-workbench.log`，地图 SQL 隔离回归位于 `apple-map-integration.log`。底图改为独立自托管 PMTiles：`.local/maps/data/basemap.pmtiles` 保存全球 z0–7 和中国及周边 z8–14 的公开地理数据，来源日期、范围和 SHA-256 在同目录 `sources.json`；工作台按同源 Range 读取，不外发查看区域。照片标记缩小至 52px，减少提前合并，API 查询缩放上限同步提升至 16，近景网格最高 level 20，仍维持 1024 个理论网格预算。设计范围与地理精度见 [照片地图](photo-map.md)。
 
 本轮最终核验：全工作区 CI 门禁通过，地图 SQL 回归包含 16 级视口、level 20 的成员访问、私密／模式／版本隔离；密集页面测试保留 48 个独立位置。实际工作台含 31 张照片，其中 19 张带位置，真实样本集中少量拍摄地点，不应把该样本数量当作生产图库的显示上限。浏览器核对区域展开、近景街道、真实缩略图和选片；日志使用 `map-density-final-*`，底图来源和归档校验使用 `map-china-download.log`、`map-archive-verify.log`。
+
+## 2026-10-24 照片统计周周期修订
+
+按最新用户反馈，本地 API／web 默认同步为按相机、按周显示，提供最近 1／3／5 个日历年与所有时长（默认），保留自定义日期和年／月切换。周一为周起点，周中日期范围不计入范围外照片；悬浮框跟随指针，浏览器实测 160×42px。工作台复用原有 27 张私有照片样本和 4 张合成照片重新导入，未重新连接群晖；地图归档保留。进程／容器从 `.omx/artifacts/photo-workbench.json` 核验，当前轮工作台日志为 `statistics-week-workbench.log`。
+
+完整 `npm run ci:check` 通过，网页 696 项、API 341 项通过（1 项既有条件跳过）；统计聚焦测试为 API 8 项、网页及日期／曲线 20 项。真实 PostgreSQL 验证周跨年、周中范围、补零和原有 owner／模式／私密／版本隔离。浏览器核对四档范围、年／月／周切换、默认相机曲线与小型提示，实际鼠标命中仅显示一条设备数据。证据位于 `.omx/artifacts/statistics-week-*`，截图为 `statistics-week-final.png`。本轮未推送或部署生产，群晖图库和后台任务不变。
