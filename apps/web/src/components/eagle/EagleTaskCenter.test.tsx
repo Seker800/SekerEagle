@@ -221,3 +221,28 @@ describe('unified task center', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');
   });
 });
+
+describe('execution sections', () => {
+  it('shows three ordered sections, keeps disabled failures paused, and removes manual priority', async () => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+      ...summary,
+      groups: [
+        summary.groups[0]!,
+        { ...summary.groups[0]!, id: 'BROWSE', background: false },
+        { ...summary.groups[0]!, id: 'COLOR', queued: 0, failed: 6, availability: 'DISABLED', waiting: [] },
+      ],
+    });
+    mount();
+    const immediate = await screen.findByRole('region', { name: '立即处理' });
+    const scheduled = screen.getByRole('region', { name: '按时段处理' });
+    const paused = screen.getByRole('region', { name: '已暂停' });
+    expect(within(immediate).getByRole('heading', { name: '缩略图与预览' })).toBeVisible();
+    expect(within(scheduled).getByRole('heading', { name: '2B 向量搜图' })).toBeVisible();
+    expect(within(paused).getByRole('heading', { name: '代表色提取' })).toBeVisible();
+    expect(within(paused).getByText('服务器未启用')).toBeVisible();
+    expect(within(paused).queryByRole('button', { name: '继续这项工作' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('处理顺序')).not.toBeInTheDocument();
+    expect(immediate.compareDocumentPosition(scheduled) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scheduled.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

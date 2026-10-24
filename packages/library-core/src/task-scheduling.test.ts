@@ -32,3 +32,21 @@ test('video playback and source details are separate from immediately needed bro
   assert.equal(mediaTaskFamily('GENERATE_EMBEDDING', 'v1'), 'EMBEDDING');
   assert.equal(mediaTaskFamily('PURGE_ASSET', 'v1'), 'CLEANUP');
 });
+
+test('task sections explain actual execution without turning temporary waits into pauses', async () => {
+  const { taskSection, taskExecutionPriority } = await import('./task-scheduling');
+  const group = { id: 'EMBEDDING', background: true, queued: 5, running: 0, failed: 0, completed: 0, approval: 0, waiting: [], steps: [] } as const;
+  const make = (extra = {}) => ({ ...group, waiting: [], steps: [], ...extra });
+  const night = { mode: 'NIGHT', nightStart: '02:00', nightEnd: '10:00' };
+  assert.equal(taskSection(make(), night), 'SCHEDULED');
+  assert.equal(taskSection(make(), { ...night, mode: 'ALWAYS' }), 'IMMEDIATE');
+  assert.equal(taskSection(make(), { ...night, mode: 'MANUAL' }), 'PAUSED');
+  assert.equal(taskSection(make({ background: false, id: 'BROWSE' }), night), 'IMMEDIATE');
+  assert.equal(taskSection(make({ availability: 'DISABLED', failed: 2, queued: 0 }), night), 'PAUSED');
+  assert.equal(taskSection(make({ policy: { paused: true, priority: 1 } }), night), 'PAUSED');
+  assert.equal(taskSection(make({ waiting: [{ reason: 'MODEL_OFFLINE', count: 5, nextAt: null }] }), night), 'SCHEDULED');
+  assert.equal(taskSection(make({ id: 'APPROVALS', background: false }), night), 'REVIEW');
+  assert.ok(taskExecutionPriority('COLOR') > taskExecutionPriority('EMBEDDING'));
+  assert.ok(taskExecutionPriority('EMBEDDING') > taskExecutionPriority('DETAILS'));
+  assert.ok(taskExecutionPriority('DETAILS') > taskExecutionPriority('PYRAMID'));
+});
