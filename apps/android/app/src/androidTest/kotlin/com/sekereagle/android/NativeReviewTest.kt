@@ -106,6 +106,41 @@ class NativeReviewTest {
     }
 
     @Test
+    fun commonActionsOpenDirectlyFromTheOverflowMenuInBothLibraries() {
+        Server().use { server ->
+            val model = model(server)
+            val destinations = CopyOnWriteArrayList<String>()
+            compose.setContent { NativeGalleryApp(model) { destinations.add(it) } }
+            for (mode in GalleryMode.entries) {
+                compose.onNodeWithTag("mode:${mode.name}").performClick()
+                await { !model.state.value.loading }
+                compose.onNodeWithContentDescription("更多操作").performClick()
+                compose.onNodeWithText("更多", useUnmergedTree = true).assertDoesNotExist()
+                for (label in listOf("上传", "传输列表", "备份设置", "释放手机空间", "最近删除", "刷新", "账号与连接")) {
+                    compose.onNodeWithText(label, useUnmergedTree = true).assertExists()
+                }
+                compose.onNodeWithText("备份设置").performScrollTo().performClick()
+                assertEquals("backup", destinations.last())
+                compose.onNodeWithTag("native-library").assertExists()
+                compose.onNodeWithText("备份设置").assertDoesNotExist()
+                compose.onNodeWithContentDescription("更多操作").performClick()
+                compose.onNodeWithText("释放手机空间").performScrollTo().performClick()
+                assertEquals("cleanup", destinations.last())
+                compose.onNodeWithContentDescription("更多操作").performClick()
+                compose.onNodeWithText("账号与连接").performScrollTo().performClick()
+                compose.onNodeWithTag("native-account").assertExists()
+                compose.onNodeWithText("test@example.invalid").assertExists()
+                compose.onNodeWithText("退出登录").assertExists()
+                compose.onNodeWithText("备份设置").assertDoesNotExist()
+                compose.onNodeWithText("传输列表").assertDoesNotExist()
+                compose.onNodeWithContentDescription("返回").performClick()
+                compose.onNodeWithTag("native-library").assertExists()
+            }
+            main { model.logout() }
+        }
+    }
+
+    @Test
     fun prependingInsideTheVisibleDayKeepsTheSamePhotoAtTheSamePosition() {
         Server().use { server ->
             val model = model(server)
