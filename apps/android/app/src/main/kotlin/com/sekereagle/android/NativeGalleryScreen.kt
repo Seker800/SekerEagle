@@ -107,12 +107,10 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-internal fun NativeLibrary(
+internal fun NativeLibraryPage(
     state: GalleryState,
     model: NativeGalleryViewModel,
     repo: NativeGalleryRepository,
-    openNative: (String) -> Unit,
-    chooseUpload: () -> Unit,
     active: Boolean = true,
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
@@ -173,9 +171,6 @@ internal fun NativeLibrary(
             .distinctUntilChanged()
             .collect { if (it) model.loadPrevious() }
     }
-    val backdrop = rememberGraphicsLayer()
-    var sourceOffset by remember { mutableStateOf(Offset.Zero) }
-    var menu by rememberSaveable { mutableStateOf<NativeLibraryMenu?>(null) }
     var appliedScrollRequest by rememberSaveable { mutableIntStateOf(state.scrollRequest) }
     LaunchedEffect(state.scrollRequest) {
         // A restored composition already has the correct saved grid position. Only explicit
@@ -203,15 +198,8 @@ internal fun NativeLibrary(
                     model.load(true)
             }
     }
-    Box(Modifier.fillMaxSize().testTag("native-library")) {
-        Box(
-            Modifier.fillMaxSize()
-                .onGloballyPositioned { sourceOffset = it.positionInRoot() }
-                .drawWithContent {
-                    backdrop.record { this@drawWithContent.drawContent() }
-                    drawLayer(backdrop)
-                }
-        ) {
+    Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 GridCells.Fixed(state.columns),
                 state = grid,
@@ -366,6 +354,40 @@ internal fun NativeLibrary(
                     )
                 }
         }
+        if (state.timeline != null && !state.searchOpen && !state.selecting)
+            NativeFastScroll(
+                state,
+                grid,
+                model::jumpToDay,
+                Modifier.align(Alignment.CenterEnd)
+                    .fillMaxHeight()
+                    .padding(top = 90.dp, bottom = 110.dp),
+            )
+    }
+}
+
+@Composable
+internal fun NativeLibrary(
+    state: GalleryState,
+    model: NativeGalleryViewModel,
+    openNative: (String) -> Unit,
+    chooseUpload: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    val backdrop = rememberGraphicsLayer()
+    var sourceOffset by remember { mutableStateOf(Offset.Zero) }
+    var menu by rememberSaveable(state.mode) { mutableStateOf<NativeLibraryMenu?>(null) }
+    Box(Modifier.fillMaxSize().testTag("native-library")) {
+        Box(
+            Modifier.fillMaxSize()
+                .onGloballyPositioned { sourceOffset = it.positionInRoot() }
+                .drawWithContent {
+                    backdrop.record { this@drawWithContent.drawContent() }
+                    drawLayer(backdrop)
+                }
+        ) {
+            content()
+        }
         if (!state.selecting)
             Row(
                 Modifier.align(Alignment.TopEnd).padding(top = 8.dp, end = 14.dp),
@@ -434,17 +456,10 @@ internal fun NativeLibrary(
             ) {
                 Text(state.message, Modifier.padding(14.dp))
             }
-        if (state.timeline != null && !state.searchOpen && !state.selecting)
-            NativeFastScroll(
-                state,
-                grid,
-                model::jumpToDay,
-                Modifier.align(Alignment.CenterEnd)
-                    .fillMaxHeight()
-                    .padding(top = 90.dp, bottom = 110.dp),
-            )
         menu?.let { activeMenu ->
-            NativeGalleryMenu(activeMenu, state, model, chooseUpload, openNative) { menu = null }
+            NativeGalleryMenu(activeMenu, state, model, chooseUpload, openNative) {
+                menu = null
+            }
         }
     }
 }

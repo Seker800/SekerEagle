@@ -2,6 +2,8 @@ package com.sekereagle.android
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -10,6 +12,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -36,37 +40,58 @@ internal fun NativeLibraryPager(
             .drop(1)
             .collect { model.switchMode(GalleryMode.entries[it]) }
     }
-    HorizontalPager(
-        state = pager,
-        modifier = Modifier.fillMaxSize(),
-        key = { GalleryMode.entries[it].name },
-        beyondViewportPageCount = 1,
-        userScrollEnabled =
-            !state.busy &&
-                !state.selecting &&
-                state.viewerId == null &&
-                !state.searchOpen &&
-                !state.accountOpen &&
-                !state.cacheOpen &&
-                !state.transfersOpen &&
-                state.filterPanel == null,
-    ) { page ->
-        val mode = GalleryMode.entries[page]
-        val active = state.mode == mode
-        val library =
-            if (active) state
-            else
-                retained[mode]
-                    ?: GalleryState(
-                        identity = state.identity,
-                        restoring = false,
-                        mode = mode,
-                        loading = true,
-                        sort = GallerySort.default(mode),
-                    )
-        // Offscreen pages remain composed, but do not expose duplicate accessibility actions.
-        Box(if (active) Modifier else Modifier.clearAndSetSemantics {}) {
-            NativeLibrary(library, model, repo, openNative, chooseUpload, active)
+    NativeLibrary(state, model, openNative, chooseUpload) {
+        HorizontalPager(
+            state = pager,
+            modifier = Modifier.fillMaxSize(),
+            key = { GalleryMode.entries[it].name },
+            beyondViewportPageCount = 1,
+            userScrollEnabled =
+                !state.busy &&
+                    !state.selecting &&
+                    state.viewerId == null &&
+                    !state.searchOpen &&
+                    !state.accountOpen &&
+                    !state.cacheOpen &&
+                    !state.transfersOpen &&
+                    state.filterPanel == null,
+        ) { page ->
+            val mode = GalleryMode.entries[page]
+            val active = state.mode == mode
+            val library =
+                if (active) state
+                else
+                    retained[mode]
+                        ?: GalleryState(
+                            identity = state.identity,
+                            restoring = false,
+                            mode = mode,
+                            loading = true,
+                            sort = GallerySort.default(mode),
+                        )
+            // Offscreen pages remain composed, but do not expose duplicate accessibility actions.
+            Box(
+                if (active) Modifier
+                else
+                    Modifier.clearAndSetSemantics {}
+                        .pointerInput(Unit) {
+                            // During animation, outgoing controls must not dispatch into the new
+                            // mode.
+                            awaitEachGesture {
+                                awaitFirstDown(
+                                        requireUnconsumed = false,
+                                        pass = PointerEventPass.Initial,
+                                    )
+                                    .consume()
+                                do {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                            }
+                        }
+            ) {
+                NativeLibraryPage(library, model, repo, active)
+            }
         }
     }
 }

@@ -32,6 +32,8 @@ class NativeReviewTest {
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
         @Volatile var version = 1
+        @Volatile var listDelay = 0L
+        @Volatile var revoked = false
         private val thread =
             Thread {
                     try {
@@ -49,7 +51,14 @@ class NativeReviewTest {
                                     length = line.substringAfter(':').trim().toInt()
                             }
                             repeat(length) { reader.read() }
-                            val status = if (path == "/api/auth/login") 401 else 200
+                            if (path.contains("/assets?")) Thread.sleep(listDelay)
+                            val status =
+                                if (
+                                    path == "/api/auth/login" ||
+                                        (revoked && path.startsWith("/api/auth/"))
+                                )
+                                    401
+                                else 200
                             val body =
                                 when {
                                     path == "/api/auth/me" ->
@@ -67,7 +76,10 @@ class NativeReviewTest {
                                             (start until minOf(start + 60, 180)).joinToString(
                                                 ","
                                             ) { i ->
-                                                """{"id":"asset$i","displayName":"item$i","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
+                                                val prefix =
+                                                    if (path.startsWith("/api/eagle/")) "material"
+                                                    else "asset"
+                                                """{"id":"$prefix$i","displayName":"item$i","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
                                             }
                                         """{"items":[$items],"nextCursor":${if (start + 60 < 180) "\"${start+60}\"" else "null"}}"""
                                     }
@@ -176,6 +188,32 @@ class NativeReviewTest {
             .value()
 
     @Test
+    fun navigationStaysFixedWhileDraggingLibraryContent() {
+        Server().use { server ->
+            val model = model(server)
+            await { model.retainedLibraries.value[GalleryMode.MATERIAL]?.loaded == true }
+            compose.setContent { NativeGalleryApp(model) {} }
+            val before = compose.onNodeWithTag("mode:PHOTO").fetchSemanticsNode().boundsInRoot
+            val photoLeft =
+                compose.onNodeWithTag("asset:asset2").fetchSemanticsNode().boundsInRoot.left
+            compose.onNodeWithTag("native-library").performTouchInput {
+                down(androidx.compose.ui.geometry.Offset(width * 0.8f, height * 0.4f))
+                moveBy(androidx.compose.ui.geometry.Offset(-width * 0.35f, 0f), delayMillis = 200)
+            }
+            compose.waitForIdle()
+            val during = compose.onNodeWithTag("mode:PHOTO").fetchSemanticsNode().boundsInRoot
+            assertEquals(before, during)
+            assertTrue(
+                compose.onNodeWithTag("asset:asset2").fetchSemanticsNode().boundsInRoot.left <
+                    photoLeft - 50f
+            )
+            compose.onNodeWithTag("native-library").performTouchInput { up() }
+            compose.waitForIdle()
+            main { model.logout() }
+        }
+    }
+
+    @Test
     fun authenticatedLaunchDoesNotImmediatelyRepeatValidationOrReload() {
         Server().use { server ->
             val model = model(server)
@@ -191,6 +229,44 @@ class NativeReviewTest {
             )
             assertTrue(model.retainedLibraries.value[GalleryMode.MATERIAL]!!.items.isNotEmpty())
             main { model.logout() }
+        }
+    }
+
+    @Test
+    fun rapidSwitchingDuringSearchKeepsModeDataAndRejectsRevokedRetainedPages() {
+        Server().use { server ->
+            val model = model(server)
+            await { model.retainedLibraries.value[GalleryMode.MATERIAL]?.loaded == true }
+            server.listDelay = 150L
+            compose.setContent { NativeGalleryApp(model) {} }
+            main {
+                model.search("photos")
+                model.switchMode(GalleryMode.MATERIAL)
+            }
+            assertTrue(model.state.value.items.all { it.id.startsWith("material") })
+            main { model.search("materials") }
+            main { model.switchMode(GalleryMode.PHOTO) }
+            await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+            assertEquals("photos", model.state.value.query)
+            assertTrue(model.state.value.items.all { it.id.startsWith("asset") })
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+            assertEquals("materials", model.state.value.query)
+            assertTrue(model.state.value.items.all { it.id.startsWith("material") })
+            repeat(4) {
+                main { model.switchMode(GalleryMode.PHOTO) }
+                main { model.switchMode(GalleryMode.MATERIAL) }
+            }
+            compose.waitForIdle()
+            assertEquals(GalleryMode.MATERIAL, model.state.value.mode)
+            server.revoked = true
+            main {
+                model.onBackground()
+                model.onForeground()
+            }
+            await { model.state.value.identity == null }
+            assertTrue(model.retainedLibraries.value.isEmpty())
+            compose.onNodeWithTag("native-library").assertDoesNotExist()
         }
     }
 

@@ -543,6 +543,9 @@ class NativeGalleryTest {
 
     @Test
     fun modesUseIndependentResourcesAndLogoutClearsNativeFlow() {
+        fun currentModel() =
+            androidx.lifecycle
+                .ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
         login()
         firstAsset()
         val session = NativeSession.open(context, credentials.getString("origin"))
@@ -559,6 +562,20 @@ class NativeGalleryTest {
         assertTrue(photoIds.isNotEmpty())
         assertTrue(materialIds.isNotEmpty())
         assertTrue(photoIds.intersect(materialIds).isEmpty())
+        compose.onNodeWithTag("native-library").performTouchInput { swipeLeft() }
+        compose.waitUntil(10_000) {
+            currentModel().state.value.mode == GalleryMode.MATERIAL &&
+                !currentModel().state.value.loading
+        }
+        assertTrue(currentModel().state.value.items.all { it.id in materialIds })
+        capture("native-library-materials.png")
+        compose.onNodeWithTag("native-library").performTouchInput { swipeRight() }
+        compose.waitUntil(10_000) {
+            currentModel().state.value.mode == GalleryMode.PHOTO &&
+                !currentModel().state.value.loading
+        }
+        assertTrue(currentModel().state.value.items.all { it.id in photoIds })
+        capture("native-library-photos.png")
         val settings = BackupSettings(context)
         val encrypted =
             settings.value("native-session:${credentials.getString("origin")}", "credential", "")

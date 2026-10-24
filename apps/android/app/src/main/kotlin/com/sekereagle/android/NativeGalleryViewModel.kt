@@ -72,7 +72,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     val retainedLibraries = retained.asStateFlow()
     private val staleLibraries = mutableSetOf<GalleryMode>()
     private var prefetchJob: Job? = null
-    private var lastValidation = 0L
+    private var foreground = true
 
     private fun initialLibrary(identity: NativeIdentity, mode: GalleryMode) =
         GalleryState(
@@ -87,7 +87,6 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         prefetchJob?.cancel()
         retained.value = emptyMap()
         staleLibraries.clear()
-        lastValidation = 0L
     }
 
     private fun invalidateInactiveLibrary() {
@@ -304,7 +303,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 }
                 if (request != generation) return@launch
                 cityReady.await()
-                lastValidation = android.os.SystemClock.elapsedRealtime()
+                if (request != generation) return@launch
                 session = connection
                 repository = NativeGalleryRepository(connection, scope, mediaCache)
                 mutable.value =
@@ -951,14 +950,14 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value = GalleryState(restoring = false)
     }
 
-    fun onForeground() {
+    fun onForeground(recreated: Boolean = false) {
+        // Cold authentication validates once. A real return or recreated Activity validates again,
+        // including brief transitions, while keeping the loaded window and its visible anchor.
+        if (foreground && !recreated) return
+        foreground = true
         val identity = state.value.identity ?: return
         val connection = session ?: return
-        if (
-            foregroundJob?.isActive == true ||
-                android.os.SystemClock.elapsedRealtime() - lastValidation < 30_000
-        )
-            return
+        if (foregroundJob?.isActive == true) return
         foregroundJob = viewModelScope.launch {
             try {
                 val me = withContext(Dispatchers.IO) { connection.json("GET", "/api/auth/me") }
@@ -971,7 +970,6 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     connection.invalidateLocally()
                     expire()
                 } else {
-                    lastValidation = android.os.SystemClock.elapsedRealtime()
                     invalidateInactiveLibrary()
                     automaticallyBackup()
                     val current = state.value
@@ -1001,6 +999,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun onBackground() {
+        foreground = false
         downloads.cancel()
     }
 

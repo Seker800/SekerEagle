@@ -13,9 +13,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 /** The exported launcher contains no WebView. Legacy Java screens only host backup/cleanup. */
 class NativeActivity : ComponentActivity() {
     private lateinit var model: NativeGalleryViewModel
+    private var revalidateOnResume = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        revalidateOnResume = savedInstanceState != null
         clearLegacyWebSessionOnce()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
@@ -69,6 +71,9 @@ class NativeActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (::model.isInitialized) model.onForeground()
+        if (::model.isInitialized) {
+            model.onForeground(recreated = revalidateOnResume)
+            revalidateOnResume = false
+        }
     }
 }
