@@ -102,3 +102,26 @@ test('matching uses only one published embedding and current media versions in t
     },
   });
 });
+
+test('folder metadata cannot override snapshot identity or leak into scoped predicates', async () => {
+  const f = fixture();
+  const folder = { ...scope, id: 'folder-id' };
+  await scheduleSmartFolderSnapshot(
+    f.tx as never,
+    folder,
+    folder.id,
+    { text: '海边', breadth: 'STRICT' },
+    'space',
+    0.35,
+  );
+  assert.equal(
+    f.created[0]!.data.id,
+    undefined,
+    'the snapshot must have its own generated identity',
+  );
+  assert.deepEqual(f.deleted[0], { where: { ...scope, folderId: folder.id, isActive: false } });
+  assert.deepEqual(
+    smartFolderMatchWhere(folder, folder.id),
+    smartFolderMatchWhere(scope, folder.id),
+  );
+});

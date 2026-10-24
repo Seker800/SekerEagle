@@ -174,7 +174,22 @@ try {
     },
   };
   const step = () => runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer));
-  await step();
+  // The application and database can have different clocks. A completed batch must
+  // remain immediately claimable rather than wait for the application's wall clock.
+  const actualNow = Date.now;
+  Date.now = () => actualNow() + 60_000;
+  try {
+    await step();
+  } finally {
+    Date.now = actualNow;
+  }
+  const [claimable] =
+    await client.$queryRaw`SELECT "availableAt"<=now() AS ready FROM "EagleSmartFolderSemanticSnapshot" WHERE "folderId"=${folder.id}`;
+  assert.equal(
+    claimable.ready,
+    true,
+    'successful batches must be immediately claimable by the database clock',
+  );
   let state = (await service.listSmartFolders(ownerId))[0].semanticState;
   assert.equal(state.status, 'BUILDING');
   assert.equal(
@@ -410,7 +425,22 @@ try {
   });
   await reconcileSmartFolderSpaces(client, 'test-new-space');
   assert.equal(await client.eagleSmartFolderSemanticSnapshot.count(), 2);
-  assert.ok((await service.listSmartFolders(ownerId))[0].semanticState.hasResults);
+  assert.ok(
+    (await service.listSmartFolders(ownerId))[0].semanticState.hasResults,
+    JSON.stringify(
+      await client.eagleSmartFolderSemanticSnapshot.findMany({
+        select: {
+          id: true,
+          text: true,
+          status: true,
+          isActive: true,
+          spaceId: true,
+          scannedCount: true,
+          errorCode: true,
+        },
+      }),
+    ),
+  );
   await runSmartFolderBuildStep(client, 'test-new-space', infer.run.bind(infer));
   assert.equal((await service.listSmartFolders(ownerId))[0].semanticState.status, 'BUILDING');
   assert.ok(
