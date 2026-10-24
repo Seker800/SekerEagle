@@ -30,7 +30,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             }
         } catch (_: Exception) {
             jar.clear()
-            settings.setValue(storageKey, "credential", "")
+            runCatching { settings.clearToken(storageKey) }
         }
     }
 
@@ -201,7 +201,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         epoch++
         blocked = true
         jar.clear()
-        settings.setValue(storageKey, "credential", "")
+        runCatching { settings.clearToken(storageKey) }
     }
 
     private fun ensureActive(ticket: Int) =
@@ -348,17 +348,33 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                 if (status == 401) clear()
                 throw Failure(status)
             }
+            var persistenceFailure: Exception? = null
             synchronized(credentialLock) {
                 ensureActive(ticket)
+                val next = NativeCookies(origin).apply { restore(jar.snapshot()) }
                 var changed = false
                 connection.headerFields.forEach { (name, values) ->
                     if (name?.equals("Set-Cookie", true) == true)
                         values.forEach {
-                            jar.accept(it)
+                            next.accept(it)
                             changed = true
                         }
                 }
-                if (changed) settings.saveToken(storageKey, JSONObject(jar.snapshot()).toString())
+                if (changed) {
+                    try {
+                        settings.saveToken(storageKey, JSONObject(next.snapshot()).toString())
+                        jar.restore(next.snapshot())
+                    } catch (failure: Exception) {
+                        // Never publish a rotated session that has not been safely persisted.
+                        pendingLogout = next.header("/api/auth/logout")
+                        erase()
+                        persistenceFailure = failure
+                    }
+                }
+            }
+            persistenceFailure?.let {
+                runCatching { logout() }
+                throw IOException("登录凭据保存失败，请检查手机存储后重新登录", it)
             }
             return consume(connection) {
                 cancellation?.check()

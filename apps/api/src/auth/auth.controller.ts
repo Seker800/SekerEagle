@@ -153,6 +153,15 @@ export class AuthController {
     return this.pats.create(principal.sub, dto.name, dto.scopes);
   }
 
+  @Delete('tokens/current')
+  @UseGuards(AccessAuthGuard)
+  async revokeCurrentToken(@CurrentPrincipal() principal: AuthPrincipal, @Req() request: Request) {
+    if (principal.kind !== 'pat') throw new UnauthorizedException('此入口仅撤销当前 PAT。');
+    const token = request.headers.authorization!.trim().slice(7).trim();
+    await this.pats.revokeCurrent(principal.sub, token);
+    return { ok: true };
+  }
+
   @Delete('tokens/:tokenId')
   @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, BrowserOriginGuard)
   async revokeToken(

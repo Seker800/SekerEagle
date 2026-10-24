@@ -50,6 +50,13 @@ export class PatService {
     });
   }
 
+  async revokeCurrent(userId: string, token: string): Promise<void> {
+    await this.prisma.personalAccessToken.updateMany({
+      where: { userId, tokenHash: this.hash(token), revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
   async authenticate(token: string): Promise<AuthPrincipal> {
     if (!token.startsWith(PAT_PREFIX)) throw new UnauthorizedException('PAT 格式无效。');
     const record = await this.prisma.personalAccessToken.findUnique({

@@ -19,7 +19,11 @@ final class BackupSettings {
   private final SharedPreferences preferences;
 
   BackupSettings(Context context) {
-    preferences = context.getSharedPreferences("backup", Context.MODE_PRIVATE);
+    this(context.getSharedPreferences("backup", Context.MODE_PRIVATE));
+  }
+
+  BackupSettings(SharedPreferences preferences) {
+    this.preferences = preferences;
   }
 
   String origin() {
@@ -49,7 +53,9 @@ final class BackupSettings {
   void setValue(String scope, String key, String value) {
     SharedPreferences.Editor editor = preferences.edit().putString(scope + ":" + key, value);
     // Credential erasure must survive process death; ordinary preferences never block UI writes.
-    if (key.equals("credential")) editor.commit();
+    if (key.equals("credential")) {
+      if (!editor.commit()) throw new IllegalStateException("凭据未能安全保存，请检查手机存储后重试");
+    }
     else editor.apply();
   }
 
@@ -95,10 +101,11 @@ final class BackupSettings {
 
   void saveToken(String scope, String token) throws Exception {
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-    cipher.init(Cipher.ENCRYPT_MODE, key());
+    cipher.init(Cipher.ENCRYPT_MODE, key(alias(scope), true));
     cipher.updateAAD(scope.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     JSONObject record =
         new JSONObject()
+            .put("keyVersion", 2)
             .put("iv", Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP))
             .put(
                 "data",
@@ -115,7 +122,7 @@ final class BackupSettings {
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
     cipher.init(
         Cipher.DECRYPT_MODE,
-        key(),
+        key(record.optInt("keyVersion") == 2 ? alias(scope) : "sekereagle-backup-v1", false),
         new GCMParameterSpec(128, Base64.decode(record.getString("iv"), Base64.NO_WRAP)));
     cipher.updateAAD(scope.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     return new String(
@@ -123,11 +130,26 @@ final class BackupSettings {
         java.nio.charset.StandardCharsets.UTF_8);
   }
 
-  private SecretKey key() throws Exception {
+  void clearToken(String scope) throws Exception {
+    String raw = value(scope, "credential", "");
     KeyStore store = KeyStore.getInstance("AndroidKeyStore");
     store.load(null);
-    String alias = "sekereagle-backup-v1";
+    store.deleteEntry(alias(scope));
+    // Old versions shared one key. Erase it only when clearing an unmigrated credential.
+    if (!raw.isEmpty() && new JSONObject(raw).optInt("keyVersion") != 2)
+      store.deleteEntry("sekereagle-backup-v1");
+    setValue(scope, "credential", "");
+  }
+
+  private String alias(String scope) {
+    return "sekereagle-credential-v2-" + BackupPolicy.digest(scope);
+  }
+
+  private SecretKey key(String alias, boolean create) throws Exception {
+    KeyStore store = KeyStore.getInstance("AndroidKeyStore");
+    store.load(null);
     if (store.containsAlias(alias)) return (SecretKey) store.getKey(alias, null);
+    if (!create) throw new java.security.KeyStoreException("凭据已清除，请重新登录或授权");
     KeyGenerator generator =
         KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore");
     generator.init(
