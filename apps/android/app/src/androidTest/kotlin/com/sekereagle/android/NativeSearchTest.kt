@@ -456,6 +456,47 @@ class NativeSearchTest {
         }
     }
 
+    @Test
+    fun tagConfirmationIsVisibleAboveTheKeyboardAndSearchResultsStayReachable() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { model.openSearch(); model.openFilters("标签") }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithTag("tag-search").performTextInput("bq1")
+            await { compose.onAllNodesWithText("标签1").fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText("标签1").performClick()
+            val submit = compose.onNodeWithTag("filter-submit").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val input = compose.onNodeWithTag("tag-search").fetchSemanticsNode().boundsInRoot
+            assertTrue("Confirmation must stay in the sheet header above the keyboard and list", submit.bottom <= input.top)
+            compose.onNodeWithTag("filter-submit").performClick()
+            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
+            await { !model.state.value.loading && !model.state.value.searchOpen }
+            assertEquals(setOf("tag1"), model.state.value.filters.tags)
+            assertTrue(server.paths.last { it.contains("/assets?") }.contains("manualTagIds=tag1"))
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun pullingDownRefreshesTheCurrentSearchAndKeepsItsFilters() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { model.search("flower", NativeFilters(tags = setOf("tag1"), formats = setOf("png"))) }
+            await { !model.state.value.loading }
+            val requests = server.paths.count { it.contains("/assets?") }
+            compose.onNodeWithTag("native-grid").performTouchInput { swipeDown(startY = height * 0.2f, endY = height * 0.85f, durationMillis = 600) }
+            compose.waitUntil(3000) { server.paths.count { it.contains("/assets?") } > requests }
+            await { !model.state.value.loading }
+            assertEquals("flower", model.state.value.query)
+            assertEquals(setOf("tag1"), model.state.value.filters.tags)
+            val path = server.paths.last { it.contains("/assets?") }
+            assertTrue(path.contains("manualTagIds=tag1") && path.contains("formats=png") && path.contains("search=flower"))
+            main { model.logout() }
+        }
+    }
+
     private fun hasTestTagPrefix(prefix: String) =
         SemanticsMatcher("tag starts $prefix") {
             it.config
