@@ -40,7 +40,7 @@ test('NAS uses matching signed upload host and no Mac runtime mounts', async () 
     assert.equal(env.S3_ENDPOINT, 'http://minio:9000');
     assert.equal(env.S3_BUCKET, 'sekereagle-assets');
     assert.equal(env.MLX_EMBEDDING_URL, 'http://127.0.0.1:11435');
-    assert.equal(env.OLLAMA_URL, 'http://127.0.0.1:11434');
+    assert.equal(env.OLLAMA_URL, undefined);
   }
   assert.equal(result.services.api.volumes, undefined);
   assert.deepEqual(result.services.worker.profiles, ['processing']);

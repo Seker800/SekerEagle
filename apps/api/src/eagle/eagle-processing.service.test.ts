@@ -46,7 +46,7 @@ test('reconciler creates every missing current-version image task', async () => 
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 2, created: 5, skipped: 0, remaining: 0 });
+  assert.deepEqual(result, { scanned: 2, created: 3, skipped: 0, remaining: 0 });
   const paletteJob = created.find(
     (job) => (job as { kind?: string }).kind === 'EXTRACT_COLOR_PALETTE',
   );
@@ -70,7 +70,7 @@ test('reconciler creates every missing current-version image task', async () => 
   );
   assert.equal(
     created.filter((job) => (job as { kind?: string }).kind === 'GENERATE_AI_TAGS').length,
-    2,
+    0,
   );
 });
 
@@ -97,7 +97,7 @@ test('reconciler scans beyond the first page without exceeding its creation boun
 
   const result = await service.reconcile('owner-1');
 
-  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1504 });
+  assert.deepEqual(result, { scanned: 501, created: 500, skipped: 0, remaining: 1003 });
   assert.equal(page, 2);
 });
 
@@ -133,18 +133,7 @@ test('reconciler skips an AI job whose completed result survived job pruning', a
     created.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
     false,
   );
-  assert.deepEqual(completionQueries, [
-    {
-      by: ['assetId', 'assetRevision'],
-      where: {
-        libraryMode: 'MATERIAL',
-        ownerId: 'owner-1',
-        assetId: { in: ['asset-1'] },
-        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
-        status: { in: ['SUCCEEDED', 'SUPERSEDED'] },
-      },
-    },
-  ]);
+  assert.deepEqual(completionQueries, []);
 });
 
 test('retrying a required media task restores the current asset processing lifecycle', async () => {

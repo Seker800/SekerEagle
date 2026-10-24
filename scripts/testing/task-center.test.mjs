@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { test, after } from 'node:test';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
@@ -291,4 +292,129 @@ test('per-category pause is applied before the candidate limit and priority leav
   );
   const material = await new EagleTaskCenterService(prisma, 'MATERIAL').overview(f.owner);
   assert.ok(!material.groups.some((group) => group.policy?.paused));
+});
+
+test('retired generation is absent from overview, claims and retry while 2B work remains active', async () => {
+  const f = await fixture();
+  const a = await f.asset();
+  for (let n = 0; n < 60; n++)
+    await f.job(a, { kind: 'GENERATE_AI_TAGS', processorVersion: `legacy-${n}`, status: 'FAILED' });
+  const active = await f.job(a);
+  const summary = await f.service.overview(f.owner);
+  assert.equal(
+    summary.groups.some((g) => g.id === 'AI_TAGS'),
+    false,
+  );
+  assert.equal(
+    summary.groups.some((g) => g.steps.some((s) => s.id === 'GENERATE_AI_TAGS')),
+    false,
+  );
+  const query = { where: { lane: 'BACKGROUND', kind: { not: 'GENERATE_AI_TAGS' } }, take: 50 };
+  await prisma.eagleProcessingSetting.upsert({
+    where: { ownerId_libraryMode: { ownerId: f.owner, libraryMode: 'PHOTO' } },
+    create: { ownerId: f.owner, libraryMode: 'PHOTO', mode: 'ALWAYS', aiTagManualEnabled: true },
+    update: { mode: 'ALWAYS', aiTagManualEnabled: true },
+  });
+  await prisma.eagleAssetProcessingJob.updateMany({
+    where: { ownerId: f.owner, kind: 'GENERATE_AI_TAGS' },
+    data: { status: 'PENDING' },
+  });
+  assert.ok(
+    (await selectScheduledMediaCandidates(prisma, query)).every(
+      (job) => job.kind !== 'GENERATE_AI_TAGS',
+    ),
+  );
+  assert.ok(
+    (await selectScheduledMediaCandidates(prisma, query)).some((job) => job.id === active.id),
+  );
+  await prisma.eagleAssetProcessingJob.updateMany({
+    where: { ownerId: f.owner, kind: 'GENERATE_AI_TAGS' },
+    data: { status: 'FAILED' },
+  });
+  await assert.rejects(f.service.retry(f.owner, 'BROWSE'), { status: 404 });
+});
+
+test('retirement migration revokes old leases and preserves generated tags and successful history', async () => {
+  const f = await fixture();
+  const a = await f.asset();
+  const legacy = await f.job(a, {
+    kind: 'GENERATE_AI_TAGS',
+    status: 'PROCESSING',
+    leaseVersion: 3,
+    lockedAt: new Date(),
+  });
+  const active = await f.job(a);
+  const run = await prisma.eagleAiAnalysisRun.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      assetId: a.id,
+      assetRevision: a.mediaRevision,
+      provider: 'OLLAMA',
+      model: 'historical',
+      promptVersion: 'historical',
+      status: 'SUCCEEDED',
+    },
+  });
+  const tag = await prisma.eagleAiTag.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      name: 'Historical',
+      normalizedName: 'historical',
+    },
+  });
+  const link = await prisma.eagleAssetAiTag.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      assetId: a.id,
+      aiTagId: tag.id,
+      analysisRunId: run.id,
+      confidence: 1,
+    },
+  });
+  const sql = await readFile(
+    new URL(
+      '../../apps/api/prisma/migrations/20261024150000_retire_ai_tag_generation/migration.sql',
+      import.meta.url,
+    ),
+    'utf8',
+  );
+  const rollback = new Error('Rollback isolated migration verification');
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      for (const statement of sql.split(';').filter((part) => part.trim()))
+        await tx.$executeRawUnsafe(statement);
+      const retired = await tx.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: legacy.id },
+      });
+      assert.equal(retired.status, 'FAILED');
+      assert.equal(retired.leaseVersion, 4);
+      assert.equal(retired.lastError, 'FEATURE_RETIRED');
+      assert.equal(retired.lockedAt, null);
+      assert.equal(
+        (await tx.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: active.id } })).status,
+        'PENDING',
+      );
+      assert.equal(
+        (await tx.eagleAiAnalysisRun.findUniqueOrThrow({ where: { id: run.id } })).status,
+        'SUCCEEDED',
+      );
+      assert.ok(await tx.eagleAiTag.findUnique({ where: { id: tag.id } }));
+      assert.ok(
+        await tx.eagleAssetAiTag.findFirst({
+          where: {
+            ownerId: link.ownerId,
+            libraryMode: link.libraryMode,
+            assetId: link.assetId,
+            aiTagId: link.aiTagId,
+            analysisRunId: link.analysisRunId,
+          },
+        }),
+      );
+      throw rollback;
+    }),
+    (error) => error === rollback,
+  );
 });

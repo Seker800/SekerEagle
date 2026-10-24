@@ -836,70 +836,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/eagle/ai-tags/summary': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['EagleAiTagController_summary'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/eagle/ai-tags/scan-missing': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['EagleAiTagController_scanMissing'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/eagle/ai-tags/retry-failed': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['EagleAiTagController_retryFailed'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/eagle/ai-tags/settings': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations['EagleAiTagController_updateSettings'];
-    trace?: never;
-  };
   '/api/eagle/browser-captures': {
     parameters: {
       query?: never;
@@ -2836,70 +2772,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/photos/ai-tags/summary': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get: operations['PhotoAiTagsController_summary'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/photos/ai-tags/scan-missing': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['PhotoAiTagsController_scanMissing'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/photos/ai-tags/retry-failed': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post: operations['PhotoAiTagsController_retryFailed'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/photos/ai-tags/settings': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch: operations['PhotoAiTagsController_updateSettings'];
-    trace?: never;
-  };
   '/api/photos/vector/summary': {
     parameters: {
       query?: never;
@@ -3500,16 +3372,6 @@ export interface components {
       parentId?: Record<string, never> | null;
       position: number;
     };
-    UpdateEagleAiTagSettingsDto: {
-      /** @example false */
-      manualEnabled: boolean;
-      /** @example false */
-      scheduleEnabled: boolean;
-      /** @example 23:00 */
-      scheduleStart: string;
-      /** @example 06:00 */
-      scheduleEnd: string;
-    };
     InitiateEagleBrowserCaptureDto: {
       /** Format: uuid */
       clientCaptureId: string;
@@ -3575,7 +3437,6 @@ export interface components {
         | 'DETAILS'
         | 'VIDEO'
         | 'EMBEDDING'
-        | 'AI_TAGS'
         | 'FACES'
         | 'COLOR'
         | 'PYRAMID'
@@ -3591,7 +3452,6 @@ export interface components {
         | 'DETAILS'
         | 'VIDEO'
         | 'EMBEDDING'
-        | 'AI_TAGS'
         | 'FACES'
         | 'COLOR'
         | 'PYRAMID'
@@ -5133,78 +4993,6 @@ export interface operations {
     };
     responses: {
       201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleAiTagController_summary: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleAiTagController_scanMissing: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleAiTagController_retryFailed: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  EagleAiTagController_updateSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateEagleAiTagSettingsDto'];
-      };
-    };
-    responses: {
-      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -8171,78 +7959,6 @@ export interface operations {
     };
     responses: {
       201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotoAiTagsController_summary: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotoAiTagsController_scanMissing: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotoAiTagsController_retryFailed: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  PhotoAiTagsController_updateSettings: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateEagleAiTagSettingsDto'];
-      };
-    };
-    responses: {
-      200: {
         headers: {
           [name: string]: unknown;
         };

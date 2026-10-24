@@ -12,9 +12,9 @@ export type EagleMediaJobKind =
   | 'PROBE_MEDIA'
   | 'EXTRACT_COLOR_PALETTE'
   | 'GENERATE_IMAGE_PYRAMID'
+  | 'GENERATE_AI_TAGS' // Historical rows only; never selected or executed.
   | 'GENERATE_EMBEDDING'
   | 'ANALYZE_PHOTO_FACES'
-  | 'GENERATE_AI_TAGS'
   | 'PURGE_ASSET';
 export type EagleProcessingLane = 'INTERACTIVE' | 'BACKGROUND' | 'MAINTENANCE';
 
@@ -37,8 +37,8 @@ const LANE_BY_KIND: Record<EagleMediaJobKind, EagleProcessingLane> = {
   PROBE_MEDIA: 'INTERACTIVE',
   EXTRACT_COLOR_PALETTE: 'BACKGROUND',
   GENERATE_IMAGE_PYRAMID: 'BACKGROUND',
-  GENERATE_EMBEDDING: 'BACKGROUND',
   GENERATE_AI_TAGS: 'BACKGROUND',
+  GENERATE_EMBEDDING: 'BACKGROUND',
   ANALYZE_PHOTO_FACES: 'BACKGROUND',
   PURGE_ASSET: 'MAINTENANCE',
 };
@@ -49,7 +49,10 @@ export function parseProcessingJobKinds(
 ): readonly EagleMediaJobKind[] | undefined {
   if (value === undefined) return undefined;
   const kinds = value.split(',').map((kind) => kind.trim());
-  if (!kinds.length || kinds.some((kind) => !Object.hasOwn(LANE_BY_KIND, kind)))
+  if (
+    !kinds.length ||
+    kinds.some((kind) => kind === 'GENERATE_AI_TAGS' || !Object.hasOwn(LANE_BY_KIND, kind))
+  )
     throw new Error('EAGLE_PROCESSING_JOB_KINDS must contain supported, nonempty job kinds');
   return Object.freeze([...new Set(kinds as EagleMediaJobKind[])]);
 }
@@ -90,40 +93,14 @@ export function canClaimBackgroundJobs(
 }
 
 export function mediaBackgroundAllowed(
-  settings:
-    | (BackgroundSchedule & {
-        aiTagManualEnabled?: boolean;
-        aiTagScheduleEnabled?: boolean;
-        aiTagScheduleStart?: string;
-        aiTagScheduleEnd?: string;
-      })
-    | null,
+  settings: BackgroundSchedule | null,
   kind: string,
   now = new Date(),
 ): boolean {
-  if (!backgroundScheduleAllows(settings ?? DEFAULT_BACKGROUND_SCHEDULE, now)) return false;
   return (
-    kind !== 'GENERATE_AI_TAGS' ||
-    canClaimAiTagJobs(
-      settings?.aiTagManualEnabled ?? false,
-      settings?.aiTagScheduleEnabled ?? false,
-      settings?.aiTagScheduleStart ?? '23:00',
-      settings?.aiTagScheduleEnd ?? '06:00',
-      now,
-    )
+    kind !== 'GENERATE_AI_TAGS' &&
+    backgroundScheduleAllows(settings ?? DEFAULT_BACKGROUND_SCHEDULE, now)
   );
-}
-
-export function canClaimAiTagJobs(
-  manualEnabled: boolean,
-  scheduleEnabled: boolean,
-  windowStart: string,
-  windowEnd: string,
-  now = new Date(),
-): boolean {
-  if (manualEnabled) return true;
-  if (!scheduleEnabled) return false;
-  return canClaimBackgroundJobs('NIGHT', windowStart, windowEnd, now);
 }
 
 /** An import-only worker can pause optional analysis without changing owner preferences. */

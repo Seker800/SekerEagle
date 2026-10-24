@@ -1,6 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createEagleApi } from './eagle-api';
-import { createEagleAiTagApi } from './eagle-ai-tag-api';
 import { createEagleVectorApi } from './eagle-vector-api';
 import { createEagleProcessingAdminApi } from './eagle-processing-admin-api';
 import { createEagleTaskCenterApi } from './eagle-task-center-api';
@@ -11,7 +10,6 @@ import type { LibraryMode } from './library-api-scope';
 afterEach(() => vi.restoreAllMocks());
 const factories = [
   createEagleApi,
-  createEagleAiTagApi,
   createEagleVectorApi,
   createEagleProcessingAdminApi,
   createEagleTaskCenterApi,
@@ -50,7 +48,6 @@ const operations = {
   restore: (mode: LibraryMode) => createEagleApi(mode).batchRestoreEagleAssets('', ['asset']),
   filters: (mode: LibraryMode) =>
     createEagleApi(mode).countEagleAssets('', { version: 2, conditions: [] }),
-  aiTags: (mode: LibraryMode) => createEagleAiTagApi(mode).fetchEagleAiTagSummary(),
   vectors: (mode: LibraryMode) => createEagleVectorApi(mode).fetchEagleVectorSummary(),
   processing: (mode: LibraryMode) =>
     createEagleProcessingAdminApi(mode).fetchEagleProcessingSummary(''),

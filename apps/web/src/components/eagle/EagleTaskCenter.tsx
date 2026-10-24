@@ -4,7 +4,6 @@ import type { BackgroundSchedule, TaskFamily, TaskGroup } from '@sekereagle/libr
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { EagleProcessingPage } from './EagleProcessingPage';
-import { EagleAiTagSetupPanel } from './EagleAiTagSetupPanel';
 import {
   taskExecutionLabel,
   taskFamilyLabels,
@@ -17,12 +16,10 @@ export function EagleTaskCenter({
   includePrivate = false,
   canManageProcessing = false,
   onReview,
-  initialSettings = false,
 }: {
   includePrivate?: boolean;
   canManageProcessing?: boolean;
   onReview?: () => void;
-  initialSettings?: boolean;
 } = {}) {
   const { ownerId, libraryMode, api } = useLibraryWorkspace();
   const client = useQueryClient();
@@ -34,14 +31,12 @@ export function EagleTaskCenter({
   });
   const [draft, setDraft] = useState<BackgroundSchedule | null>(null);
   const [notice, setNotice] = useState('');
-  const [showAi, setShowAi] = useState(initialSettings);
   const [showDetails, setShowDetails] = useState(false);
   useEffect(() => {
     setDraft(null);
     setNotice('');
-    setShowAi(initialSettings);
     setShowDetails(false);
-  }, [ownerId, libraryMode, includePrivate, initialSettings]);
+  }, [ownerId, libraryMode, includePrivate]);
   const save = useMutation({
     mutationFn: (settings: BackgroundSchedule) => api.updateEagleTaskSchedule(settings),
     onSuccess: async () => {
@@ -205,25 +200,19 @@ export function EagleTaskCenter({
               <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>
             )}
           </div>
-          <section className={styles.settings}>
-            <h2>{t('处理设置与记录')}</h2>
-            <button type="button" aria-expanded={showAi} onClick={() => setShowAi(!showAi)}>
-              {t('AI 内容识别设置')}
-            </button>
-            {showAi && <EagleAiTagSetupPanel />}
-            {canManageProcessing && (
-              <>
-                <button
-                  type="button"
-                  aria-expanded={showDetails}
-                  onClick={() => setShowDetails(!showDetails)}
-                >
-                  {t('查看详细处理记录')}
-                </button>
-                {showDetails && <EagleProcessingPage canManageProcessing />}
-              </>
-            )}
-          </section>
+          {canManageProcessing && (
+            <section className={styles.settings}>
+              <h2>{t('处理记录')}</h2>
+              <button
+                type="button"
+                aria-expanded={showDetails}
+                onClick={() => setShowDetails(!showDetails)}
+              >
+                {t('查看详细处理记录')}
+              </button>
+              {showDetails && <EagleProcessingPage canManageProcessing />}
+            </section>
+          )}
           <aside className={styles.external}>
             <h2>{t('其他设备与维护')}</h2>
             <p>

@@ -383,11 +383,10 @@ test('new browser captures commit provenance and initial metadata with the uploa
   ]);
   assert.equal(captureWrites[0]?.assetId, result.assetId);
   assert.equal(captureWrites[0]?.completedAt instanceof Date, true);
-  const aiTagJob = jobs[0]?.find(({ kind }) => kind === 'GENERATE_AI_TAGS');
-  assert.equal(aiTagJob?.ownerId, ownerId);
-  assert.equal(aiTagJob?.assetId, result.assetId);
-  assert.equal(aiTagJob?.lane, 'BACKGROUND');
-  assert.equal(typeof aiTagJob?.dependsOnJobId, 'string');
+  assert.equal(
+    jobs[0]?.some(({ kind }) => kind === 'GENERATE_AI_TAGS'),
+    false,
+  );
 });
 
 test('upload progress exposes bounded processing status only within authenticated owner and library', async () => {

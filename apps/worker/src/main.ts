@@ -39,13 +39,7 @@ import {
   type EagleTagSemanticBuild,
   type LibraryMode,
 } from '@prisma/client';
-import {
-  EAGLE_AI_TAG_DEFAULT_MODEL,
-  EAGLE_AI_TAG_PROCESSOR_VERSION,
-  EAGLE_AI_TAG_PROMPT_VERSION,
-  assertSafeRuntimeTarget,
-  describeRuntimeTarget,
-} from '@sekereagle/config';
+import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import {
   parseProcessingJobKinds,
   taskBlocksAssetReady,
@@ -55,7 +49,6 @@ import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
 import { inspectLivePhotoImage } from './live-photo';
 import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
-import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
@@ -67,7 +60,6 @@ import {
   PermanentMediaValidationError,
 } from './media-validation-error';
 import { EmbeddingClient, EmbeddingClientError } from './embedding-client';
-import { OllamaVisionClient, renderAiTagInput } from './ai-tagging';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
 import {
   JobWakeScheduler,
@@ -99,7 +91,6 @@ const storage = new S3Client({
 let embeddingReadiness: 'READY' | 'OFFLINE' | 'DRIFTED' = 'OFFLINE';
 let checkingHeartbeat = false;
 let heartbeatTimer: NodeJS.Timeout | undefined;
-let aiTagReconcileTimer: NodeJS.Timeout | undefined;
 let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
 let smartFolderTimer: NodeJS.Timeout | undefined;
@@ -136,12 +127,6 @@ const embeddingClient = new EmbeddingClient({
     1,
     50 * 1024 * 1024,
   ),
-});
-const ollamaModel = process.env.OLLAMA_VISION_MODEL ?? EAGLE_AI_TAG_DEFAULT_MODEL;
-const ollamaClient = new OllamaVisionClient({
-  baseUrl: process.env.OLLAMA_URL ?? 'http://host.docker.internal:11434',
-  model: ollamaModel,
-  timeoutMs: boundedInteger(process.env.OLLAMA_TIMEOUT_MS, 120_000, 1_000, 600_000),
 });
 
 async function heartbeat(): Promise<void> {
@@ -189,7 +174,6 @@ let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   const sequence = claimSequence++;
   return claimNextMediaJob(prisma, {
-    partitionAi: false,
     selectCandidates: (input) =>
       selectScheduledMediaCandidates(
         prisma,
@@ -217,71 +201,6 @@ async function canClaimBackgroundForOwner(
     where: { ownerId_libraryMode: { ownerId, libraryMode } },
   });
   return mediaBackgroundAllowed(settings, kind);
-}
-
-async function reconcileEnabledAiTagJobs(): Promise<void> {
-  if (
-    !runBackgroundProcessing ||
-    (allowedJobKinds && !allowedJobKinds.includes('GENERATE_AI_TAGS'))
-  )
-    return;
-  const settings = await prisma.eagleProcessingSetting.findMany({
-    where: { OR: [{ aiTagManualEnabled: true }, { aiTagScheduleEnabled: true }] },
-    select: {
-      ownerId: true,
-      libraryMode: true,
-      mode: true,
-      nightStart: true,
-      nightEnd: true,
-      aiTagManualEnabled: true,
-      aiTagScheduleEnabled: true,
-      aiTagScheduleStart: true,
-      aiTagScheduleEnd: true,
-    },
-  });
-  for (const setting of settings) {
-    if (!mediaBackgroundAllowed(setting, 'GENERATE_AI_TAGS')) continue;
-    await prisma.$executeRaw(Prisma.sql`
-      INSERT INTO "EagleMediaJob" (
-        id, "ownerId", "libraryMode", "assetId", kind, status, lane, "assetRevision", "processorVersion",
-        attempts, "leaseVersion", "availableAt", "createdAt", "updatedAt"
-      )
-      SELECT gen_random_uuid(), asset."ownerId", asset."libraryMode", asset.id, 'GENERATE_AI_TAGS'::"EagleMediaJobKind",
-        'PENDING'::"EagleMediaJobStatus", 'BACKGROUND'::"EagleProcessingLane",
-        asset."mediaRevision", ${EAGLE_AI_TAG_PROCESSOR_VERSION}, 0, 0, now(), now(), now()
-      FROM "EagleAsset" AS asset
-      WHERE asset."ownerId" = ${setting.ownerId} AND asset."libraryMode" = ${setting.libraryMode}::"LibraryMode"
-        AND asset."deletedAt" IS NULL
-        AND asset."isPrivate" = false
-        AND asset."mimeType" LIKE 'image/%'
-        AND EXISTS (
-          SELECT 1 FROM "EagleAssetRendition" AS preview
-          WHERE preview."ownerId" = asset."ownerId" AND preview."libraryMode" = asset."libraryMode"
-            AND preview."assetId" = asset.id
-            AND preview.revision = asset."mediaRevision"
-            AND preview.kind = 'PREVIEW'
-            AND preview.status = 'READY'
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM "EagleMediaJob" AS existing
-          WHERE existing."assetId" = asset.id
-            AND existing."assetRevision" = asset."mediaRevision"
-            AND existing.kind = 'GENERATE_AI_TAGS'
-            AND existing."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
-        )
-        AND NOT EXISTS (
-          SELECT 1 FROM "EagleAiAnalysisRun" AS run
-          WHERE run."ownerId" = asset."ownerId" AND run."libraryMode" = asset."libraryMode"
-            AND run."assetId" = asset.id
-            AND run."assetRevision" = asset."mediaRevision"
-            AND run."processorVersion" = ${EAGLE_AI_TAG_PROCESSOR_VERSION}
-            AND run.status IN ('SUCCEEDED', 'SUPERSEDED')
-        )
-      ORDER BY asset."libraryAddedAt", asset.id
-      LIMIT 1000
-      ON CONFLICT ("assetId", kind, "assetRevision", "processorVersion") DO NOTHING
-    `);
-  }
 }
 
 async function processJob(job: EagleAssetProcessingJob): Promise<void> {
@@ -332,9 +251,6 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       },
     });
     return;
-  }
-  if (job.kind === 'GENERATE_AI_TAGS') {
-    if (await finishAlreadyAnalyzedAiTagJob(prisma, job)) return;
   }
   if (job.kind === 'ANALYZE_PHOTO_FACES') {
     if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
@@ -401,16 +317,6 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         asset,
         sourceDetails.mimeType,
         object.Body as AsyncIterable<Uint8Array>,
-      );
-      return;
-    }
-    if (job.kind === 'GENERATE_AI_TAGS') {
-      await processAiTaggingJob(
-        job,
-        asset,
-        object.Body as AsyncIterable<Uint8Array>,
-        sourceDetails.mimeType,
-        sourceDetails.storageKey,
       );
       return;
     }
@@ -684,154 +590,6 @@ async function processEmbeddingJob(
   const bytes = await readBoundedBytes(source, 20 * 1024 * 1024);
   const { embedding } = await embeddingClient.embedImage(bytes, mimeType);
   await publishEmbedding(prisma, job, record.id, embedding, createTopSuggestion);
-}
-
-async function processAiTaggingJob(
-  job: EagleAssetProcessingJob,
-  asset: { id: string; ownerId: string; libraryMode: LibraryMode },
-  source: AsyncIterable<Uint8Array>,
-  mimeType: string,
-  storageKey: string,
-): Promise<void> {
-  if (job.processorVersion !== EAGLE_AI_TAG_PROCESSOR_VERSION)
-    throw new Error('AI_TAG_VERSION_DRIFT');
-  if (!process.env.MLX_EMBEDDING_TOKEN?.trim()) throw new Error('MLX_EMBEDDING_TOKEN_REQUIRED');
-  const run = await prisma.eagleAiAnalysisRun.create({
-    data: {
-      ownerId: asset.ownerId,
-      libraryMode: asset.libraryMode,
-      assetId: asset.id,
-      assetRevision: job.assetRevision,
-      provider: 'OLLAMA',
-      model: ollamaModel,
-      promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
-      processorVersion: job.processorVersion,
-      status: 'RUNNING',
-      startedAt: new Date(),
-    },
-    select: { id: true },
-  });
-  const { result: bytes } = await withProcessableImage(
-    source,
-    mimeType,
-    storageKey,
-    renderAiTagInput,
-  );
-  const names = await ollamaClient.tagImage(bytes);
-  const normalizedNames = names.map(normalizeAiTagName);
-  const embeddedRows = normalizedNames.length
-    ? await prisma.$queryRaw<Array<{ normalizedName: string }>>(Prisma.sql`
-        SELECT "normalizedName"
-        FROM "EagleAiTag"
-        WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode"
-          AND "normalizedName" IN (${Prisma.join(normalizedNames)})
-          AND "embeddingSpaceId" = ${embeddingSpaceId}
-          AND embedding IS NOT NULL
-      `)
-    : [];
-  const embedded = new Set(embeddedRows.map((row) => row.normalizedName));
-  const vectors = new Map<string, number[]>();
-  for (let index = 0; index < names.length; index += 1) {
-    const normalizedName = normalizedNames[index]!;
-    if (embedded.has(normalizedName)) continue;
-    const result = await embeddingClient.embedText(
-      `图片中的具体物体、场所或内容类型：${names[index]}`,
-    );
-    vectors.set(normalizedName, result.embedding);
-  }
-  await ensureEmbeddingSpace();
-  await prisma.$transaction(async (transaction) => {
-    const completed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
-    });
-    if (completed.count !== 1) return;
-    await transaction.eagleAiAnalysisRun.updateMany({
-      where: {
-        ownerId: asset.ownerId,
-        libraryMode: asset.libraryMode,
-        assetId: asset.id,
-        provider: 'OLLAMA',
-        promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
-        status: 'SUCCEEDED',
-        id: { not: run.id },
-      },
-      data: { status: 'SUPERSEDED' },
-    });
-    await transaction.eagleAssetAiTag.updateMany({
-      where: {
-        ownerId: asset.ownerId,
-        libraryMode: asset.libraryMode,
-        assetId: asset.id,
-        status: 'ACTIVE',
-      },
-      data: { status: 'HIDDEN' },
-    });
-    for (let index = 0; index < names.length; index += 1) {
-      const name = names[index]!;
-      const normalizedName = normalizedNames[index]!;
-      const tag = await transaction.eagleAiTag.upsert({
-        where: {
-          ownerId_libraryMode_normalizedName: {
-            libraryMode: asset.libraryMode,
-            ownerId: asset.ownerId,
-            normalizedName,
-          },
-        },
-        create: {
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          name,
-          normalizedName,
-          embeddingSpaceId,
-        },
-        update: { name, embeddingSpaceId },
-        select: { id: true },
-      });
-      const vector = vectors.get(normalizedName);
-      if (vector) {
-        const serialized = `[${vector.join(',')}]`;
-        await transaction.$executeRaw(Prisma.sql`
-          UPDATE "EagleAiTag"
-          SET embedding = ${serialized}::vector, "embeddingSpaceId" = ${embeddingSpaceId}
-          WHERE "ownerId" = ${asset.ownerId} AND "libraryMode" = ${asset.libraryMode}::"LibraryMode" AND id = ${tag.id}
-        `);
-      }
-      await transaction.eagleAssetAiTag.create({
-        data: {
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          aiTagId: tag.id,
-          analysisRunId: run.id,
-          confidence: 1,
-          status: 'ACTIVE',
-        },
-      });
-    }
-    await transaction.eagleAiAnalysisRun.update({
-      where: { id: run.id },
-      data: { status: 'SUCCEEDED', completedAt: new Date(), errorCode: null },
-    });
-  });
-}
-
-async function ensureEmbeddingSpace(): Promise<void> {
-  await prisma.$transaction((tx) =>
-    ensureCompatibleEmbeddingSpace(tx, {
-      id: embeddingSpaceId,
-      model: embeddingModel,
-      revision: embeddingRevision,
-      dimensions: embeddingDimensions,
-      instructionVersion: 'image-retrieval-v1',
-      preprocessingVersion: 'preview-webp-v1',
-      normalized: true,
-    }),
-  );
-}
-
-function normalizeAiTagName(value: string): string {
-  return value.normalize('NFKC').trim().toLocaleLowerCase('zh-CN');
 }
 
 async function createTopSuggestion(
@@ -1427,24 +1185,6 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
         },
       });
     }
-    if (job.kind === 'GENERATE_AI_TAGS') {
-      await transaction.eagleAiAnalysisRun.updateMany({
-        where: {
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          assetId: job.assetId,
-          assetRevision: job.assetRevision,
-          provider: 'OLLAMA',
-          promptVersion: EAGLE_AI_TAG_PROMPT_VERSION,
-          status: 'RUNNING',
-        },
-        data: {
-          status: terminal ? 'FAILED' : 'PENDING',
-          errorCode: message.slice(0, 100),
-          completedAt: terminal ? new Date() : null,
-        },
-      });
-    }
     const assetFailure = terminal
       ? terminalAssetFailure(job.kind, job.processorVersion, message)
       : null;
@@ -1582,19 +1322,11 @@ function normalizeWakeSettings(input: {
   mode: string;
   nightStart: string;
   nightEnd: string;
-  aiTagManualEnabled: boolean;
-  aiTagScheduleEnabled: boolean;
-  aiTagScheduleStart: string;
-  aiTagScheduleEnd: string;
 }): ProcessingWakeSettings {
   return {
     mode: input.mode === 'ALWAYS' || input.mode === 'MANUAL' ? input.mode : 'NIGHT',
     nightStart: input.nightStart,
     nightEnd: input.nightEnd,
-    aiTagManualEnabled: input.aiTagManualEnabled,
-    aiTagScheduleEnabled: input.aiTagScheduleEnabled,
-    aiTagScheduleStart: input.aiTagScheduleStart,
-    aiTagScheduleEnd: input.aiTagScheduleEnd,
   };
 }
 
@@ -1603,10 +1335,6 @@ function defaultWakeSettings(): ProcessingWakeSettings {
     mode: 'NIGHT',
     nightStart: '23:00',
     nightEnd: '06:00',
-    aiTagManualEnabled: false,
-    aiTagScheduleEnabled: false,
-    aiTagScheduleStart: '23:00',
-    aiTagScheduleEnd: '06:00',
   };
 }
 
@@ -1703,7 +1431,6 @@ async function stop(signal: string): Promise<void> {
   stopping = true;
   if (smartFolderTimer) clearInterval(smartFolderTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
-  if (aiTagReconcileTimer) clearInterval(aiTagReconcileTimer);
   wakeScheduler?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
@@ -1732,13 +1459,7 @@ async function main(): Promise<void> {
   );
   await wakeListener.start();
   heartbeatTimer = setInterval(() => void heartbeat().catch(reportLoopError), 15_000);
-  aiTagReconcileTimer = setInterval(
-    () => void reconcileEnabledAiTagJobs().catch(reportLoopError),
-    10_000,
-  );
-  aiTagReconcileTimer.unref();
-  await reconcileEnabledAiTagJobs();
-  // Semantic folders use 2B only, independent of the disabled 8B/tag-build lane.
+  // Semantic folders reuse saved vectors and request 2B only for uncached queries.
   if (
     runBackgroundProcessing &&
     (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))

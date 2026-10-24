@@ -33,12 +33,6 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('预览图 + Mac 2B 模型'),
       t('Mac · 较重'),
     ],
-    AI_TAGS: [
-      t('AI 标签生成'),
-      t('通过视觉模型识别内容，生成标签。'),
-      t('预览图 + 视觉模型 + 单独启用'),
-      t('模型服务 · 重'),
-    ],
     FACES: [
       t('人脸检测与匹配'),
       t('检测人脸并计算特征，用于人物分组。'),
@@ -123,7 +117,6 @@ const steps: Record<string, () => string> = {
   GENERATE_PREVIEW: () => t('生成预览图'),
   PROBE_MEDIA: () => t('读取媒体信息'),
   GENERATE_EMBEDDING: () => t('生成图片向量'),
-  GENERATE_AI_TAGS: () => t('生成 AI 标签'),
   ANALYZE_PHOTO_FACES: () => t('分析人物'),
   EXTRACT_COLOR_PALETTE: () => t('提取图片代表色'),
   GENERATE_IMAGE_PYRAMID: () => t('生成大图缩放切片'),

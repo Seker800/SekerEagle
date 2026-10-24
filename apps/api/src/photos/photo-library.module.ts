@@ -21,7 +21,6 @@ import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EagleController } from '../eagle/eagle.controller';
 import { EagleUploadController } from '../eagle/eagle-upload.controller';
-import { EagleAiTagController } from '../eagle/eagle-ai-tag.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
 import { EagleTaskCenterController } from '../eagle/eagle-task-center.controller';
@@ -47,11 +46,6 @@ export class PhotosController extends EagleController {}
 @ApiTags('photo-uploads')
 @Controller('photos/uploads')
 export class PhotoUploadsController extends EagleUploadController {}
-
-@SetMetadata(LIBRARY_MODE, 'PHOTO')
-@ApiTags('photo-ai-tags')
-@Controller('photos/ai-tags')
-export class PhotoAiTagsController extends EagleAiTagController {}
 
 @SetMetadata(LIBRARY_MODE, 'PHOTO')
 @ApiTags('photo-vectors')
@@ -97,7 +91,6 @@ export class PhotoPrivacyVisibilityController {
     PhotoAgentController,
     PhotoPrivacyVisibilityController,
     PhotoUploadsController,
-    PhotoAiTagsController,
     PhotoVectorsController,
     PhotoProcessingController,
     PhotoTaskCenterController,

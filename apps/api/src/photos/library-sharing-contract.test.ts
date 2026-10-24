@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common/constants';
 import { EagleController } from '../eagle/eagle.controller';
 import { EagleUploadController } from '../eagle/eagle-upload.controller';
-import { EagleAiTagController } from '../eagle/eagle-ai-tag.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
 import { EagleModule, EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
@@ -19,7 +18,6 @@ import {
   PhotoLibraryModule,
   PhotosController,
   PhotoUploadsController,
-  PhotoAiTagsController,
   PhotoVectorsController,
   PhotoProcessingController,
 } from './photo-library.module';
@@ -27,7 +25,6 @@ import {
 const pairs = [
   [EagleController, PhotosController],
   [EagleUploadController, PhotoUploadsController],
-  [EagleAiTagController, PhotoAiTagsController],
   [EagleVectorController, PhotoVectorsController],
   [EagleProcessingController, PhotoProcessingController],
 ] as const;

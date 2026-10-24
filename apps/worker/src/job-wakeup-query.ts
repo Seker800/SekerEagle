@@ -23,7 +23,7 @@ export function buildMediaWakeQuery(allowedJobKinds?: readonly EagleMediaJobKind
         WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL
           AND job."assetRevision"=asset."mediaRevision" AND (asset."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
       ) AS candidate
-      WHERE ${taskPolicyAllowsSql(Prisma.sql`candidate."ownerId"`, Prisma.sql`candidate."libraryMode"`, mediaTaskFamilySql(Prisma.sql`candidate.kind`, Prisma.sql`candidate."processorVersion"`))}
+      WHERE candidate.kind<>'GENERATE_AI_TAGS' AND ${taskPolicyAllowsSql(Prisma.sql`candidate."ownerId"`, Prisma.sql`candidate."libraryMode"`, mediaTaskFamilySql(Prisma.sql`candidate.kind`, Prisma.sql`candidate."processorVersion"`))}
       ${
         allowedJobKinds === undefined
           ? Prisma.empty

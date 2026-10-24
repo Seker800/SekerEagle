@@ -6,10 +6,6 @@ const defaultSettings = {
   mode: 'NIGHT' as const,
   nightStart: '23:00',
   nightEnd: '06:00',
-  aiTagManualEnabled: false,
-  aiTagScheduleEnabled: false,
-  aiTagScheduleStart: '23:00',
-  aiTagScheduleEnd: '06:00',
 };
 
 function candidate(overrides: Partial<PendingWakeCandidate> = {}): PendingWakeCandidate {
@@ -76,27 +72,6 @@ test('manual and disabled AI work stay asleep until settings change', () => {
       now,
     ),
     null,
-  );
-});
-
-test('scheduled AI work respects both windows and manual AI respects the global window', () => {
-  const now = new Date('2026-09-16T04:00:00.000Z');
-  const aiCandidate = candidate({ lane: 'BACKGROUND', kind: 'GENERATE_AI_TAGS' });
-  assert.equal(
-    nextEligibleWakeAt(
-      aiCandidate,
-      { ...defaultSettings, aiTagScheduleEnabled: true },
-      now,
-    )?.toISOString(),
-    '2026-09-16T15:00:00.000Z',
-  );
-  assert.equal(
-    nextEligibleWakeAt(
-      aiCandidate,
-      { ...defaultSettings, mode: 'ALWAYS', aiTagManualEnabled: true },
-      now,
-    )?.toISOString(),
-    now.toISOString(),
   );
 });
 

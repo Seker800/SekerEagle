@@ -9,7 +9,14 @@ test('explicit processing profile is strict, deduplicated and leaves the default
     parseProcessingJobKinds(' GENERATE_RENDITIONS,GENERATE_EMBEDDING,GENERATE_RENDITIONS '),
     ['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING'],
   );
-  for (const value of ['', ' ', 'GENERATE_EMBEDING', 'GENERATE_EMBEDDING,', 'constructor'])
+  for (const value of [
+    '',
+    ' ',
+    'GENERATE_EMBEDING',
+    'GENERATE_EMBEDDING,',
+    'constructor',
+    'GENERATE_AI_TAGS',
+  ])
     assert.throws(() => parseProcessingJobKinds(value), /EAGLE_PROCESSING_JOB_KINDS/);
 });
 
@@ -35,14 +42,14 @@ test('the database query excludes paused job kinds before the bounded candidate 
   assert.deepEqual(
     queries.map((q) => q.where.kind),
     [
-      { in: [...allowedJobKinds] },
       { not: 'GENERATE_AI_TAGS', in: [...allowedJobKinds] },
-      { in: [...allowedJobKinds] },
+      { not: 'GENERATE_AI_TAGS', in: [...allowedJobKinds] },
+      { not: 'GENERATE_AI_TAGS', in: [...allowedJobKinds] },
     ],
   );
 });
 
-test('AI tag partition remains available only when explicitly allowed', async () => {
+test('legacy AI tag selection is excluded even when an old caller explicitly allows it', async () => {
   const kinds: unknown[] = [];
   await claimNextMediaJob(
     {
@@ -59,7 +66,7 @@ test('AI tag partition remains available only when explicitly allowed', async ()
     },
     { allowedJobKinds: ['GENERATE_AI_TAGS'], canClaimBackground: async () => true },
   );
-  assert.ok(kinds.includes('GENERATE_AI_TAGS'));
+  assert.deepEqual(kinds, Array(3).fill({ not: 'GENERATE_AI_TAGS', in: ['GENERATE_AI_TAGS'] }));
 });
 
 test('wake-up queries use the same selection and group every selected job version', async () => {

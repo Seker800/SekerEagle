@@ -8,7 +8,6 @@ import {
   isBackgroundFamily,
   mediaTaskFamily,
   nextBackgroundTime,
-  nextAnalysisTime,
   type TaskCounts,
   type TaskCenterOverview,
   type TaskFamily,
@@ -89,7 +88,7 @@ export class EagleTaskCenterService {
       }
       if (['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(family)) return 0;
       const kinds = Object.values(EagleMediaJobKind).filter(
-        (kind) => mediaTaskFamily(kind, 'v1') === family,
+        (kind) => kind !== 'GENERATE_AI_TAGS' && mediaTaskFamily(kind, 'v1') === family,
       );
       const condition =
         family === 'DETAILS'
@@ -139,6 +138,7 @@ export class EagleTaskCenterService {
     };
     const groups = new Map<TaskFamily, TaskGroup>();
     for (const bucket of buckets) {
+      if (bucket.step === 'GENERATE_AI_TAGS') continue;
       const family =
         bucket.family === 'MEDIA' ? mediaTaskFamily(bucket.step, bucket.version) : bucket.family;
       if (!TASK_FAMILIES.includes(family)) continue;
@@ -203,34 +203,6 @@ export class EagleTaskCenterService {
       } else if (group.background && !backgroundScheduleAllows(settings, now)) {
         reason = 'SCHEDULE';
         nextAt = nextBackgroundTime(settings, now)?.toISOString() ?? null;
-      }
-      if (
-        family === 'AI_TAGS' &&
-        !['PAUSED', 'DISABLED', 'WORKER_OFFLINE', 'DEPENDENCY', 'DEPENDENCY_FAILED'].includes(
-          reason,
-        )
-      ) {
-        const next = nextAnalysisTime(
-          {
-            ...settings,
-            aiTagManualEnabled: setting?.aiTagManualEnabled,
-            aiTagScheduleEnabled: setting?.aiTagScheduleEnabled,
-            aiTagScheduleStart: setting?.aiTagScheduleStart,
-            aiTagScheduleEnd: setting?.aiTagScheduleEnd,
-          },
-          'GENERATE_AI_TAGS',
-          new Date(Math.max(now.getTime(), bucket.nextAt?.getTime() ?? 0)),
-        );
-        if (!next) {
-          reason = 'PAUSED';
-          nextAt = null;
-        } else if (
-          next > now &&
-          (reason !== 'RETRY' || next.getTime() !== bucket.nextAt?.getTime())
-        ) {
-          reason = 'SCHEDULE';
-          nextAt = next.toISOString();
-        }
       }
       if (reason !== 'RETRY' && reason !== 'SCHEDULE') nextAt = null;
       const wait = group.waiting.find(

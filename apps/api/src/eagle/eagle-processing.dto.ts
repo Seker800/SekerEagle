@@ -1,7 +1,17 @@
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { EagleMediaJobKind, EagleMediaJobStatus, EagleProcessingLane } from '@prisma/client';
-import { IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNotIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export enum EagleProcessingModeDto {
   ALWAYS = 'ALWAYS',
@@ -24,7 +34,7 @@ export class UpdateEagleProcessingSettingsDto {
 export class ListEagleProcessingJobsDto {
   @IsOptional() @IsEnum(EagleMediaJobStatus) status?: EagleMediaJobStatus;
   @IsOptional() @IsEnum(EagleProcessingLane) lane?: EagleProcessingLane;
-  @IsOptional() @IsEnum(EagleMediaJobKind) kind?: EagleMediaJobKind;
+  @IsOptional() @IsEnum(EagleMediaJobKind) @IsNotIn(['GENERATE_AI_TAGS']) kind?: EagleMediaJobKind;
   @IsOptional() @IsString() @MaxLength(1024) cursor?: string;
   @Type(() => Number) @IsOptional() @IsInt() @Min(1) @Max(100) limit?: number;
 }

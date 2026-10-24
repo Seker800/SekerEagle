@@ -55,7 +55,6 @@ export interface MediaJobClaimClient {
 }
 
 interface ClaimMediaJobOptions {
-  partitionAi?: boolean;
   selectCandidates?: (input: ClaimFindManyInput) => Promise<EagleAssetProcessingJob[]>;
   now?: Date;
   excludedProcessorVersions?: string[];
@@ -77,78 +76,67 @@ export async function claimNextMediaJob(
   const staleBefore = new Date(now.getTime() - STALE_LEASE_MS);
 
   for (const lane of options.laneOrder ?? LANE_ORDER) {
-    const kindPartitions: Array<ClaimFindManyInput['where']['kind']> =
-      lane === 'BACKGROUND' && options.partitionAi !== false
-        ? [{ not: 'GENERATE_AI_TAGS' }, 'GENERATE_AI_TAGS']
-        : [undefined];
-    for (const kind of kindPartitions) {
-      if (
-        typeof kind === 'string' &&
-        options.allowedJobKinds &&
-        !options.allowedJobKinds.includes(kind)
-      )
-        continue;
-      const kindFilter =
-        options.allowedJobKinds && typeof kind !== 'string'
-          ? { ...kind, in: [...options.allowedJobKinds] }
-          : kind;
-      const candidates = await (
-        options.selectCandidates ?? ((input) => client.eagleAssetProcessingJob.findMany(input))
-      )({
-        where: {
-          lane,
-          ...(options.excludedProcessorVersions?.length
-            ? { processorVersion: { notIn: options.excludedProcessorVersions } }
-            : {}),
-          ...(kindFilter ? { kind: kindFilter } : {}),
-          AND: [
-            { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
-            {
-              OR: [
-                { status: 'PENDING', availableAt: { lte: now } },
-                { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
-              ],
-            },
-          ],
-        },
-        orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
-        take: CLAIM_BATCH_SIZE,
-      });
+    const kindFilter = {
+      not: 'GENERATE_AI_TAGS' as const,
+      ...(options.allowedJobKinds ? { in: [...options.allowedJobKinds] } : {}),
+    };
+    const candidates = await (
+      options.selectCandidates ?? ((input) => client.eagleAssetProcessingJob.findMany(input))
+    )({
+      where: {
+        lane,
+        ...(options.excludedProcessorVersions?.length
+          ? { processorVersion: { notIn: options.excludedProcessorVersions } }
+          : {}),
+        ...(kindFilter ? { kind: kindFilter } : {}),
+        AND: [
+          { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
+          {
+            OR: [
+              { status: 'PENDING', availableAt: { lte: now } },
+              { status: 'PROCESSING', lockedAt: { lt: staleBefore } },
+            ],
+          },
+        ],
+      },
+      orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
+      take: CLAIM_BATCH_SIZE,
+    });
 
-      for (const candidate of candidates) {
-        if (
-          (candidate.lane === 'BACKGROUND' ||
-            candidate.processorVersion === 'photo-source-details-v1') &&
-          !(await options.canClaimBackground(
-            candidate.ownerId,
-            candidate.kind,
-            candidate.libraryMode,
-            candidate.processorVersion,
-          ))
-        ) {
-          continue;
-        }
-        const claimed = await client.eagleAssetProcessingJob.updateMany({
-          where: {
-            id: candidate.id,
-            leaseVersion: candidate.leaseVersion,
-            ...(candidate.status === 'PENDING'
-              ? { status: 'PENDING' as const }
-              : { status: 'PROCESSING' as const, lockedAt: { lt: staleBefore } }),
-          },
-          data: {
-            status: 'PROCESSING',
-            lockedAt: now,
-            startedAt: candidate.startedAt ?? now,
-            attempts: { increment: 1 },
-            leaseVersion: { increment: 1 },
-          },
+    for (const candidate of candidates) {
+      if (candidate.kind === 'GENERATE_AI_TAGS') continue;
+      if (
+        (candidate.lane === 'BACKGROUND' ||
+          candidate.processorVersion === 'photo-source-details-v1') &&
+        !(await options.canClaimBackground(
+          candidate.ownerId,
+          candidate.kind,
+          candidate.libraryMode,
+          candidate.processorVersion,
+        ))
+      ) {
+        continue;
+      }
+      const claimed = await client.eagleAssetProcessingJob.updateMany({
+        where: {
+          id: candidate.id,
+          leaseVersion: candidate.leaseVersion,
+          ...(candidate.status === 'PENDING'
+            ? { status: 'PENDING' as const }
+            : { status: 'PROCESSING' as const, lockedAt: { lt: staleBefore } }),
+        },
+        data: {
+          status: 'PROCESSING',
+          lockedAt: now,
+          startedAt: candidate.startedAt ?? now,
+          attempts: { increment: 1 },
+          leaseVersion: { increment: 1 },
+        },
+      });
+      if (claimed.count === 1) {
+        return client.eagleAssetProcessingJob.findUniqueOrThrow({
+          where: { id: candidate.id },
         });
-        if (claimed.count === 1) {
-          return client.eagleAssetProcessingJob.findUniqueOrThrow({
-            where: { id: candidate.id },
-          });
-        }
       }
     }
   }

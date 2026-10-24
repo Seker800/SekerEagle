@@ -671,6 +671,7 @@ describe('SekerEaglePage', () => {
 
     expect(screen.getByTestId('eagle-processing-page')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI 内容识别设置' })).not.toBeInTheDocument();
   });
 
   it('keeps processing tasks available for ordinary owners inside the pending workspace', async () => {
@@ -2121,8 +2122,10 @@ describe('SekerEaglePage', () => {
     fireEvent.click(within(settingsNavigation).getByRole('button', { name: '人工标签推荐' }));
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
 
-    fireEvent.click(within(settingsNavigation).getByRole('button', { name: 'AI 内容识别' }));
-    expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
+    expect(
+      within(settingsNavigation).queryByRole('button', { name: 'AI 内容识别' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'AI 内容识别设置' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '标签' }));
     expect(

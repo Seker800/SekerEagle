@@ -12,7 +12,6 @@ export function mediaTaskFamilySql(kind: Prisma.Sql, version: Prisma.Sql) {
   return Prisma.sql`CASE WHEN ${version}='photo-source-details-v1' THEN 'DETAILS'
     WHEN ${version} LIKE 'video-playback-%' THEN 'VIDEO'
     WHEN ${kind}::text='GENERATE_EMBEDDING' THEN 'EMBEDDING'
-    WHEN ${kind}::text='GENERATE_AI_TAGS' THEN 'AI_TAGS'
     WHEN ${kind}::text='ANALYZE_PHOTO_FACES' THEN 'FACES'
     WHEN ${kind}::text='EXTRACT_COLOR_PALETTE' THEN 'COLOR'
     WHEN ${kind}::text='GENERATE_IMAGE_PYRAMID' THEN 'PYRAMID'

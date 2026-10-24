@@ -114,7 +114,7 @@ test('skips disallowed background work and falls through to maintenance', async 
   });
 
   assert.equal(claimed?.id, 'maintenance');
-  assert.deepEqual(queriedLanes, ['INTERACTIVE', 'BACKGROUND', 'BACKGROUND', 'MAINTENANCE']);
+  assert.deepEqual(queriedLanes, ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE']);
 });
 
 test('only queries jobs whose dependency completed successfully', async () => {
@@ -137,6 +137,7 @@ test('only queries jobs whose dependency completed successfully', async () => {
 
   assert.deepEqual(capturedWhere, {
     lane: 'MAINTENANCE',
+    kind: { not: 'GENERATE_AI_TAGS' },
     AND: [
       { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
       {
@@ -150,7 +151,7 @@ test('only queries jobs whose dependency completed successfully', async () => {
 });
 
 test('passes the background job kind into the independent scheduling decision', async () => {
-  const background = job('ai-tag', 'BACKGROUND', { kind: 'GENERATE_AI_TAGS' });
+  const background = job('embedding', 'BACKGROUND', { kind: 'GENERATE_EMBEDDING' });
   const checked: Array<{ ownerId: string; kind: string }> = [];
   const client = {
     eagleAssetProcessingJob: {
@@ -172,7 +173,7 @@ test('passes the background job kind into the independent scheduling decision', 
     },
   });
 
-  assert.deepEqual(checked, [{ ownerId: 'owner-1', kind: 'GENERATE_AI_TAGS' }]);
+  assert.deepEqual(checked, [{ ownerId: 'owner-1', kind: 'GENERATE_EMBEDDING' }]);
 });
 
 test('a paused AI backlog cannot hide ordinary background work', async () => {

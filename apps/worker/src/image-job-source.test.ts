@@ -61,7 +61,7 @@ test('embedding reads the current ready preview instead of the original', () => 
   });
 });
 
-test('AI noun tagging reads the bounded preview instead of the original', () => {
+test('image embedding reads the bounded preview instead of the original', () => {
   const sourceAsset = {
     originalObjectKey: 'users/owner/assets/asset/original.heic',
     mimeType: 'image/heic',
@@ -77,7 +77,7 @@ test('AI noun tagging reads the bounded preview instead of the original', () => 
     ],
   };
 
-  assert.deepEqual(selectImageJobSource(sourceAsset, 'GENERATE_AI_TAGS'), {
+  assert.deepEqual(selectImageJobSource(sourceAsset, 'GENERATE_EMBEDDING'), {
     storageKey: sourceAsset.renditions[0]!.storageKey,
     mimeType: 'image/webp',
     verifiesOriginalHash: false,
@@ -129,7 +129,7 @@ test('analysis never loads the large RAW edit copy, even when it precedes the br
     mimeType: 'image/webp',
   };
   const preview = { ...edit, variant: 'default', storageKey: 'preview.webp' };
-  for (const kind of ['GENERATE_AI_TAGS', 'GENERATE_EMBEDDING', 'ANALYZE_PHOTO_FACES'] as const) {
+  for (const kind of ['GENERATE_EMBEDDING', 'ANALYZE_PHOTO_FACES'] as const) {
     assert.equal(
       selectImageJobSource({ ...asset, renditions: [edit, preview] }, kind).storageKey,
       'preview.webp',

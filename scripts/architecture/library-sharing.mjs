@@ -51,7 +51,6 @@ const composition = {
 const controllers = {
   PhotosController: 'EagleController',
   PhotoUploadsController: 'EagleUploadController',
-  PhotoAiTagsController: 'EagleAiTagController',
   PhotoVectorsController: 'EagleVectorController',
   PhotoProcessingController: 'EagleProcessingController',
   PhotoTaskCenterController: 'EagleTaskCenterController',

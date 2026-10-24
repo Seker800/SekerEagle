@@ -8,7 +8,10 @@ import {
 
 test('new uploads and reconciliation never recreate retired AI tag generation', () => {
   const input = { ownerId: 'owner', assetId: 'asset', assetRevision: 1, width: 800, height: 600 };
-  for (const jobs of [buildImageProcessingJobs(input), buildMissingImageProcessingJobs(input, [])]) {
+  for (const jobs of [
+    buildImageProcessingJobs(input),
+    buildMissingImageProcessingJobs(input, []),
+  ]) {
     assert.ok(jobs.every((job) => job.kind !== 'GENERATE_AI_TAGS'));
     assert.ok(jobs.some((job) => job.kind === 'GENERATE_EMBEDDING'));
   }
@@ -59,15 +62,6 @@ test('large images get dependent palette and pyramid jobs after renditions', () 
         processorVersion: 'qwen3-vl-embedding-2b-1024-v1',
         dependsOnJobId: 'rendition-job',
       },
-      {
-        ownerId: 'owner-1',
-        assetId: 'asset-1',
-        assetRevision: 2,
-        kind: 'GENERATE_AI_TAGS',
-        lane: 'BACKGROUND',
-        processorVersion: 'ollama-concrete-nouns-8b-instruct-v2',
-        dependsOnJobId: 'rendition-job',
-      },
     ],
   );
 });
@@ -95,7 +89,6 @@ test('backfill reuses a current rendition job as the dependency for missing anal
     ['EXTRACT_COLOR_PALETTE', 'rendition-job'],
     ['GENERATE_IMAGE_PYRAMID', 'rendition-job'],
     ['GENERATE_EMBEDDING', 'rendition-job'],
-    ['GENERATE_AI_TAGS', 'rendition-job'],
   ]);
 });
 
@@ -130,7 +123,6 @@ test('backfill does not recreate an AI job when the current revision has a compl
       assetRevision: 2,
       width: 1_000,
       height: 800,
-      completedAiTag: true,
     },
     [],
   );
@@ -163,7 +155,6 @@ test('job pruning does not regenerate durable current-revision media facts', () 
       assetRevision: 2,
       width: 8000,
       height: 6000,
-      completedAiTag: true,
       renditionsReady: true,
       paletteReady: true,
       pyramidReady: true,
@@ -183,7 +174,6 @@ test('missing analysis can depend on ready renditions after rendition job prunin
       width: 100,
       height: 100,
       renditionsReady: true,
-      completedAiTag: true,
     },
     [],
   );

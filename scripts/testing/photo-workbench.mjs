@@ -229,7 +229,6 @@ try {
     S3_ACCESS_KEY_ID: accessKey,
     S3_SECRET_ACCESS_KEY: secretKey,
     MLX_EMBEDDING_URL: 'http://127.0.0.1:9',
-    OLLAMA_URL: 'http://127.0.0.1:9',
     PHOTO_FACE_PYTHON: process.env.PHOTO_FACE_PYTHON || resolve('.omx/photo-face/venv/bin/python'),
     PHOTO_FACE_MODEL_DIR: process.env.PHOTO_FACE_MODEL_DIR || resolve('.omx/photo-face/models'),
   };
@@ -1139,6 +1138,31 @@ try {
       const overview = await call(`/${mode}/tasks`);
       assert.equal(overview.status, 200);
       assert.deepEqual((await overview.json()).groups, []);
+    }
+    for (const mode of ['eagle', 'photos']) {
+      for (const [path, method] of [
+        ['summary', 'GET'],
+        ['settings', 'PATCH'],
+        ['scan-missing', 'POST'],
+        ['retry-failed', 'POST'],
+      ]) {
+        assert.equal(
+          (await call(`/${mode}/ai-tags/${path}`, method, method === 'GET' ? undefined : {}))
+            .status,
+          404,
+        );
+      }
+      assert.equal((await call(`/${mode}/tasks/retry`, 'POST', { family: 'AI_TAGS' })).status, 400);
+      assert.equal(
+        (
+          await call(`/${mode}/tasks/policy`, 'PATCH', {
+            family: 'AI_TAGS',
+            paused: false,
+            priority: 1,
+          })
+        ).status,
+        400,
+      );
     }
     const schedule = { mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' };
     assert.equal(

@@ -48,7 +48,6 @@ export function createNasStagingCompose(base, { revision }) {
     env.ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS = 'false';
     // No restored queue may silently call inference on the production Mac.
     env.MLX_EMBEDDING_URL = 'http://127.0.0.1:11435';
-    env.OLLAMA_URL = 'http://127.0.0.1:11434';
     delete env.SEKEREAGLE_BACKUP_STATUS_FILE;
     services[name].mem_limit = name === 'worker' ? '2g' : '1g';
   }

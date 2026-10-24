@@ -13,9 +13,6 @@ vi.mock('../../lib/eagle-task-center-api', () => ({
   createEagleTaskCenterApi: vi.fn(),
 }));
 vi.mock('./EagleProcessingPage', () => ({ EagleProcessingPage: () => <div>处理记录详情</div> }));
-vi.mock('./EagleAiTagSetupPanel', () => ({
-  EagleAiTagSetupPanel: () => <div>AI 内容识别设置</div>,
-}));
 const summary = {
   worker: 'ONLINE' as const,
   settings: {
@@ -188,8 +185,6 @@ describe('unified task center', () => {
     mount({ onReview, canManageProcessing: true });
     fireEvent.click(await screen.findByRole('button', { name: '去审批' }));
     expect(onReview).toHaveBeenCalledOnce();
-    fireEvent.click(screen.getByRole('button', { name: 'AI 内容识别设置' }));
-    expect(screen.getByText('AI 内容识别设置', { selector: 'div' })).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: '查看详细处理记录' }));
     expect(screen.getByText('处理记录详情')).toBeVisible();
   });

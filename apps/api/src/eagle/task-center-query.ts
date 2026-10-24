@@ -18,7 +18,7 @@ export function taskCenterQuery(
         j."availableAt" AS "nextAt"
       FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
       LEFT JOIN "EagleMediaJob" d ON d.id=j."dependsOnJobId" AND d."ownerId"=j."ownerId" AND d."libraryMode"=j."libraryMode"
-      WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${libraryMode}::"LibraryMode"
+      WHERE j.kind<>'GENERATE_AI_TAGS' AND j."ownerId"=${ownerId} AND j."libraryMode"=${libraryMode}::"LibraryMode"
         AND j."assetRevision"=a."mediaRevision" AND (${includePrivate} OR NOT a."isPrivate")
         AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET')
       UNION ALL

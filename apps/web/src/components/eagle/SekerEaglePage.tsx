@@ -174,14 +174,13 @@ type EagleLibraryView =
   | 'VECTOR_REVIEW'
   | 'VECTOR_TAGS'
   | 'VECTOR_UNCLASSIFIED'
-  | 'AI_TAG_SETTINGS'
   | 'PROCESSING'
   | 'ACCOUNT';
 type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS' | 'TASKS';
 
 function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
   if (view === 'MANUAL_TAGS' || view === 'AI_TAGS') return 'TAGS';
-  if (view === 'PROCESSING' || view === 'AI_TAG_SETTINGS') return 'TASKS';
+  if (view === 'PROCESSING') return 'TASKS';
   if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED') {
     return 'PENDING';
   }
@@ -1735,19 +1734,17 @@ export function SekerEaglePage({
               items={[
                 ...(accountView ? [{ view: 'ACCOUNT' as const, label: t('账号') }] : []),
                 { view: 'VECTOR_TAGS', label: t('人工标签推荐') },
-                { view: 'AI_TAG_SETTINGS', label: t('AI 内容识别') },
               ]}
               onSelect={changeLibraryView}
             />
           ) : null}
           {libraryView === 'ACCOUNT' ? (
             accountView
-          ) : libraryView === 'PROCESSING' || libraryView === 'AI_TAG_SETTINGS' ? (
+          ) : libraryView === 'PROCESSING' ? (
             <EagleTaskCenter
               key={`${storeScope}:${privateVisible}`}
               includePrivate={privateVisible}
               canManageProcessing={canManageProcessing}
-              initialSettings={libraryView === 'AI_TAG_SETTINGS'}
               onReview={() => {
                 changeLibraryView('ACTIVE');
                 setPhotoView('agent');

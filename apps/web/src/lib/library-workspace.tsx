@@ -1,6 +1,5 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import * as assets from './eagle-api';
-import * as aiTags from './eagle-ai-tag-api';
 import * as vectors from './eagle-vector-api';
 import * as processing from './eagle-processing-admin-api';
 import * as privacy from './eagle-privacy-api';
@@ -10,7 +9,6 @@ import type { LibraryMode } from './library-api-scope';
 
 const materialApi = {
   ...assets,
-  ...aiTags,
   ...vectors,
   ...processing,
   ...privacy,
@@ -20,7 +18,6 @@ const materialApi = {
 function photoApi() {
   return {
     ...assets.createEagleApi('PHOTO'),
-    ...aiTags.createEagleAiTagApi('PHOTO'),
     ...vectors.createEagleVectorApi('PHOTO'),
     ...processing.createEagleProcessingAdminApi('PHOTO'),
     ...privacy.createEaglePrivacyApi('PHOTO'),

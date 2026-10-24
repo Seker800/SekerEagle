@@ -258,22 +258,7 @@ test('schedule explanations use the actual intersection and deployment-specific 
   };
   const night = { mode: 'NIGHT', nightStart: '23:00', nightEnd: '06:00' };
   assert.equal((await overview('EMBEDDING', night, cap))?.reason, 'SCHEDULE');
-  assert.equal(
-    (
-      await overview(
-        'AI_TAGS',
-        {
-          ...night,
-          aiTagScheduleEnabled: true,
-          aiTagScheduleStart: '01:00',
-          aiTagScheduleEnd: '03:00',
-        },
-        cap,
-      )
-    )?.nextAt,
-    '2026-10-24T17:00:00.000Z',
-  );
-  assert.equal((await overview('AI_TAGS', { mode: 'ALWAYS' }, cap))?.reason, 'PAUSED');
+  assert.equal(await overview('AI_TAGS', { mode: 'ALWAYS' }, cap), undefined);
   for (const [family, field] of [
     ['VIDEO', 'video'],
     ['SMART_FOLDERS', 'smartFolders'],

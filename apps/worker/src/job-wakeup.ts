@@ -1,5 +1,5 @@
 import type { EagleMediaJobKind, EagleProcessingLane } from '@prisma/client';
-import { nextAnalysisTime } from '@sekereagle/library-core';
+import { nextBackgroundTime } from '@sekereagle/library-core';
 import { Client, type Notification } from 'pg';
 
 export const WORKER_WAKEUP_CHANNEL = 'sekereagle_worker_wakeup';
@@ -15,10 +15,6 @@ export interface ProcessingWakeSettings {
   mode: 'ALWAYS' | 'NIGHT' | 'MANUAL';
   nightStart: string;
   nightEnd: string;
-  aiTagManualEnabled: boolean;
-  aiTagScheduleEnabled: boolean;
-  aiTagScheduleStart: string;
-  aiTagScheduleEnd: string;
 }
 
 export function nextEligibleWakeAt(
@@ -27,8 +23,9 @@ export function nextEligibleWakeAt(
   now = new Date(),
 ): Date | null {
   const dueAt = new Date(Math.max(candidate.availableAt.getTime(), now.getTime()));
+  if (candidate.kind === 'GENERATE_AI_TAGS') return null;
   if (candidate.lane !== 'BACKGROUND') return dueAt;
-  return nextAnalysisTime(settings, candidate.kind, dueAt);
+  return nextBackgroundTime(settings, dueAt);
 }
 
 export class JobWakeScheduler {

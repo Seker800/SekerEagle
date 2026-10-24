@@ -135,12 +135,12 @@ describe('EagleProcessingPage', () => {
     vi.mocked(api.listEagleProcessingJobs).mockResolvedValue({
       items: [
         {
-          id: 'job-ai-tags',
+          id: 'job-embedding',
           assetReference: 'asset-1',
-          kind: 'GENERATE_AI_TAGS',
+          kind: 'GENERATE_EMBEDDING',
           lane: 'BACKGROUND',
           status: 'COMPLETED',
-          processorVersion: 'ai-tags-v1',
+          processorVersion: 'embedding-v1',
           attempts: 1,
           availableAt: '2026-08-14T12:00:00.000Z',
           startedAt: '2026-08-14T12:00:00.000Z',
@@ -158,8 +158,8 @@ describe('EagleProcessingPage', () => {
     await screen.findByText('在线');
     fireEvent.click(screen.getByRole('button', { name: '处理记录' }));
     const historyTable = screen.getByRole('table');
-    expect(within(historyTable).getByText('生成 AI 标签')).toBeVisible();
-    expect(within(historyTable).queryByText('GENERATE_AI_TAGS')).not.toBeInTheDocument();
+    expect(within(historyTable).getByText('生成图片向量')).toBeVisible();
+    expect(within(historyTable).queryByText('GENERATE_EMBEDDING')).not.toBeInTheDocument();
   });
 
   it('clamps stale color coverage values to a valid completed state', async () => {

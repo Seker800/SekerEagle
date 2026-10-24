@@ -6,7 +6,6 @@ import { AuthModule } from '../auth/auth.module';
 import { StorageModule } from '../storage/storage.module';
 import { EagleController } from './eagle.controller';
 import { EagleBrowserCaptureController } from './eagle-browser-capture.controller';
-import { EagleAiTagController } from './eagle-ai-tag.controller';
 import { EagleAiTagService } from './eagle-ai-tag.service';
 import { EagleEmbeddingClient } from './eagle-embedding-client';
 import { EagleBrowserCaptureService } from './eagle-browser-capture.service';
@@ -64,7 +63,6 @@ export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
   imports: [AuthModule, StorageModule],
   controllers: [
     EagleController,
-    EagleAiTagController,
     EagleBrowserCaptureController,
     EagleUploadController,
     EagleImportController,

@@ -3,38 +3,6 @@ export interface BackgroundSchedule {
   nightStart: string;
   nightEnd: string;
 }
-export interface AnalysisSchedule extends BackgroundSchedule {
-  aiTagManualEnabled?: boolean;
-  aiTagScheduleEnabled?: boolean;
-  aiTagScheduleStart?: string;
-  aiTagScheduleEnd?: string;
-}
-/** Earliest point inside both daily windows; disjoint windows have no eligible time. */
-export function nextAnalysisTime(
-  settings: AnalysisSchedule,
-  kind: string,
-  dueAt = new Date(),
-): Date | null {
-  if (kind !== 'GENERATE_AI_TAGS' || settings.aiTagManualEnabled)
-    return nextBackgroundTime(settings, dueAt);
-  if (!settings.aiTagScheduleEnabled) return null;
-  const ai = {
-    mode: 'NIGHT',
-    nightStart: settings.aiTagScheduleStart ?? '23:00',
-    nightEnd: settings.aiTagScheduleEnd ?? '06:00',
-  };
-  let at = dueAt;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    const globalAt = nextBackgroundTime(settings, at);
-    if (!globalAt) return null;
-    const aiAt = nextBackgroundTime(ai, globalAt);
-    if (!aiAt) return null;
-    if (aiAt.getTime() === globalAt.getTime()) return aiAt;
-    at = aiAt;
-  }
-  return null;
-}
-
 export const DEFAULT_BACKGROUND_SCHEDULE: BackgroundSchedule = {
   mode: 'NIGHT',
   nightStart: '23:00',
@@ -75,7 +43,6 @@ export const TASK_FAMILIES = [
   'DETAILS',
   'VIDEO',
   'EMBEDDING',
-  'AI_TAGS',
   'FACES',
   'COLOR',
   'PYRAMID',
@@ -121,7 +88,6 @@ export const CONTROLLABLE_TASK_FAMILIES = [
   'DETAILS',
   'VIDEO',
   'EMBEDDING',
-  'AI_TAGS',
   'FACES',
   'COLOR',
   'PYRAMID',
@@ -149,7 +115,6 @@ export function mediaTaskFamily(kind: string, version: string): TaskFamily {
   if (version.startsWith('video-playback-')) return 'VIDEO';
   const families: Record<string, TaskFamily> = {
     GENERATE_EMBEDDING: 'EMBEDDING',
-    GENERATE_AI_TAGS: 'AI_TAGS',
     ANALYZE_PHOTO_FACES: 'FACES',
     EXTRACT_COLOR_PALETTE: 'COLOR',
     GENERATE_IMAGE_PYRAMID: 'PYRAMID',

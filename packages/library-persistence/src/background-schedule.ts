@@ -5,12 +5,6 @@ export function dailyWindowSql(start: Prisma.Sql, end: Prisma.Sql) {
     THEN to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=${start} AND to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<${end}
     ELSE to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=${start} OR to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<${end} END`;
 }
-export function aiTagScheduleSql(owner: Prisma.Sql, mode: Prisma.Sql) {
-  return Prisma.sql`EXISTS (SELECT 1 FROM "EagleProcessingSetting" ai
-    WHERE ai."ownerId"=${owner} AND ai."libraryMode"=${mode} AND
-      (ai."aiTagManualEnabled" OR (ai."aiTagScheduleEnabled" AND ${dailyWindowSql(Prisma.sql`ai."aiTagScheduleStart"`, Prisma.sql`ai."aiTagScheduleEnd"`)})))`;
-}
-
 /** Same Shanghai window as library-core, evaluated at the database clock before claiming. */
 export function backgroundScheduleSql(owner: Prisma.Sql, mode: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
