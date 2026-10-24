@@ -1,5 +1,19 @@
 # 现用运行状态与交接
 
+## 2026-10-24 最新版本生产发布
+
+用户本次明确授权将现有最新版发布生产，覆盖此前暂停发布的历史要求。已发布代码为 `f32accdfe96a58f071407e2b51c50a5ff87797af`，包含统一任务中心、AI 标签生成退役、整理审批／操作记录、照片统计及地图持久索引与九地点精选。此前讨论的新任务中心设计与任务合并仍未实施，不属于此次发布。
+
+API、worker、web 均运行 `sekereagle/<服务>:nas-f32accdfe96a58f071407e2b51c50a5ff87797af`，三个服务健康，重启次数为 0；数据库迁移从 40 项升至 47 项，最新为 `20261024150000_retire_ai_tag_generation`。保留 PostgreSQL、MinIO、网关与独立封面容器身份；网关仅重新加载路由。三项应用的环境摘要、内存、账号及重启策略与发布前一致，API／worker 挂载保持原样，web 增加只读地图归档挂载。原处理白名单、视频／人脸／标签索引停用策略及 Mac 2B 位置不变；退役迁移只关闭旧 AI 标签生成开关、终止未完成生成任务并撤销租约，不删除已有标签、关联和成功历史。
+
+备份及回滚保存在 NAS 私有 `maintenance/latest-release-20261024-f32accd/`：一致性数据库归档为 539,662,260 字节，已校验 SHA256 及可读归档目录；另存构建产物清单、原服务摘要、迁移／部署日志、`rollback.yml` 与 `runtime-release.json`。没有恢复数据库、seed 或重新导入。Linux 依赖按当前锁文件重装，API 与 worker 均通过原生图像、bcrypt、数据库模型及依赖版本检查，实际 body-parser 为 2.4.0、multer 为 2.5.0；完整依赖审计为零漏洞。准备阶段遇到一次 Docker 中间构建层错误，关闭缓存并重建后完成，没有重启 Docker 或现用存储。
+
+现用 Compose 参数链仍以 `maintenance/processing-upgrade-20261023/release-compose.json` 的 `command` 为准，已追加本次 `latest-release-20261024-f32accd/runtime-override.yml`。只回滚应用时，在完整当前参数链末尾追加本次 `rollback.yml`；保留新增数据库结构，不自动恢复备份。地图归档实际挂载自 `maintenance/approvals-release-20261024/maps/`，**该目录已用于生产，不能作为旧候选清理**；大小为 6,730,630,120 字节，SHA256 已与本机公开地图来源清单一致性核验。
+
+验收：完整 CI、历史升级和完整数据库恢复检查通过；HTTPS readiness 为 200，线上 HTML 与本机候选逐字节相同；双模式任务接口未登录均为 401，退役生成 summary 接口均为 404；地图 Range 请求返回 206 和正确 PMTiles 文件头。生产内部只读查询确认两个模式的处理服务在线，旧生成待执行任务为 0，2B 能力为 READY；新 API 的合成文字推理验证返回 1024 维归一化向量。地图第一版持久索引仍在后台初始化，PENDING 不代表已完成；实际状态从地图状态表／接口读取。没有已登录生产浏览器交互验收，没有创建测试图库资源。
+
+独立封面检查点在发布准备到切换验收期间从 41,400 前进至 42,200／53,403，清单哈希不变，原容器与重启次数 0 保留；这是核验快照，实时进度仍读原检查点。验收记录位于本机 `.omx/artifacts/latest-production-*` 和上述 NAS 私有目录，勿提交归档或私人运行文件。
+
 核验时间：2026-10-24（北京时间，生产升级后）。这是当前部署快照，不是实时监控；修改运行位置、镜像、模型路由、处理开关或长期任务后，应更新本页并重新核验。安全边界以 [AGENTS](../AGENTS.md)、[架构北极星](architecture.md#north-star)为准。
 
 ## 2026-10-24 本机统一任务中心验收
@@ -44,18 +58,18 @@ DSM 已启用 root 开机任务 `SekerEagle Startup`，内嵌仓库 [nas-startup
 
 ## 每个运行模块负责什么
 
-| 模块          | 位置／标识                                      | 职责与依赖                                                                       |
-| ------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
-| HTTPS 入口    | DSM 反向代理、现有域名及证书                    | 终止 TLS，转发到群晖网关；不是数据库或图片处理服务                               |
-| gateway       | `sekereagle-nas-staging-gateway-1`              | 同源网页、API 和签名对象请求入口；NAS 局域网回源端口 8181                        |
-| web           | `sekereagle-nas-staging-web-1`                  | 静态 React/Vite 网页；浏览器负责呈现、缩略图缓存和现有编辑器交互                 |
-| API           | `sekereagle-nas-staging-api-1`                  | 认证、owner／模式隔离、图库查询、上传发布、任务管理；文字搜索向 Mac 请求向量     |
-| PostgreSQL    | `sekereagle-nas-staging-postgres-1`             | 业务记录、摄影索引、任务、向量及查询索引，是业务事实源                           |
-| MinIO         | `sekereagle-nas-staging-minio-1`                | 托管原片和派生图；写入必须走 S3 接口，不能直接向底层数据目录塞文件               |
-| worker        | `sekereagle-nas-staging-worker-1`               | 领取可重试媒体任务；生成普通封面／预览、补读信息、调度图片向量并写回群晖         |
-| 2B 模型       | Mac，`com.sekereagle.mlx-embedding`，端口 11435 | Qwen3-VL-Embedding-2B，固定模型修订及 1024 维空间；提供带认证的文字／图片推理    |
-| 独立封面复制  | NAS，`sekereagle-cover-copy-20261023`           | 从共享相册既有 JPEG 派生缓存复制到本应用 MinIO，发布当前版本封面，保留逐批检查点 |
-| 8B 标签／人脸 | 可选模型及 worker 任务                          | 当前处理配置未领取这些任务；不因更新应用顺便启用                                 |
+| 模块         | 位置／标识                                      | 职责与依赖                                                                       |
+| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| HTTPS 入口   | DSM 反向代理、现有域名及证书                    | 终止 TLS，转发到群晖网关；不是数据库或图片处理服务                               |
+| gateway      | `sekereagle-nas-staging-gateway-1`              | 同源网页、API 和签名对象请求入口；NAS 局域网回源端口 8181                        |
+| web          | `sekereagle-nas-staging-web-1`                  | 静态 React/Vite 网页；浏览器负责呈现、缩略图缓存和现有编辑器交互                 |
+| API          | `sekereagle-nas-staging-api-1`                  | 认证、owner／模式隔离、图库查询、上传发布、任务管理；文字搜索向 Mac 请求向量     |
+| PostgreSQL   | `sekereagle-nas-staging-postgres-1`             | 业务记录、摄影索引、任务、向量及查询索引，是业务事实源                           |
+| MinIO        | `sekereagle-nas-staging-minio-1`                | 托管原片和派生图；写入必须走 S3 接口，不能直接向底层数据目录塞文件               |
+| worker       | `sekereagle-nas-staging-worker-1`               | 领取可重试媒体任务；生成普通封面／预览、补读信息、调度图片向量并写回群晖         |
+| 2B 模型      | Mac，`com.sekereagle.mlx-embedding`，端口 11435 | Qwen3-VL-Embedding-2B，固定模型修订及 1024 维空间；提供带认证的文字／图片推理    |
+| 独立封面复制 | NAS，`sekereagle-cover-copy-20261023`           | 从共享相册既有 JPEG 派生缓存复制到本应用 MinIO，发布当前版本封面，保留逐批检查点 |
+| 人脸识别     | 图库服务器的可选 YuNet／SFace 模型              | 当前白名单未启用；旧版 8B 标签生成已退役                                         |
 
 Docker 项目仍叫 `sekereagle-nas-staging`，数据库仍叫 `sekereagle_test`，桶为 `sekereagle-assets`。这是初次恢复沿用的名称，**里面是现用用户数据，不是可随意重置的测试实例**。数据库及 S3 地址在应用配置中使用 Compose 服务名；不得为方便诊断改成 NAS IP 或连接受保护的外部系统。
 
@@ -84,9 +98,9 @@ EAGLE_INTERACTIVE_CONCURRENCY=1
 NODE_OPTIONS=--max-old-space-size=512
 ```
 
-普通 worker 的容器内存上限为 2 GiB。当前优先封面和 2B 向量；完整视频转码暂停，任务保留；人脸、8B 标签、调色板和深层金字塔不在当前领取白名单中。标签中心构建也受此处理配置限制。任务存在不等于已执行，队列暂停不等于删除。
+普通 worker 的容器内存上限为 2 GiB。当前优先封面和 2B 向量；完整视频转码暂停，任务保留；人脸、调色板和深层金字塔不在当前领取白名单中；旧版 8B 标签生成已退役，不再属于暂停队列。标签中心构建也受此处理配置限制。任务存在不等于已执行，队列暂停不等于删除。
 
-图片向量使用已托管的适用派生图作为输入，NAS 向 Mac 发送图片数据，Mac 返回向量，NAS 负责业务发布；不是把整套原片图库搬回 Mac。文字语义搜索同样调用 Mac。Mac 关机／模型断连时，已有封面浏览不依赖它，内容搜索会降级，新向量任务不能正常完成。不能在未验证前承诺断连后所有任务无限自动重试。
+图片向量使用已托管的适用派生图作为输入，NAS 向 Mac 发送图片数据，Mac 返回向量，NAS 负责业务发布；不是把整套原片图库搬回 Mac。文字语义搜索同样调用 Mac。Mac 关机／模型断连时，已有封面浏览不依赖它，内容搜索会降级；新向量任务等待服务恢复，不消耗业务重试预算。已保存查询向量的智能文件夹可继续使用已有数据，仍须满足原部署开关与时段。
 
 ### 独立封面任务
 
@@ -122,16 +136,16 @@ journal 和清单包含私人文件信息，只保存在私有目录，不提交
 
 ## 代码与已部署版本
 
-2026-10-24 生产升级验收快照：
+2026-10-24 本次生产升级验收快照（历史经过保留在后文）：
 
 | 位置               | 已核验版本                                                                                      |
 | ------------------ | ----------------------------------------------------------------------------------------------- |
-| 本地 `main`        | 发布代码 `2b6bcb2`，运行文档提交会继续推进 main                                                 |
+| 本次发布提交       | 发布代码 `f32accd`，运行文档提交会继续推进 main                                                 |
 | 远程 `origin/main` | 发布代码已推送；实时提交请重新 fetch 核验                                                       |
-| NAS API 镜像       | `sekereagle/api:nas-2b6bcb271fec2ad390358dd857e7e11c35529c94`                                   |
-| NAS worker 镜像    | `sekereagle/worker:nas-2b6bcb271fec2ad390358dd857e7e11c35529c94`                                |
-| NAS web 镜像       | `sekereagle/web:nas-2b6bcb271fec2ad390358dd857e7e11c35529c94`                                   |
-| 数据库迁移         | `20261023150000_semantic_smart_folders`，已完成迁移共 40 项                                     |
+| NAS API 镜像       | `sekereagle/api:nas-f32accdfe96a58f071407e2b51c50a5ff87797af`                                   |
+| NAS worker 镜像    | `sekereagle/worker:nas-f32accdfe96a58f071407e2b51c50a5ff87797af`                                |
+| NAS web 镜像       | `sekereagle/web:nas-f32accdfe96a58f071407e2b51c50a5ff87797af`                                   |
+| 数据库迁移         | `20261024150000_retire_ai_tag_generation`，已完成迁移共 47 项                                   |
 | 独立封面容器       | 继续使用 `sekereagle/worker:nas-5b745e575ac649cc5bc0073539ccc8d14ccc90b0`，原容器及生命周期独立 |
 
 语义智能文件夹、照片地图与离线地名能力已部署，此前年份刻度、双向分页、日期修复和缩略图缓存保留。语义文件夹保存 2B 查询向量和匹配快照，普通条件实时筛选；新增图片向量发布时增量维护。详情见 [语义智能文件夹](semantic-smart-folders.md)。
