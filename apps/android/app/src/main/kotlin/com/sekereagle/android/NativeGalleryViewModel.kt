@@ -21,6 +21,14 @@ import org.json.JSONArray
 
 data class NativeIdentity(val scope: String, val email: String, val origin: String)
 
+sealed interface NativeReadRetry {
+    data class Page(val next: Boolean, val before: String?, val offset: Long) : NativeReadRetry
+
+    data object Refresh : NativeReadRetry
+
+    data object Previous : NativeReadRetry
+}
+
 data class GalleryState(
     val identity: NativeIdentity? = null,
     val restoring: Boolean = true,
@@ -37,6 +45,7 @@ data class GalleryState(
     val loading: Boolean = false,
     val loaded: Boolean = false,
     val error: String? = null,
+    val readRetry: NativeReadRetry? = null,
     val searchOpen: Boolean = false,
     val searchDraft: String = "",
     val searchFilters: NativeFilters = NativeFilters(),
@@ -421,6 +430,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             snapshot.copy(
                 loading = true,
                 error = null,
+                readRetry = null,
                 windowOffset = if (!next && before == null) 0 else snapshot.windowOffset,
             )
         if (!next) loadTimeline(snapshot, repo)
@@ -457,9 +467,22 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     if (e is NativeSession.Failure && e.status == 401) expire()
                     else
                         mutable.value =
-                            state.value.copy(loading = false, error = e.message ?: "加载失败，请重试")
+                            state.value.copy(
+                                loading = false,
+                                error = e.message ?: "加载失败，请重试",
+                                readRetry = NativeReadRetry.Page(next, before, offset),
+                            )
                 }
             }
+        }
+    }
+
+    fun retryRead() {
+        when (val retry = state.value.readRetry) {
+            is NativeReadRetry.Page -> load(retry.next, retry.before, retry.offset)
+            NativeReadRetry.Refresh -> refresh()
+            NativeReadRetry.Previous -> loadPrevious()
+            null -> Unit
         }
     }
 
@@ -471,7 +494,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         operation?.cancel()
         val request = ++generation
         transferRefreshPending = false
-        mutable.value = snapshot.copy(loading = true, error = null)
+        mutable.value = snapshot.copy(loading = true, error = null, readRetry = null)
         loadTimeline(snapshot, repo)
         operation = viewModelScope.launch {
             try {
@@ -504,6 +527,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     state.value.copy(
                         items = items.distinctBy { it.id },
                         cursor = cursor,
+                        loaded = true,
                         selected = state.value.selected.intersect(items.map { it.id }.toSet()),
                         loading = false,
                     )
@@ -515,7 +539,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     if (e is NativeSession.Failure && e.status == 401) expire()
                     else
                         mutable.value =
-                            state.value.copy(loading = false, error = e.message ?: "刷新失败，请重试")
+                            state.value.copy(
+                                loading = false,
+                                error = e.message ?: "刷新失败，请重试",
+                                readRetry = NativeReadRetry.Refresh,
+                            )
                 }
             }
         }
@@ -537,7 +565,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val start = (snapshot.windowOffset - 60).coerceAtLeast(0)
         val day = index.dayAt(start) ?: return
         val request = ++generation
-        mutable.value = snapshot.copy(loading = true, error = null)
+        mutable.value = snapshot.copy(loading = true, error = null, readRetry = null)
         operation = viewModelScope.launch {
             try {
                 val page =
@@ -563,7 +591,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     if (e is NativeSession.Failure && e.status == 401) expire()
                     else
                         mutable.value =
-                            state.value.copy(loading = false, error = e.message ?: "加载较新照片失败，请重试")
+                            state.value.copy(
+                                loading = false,
+                                error = e.message ?: "加载较新照片失败，请重试",
+                                readRetry = NativeReadRetry.Previous,
+                            )
                 }
             }
         }

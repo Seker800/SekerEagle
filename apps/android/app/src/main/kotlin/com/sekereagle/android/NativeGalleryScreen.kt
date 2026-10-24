@@ -185,7 +185,7 @@ internal fun NativeLibraryPage(
             appliedScrollRequest = state.scrollRequest
         }
     }
-    LaunchedEffect(active, grid, state.cursor, state.loading) {
+    LaunchedEffect(active, grid, state.cursor, state.loading, state.error) {
         if (!active) return@LaunchedEffect
         snapshotFlow {
                 val layout = grid.layoutInfo
@@ -198,7 +198,8 @@ internal fun NativeLibraryPage(
                         last >= 0 &&
                         last >= total - 12 &&
                         state.cursor != null &&
-                        !state.loading
+                        !state.loading &&
+                        state.error == null
                 )
                     model.load(true)
             }
@@ -334,7 +335,7 @@ internal fun NativeLibraryPage(
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(state.error, color = NativeMuted)
-                            TextButton({ model.load(state.items.isNotEmpty()) }) { Text("重试") }
+                            TextButton(model::retryRead, enabled = !state.loading) { Text("重试") }
                         }
                     }
             }
