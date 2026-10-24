@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PAT_PREFIX } from './auth.constants';
 import { PAT_SCOPES, type AuthPrincipal, type PatScope } from './auth.types';
@@ -8,13 +9,22 @@ import { PAT_SCOPES, type AuthPrincipal, type PatScope } from './auth.types';
 export class PatService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(userId: string, name: string, scopes: PatScope[]) {
+  async create(userId: string, name: string, scopes: PatScope[], expectedAuthVersion?: number) {
     const uniqueScopes = [...new Set(scopes)];
     if (uniqueScopes.some((scope) => !PAT_SCOPES.includes(scope))) {
       throw new BadRequestException('PAT scope 不受支持。');
     }
     const token = `${PAT_PREFIX}${randomBytes(32).toString('base64url')}`;
-    const record = await this.prisma.personalAccessToken.create({
+    const record = await this.prisma.$transaction(async (tx) => {
+      // Same account-first ordering as password changes and browser session issuance.
+      // A request authenticated before a password change cannot mint a surviving PAT afterward.
+      const accounts = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT id FROM "User" WHERE id = ${userId} AND "disabledAt" IS NULL
+        ${expectedAuthVersion === undefined ? Prisma.empty : Prisma.sql`AND "authVersion" = ${expectedAuthVersion}`}
+        FOR SHARE
+      `);
+      if (accounts.length !== 1) throw new UnauthorizedException('登录状态已失效，请重新登录。');
+      return tx.personalAccessToken.create({
       data: {
         userId,
         name,
@@ -23,6 +33,7 @@ export class PatService {
         expiresAt: null,
       },
       select: { id: true, name: true, scopes: true, expiresAt: true, createdAt: true },
+    });
     });
     return { ...record, token };
   }

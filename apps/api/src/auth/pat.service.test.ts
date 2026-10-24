@@ -21,6 +21,10 @@ void test('新建 PAT 永久有效，同时保留最小权限和单次明文返�
     },
   } as unknown as PrismaService;
 
+  Object.assign(prisma, {
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(prisma),
+    $queryRaw: async () => [{ id: 'owner-1' }],
+  });
   const result = await new PatService(prisma).create('owner-1', '采集器', [
     'capture:write',
     'capture:write',

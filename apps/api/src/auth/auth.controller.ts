@@ -150,7 +150,7 @@ export class AuthController {
   @Post('tokens')
   @UseGuards(AccessAuthGuard, BrowserPrincipalGuard, BrowserOriginGuard)
   createToken(@CurrentPrincipal() principal: AuthPrincipal, @Body() dto: CreatePatDto) {
-    return this.pats.create(principal.sub, dto.name, dto.scopes);
+    return this.pats.create(principal.sub, dto.name, dto.scopes, principal.authVersion);
   }
 
   @Delete('tokens/current')
