@@ -54,6 +54,7 @@ const controllers = {
   PhotoAiTagsController: 'EagleAiTagController',
   PhotoVectorsController: 'EagleVectorController',
   PhotoProcessingController: 'EagleProcessingController',
+  PhotoTaskCenterController: 'EagleTaskCenterController',
 };
 function walk(node, visit) {
   visit(node);

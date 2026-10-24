@@ -1,0 +1,68 @@
+import { Prisma, type LibraryMode } from '@prisma/client';
+
+/** Aggregate in PostgreSQL: never load every resource or expose private task payloads. */
+export function taskCenterQuery(ownerId: string, libraryMode: LibraryMode, includePrivate: boolean) {
+  return Prisma.sql`
+    WITH facts AS (
+      SELECT 'MEDIA' AS family, j.kind::text AS step, j."processorVersion" AS version,
+        CASE WHEN j.status='COMPLETED' THEN 'COMPLETED' WHEN j.status='FAILED' THEN 'FAILED'
+          WHEN j.status='PROCESSING' AND j."lockedAt">now()-interval '10 minutes' THEN 'RUNNING'
+          ELSE 'QUEUED' END AS status,
+        CASE WHEN d.status='FAILED' THEN 'DEPENDENCY_FAILED'
+          WHEN j."dependsOnJobId" IS NOT NULL AND d.status IS DISTINCT FROM 'COMPLETED' THEN 'DEPENDENCY'
+          WHEN j."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END AS reason,
+        j."availableAt" AS "nextAt"
+      FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
+      LEFT JOIN "EagleMediaJob" d ON d.id=j."dependsOnJobId" AND d."ownerId"=j."ownerId" AND d."libraryMode"=j."libraryMode"
+      WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${libraryMode}::"LibraryMode"
+        AND j."assetRevision"=a."mediaRevision" AND (${includePrivate} OR NOT a."isPrivate")
+        AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET')
+      UNION ALL
+      SELECT 'SMART_FOLDERS','SMART_FOLDERS','',
+        CASE WHEN s.status='READY' THEN 'COMPLETED' WHEN s.status='FAILED' THEN 'FAILED'
+          WHEN s."lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
+        CASE WHEN s."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,s."availableAt"
+      FROM "EagleSmartFolderSemanticSnapshot" s
+      WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
+        AND s.status IN ('PENDING','BUILDING','READY','FAILED')
+      UNION ALL
+      SELECT 'TAG_INDEX','TAG_INDEX','',
+        CASE WHEN b.status='COMPLETED' THEN 'COMPLETED' WHEN b.status='FAILED' THEN 'FAILED'
+          WHEN b.status='PROCESSING' AND b."lockedAt">now()-interval '10 minutes' THEN 'RUNNING' ELSE 'QUEUED' END,
+        CASE WHEN b."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,b."availableAt"
+      FROM "EagleTagSemanticBuild" b JOIN "EagleManualTag" t ON t.id=b."tagId" AND t."ownerId"=b."ownerId" AND t."libraryMode"=b."libraryMode"
+      WHERE b."ownerId"=${ownerId} AND b."libraryMode"=${libraryMode}::"LibraryMode" AND (${includePrivate} OR NOT t."marksAssetsPrivate")
+      UNION ALL
+      SELECT 'PHOTO_MAP','PHOTO_MAP','',
+        CASE WHEN "dirtyAt" IS NULL THEN 'COMPLETED' WHEN "lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
+        CASE WHEN "availableAt">now() AND "lastError" IS NOT NULL THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
+      FROM "EaglePhotoMapState" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode"
+      UNION ALL
+      SELECT 'CLEANUP','OBJECT_DELETION','',CASE WHEN status='PROCESSING' AND "lockedAt">now()-interval '10 minutes' THEN 'RUNNING' ELSE 'QUEUED' END,
+        CASE WHEN "availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
+      FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate}
+      UNION ALL
+      SELECT 'APPROVALS','APPROVALS','',CASE WHEN s.status='PENDING' THEN 'APPROVAL' WHEN s.status='FAILED' THEN 'FAILED'
+        WHEN s.status='APPLYING' THEN 'RUNNING' ELSE 'COMPLETED' END,'APPROVAL',NULL::timestamptz
+      FROM "EaglePhotoAgentSuggestion" s JOIN "EagleAsset" a ON a.id=s."assetId" AND a."ownerId"=s."ownerId" AND a."libraryMode"=s."libraryMode"
+      JOIN "EaglePhotoAgentTask" t ON t.id=s."taskId" AND t."ownerId"=s."ownerId" AND t."libraryMode"=s."libraryMode"
+      WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode" AND s."assetRevision"=a."mediaRevision"
+        AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
+        AND (t."expiresAt" IS NULL OR t."expiresAt">now()) AND t.status='OPEN'
+      UNION ALL
+      SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">now()-interval '10 minutes' THEN 'RUNNING'
+        WHEN j.status='FAILED' THEN 'FAILED' WHEN j.status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,
+        CASE WHEN j."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,j."availableAt"
+      FROM "UploadFinalizationJob" j JOIN "UploadSession" s ON s.id=j."uploadSessionId"
+      LEFT JOIN "EagleAsset" a ON a.id=s."eagleAssetId" AND a."ownerId"=s."uploaderId" AND a."libraryMode"=s."libraryMode"
+      WHERE s."uploaderId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
+        AND (${includePrivate} OR a.id IS NULL OR NOT a."isPrivate")
+      UNION ALL
+      SELECT 'IMPORTS','IMPORTS','',CASE WHEN status='RUNNING' THEN 'RUNNING' WHEN status IN ('PARTIAL','FAILED') THEN 'FAILED'
+        WHEN status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,'QUEUED',NULL::timestamptz
+      FROM "EagleImportRun" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND status<>'CANCELLED'
+    )
+    SELECT family,step,version,status,reason,count(*) AS count,min("nextAt") AS "nextAt"
+    FROM facts GROUP BY family,step,version,status,reason ORDER BY family,step,status,reason
+  `;
+}

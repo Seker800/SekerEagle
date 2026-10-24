@@ -27,14 +27,14 @@ test('task center groups facts without returning raw errors, names or global wor
   } as never, 'PHOTO');
   const result = await service.overview('owner-a', false);
   assert.equal(result.groups.find((group) => group.id === 'BROWSE')?.queued, 3);
-  assert.equal(result.groups.find((group) => group.id === 'BROWSE')?.waiting[0].reason, 'DEPENDENCY');
+  assert.equal(result.groups.find((group) => group.id === 'BROWSE')?.waiting[0]?.reason, 'DEPENDENCY');
   assert.equal(result.worker, 'ONLINE');
   assert.equal(queries.length, 1);
-  assert.ok(queries[0].values.includes('owner-a'));
-  assert.ok(queries[0].values.includes('PHOTO'));
-  assert.ok(queries[0].values.includes(false));
-  assert.match(queries[0].sql, /mediaRevision/);
-  assert.match(queries[0].sql, /isPrivate/);
+  assert.ok(queries[0]!.values.includes('owner-a'));
+  assert.ok(queries[0]!.values.includes('PHOTO'));
+  assert.ok(queries[0]!.values.includes(false));
+  assert.match(queries[0]!.sql, /mediaRevision/);
+  assert.match(queries[0]!.sql, /isPrivate/);
   assert.equal(JSON.stringify(result).includes('lastError'), false);
 });
 

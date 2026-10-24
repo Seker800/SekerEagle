@@ -1,4 +1,5 @@
 import { Prisma, type LibraryMode } from '@prisma/client';
+export { backgroundScheduleSql } from './background-schedule';
 
 export async function lockOwnerPrivacyProjection(
   transaction: Prisma.TransactionClient,

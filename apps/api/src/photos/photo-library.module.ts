@@ -24,6 +24,7 @@ import { EagleUploadController } from '../eagle/eagle-upload.controller';
 import { EagleAiTagController } from '../eagle/eagle-ai-tag.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
+import { EagleTaskCenterController } from '../eagle/eagle-task-center.controller';
 import { EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
 import { EagleMaintenanceService } from '../eagle/eagle-maintenance.service';
 import type { Request, Response } from 'express';
@@ -63,6 +64,10 @@ export class PhotoVectorsController extends EagleVectorController {}
 export class PhotoProcessingController extends EagleProcessingController {}
 
 @SetMetadata(LIBRARY_MODE, 'PHOTO')
+@Controller('photos/tasks')
+export class PhotoTaskCenterController extends EagleTaskCenterController {}
+
+@SetMetadata(LIBRARY_MODE, 'PHOTO')
 @Controller('photos/privacy-visibility')
 @UseGuards(AccessAuthGuard, BrowserPrincipalGuard)
 export class PhotoPrivacyVisibilityController {
@@ -95,6 +100,7 @@ export class PhotoPrivacyVisibilityController {
     PhotoAiTagsController,
     PhotoVectorsController,
     PhotoProcessingController,
+    PhotoTaskCenterController,
   ],
   providers: [
     PhotoManagementService,

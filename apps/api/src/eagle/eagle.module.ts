@@ -18,6 +18,8 @@ import { EagleMediaCapabilityService } from './eagle-media-capability.service';
 import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 import { EagleProcessingController } from './eagle-processing.controller';
 import { EagleProcessingService } from './eagle-processing.service';
+import { EagleTaskCenterController } from './eagle-task-center.controller';
+import { EagleTaskCenterService } from './eagle-task-center.service';
 import { EagleVectorController } from './eagle-vector.controller';
 import { EagleVectorService } from './eagle-vector.service';
 import { EagleService } from './eagle.service';
@@ -54,6 +56,7 @@ export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
   { provide: EAGLE_IMPORTS_REPOSITORY, useExisting: PrismaEagleImportsRepository },
   { provide: SEKER_EAGLE_INGESTION_PORT, useExisting: PrismaSekerEagleIngestionAdapter },
   EagleProcessingService,
+  EagleTaskCenterService,
   EagleVectorService,
 ];
 
@@ -66,6 +69,7 @@ export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
     EagleUploadController,
     EagleImportController,
     EagleProcessingController,
+    EagleTaskCenterController,
     EagleVectorController,
   ],
   providers: [...EAGLE_LIBRARY_PROVIDERS, { provide: LIBRARY_MODE, useValue: 'MATERIAL' }],

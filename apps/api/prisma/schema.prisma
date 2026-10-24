@@ -1234,6 +1234,7 @@ model EagleProcessingWorkerHeartbeat {
   startedAt      DateTime
   heartbeatAt    DateTime
   activeJobCount Int      @default(0)
+  capabilities   Json?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
