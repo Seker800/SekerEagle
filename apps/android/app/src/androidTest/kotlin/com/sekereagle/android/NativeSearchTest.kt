@@ -157,7 +157,9 @@ class NativeSearchTest {
             compose.onNodeWithTag("tag-search").performTextInput("bq8999")
             await { compose.onAllNodesWithText("标签8999").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("标签8999").performClick()
-            compose.onNodeWithTag("filter-submit").performClick()
+            compose.waitForIdle()
+            captureNativeEvidence("native-search-tags.png")
+            compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             compose.onNodeWithTag("native-search").assertExists()
             compose.onNodeWithTag("search-submit").performScrollTo().performClick()
             await { !model.state.value.loading }
@@ -293,6 +295,8 @@ class NativeSearchTest {
             compose.onNodeWithText("Lens B").performScrollTo().performClick()
             compose.onNodeWithText("4 ★").performScrollTo().performClick()
             compose.onNodeWithText("有 GPS").performScrollTo().performClick()
+            compose.waitForIdle()
+            captureNativeEvidence("native-search-combined.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             assertEquals("flower", model.state.value.searchDraft)
             compose.onNodeWithTag("search-submit").performScrollTo().performClick()
@@ -353,6 +357,28 @@ class NativeSearchTest {
             compose.waitUntil(1500) { !model.state.value.optionsLoading }
             assertEquals(listOf("jpeg", "mp4", "png"), model.state.value.options.formats)
             assertTrue(model.state.value.options.tags.isEmpty())
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun blankSearchSpaceCannotTapThroughToTheGallery() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            val assetY =
+                compose.onNodeWithTag("asset:asset").fetchSemanticsNode().boundsInRoot.center.y
+            main { model.openSearch() }
+            val searchTop =
+                compose.onNodeWithTag("native-search").fetchSemanticsNode().boundsInRoot.top
+            compose.onNodeWithTag("native-search").performTouchInput {
+                click(androidx.compose.ui.geometry.Offset(2f, assetY - searchTop))
+            }
+            assertNull(
+                "Search must consume touches in its padding, without opening the underlying photo",
+                model.state.value.viewerId,
+            )
+            assertTrue(model.state.value.searchOpen)
             main { model.logout() }
         }
     }
