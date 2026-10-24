@@ -1,4 +1,18 @@
 export const enUS = {
+  "时间范围": "Time range",
+  "最近一年": "Last year",
+  "自定义日期": "Custom dates",
+  "相机筛选": "Filter cameras",
+  "镜头筛选": "Filter lenses",
+  "搜索设备": "Search devices",
+  "没有匹配的设备": "No matching devices",
+  "移除筛选：{{value1}}": "Remove filter: {{value1}}",
+  "重置筛选": "Reset filters",
+  "正在更新统计…": "Updating statistics…",
+  "数量 / 占比": "Count / Share",
+  "点击设备可直接筛选，再次点击取消。仅统计可见照片，不含视频和回收站；未知日期不使用导入时间替代。": "Click a device to filter; click again to clear. Counts visible photos, excluding videos and trash. Import dates never replace unknown capture dates.",
+  "悬停查看数量，方向键切换时间，点击图例显示或隐藏曲线。": "Hover for counts, use arrow keys to inspect time, and click legend items to show or hide series.",
+
   照片数量: 'Photo count',
   '仅统计当前可见的照片，视频和回收站不参与。按相机记录的本地拍摄日期统计，缺失日期不使用导入时间替代。':
     'Counts visible photos only, excluding videos and trash. Uses the camera’s local capture date, or UTC when unavailable; import dates never replace missing capture dates.',

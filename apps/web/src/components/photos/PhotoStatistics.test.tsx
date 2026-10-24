@@ -48,9 +48,9 @@ describe('photo statistics', () => {
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
-    fireEvent.click(screen.getByLabelText('Camera A'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
-    fireEvent.click(screen.getByLabelText('Lens A'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '按镜头' }));
     await waitFor(() =>
       expect(get.mock.calls.at(-1)?.[0]).toMatchObject({
@@ -98,14 +98,14 @@ describe('statistics interactions', () => {
     mount();
     await screen.findByRole('img', { name: '拍摄量折线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
-    fireEvent.click(screen.getByLabelText('Camera A'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
-    fireEvent.click(screen.getByLabelText('Camera A'));
-    await waitFor(() => expect(screen.getByLabelText('Camera A')).not.toBeChecked());
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A', exact: true }));
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Camera A', exact: true })).not.toBeChecked());
     fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
-    fireEvent.click(screen.getByLabelText('Lens A'));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Lens A', exact: true }));
     fireEvent.click(screen.getByRole('button', { name: '清除选择' }));
-    expect(screen.getByLabelText('Lens A')).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Lens A', exact: true })).not.toBeChecked();
   });
   it('keeps unrecognised devices and missing dates explicit', async () => {
     get.mockResolvedValue({
@@ -183,11 +183,11 @@ it('searches full device lists, exposes active filters and clears them together'
   get.mockResolvedValue(data); mount(); await screen.findByRole('img', { name: '拍摄量折线图' });
   fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
   fireEvent.change(screen.getByLabelText('搜索设备'), { target: { value: 'Camera B' } });
-  expect(screen.queryByLabelText('Camera A')).not.toBeInTheDocument();
-  fireEvent.click(screen.getByLabelText('Camera B'));
+  expect(screen.queryByRole('checkbox', { name: 'Camera A', exact: true })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Camera B', exact: true }));
   expect(screen.getByRole('button', { name: '移除筛选：Camera B' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '重置筛选' }));
-  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual([]));
+  await waitFor(() => expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument());
   expect(screen.queryByRole('button', { name: '移除筛选：Camera B' })).not.toBeInTheDocument();
 });
 
@@ -196,7 +196,7 @@ it('filters from a ranked device row and supports a recent-year shortcut', async
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
-  await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual([]));
+  await waitFor(() => expect(screen.queryByRole('button', { name: '移除筛选：Camera A' })).not.toBeInTheDocument());
   fireEvent.click(screen.getByRole('button', { name: '最近一年' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].end).toMatch(/^\d{4}-\d{2}-\d{2}$/));
 });
