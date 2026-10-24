@@ -178,7 +178,7 @@ class NativeSearchTest {
             captureNativeEvidence("native-search-tags.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             compose.onNodeWithTag("native-search").assertExists()
-            compose.onNodeWithTag("search-submit").performScrollTo().performClick()
+            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading }
             assertEquals(setOf("tag8999"), model.state.value.filters.tags)
             main { model.logout() }
@@ -262,7 +262,7 @@ class NativeSearchTest {
             compose.onNodeWithTag("filter-submit").performClick()
             compose.onNodeWithTag("condition:tag:tag1").assertExists()
             compose.onNodeWithTag("condition:format:png").assertExists()
-            compose.onNodeWithTag("search-submit").performScrollTo().performClick()
+            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading }
             assertEquals("new keyword", model.state.value.query)
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
@@ -316,7 +316,7 @@ class NativeSearchTest {
             captureNativeEvidence("native-search-combined.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             assertEquals("flower", model.state.value.searchDraft)
-            compose.onNodeWithTag("search-submit").performScrollTo().performClick()
+            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading }
             val filters = model.state.value.filters
             assertEquals("Camera A", filters.camera)
@@ -461,14 +461,25 @@ class NativeSearchTest {
         Server().use { server ->
             val model = model(server)
             compose.setContent { NativeGalleryApp(model) {} }
-            main { model.openSearch(); model.openFilters("标签") }
+            main {
+                model.openSearch()
+                model.openFilters("标签")
+            }
             await { !model.state.value.optionsLoading }
             compose.onNodeWithTag("tag-search").performTextInput("bq1")
             await { compose.onAllNodesWithText("标签1").fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText("标签1").performClick()
-            val submit = compose.onNodeWithTag("filter-submit").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+            val submit =
+                compose
+                    .onNodeWithTag("filter-submit")
+                    .assertIsDisplayed()
+                    .fetchSemanticsNode()
+                    .boundsInRoot
             val input = compose.onNodeWithTag("tag-search").fetchSemanticsNode().boundsInRoot
-            assertTrue("Confirmation must stay in the sheet header above the keyboard and list", submit.bottom <= input.top)
+            assertTrue(
+                "Confirmation must stay in the sheet header above the keyboard and list",
+                submit.bottom <= input.top,
+            )
             compose.onNodeWithTag("filter-submit").performClick()
             compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading && !model.state.value.searchOpen }
@@ -483,16 +494,24 @@ class NativeSearchTest {
         Server().use { server ->
             val model = model(server)
             compose.setContent { NativeGalleryApp(model) {} }
-            main { model.search("flower", NativeFilters(tags = setOf("tag1"), formats = setOf("png"))) }
+            main {
+                model.search("flower", NativeFilters(tags = setOf("tag1"), formats = setOf("png")))
+            }
             await { !model.state.value.loading }
             val requests = server.paths.count { it.contains("/assets?") }
-            compose.onNodeWithTag("native-grid").performTouchInput { swipeDown(startY = height * 0.2f, endY = height * 0.85f, durationMillis = 600) }
+            compose.onNodeWithTag("native-grid").performTouchInput {
+                swipeDown(startY = height * 0.2f, endY = height * 0.85f, durationMillis = 600)
+            }
             compose.waitUntil(3000) { server.paths.count { it.contains("/assets?") } > requests }
             await { !model.state.value.loading }
             assertEquals("flower", model.state.value.query)
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
             val path = server.paths.last { it.contains("/assets?") }
-            assertTrue(path.contains("manualTagIds=tag1") && path.contains("formats=png") && path.contains("search=flower"))
+            assertTrue(
+                path.contains("manualTagIds=tag1") &&
+                    path.contains("formats=png") &&
+                    path.contains("search=flower")
+            )
             main { model.logout() }
         }
     }

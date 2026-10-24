@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
@@ -111,7 +112,7 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
 }
 
 @Composable
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 internal fun NativeLibraryPage(
     state: GalleryState,
     model: NativeGalleryViewModel,
@@ -204,7 +205,23 @@ internal fun NativeLibraryPage(
                     model.load(true)
             }
     }
-    Box(Modifier.fillMaxSize()) {
+    val refreshState = rememberPullToRefreshState()
+    Box(
+        Modifier.fillMaxSize()
+            .pullToRefresh(
+                isRefreshing = state.refreshing,
+                state = refreshState,
+                enabled =
+                    active &&
+                        !state.loading &&
+                        !state.busy &&
+                        !state.selecting &&
+                        !state.searchOpen &&
+                        state.filterPanel == null &&
+                        state.viewerId == null,
+                onRefresh = model::refresh,
+            )
+    ) {
         Box(Modifier.fillMaxSize()) {
             LazyVerticalGrid(
                 GridCells.Fixed(state.columns),
@@ -319,7 +336,7 @@ internal fun NativeLibraryPage(
                         }
                     }
                 }
-                if (state.loading && state.items.isNotEmpty())
+                if (state.loading && !state.refreshing && state.items.isNotEmpty())
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
                             Modifier.fillMaxWidth().padding(28.dp),
@@ -360,6 +377,11 @@ internal fun NativeLibraryPage(
                     )
                 }
         }
+        PullToRefreshDefaults.Indicator(
+            state = refreshState,
+            isRefreshing = state.refreshing,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = topInset),
+        )
         if (state.timeline != null && !state.searchOpen && !state.selecting)
             NativeFastScroll(
                 state,

@@ -43,6 +43,7 @@ data class GalleryState(
     val cursor: String? = null,
     val query: String = "",
     val loading: Boolean = false,
+    val refreshing: Boolean = false,
     val loaded: Boolean = false,
     val error: String? = null,
     val readRetry: NativeReadRetry? = null,
@@ -373,6 +374,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 (current.mode to
                     current.copy(
                         loading = false,
+                        refreshing = false,
                         optionStatus =
                             current.optionStatus.mapValues { (_, value) ->
                                 value.copy(loading = false)
@@ -429,6 +431,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             snapshot.copy(
                 loading = true,
+                refreshing = false,
                 error = null,
                 readRetry = null,
                 windowOffset = if (!next && before == null) 0 else snapshot.windowOffset,
@@ -457,6 +460,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         cursor = page.cursor,
                         loaded = true,
                         loading = false,
+                        refreshing = false,
                     )
                 refreshTransfersWhenIdle()
                 prefetchLibrary()
@@ -469,6 +473,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         mutable.value =
                             state.value.copy(
                                 loading = false,
+                                refreshing = false,
                                 error = e.message ?: "加载失败，请重试",
                                 readRetry = NativeReadRetry.Page(next, before, offset),
                             )
@@ -494,7 +499,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         operation?.cancel()
         val request = ++generation
         transferRefreshPending = false
-        mutable.value = snapshot.copy(loading = true, error = null, readRetry = null)
+        mutable.value =
+            snapshot.copy(loading = true, refreshing = true, error = null, readRetry = null)
         loadTimeline(snapshot, repo)
         operation = viewModelScope.launch {
             try {
@@ -530,6 +536,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         loaded = true,
                         selected = state.value.selected.intersect(items.map { it.id }.toSet()),
                         loading = false,
+                        refreshing = false,
                     )
                 refreshTransfersWhenIdle()
             } catch (e: CancellationException) {
@@ -541,6 +548,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         mutable.value =
                             state.value.copy(
                                 loading = false,
+                                refreshing = false,
                                 error = e.message ?: "刷新失败，请重试",
                                 readRetry = NativeReadRetry.Refresh,
                             )
@@ -565,7 +573,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val start = (snapshot.windowOffset - 60).coerceAtLeast(0)
         val day = index.dayAt(start) ?: return
         val request = ++generation
-        mutable.value = snapshot.copy(loading = true, error = null, readRetry = null)
+        mutable.value =
+            snapshot.copy(loading = true, refreshing = false, error = null, readRetry = null)
         operation = viewModelScope.launch {
             try {
                 val page =
@@ -582,6 +591,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         items = (page.items + snapshot.items).distinctBy { it.id },
                         windowOffset = start,
                         loading = false,
+                        refreshing = false,
                     )
                 refreshTransfersWhenIdle()
             } catch (e: CancellationException) {
@@ -593,6 +603,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         mutable.value =
                             state.value.copy(
                                 loading = false,
+                                refreshing = false,
                                 error = e.message ?: "加载较新照片失败，请重试",
                                 readRetry = NativeReadRetry.Previous,
                             )
@@ -995,7 +1006,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         if (assets.size != s.selected.size) return
         operation?.cancel()
         val request = ++generation
-        mutable.value = s.copy(busy = true, loading = false, message = null)
+        mutable.value = s.copy(busy = true, loading = false, refreshing = false, message = null)
         mutation = viewModelScope.launch {
             try {
                 repo.change(s.mode, assets, action, tags, rating)

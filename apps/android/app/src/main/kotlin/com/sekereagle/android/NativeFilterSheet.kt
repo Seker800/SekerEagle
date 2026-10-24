@@ -80,11 +80,37 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 .padding(horizontal = 22.dp)
                 .testTag("native-filter-sheet")
         ) {
-            Text(
-                if (panel == "筛选") "搜索条件" else panel,
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(bottom = 12.dp),
-            )
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    if (panel == "筛选") "搜索条件" else panel,
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    {
+                        when {
+                            editingTags ->
+                                model.changeSelection(
+                                    if (panel == "添加标签") "tags" else "removeTags",
+                                    tags,
+                                )
+                            panel == "评分" -> model.changeSelection("rating", rating = draft.rating)
+                            else -> model.confirmFilters(draft)
+                        }
+                    },
+                    modifier = Modifier.testTag("filter-submit"),
+                    enabled = !state.busy && error == null && (!editingTags || tags.isNotEmpty()),
+                ) {
+                    Text(
+                        if (state.busy) "正在保存…"
+                        else if (state.searchOpen && !editingTags && panel != "评分") "完成选择" else "应用"
+                    )
+                }
+            }
             Column(
                 Modifier.fillMaxWidth()
                     .weight(1f, fill = false)
@@ -242,27 +268,6 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                     }) {
                         Text(if (panel == "筛选") "清空条件" else "不限")
                     }
-                Spacer(Modifier.weight(1f))
-                Button(
-                    {
-                        when {
-                            editingTags ->
-                                model.changeSelection(
-                                    if (panel == "添加标签") "tags" else "removeTags",
-                                    tags,
-                                )
-                            panel == "评分" -> model.changeSelection("rating", rating = draft.rating)
-                            else -> model.confirmFilters(draft)
-                        }
-                    },
-                    modifier = Modifier.testTag("filter-submit"),
-                    enabled = !state.busy && error == null && (!editingTags || tags.isNotEmpty()),
-                ) {
-                    Text(
-                        if (state.busy) "正在保存…"
-                        else if (state.searchOpen && !editingTags && panel != "评分") "确定" else "应用"
-                    )
-                }
             }
         }
     }

@@ -85,7 +85,7 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                 keyboard?.show()
             }
         }
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(top = 30.dp)) {
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 30.dp)) {
             Text("按条件查找", color = NativeMuted, fontSize = 13.sp)
             Text(
                 "不同类别同时满足；标签、格式多选时，匹配其中任意一个即可。",
@@ -113,12 +113,6 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                     }
             }
             NativeSearchConditions(state, model, showKeyword = false)
-            Button(
-                { submit(query) },
-                Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-submit"),
-            ) {
-                Text("查看结果")
-            }
             Spacer(Modifier.height(24.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("搜索历史", Modifier.weight(1f), color = NativeMuted)
@@ -143,6 +137,12 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                     color = NativeMuted,
                     fontSize = 13.sp,
                 )
+        }
+        Button(
+            { submit(query) },
+            Modifier.fillMaxWidth().padding(top = 8.dp).testTag("search-submit"),
+        ) {
+            Text("查看结果")
         }
     }
 }
