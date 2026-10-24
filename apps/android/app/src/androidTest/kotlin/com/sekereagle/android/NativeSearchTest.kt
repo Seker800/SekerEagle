@@ -30,6 +30,7 @@ class NativeSearchTest {
         @Volatile var mediaStatus = 200
         @Volatile var photoStatus = 200
         @Volatile var assetStatus = 200
+        @Volatile var assetDelay = 0L
         @Volatile var tagDelay = 0L
         private val workers = CopyOnWriteArrayList<Thread>()
         private val tags =
@@ -57,6 +58,7 @@ class NativeSearchTest {
                                             paths.add(path)
                                             while (!reader.readLine().isNullOrEmpty()) {}
                                             if (path.contains("manual-tags")) Thread.sleep(tagDelay)
+                                            if (path.contains("/assets?")) Thread.sleep(assetDelay)
                                             val status =
                                                 when {
                                                     path.contains("/assets?") -> assetStatus
@@ -430,13 +432,17 @@ class NativeSearchTest {
             main { model.search("flower") }
             await { !model.state.value.loading }
             server.assetStatus = 503
+            server.assetDelay = 80L
             compose.onNodeWithTag("native-grid").performScrollToIndex(50)
             await {
                 server.paths.any {
                     it.startsWith("/api/photos/assets?") && it.contains("cursor=60")
                 }
             }
-            Thread.sleep(500)
+            repeat(5) {
+                Thread.sleep(100)
+                compose.waitForIdle()
+            }
             val failures =
                 server.paths.count {
                     it.startsWith("/api/photos/assets?") && it.contains("cursor=60")
