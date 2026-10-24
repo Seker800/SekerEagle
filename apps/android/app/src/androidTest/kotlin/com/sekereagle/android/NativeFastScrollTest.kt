@@ -67,6 +67,9 @@ class NativeFastScrollTest {
         compose.onNodeWithTag("timeline-thumb").assertDoesNotExist()
         compose.onNodeWithTag("grid").performTouchInput { swipeUp() }
         compose.onNodeWithTag("timeline-thumb").assertExists()
+        compose.onNodeWithTag("timeline-thumb").assert(
+            SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsActions.SetProgress)
+        )
         val bottom = compose.onRoot().fetchSemanticsNode().boundsInRoot.bottom - 80f
         val thumb = compose.onNodeWithTag("timeline-thumb").fetchSemanticsNode().boundsInRoot
         compose.onNodeWithTag("timeline-thumb").performTouchInput {
