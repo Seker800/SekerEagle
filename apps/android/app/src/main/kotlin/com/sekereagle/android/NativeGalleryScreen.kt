@@ -36,10 +36,26 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit) {
     val state by model.state.collectAsStateWithLifecycle()
     val download by model.downloads.state.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationPermission =
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val uploadPicker =
         rememberLauncherForActivityResult(
             ActivityResultContracts.OpenMultipleDocuments(),
-            model::acceptUploadSelection,
+            { selected ->
+                model.acceptUploadSelection(selected)
+                if (
+                    selected.isNotEmpty() &&
+                        android.os.Build.VERSION.SDK_INT >= 33 &&
+                        context.checkSelfPermission(
+                            android.Manifest.permission.POST_NOTIFICATIONS
+                        ) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+                        !BackupSettings(context).flag("notifications", "requested", false)
+                ) {
+                    BackupSettings(context).setFlag("notifications", "requested", true)
+                    notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
         )
     NativeTheme {
         Surface(Modifier.fillMaxSize(), color = Color.Black) {
@@ -96,6 +112,43 @@ private fun NativeLibrary(
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val grid = rememberLazyGridState()
+    val topInset = 70.dp
+    val layout =
+        remember(state.items, state.mode, state.trash, state.filters.active, state.query) {
+            NativeGridLayout(
+                state.items,
+                state.mode == GalleryMode.PHOTO,
+                (if (state.trash) 1 else 0) +
+                    (if (state.filters.active || state.query.isNotEmpty()) 1 else 0),
+            )
+        }
+    var renderedWindow by
+        remember(
+            state.mode,
+            state.sort,
+            state.query,
+            state.filters,
+            state.trash,
+            state.scrollRequest,
+        ) {
+            mutableLongStateOf(state.windowOffset)
+        }
+    if (state.windowOffset < renderedWindow) {
+        val visible = grid.layoutInfo.visibleItemsInfo
+        val firstKey = visible.firstOrNull()?.key?.toString().orEmpty()
+        // Stable media keys already preserve ordinary scrolling. Only a removed day header needs
+        // an explicit photo anchor; leave active gestures alone in every other case.
+        if (firstKey.startsWith("date:") && firstKey.removePrefix("date:") !in layout.dayStarts) {
+            val anchor = visible.firstOrNull { it.key.toString().startsWith("${state.mode}:") }
+            val index =
+                anchor?.key?.toString()?.removePrefix("${state.mode}:")?.let(layout::indexOf)
+            if (index != null && anchor != null)
+                SideEffect {
+                    grid.requestScrollToItem(index, -anchor.offset.y)
+                }
+        }
+    }
+    SideEffect { renderedWindow = state.windowOffset }
     val draggingGrid by grid.interactionSource.collectIsDraggedAsState()
     LaunchedEffect(state.windowOffset, state.loading, state.timeline, state.error, draggingGrid) {
         snapshotFlow {
@@ -145,7 +198,7 @@ private fun NativeLibrary(
                 GridCells.Fixed(state.columns),
                 state = grid,
                 modifier = Modifier.fillMaxSize().testTag("native-grid"),
-                contentPadding = PaddingValues(top = 70.dp, bottom = 104.dp),
+                contentPadding = PaddingValues(top = topInset, bottom = 104.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -177,11 +230,8 @@ private fun NativeLibrary(
                             NativeSearchConditions(state, model)
                         }
                     }
-                state.items.forEachIndexed { index, asset ->
-                    if (
-                        state.mode == GalleryMode.PHOTO &&
-                            (index == 0 || asset.groupDate != state.items[index - 1].groupDate)
-                    )
+                state.items.forEach { asset ->
+                    if (asset.id in layout.dayStarts)
                         item(key = "date:${asset.id}", span = { GridItemSpan(maxLineSpan) }) {
                             Text(
                                 asset.groupDate,
