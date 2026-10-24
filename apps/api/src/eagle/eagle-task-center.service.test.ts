@@ -4,7 +4,7 @@ import test from 'node:test';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { validate } from 'class-validator';
 import { EagleTaskCenterService } from './eagle-task-center.service';
-import { EagleTaskCenterController } from './eagle-task-center.controller';
+import { EagleTaskCenterController, TaskPolicyDto } from './eagle-task-center.controller';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
@@ -303,4 +303,47 @@ test('indexes that only use saved vectors do not wait for the inference host', a
   } as never);
   const result = await service.overview('owner');
   for (const group of result.groups) assert.equal(group.waiting[0]?.reason, 'QUEUED');
+});
+
+test('disabled capability is reported even if every task is failed and has no wait bucket', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [
+      {
+        family: 'MEDIA',
+        step: 'EXTRACT_COLOR_PALETTE',
+        version: 'v1',
+        status: 'FAILED',
+        reason: 'QUEUED',
+        count: 6n,
+      },
+    ],
+    eagleProcessingWorkerHeartbeat: {
+      findMany: async () => [
+        { capabilities: { background: true, jobKinds: ['GENERATE_RENDITIONS'] } },
+      ],
+    },
+    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+    eagleTaskPolicy: { findMany: async () => [] },
+  } as never);
+  assert.equal((await service.overview('owner')).groups[0]?.availability, 'DISABLED');
+});
+
+test('pause needs no user priority, and historical priority cannot override automatic rules', async () => {
+  assert.equal(
+    (await validate(Object.assign(new TaskPolicyDto(), { family: 'EMBEDDING', paused: true })))
+      .length,
+    0,
+  );
+  let write: { create: { priority: number }; update: { priority: number } } | undefined;
+  const service = new EagleTaskCenterService({
+    eagleTaskPolicy: {
+      upsert: async (input: typeof write) => {
+        write = input;
+        return {};
+      },
+    },
+  } as never);
+  await service.policy('owner', { family: 'EMBEDDING', paused: true, priority: 1 });
+  assert.equal(write?.create.priority, 0);
+  assert.equal(write?.update.priority, 0);
 });

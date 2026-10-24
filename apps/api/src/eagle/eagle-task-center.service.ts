@@ -37,8 +37,9 @@ export class EagleTaskCenterService {
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
-  async policy(ownerId: string, input: { family: TaskFamily; paused: boolean; priority: number }) {
-    const { family, paused, priority } = input;
+  async policy(ownerId: string, input: { family: TaskFamily; paused: boolean; priority?: number }) {
+    const { family, paused } = input;
+    const priority = 0; // Historical priority is no longer a user scheduling control.
     return this.prisma.eagleTaskPolicy.upsert({
       where: { ownerId_libraryMode_family: { ownerId, libraryMode: this.libraryMode, family } },
       create: { ownerId, libraryMode: this.libraryMode, family, paused, priority },
@@ -148,7 +149,7 @@ export class EagleTaskCenterService {
         group = {
           id: family,
           background: isBackgroundFamily(family),
-          policy: { paused: policy?.paused ?? false, priority: policy?.priority ?? 0 },
+          policy: { paused: policy?.paused ?? false, priority: 0 },
           ...counts(),
           waiting: [],
           steps: [],
@@ -210,6 +211,18 @@ export class EagleTaskCenterService {
       );
       if (wait) wait.count += count;
       else group.waiting.push({ reason, count, nextAt });
+    }
+    for (const group of groups.values()) {
+      const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(group.id);
+      group.availability = !workerOwned
+        ? 'ENABLED'
+        : !workers.length
+          ? 'UNKNOWN'
+          : group.steps.some((step) =>
+                workers.some((worker) => supports(worker.capabilities, group.id, step.id)),
+              )
+            ? 'ENABLED'
+            : 'DISABLED';
     }
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',

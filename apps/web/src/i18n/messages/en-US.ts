@@ -1,4 +1,32 @@
 export const enUS = {
+  '部分安排未保存，请核对各库当前设置后重试。':
+    'Some schedules could not be saved. Check each library and try again.',
+  立即处理: 'Immediate processing',
+  '文件入库后处理，或在数据变化后自动更新；不受后台时段限制。':
+    'Process new files or update changed data automatically, regardless of the background schedule.',
+  '到已保存的时段自动开始；前置条件未满足时先处理其他工作。':
+    'Start automatically during the saved window; process other work while prerequisites are pending.',
+  '这些工作不会领取新任务。下方说明暂停原因，当前步骤完成后停下。':
+    'No new tasks will start. Reasons appear below; current steps can finish.',
+  '系统按依赖、计算成本和等待时间自动安排，无需手动设置优先级。':
+    'The system schedules work by dependencies, processing cost and waiting time.',
+  查看范围: 'View scope',
+  全部图库: 'All libraries',
+  全部图库的后台运行方式: 'Background processing for all libraries',
+  '部分图库读取失败，当前合计仅包含已加载的图库。':
+    'Some libraries could not be loaded. Totals include loaded libraries only.',
+  '素材与照片当前安排不同，卡片显示各自生效的安排；保存后统一应用到两个库。':
+    'Assets and Photos currently have different schedules. Cards show saved settings; saving applies this schedule to both libraries.',
+  '上方优先处理轻量和必要工作；不同工作可穿插执行，不会等一类全部完成才开始下一类。':
+    'Light and essential work comes first. Categories can interleave without waiting for an entire category to finish.',
+  暂无此类工作: 'No work in this section',
+  '需要启用服务器处理能力，修改时段或点击继续不会启动。':
+    'Server processing must be enabled; changing the schedule or resuming will not enable it.',
+  你已暂停: 'Paused by you',
+  '后台处理已整体暂停，请修改上方运行方式。':
+    'Background processing is paused. Change the mode above to resume.',
+  '请进入对应图库审批。': 'Open the corresponding library to review.',
+  服务器未启用: 'Disabled on the server',
   缩略图与预览: 'Thumbnails and previews',
   '生成缩略图、预览图，读取文件信息。': 'Generate thumbnails, previews and file metadata.',
   原文件: 'Original file',

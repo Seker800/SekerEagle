@@ -53,7 +53,7 @@ import { extractRepresentativeColors } from './color-palette';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
-import { selectScheduledMediaCandidates } from './scheduled-media-candidates';
+import { createScheduledMediaSelector } from './scheduled-media-candidates';
 import { taskPolicyAllowsSql } from '@sekereagle/library-persistence';
 import { claimNextMediaJob } from './job-claim';
 import {
@@ -174,17 +174,15 @@ async function heartbeat(): Promise<void> {
   }
 }
 
+const selectMediaCandidates = createScheduledMediaSelector(
+  prisma,
+  () => embeddingReadiness !== 'READY',
+);
 let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
   const sequence = claimSequence++;
   return claimNextMediaJob(prisma, {
-    selectCandidates: (input) =>
-      selectScheduledMediaCandidates(
-        prisma,
-        input,
-        sequence % 4 !== 3,
-        embeddingReadiness !== 'READY',
-      ),
+    selectCandidates: selectMediaCandidates,
     canClaimBackground: canClaimBackgroundForOwner,
     allowedJobKinds,
     excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],

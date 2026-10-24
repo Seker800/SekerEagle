@@ -38,3 +38,16 @@ export function selectScheduledMediaCandidates(
     ORDER BY ${preferPriority ? Prisma.sql`${priority} DESC,` : Prisma.empty} job."availableAt",job."createdAt",job.id LIMIT ${input.take}
   `);
 }
+
+/** Count fairness independently per lane: reserved background turns must not all become FIFO. */
+export function createScheduledMediaSelector(
+  client: Pick<PrismaClient, '$queryRaw'>,
+  embeddingUnavailable: () => boolean,
+) {
+  const turns = new Map<string, number>();
+  return (input: ClaimFindManyInput) => {
+    const turn = turns.get(input.where.lane) ?? 0;
+    turns.set(input.where.lane, turn + 1);
+    return selectScheduledMediaCandidates(client, input, turn % 4 !== 3, embeddingUnavailable());
+  };
+}

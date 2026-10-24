@@ -1,6 +1,15 @@
-import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { BackgroundSchedule, TaskFamily, TaskGroup } from '@sekereagle/library-core';
+import { useEffect, useMemo, useState } from 'react';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
+import {
+  taskSection,
+  taskExecutionPriority,
+  type BackgroundSchedule,
+  type TaskFamily,
+  type TaskGroup,
+  type TaskSection,
+} from '@sekereagle/library-core';
+import { createEagleTaskCenterApi } from '../../lib/eagle-task-center-api';
+import type { LibraryMode } from '../../lib/library-api-scope';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { EagleProcessingPage } from './EagleProcessingPage';
@@ -23,12 +32,35 @@ export function EagleTaskCenter({
 } = {}) {
   const { ownerId, libraryMode, api } = useLibraryWorkspace();
   const client = useQueryClient();
-  const key = ['task-center', ownerId, libraryMode, includePrivate];
-  const query = useQuery({
-    queryKey: key,
-    queryFn: ({ signal }) => api.fetchEagleTaskCenter(signal),
-    refetchInterval: 10000,
+  const key = ['task-center', ownerId];
+  const [scope, setScope] = useState<'ALL' | LibraryMode>('ALL');
+  const modes: LibraryMode[] = scope === 'ALL' ? ['MATERIAL', 'PHOTO'] : [scope];
+  const otherMode = libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
+  const otherApi = useMemo(() => createEagleTaskCenterApi(otherMode), [otherMode]);
+  const apiFor = (mode: LibraryMode) => (mode === libraryMode ? api : otherApi);
+  const queries = useQueries({
+    queries: modes.map((mode) => ({
+      queryKey: [...key, mode, includePrivate],
+      queryFn: ({ signal }: { signal: AbortSignal }) => apiFor(mode).fetchEagleTaskCenter(signal),
+      refetchInterval: 10000,
+    })),
   });
+  const query = {
+    isFetching: queries.some((result) => result.isFetching),
+    isPending: queries.some((result) => result.isPending),
+    error: queries.find((result) => result.error)?.error,
+    refetch: () => Promise.all(queries.map((result) => result.refetch())),
+  };
+  const entries = queries.flatMap((result, index) =>
+    result.data
+      ? [
+          {
+            mode: modes[index],
+            summary: result.data,
+          },
+        ]
+      : [],
+  );
   const [draft, setDraft] = useState<BackgroundSchedule | null>(null);
   const [notice, setNotice] = useState('');
   const [showDetails, setShowDetails] = useState(false);
@@ -36,9 +68,16 @@ export function EagleTaskCenter({
     setDraft(null);
     setNotice('');
     setShowDetails(false);
-  }, [ownerId, libraryMode, includePrivate]);
+  }, [ownerId, libraryMode, includePrivate, scope]);
   const save = useMutation({
-    mutationFn: (settings: BackgroundSchedule) => api.updateEagleTaskSchedule(settings),
+    mutationFn: async (settings: BackgroundSchedule) => {
+      const results = await Promise.allSettled(
+        modes.map((mode) => apiFor(mode).updateEagleTaskSchedule(settings)),
+      );
+      await client.invalidateQueries({ queryKey: key });
+      if (results.some((result) => result.status === 'rejected'))
+        throw new Error(t('部分安排未保存，请核对各库当前设置后重试。'));
+    },
     onSuccess: async () => {
       setDraft(null);
       setNotice(t('后台安排已保存'));
@@ -46,21 +85,55 @@ export function EagleTaskCenter({
     },
   });
   const retry = useMutation({
-    mutationFn: (family: TaskFamily) => api.retryEagleTaskFamily(family),
+    mutationFn: ({ mode, family }: { mode: LibraryMode; family: TaskFamily }) =>
+      apiFor(mode).retryEagleTaskFamily(family),
     onSuccess: async () => {
       setNotice(t('失败任务已重新排队'));
       await client.invalidateQueries({ queryKey: key });
     },
   });
   const policy = useMutation({
-    mutationFn: (input: { family: TaskFamily; paused: boolean; priority: number }) =>
-      api.updateEagleTaskPolicy(input),
+    mutationFn: ({ mode, ...input }: { mode: LibraryMode; family: TaskFamily; paused: boolean }) =>
+      apiFor(mode).updateEagleTaskPolicy(input),
     onSuccess: async () => {
       setNotice(t('后台安排已保存'));
       await client.invalidateQueries({ queryKey: key });
     },
   });
-  const summary = query.data;
+  const summary =
+    entries.find((entry) => entry.mode === libraryMode)?.summary ?? entries[0]?.summary;
+  const cards = entries
+    .flatMap(({ mode, summary: entry }) =>
+      entry.groups.map((group) => ({ mode, group, schedule: entry.settings })),
+    )
+    .sort(
+      (a, b) =>
+        taskExecutionPriority(b.group.id) - taskExecutionPriority(a.group.id) ||
+        a.mode.localeCompare(b.mode),
+    );
+  const sections: Array<{ id: TaskSection; title: string; description: string }> = [
+    {
+      id: 'IMMEDIATE',
+      title: t('立即处理'),
+      description: t('文件入库后处理，或在数据变化后自动更新；不受后台时段限制。'),
+    },
+    {
+      id: 'SCHEDULED',
+      title: t('按时段处理'),
+      description: t('到已保存的时段自动开始；前置条件未满足时先处理其他工作。'),
+    },
+    {
+      id: 'PAUSED',
+      title: t('已暂停'),
+      description: t('这些工作不会领取新任务。下方说明暂停原因，当前步骤完成后停下。'),
+    },
+  ];
+  const differentSchedules =
+    entries.length > 1 &&
+    entries.some(
+      (entry) =>
+        JSON.stringify(entry.summary.settings) !== JSON.stringify(entries[0].summary.settings),
+    );
   const settings =
     draft ??
     (summary
@@ -71,8 +144,8 @@ export function EagleTaskCenter({
         }
       : null);
   const error = save.error ?? retry.error ?? policy.error ?? query.error;
-  const total = summary?.groups.reduce(
-    (sum, group) => ({
+  const total = cards.reduce(
+    (sum, { group }) => ({
       running: sum.running + group.running,
       queued: sum.queued + group.queued,
       failed: sum.failed + group.failed,
@@ -85,16 +158,27 @@ export function EagleTaskCenter({
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
-          <p>{t('图库的后台工作，都在这里查看和安排。')}</p>
+          <p>{t('系统按依赖、计算成本和等待时间自动安排，无需手动设置优先级。')}</p>
         </div>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('刷新')}
         </button>
       </header>
+      <label className={styles.scope}>
+        {t('查看范围')}
+        <select
+          value={scope}
+          onChange={(event) => setScope(event.target.value as 'ALL' | LibraryMode)}
+        >
+          <option value="ALL">{t('全部图库')}</option>
+          <option value="MATERIAL">{t('素材')}</option>
+          <option value="PHOTO">{t('照片')}</option>
+        </select>
+      </label>
       {error && (
         <div role="alert" className={styles.error}>
           {error.message}
-          {!summary && (
+          {query.error && (
             <button type="button" onClick={() => void query.refetch()}>
               {t('重试加载')}
             </button>
@@ -103,7 +187,7 @@ export function EagleTaskCenter({
       )}
       {notice && <p role="status">{notice}</p>}
       {query.isPending && <p role="status">{t('正在读取后台工作…')}</p>}
-      {summary && (
+      {summary && !query.isPending && (
         <>
           <div className={styles.overview}>
             <span>
@@ -115,7 +199,7 @@ export function EagleTaskCenter({
               {t('运行中')} <strong>{total?.running}</strong>
             </span>
             <span>
-              {t('等待执行')} <strong>{total?.queued}</strong>
+              {t('待处理')} <strong>{total?.queued}</strong>
             </span>
             <span>
               {t('失败')} <strong>{total?.failed}</strong>
@@ -124,10 +208,13 @@ export function EagleTaskCenter({
               {t('等待你审批')} <strong>{total?.approval}</strong>
             </span>
             <span className={styles.worker}>
-              {summary.worker === 'ONLINE' ? t('处理服务在线') : t('处理服务离线')}
+              {entries.every((entry) => entry.summary.worker === 'ONLINE')
+                ? t('处理服务在线')
+                : t('处理服务离线')}
             </span>
           </div>
           <small>{t('这里统计处理步骤，同一张图片可能包含多个步骤。')}</small>
+          {query.error && <p>{t('部分图库读取失败，当前合计仅包含已加载的图库。')}</p>}
           {settings && (
             <form
               className={styles.schedule}
@@ -138,7 +225,7 @@ export function EagleTaskCenter({
               }}
             >
               <label>
-                {t('后台运行方式')}
+                {scope === 'ALL' ? t('全部图库的后台运行方式') : t('后台运行方式')}
                 <select
                   value={settings.mode}
                   onChange={(event) => setDraft({ ...settings, mode: event.target.value })}
@@ -176,6 +263,11 @@ export function EagleTaskCenter({
               <button type="submit" disabled={save.isPending}>
                 {save.isPending ? t('保存中…') : t('保存安排')}
               </button>
+              {differentSchedules && (
+                <p>
+                  {t('素材与照片当前安排不同，卡片显示各自生效的安排；保存后统一应用到两个库。')}
+                </p>
+              )}
               <p>
                 {t(
                   '暂停后不再领取新的分析任务，当前步骤完成后停下；基础浏览、地图索引和必要清理继续运行。',
@@ -183,23 +275,57 @@ export function EagleTaskCenter({
               </p>
             </form>
           )}
-          <div className={styles.groups}>
-            {summary.groups.length ? (
-              summary.groups.map((group) => (
-                <TaskCard
-                  key={group.id}
-                  group={group}
-                  schedule={summary.settings}
-                  busy={retry.isPending || policy.isPending}
-                  onRetry={() => retry.mutate(group.id)}
-                  onPolicy={(next) => policy.mutate({ family: group.id, ...next })}
-                  onReview={onReview}
-                />
-              ))
-            ) : (
-              <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>
-            )}
-          </div>
+          <p className={styles.rule}>
+            {t('上方优先处理轻量和必要工作；不同工作可穿插执行，不会等一类全部完成才开始下一类。')}
+          </p>
+          {!cards.length && <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>}
+          {sections.map((section) => (
+            <section key={section.id} className={styles.section} aria-label={section.title}>
+              <header className={styles.sectionHeader}>
+                <h2>{section.title}</h2>
+                <p>{section.description}</p>
+              </header>
+              <div className={styles.groups}>
+                {cards
+                  .filter((card) => taskSection(card.group, card.schedule) === section.id)
+                  .map((card) => (
+                    <TaskCard
+                      key={`${card.mode}:${card.group.id}`}
+                      group={card.group}
+                      schedule={card.schedule}
+                      mode={card.mode}
+                      busy={retry.isPending || policy.isPending}
+                      onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
+                      onPolicy={(paused) =>
+                        policy.mutate({ mode: card.mode, family: card.group.id, paused })
+                      }
+                    />
+                  ))}
+              </div>
+              {!cards.some((card) => taskSection(card.group, card.schedule) === section.id) && (
+                <p className={styles.empty}>{t('暂无此类工作')}</p>
+              )}
+            </section>
+          ))}
+          {cards.some((card) => card.group.id === 'APPROVALS') && (
+            <section className={styles.section} aria-label={t('等待你审批')}>
+              <h2>{t('等待你审批')}</h2>
+              {cards
+                .filter((card) => card.group.id === 'APPROVALS')
+                .map((card) => (
+                  <TaskCard
+                    key={`${card.mode}:APPROVALS`}
+                    group={card.group}
+                    schedule={card.schedule}
+                    mode={card.mode}
+                    busy={false}
+                    onRetry={() => {}}
+                    onPolicy={() => {}}
+                    onReview={card.mode === libraryMode ? onReview : undefined}
+                  />
+                ))}
+            </section>
+          )}
           {canManageProcessing && (
             <section className={styles.settings}>
               <h2>{t('处理记录')}</h2>
@@ -230,6 +356,7 @@ export function EagleTaskCenter({
 function TaskCard({
   group,
   schedule,
+  mode,
   busy,
   onRetry,
   onPolicy,
@@ -237,18 +364,25 @@ function TaskCard({
 }: {
   group: TaskGroup;
   schedule: BackgroundSchedule;
+  mode: LibraryMode;
   busy: boolean;
   onRetry: () => void;
-  onPolicy: (next: { paused: boolean; priority: number }) => void;
+  onPolicy: (paused: boolean) => void;
   onReview?: () => void;
 }) {
   const [title, description, dependency, compute] = taskFamilyLabels(group.id);
   const remaining = group.queued + group.running + group.failed;
   const retryable = !['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(group.id);
+  const disabled =
+    group.availability === 'DISABLED' ||
+    group.waiting.some(
+      (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
+    );
   return (
     <article className={styles.card}>
       <header>
-        <h2>{title}</h2>
+        <h3>{title}</h3>
+        <span className={styles.badge}>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
       </header>
       <p>{description}</p>
       <dl className={styles.facts}>
@@ -322,35 +456,24 @@ function TaskCard({
           {t('去审批')}
         </button>
       )}
-      {group.background && (
+      {disabled && (
+        <p className={styles.wait}>{t('需要启用服务器处理能力，修改时段或点击继续不会启动。')}</p>
+      )}
+      {group.background && !disabled && (
         <div className={styles.policy}>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() =>
-              onPolicy({ paused: !group.policy?.paused, priority: group.policy?.priority ?? 0 })
-            }
-          >
-            {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
-          </button>
-          <label>
-            {t('处理顺序')}
-            <select
-              disabled={busy}
-              value={group.policy?.priority ?? 0}
-              onChange={(event) =>
-                onPolicy({
-                  paused: group.policy?.paused ?? false,
-                  priority: Number(event.target.value),
-                })
-              }
-            >
-              <option value={0}>{t('正常')}</option>
-              <option value={1}>{t('优先')}</option>
-            </select>
-          </label>
+          {schedule.mode !== 'MANUAL' && (
+            <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
+              {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
+            </button>
+          )}
+          {group.policy?.paused ? (
+            <span>{t('你已暂停')}</span>
+          ) : schedule.mode === 'MANUAL' ? (
+            <span>{t('后台处理已整体暂停，请修改上方运行方式。')}</span>
+          ) : null}
         </div>
       )}
+      {group.id === 'APPROVALS' && !onReview && <p>{t('请进入对应图库审批。')}</p>}
       <details>
         <summary>{t('查看处理步骤')}</summary>
         <ul>

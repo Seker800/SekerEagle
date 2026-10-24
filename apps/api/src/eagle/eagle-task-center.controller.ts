@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
-import { IsIn, IsBoolean, IsInt, Min, Max } from 'class-validator';
+import { IsIn, IsBoolean, IsInt, Min, Max, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import {
   TASK_FAMILIES,
@@ -27,11 +27,12 @@ export class TaskPolicyDto {
   @ApiProperty({ type: Boolean })
   @IsBoolean()
   paused!: boolean;
-  @ApiProperty({ type: Number, minimum: 0, maximum: 1 })
+  @ApiProperty({ type: Number, minimum: 0, maximum: 1, required: false, deprecated: true })
+  @IsOptional()
   @IsInt()
   @Min(0)
   @Max(1)
-  priority!: number;
+  priority?: number;
 }
 
 @Controller('eagle/tasks')

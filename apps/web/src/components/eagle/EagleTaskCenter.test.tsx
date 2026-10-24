@@ -50,12 +50,18 @@ function mount(props = {}) {
     </QueryClientProvider>,
   );
 }
-describe('unified task center', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(summary);
-    vi.mocked(api.updateEagleTaskSchedule).mockResolvedValue(summary.settings);
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(summary);
+  vi.mocked(api.updateEagleTaskSchedule).mockResolvedValue(summary.settings);
+  vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
+    fetchEagleTaskCenter: vi.fn().mockResolvedValue({ ...summary, groups: [] }),
+    updateEagleTaskSchedule: vi.fn().mockResolvedValue(summary.settings),
+    updateEagleTaskPolicy: vi.fn(),
+    retryEagleTaskFamily: vi.fn(),
   });
+});
+describe('unified task center', () => {
   it('explains dependencies, computation and the actual schedule in compact rows', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
@@ -130,7 +136,7 @@ describe('unified task center', () => {
   it('lets an ordinary owner pause background work while explaining essential work continues', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
-    fireEvent.change(screen.getByRole('combobox', { name: '后台运行方式' }), {
+    fireEvent.change(screen.getByRole('combobox', { name: '全部图库的后台运行方式' }), {
       target: { value: 'MANUAL' },
     });
     fireEvent.click(screen.getByRole('button', { name: '保存安排' }));
@@ -154,26 +160,14 @@ describe('unified task center', () => {
     await waitFor(() => expect(api.fetchEagleTaskCenter).toHaveBeenCalledTimes(3));
     expect(screen.getByLabelText('开始时间')).toHaveValue('22:00');
   });
-  it('pauses one work category and can prioritize it without changing the global schedule', async () => {
+  it('pauses one category without exposing or sending a manual priority', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
     fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
     await waitFor(() =>
-      expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({
-        family: 'EMBEDDING',
-        paused: true,
-        priority: 0,
-      }),
+      expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({ family: 'EMBEDDING', paused: true }),
     );
-    await waitFor(() => expect(screen.getByLabelText('处理顺序')).not.toBeDisabled());
-    fireEvent.change(screen.getByLabelText('处理顺序'), { target: { value: '1' } });
-    await waitFor(() =>
-      expect(api.updateEagleTaskPolicy).toHaveBeenLastCalledWith({
-        family: 'EMBEDDING',
-        paused: false,
-        priority: 1,
-      }),
-    );
+    expect(screen.queryByLabelText('处理顺序')).not.toBeInTheDocument();
     expect(api.updateEagleTaskSchedule).not.toHaveBeenCalled();
   });
   it('routes approvals to human review and keeps detailed controls in the same center', async () => {
@@ -206,7 +200,6 @@ describe('unified task center', () => {
       expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({
         family: 'EMBEDDING',
         paused: false,
-        priority: 1,
       }),
     );
     expect(screen.getByText('处理服务离线')).toBeVisible();
@@ -218,7 +211,7 @@ describe('unified task center', () => {
     await screen.findByText('暂时没有后台工作。新任务会自动出现在这里。');
     fireEvent.change(screen.getByLabelText('结束时间'), { target: { value: '07:00' } });
     fireEvent.click(screen.getByRole('button', { name: '保存安排' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('保存失败');
+    expect(await screen.findByRole('alert')).toHaveTextContent('部分安排未保存');
   });
 });
 
@@ -229,7 +222,14 @@ describe('execution sections', () => {
       groups: [
         summary.groups[0]!,
         { ...summary.groups[0]!, id: 'BROWSE', background: false },
-        { ...summary.groups[0]!, id: 'COLOR', queued: 0, failed: 6, availability: 'DISABLED', waiting: [] },
+        {
+          ...summary.groups[0]!,
+          id: 'COLOR',
+          queued: 0,
+          failed: 6,
+          availability: 'DISABLED',
+          waiting: [],
+        },
       ],
     });
     mount();
@@ -242,7 +242,64 @@ describe('execution sections', () => {
     expect(within(paused).getByText('服务器未启用')).toBeVisible();
     expect(within(paused).queryByRole('button', { name: '继续这项工作' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('处理顺序')).not.toBeInTheDocument();
-    expect(immediate.compareDocumentPosition(scheduled) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(scheduled.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      immediate.compareDocumentPosition(scheduled) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      scheduled.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+});
+
+describe('cross-library task visibility and controls', () => {
+  it('defaults to both libraries and routes a filtered action to its own library', async () => {
+    const other = api.createEagleTaskCenterApi('PHOTO');
+    vi.mocked(other.fetchEagleTaskCenter).mockResolvedValue({
+      ...summary,
+      groups: [{ ...summary.groups[0]!, id: 'COLOR', queued: 7, waiting: [] }],
+    });
+    mount();
+    await screen.findByRole('heading', { name: '代表色提取' });
+    expect(screen.getByText('剩余 19 项')).toBeVisible();
+    expect(within(screen.getAllByRole('article')[0]!).getByText('照片')).toBeVisible();
+    fireEvent.change(screen.getByLabelText('查看范围'), { target: { value: 'PHOTO' } });
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: '2B 向量搜图' })).not.toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
+    await waitFor(() =>
+      expect(other.updateEagleTaskPolicy).toHaveBeenCalledWith({ family: 'COLOR', paused: true }),
+    );
+    expect(api.updateEagleTaskPolicy).not.toHaveBeenCalled();
+  });
+
+  it('saves a shared window to both libraries and reports partial failures without claiming success', async () => {
+    const other = api.createEagleTaskCenterApi('PHOTO');
+    vi.mocked(other.updateEagleTaskSchedule).mockRejectedValue(new Error('Unavailable'));
+    mount();
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
+    fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '02:00' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存安排' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('部分安排未保存');
+    expect(api.updateEagleTaskSchedule).toHaveBeenCalledWith({
+      mode: 'NIGHT',
+      nightStart: '02:00',
+      nightEnd: '06:00',
+    });
+    expect(other.updateEagleTaskSchedule).toHaveBeenCalledWith({
+      mode: 'NIGHT',
+      nightStart: '02:00',
+      nightEnd: '06:00',
+    });
+    expect(screen.queryByText('后台安排已保存')).not.toBeInTheDocument();
+  });
+
+  it('labels partial totals when one library cannot be loaded instead of silently losing its tasks', async () => {
+    const other = api.createEagleTaskCenterApi('PHOTO');
+    vi.mocked(other.fetchEagleTaskCenter).mockRejectedValue(new Error('Photo library unavailable'));
+    mount();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Photo library unavailable');
+    expect(screen.getByText('部分图库读取失败，当前合计仅包含已加载的图库。')).toBeVisible();
+    expect(screen.getAllByText('剩余 12 项')[0]).toBeVisible();
   });
 });

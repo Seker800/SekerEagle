@@ -5,15 +5,26 @@ import type { ClaimFindManyInput } from './job-claim';
 
 test('FIFO fairness belongs to each lane, so reserved background turns still use automatic preferences', async () => {
   const queries: string[] = [];
-  const select = createScheduledMediaSelector({ $queryRaw: async (sql: { text: string }) => { queries.push(sql.text); return []; } } as never, () => false);
-  const input = (lane: 'INTERACTIVE' | 'BACKGROUND') => ({ where: { lane }, take: 50 }) as ClaimFindManyInput;
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        queries.push(sql.text);
+        return [];
+      },
+    } as never,
+    () => false,
+  );
+  const input = (lane: 'INTERACTIVE' | 'BACKGROUND') =>
+    ({ where: { lane }, take: 50 }) as ClaimFindManyInput;
   for (let turn = 0; turn < 4; turn++) {
     for (let i = 0; i < 3; i++) await select(input('INTERACTIVE'));
     await select(input('BACKGROUND'));
   }
-  const background = queries.filter(sql => sql.includes('SELECT job.*')).filter((_, index) => index % 4 === 3);
+  const background = queries
+    .filter((sql) => sql.includes('SELECT job.*'))
+    .filter((_, index) => index % 4 === 3);
   assert.equal(background.length, 4);
   for (const sql of background.slice(0, 3)) assert.match(sql, /ORDER BY CASE/);
   assert.doesNotMatch(background[3]!, /ORDER BY CASE/);
-  assert.ok(queries.every(sql => !sql.includes('policy.priority')));
+  assert.ok(queries.every((sql) => !sql.includes('policy.priority')));
 });

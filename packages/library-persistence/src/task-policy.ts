@@ -1,12 +1,16 @@
 import { Prisma } from '@prisma/client';
+import { TASK_EXECUTION_ORDER, taskExecutionPriority } from '@sekereagle/library-core';
 
 export function taskPolicyAllowsSql(owner: Prisma.Sql, mode: Prisma.Sql, family: Prisma.Sql) {
   return Prisma.sql`NOT EXISTS (SELECT 1 FROM "EagleTaskPolicy" policy
     WHERE policy."ownerId"=${owner} AND policy."libraryMode"=${mode} AND policy.family=${family} AND policy.paused)`;
 }
-export function taskPrioritySql(owner: Prisma.Sql, mode: Prisma.Sql, family: Prisma.Sql) {
-  return Prisma.sql`COALESCE((SELECT policy.priority FROM "EagleTaskPolicy" policy
-    WHERE policy."ownerId"=${owner} AND policy."libraryMode"=${mode} AND policy.family=${family}),0)`;
+/** Legacy owner preferences are intentionally ignored; all owners use the same rules. */
+export function taskPrioritySql(_owner: Prisma.Sql, _mode: Prisma.Sql, family: Prisma.Sql) {
+  return Prisma.sql`CASE ${family} ${Prisma.join(
+    TASK_EXECUTION_ORDER.map((id) => Prisma.sql`WHEN ${id} THEN ${taskExecutionPriority(id)}`),
+    ' ',
+  )} ELSE 0 END`;
 }
 export function mediaTaskFamilySql(kind: Prisma.Sql, version: Prisma.Sql) {
   return Prisma.sql`CASE WHEN ${version}='photo-source-details-v1' THEN 'DETAILS'

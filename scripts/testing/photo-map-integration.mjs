@@ -391,10 +391,24 @@ try {
   });
   await prisma.eaglePhotoMetadata.update({ where: { assetId: added }, data: { latitude: 43 } });
   await prisma.eaglePhotoMapState.update({ where: stateKey, data: { availableAt: new Date(0) } });
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: busy.id },
+    data: { status: 'PROCESSING', lockedAt: new Date() },
+  });
   await runPhotoMapBuildStep(prisma);
   assert.equal(
     (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })).buildingSnapshotId,
     null,
+    'Active processing must retain its resource budget',
+  );
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: busy.id },
+    data: { status: 'PENDING', lockedAt: null },
+  });
+  await runPhotoMapBuildStep(prisma);
+  assert.ok(
+    (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })).buildingSnapshotId,
+    'Pending ingestion must not starve a bounded map step between media jobs',
   );
   await prisma.eagleAssetProcessingJob.update({
     where: { id: busy.id },

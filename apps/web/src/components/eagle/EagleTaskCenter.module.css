@@ -104,7 +104,7 @@
 }
 .groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 .card {
@@ -180,4 +180,65 @@
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.scope {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  font-size: 13px;
+}
+.section {
+  margin-top: 28px;
+}
+.sectionHeader {
+  border-bottom: 1px solid var(--ui-line);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+}
+.sectionHeader h2 {
+  font-size: 17px;
+}
+.sectionHeader p {
+  margin: 6px 0 0;
+}
+.center h3 {
+  font-size: 14px;
+  margin: 0;
+}
+.center .empty {
+  padding: 12px 0;
+  margin: 0;
+}
+.badge {
+  border: 1px solid var(--ui-line);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+  column-gap: 28px;
+}
+.card > header,
+.card > p,
+.card > details,
+.card > button,
+.card > .policy {
+  grid-column: 1 / -1;
+}
+.facts {
+  margin: 8px 0 12px;
+}
+.counts {
+  align-content: center;
+}
+@media (max-width: 640px) {
+  .card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .center {
+    padding: 16px;
+  }
 }

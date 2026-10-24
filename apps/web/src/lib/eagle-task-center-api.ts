@@ -13,7 +13,7 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
     return response.json() as Promise<T>;
   }
   return {
-    updateEagleTaskPolicy: (policy: { family: TaskFamily; paused: boolean; priority: number }) =>
+    updateEagleTaskPolicy: (policy: { family: TaskFamily; paused: boolean; priority?: number }) =>
       request<{ family: TaskFamily; paused: boolean; priority: number }>('/policy', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },

@@ -249,7 +249,7 @@ test('scheduled tag claims skip paused owners without consuming their attempts',
   );
 });
 
-test('per-category pause is applied before the candidate limit and priority leaves FIFO turns available', async () => {
+test('fixed light-work order ignores legacy priority, applies pause before the limit and preserves FIFO turns', async () => {
   const f = await fixture();
   await prisma.eagleProcessingSetting.create({
     data: { ownerId: f.owner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
@@ -259,7 +259,16 @@ test('per-category pause is applied before the candidate limit and priority leav
     kind: 'EXTRACT_COLOR_PALETTE',
     availableAt: new Date('1900-01-02T00:00:00Z'),
   });
-  await f.service.policy(f.owner, { family: 'COLOR', paused: false, priority: 1 });
+  await f.service.policy(f.owner, { family: 'COLOR', paused: false });
+  await prisma.eagleTaskPolicy.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      family: 'EMBEDDING',
+      paused: false,
+      priority: 1,
+    },
+  });
   const query = { where: { lane: 'BACKGROUND', kind: { not: 'GENERATE_AI_TAGS' } }, take: 50 };
   assert.equal((await selectScheduledMediaCandidates(prisma, query, true))[0].id, urgent.id);
   assert.equal((await selectScheduledMediaCandidates(prisma, query, false))[0].id, normal.id);

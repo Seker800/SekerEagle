@@ -80,6 +80,7 @@ export interface TaskStep extends TaskCounts {
 export interface TaskGroup extends TaskCounts {
   id: TaskFamily;
   background: boolean;
+  availability?: 'ENABLED' | 'DISABLED' | 'UNKNOWN';
   policy?: { paused: boolean; priority: number };
   waiting: Array<{ reason: TaskWaitReason; count: number; nextAt: string | null }>;
   steps: TaskStep[];
@@ -125,4 +126,41 @@ export function mediaTaskFamily(kind: string, version: string): TaskFamily {
 
 export function isBackgroundFamily(family: TaskFamily): boolean {
   return !['BROWSE', 'UPLOADS', 'IMPORTS', 'CLEANUP', 'APPROVALS', 'PHOTO_MAP'].includes(family);
+}
+
+/** Fixed preference within an eligible lane. FIFO turns and lane quotas prevent starvation.
+ * Light work using small derived images comes before heavy original decoding.
+ * Dependencies, time windows and deployment capabilities always filter first.
+ */
+export const TASK_EXECUTION_ORDER: readonly TaskFamily[] = [
+  'UPLOADS',
+  'BROWSE',
+  'COLOR',
+  'EMBEDDING',
+  'SMART_FOLDERS',
+  'TAG_INDEX',
+  'FACES',
+  'DETAILS',
+  'VIDEO',
+  'PYRAMID',
+  'PHOTO_MAP',
+  'CLEANUP',
+  'IMPORTS',
+  'APPROVALS',
+];
+export const taskExecutionPriority = (family: TaskFamily): number =>
+  TASK_EXECUTION_ORDER.length - TASK_EXECUTION_ORDER.indexOf(family);
+
+export type TaskSection = 'IMMEDIATE' | 'SCHEDULED' | 'PAUSED' | 'REVIEW';
+export function taskSection(group: TaskGroup, schedule: BackgroundSchedule): TaskSection {
+  if (group.id === 'APPROVALS') return 'REVIEW';
+  if (
+    group.availability === 'DISABLED' ||
+    group.policy?.paused ||
+    (group.background && schedule.mode === 'MANUAL') ||
+    (group.queued > 0 &&
+      group.waiting.some((wait) => wait.reason === 'DISABLED' && wait.count === group.queued))
+  )
+    return 'PAUSED';
+  return group.background && schedule.mode !== 'ALWAYS' ? 'SCHEDULED' : 'IMMEDIATE';
 }
