@@ -64,3 +64,46 @@ test('approval snapshot mismatch fails before a transfer plan or any object copy
   );
   assert.equal(writes, 0);
 });
+
+test('an edit between approval validation and plan creation cannot silently replace the approved version', async () => {
+  let reads = 0,
+    writes = 0;
+  const db = {
+    eagleLibraryTransfer: {
+      findUnique: async () => null,
+      upsert: async () => {
+        writes++;
+      },
+    },
+    eagleAsset: {
+      findMany: async () => [
+        {
+          id: 'photo',
+          mediaRevision: 1,
+          rowVersion: ++reads === 1 ? 1 : 2,
+          mimeType: 'image/jpeg',
+          lifecycleStatus: 'READY',
+        },
+      ],
+    },
+  } as never;
+  await assert.rejects(
+    new EagleLibraryTransferService(
+      db,
+      {
+        copyObject: async () => {
+          writes++;
+        },
+      } as never,
+      'PHOTO',
+    ).send(
+      'owner',
+      { operationId: 'op', assetIds: ['photo'] },
+      false,
+      new Map([['photo', { mediaRevision: 1, rowVersion: 1 }]]),
+    ),
+    /照片已变化/,
+  );
+  assert.equal(reads, 2);
+  assert.equal(writes, 0);
+});

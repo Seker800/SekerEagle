@@ -96,18 +96,25 @@ export class EagleLibraryTransferService {
       where: this.libraryModeWhere(ownerId, ids, includePrivate),
     });
     if (selected.length !== ids.length) throw new NotFoundException('一个或多个图片不存在。');
-    if (
-      expected &&
-      selected.some((row) => {
-        const snapshot = expected.get(row.id);
-        return (
-          !snapshot ||
-          snapshot.mediaRevision !== row.mediaRevision ||
-          snapshot.rowVersion !== row.rowVersion
-        );
-      })
-    )
-      throw new ConflictException('照片已变化，请重新提交申请。');
+    const checkExpected = (
+      rows: Array<{ id: string; mediaRevision: number; rowVersion: number }>,
+    ) => {
+      if (
+        expected &&
+        ids.some((id) => {
+          const row = rows.find((candidate) => candidate.id === id),
+            snapshot = expected.get(id);
+          return (
+            !row ||
+            !snapshot ||
+            snapshot.mediaRevision !== row.mediaRevision ||
+            snapshot.rowVersion !== row.rowVersion
+          );
+        })
+      )
+        throw new ConflictException('照片已变化，请重新提交申请。');
+    };
+    checkExpected(selected);
     if (selected.some((row) => !row.mimeType.startsWith('image/')))
       throw new BadRequestException('请选择图片；配对实况视频会自动随照片发送。');
     if (selected.some((row) => row.lifecycleStatus !== 'READY'))
@@ -128,6 +135,7 @@ export class EagleLibraryTransferService {
       });
       if (components.length !== componentIds.length)
         throw new NotFoundException('实况照片组件不存在。');
+      checkExpected(components);
       const items: TransferItem[] = components.map((row) => {
         assertOwnedObjectKey(ownerId, row.originalObjectKey);
         const targetId = randomUUID();
@@ -187,6 +195,7 @@ export class EagleLibraryTransferService {
       })
     )
       throw new ConflictException('图片已变化或不再可访问，请刷新后重新发送。');
+    checkExpected(currentSources);
     // The durable plan owns these keys before copying; retrying never creates additional copies.
     for (const item of items) {
       const active = await this.prisma.eagleLibraryTransfer.findUniqueOrThrow({
@@ -220,6 +229,7 @@ export class EagleLibraryTransferService {
         });
         if (sources.length !== items.length)
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+        checkExpected(sources);
         for (const item of items) {
           const source = sources.find((row) => row.id === item.sourceId)!;
           if (
