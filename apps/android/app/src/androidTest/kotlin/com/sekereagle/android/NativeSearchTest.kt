@@ -480,7 +480,12 @@ class NativeSearchTest {
                 "Confirmation must stay in the sheet header above the keyboard and list",
                 submit.bottom <= input.top,
             )
+            captureNativeEvidence("native-tag-confirm-header.png")
             compose.onNodeWithTag("filter-submit").performClick()
+            await {
+                compose.onAllNodesWithTag("native-filter-sheet").fetchSemanticsNodes().isEmpty()
+            }
+            captureNativeEvidence("native-search-fixed-submit.png")
             compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading && !model.state.value.searchOpen }
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
@@ -512,6 +517,41 @@ class NativeSearchTest {
                     path.contains("formats=png") &&
                     path.contains("search=flower")
             )
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun emptyLibraryPullRefreshHandlesFailureAndModeSwitchWithoutDuplicateRequests() {
+        Server(assetCount = 0).use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            server.assetStatus = 503
+            compose.onNodeWithTag("native-grid").performTouchInput {
+                swipeDown(durationMillis = 600)
+            }
+            await { model.state.value.error != null }
+            assertFalse(model.state.value.refreshing)
+            assertTrue(model.state.value.items.isEmpty())
+            server.assetStatus = 200
+            compose.onNodeWithText("重试").assertIsDisplayed().performClick()
+            await { model.state.value.error == null && !model.state.value.loading }
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            await { !model.state.value.loading }
+            server.assetDelay = 2000
+            val before = server.paths.count { it.startsWith("/api/eagle/assets?") }
+            compose.onNodeWithTag("native-grid").performTouchInput {
+                swipeDown(durationMillis = 600)
+            }
+            await { model.state.value.refreshing }
+            compose.onNodeWithTag("native-grid").performTouchInput {
+                swipeDown(durationMillis = 300)
+            }
+            assertEquals(before + 1, server.paths.count { it.startsWith("/api/eagle/assets?") })
+            main { model.switchMode(GalleryMode.PHOTO) }
+            await { !model.state.value.loading }
+            assertFalse(model.state.value.refreshing)
+            assertEquals(GalleryMode.PHOTO, model.state.value.mode)
             main { model.logout() }
         }
     }
