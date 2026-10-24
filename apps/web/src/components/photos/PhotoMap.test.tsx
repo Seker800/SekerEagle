@@ -20,7 +20,10 @@ const mocks = vi.hoisted(() => {
       getSouth: () => 30,
       getNorth: () => 32,
     })),
-    latLngToContainerPoint: vi.fn(() => ({ x: 100, y: 100 })),
+    latLngToContainerPoint: vi.fn(([latitude, longitude]) => ({
+      x: longitude * 100,
+      y: latitude * 100,
+    })),
     attributionControl: { setPrefix: vi.fn(), addAttribution: vi.fn() },
   };
   return { map, icons: vi.fn(), tiles: vi.fn(), getMap: vi.fn(), getPhotos: vi.fn() };
@@ -32,12 +35,13 @@ vi.mock('../../lib/photo-management-api', () => ({
 vi.mock('../eagle/EagleAssetThumbnail', () => ({
   EagleAssetThumbnail: () => <span>shared thumbnail</span>,
 }));
+vi.mock('./self-hosted-basemap', () => ({ addSelfHostedBasemap: vi.fn(async () => null) }));
 vi.mock('leaflet', () => ({
   map: () => mocks.map,
   tileLayer: mocks.tiles,
   geoJSON: () => ({ addTo: vi.fn() }),
   layerGroup: () => ({ addTo: vi.fn().mockReturnThis(), clearLayers: vi.fn(), remove: vi.fn() }),
-  marker: () => ({ addTo: vi.fn().mockReturnThis() }),
+  marker: () => ({ addTo: vi.fn().mockReturnThis(), setZIndexOffset: vi.fn() }),
   divIcon: mocks.icons,
 }));
 const first = { id: '5/20/12', latitude: 31, longitude: 121, count: 10000 };
@@ -74,7 +78,10 @@ beforeEach(() => {
     total: 10001,
     bounds: { west: 120, east: 122, south: 30, north: 32 },
     level: 5,
-    clusters: [first, { ...first, id: '5/21/12', longitude: 122, count: 1 }],
+    clusters: [
+      { ...first, cover: asset },
+      { ...first, id: '5/21/12', longitude: 122, count: 1 },
+    ],
   });
   mocks.getPhotos.mockResolvedValue({ items: [asset], nextCursor: null });
   vi.stubGlobal(
@@ -88,15 +95,63 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('whole-library location map', () => {
-  it('shows all-library counts without depending on loaded asset pages, scales circles and uses no external tiles', async () => {
+  it('zooms into a single server cell spanning multiple places before opening photos', async () => {
+    mocks.getMap.mockResolvedValue({
+      total: 10,
+      level: 6,
+      clusters: [
+        {
+          ...first,
+          count: 10,
+          photoLatitude: 37.5,
+          photoLongitude: 122,
+          south: 36,
+          north: 38,
+          west: 120,
+          east: 123,
+        },
+      ],
+    });
+    const { onOpen } = mount();
+    await screen.findByText('全库 10 张带位置照片');
+    await waitFor(() => expect(markerButtons()).toHaveLength(1));
+    expect(markerButtons()[0]).toHaveAttribute('aria-label', '放大查看 10 张照片的位置');
+    fireEvent.click(markerButtons()[0]);
+    expect(mocks.map.setView).toHaveBeenLastCalledWith([37.5, 122], 7);
+    expect(mocks.getPhotos).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+  it('renders all 48 distributed location thumbnails without an artificial group limit', async () => {
+    mocks.getMap.mockResolvedValue({
+      total: 48,
+      level: 12,
+      clusters: Array.from({ length: 48 }, (_, i) => ({
+        id: `12/${i}/1`,
+        count: 1,
+        latitude: 30,
+        longitude: 120,
+        photoLatitude: 30 + Math.floor(i / 8) * 0.6,
+        photoLongitude: 120 + (i % 8) * 0.55,
+        cover: { ...asset, id: `photo-${i}` },
+      })),
+    });
+    mount();
+    await screen.findByText('全库 48 张带位置照片');
+    await waitFor(() => expect(markerButtons()).toHaveLength(48));
+    expect(markerButtons().every((button) => button.textContent?.includes('1'))).toBe(true);
+  });
+
+  it('shows readable location cards with complete counts and uses no external tiles', async () => {
     mount();
     expect(await screen.findByText('全库 10001 张带位置照片')).toBeInTheDocument();
     expect(screen.queryByText('载入更多照片')).not.toBeInTheDocument();
     expect(markerButtons()).toHaveLength(2);
-    expect(parseFloat(markerButtons()[0]!.style.width)).toBeGreaterThan(
-      parseFloat(markerButtons()[1]!.style.width),
-    );
-    expect(parseFloat(markerButtons()[1]!.style.width)).toBeGreaterThanOrEqual(44);
+    expect(markerButtons()[0]).toHaveTextContent('10,000');
+    await waitFor(() => expect(markerButtons()[0]).toHaveTextContent('shared thumbnail'));
+    expect(markerButtons()[1]).toHaveTextContent('1');
+    expect(markerButtons()[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(markerButtons()[0]!.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    expect(screen.getByText('离线概览 · 详细地图尚未安装')).toBeInTheDocument();
     expect(mocks.tiles).not.toHaveBeenCalled();
     expect(
       (vi.mocked(fetch).mock.calls as unknown[][]).every(
@@ -109,7 +164,11 @@ describe('whole-library location map', () => {
   it('opens every group through bounded member pages and the shared viewer callback, treating names as text', async () => {
     const view = mount();
     await waitFor(() => expect(markerButtons()).toHaveLength(2));
-    act(() => markerButtons()[0]!.click());
+    const originalMarkers = markerButtons();
+    act(() => originalMarkers[0]!.click());
+    expect(originalMarkers[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(originalMarkers[1]).toHaveAttribute('aria-pressed', 'false');
+    expect(markerButtons()).toEqual(originalMarkers);
     const photo = await screen.findByRole('button', { name: asset.displayName });
     expect(photo.querySelector('img')).toBeNull();
     const latest = vi.fn();
@@ -121,6 +180,7 @@ describe('whole-library location map', () => {
     expect(mocks.map.remove).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: '关闭' }));
     expect(screen.queryByRole('region', { name: '此位置的照片' })).not.toBeInTheDocument();
+    expect(originalMarkers[0]).toHaveAttribute('aria-pressed', 'false');
   });
   it('queries the new zoom and viewport after moving and retains the selected group membership', async () => {
     mount();

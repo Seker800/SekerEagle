@@ -9,7 +9,7 @@ import { previewSelect, serializePreview } from './photo-preview';
 function locations(ownerId: string, includePrivate: boolean, n: number) {
   return Prisma.sql`
     WITH locations AS (
-      SELECT a.id, a."chronologicalAt",
+      SELECT a.id, a."chronologicalAt", a."mediaRevision",
         CASE WHEN m.latitude BETWEEN -90 AND 90 AND m.longitude BETWEEN -180 AND 180
           THEN m.latitude ELSE l.latitude END AS latitude,
         CASE WHEN m.latitude BETWEEN -90 AND 90 AND m.longitude BETWEEN -180 AND 180
@@ -38,6 +38,8 @@ interface ClusterRow {
   longitude: number;
   photoLatitude: number;
   photoLongitude: number;
+  coverId: string;
+  coverRevision: number;
   south: number;
   north: number;
   west: number;
@@ -61,14 +63,20 @@ export class PhotoMapService {
       ${locations(ownerId, includePrivate, grid.n)}, visible_cells AS (
         SELECT * FROM cells WHERE y BETWEEN ${grid.yMin} AND ${grid.yMax}
           AND (${Prisma.join(ranges, ' OR ')})
+      ), label_cells AS (
+        SELECT *, FLOOR(latitude * ${grid.n * 4} / 180) AS sy,
+          FLOOR(longitude * ${grid.n * 4} / 360) AS sx FROM visible_cells
       ), label_buckets AS (
-        SELECT x, y, FLOOR(latitude * ${grid.n * 4} / 180) AS sy,
-          FLOOR(longitude * ${grid.n * 4} / 360) AS sx, count(*) AS weight,
+        SELECT x, y, sx, sy, count(*) AS weight,
           AVG(latitude) AS "photoLatitude", AVG(longitude) AS "photoLongitude"
-        FROM visible_cells GROUP BY x, y, sx, sy
+        FROM label_cells GROUP BY x, y, sx, sy
       ), representatives AS (
-        SELECT DISTINCT ON (x, y) x, y, "photoLatitude", "photoLongitude"
+        SELECT DISTINCT ON (x, y) x, y, sx, sy, "photoLatitude", "photoLongitude"
         FROM label_buckets ORDER BY x, y, weight DESC, sx, sy
+      ), covers AS (
+        SELECT DISTINCT ON (c.x, c.y) c.x, c.y, c.id AS "coverId", c."mediaRevision" AS "coverRevision"
+        FROM label_cells c JOIN representatives r USING (x, y, sx, sy)
+        ORDER BY c.x, c.y, c."chronologicalAt" DESC, c.id DESC
       ), counts AS (
         SELECT x, y, count(*)::int AS count,
           MIN(latitude) AS south, MAX(latitude) AS north,
@@ -77,8 +85,9 @@ export class PhotoMapService {
           (x + 0.5) / ${grid.n} * 360 - 180 AS longitude
         FROM visible_cells GROUP BY x, y
       ), grouped AS (
-        SELECT counts.*, representatives."photoLatitude", representatives."photoLongitude"
-        FROM counts JOIN representatives USING (x, y)
+        SELECT counts.*, representatives."photoLatitude", representatives."photoLongitude",
+          covers."coverId", covers."coverRevision"
+        FROM counts JOIN representatives USING (x, y) JOIN covers USING (x, y)
       ), summary AS (
         SELECT count(*) AS total, MIN(longitude) AS west, MAX(longitude) AS east,
           MIN(latitude) AS south, MAX(latitude) AS north FROM valid
@@ -86,6 +95,25 @@ export class PhotoMapService {
       SELECT summary.*, COALESCE((SELECT jsonb_agg(to_jsonb(grouped) ORDER BY x,y) FROM grouped), '[]'::jsonb) AS clusters
       FROM summary
     `);
+    // Recheck authorization and revision after aggregation; a concurrent replacement or
+    // privacy change may invalidate a representative before its thumbnail is projected.
+    const candidates = summary!.clusters.filter((cluster) => cluster.coverId);
+    const assets = candidates.length
+      ? await this.prisma.eagleAsset.findMany({
+          where: {
+            OR: candidates.map((cluster) => ({
+              id: cluster.coverId,
+              mediaRevision: cluster.coverRevision,
+            })),
+            ownerId,
+            libraryMode: 'PHOTO',
+            deletedAt: null,
+            ...(!includePrivate ? { isPrivate: false } : {}),
+          },
+          select: previewSelect,
+        })
+      : [];
+    const covers = new Map(assets.map((asset) => [asset.id, serializePreview(asset)]));
     return {
       total: Number(summary!.total),
       bounds:
@@ -98,9 +126,10 @@ export class PhotoMapService {
             }
           : null,
       level: grid.level,
-      clusters: summary!.clusters.map((cluster) => ({
+      clusters: summary!.clusters.map(({ coverId, coverRevision: _revision, ...cluster }) => ({
         ...cluster,
         id: `${grid.level}/${cluster.x}/${cluster.y}`,
+        cover: covers.get(coverId) ?? null,
       })),
     };
   }

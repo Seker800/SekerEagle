@@ -27,11 +27,11 @@ export class MapViewportDto {
   @Min(-90)
   @Max(90)
   north!: number;
-  @ApiProperty({ minimum: 1, maximum: 12 })
+  @ApiProperty({ minimum: 1, maximum: 16 })
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  @Max(12)
+  @Max(16)
   zoom!: number;
 }
 export class MapPhotosDto {

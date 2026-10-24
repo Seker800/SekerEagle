@@ -5559,7 +5559,7 @@
             "in": "query",
             "schema": {
               "minimum": 1,
-              "maximum": 12,
+              "maximum": 16,
               "type": "number"
             }
           }

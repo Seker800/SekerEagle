@@ -11,6 +11,17 @@ test('map grid remains bounded for a world query even at maximum zoom and refine
   const coarse = mapGrid(world);
   const detail = mapGrid({ west: 120, east: 120.03, south: 30, north: 30.03, zoom: 12 });
   assert.ok(detail.level > coarse.level);
+  assert.equal(detail.level, 16);
+  assert.deepEqual(decodeMapCell('16/65535/65535'), { level: 16, n: 65536, x: 65535, y: 65535 });
+  assert.throws(() => decodeMapCell('21/0/0'));
+  const street = mapGrid({ west: 120, east: 120.001, south: 30, north: 30.001, zoom: 16 });
+  assert.equal(street.level, 20);
+  assert.deepEqual(decodeMapCell('20/1048575/1048575'), {
+    level: 20,
+    n: 1048576,
+    x: 1048575,
+    y: 1048575,
+  });
   const huge = mapGrid({ ...world, zoom: 12 });
   assert.ok(huge.cellCount <= 1024);
   const crossing = mapGrid({ west: 179, east: -179, south: -5, north: 5, zoom: 6 });
@@ -142,4 +153,53 @@ test('map endpoints retain browser authentication and cannot take owner or priva
   controller.mapPhotos(principal, '5/20/12', {});
   assert.deepEqual(calls[0], ['authenticated-owner', false, world]);
   assert.deepEqual(calls[1], ['authenticated-owner', false, '5/20/12', undefined]);
+});
+
+test('map covers are batch loaded with owner, mode, privacy and frozen revision rechecks', async () => {
+  const queries: unknown[] = [];
+  let visible = true;
+  const service = new PhotoMapService({
+    $queryRaw: async () => [
+      {
+        total: 1n,
+        west: 120,
+        east: 120,
+        south: 30,
+        north: 30,
+        clusters: [
+          {
+            x: 20,
+            y: 12,
+            latitude: 30,
+            longitude: 120,
+            count: 1,
+            coverId: 'photo',
+            coverRevision: 3,
+          },
+        ],
+      },
+    ],
+    eagleAsset: {
+      findMany: async (query: unknown) => {
+        queries.push(query);
+        return visible ? [{ id: 'photo', mediaRevision: 3, byteSize: 1n, renditions: [] }] : [];
+      },
+    },
+  } as never);
+  const result = await service.clusters('owner', false, world);
+  assert.equal(result.clusters[0]?.cover?.id, 'photo');
+  const where = (queries[0] as { where: unknown }).where;
+  assert.deepEqual(where, {
+    OR: [{ id: 'photo', mediaRevision: 3 }],
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    deletedAt: null,
+    isPrivate: false,
+  });
+  assert.ok(!('coverId' in result.clusters[0]!));
+  assert.ok(!('coverRevision' in result.clusters[0]!));
+  visible = false;
+  assert.equal((await service.clusters('owner', false, world)).clusters[0]?.cover, null);
+  await service.clusters('owner', true, world);
+  assert.ok(!('isPrivate' in (queries[2] as { where: object }).where));
 });

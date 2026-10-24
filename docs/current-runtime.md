@@ -219,3 +219,11 @@ cat /volume1/homes/seker/sekereagle-staging/maintenance/photo-timeline-repair-20
 群晖仅只读抽取 27 张原始 JPEG 和必要摄影样本信息到本机私有目录，再经过本地上传及 worker 提取；工作台额外含 4 张合成照片。未复制线上用户凭据、未恢复完整数据库，现用群晖服务和任务未改变。浏览器、HTTP、真实数据库和工程门禁的范围见 [照片统计](photo-statistics.md)。该环境使用临时存储，不承诺重启后保留；进程、容器和运行位置从 `.omx/artifacts/photo-workbench.json` 重新核对，不把文档记录当实时状态。
 
 同日统计呈现已更新为低饱和紧凑布局，去除常驻滑块和排名横向滚动。后续按用户反馈增加默认总量聚合、年／月平滑曲线和单曲线悬浮提示；本机 API 与网页需要更新，测试工作台复用已有私有照片样本重建验证。群晖部署和真实图库不变。
+
+## 2026-10-24 本机照片地图视觉验收
+
+同一隔离工作台更新为 Dark 2D 风格离线分层底图与 Apple 式真实照片缩略图标记。API 增加受账号、PHOTO、私密可见性与当前版本约束的批量封面预览；本地 API／web 已更新，已有 27 张私有样本和 4 张合成照片重新导入临时存储验证，没有重新读取群晖。生产镜像、Mac 模型和现用后台任务保持原状态。本轮仍只在 `127.0.0.1:4188` 验收，不代表已发布生产。
+
+运行身份继续从 `.omx/artifacts/photo-workbench.json` 读取；日志位于 `.omx/artifacts/apple-map-workbench.log`，地图 SQL 隔离回归位于 `apple-map-integration.log`。底图改为独立自托管 PMTiles：`.local/maps/data/basemap.pmtiles` 保存全球 z0–7 和中国及周边 z8–14 的公开地理数据，来源日期、范围和 SHA-256 在同目录 `sources.json`；工作台按同源 Range 读取，不外发查看区域。照片标记缩小至 52px，减少提前合并，API 查询缩放上限同步提升至 16，近景网格最高 level 20，仍维持 1024 个理论网格预算。设计范围与地理精度见 [照片地图](photo-map.md)。
+
+本轮最终核验：全工作区 CI 门禁通过，地图 SQL 回归包含 16 级视口、level 20 的成员访问、私密／模式／版本隔离；密集页面测试保留 48 个独立位置。实际工作台含 31 张照片，其中 19 张带位置，真实样本集中少量拍摄地点，不应把该样本数量当作生产图库的显示上限。浏览器核对区域展开、近景街道、真实缩略图和选片；日志使用 `map-density-final-*`，底图来源和归档校验使用 `map-china-download.log`、`map-archive-verify.log`。

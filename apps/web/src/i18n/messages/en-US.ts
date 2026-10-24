@@ -1471,6 +1471,9 @@ export const enUS = {
   相册: 'Albums',
   '视频播放副本生成失败，原片已保存，可在处理任务中重试':
     'Video playback generation failed. The original is saved; retry in processing tasks.',
+  封面待生成: 'Preview pending',
+  '放大查看 {{value1}} 张照片的位置': 'Zoom in to explore locations of {{value1}} photos',
+  '放大地图，探索照片拍摄地点': 'Zoom in to explore where your photos were taken',
   '全库 {{value1}} 张带位置照片': '{{value1}} geotagged photos in your library',
   此位置的照片: 'Photos at this location',
   '约 {{value1}} 张 · 按拍摄时间排序': 'About {{value1}} photos · Capture date order',
@@ -1482,12 +1485,17 @@ export const enUS = {
   '查看此位置的 {{value1}} 张照片': 'View {{value1}} photos at this location',
   '正在统计照片位置…': 'Loading photo locations…',
   '照片位置加载失败。': 'Could not load photo locations.',
-  '圆圈大小表示照片数量；放大查看附近位置，点击浏览该组全部照片。':
-    'Circle size reflects the number of photos. Zoom in for nearby groups; select a circle to browse all its photos.',
+  '地点标记显示照片数量；放大查看附近位置，点击浏览该组全部照片。':
+    'Location markers show photo counts. Zoom in for nearby groups; select a marker to browse all its photos.',
   附近区域: 'Nearby area',
   多地合并区域: 'Combined areas',
   '{{value1}}附近': 'Near {{value1}}',
   '{{value1}}周边 · 多地合并': 'Around {{value1}} · Combined areas',
   '查看{{value1}}的 {{value2}} 张照片': 'View {{value2}} photos near {{value1}}',
   '{{value1}}等': '{{value1}} +',
+  '中国及周边详细地图 · 其他地区为全球概览':
+    'Detailed map of China and surrounding areas · Global overview elsewhere',
+  '离线概览 · 详细地图尚未安装': 'Offline overview · Detailed map is not installed',
+  '自托管矢量底图 · 道路与建筑随缩放显示':
+    'Self-hosted vector map · Roads and buildings appear as you zoom',
 } as const;

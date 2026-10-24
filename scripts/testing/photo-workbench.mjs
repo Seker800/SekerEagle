@@ -1,4 +1,5 @@
 import { URLSearchParams } from 'node:url';
+import { serveMapArchive } from '../maps/serve-map-archive.mjs';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 /* global setTimeout, clearTimeout, console */
 import assert from 'node:assert/strict';
@@ -164,6 +165,12 @@ try {
         res.end('Test service unavailable');
       });
       req.pipe(upstream);
+      return;
+    }
+    if (await serveMapArchive(req, res, join(root, '.local/maps/data'))) return;
+    if (req.url.startsWith('/maps/')) {
+      res.writeHead(404);
+      res.end();
       return;
     }
     try {

@@ -105,6 +105,7 @@ export interface PhotoMapViewport {
   zoom: number;
 }
 export interface PhotoMapCluster {
+  cover?: EagleAssetListItem | null;
   id: string;
   latitude: number;
   longitude: number;

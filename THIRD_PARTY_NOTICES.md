@@ -77,8 +77,11 @@ an SBOM from the exact container images or artifacts being published.
 ## Photo metadata and maps
 
 Photo metadata parsing uses `exifr` (MIT). Interactive maps use Leaflet
-(BSD-2-Clause). The current default uses the locally bundled Natural Earth data
-noted below and makes no requests to OpenStreetMap tiles. Photography metadata
+(BSD-2-Clause). Self-hosted vector maps use protomaps-leaflet 5.1.0 (BSD-3-Clause),
+@protomaps/basemaps (BSD-3-Clause) and PMTiles (BSD-3-Clause). Public
+Protomaps/OpenStreetMap geographic data is downloaded separately under ODbL-1.0
+with visible attribution. The bundled Natural Earth overview remains a fallback.
+Map viewing makes no requests to third-party tile services. Photography metadata
 remains in the local application database.
 
 ## Local photo face models
@@ -116,3 +119,13 @@ Source: https://github.com/darktable-org/rawspeed/commit/70d3725 .
 The data is distributed under Creative Commons Attribution-ShareAlike 3.0
 (https://creativecommons.org/licenses/by-sa/3.0/). The data remains separately
 licensed under those terms; no RawSpeed decoder code is included.
+
+## Self-hosted vector geography
+
+The optional regional archive is extracted from https://build.protomaps.com/20261023.pmtiles
+using https://github.com/protomaps/go-pmtiles (BSD-3-Clause). Protomaps basemap
+sources and attribution: https://docs.protomaps.com/basemaps/downloads .
+OpenStreetMap data: https://www.openstreetmap.org/copyright ; ODbL:
+https://opendatacommons.org/licenses/odbl/1-0/ . Preserve source attribution and
+applicable database sharing obligations when redistributing map archives.
+Geographic archives are separate from the Apache-2.0 application source.

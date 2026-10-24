@@ -121,7 +121,7 @@ try {
   };
   const expected = new Set();
   for (let i = 0; i < 130; i++) expected.add(await make());
-  await make({ isPrivate: true });
+  const privateId = await make({ isPrivate: true, chronologicalAt: new Date('2099-01-01Z') });
   await make({ libraryMode: 'MATERIAL' });
   await make({ ownerId: other });
   await make({ deletedAt: new Date() });
@@ -177,6 +177,10 @@ try {
   assert.ok(Math.abs(cluster.photoLongitude - 120.15) < 0.0001);
   assert.equal(cluster.west, 120.15);
   assert.equal(cluster.east, 120.15);
+  assert.ok(expected.has(cluster.cover.id));
+  assert.equal(cluster.cover.mediaRevision, 1);
+  assert.ok(overview.clusters.every((cell) => cell.cover?.libraryMode === 'PHOTO'));
+  assert.ok(!overview.clusters.some((cell) => cell.cover?.id === privateId));
   const seen = [],
     cursors = [];
   let cursor;
@@ -195,6 +199,7 @@ try {
   await assert.rejects(service.photos(owner, true, cluster.id, cursors[0]));
   const unlocked = await service.clusters(owner, true, world);
   assert.equal(unlocked.total, 133);
+  assert.ok(unlocked.clusters.some((cell) => cell.cover?.id === privateId));
   const detail = await service.clusters(owner, false, {
     west: 120.1,
     east: 120.2,
@@ -210,6 +215,19 @@ try {
   assert.ok(detail.level > overview.level);
   const preciseMembers = await service.photos(owner, false, detail.clusters[0].id);
   assert.equal(preciseMembers.items.length, 60);
+  const street = await service.clusters(owner, false, {
+    west: 120.149,
+    east: 120.151,
+    south: 30.249,
+    north: 30.251,
+    zoom: 16,
+  });
+  assert.equal(street.level, 20);
+  assert.equal(
+    street.clusters.reduce((sum, cell) => sum + cell.count, 0),
+    131,
+  );
+  assert.equal((await service.photos(owner, false, street.clusters[0].id)).items.length, 60);
   const pole = await make({}, 90, 180);
   const poles = await service.clusters(owner, false, world);
   assert.ok(

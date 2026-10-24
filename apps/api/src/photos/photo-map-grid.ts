@@ -20,10 +20,10 @@ export function mapGrid(view: MapViewportDto) {
     view.north > 90 ||
     !Number.isInteger(view.zoom) ||
     view.zoom < 1 ||
-    view.zoom > 12
+    view.zoom > 16
   )
     throw new BadRequestException('地图范围无效');
-  let level = view.zoom + 2;
+  let level = view.zoom + 4;
   while (true) {
     const n = 2 ** level,
       west = column(view.west, n),
@@ -44,10 +44,10 @@ export function mapGrid(view: MapViewportDto) {
   }
 }
 export function decodeMapCell(key: string) {
-  if (!/^\d{1,2}\/\d{1,5}\/\d{1,5}$/.test(key)) throw new BadRequestException('位置分组无效');
+  if (!/^\d{1,2}\/\d{1,7}\/\d{1,7}$/.test(key)) throw new BadRequestException('位置分组无效');
   const [level, x, y] = key.split('/').map(Number) as [number, number, number];
   const n = 2 ** level;
-  if (level > 14 || x >= n || y >= n) throw new BadRequestException('位置分组无效');
+  if (level > 20 || x >= n || y >= n) throw new BadRequestException('位置分组无效');
   return { level, n, x, y };
 }
 interface CursorScope {

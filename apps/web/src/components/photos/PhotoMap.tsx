@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconFocusCentered, IconMapPin } from '@tabler/icons-react';
 import * as L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getLocale, t } from '../../i18n';
@@ -8,21 +9,28 @@ import {
   type PhotoMapCluster,
   type PhotoMapViewport,
 } from '../../lib/photo-management-api';
+import { PhotoMapMarkers } from './PhotoMapMarkers';
 import { PhotoMapPhotos } from './PhotoMapPhotos';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { describeClusterPlace } from './photo-map-place';
 import { loadLocalBasemap, selectCityLabels, type MapCity } from './local-basemap';
+import { addSelfHostedBasemap } from './self-hosted-basemap';
 import styles from './PhotoMap.module.css';
 
 function clusterPlaceName(cluster: PhotoMapCluster, cities: readonly MapCity[]) {
   const place = describeClusterPlace(cluster, cities);
   if (!place.city)
-    return { label: place.regional ? t('多地合并区域') : t('附近区域'), shortLabel: t('附近区域') };
+    return {
+      label: place.regional ? t('多地合并区域') : t('附近区域'),
+      shortLabel: t('附近区域'),
+      regional: place.regional,
+    };
   const city = getLocale() === 'zh-CN' ? place.city.nameZh : place.city.name;
   return {
     label: place.regional
       ? t('{{value1}}周边 · 多地合并', { value1: city })
       : t('{{value1}}附近', { value1: city }),
+    regional: place.regional,
     shortLabel: place.regional ? t('{{value1}}等', { value1: city }) : city,
   };
 }
@@ -39,8 +47,10 @@ export function PhotoMap({
   const container = useRef<HTMLDivElement>(null),
     mapRef = useRef<L.Map | null>(null);
   const framed = useRef(false);
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
   const [status, setStatus] = useState<'LOADING' | 'READY' | 'ERROR'>('LOADING');
   const [reload, setReload] = useState(0);
+  const [hasDetailedMap, setHasDetailedMap] = useState(false);
   const [cities, setCities] = useState<readonly MapCity[]>([]);
   const [viewport, setViewport] = useState<PhotoMapViewport>({
     west: -180,
@@ -55,7 +65,7 @@ export function PhotoMap({
     queryFn: ({ signal }) => getPhotoMap(viewport, signal),
     staleTime: 30000,
   });
-  const points = locations.data?.clusters;
+  const points = useMemo(() => locations.data?.clusters ?? [], [locations.data?.clusters]);
   const bounds = locations.data?.bounds;
   const placeNames = useMemo(
     () => new Map((points ?? []).map((cluster) => [cluster.id, clusterPlaceName(cluster, cities)])),
@@ -72,7 +82,7 @@ export function PhotoMap({
           [bounds.south, bounds.west],
           [bounds.north, bounds.east],
         ],
-        { maxZoom: 7, padding: [48, 48] },
+        { maxZoom: 7, padding: [96, 80] },
       );
   };
 
@@ -80,7 +90,7 @@ export function PhotoMap({
     if (!container.current) return;
     const map = L.map(container.current, {
       minZoom: 1,
-      maxZoom: 12,
+      maxZoom: 16,
       maxBounds: [
         [-85, -180],
         [85, 180],
@@ -89,6 +99,7 @@ export function PhotoMap({
       preferCanvas: true,
     }).setView([30, 105], 3);
     mapRef.current = map;
+    setMapInstance(map);
     framed.current = false;
     let moveTimer: ReturnType<typeof setTimeout> | undefined;
     const updateViewport = () => {
@@ -100,7 +111,7 @@ export function PhotoMap({
           east: Math.min(180, current.getEast()),
           south: Math.max(-90, current.getSouth()),
           north: Math.min(90, current.getNorth()),
-          zoom: Math.round(map.getZoom()),
+          zoom: Math.min(16, Math.round(map.getZoom())),
         });
       }, 180);
     };
@@ -111,9 +122,6 @@ export function PhotoMap({
         : null;
     resize?.observe(container.current);
     map.attributionControl.setPrefix(false);
-    map.attributionControl.addAttribution(
-      '<a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
-    );
     const citiesPane = map.createPane('photoCities');
     citiesPane.style.pointerEvents = 'none';
     citiesPane.style.zIndex = '450';
@@ -121,17 +129,26 @@ export function PhotoMap({
     const labels = L.layerGroup().addTo(map),
       controller = new AbortController();
     const palette = getComputedStyle(container.current);
-    const accent = palette.getPropertyValue('--eagle-accent').trim() || '#94a5b4';
-    const land = palette.getPropertyValue('--eagle-panel-raised').trim() || '#1d1f23';
+    const land = palette.getPropertyValue('--map-land').trim() || '#25272d';
     setStatus('LOADING');
     let updateLabels: (() => void) | undefined;
     void loadLocalBasemap(controller.signal)
-      .then((data) => {
+      .then(async (data) => {
         if (controller.signal.aborted) return;
         if (data.cities.length) setCities(data.cities);
+        const vectorLayer = await addSelfHostedBasemap(map, controller.signal);
+        if (controller.signal.aborted) return;
+        setHasDetailedMap(Boolean(vectorLayer));
+        if (vectorLayer) {
+          setStatus('READY');
+          return;
+        }
+        map.attributionControl.addAttribution(
+          '<a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
+        );
         L.geoJSON(data.land, {
           interactive: false,
-          style: { color: accent, weight: 0.7, opacity: 0.25, fillColor: land, fillOpacity: 1 },
+          style: { color: '#363b43', weight: 0.8, opacity: 1, fillColor: land, fillOpacity: 1 },
         }).addTo(map);
         updateLabels = () => {
           labels.clearLayers();
@@ -171,63 +188,13 @@ export function PhotoMap({
     };
   }, [reload]);
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const markers = L.layerGroup().addTo(map);
-    const accent = container.current
-      ? getComputedStyle(container.current).getPropertyValue('--eagle-accent').trim() || '#94a5b4'
-      : '#94a5b4';
-    const largest = Math.max(100, ...(points ?? []).map((cluster) => cluster.count));
-    for (const cluster of points ?? []) {
-      const diameter = 44 + 20 * Math.sqrt(cluster.count / largest);
-      const label = document.createElement('button');
-      label.type = 'button';
-      label.className = styles.cluster;
-      label.style.width = `${diameter}px`;
-      label.style.height = `${diameter}px`;
-      label.style.borderColor = accent;
-      const count = document.createElement('span');
-      count.textContent = cluster.count.toLocaleString();
-      const place = document.createElement('span');
-      place.className = styles.clusterPlace;
-      const placeInfo = placeNames.get(cluster.id) ?? {
-        label: t('附近区域'),
-        shortLabel: t('附近区域'),
-      };
-      place.textContent = placeInfo.shortLabel;
-      label.append(count, place);
-      label.title = placeInfo.label;
-      label.setAttribute(
-        'aria-label',
-        t('查看{{value1}}的 {{value2}} 张照片', {
-          value1: placeInfo.label,
-          value2: cluster.count,
-        }),
-      );
-      label.onclick = () => setSelected(cluster);
-      L.marker([cluster.latitude, cluster.longitude], {
-        pane: 'photoLocations',
-        keyboard: false,
-        icon: L.divIcon({
-          className: styles.clusterIcon,
-          html: label,
-          iconSize: [diameter, diameter],
-          iconAnchor: [diameter / 2, diameter / 2],
-        }),
-      }).addTo(markers);
-    }
-    return () => {
-      markers.remove();
-    };
-  }, [points, placeNames, reload]);
-  useEffect(() => {
     if (bounds && !framed.current && mapRef.current) {
       mapRef.current.fitBounds(
         [
           [bounds.south, bounds.west],
           [bounds.north, bounds.east],
         ],
-        { maxZoom: 7, padding: [48, 48] },
+        { maxZoom: 7, padding: [96, 80] },
       );
       framed.current = true;
     }
@@ -237,14 +204,37 @@ export function PhotoMap({
       <div className={styles.mapLayout} data-selected={Boolean(selected)}>
         <div className={styles.mapArea}>
           <div className={styles.heading}>
-            <p>{t('全库 {{value1}} 张带位置照片', { value1: locations.data?.total ?? '—' })}</p>
+            <div className={styles.mapSummary}>
+              <IconMapPin size={18} aria-hidden="true" />
+              <div>
+                <p>{t('全库 {{value1}} 张带位置照片', { value1: locations.data?.total ?? '—' })}</p>
+                <span>
+                  {hasDetailedMap
+                    ? t('中国及周边详细地图 · 其他地区为全球概览')
+                    : t('离线概览 · 详细地图尚未安装')}
+                </span>
+              </div>
+            </div>
             <button type="button" disabled={!bounds} onClick={showAll}>
+              <IconFocusCentered size={15} aria-hidden="true" />
               {t('显示全部照片位置')}
             </button>
           </div>
           <div className={styles.frame} ref={container} aria-label={t('照片地图')} />
+          <PhotoMapMarkers
+            viewport={viewport}
+            map={mapInstance}
+            clusters={points}
+            names={placeNames}
+            selectedId={selected?.id}
+            onSelect={setSelected}
+          />
           <div className={styles.caption}>
-            <span>{t('离线概览 · 不含街道级细节')}</span>
+            <span>
+              {hasDetailedMap
+                ? t('自托管矢量底图 · 道路与建筑随缩放显示')
+                : t('离线概览 · 不含街道级细节')}
+            </span>
             {status === 'LOADING' && <span role="status">{t('正在加载本地地图…')}</span>}
             {status === 'ERROR' && (
               <span role="alert">
@@ -266,7 +256,7 @@ export function PhotoMap({
           )}
           {locations.data?.total === 0 && <p>{t('当前照片没有 GPS 信息。')}</p>}
           <p className={styles.hint}>
-            {t('圆圈大小表示照片数量；放大查看附近位置，点击浏览该组全部照片。')}
+            {t('地点标记显示照片数量；放大查看附近位置，点击浏览该组全部照片。')}
           </p>
         </div>
         {selected && (
