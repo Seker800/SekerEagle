@@ -316,7 +316,9 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<'timeline' | 'map' | 'people' | 'agent' | 'statistics'>('timeline');
+  const [photoView, setPhotoView] = useState<
+    'timeline' | 'map' | 'people' | 'agent' | 'statistics'
+  >('timeline');
   const [search, setSearch] = useState('');
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
@@ -1290,8 +1292,20 @@ export function SekerEaglePage({
               setPhotoView(view);
             }}
           >
-            {view === 'map' ? <IconMapPin size={17} /> : view === 'statistics' ? <IconChartBar size={17} /> : <IconUsers size={17} />}
-            {view === 'map' ? t('地图') : view === 'people' ? t('人物') : view === 'statistics' ? t('照片统计') : t('智能整理')}
+            {view === 'map' ? (
+              <IconMapPin size={17} />
+            ) : view === 'statistics' ? (
+              <IconChartBar size={17} />
+            ) : (
+              <IconUsers size={17} />
+            )}
+            {view === 'map'
+              ? t('地图')
+              : view === 'people'
+                ? t('人物')
+                : view === 'statistics'
+                  ? t('照片统计')
+                  : t('智能整理')}
           </button>
         ))}
       {privateVisible && (
@@ -1918,7 +1932,11 @@ export function SekerEaglePage({
                 </div>
               )}
               {libraryMode === 'PHOTO' && photoView === 'statistics' && (
-                <PhotoStatistics key={`${ownerId}:${privateVisible}`} ownerId={ownerId} includePrivate={privateVisible} />
+                <PhotoStatistics
+                  key={`${ownerId}:${privateVisible}`}
+                  ownerId={ownerId}
+                  includePrivate={privateVisible}
+                />
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
                 <PhotoAgentReview

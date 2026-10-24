@@ -7,7 +7,10 @@ export interface PhotoStatisticsQuery {
   cameras: string[];
   lenses: string[];
 }
-export interface PhotoUsage { key: string; count: number }
+export interface PhotoUsage {
+  key: string;
+  count: number;
+}
 export interface PhotoStatisticsData {
   total: number;
   unknownDate: number;
@@ -24,6 +27,7 @@ export function getPhotoStatistics(input: PhotoStatisticsQuery, signal?: AbortSi
   const params = new URLSearchParams({ grain: input.grain, groupBy: input.groupBy });
   if (input.start) params.set('start', input.start);
   if (input.end) params.set('end', input.end);
-  for (const key of ['cameras', 'lenses'] as const) for (const value of input[key]) params.append(key, value);
+  for (const key of ['cameras', 'lenses'] as const)
+    for (const value of input[key]) params.append(key, value);
   return request<PhotoStatisticsData>(`/api/photos/photography/statistics?${params}`, { signal });
 }
