@@ -29,6 +29,8 @@ class NativeSearchTest {
         val paths = CopyOnWriteArrayList<String>()
         @Volatile var mediaStatus = 200
         @Volatile var photoStatus = 200
+        @Volatile var tagDelay = 0L
+        private val workers = CopyOnWriteArrayList<Thread>()
         private val tags =
             (0 until tagCount).joinToString(",", "[", "]") {
                 JSONObject()
@@ -42,40 +44,53 @@ class NativeSearchTest {
         private val thread =
             Thread {
                     try {
-                        while (!socket.isClosed) socket.accept().use { client ->
-                            client.soTimeout = 5000
-                            val reader = client.getInputStream().bufferedReader()
-                            val path = reader.readLine().split(" ")[1]
-                            paths.add(path)
-                            while (!reader.readLine().isNullOrEmpty()) {}
-                            val status =
-                                when {
-                                    path.endsWith("media-capabilities") -> mediaStatus
-                                    path.endsWith("photography/facets") -> photoStatus
-                                    else -> 200
-                                }
-                            val body =
-                                when {
-                                    path == "/api/auth/me" ->
-                                        """{"user":{"id":"owner","email":"search@example.invalid"},"desktopCache":{"deploymentId":"search"}}"""
-                                    path.contains("manual-tags") -> tags
-                                    path.endsWith("media-capabilities") ->
-                                        """{"images":{"formats":["jpeg","png"]},"videos":{"formats":["mp4"]}}"""
-                                    path.endsWith("photography/facets") ->
-                                        """{"cameras":["Camera A"],"lenses":["Lens B"]}"""
-                                    path.contains("/timeline") -> """{"days":[],"total":1}"""
-                                    path.contains("/assets?") ->
-                                        """{"items":[{"id":"asset","displayName":"photo","mediaRevision":1,"rowVersion":1,"renditions":[]}],"nextCursor":null}"""
-                                    else -> "{}"
-                                }
-                            val bytes = body.toByteArray()
-                            client
-                                .getOutputStream()
-                                .write(
-                                    "HTTP/1.1 $status Test\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
-                                        .toByteArray()
-                                )
-                            client.getOutputStream().write(bytes)
+                        while (!socket.isClosed) {
+                            val accepted = socket.accept()
+                            workers +=
+                                Thread {
+                                        accepted.use { client ->
+                                            client.soTimeout = 5000
+                                            val reader = client.getInputStream().bufferedReader()
+                                            val path = reader.readLine().split(" ")[1]
+                                            paths.add(path)
+                                            while (!reader.readLine().isNullOrEmpty()) {}
+                                            if (path.contains("manual-tags")) Thread.sleep(tagDelay)
+                                            val status =
+                                                when {
+                                                    path.endsWith("media-capabilities") ->
+                                                        mediaStatus
+                                                    path.endsWith("photography/facets") ->
+                                                        photoStatus
+                                                    else -> 200
+                                                }
+                                            val body =
+                                                when {
+                                                    path == "/api/auth/me" ->
+                                                        """{"user":{"id":"owner","email":"search@example.invalid"},"desktopCache":{"deploymentId":"search"}}"""
+                                                    path.contains("manual-tags") -> tags
+                                                    path.endsWith("media-capabilities") ->
+                                                        """{"images":{"formats":["jpeg","png"]},"videos":{"formats":["mp4"]}}"""
+                                                    path.endsWith("photography/facets") ->
+                                                        """{"cameras":["Camera A"],"lenses":["Lens B"]}"""
+                                                    path.contains("/timeline") ->
+                                                        """{"days":[],"total":1}"""
+                                                    path.contains("/assets?") ->
+                                                        """{"items":[{"id":"asset","displayName":"photo","mediaRevision":1,"rowVersion":1,"renditions":[]}],"nextCursor":null}"""
+                                                    else -> "{}"
+                                                }
+                                            val bytes = body.toByteArray()
+                                            runCatching {
+                                                client
+                                                    .getOutputStream()
+                                                    .write(
+                                                        "HTTP/1.1 $status Test\r\nContent-Type: application/json\r\nContent-Length: ${bytes.size}\r\nConnection: close\r\n\r\n"
+                                                            .toByteArray()
+                                                    )
+                                                client.getOutputStream().write(bytes)
+                                            }
+                                        }
+                                    }
+                                    .apply { start() }
                         }
                     } catch (_: java.io.IOException) {}
                 }
@@ -84,6 +99,7 @@ class NativeSearchTest {
         override fun close() {
             socket.close()
             thread.join(6000)
+            workers.forEach { it.join(6000) }
         }
     }
 
@@ -173,6 +189,170 @@ class NativeSearchTest {
             main { model.back() }
             assertEquals("old", model.state.value.searchDraft)
             assertEquals(setOf("tag0"), model.state.value.filters.tags)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun partialOptionFailuresDoNotEraseOtherSectionsAndDatesNeedNoCatalogRequest() {
+        Server().use { server ->
+            server.mediaStatus = 503
+            val model = model(server)
+            main { model.openFilters("筛选") }
+            await { !model.state.value.optionsLoading }
+            assertEquals(3, model.state.value.options.tags.size)
+            assertEquals(listOf("Camera A"), model.state.value.options.cameras)
+            assertNotNull(model.state.value.optionStatus[NativeOptionSection.FORMATS]?.error)
+            assertNull(model.state.value.optionStatus[NativeOptionSection.TAGS]?.error)
+            server.mediaStatus = 200
+            main { model.openFilters("格式") }
+            await { !model.state.value.optionsLoading }
+            assertEquals(listOf("jpeg", "mp4", "png"), model.state.value.options.formats)
+            assertEquals(3, model.state.value.options.tags.size)
+            assertEquals(listOf("Lens B"), model.state.value.options.lenses)
+            val requests = server.paths.size
+            main {
+                model.openFilters("时间")
+                model.closePanel()
+                model.openFilters("评分")
+            }
+            compose.waitForIdle()
+            assertEquals(requests, server.paths.size)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun choicesAccumulateInDraftThenSubmitTogetherAndRemainModeScoped() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main {
+                model.openSearch()
+                model.updateSearchDraft("new keyword")
+                model.openFilters("标签")
+            }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("标签1").performClick()
+            compose.onNodeWithTag("filter-submit").performClick()
+            assertTrue(model.state.value.searchOpen)
+            assertTrue(model.state.value.filters.tags.isEmpty())
+            main { model.openFilters("格式") }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("PNG").performClick()
+            compose.onNodeWithTag("filter-submit").performClick()
+            compose.onNodeWithTag("condition:tag:tag1").assertExists()
+            compose.onNodeWithTag("condition:format:png").assertExists()
+            compose.onNodeWithTag("search-submit").performScrollTo().performClick()
+            await { !model.state.value.loading }
+            assertEquals("new keyword", model.state.value.query)
+            assertEquals(setOf("tag1"), model.state.value.filters.tags)
+            assertEquals(setOf("png"), model.state.value.filters.formats)
+            assertTrue(
+                server.paths.any {
+                    it.startsWith("/api/photos/assets?") &&
+                        it.contains("manualTagIds=tag1") &&
+                        it.contains("formats=png") &&
+                        it.contains("search=new+keyword")
+                }
+            )
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            assertTrue(model.state.value.filters.tags.isEmpty())
+            main { model.openFilters("相机") }
+            await { !model.state.value.optionsLoading }
+            assertFalse(server.paths.any { it.contains("/api/eagle/photography") })
+            main { model.switchMode(GalleryMode.PHOTO) }
+            assertEquals(setOf("tag1"), model.state.value.filters.tags)
+            main {
+                model.openSearch()
+                model.openFilters("标签")
+            }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("标签2").performClick()
+            compose.onNodeWithText("取消").performClick()
+            assertEquals(setOf("tag1"), model.state.value.searchFilters.tags)
+            main {
+                model.back()
+                model.logout()
+            }
+        }
+    }
+
+    @Test
+    fun cameraLensRatingAndGpsCanBeEditedTogetherWithoutChangingTheKeyword() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main {
+                model.openSearch()
+                model.updateSearchDraft("flower")
+                model.openFilters("筛选")
+            }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("Camera A").performScrollTo().performClick()
+            compose.onNodeWithText("Lens B").performScrollTo().performClick()
+            compose.onNodeWithText("4 ★").performScrollTo().performClick()
+            compose.onNodeWithText("有 GPS").performScrollTo().performClick()
+            compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
+            assertEquals("flower", model.state.value.searchDraft)
+            compose.onNodeWithTag("search-submit").performScrollTo().performClick()
+            await { !model.state.value.loading }
+            val filters = model.state.value.filters
+            assertEquals("Camera A", filters.camera)
+            assertEquals("Lens B", filters.lens)
+            assertEquals(4, filters.rating)
+            assertEquals("WITH", filters.gps)
+            assertTrue(
+                server.paths.any {
+                    it.contains("cameraModel=Camera+A") &&
+                        it.contains("lensModel=Lens+B") &&
+                        it.contains("rating=4") &&
+                        it.contains("gps=WITH")
+                }
+            )
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun largerTagBudgetDoesNotChangeOrdinaryJsonLimitsOrImageMimeValidation() {
+        Server(9000).use { server ->
+            val model = model(server)
+            val connection = model.repository!!.connection
+            assertThrows(java.io.IOException::class.java) {
+                connection.array("/api/photos/manual-tags")
+            }
+            assertThrows(java.io.IOException::class.java) {
+                connection.media("/api/photos/manual-tags")
+            }
+            assertThrows(IllegalArgumentException::class.java) {
+                connection.array("/api/photos/manual-tags", 17 * 1024 * 1024)
+            }
+            assertEquals(
+                9000,
+                connection.array("/api/photos/manual-tags", 16 * 1024 * 1024).length(),
+            )
+            main { model.logout() }
+            assertThrows(NativeSession.Failure::class.java) {
+                connection.array("/api/photos/manual-tags", 16 * 1024 * 1024)
+            }
+        }
+    }
+
+    @Test
+    fun cancellingASlowTagLookupAllowsTheNextOptionRequestImmediately() {
+        Server().use { server ->
+            server.tagDelay = 3000L
+            val model = model(server)
+            main { model.openFilters("标签") }
+            await { server.paths.any { it.contains("manual-tags") } }
+            main {
+                model.closePanel()
+                model.openFilters("格式")
+            }
+            compose.waitUntil(1500) { !model.state.value.optionsLoading }
+            assertEquals(listOf("jpeg", "mp4", "png"), model.state.value.options.formats)
+            assertTrue(model.state.value.options.tags.isEmpty())
             main { model.logout() }
         }
     }
