@@ -73,12 +73,13 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                 ) {
                     model.back()
                 }
-                if (state.identity == null) NativeLogin(state, model)
-                else {
+                if (state.identity == null) {
+                    if (state.restoring) NativeLibraryPlaceholder() else NativeLogin(state, model)
+                } else {
                     key(state.identity!!.scope) {
                         val repo = model.repository
                         if (repo != null) {
-                            NativeLibrary(state, model, repo, openNative) {
+                            NativeLibraryPager(state, model, repo, openNative) {
                                 if (model.prepareUploadSelection())
                                     uploadPicker.launch(arrayOf("*/*"))
                             }
@@ -99,9 +100,6 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
                         { model.repository?.evictImages() },
                         { model.back() },
                     )
-                LaunchedEffect(state.identity?.scope) {
-                    if (state.identity != null) model.onForeground()
-                }
             }
         }
     }
@@ -109,12 +107,13 @@ fun NativeGalleryApp(model: NativeGalleryViewModel, openNative: (String) -> Unit
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun NativeLibrary(
+internal fun NativeLibrary(
     state: GalleryState,
     model: NativeGalleryViewModel,
     repo: NativeGalleryRepository,
     openNative: (String) -> Unit,
     chooseUpload: () -> Unit,
+    active: Boolean = true,
 ) {
     val haptics = androidx.compose.ui.platform.LocalHapticFeedback.current
     val grid = rememberLazyGridState()
@@ -156,7 +155,15 @@ private fun NativeLibrary(
     }
     SideEffect { renderedWindow = state.windowOffset }
     val draggingGrid by grid.interactionSource.collectIsDraggedAsState()
-    LaunchedEffect(state.windowOffset, state.loading, state.timeline, state.error, draggingGrid) {
+    LaunchedEffect(
+        active,
+        state.windowOffset,
+        state.loading,
+        state.timeline,
+        state.error,
+        draggingGrid,
+    ) {
+        if (!active) return@LaunchedEffect
         snapshotFlow {
                 grid.firstVisibleItemIndex < 6 &&
                     grid.lastScrolledBackward &&
@@ -179,7 +186,8 @@ private fun NativeLibrary(
     ) {
         grid.scrollToItem(0)
     }
-    LaunchedEffect(grid, state.cursor, state.loading) {
+    LaunchedEffect(active, grid, state.cursor, state.loading) {
+        if (!active) return@LaunchedEffect
         snapshotFlow { grid.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
             .distinctUntilChanged()
             .collect { last ->
@@ -313,7 +321,7 @@ private fun NativeLibrary(
                         }
                     }
                 }
-                if (state.loading)
+                if (state.loading && state.items.isNotEmpty())
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Box(
                             Modifier.fillMaxWidth().padding(28.dp),
@@ -333,6 +341,7 @@ private fun NativeLibrary(
                         }
                     }
             }
+            if (state.loading && state.items.isEmpty()) NativeLibraryPlaceholder()
             if (!state.loading && state.items.isEmpty() && state.error == null)
                 Column(
                     Modifier.align(Alignment.Center),

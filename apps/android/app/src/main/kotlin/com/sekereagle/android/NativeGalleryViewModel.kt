@@ -12,6 +12,7 @@ import com.sekereagle.android.core.BackupPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -34,6 +35,7 @@ data class GalleryState(
     val cursor: String? = null,
     val query: String = "",
     val loading: Boolean = false,
+    val loaded: Boolean = false,
     val error: String? = null,
     val searchOpen: Boolean = false,
     val searchDraft: String = "",
@@ -59,14 +61,78 @@ data class GalleryState(
  * Owns the native flow. A cancelled/replaced scope can never publish a response into another one.
  */
 class NativeGalleryViewModel(application: Application) : AndroidViewModel(application) {
-    init {
-        NativeCity.initialize(application)
-    }
+    private val cityReady =
+        viewModelScope.async(Dispatchers.IO) { NativeCity.initialize(application) }
 
     val mediaCache = NativeMediaCache.get(application)
     private val settings = BackupSettings(application)
     private val mutable = MutableStateFlow(GalleryState())
     val state = mutable.asStateFlow()
+    private val retained = MutableStateFlow<Map<GalleryMode, GalleryState>>(emptyMap())
+    val retainedLibraries = retained.asStateFlow()
+    private val staleLibraries = mutableSetOf<GalleryMode>()
+    private var prefetchJob: Job? = null
+    private var lastValidation = 0L
+
+    private fun initialLibrary(identity: NativeIdentity, mode: GalleryMode) =
+        GalleryState(
+            identity = identity,
+            restoring = false,
+            mode = mode,
+            sort = GallerySort.restore(settings, identity.scope, mode),
+            history = history(identity.scope, mode),
+        )
+
+    private fun clearLibraries() {
+        prefetchJob?.cancel()
+        retained.value = emptyMap()
+        staleLibraries.clear()
+        lastValidation = 0L
+    }
+
+    private fun invalidateInactiveLibrary() {
+        prefetchJob?.cancel()
+        staleLibraries.addAll(GalleryMode.entries.filter { it != state.value.mode })
+    }
+
+    /** Only the other library's first page; never originals or an entire library. */
+    private fun prefetchLibrary() {
+        val current = state.value
+        val identity = current.identity ?: return
+        val repo = repository ?: return
+        val mode = GalleryMode.entries.first { it != current.mode }
+        if (retained.value.containsKey(mode) || prefetchJob?.isActive == true) return
+        val snapshot = initialLibrary(identity, mode)
+        prefetchJob = viewModelScope.launch {
+            try {
+                val page = repo.page(mode, "", sort = snapshot.sort)
+                val timeline = runCatching { repo.timeline(mode, snapshot.sort) }.getOrNull()
+                if (
+                    repository === repo &&
+                        state.value.identity == identity &&
+                        state.value.mode != mode
+                ) {
+                    retained.value =
+                        retained.value +
+                            (mode to
+                                snapshot.copy(
+                                    items = page.items,
+                                    cursor = page.cursor,
+                                    timeline = timeline,
+                                    loaded = true,
+                                ))
+                    staleLibraries.remove(mode)
+                }
+            } catch (reason: CancellationException) {
+                throw reason
+            } catch (reason: Exception) {
+                if (repository === repo && reason is NativeSession.Failure && reason.status == 401)
+                    expire()
+                // An optional prefetch failure must not replace the visible library.
+            }
+        }
+    }
+
     private var session: NativeSession? = null
     var repository: NativeGalleryRepository? = null
         private set
@@ -151,6 +217,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         event.message?.let {
                             mutable.value = state.value.copy(message = it)
                         }
+                        if (state.value.mode != event.mode) {
+                            prefetchJob?.cancel()
+                            staleLibraries.add(event.mode)
+                        }
                         if (state.value.mode == event.mode) {
                             transferRefreshPending = true
                             refreshTransfersWhenIdle()
@@ -178,6 +248,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     private fun authenticate(origin: String, email: String?, password: String?) {
         downloads.clear()
+        clearLibraries()
         if (email != null) {
             transfers.clear()
             mediaCache.invalidate()
@@ -224,6 +295,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     settings.active(scope)
                 }
                 if (request != generation) return@launch
+                cityReady.await()
+                lastValidation = android.os.SystemClock.elapsedRealtime()
                 session = connection
                 repository = NativeGalleryRepository(connection, scope, mediaCache)
                 mutable.value =
@@ -234,6 +307,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         sort = GallerySort.restore(settings, scope, GalleryMode.PHOTO),
                     )
                 load()
+                automaticallyBackup()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -255,39 +329,38 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun switchMode(mode: GalleryMode) {
-        val identity = state.value.identity ?: return
-        if (state.value.busy || mode == state.value.mode) return
+        val current = state.value
+        val identity = current.identity ?: return
+        if (current.busy || mode == current.mode) return
         transferRefreshPending = false
         downloads.clear()
         uploadPickerTarget = null
         operation?.cancel()
         optionsJob?.cancel()
         timelineJob?.cancel()
+        prefetchJob?.cancel()
         generation++
-        val current = state.value
-        mutable.value =
-            current.copy(
-                mode = mode,
-                sort = GallerySort.restore(settings, identity.scope, mode),
-                filters = NativeFilters(),
-                filterPanel = null,
-                options = NativeOptions(),
-                optionsLoading = false,
-                optionsError = null,
-                selecting = false,
-                selected = emptySet(),
-                trash = false,
-                message = null,
-                items = emptyList(),
-                cursor = null,
-                query = "",
-                viewerId = null,
-                searchOpen = false,
-                accountOpen = false,
-                error = null,
-                history = history(identity.scope, mode),
-            )
-        load()
+        // Retain browsing state, never transient actions or dialogs from the old workspace.
+        retained.value =
+            retained.value +
+                (current.mode to
+                    current.copy(
+                        loading = false,
+                        optionsLoading = false,
+                        filterPanel = null,
+                        selecting = false,
+                        selected = emptySet(),
+                        viewerId = null,
+                        searchOpen = false,
+                        accountOpen = false,
+                        cacheOpen = false,
+                        transfersOpen = false,
+                        message = null,
+                    ))
+        val restored = retained.value[mode] ?: initialLibrary(identity, mode)
+        mutable.value = restored
+        if (!restored.loaded) load()
+        else if (staleLibraries.remove(mode)) refresh() else prefetchLibrary()
     }
 
     fun sort(order: GallerySort) {
@@ -345,9 +418,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                                 it.id
                             },
                         cursor = page.cursor,
+                        loaded = true,
                         loading = false,
                     )
                 refreshTransfersWhenIdle()
+                prefetchLibrary()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -783,6 +858,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             try {
                 repo.change(s.mode, assets, action, tags, rating)
                 if (generation != request) return@launch
+                invalidateInactiveLibrary()
                 mutable.value =
                     state.value.copy(
                         busy = false,
@@ -827,6 +903,9 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private fun expire() {
+        clearLibraries()
+        timelineJob?.cancel()
+        foregroundJob?.cancel()
         mediaCache.invalidate()
         viewModelScope.launch { runCatching { mediaCache.clear() } }
         transferRefreshPending = false
@@ -852,7 +931,11 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun onForeground() {
         val identity = state.value.identity ?: return
         val connection = session ?: return
-        foregroundJob?.cancel()
+        if (
+            foregroundJob?.isActive == true ||
+                android.os.SystemClock.elapsedRealtime() - lastValidation < 30_000
+        )
+            return
         foregroundJob = viewModelScope.launch {
             try {
                 val me = withContext(Dispatchers.IO) { connection.json("GET", "/api/auth/me") }
@@ -865,6 +948,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                     connection.invalidateLocally()
                     expire()
                 } else {
+                    lastValidation = android.os.SystemClock.elapsedRealtime()
+                    invalidateInactiveLibrary()
                     automaticallyBackup()
                     val current = state.value
                     if (

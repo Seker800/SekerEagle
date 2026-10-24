@@ -118,7 +118,10 @@ class NativeReviewTest {
             val materials = model.state.value.items
             val requests = server.paths.count { it.contains("/assets?") }
             main { model.switchMode(GalleryMode.PHOTO) }
-            assertFalse("Switching back must display the retained page immediately", model.state.value.loading)
+            assertFalse(
+                "Switching back must display the retained page immediately",
+                model.state.value.loading,
+            )
             assertEquals(photos, model.state.value.items)
             main { model.switchMode(GalleryMode.MATERIAL) }
             assertFalse(model.state.value.loading)
