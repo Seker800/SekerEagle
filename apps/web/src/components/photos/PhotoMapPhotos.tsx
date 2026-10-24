@@ -16,6 +16,7 @@ export function PhotoMapPhotos({
   includePrivate,
   onOpen,
   onClose,
+  onZoom,
 }: {
   cluster: PhotoMapCluster;
   placeName?: string;
@@ -23,6 +24,7 @@ export function PhotoMapPhotos({
   includePrivate: boolean;
   onOpen: (asset: EagleAssetListItem, context?: EagleAssetListItem[]) => void;
   onClose: () => void;
+  onZoom?: () => void;
 }) {
   const panel = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -54,6 +56,11 @@ export function PhotoMapPhotos({
           {t('关闭')}
         </button>
       </div>
+      {onZoom && (
+        <button type="button" onClick={onZoom}>
+          {t('放大此位置')}
+        </button>
+      )}
       {page.isPending && <p role="status">{t('正在加载照片…')}</p>}
       {page.isError && (
         <p role="alert">

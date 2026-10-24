@@ -180,6 +180,7 @@ model EagleLibraryTransfer {
 }
 
 model User {
+  photoMapStates EaglePhotoMapState[]
   libraryTransfers EagleLibraryTransfer[]
   photoPeople EaglePhotoPerson[]
   photoGroups EaglePhotoGroup[]
@@ -1266,6 +1267,16 @@ model AppDeploymentIdentity {
   createdAt DateTime @default(now())
 }
 
+model EagleTaskPolicy {
+  ownerId String
+  libraryMode LibraryMode
+  family String
+  paused Boolean @default(false)
+  priority Int @default(0)
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields:[ownerId], references:[id], onDelete:Cascade)
+  @@id([ownerId,libraryMode,family])
+}
 
 model EaglePhotoMetadata {
   assetId String @id
@@ -1297,7 +1308,6 @@ model EaglePhotoMetadata {
   @@index([ownerId, libraryMode, lensModel])
 }
 
-
 model EaglePhotoPerson {
   marksAssetsPrivate Boolean @default(false)
   id String @id @default(uuid())
@@ -1315,6 +1325,7 @@ model EaglePhotoPerson {
   @@index([ownerId, libraryMode])
   @@index([ownerId, libraryMode, createdAt, id])
 }
+
 model EaglePhotoFace {
   id String @id
   ownerId String
@@ -1334,6 +1345,7 @@ model EaglePhotoFace {
   @@index([ownerId, libraryMode, personId])
   @@index([ownerId, libraryMode, assetId, isCurrent])
 }
+
 model EaglePhotoGroup {
   id String @id @default(uuid())
   ownerId String
@@ -1351,6 +1363,7 @@ model EaglePhotoGroup {
   @@unique([ownerId, libraryMode, id])
   @@unique([ownerId, libraryMode, sourceKey])
 }
+
 model EaglePhotoGroupMember {
   ownerId String
   libraryMode LibraryMode @default(PHOTO)
@@ -1411,6 +1424,7 @@ model EaglePhotoAgentTask {
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, createdAt, id])
 }
+
 model EaglePhotoAgentEvent {
   id String @id @default(uuid())
   ownerId String
@@ -1425,6 +1439,7 @@ model EaglePhotoAgentEvent {
   task EaglePhotoAgentTask @relation(fields:[ownerId,libraryMode,taskId],references:[ownerId,libraryMode,id],onDelete:Restrict)
   @@index([ownerId,libraryMode,taskId,createdAt,id])
 }
+
 model EaglePhotoAgentSuggestion {
   id String @id @default(uuid())
   ownerId String
@@ -1446,6 +1461,7 @@ model EaglePhotoAgentSuggestion {
   @@unique([taskId, assetId])
   @@index([ownerId,libraryMode,assetId,assetRevision,status])
 }
+
 model EaglePhotoLocation {
   assetId String @id
   ownerId String
@@ -1515,13 +1531,82 @@ model EagleSmartFolderSemanticMatch {
   @@index([ownerId, libraryMode, snapshotId, similarity, embeddingId])
 }
 
-model EagleTaskPolicy {
-  ownerId String
-  libraryMode LibraryMode
-  family String
-  paused Boolean @default(false)
-  priority Int @default(0)
-  updatedAt DateTime @updatedAt
-  owner User @relation(fields:[ownerId], references:[id], onDelete:Cascade)
-  @@id([ownerId,libraryMode,family])
+model EaglePhotoMapState {
+  ownerId            String
+  libraryMode        LibraryMode             @default(PHOTO)
+  requestedVersion   Int                     @default(1)
+  visibilityVersion  Int                     @default(0)
+  builtVersion       Int                     @default(0)
+  dirtyAt            DateTime?               @default(now())
+  availableAt        DateTime                @default(now())
+  activeSnapshotId   String?
+  buildingSnapshotId String?
+  nextLevel          Int                     @default(0)
+  leaseToken         String?
+  lockedUntil        DateTime?
+  attempts           Int                     @default(0)
+  lastError          String?
+  owner              User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  snapshots          EaglePhotoMapSnapshot[]
+
+  @@id([ownerId, libraryMode])
+  @@index([availableAt, lockedUntil])
+}
+
+model EaglePhotoMapSnapshot {
+  id                String               @id @default(uuid())
+  ownerId           String
+  libraryMode       LibraryMode          @default(PHOTO)
+  version           Int
+  visibilityVersion Int
+  summary           Json
+  createdAt         DateTime             @default(now())
+  completedAt       DateTime?
+  state             EaglePhotoMapState   @relation(fields: [ownerId, libraryMode], references: [ownerId, libraryMode], onDelete: Cascade)
+  points            EaglePhotoMapPoint[]
+  cells             EaglePhotoMapCell[]
+
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, createdAt])
+}
+
+model EaglePhotoMapPoint {
+  ownerId         String
+  libraryMode     LibraryMode           @default(PHOTO)
+  snapshotId      String
+  assetId         String
+  assetRevision   Int
+  isPrivate       Boolean
+  chronologicalAt DateTime
+  latitude        Float
+  longitude       Float
+  x               Int
+  y               Int
+  snapshot        EaglePhotoMapSnapshot @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+
+  @@id([ownerId, libraryMode, snapshotId, assetId])
+  @@index([ownerId, libraryMode, snapshotId, x, y, chronologicalAt, assetId], map: "EaglePhotoMapPoint_snapshot_position_idx")
+}
+
+model EaglePhotoMapCell {
+  ownerId        String
+  libraryMode    LibraryMode           @default(PHOTO)
+  snapshotId     String
+  includePrivate Boolean
+  level          Int
+  x              Int
+  y              Int
+  count          Int
+  latitude       Float
+  longitude      Float
+  south          Float
+  north          Float
+  west           Float
+  east           Float
+  coverId        String
+  coverRevision  Int
+  snapshot       EaglePhotoMapSnapshot @relation(fields: [ownerId, libraryMode, snapshotId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+
+  @@id([ownerId, libraryMode, snapshotId, includePrivate, level, x, y])
+  @@index([ownerId, libraryMode, snapshotId, includePrivate, level, y, x], map: "EaglePhotoMapCell_snapshot_position_idx")
 }

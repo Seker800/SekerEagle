@@ -11,11 +11,11 @@ test('map grid remains bounded for a world query even at maximum zoom and refine
   const coarse = mapGrid(world);
   const detail = mapGrid({ west: 120, east: 120.03, south: 30, north: 30.03, zoom: 12 });
   assert.ok(detail.level > coarse.level);
-  assert.equal(detail.level, 16);
+  assert.equal(detail.level, 17);
   assert.deepEqual(decodeMapCell('16/65535/65535'), { level: 16, n: 65536, x: 65535, y: 65535 });
-  assert.throws(() => decodeMapCell('21/0/0'));
+  assert.throws(() => decodeMapCell('22/0/0'));
   const street = mapGrid({ west: 120, east: 120.001, south: 30, north: 30.001, zoom: 16 });
-  assert.equal(street.level, 20);
+  assert.equal(street.level, 21);
   assert.deepEqual(decodeMapCell('20/1048575/1048575'), {
     level: 20,
     n: 1048576,
@@ -23,7 +23,7 @@ test('map grid remains bounded for a world query even at maximum zoom and refine
     y: 1048575,
   });
   const huge = mapGrid({ ...world, zoom: 12 });
-  assert.ok(huge.cellCount <= 1024);
+  assert.ok(huge.cellCount <= 16384);
   const crossing = mapGrid({ west: 179, east: -179, south: -5, north: 5, zoom: 6 });
   assert.equal(crossing.xRanges.length, 2);
   assert.throws(() => decodeMapCell('14/16384/0'));
@@ -62,73 +62,6 @@ test('member cursors bind owner, privacy, cell and photography mode', () => {
   assert.throws(() => readMapCursor('bad', scope));
 });
 
-test('all-library map aggregation is owner scoped, current revision only, private safe and not list limited', async () => {
-  const queries: Array<{ text: string; values: unknown[] }> = [];
-  const service = new PhotoMapService({
-    $queryRaw: async (query: { text: string; values: unknown[] }) => {
-      queries.push(query);
-      return [
-        {
-          total: 10000n,
-          west: 120,
-          east: 121,
-          south: 30,
-          north: 31,
-          clusters: [{ x: 20, y: 12, latitude: 30.5, longitude: 120.5, count: 10000 }],
-        },
-      ];
-    },
-  } as never);
-  const result = await service.clusters('owner', false, world);
-  assert.equal(result.total, 10000);
-  assert.equal(result.clusters[0]!.count, 10000);
-  const text = queries[0]!.text;
-  assert.match(text, /a\."libraryMode" = 'PHOTO'/);
-  assert.match(text, /a\."ownerId" = \$/);
-  assert.match(text, /a\."isPrivate" = false/);
-  assert.match(text, /a\."deletedAt" IS NULL/);
-  assert.match(text, /m\."assetRevision" = a\."mediaRevision"/);
-  assert.match(text, /l\."assetRevision" = a\."mediaRevision"/);
-  assert.match(text, /GROUP BY/);
-  assert.match(text, /AVG\(latitude\) AS "photoLatitude"/);
-  assert.match(text, /MAX\(longitude\) AS east/);
-  assert.doesNotMatch(text, /LIMIT/);
-  assert.ok(queries[0]!.values.includes('owner'));
-  await service.clusters('owner', true, world);
-  assert.doesNotMatch(queries[1]!.text, /a\."isPrivate" = false/);
-});
-
-test('location photos use the exact cluster membership and stable bounded keyset pagination', async () => {
-  let query: { text: string; values: unknown[] } | undefined;
-  let where: unknown;
-  const records = Array.from({ length: 61 }, (_, i) => ({
-    id: 'photo-' + i,
-    at: new Date('2024-01-02Z'),
-  }));
-  const service = new PhotoMapService({
-    $queryRaw: async (input: typeof query) => {
-      query = input;
-      return records;
-    },
-    eagleAsset: {
-      findMany: async (input: { where: unknown }) => {
-        where = input.where;
-        return [];
-      },
-    },
-  } as never);
-  const result = await service.photos('owner', false, '5/20/12');
-  assert.ok(result.nextCursor);
-  assert.match(query!.text, /ORDER BY "chronologicalAt" DESC, id DESC/);
-  assert.match(query!.text, /LIMIT 61/);
-  assert.match(query!.text, /"isPrivate" = false/);
-  assert.ok(query!.values.includes(20) && query!.values.includes(12));
-  assert.match(JSON.stringify(where), /"ownerId":"owner"/);
-  assert.match(JSON.stringify(where), /"libraryMode":"PHOTO"/);
-  assert.match(JSON.stringify(where), /"isPrivate":false/);
-  await assert.rejects(service.photos('other', false, '5/20/12', result.nextCursor!));
-});
-
 test('map endpoints retain browser authentication and cannot take owner or private flags from the request', async () => {
   const { PhotoManagementController } = await import('./photo-management.controller');
   const { GUARDS_METADATA } = await import('@nestjs/common/constants');
@@ -155,51 +88,146 @@ test('map endpoints retain browser authentication and cannot take owner or priva
   assert.deepEqual(calls[1], ['authenticated-owner', false, '5/20/12', undefined]);
 });
 
-test('map covers are batch loaded with owner, mode, privacy and frozen revision rechecks', async () => {
+const snapshotId = '00000000-0000-4000-8000-000000000001';
+function indexedFixture(cells: Array<Record<string, unknown>> = []) {
   const queries: unknown[] = [];
-  let visible = true;
-  const service = new PhotoMapService({
-    $queryRaw: async () => [
-      {
-        total: 1n,
-        west: 120,
-        east: 120,
-        south: 30,
-        north: 30,
-        clusters: [
-          {
-            x: 20,
-            y: 12,
-            latitude: 30,
-            longitude: 120,
-            count: 1,
-            coverId: 'photo',
-            coverRevision: 3,
-          },
-        ],
-      },
+  const state = { activeSnapshotId: snapshotId, visibilityVersion: 1, dirtyAt: null };
+  const snapshot = {
+    id: snapshotId,
+    completedAt: new Date('2026-10-24T00:00:00Z'),
+    summary: [
+      { includePrivate: false, total: 10000, south: 30, north: 31, west: 120, east: 121 },
+      { includePrivate: true, total: 11000, south: 30, north: 31, west: 120, east: 121 },
     ],
-    eagleAsset: {
-      findMany: async (query: unknown) => {
-        queries.push(query);
-        return visible ? [{ id: 'photo', mediaRevision: 3, byteSize: 1n, renditions: [] }] : [];
+  };
+  const tx = {
+    eaglePhotoMapState: { findUnique: async () => state },
+    eaglePhotoMapSnapshot: {
+      findFirst: async (input: unknown) => {
+        queries.push(input);
+        return snapshot;
       },
     },
+    eaglePhotoMapCell: {
+      findMany: async (input: unknown) => {
+        queries.push(input);
+        return cells;
+      },
+    },
+    eagleAsset: {
+      findMany: async (input: unknown) => {
+        queries.push(input);
+        return [{ id: 'photo', mediaRevision: 3, byteSize: 1n, renditions: [] }];
+      },
+    },
+    $queryRaw: async (input: unknown) => {
+      queries.push(input);
+      return [];
+    },
+  };
+  const service = new PhotoMapService({
+    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never);
-  const result = await service.clusters('owner', false, world);
-  assert.equal(result.clusters[0]?.cover?.id, 'photo');
-  const where = (queries[0] as { where: unknown }).where;
-  assert.deepEqual(where, {
-    OR: [{ id: 'photo', mediaRevision: 3 }],
-    ownerId: 'owner',
-    libraryMode: 'PHOTO',
-    deletedAt: null,
-    isPrivate: false,
+  return { service, tx, queries, state };
+}
+test('map reads persisted cells and bounded current covers without a gallery scan or build on GET', async () => {
+  const f = indexedFixture([
+    {
+      x: 20,
+      y: 12,
+      level: 7,
+      count: 10000,
+      latitude: 30,
+      longitude: 120,
+      coverId: 'photo',
+      coverRevision: 3,
+    },
+  ]);
+  const result = await f.service.clusters('owner', false, world);
+  assert.equal(result.total, 10000);
+  assert.equal(result.clusters[0]!.cover?.id, 'photo');
+  assert.equal(result.clusters[0]!.id, `${snapshotId}:7/20/12`);
+  assert.equal(result.clusters[0]!.photoLatitude, 30);
+  const where = (f.queries[1] as { where: Record<string, unknown> }).where;
+  assert.equal(where.ownerId, 'owner');
+  assert.equal(where.snapshotId, snapshotId);
+  assert.equal(where.includePrivate, false);
+  assert.match(JSON.stringify(f.queries[2]), /"mediaRevision":3/);
+  assert.equal(result.status, 'READY');
+});
+test('unbuilt and invalidated snapshots return pending without scanning the source library', async () => {
+  const f = indexedFixture();
+  f.state.activeSnapshotId = null as never;
+  assert.equal((await f.service.clusters('owner', false, world)).status, 'PENDING');
+  assert.equal(f.queries.length, 0);
+  f.state.activeSnapshotId = snapshotId;
+  f.tx.eaglePhotoMapSnapshot.findFirst = async () => null as never;
+  assert.equal((await f.service.clusters('owner', false, world)).status, 'PENDING');
+  assert.equal(f.queries.length, 0);
+});
+test('every zoom features the nine busiest visible locations while retaining all footprints', async () => {
+  const f = indexedFixture(
+    Array.from({ length: 1500 }, (_, i) => ({
+      x: i,
+      y: 0,
+      count: i + 1,
+      latitude: 0,
+      longitude: 0,
+      coverId: `photo-${i}`,
+      coverRevision: 3,
+    })),
+  );
+  const distant = await f.service.clusters('owner', false, world);
+  assert.equal(distant.clusters.length, 1500);
+  const distantCovers = (f.queries.at(-1) as { where: { OR: Array<{ id: string }> } }).where.OR;
+  assert.deepEqual(
+    distantCovers.map((c) => c.id),
+    Array.from({ length: 9 }, (_, i) => `photo-${1499 - i}`),
+  );
+  const close = await f.service.clusters('owner', true, { ...world, zoom: 12 });
+  assert.equal(close.clusters.length, 1500);
+  assert.equal((f.queries.at(-1) as { where: { OR: unknown[] } }).where.OR.length, 9);
+});
+test('member reads use frozen spatial points and a snapshot-bound cursor, never GPS aggregation', async () => {
+  const f = indexedFixture();
+  const result = await f.service.photos('owner', false, `${snapshotId}:7/20/12`);
+  assert.deepEqual(result.items, []);
+  const query = f.queries.find(
+    (value) => typeof value === 'object' && value && 'text' in value,
+  ) as { text: string; values: unknown[] };
+  assert.match(query.text, /FROM "EaglePhotoMapPoint"/);
+  assert.doesNotMatch(query.text, /EaglePhotoMetadata/);
+  assert.match(query.text, /"mediaRevision"=p\."assetRevision"/);
+  await assert.rejects(f.service.photos('owner', false, '7/20/12'), /重新选择/);
+});
+
+test('featured locations are inside the real viewport, including views crossing the date line', async () => {
+  const f = indexedFixture([
+    { count: 2, latitude: 0, longitude: 175, coverId: 'east', coverRevision: 3 },
+    { count: 1, latitude: 0, longitude: -175, coverId: 'west', coverRevision: 3 },
+    { count: 1000, latitude: 0, longitude: 0, coverId: 'outside-longitude', coverRevision: 3 },
+    { count: 1000, latitude: 11, longitude: 175, coverId: 'outside-latitude', coverRevision: 3 },
+  ]);
+  await f.service.clusters('owner', false, {
+    west: 170,
+    east: -170,
+    south: -10,
+    north: 10,
+    zoom: 3,
   });
-  assert.ok(!('coverId' in result.clusters[0]!));
-  assert.ok(!('coverRevision' in result.clusters[0]!));
-  visible = false;
-  assert.equal((await service.clusters('owner', false, world)).clusters[0]?.cover, null);
-  await service.clusters('owner', true, world);
-  assert.ok(!('isPrivate' in (queries[2] as { where: object }).where));
+  const query = f.queries.at(-1) as {
+    where: { ownerId: string; libraryMode: string; isPrivate: boolean; OR: Array<{ id: string }> };
+  };
+  assert.deepEqual(
+    query.where.OR.map((c) => c.id),
+    ['east', 'west'],
+  );
+  assert.equal(query.where.ownerId, 'owner');
+  assert.equal(query.where.libraryMode, 'PHOTO');
+  assert.equal(query.where.isPrivate, false);
+  await f.service.clusters('owner', false, { west: -10, east: 10, south: -10, north: 10, zoom: 8 });
+  assert.deepEqual(
+    (f.queries.at(-1) as typeof query).where.OR.map((c) => c.id),
+    ['outside-longitude'],
+  );
 });
