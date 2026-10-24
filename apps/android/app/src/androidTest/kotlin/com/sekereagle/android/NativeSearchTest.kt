@@ -27,6 +27,7 @@ class NativeSearchTest {
         val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
+        @Volatile var folderStatus = 200
         @Volatile var mediaStatus = 200
         @Volatile var photoStatus = 200
         @Volatile var assetStatus = 200
@@ -61,6 +62,7 @@ class NativeSearchTest {
                                             if (path.contains("/assets?")) Thread.sleep(assetDelay)
                                             val status =
                                                 when {
+                                                    path.endsWith("smart-folders") -> folderStatus
                                                     path.contains("/assets?") -> assetStatus
                                                     path.endsWith("media-capabilities") ->
                                                         mediaStatus
@@ -72,6 +74,10 @@ class NativeSearchTest {
                                                 when {
                                                     path == "/api/auth/me" ->
                                                         """{"user":{"id":"owner","email":"search@example.invalid"},"desktopCache":{"deploymentId":"search"}}"""
+                                                    path.endsWith("smart-folders") -> {
+                                                        val prefix = if (path.startsWith("/api/photos/")) "photo" else "material"
+                                                        """[{"id":"$prefix-parent","name":"收藏","parentId":null},{"id":"$prefix-child","name":"旅行","parentId":"$prefix-parent"}]"""
+                                                    }
                                                     path.contains("manual-tags") -> tags
                                                     path.endsWith("media-capabilities") ->
                                                         """{"images":{"formats":["jpeg","png"]},"videos":{"formats":["mp4"]}}"""
@@ -544,6 +550,30 @@ class NativeSearchTest {
             await { !model.state.value.loading }
             assertFalse(model.state.value.refreshing)
             assertEquals(GalleryMode.PHOTO, model.state.value.mode)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun existingSmartFolderSubmitsWithOtherConditionsAndCanBeRemoved() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            main { model.search("flower", NativeFilters(tags = setOf("tag1"))) }
+            await { !model.state.value.loading }
+            main { model.openSearch() }
+            compose.onNodeWithText("智能文件夹").assertIsDisplayed().performClick()
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("收藏 / 旅行").performClick()
+            compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
+            await { !model.state.value.searchOpen && !model.state.value.loading }
+            assertTrue(server.paths.any { it.contains("smartFolderId=photo-child") && it.contains("manualTagIds=tag1") && it.contains("search=flower") })
+            compose.onNodeWithText("智能文件夹：收藏 / 旅行").assertExists()
+            compose.onNodeWithTag("condition:smartFolder").performClick()
+            await { !model.state.value.loading }
+            assertFalse(server.paths.last { it.contains("/assets?") }.contains("smartFolderId="))
+            assertEquals("flower", model.state.value.query)
+            assertEquals(setOf("tag1"), model.state.value.filters.tags)
             main { model.logout() }
         }
     }
