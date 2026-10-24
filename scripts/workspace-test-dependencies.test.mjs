@@ -4,6 +4,23 @@ import test from 'node:test';
 
 const readManifest = async (path) => JSON.parse(await readFile(path, 'utf8'));
 
+test('worker image builds and ships every internal runtime dependency', async () => {
+  const manifest = await readManifest('apps/worker/package.json');
+  const dockerfile = await readFile('apps/worker/Dockerfile', 'utf8');
+  const [build, runtime] = dockerfile.split(' AS runtime');
+  for (const name of Object.keys(manifest.dependencies).filter((key) =>
+    key.startsWith('@sekereagle/'),
+  )) {
+    const directory = `packages/${name.split('/')[1]}`;
+    assert.ok(build.includes(`COPY ${directory} ${directory}`), `missing build sources: ${name}`);
+    assert.ok(build.includes(`--workspace ${name}`), `missing build command: ${name}`);
+    assert.ok(
+      runtime.includes(`COPY --from=build /sekereagle/${directory} ./${directory}`),
+      `missing runtime package: ${name}`,
+    );
+  }
+});
+
 test('API pretest builds every internal runtime dependency before loading tests', async () => {
   const apiManifest = await readManifest('apps/api/package.json');
   const internalRuntimeDependencies = Object.keys(apiManifest.dependencies ?? {}).filter((name) =>
