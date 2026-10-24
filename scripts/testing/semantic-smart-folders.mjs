@@ -95,6 +95,11 @@ try {
       passwordHash: 'test-only',
     })),
   });
+  await client.eagleProcessingSetting.createMany({
+    data: [ownerId, otherOwner].flatMap((ownerId) =>
+      ['MATERIAL', 'PHOTO'].map((libraryMode) => ({ ownerId, libraryMode, mode: 'ALWAYS' })),
+    ),
+  });
   const spaceId = 'qwen3-vl-embedding-2b-1024-v1';
   await client.eagleEmbeddingSpace.create({
     data: {

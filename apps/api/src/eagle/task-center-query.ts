@@ -1,7 +1,11 @@
 import { Prisma, type LibraryMode } from '@prisma/client';
 
 /** Aggregate in PostgreSQL: never load every resource or expose private task payloads. */
-export function taskCenterQuery(ownerId: string, libraryMode: LibraryMode, includePrivate: boolean) {
+export function taskCenterQuery(
+  ownerId: string,
+  libraryMode: LibraryMode,
+  includePrivate: boolean,
+) {
   return Prisma.sql`
     WITH facts AS (
       SELECT 'MEDIA' AS family, j.kind::text AS step, j."processorVersion" AS version,
@@ -18,7 +22,7 @@ export function taskCenterQuery(ownerId: string, libraryMode: LibraryMode, inclu
         AND j."assetRevision"=a."mediaRevision" AND (${includePrivate} OR NOT a."isPrivate")
         AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET')
       UNION ALL
-      SELECT 'SMART_FOLDERS','SMART_FOLDERS','',
+      SELECT 'SMART_FOLDERS',CASE WHEN s."queryVector" IS NULL THEN 'SMART_FOLDER_QUERY' ELSE 'SMART_FOLDERS' END,'',
         CASE WHEN s.status='READY' THEN 'COMPLETED' WHEN s.status='FAILED' THEN 'FAILED'
           WHEN s."lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
         CASE WHEN s."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,s."availableAt"

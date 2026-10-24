@@ -3,10 +3,52 @@ import test from 'node:test';
 import { EmbeddingClient, EmbeddingClientError } from './embedding-client';
 
 test('model readiness is checked before claiming work and rejects a different model contract', async () => {
-  const options = { baseUrl: 'http://127.0.0.1:11435', token: 'synthetic-test', modelId: 'expected', modelRevision: 'revision', dimensions: 2, timeoutMs: 1000, maxPayloadBytes: 1024 };
-  assert.equal(await new EmbeddingClient({ ...options, fetch: async () => { throw new Error('offline'); } }).readiness(), 'OFFLINE');
-  assert.equal(await new EmbeddingClient({ ...options, fetch: async () => Response.json({ status: 'ready', model: 'other', revision: 'revision', dimensions: 2, metal: true }) }).readiness(), 'DRIFTED');
-  assert.equal(await new EmbeddingClient({ ...options, fetch: async () => Response.json({ status: 'ready', model: 'expected', revision: 'revision', dimensions: 2, metal: true }) }).readiness(), 'READY');
+  const options = {
+    baseUrl: 'http://127.0.0.1:11435',
+    token: 'synthetic-test',
+    modelId: 'expected',
+    modelRevision: 'revision',
+    dimensions: 2,
+    timeoutMs: 1000,
+    maxPayloadBytes: 1024,
+  };
+  assert.equal(
+    await new EmbeddingClient({
+      ...options,
+      fetch: async () => {
+        throw new Error('offline');
+      },
+    }).readiness(),
+    'OFFLINE',
+  );
+  assert.equal(
+    await new EmbeddingClient({
+      ...options,
+      fetch: async () =>
+        Response.json({
+          status: 'ready',
+          model: 'other',
+          revision: 'revision',
+          dimensions: 2,
+          metal: true,
+        }),
+    }).readiness(),
+    'DRIFTED',
+  );
+  assert.equal(
+    await new EmbeddingClient({
+      ...options,
+      fetch: async () =>
+        Response.json({
+          status: 'ready',
+          model: 'expected',
+          revision: 'revision',
+          dimensions: 2,
+          metal: true,
+        }),
+    }).readiness(),
+    'READY',
+  );
 });
 
 test('EmbeddingClient sends bounded image bytes and validates model identity', async () => {

@@ -1,5 +1,16 @@
 import { Prisma } from '@prisma/client';
 
+export function dailyWindowSql(start: Prisma.Sql, end: Prisma.Sql) {
+  return Prisma.sql`CASE WHEN ${start}=${end} THEN true WHEN ${start}<${end}
+    THEN to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=${start} AND to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<${end}
+    ELSE to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=${start} OR to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<${end} END`;
+}
+export function aiTagScheduleSql(owner: Prisma.Sql, mode: Prisma.Sql) {
+  return Prisma.sql`EXISTS (SELECT 1 FROM "EagleProcessingSetting" ai
+    WHERE ai."ownerId"=${owner} AND ai."libraryMode"=${mode} AND
+      (ai."aiTagManualEnabled" OR (ai."aiTagScheduleEnabled" AND ${dailyWindowSql(Prisma.sql`ai."aiTagScheduleStart"`, Prisma.sql`ai."aiTagScheduleEnd"`)})))`;
+}
+
 /** Same Shanghai window as library-core, evaluated at the database clock before claiming. */
 export function backgroundScheduleSql(owner: Prisma.Sql, mode: Prisma.Sql): Prisma.Sql {
   return Prisma.sql`EXISTS (
@@ -7,11 +18,6 @@ export function backgroundScheduleSql(owner: Prisma.Sql, mode: Prisma.Sql): Pris
     LEFT JOIN "EagleProcessingSetting" schedule ON schedule."ownerId"=${owner} AND schedule."libraryMode"=${mode}
     WHERE COALESCE(schedule.mode,'NIGHT')='ALWAYS'
       OR (COALESCE(schedule.mode,'NIGHT')='NIGHT' AND
-        CASE WHEN COALESCE(schedule."nightStart",'23:00')=COALESCE(schedule."nightEnd",'06:00') THEN true
-        WHEN COALESCE(schedule."nightStart",'23:00')<COALESCE(schedule."nightEnd",'06:00')
-        THEN to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=COALESCE(schedule."nightStart",'23:00')
-          AND to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<COALESCE(schedule."nightEnd",'06:00')
-        ELSE to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')>=COALESCE(schedule."nightStart",'23:00')
-          OR to_char(now() AT TIME ZONE 'Asia/Shanghai','HH24:MI')<COALESCE(schedule."nightEnd",'06:00') END)
+        ${dailyWindowSql(Prisma.sql`COALESCE(schedule."nightStart",'23:00')`, Prisma.sql`COALESCE(schedule."nightEnd",'06:00')`)})
   )`;
 }

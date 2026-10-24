@@ -78,6 +78,17 @@ test('rejects overrides on inherited generic photo routes', () => {
     'inherited-controllers',
   );
 });
+test('rejects a photo-specific task center route override', () => {
+  rejectsMutation(
+    photoModule,
+    (s) =>
+      s.replace(
+        'PhotoTaskCenterController extends EagleTaskCenterController {}',
+        'PhotoTaskCenterController extends EagleTaskCenterController { overview() { return []; } }',
+      ),
+    'inherited-controllers',
+  );
+});
 test('rejects replacing the shared providers with a photo implementation', () => {
   rejectsMutation(
     photoModule,

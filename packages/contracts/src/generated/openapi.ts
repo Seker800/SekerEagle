@@ -1364,6 +1364,70 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/tasks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleTaskCenterController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/tasks/policy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['EagleTaskCenterController_policy'];
+    trace?: never;
+  };
+  '/api/eagle/tasks/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleTaskCenterController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/tasks/settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['EagleTaskCenterController_settings'];
+    trace?: never;
+  };
   '/api/eagle/vector/summary': {
     parameters: {
       query?: never;
@@ -3124,6 +3188,70 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/tasks': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoTaskCenterController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/tasks/policy': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['PhotoTaskCenterController_policy'];
+    trace?: never;
+  };
+  '/api/photos/tasks/retry': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoTaskCenterController_retry'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/tasks/settings': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch: operations['PhotoTaskCenterController_settings'];
+    trace?: never;
+  };
   '/api/health': {
     parameters: {
       query?: never;
@@ -3433,7 +3561,48 @@ export interface components {
     FinishEagleImportItemDto: {
       assetId: string;
     };
-    UpdateEagleProcessingSettingsDto: Record<string, never>;
+    UpdateEagleProcessingSettingsDto: {
+      /** @enum {string} */
+      mode: 'ALWAYS' | 'NIGHT' | 'MANUAL';
+      /** @example 23:00 */
+      nightStart: string;
+      /** @example 06:00 */
+      nightEnd: string;
+    };
+    TaskPolicyDto: {
+      /** @enum {string} */
+      family:
+        | 'DETAILS'
+        | 'VIDEO'
+        | 'EMBEDDING'
+        | 'AI_TAGS'
+        | 'FACES'
+        | 'COLOR'
+        | 'PYRAMID'
+        | 'SMART_FOLDERS'
+        | 'TAG_INDEX';
+      paused: boolean;
+      priority: number;
+    };
+    RetryTaskFamilyDto: {
+      /** @enum {string} */
+      family:
+        | 'BROWSE'
+        | 'DETAILS'
+        | 'VIDEO'
+        | 'EMBEDDING'
+        | 'AI_TAGS'
+        | 'FACES'
+        | 'COLOR'
+        | 'PYRAMID'
+        | 'SMART_FOLDERS'
+        | 'TAG_INDEX'
+        | 'PHOTO_MAP'
+        | 'CLEANUP'
+        | 'APPROVALS'
+        | 'UPLOADS'
+        | 'IMPORTS';
+    };
     SetTagRecommendationDto: Record<string, never>;
     ReviewVectorSuggestionDto: Record<string, never>;
     BatchReviewVectorSuggestionsDto: Record<string, never>;
@@ -5694,6 +5863,86 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_overview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_policy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskPolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RetryTaskFamilyDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_settings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateEagleProcessingSettingsDto'];
+      };
+    };
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };
@@ -8343,6 +8592,86 @@ export interface operations {
     requestBody?: never;
     responses: {
       201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_overview: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_policy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['TaskPolicyDto'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_retry: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RetryTaskFamilyDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_settings: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdateEagleProcessingSettingsDto'];
+      };
+    };
+    responses: {
+      200: {
         headers: {
           [name: string]: unknown;
         };

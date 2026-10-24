@@ -1,8 +1,8 @@
 import type { EagleMediaJobKind, EagleProcessingLane } from '@prisma/client';
+import { nextAnalysisTime } from '@sekereagle/library-core';
 import { Client, type Notification } from 'pg';
 
 export const WORKER_WAKEUP_CHANNEL = 'sekereagle_worker_wakeup';
-const SHANGHAI_UTC_OFFSET_HOURS = 8;
 const FALLBACK_POLL_MS = 30_000;
 
 export interface PendingWakeCandidate {
@@ -28,18 +28,7 @@ export function nextEligibleWakeAt(
 ): Date | null {
   const dueAt = new Date(Math.max(candidate.availableAt.getTime(), now.getTime()));
   if (candidate.lane !== 'BACKGROUND') return dueAt;
-  if (candidate.kind === 'GENERATE_AI_TAGS') {
-    if (settings.aiTagManualEnabled) return dueAt;
-    if (!settings.aiTagScheduleEnabled) return null;
-    return nextTimeInsideShanghaiWindow(
-      dueAt,
-      settings.aiTagScheduleStart,
-      settings.aiTagScheduleEnd,
-    );
-  }
-  if (settings.mode === 'ALWAYS') return dueAt;
-  if (settings.mode === 'MANUAL') return null;
-  return nextTimeInsideShanghaiWindow(dueAt, settings.nightStart, settings.nightEnd);
+  return nextAnalysisTime(settings, candidate.kind, dueAt);
 }
 
 export class JobWakeScheduler {
@@ -162,72 +151,6 @@ export class PostgresWakeListener {
     }, delay);
     this.reconnectTimer.unref();
   }
-}
-
-function nextTimeInsideShanghaiWindow(reference: Date, startValue: string, endValue: string): Date {
-  const start = minuteOfDay(startValue, 23 * 60);
-  const end = minuteOfDay(endValue, 6 * 60);
-  if (start === end) return reference;
-  const parts = shanghaiParts(reference);
-  const current = parts.hour * 60 + parts.minute;
-  const inside =
-    start < end ? current >= start && current < end : current >= start || current < end;
-  if (inside) return reference;
-  const dayOffset = current < start ? 0 : 1;
-  return shanghaiDate(parts, start, dayOffset);
-}
-
-function minuteOfDay(value: string, fallback: number): number {
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) return fallback;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  return hour <= 23 && minute <= 59 ? hour * 60 + minute : fallback;
-}
-
-function shanghaiParts(date: Date): {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  minute: number;
-} {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date);
-  const value = (type: Intl.DateTimeFormatPartTypes) =>
-    Number(parts.find((part) => part.type === type)?.value ?? 0);
-  return {
-    year: value('year'),
-    month: value('month'),
-    day: value('day'),
-    hour: value('hour'),
-    minute: value('minute'),
-  };
-}
-
-function shanghaiDate(
-  parts: { year: number; month: number; day: number },
-  minute: number,
-  dayOffset: number,
-): Date {
-  const hour = Math.floor(minute / 60);
-  const minutes = minute % 60;
-  return new Date(
-    Date.UTC(
-      parts.year,
-      parts.month - 1,
-      parts.day + dayOffset,
-      hour - SHANGHAI_UTC_OFFSET_HOURS,
-      minutes,
-    ),
-  );
 }
 
 function postgresConnectionString(value: string): string {

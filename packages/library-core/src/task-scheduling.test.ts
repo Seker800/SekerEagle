@@ -8,7 +8,10 @@ test('one background schedule handles overnight windows and pause without affect
   assert.equal(backgroundScheduleAllows(settings, new Date('2026-10-24T22:00:00Z')), false);
   assert.equal(backgroundScheduleAllows({ ...settings, mode: 'MANUAL' }), false);
   assert.equal(backgroundScheduleAllows({ ...settings, mode: 'ALWAYS' }), true);
-  assert.equal(nextBackgroundTime(settings, new Date('2026-10-24T04:00:00Z'))?.toISOString(), '2026-10-24T15:00:00.000Z');
+  assert.equal(
+    nextBackgroundTime(settings, new Date('2026-10-24T04:00:00Z'))?.toISOString(),
+    '2026-10-24T15:00:00.000Z',
+  );
   assert.equal(nextBackgroundTime({ ...settings, mode: 'MANUAL' }), null);
 });
 

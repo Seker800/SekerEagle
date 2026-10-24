@@ -3,6 +3,7 @@ import { createEagleApi } from './eagle-api';
 import { createEagleAiTagApi } from './eagle-ai-tag-api';
 import { createEagleVectorApi } from './eagle-vector-api';
 import { createEagleProcessingAdminApi } from './eagle-processing-admin-api';
+import { createEagleTaskCenterApi } from './eagle-task-center-api';
 import { createEaglePrivacyApi } from './eagle-privacy-api';
 import { createPrivacyVisibilityApi } from './privacy-visibility-api';
 import type { LibraryMode } from './library-api-scope';
@@ -13,6 +14,7 @@ const factories = [
   createEagleAiTagApi,
   createEagleVectorApi,
   createEagleProcessingAdminApi,
+  createEagleTaskCenterApi,
   createEaglePrivacyApi,
   createPrivacyVisibilityApi,
 ];
@@ -22,6 +24,21 @@ for (const factory of factories) {
   });
 }
 const operations = {
+  tasks: (mode: LibraryMode) => createEagleTaskCenterApi(mode).fetchEagleTaskCenter(),
+  taskSchedule: (mode: LibraryMode) =>
+    createEagleTaskCenterApi(mode).updateEagleTaskSchedule({
+      mode: 'MANUAL',
+      nightStart: '23:00',
+      nightEnd: '06:00',
+    }),
+  taskRetry: (mode: LibraryMode) =>
+    createEagleTaskCenterApi(mode).retryEagleTaskFamily('EMBEDDING'),
+  taskPolicy: (mode: LibraryMode) =>
+    createEagleTaskCenterApi(mode).updateEagleTaskPolicy({
+      family: 'EMBEDDING',
+      paused: true,
+      priority: 1,
+    }),
   send: (mode: LibraryMode) =>
     createEagleApi(mode).sendEagleAssets('', { assetIds: ['asset'], operationId: 'operation' }),
   location: (mode: LibraryMode) => createEagleApi(mode).getEagleAssetLocation('', 'asset'),

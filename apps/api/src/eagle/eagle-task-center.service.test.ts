@@ -288,9 +288,32 @@ test('schedule explanations use the actual intersection and deployment-specific 
 
 test('indexes that only use saved vectors do not wait for the inference host', async () => {
   const service = new EagleTaskCenterService({
-    $queryRaw: async () => ['TAG_INDEX', 'SMART_FOLDERS'].map((family) => ({ family, step: family, version: '', status: 'QUEUED', reason: 'QUEUED', count: 1n, nextAt: null })),
-    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { background: true, jobKinds: null, tagBuilds: true, smartFolders: true, embedding: 'OFFLINE' } }] },
-    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' }) },
+    $queryRaw: async () =>
+      ['TAG_INDEX', 'SMART_FOLDERS'].map((family) => ({
+        family,
+        step: family,
+        version: '',
+        status: 'QUEUED',
+        reason: 'QUEUED',
+        count: 1n,
+        nextAt: null,
+      })),
+    eagleProcessingWorkerHeartbeat: {
+      findMany: async () => [
+        {
+          capabilities: {
+            background: true,
+            jobKinds: null,
+            tagBuilds: true,
+            smartFolders: true,
+            embedding: 'OFFLINE',
+          },
+        },
+      ],
+    },
+    eagleProcessingSetting: {
+      findUnique: async () => ({ mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' }),
+    },
     eagleTaskPolicy: { findMany: async () => [] },
   } as never);
   const result = await service.overview('owner');

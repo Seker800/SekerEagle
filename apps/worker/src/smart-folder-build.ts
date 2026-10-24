@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { EmbeddingClientError } from './embedding-client';
 import { Prisma, type PrismaClient, type EagleSmartFolderSemanticSnapshot } from '@prisma/client';
-import { scheduleSmartFolderSnapshot } from '@sekereagle/library-persistence';
+import {
+  scheduleSmartFolderSnapshot,
+  backgroundScheduleSql,
+  taskPolicyAllowsSql,
+  taskPrioritySql,
+} from '@sekereagle/library-persistence';
 import { parseEagleFilterQuery, EAGLE_SEMANTIC_THRESHOLDS } from '@sekereagle/eagle-filter-core';
 
 export function validateQueryVector(vector: readonly number[]) {
@@ -58,6 +64,7 @@ export async function runSmartFolderBuildStep(
   client: PrismaClient,
   spaceId: string,
   embedText: (text: string) => Promise<{ embedding: number[] }>,
+  allowModelRequest = true,
 ) {
   const token = randomUUID();
   const [build] = await client.$queryRaw<
@@ -65,10 +72,13 @@ export async function runSmartFolderBuildStep(
   >(Prisma.sql`
     UPDATE "EagleSmartFolderSemanticSnapshot" SET status='BUILDING', "leaseToken"=${token},
       "lockedUntil"=now()+interval '12 minutes', "updatedAt"=now()
-    WHERE id=(SELECT id FROM "EagleSmartFolderSemanticSnapshot"
+    WHERE id=(SELECT id FROM "EagleSmartFolderSemanticSnapshot" s
       WHERE "spaceId"=${spaceId} AND status IN ('PENDING','BUILDING') AND "availableAt"<=now()
         AND ("lockedUntil" IS NULL OR "lockedUntil"<now())
-      ORDER BY "availableAt", "createdAt", id FOR UPDATE SKIP LOCKED LIMIT 1)
+        AND (${allowModelRequest} OR s."queryVector" IS NOT NULL)
+        AND ${backgroundScheduleSql(Prisma.sql`s."ownerId"`, Prisma.sql`s."libraryMode"`)}
+        AND ${taskPolicyAllowsSql(Prisma.sql`s."ownerId"`, Prisma.sql`s."libraryMode"`, Prisma.sql`'SMART_FOLDERS'`)}
+      ORDER BY ${taskPrioritySql(Prisma.sql`s."ownerId"`, Prisma.sql`s."libraryMode"`, Prisma.sql`'SMART_FOLDERS'`)} DESC,"availableAt", "createdAt", id FOR UPDATE SKIP LOCKED LIMIT 1)
     RETURNING id, "ownerId", "libraryMode", "folderId", text, cursor, attempts, ("queryVector" IS NOT NULL) AS "hasVector"
   `);
   if (!build) return false;
@@ -160,16 +170,20 @@ export async function runSmartFolderBuildStep(
       },
       { timeout: 30_000, maxWait: 5_000 },
     );
-  } catch {
-    const attempts = build.attempts + 1;
+  } catch (error) {
+    const waitingForHost =
+      error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE';
+    const attempts = build.attempts + (waitingForHost ? 0 : 1);
     await client.eagleSmartFolderSemanticSnapshot.updateMany({
       where: { id: build.id, leaseToken: token },
       data: {
-        ...smartFolderRetry(attempts),
+        ...(waitingForHost
+          ? { status: 'PENDING', availableAt: new Date(Date.now() + 30000) }
+          : smartFolderRetry(attempts)),
         attempts,
         lockedUntil: null,
         leaseToken: null,
-        errorCode: 'BUILD_UNAVAILABLE',
+        errorCode: waitingForHost ? 'WAITING_EMBEDDING_HOST' : 'BUILD_UNAVAILABLE',
       },
     });
   }

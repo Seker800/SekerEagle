@@ -5,9 +5,18 @@ import * as vectors from './eagle-vector-api';
 import * as processing from './eagle-processing-admin-api';
 import * as privacy from './eagle-privacy-api';
 import * as visibility from './privacy-visibility-api';
+import * as tasks from './eagle-task-center-api';
 import type { LibraryMode } from './library-api-scope';
 
-const materialApi = { ...assets, ...aiTags, ...vectors, ...processing, ...privacy, ...visibility };
+const materialApi = {
+  ...assets,
+  ...aiTags,
+  ...vectors,
+  ...processing,
+  ...privacy,
+  ...visibility,
+  ...tasks,
+};
 function photoApi() {
   return {
     ...assets.createEagleApi('PHOTO'),
@@ -16,6 +25,7 @@ function photoApi() {
     ...processing.createEagleProcessingAdminApi('PHOTO'),
     ...privacy.createEaglePrivacyApi('PHOTO'),
     ...visibility.createPrivacyVisibilityApi('PHOTO'),
+    ...tasks.createEagleTaskCenterApi('PHOTO'),
   };
 }
 interface LibraryWorkspace {

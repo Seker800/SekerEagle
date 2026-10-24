@@ -38,6 +38,32 @@ export class EmbeddingClient {
     this.request = options.fetch ?? fetch;
   }
 
+  async readiness(): Promise<'READY' | 'OFFLINE' | 'DRIFTED'> {
+    try {
+      const response = await this.request(`${stripTrailingSlash(this.options.baseUrl)}/healthz`, {
+        headers: { authorization: `Bearer ${this.options.token}` },
+        signal: AbortSignal.timeout(2000),
+      });
+      if (!response.ok) return 'OFFLINE';
+      const data = (await response.json()) as {
+        status?: unknown;
+        model?: unknown;
+        revision?: unknown;
+        dimensions?: unknown;
+        metal?: unknown;
+      };
+      return data.status === 'ready' &&
+        data.model === this.options.modelId &&
+        data.revision === this.options.modelRevision &&
+        data.dimensions === this.options.dimensions &&
+        data.metal === true
+        ? 'READY'
+        : 'DRIFTED';
+    } catch {
+      return 'OFFLINE';
+    }
+  }
+
   async embedImage(bytes: Buffer, mimeType: string): Promise<{ embedding: number[] }> {
     if (bytes.byteLength > this.options.maxPayloadBytes) {
       throw new EmbeddingClientError(

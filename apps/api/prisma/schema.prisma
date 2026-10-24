@@ -202,6 +202,7 @@ model User {
   eagleAiTags              EagleAiTag[]
   eagleSmartFolders        EagleSmartFolder[]
   eagleProcessingSetting   EagleProcessingSetting[]
+  eagleTaskPolicies        EagleTaskPolicy[]
   eagleUploadSessionStates EagleUploadSessionState[]
   eagleExternalLibraries   EagleExternalLibrary[]
   eagleExternalAssets      EagleExternalAsset[]
@@ -1512,4 +1513,15 @@ model EagleSmartFolderSemanticMatch {
   @@id([snapshotId, embeddingId])
   @@index([ownerId, libraryMode, embeddingId])
   @@index([ownerId, libraryMode, snapshotId, similarity, embeddingId])
+}
+
+model EagleTaskPolicy {
+  ownerId String
+  libraryMode LibraryMode
+  family String
+  paused Boolean @default(false)
+  priority Int @default(0)
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields:[ownerId], references:[id], onDelete:Cascade)
+  @@id([ownerId,libraryMode,family])
 }

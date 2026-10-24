@@ -9,7 +9,7 @@ const CLAIM_BATCH_SIZE = 50;
 const STALE_LEASE_MS = 10 * 60 * 1_000;
 const LANE_ORDER: readonly EagleProcessingLane[] = ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE'];
 
-interface ClaimFindManyInput {
+export interface ClaimFindManyInput {
   where: {
     lane: EagleProcessingLane;
     processorVersion?: { notIn: string[] };
@@ -55,6 +55,8 @@ export interface MediaJobClaimClient {
 }
 
 interface ClaimMediaJobOptions {
+  partitionAi?: boolean;
+  selectCandidates?: (input: ClaimFindManyInput) => Promise<EagleAssetProcessingJob[]>;
   now?: Date;
   excludedProcessorVersions?: string[];
   allowedJobKinds?: readonly EagleMediaJobKind[];
@@ -76,7 +78,9 @@ export async function claimNextMediaJob(
 
   for (const lane of options.laneOrder ?? LANE_ORDER) {
     const kindPartitions: Array<ClaimFindManyInput['where']['kind']> =
-      lane === 'BACKGROUND' ? [{ not: 'GENERATE_AI_TAGS' }, 'GENERATE_AI_TAGS'] : [undefined];
+      lane === 'BACKGROUND' && options.partitionAi !== false
+        ? [{ not: 'GENERATE_AI_TAGS' }, 'GENERATE_AI_TAGS']
+        : [undefined];
     for (const kind of kindPartitions) {
       if (
         typeof kind === 'string' &&
@@ -88,7 +92,9 @@ export async function claimNextMediaJob(
         options.allowedJobKinds && typeof kind !== 'string'
           ? { ...kind, in: [...options.allowedJobKinds] }
           : kind;
-      const candidates = await client.eagleAssetProcessingJob.findMany({
+      const candidates = await (
+        options.selectCandidates ?? ((input) => client.eagleAssetProcessingJob.findMany(input))
+      )({
         where: {
           lane,
           ...(options.excludedProcessorVersions?.length
@@ -111,7 +117,8 @@ export async function claimNextMediaJob(
 
       for (const candidate of candidates) {
         if (
-          candidate.lane === 'BACKGROUND' &&
+          (candidate.lane === 'BACKGROUND' ||
+            candidate.processorVersion === 'photo-source-details-v1') &&
           !(await options.canClaimBackground(
             candidate.ownerId,
             candidate.kind,

@@ -7,15 +7,19 @@ import {
   VIDEO_PLAYBACK_PROCESSOR_VERSION,
   videoTranscodingEnabled,
 } from './video-processing-policy';
-import { backgroundProcessingEnabled } from './processing-policy';
+import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
-import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
+import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
 import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
-import { CAMERA_MAX_IMAGE_BYTES, isCameraVideoMime } from '@sekereagle/library-core';
+import {
+  nextBackgroundTime,
+  CAMERA_MAX_IMAGE_BYTES,
+  isCameraVideoMime,
+} from '@sekereagle/library-core';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -43,8 +47,6 @@ import {
   describeRuntimeTarget,
 } from '@sekereagle/config';
 import {
-  canClaimAiTagJobs,
-  canClaimBackgroundJobs,
   parseProcessingJobKinds,
   taskBlocksAssetReady,
   terminalAssetFailure,
@@ -57,12 +59,14 @@ import { finishAlreadyAnalyzedAiTagJob } from './ai-tag-completion';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
+import { selectScheduledMediaCandidates } from './scheduled-media-candidates';
+import { taskPolicyAllowsSql } from '@sekereagle/library-persistence';
 import { claimNextMediaJob } from './job-claim';
 import {
   isPermanentMediaValidationError,
   PermanentMediaValidationError,
 } from './media-validation-error';
-import { EmbeddingClient } from './embedding-client';
+import { EmbeddingClient, EmbeddingClientError } from './embedding-client';
 import { OllamaVisionClient, renderAiTagInput } from './ai-tagging';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
 import {
@@ -92,6 +96,8 @@ const storage = new S3Client({
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? '',
   },
 });
+let embeddingReadiness: 'READY' | 'OFFLINE' | 'DRIFTED' = 'OFFLINE';
+let checkingHeartbeat = false;
 let heartbeatTimer: NodeJS.Timeout | undefined;
 let aiTagReconcileTimer: NodeJS.Timeout | undefined;
 let wakeScheduler: JobWakeScheduler | undefined;
@@ -139,22 +145,62 @@ const ollamaClient = new OllamaVisionClient({
 });
 
 async function heartbeat(): Promise<void> {
-  const now = new Date();
-  await prisma.eagleProcessingWorkerHeartbeat.upsert({
-    where: { workerId },
-    create: { workerId, version: workerVersion, startedAt: now, heartbeatAt: now, activeJobCount },
-    update: { heartbeatAt: now, activeJobCount },
-  });
-  await recordWorkerHeartbeat();
+  if (checkingHeartbeat) return;
+  checkingHeartbeat = true;
+  try {
+    const previousReadiness = embeddingReadiness;
+    if (
+      runBackgroundProcessing &&
+      (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))
+    )
+      embeddingReadiness = await embeddingClient.readiness();
+    const now = new Date();
+    const capabilities = {
+      embedding: embeddingReadiness,
+      background: runBackgroundProcessing,
+      jobKinds: allowedJobKinds ? [...allowedJobKinds] : null,
+      video: runVideoTranscoding,
+      tagBuilds: runTagBuilds,
+      smartFolders:
+        runBackgroundProcessing &&
+        (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING')),
+      photoMap: runBackgroundProcessing,
+    };
+    await prisma.eagleProcessingWorkerHeartbeat.upsert({
+      where: { workerId },
+      create: {
+        workerId,
+        version: workerVersion,
+        startedAt: now,
+        heartbeatAt: now,
+        activeJobCount,
+        capabilities,
+      },
+      update: { heartbeatAt: now, activeJobCount, capabilities },
+    });
+    await recordWorkerHeartbeat();
+    if (previousReadiness !== embeddingReadiness) wakeScheduler?.wakeNow();
+  } finally {
+    checkingHeartbeat = false;
+  }
 }
 
 let claimSequence = 0;
 async function claimJob(): Promise<EagleAssetProcessingJob | null> {
+  const sequence = claimSequence++;
   return claimNextMediaJob(prisma, {
+    partitionAi: false,
+    selectCandidates: (input) =>
+      selectScheduledMediaCandidates(
+        prisma,
+        input,
+        sequence % 4 !== 3,
+        embeddingReadiness !== 'READY',
+      ),
     canClaimBackground: canClaimBackgroundForOwner,
     allowedJobKinds,
     excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
-    laneOrder: mediaLaneOrder(claimSequence++),
+    laneOrder: mediaLaneOrder(sequence),
   });
 }
 
@@ -164,29 +210,13 @@ async function canClaimBackgroundForOwner(
   libraryMode: LibraryMode,
   processorVersion?: string,
 ): Promise<boolean> {
-  if (processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION) return runVideoTranscoding;
+  if (processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION && !runVideoTranscoding) return false;
   if (!runBackgroundProcessing) return false;
+  if (kind === 'GENERATE_EMBEDDING' && embeddingReadiness !== 'READY') return false;
   const settings = await prisma.eagleProcessingSetting.findUnique({
     where: { ownerId_libraryMode: { ownerId, libraryMode } },
   });
-  if (kind === 'GENERATE_AI_TAGS') {
-    return canClaimAiTagJobs(
-      settings?.aiTagManualEnabled ?? false,
-      settings?.aiTagScheduleEnabled ?? false,
-      settings?.aiTagScheduleStart ?? '23:00',
-      settings?.aiTagScheduleEnd ?? '06:00',
-    );
-  }
-  const configuredMode = settings?.mode;
-  const mode =
-    configuredMode === 'ALWAYS' || configuredMode === 'MANUAL' || configuredMode === 'NIGHT'
-      ? configuredMode
-      : 'NIGHT';
-  return canClaimBackgroundJobs(
-    mode,
-    settings?.nightStart ?? '23:00',
-    settings?.nightEnd ?? '06:00',
-  );
+  return mediaBackgroundAllowed(settings, kind);
 }
 
 async function reconcileEnabledAiTagJobs(): Promise<void> {
@@ -200,6 +230,9 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
     select: {
       ownerId: true,
       libraryMode: true,
+      mode: true,
+      nightStart: true,
+      nightEnd: true,
       aiTagManualEnabled: true,
       aiTagScheduleEnabled: true,
       aiTagScheduleStart: true,
@@ -207,16 +240,7 @@ async function reconcileEnabledAiTagJobs(): Promise<void> {
     },
   });
   for (const setting of settings) {
-    if (
-      !canClaimAiTagJobs(
-        setting.aiTagManualEnabled,
-        setting.aiTagScheduleEnabled,
-        setting.aiTagScheduleStart,
-        setting.aiTagScheduleEnd,
-      )
-    ) {
-      continue;
-    }
+    if (!mediaBackgroundAllowed(setting, 'GENERATE_AI_TAGS')) continue;
     await prisma.$executeRaw(Prisma.sql`
       INSERT INTO "EagleMediaJob" (
         id, "ownerId", "libraryMode", "assetId", kind, status, lane, "assetRevision", "processorVersion",
@@ -1138,6 +1162,21 @@ async function recomputeSuggestionGeneration(
 }
 
 async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
+  if (error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE') {
+    embeddingReadiness = 'OFFLINE';
+    await prisma.eagleTagSemanticBuild.updateMany({
+      where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
+      data: {
+        status: 'PENDING',
+        attempts: Math.max(0, build.attempts - 1),
+        availableAt: new Date(Date.now() + 30000),
+        lockedAt: null,
+        lastError: 'WAITING_EMBEDDING_HOST',
+      },
+    });
+    return;
+  }
+
   const message = error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_TAG_BUILD_ERROR';
   const terminal = build.attempts >= 5 || message === 'TAG_RECOMMENDATION_DISABLED';
   const delaySeconds = Math.min(3_600, 2 ** Math.min(build.attempts, 12));
@@ -1297,6 +1336,21 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 }
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
+  if (error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE') {
+    embeddingReadiness = 'OFFLINE';
+    await prisma.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: {
+        status: 'PENDING',
+        attempts: Math.max(0, job.attempts - 1),
+        availableAt: new Date(Date.now() + 30000),
+        lockedAt: null,
+        lastError: 'WAITING_EMBEDDING_HOST',
+      },
+    });
+    return;
+  }
+
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
   const terminal = isPermanentMediaValidationError(error) || job.attempts >= 12;
@@ -1450,7 +1504,7 @@ async function poll(): Promise<void> {
       });
   }
   if (!stopping && runTagBuilds && activeTagBuildCount === 0) {
-    const build = await claimNextTagBuild(prisma);
+    const build = await claimNextScheduledTagBuild(prisma);
     if (build) {
       activeTagBuildCount++;
       void processClaimedTagBuild(build).catch(reportLoopError);
@@ -1475,15 +1529,13 @@ interface PendingMediaWakeRow {
 }
 
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
-  const [mediaCandidates, nextTagBuild, settings] = await Promise.all([
+  const [mediaCandidates, tagBuilds, settings] = await Promise.all([
     prisma.$queryRaw<PendingMediaWakeRow[]>(buildMediaWakeQuery(allowedJobKinds)),
     runTagBuilds
-      ? prisma.eagleTagSemanticBuild.findFirst({
-          where: { status: 'PENDING' },
-          orderBy: [{ availableAt: 'asc' }, { createdAt: 'asc' }],
-          select: { availableAt: true },
-        })
-      : Promise.resolve(null),
+      ? prisma.$queryRaw<Array<{ ownerId: string; libraryMode: LibraryMode; availableAt: Date }>>(
+          Prisma.sql`SELECT b."ownerId",b."libraryMode",min(b."availableAt") AS "availableAt" FROM "EagleTagSemanticBuild" b WHERE b.status='PENDING' AND ${taskPolicyAllowsSql(Prisma.sql`b."ownerId"`, Prisma.sql`b."libraryMode"`, Prisma.sql`'TAG_INDEX'`)} GROUP BY b."ownerId",b."libraryMode"`,
+        )
+      : Promise.resolve([]),
     prisma.eagleProcessingSetting.findMany(),
   ]);
   const settingsByOwner = new Map(
@@ -1492,25 +1544,35 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
     ),
   );
-  let earliest = runTagBuilds ? (nextTagBuild?.availableAt ?? null) : null;
+  let earliest: Date | null = null;
+  for (const build of tagBuilds) {
+    const due = new Date(Math.max(now.getTime(), build.availableAt?.getTime() ?? now.getTime()));
+    const next = nextBackgroundTime(
+      settingsByOwner.get(JSON.stringify([build.ownerId, build.libraryMode])) ??
+        defaultWakeSettings(),
+      due,
+    );
+    if (next && (!earliest || next < earliest)) earliest = next;
+  }
   for (const candidate of mediaCandidates) {
+    if (candidate.kind === 'GENERATE_EMBEDDING' && embeddingReadiness !== 'READY') continue;
     if (candidate.processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION && !runVideoTranscoding)
       continue;
     if (
       !runBackgroundProcessing &&
-      candidate.lane === 'BACKGROUND' &&
-      candidate.processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION
+      (candidate.lane === 'BACKGROUND' || candidate.processorVersion === 'photo-source-details-v1')
     )
       continue;
-    const wakeAt =
-      candidate.processorVersion === VIDEO_PLAYBACK_PROCESSOR_VERSION
-        ? candidate.availableAt
-        : nextEligibleWakeAt(
-            candidate,
-            settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
-              defaultWakeSettings(),
-            now,
-          );
+    const wakeAt = nextEligibleWakeAt(
+      {
+        ...candidate,
+        lane:
+          candidate.processorVersion === 'photo-source-details-v1' ? 'BACKGROUND' : candidate.lane,
+      },
+      settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
+        defaultWakeSettings(),
+      now,
+    );
     if (wakeAt && (!earliest || wakeAt < earliest)) earliest = wakeAt;
   }
   return earliest;
@@ -1645,7 +1707,13 @@ async function stop(signal: string): Promise<void> {
   wakeScheduler?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
-  while (activeJobCount > 0 || activeTagBuildCount > 0 || buildingSmartFolder || deletingObjects)
+  while (
+    activeJobCount > 0 ||
+    activeTagBuildCount > 0 ||
+    buildingSmartFolder ||
+    checkingHeartbeat ||
+    deletingObjects
+  )
     await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
   await prisma.$disconnect();
@@ -1680,20 +1748,25 @@ async function main(): Promise<void> {
       buildingSmartFolder = true;
       try {
         await reconcileSmartFolderSpaces(prisma, embeddingSpaceId);
-        await runSmartFolderBuildStep(prisma, embeddingSpaceId, async (text) => {
-          await prisma.$transaction((tx) =>
-            ensureCompatibleEmbeddingSpace(tx, {
-              id: embeddingSpaceId,
-              model: embeddingModel,
-              revision: embeddingRevision,
-              dimensions: embeddingDimensions,
-              normalized: true,
-              instructionVersion: 'image-retrieval-v1',
-              preprocessingVersion: 'preview-webp-v1',
-            }),
-          );
-          return embeddingClient.embedText(text);
-        });
+        await runSmartFolderBuildStep(
+          prisma,
+          embeddingSpaceId,
+          async (text) => {
+            await prisma.$transaction((tx) =>
+              ensureCompatibleEmbeddingSpace(tx, {
+                id: embeddingSpaceId,
+                model: embeddingModel,
+                revision: embeddingRevision,
+                dimensions: embeddingDimensions,
+                normalized: true,
+                instructionVersion: 'image-retrieval-v1',
+                preprocessingVersion: 'preview-webp-v1',
+              }),
+            );
+            return embeddingClient.embedText(text);
+          },
+          embeddingReadiness === 'READY',
+        );
       } finally {
         buildingSmartFolder = false;
       }

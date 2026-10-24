@@ -146,6 +146,11 @@ try {
       stdio: 'inherit',
     },
   );
+  // Queue claim tests run after other fixtures to avoid competing for their leases.
+  run(process.execPath, ['--test', 'scripts/testing/task-center.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   const preserved = run('docker', [
     'exec',
     name,

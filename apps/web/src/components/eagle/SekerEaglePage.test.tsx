@@ -149,8 +149,12 @@ vi.mock('../../lib/eagle-api', () => ({
   moveEagleSmartFolder: (...args: unknown[]) => moveEagleSmartFolderMock(...args),
 }));
 
-vi.mock('./EagleProcessingPage', () => ({
-  EagleProcessingPage: () => <div data-testid="eagle-processing-page">素材处理状态</div>,
+vi.mock('./EagleTaskCenter', () => ({
+  EagleTaskCenter: () => (
+    <section aria-label="任务中心" data-testid="eagle-processing-page">
+      后台工作
+    </section>
+  ),
 }));
 
 vi.mock('../../lib/eagle-vector-api', () => ({
@@ -657,16 +661,16 @@ describe('SekerEaglePage', () => {
       within(pendingNavigation)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['推荐审核32', '待分类6', '处理任务']);
+    ).toEqual(['推荐审核32', '待分类6', '任务中心']);
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
     fireEvent.click(
       within(pendingNavigation).getByRole('button', {
-        name: '处理任务',
+        name: '任务中心',
       }),
     );
 
     expect(screen.getByTestId('eagle-processing-page')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: '待处理' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
   });
 
   it('keeps processing tasks available for ordinary owners inside the pending workspace', async () => {
@@ -676,7 +680,7 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '待处理 38' }));
     expect(
       within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
-        name: '处理任务',
+        name: '任务中心',
       }),
     ).toBeInTheDocument();
   });
@@ -2118,7 +2122,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
 
     fireEvent.click(within(settingsNavigation).getByRole('button', { name: 'AI 内容识别' }));
-    expect(screen.getByRole('region', { name: 'AI 自动标签运行设置' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '标签' }));
     expect(

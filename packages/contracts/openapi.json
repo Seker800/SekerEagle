@@ -3323,6 +3323,84 @@
         "tags": ["EagleProcessing"]
       }
     },
+    "/api/eagle/tasks": {
+      "get": {
+        "operationId": "EagleTaskCenterController_overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
+    "/api/eagle/tasks/policy": {
+      "patch": {
+        "operationId": "EagleTaskCenterController_policy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
+    "/api/eagle/tasks/retry": {
+      "post": {
+        "operationId": "EagleTaskCenterController_retry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryTaskFamilyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
+    "/api/eagle/tasks/settings": {
+      "patch": {
+        "operationId": "EagleTaskCenterController_settings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEagleProcessingSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
     "/api/eagle/vector/summary": {
       "get": {
         "operationId": "EagleVectorController_summary",
@@ -7070,6 +7148,84 @@
         "tags": ["photo-processing"]
       }
     },
+    "/api/photos/tasks": {
+      "get": {
+        "operationId": "PhotoTaskCenterController_overview",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
+    "/api/photos/tasks/policy": {
+      "patch": {
+        "operationId": "PhotoTaskCenterController_policy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskPolicyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
+    "/api/photos/tasks/retry": {
+      "post": {
+        "operationId": "PhotoTaskCenterController_retry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetryTaskFamilyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
+    "/api/photos/tasks/settings": {
+      "patch": {
+        "operationId": "PhotoTaskCenterController_settings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateEagleProcessingSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "HealthController_getHealth",
@@ -7912,7 +8068,77 @@
       },
       "UpdateEagleProcessingSettingsDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["ALWAYS", "NIGHT", "MANUAL"]
+          },
+          "nightStart": {
+            "type": "string",
+            "example": "23:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          },
+          "nightEnd": {
+            "type": "string",
+            "example": "06:00",
+            "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+          }
+        },
+        "required": ["mode", "nightStart", "nightEnd"]
+      },
+      "TaskPolicyDto": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "DETAILS",
+              "VIDEO",
+              "EMBEDDING",
+              "AI_TAGS",
+              "FACES",
+              "COLOR",
+              "PYRAMID",
+              "SMART_FOLDERS",
+              "TAG_INDEX"
+            ]
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": ["family", "paused", "priority"]
+      },
+      "RetryTaskFamilyDto": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": [
+              "BROWSE",
+              "DETAILS",
+              "VIDEO",
+              "EMBEDDING",
+              "AI_TAGS",
+              "FACES",
+              "COLOR",
+              "PYRAMID",
+              "SMART_FOLDERS",
+              "TAG_INDEX",
+              "PHOTO_MAP",
+              "CLEANUP",
+              "APPROVALS",
+              "UPLOADS",
+              "IMPORTS"
+            ]
+          }
+        },
+        "required": ["family"]
       },
       "SetTagRecommendationDto": {
         "type": "object",

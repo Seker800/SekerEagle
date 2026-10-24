@@ -11,7 +11,7 @@ import {
 import type { LibraryMode } from '../../lib/library-api-scope';
 import { t } from '../../i18n';
 import styles from './EagleMobileChrome.module.css';
-export type MobileDestination = 'timeline' | 'map' | 'people' | 'tags' | 'more';
+export type MobileDestination = 'timeline' | 'map' | 'people' | 'tags' | 'tasks' | 'more';
 /** Phone presentation only: destinations still select the shared workspace views. */
 export function EagleMobileChrome({
   switcher,
@@ -66,6 +66,7 @@ export function EagleMobileNavigation({
           { key: 'people' as const, label: t('人物'), icon: IconUsers },
         ]
       : [{ key: 'tags' as const, label: t('标签'), icon: IconTags }]),
+    { key: 'tasks', label: t('任务中心'), icon: IconMenu2 },
     { key: 'more', label: t('更多'), icon: IconMenu2 },
   ];
   return (

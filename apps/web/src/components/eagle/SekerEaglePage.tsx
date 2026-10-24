@@ -118,7 +118,7 @@ import {
 } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
-import { EagleProcessingPage } from './EagleProcessingPage';
+import { EagleTaskCenter } from './EagleTaskCenter';
 import { EagleVectorWorkspace, type EagleVectorWorkspaceView } from './EagleVectorWorkspace';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
@@ -129,7 +129,6 @@ import {
   createEmptyEagleQuickFilterState,
 } from './EagleQuickFilterBar';
 import { EagleTagPage } from './EagleTagPage';
-import { EagleAiTagSetupPanel } from './EagleAiTagSetupPanel';
 import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
@@ -178,14 +177,15 @@ type EagleLibraryView =
   | 'AI_TAG_SETTINGS'
   | 'PROCESSING'
   | 'ACCOUNT';
-type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS';
+type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS' | 'TASKS';
 
 function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
   if (view === 'MANUAL_TAGS' || view === 'AI_TAGS') return 'TAGS';
-  if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED' || view === 'PROCESSING') {
+  if (view === 'PROCESSING' || view === 'AI_TAG_SETTINGS') return 'TASKS';
+  if (view === 'VECTOR_REVIEW' || view === 'VECTOR_UNCLASSIFIED') {
     return 'PENDING';
   }
-  if (view === 'VECTOR_TAGS' || view === 'AI_TAG_SETTINGS' || view === 'ACCOUNT') {
+  if (view === 'VECTOR_TAGS' || view === 'ACCOUNT') {
     return 'SETTINGS';
   }
   return null;
@@ -1373,6 +1373,16 @@ export function SekerEaglePage({
         <button
           data-navigation-destination
           type="button"
+          className={workspaceSection === 'TASKS' ? styles.navActive : undefined}
+          aria-label={t('任务中心')}
+          onClick={() => changeLibraryView('PROCESSING')}
+        >
+          <IconRefresh size={17} />
+          {' ' + t('任务中心')}
+        </button>
+        <button
+          data-navigation-destination
+          type="button"
           className={workspaceSection === 'TAGS' ? styles.navActive : undefined}
           aria-label={t('标签')}
           onClick={() => changeLibraryView('MANUAL_TAGS')}
@@ -1444,19 +1454,23 @@ export function SekerEaglePage({
     clearAssetSelection();
     if (destination === 'tags') {
       changeLibraryView('MANUAL_TAGS');
+    } else if (destination === 'tasks') {
+      changeLibraryView('PROCESSING');
     } else if (destination !== 'more') {
       changeLibraryView('ACTIVE');
       setPhotoView(destination);
     }
   };
   const activeMobileDestination: MobileDestination =
-    mobileMore || workspaceSection === 'SETTINGS'
-      ? 'more'
-      : workspaceSection === 'TAGS'
-        ? 'tags'
-        : photoView === 'map' || photoView === 'people'
-          ? photoView
-          : 'timeline';
+    workspaceSection === 'TASKS'
+      ? 'tasks'
+      : mobileMore || workspaceSection === 'SETTINGS'
+        ? 'more'
+        : workspaceSection === 'TAGS'
+          ? 'tags'
+          : photoView === 'map' || photoView === 'people'
+            ? photoView
+            : 'timeline';
   const toolbarTools = (
     <EagleResponsiveTools
       className={styles.toolbarActions}
@@ -1708,7 +1722,7 @@ export function SekerEaglePage({
                   label: t('待分类'),
                   count: unavailableSuggestionCount,
                 },
-                { view: 'PROCESSING', label: t('处理任务') },
+                { view: 'PROCESSING', label: t('任务中心') },
               ]}
               onSelect={changeLibraryView}
             />
@@ -1728,13 +1742,17 @@ export function SekerEaglePage({
           ) : null}
           {libraryView === 'ACCOUNT' ? (
             accountView
-          ) : libraryView === 'PROCESSING' ? (
-            <EagleProcessingPage
-              accessToken={accessToken}
+          ) : libraryView === 'PROCESSING' || libraryView === 'AI_TAG_SETTINGS' ? (
+            <EagleTaskCenter
+              key={`${storeScope}:${privateVisible}`}
+              includePrivate={privateVisible}
               canManageProcessing={canManageProcessing}
+              initialSettings={libraryView === 'AI_TAG_SETTINGS'}
+              onReview={() => {
+                changeLibraryView('ACTIVE');
+                setPhotoView('agent');
+              }}
             />
-          ) : libraryView === 'AI_TAG_SETTINGS' ? (
-            <EagleAiTagSetupPanel />
           ) : getVectorWorkspaceView(libraryView) ? (
             <EagleVectorWorkspace
               view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}

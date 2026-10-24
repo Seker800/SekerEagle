@@ -1,4 +1,9 @@
 import { VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
+import {
+  backgroundScheduleAllows,
+  DEFAULT_BACKGROUND_SCHEDULE,
+  type BackgroundSchedule,
+} from '@sekereagle/library-core';
 export type EagleBackgroundProcessingMode = 'ALWAYS' | 'NIGHT' | 'MANUAL';
 export type EagleMediaJobKind =
   | 'GENERATE_RENDITIONS'
@@ -75,36 +80,38 @@ export function taskBlocksAssetReady(kind: EagleMediaJobKind, processorVersion?:
   );
 }
 
-function minuteOfDay(value: string): number {
-  const [hours, minutes] = value.split(':').map(Number);
-  return (hours ?? 0) * 60 + (minutes ?? 0);
-}
-
-function shanghaiMinuteOfDay(now: Date): number {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Shanghai',
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now);
-  const hours = Number(parts.find((part) => part.type === 'hour')?.value ?? 0);
-  const minutes = Number(parts.find((part) => part.type === 'minute')?.value ?? 0);
-  return hours * 60 + minutes;
-}
-
 export function canClaimBackgroundJobs(
   mode: EagleBackgroundProcessingMode,
   windowStart: string,
   windowEnd: string,
   now = new Date(),
 ): boolean {
-  if (mode === 'ALWAYS') return true;
-  if (mode === 'MANUAL') return false;
-  const current = shanghaiMinuteOfDay(now);
-  const start = minuteOfDay(windowStart);
-  const end = minuteOfDay(windowEnd);
-  if (start === end) return true;
-  return start < end ? current >= start && current < end : current >= start || current < end;
+  return backgroundScheduleAllows({ mode, nightStart: windowStart, nightEnd: windowEnd }, now);
+}
+
+export function mediaBackgroundAllowed(
+  settings:
+    | (BackgroundSchedule & {
+        aiTagManualEnabled?: boolean;
+        aiTagScheduleEnabled?: boolean;
+        aiTagScheduleStart?: string;
+        aiTagScheduleEnd?: string;
+      })
+    | null,
+  kind: string,
+  now = new Date(),
+): boolean {
+  if (!backgroundScheduleAllows(settings ?? DEFAULT_BACKGROUND_SCHEDULE, now)) return false;
+  return (
+    kind !== 'GENERATE_AI_TAGS' ||
+    canClaimAiTagJobs(
+      settings?.aiTagManualEnabled ?? false,
+      settings?.aiTagScheduleEnabled ?? false,
+      settings?.aiTagScheduleStart ?? '23:00',
+      settings?.aiTagScheduleEnd ?? '06:00',
+      now,
+    )
+  );
 }
 
 export function canClaimAiTagJobs(

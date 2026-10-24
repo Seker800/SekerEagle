@@ -55,16 +55,18 @@ async function container(suffix, image, args, command = []) {
   return run('docker', ['port', id, '5432']).split(':').at(-1);
 }
 function child(path, env, label) {
-  const stream = createWriteStream(join(artifacts, `photo-workbench-${label}.log`));
-  const process = spawn(globalThis.process.execPath, [path], {
+  const prefix =
+    process.env.PHOTO_WORKBENCH_TASK_CENTER === '1' ? 'task-center-workbench' : 'photo-workbench';
+  const stream = createWriteStream(join(artifacts, `${prefix}-${label}.log`));
+  const childProcess = spawn(globalThis.process.execPath, [path], {
     cwd: root,
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  process.stdout.pipe(stream);
-  process.stderr.pipe(stream);
-  children.push(process);
-  return process;
+  childProcess.stdout.pipe(stream);
+  childProcess.stderr.pipe(stream);
+  children.push(childProcess);
+  return childProcess;
 }
 async function cleanup() {
   if (process.env.PHOTO_WORKBENCH_NATIVE === '1')
@@ -200,10 +202,15 @@ try {
       res.end();
     }
   });
-  await new Promise((resolve) =>
-    gateway.listen(Number(process.env.PHOTO_WORKBENCH_PORT ?? 0), '127.0.0.1', resolve),
-  );
-  const origin = `http://${process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES ? '127.0.0.1' : 'localhost'}:${gateway.address().port}`;
+  const gatewayHost = process.env.PHOTO_WORKBENCH_TASK_CENTER === '1' ? '::1' : '127.0.0.1';
+  await new Promise((resolve, reject) => {
+    gateway.once('error', reject);
+    gateway.listen(Number(process.env.PHOTO_WORKBENCH_PORT ?? 0), gatewayHost, () => {
+      gateway.off('error', reject);
+      resolve();
+    });
+  });
+  const origin = `http://${process.env.PHOTO_WORKBENCH_TASK_CENTER === '1' ? '[::1]' : process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES ? '127.0.0.1' : 'localhost'}:${gateway.address().port}`;
   const canonicalOrigin = `http://localhost:${gateway.address().port}`;
   const env = {
     ...process.env,
@@ -1103,6 +1110,87 @@ try {
     assert.equal(await db.eaglePhotoLocation.count({ where: { ownerId: owner.id } }), 0);
     console.log('Seeded three synthetic approval requests; no photo operation was applied.');
   }
+  if (process.env.PHOTO_WORKBENCH_TASK_CENTER === '1') {
+    const ordinary = await db.user.create({
+      data: {
+        email: `task-owner-${randomUUID()}@example.invalid`,
+        passwordHash: await bcrypt.hash(testPassword, 12),
+        role: 'USER',
+      },
+    });
+    const login = await fetch(`${origin}/api/auth/login`, {
+      method: 'POST',
+      headers: { origin, 'content-type': 'application/json' },
+      body: JSON.stringify({ email: ordinary.email, password: testPassword }),
+    });
+    assert.equal(login.status, 201);
+    const ordinaryCookie = login.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const call = (path, method = 'GET', body, requestOrigin = origin, cookie = ordinaryCookie) =>
+      fetch(`${origin}/api${path}`, {
+        method,
+        headers: { cookie, origin: requestOrigin, 'content-type': 'application/json' },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      });
+    assert.equal((await call('/photos/tasks', 'GET', undefined, origin, '')).status, 401);
+    for (const mode of ['eagle', 'photos']) {
+      const overview = await call(`/${mode}/tasks`);
+      assert.equal(overview.status, 200);
+      assert.deepEqual((await overview.json()).groups, []);
+    }
+    const schedule = { mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' };
+    assert.equal(
+      (await call('/photos/tasks/settings', 'PATCH', schedule, 'https://untrusted.invalid')).status,
+      403,
+    );
+    assert.equal(
+      (await call('/photos/tasks/settings', 'PATCH', { ...schedule, ownerId: owner.id })).status,
+      400,
+    );
+    assert.equal(
+      (await call('/photos/tasks/settings', 'PATCH', { ...schedule, nightStart: '25:00' })).status,
+      400,
+    );
+    assert.equal((await call('/photos/tasks/settings', 'PATCH', schedule)).status, 200);
+    assert.equal(
+      (
+        await call('/photos/tasks/policy', 'PATCH', {
+          family: 'EMBEDDING',
+          paused: true,
+          priority: 1,
+        })
+      ).status,
+      200,
+    );
+    assert.equal(
+      (await call('/photos/tasks/policy', 'PATCH', { family: 'BROWSE', paused: true, priority: 1 }))
+        .status,
+      400,
+    );
+    assert.equal(
+      (
+        await call('/photos/tasks/policy', 'PATCH', {
+          family: 'EMBEDDING',
+          paused: true,
+          priority: 9,
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      await db.eagleTaskPolicy.count({ where: { ownerId: ordinary.id, libraryMode: 'MATERIAL' } }),
+      0,
+    );
+    assert.equal(
+      await db.eagleTaskPolicy.count({ where: { ownerId: ordinary.id, libraryMode: 'PHOTO' } }),
+      1,
+    );
+    console.log(
+      'Task center HTTP acceptance passed: ordinary owner, Origin, strict DTOs and immutable mode scope.',
+    );
+  }
   if (basic) {
     console.log(
       'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',
@@ -1116,7 +1204,15 @@ try {
         ownerId: owner.id,
         basic: true,
       };
-      await writeFile(join(artifacts, 'photo-workbench.json'), JSON.stringify(result, null, 2));
+      await writeFile(
+        join(
+          artifacts,
+          process.env.PHOTO_WORKBENCH_TASK_CENTER === '1'
+            ? 'task-center-workbench.json'
+            : 'photo-workbench.json',
+        ),
+        JSON.stringify(result, null, 2),
+      );
       console.log(JSON.stringify({ origin, loginUrl: result.loginUrl, basic: true }));
       await new Promise(() => {});
     }

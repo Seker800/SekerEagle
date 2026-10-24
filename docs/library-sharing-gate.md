@@ -1,5 +1,9 @@
 # 素材／照片共用逻辑门禁
 
+## 2026-10-24 统一任务中心
+
+任务中心是通用能力：`EagleTaskCenterController`／`EagleTaskCenterService` 及网页 `EagleTaskCenter` 两种模式共用；照片仅在原装配模块继承路由并固定 PHOTO，不覆盖方法、不替换 provider。`library-core` 保存任务类别与时间窗口纯规则，`library-persistence` 保存数据库时钟的后台领取条件；worker 和状态查询共用规则。各来源保留自己的事务、租约、版本和断点，不另建同步状态库。新增控制器纳入继承门禁与禁止覆写反例；接口验证认证、Origin、账号／模式／私密及媒体版本隔离，客户端契约覆盖双模式。
+
 目的：两种模式隔离业务数据，共用通用实现；修复通用功能时只维护一份代码。门禁落在仓库命令和 CI 中，约束后续开发与 agent，不依赖记住聊天记录。
 
 2026-10-23 语义智能文件夹扩展共用规则契约的可选 semantic 意图；使用相同对话框、EagleService、worker 和 library-persistence 匹配实现。普通条件仍由同一规则引擎计算，向量与命中快照按 owner／模式独立。新增能力不改变装配边界，不新增摄影 provider 或豁免；既有继承方法与双模式客户端契约自动覆盖新增路由。

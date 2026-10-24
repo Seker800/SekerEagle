@@ -1,12 +1,38 @@
-import type { EagleTagSemanticBuild, Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type EagleTagSemanticBuild, type PrismaClient } from '@prisma/client';
+import {
+  backgroundScheduleSql,
+  taskPolicyAllowsSql,
+  taskPrioritySql,
+} from '@sekereagle/library-persistence';
+
+export async function claimNextScheduledTagBuild(
+  client: Pick<PrismaClient, '$transaction' | '$queryRaw'>,
+  now = new Date(),
+) {
+  const candidates = await client.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT b.id FROM "EagleTagSemanticBuild" b WHERE
+      ((b.status='PENDING' AND b."availableAt"<=now()) OR (b.status='PROCESSING' AND b."lockedAt"<now()-interval '10 minutes'))
+      AND ${backgroundScheduleSql(Prisma.sql`b."ownerId"`, Prisma.sql`b."libraryMode"`)}
+      AND ${taskPolicyAllowsSql(Prisma.sql`b."ownerId"`, Prisma.sql`b."libraryMode"`, Prisma.sql`'TAG_INDEX'`)}
+    ORDER BY ${taskPrioritySql(Prisma.sql`b."ownerId"`, Prisma.sql`b."libraryMode"`, Prisma.sql`'TAG_INDEX'`)} DESC,b."availableAt",b."createdAt" LIMIT 50
+  `);
+  if (!candidates.length) return null;
+  return claimNextTagBuild(
+    client,
+    now,
+    candidates.map(({ id }) => id),
+  );
+}
 
 export async function claimNextTagBuild(
   client: Pick<PrismaClient, '$transaction'>,
   now = new Date(),
+  eligibleIds?: string[],
 ): Promise<EagleTagSemanticBuild | null> {
   return client.$transaction(async (transaction) => {
     const candidate = await transaction.eagleTagSemanticBuild.findFirst({
       where: {
+        ...(eligibleIds ? { id: { in: eligibleIds } } : {}),
         OR: [
           { status: 'PENDING', availableAt: { lte: now } },
           { status: 'PROCESSING', lockedAt: { lt: new Date(now.getTime() - 10 * 60_000) } },

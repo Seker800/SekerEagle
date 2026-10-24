@@ -79,7 +79,7 @@ test('manual and disabled AI work stay asleep until settings change', () => {
   );
 });
 
-test('scheduled AI work wakes at its own window and manual AI work wakes immediately', () => {
+test('scheduled AI work respects both windows and manual AI respects the global window', () => {
   const now = new Date('2026-09-16T04:00:00.000Z');
   const aiCandidate = candidate({ lane: 'BACKGROUND', kind: 'GENERATE_AI_TAGS' });
   assert.equal(
@@ -93,7 +93,7 @@ test('scheduled AI work wakes at its own window and manual AI work wakes immedia
   assert.equal(
     nextEligibleWakeAt(
       aiCandidate,
-      { ...defaultSettings, aiTagManualEnabled: true },
+      { ...defaultSettings, mode: 'ALWAYS', aiTagManualEnabled: true },
       now,
     )?.toISOString(),
     now.toISOString(),

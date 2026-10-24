@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { ApiProperty } from '@nestjs/swagger';
 import { EagleMediaJobKind, EagleMediaJobStatus, EagleProcessingLane } from '@prisma/client';
 import { IsEnum, IsInt, IsOptional, IsString, Matches, Max, MaxLength, Min } from 'class-validator';
 
@@ -9,9 +10,15 @@ export enum EagleProcessingModeDto {
 }
 
 export class UpdateEagleProcessingSettingsDto {
-  @IsEnum(EagleProcessingModeDto) mode!: EagleProcessingModeDto;
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) nightStart!: string;
-  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/) nightEnd!: string;
+  @ApiProperty({ enum: EagleProcessingModeDto })
+  @IsEnum(EagleProcessingModeDto)
+  mode!: EagleProcessingModeDto;
+  @ApiProperty({ type: String, example: '23:00', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  nightStart!: string;
+  @ApiProperty({ type: String, example: '06:00', pattern: '^([01]\\d|2[0-3]):[0-5]\\d$' })
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  nightEnd!: string;
 }
 
 export class ListEagleProcessingJobsDto {

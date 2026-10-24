@@ -1,6 +1,29 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { claimNextTagBuild, holdTagBuildLease } from './tag-build-lease';
+import {
+  claimNextTagBuild,
+  claimNextScheduledTagBuild,
+  holdTagBuildLease,
+} from './tag-build-lease';
+
+test('scheduled tag selection does not claim outside the eligible candidate set', async () => {
+  assert.equal(await claimNextScheduledTagBuild({ $queryRaw: async () => [] } as never), null);
+  let candidates: unknown;
+  const result = await claimNextScheduledTagBuild({
+    $queryRaw: async () => [{ id: 'eligible-build' }],
+    $transaction: async (action: (tx: unknown) => unknown) =>
+      action({
+        eagleTagSemanticBuild: {
+          findFirst: async (query: { where: { id: unknown } }) => {
+            candidates = query.where.id;
+            return null;
+          },
+        },
+      }),
+  } as never);
+  assert.equal(result, null);
+  assert.deepEqual(candidates, { in: ['eligible-build'] });
+});
 
 const now = new Date('2026-10-19T00:00:00Z');
 const candidate = {
