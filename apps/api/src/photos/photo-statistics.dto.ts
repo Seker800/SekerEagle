@@ -30,10 +30,10 @@ export class PhotoStatisticsQueryDto {
   @IsOptional()
   @IsIn(['day', 'month', 'year'])
   grain?: 'day' | 'month' | 'year';
-  @ApiPropertyOptional({ enum: ['camera', 'lens'], default: 'camera' })
+  @ApiPropertyOptional({ enum: ['total', 'camera', 'lens'], default: 'total' })
   @IsOptional()
-  @IsIn(['camera', 'lens'])
-  groupBy?: 'camera' | 'lens';
+  @IsIn(['total', 'camera', 'lens'])
+  groupBy?: 'total' | 'camera' | 'lens';
   @ApiPropertyOptional({ example: '2024-01-01' })
   @IsOptional()
   @IsString()

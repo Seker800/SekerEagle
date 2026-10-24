@@ -1,4 +1,10 @@
 export const enUS = {
+  拍摄量曲线图: 'Photos over time curve',
+  总量: 'Total',
+  总拍摄量: 'Total photos',
+  '悬停曲线查看该设备数量，方向键切换时间。':
+    'Hover a curve to see its count; use arrow keys to inspect time.',
+
   时间范围: 'Time range',
   最近一年: 'Last year',
   自定义日期: 'Custom dates',

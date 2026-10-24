@@ -49,7 +49,12 @@ export class PhotoStatisticsService {
   constructor(private readonly prisma: PrismaService) {}
   async get(ownerId: string, includePrivate: boolean, query: PhotoStatisticsQueryDto) {
     const grain = query.grain ?? 'month';
-    const dimension = query.groupBy === 'lens' ? Prisma.sql`lens` : Prisma.sql`camera`;
+    const dimension =
+      query.groupBy === 'lens'
+        ? Prisma.sql`lens`
+        : query.groupBy === 'camera'
+          ? Prisma.sql`camera`
+          : Prisma.sql`''::text`;
     if (query.start && query.end && query.start > query.end)
       throw new BadRequestException('开始日期不能晚于结束日期。');
     if (query.start && query.end) statisticsPeriods(query.start, query.end, grain);
@@ -74,14 +79,15 @@ export class PhotoStatisticsService {
           ${query.end ? Prisma.sql`AND day <= ${query.end}` : Prisma.empty}
       ), camera_counts AS (SELECT camera AS key, count(*)::int AS count FROM filtered GROUP BY camera),
       lens_counts AS (SELECT lens AS key, count(*)::int AS count FROM filtered GROUP BY lens),
+      dated AS (SELECT day, ${dimension} AS device FROM filtered WHERE day IS NOT NULL),
       ranked AS (
-        SELECT ${dimension} AS key, row_number() OVER (ORDER BY count(*) DESC, ${dimension}) AS rank
-        FROM filtered WHERE day IS NOT NULL GROUP BY ${dimension}
+        SELECT device AS key, row_number() OVER (ORDER BY count(*) DESC, device) AS rank
+        FROM dated GROUP BY device
       ), points AS (
         SELECT LEFT(day, ${grain === 'day' ? 10 : grain === 'month' ? 7 : 4}::int) AS period,
-          CASE WHEN r.rank <= 23 THEN f.${dimension} ELSE NULL END AS key, count(*)::int AS count
-        FROM filtered f JOIN ranked r ON r.key = f.${dimension} WHERE day IS NOT NULL
-        GROUP BY period, CASE WHEN r.rank <= 23 THEN f.${dimension} ELSE NULL END
+          CASE WHEN r.rank <= 23 THEN f.device ELSE NULL END AS key, count(*)::int AS count
+        FROM dated f JOIN ranked r ON r.key = f.device
+        GROUP BY period, CASE WHEN r.rank <= 23 THEN f.device ELSE NULL END
       )
       SELECT count(*)::int AS total, count(*) FILTER (WHERE day IS NULL)::int AS "unknownDate",
         MIN(day) AS first, MAX(day) AS last,
@@ -95,7 +101,7 @@ export class PhotoStatisticsService {
     return {
       ...summary!,
       grain,
-      groupBy: query.groupBy ?? 'camera',
+      groupBy: query.groupBy ?? 'total',
       periods: statisticsPeriods(query.start ?? summary!.first, query.end ?? summary!.last, grain),
     };
   }

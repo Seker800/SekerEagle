@@ -134,6 +134,12 @@ try {
   const service = new PhotoStatisticsService(prisma);
   const data = await service.get(owner, false, {});
   assert.equal(data.total, 5);
+  assert.equal(data.groupBy, 'total');
+  assert.ok(data.points.every((point) => point.key === ''));
+  assert.equal(
+    data.points.reduce((n, point) => n + point.count, 0),
+    data.total - data.unknownDate,
+  );
   assert.equal(data.unknownDate, 3);
   assert.deepEqual(data.periods, ['2024-02', '2024-03', '2024-04']);
   assert.deepEqual(
@@ -161,7 +167,7 @@ try {
   assert.equal((await service.get(owner, false, { start: '2024-05-01' })).total, 0);
   assert.equal((await service.get(owner, false, { cameras: ["A' OR true --"] })).total, 0);
   for (let i = 0; i < 25; i++) await make({}, { cameraModel: `Device ${i}` });
-  const crowded = await service.get(owner, false, {});
+  const crowded = await service.get(owner, false, { groupBy: 'camera' });
   assert.equal(new Set(crowded.points.map((p) => p.key)).size, 24);
   assert.ok(crowded.points.some((p) => p.key === null));
   assert.equal(

@@ -16,7 +16,7 @@ export function PhotoStatistics({
 }) {
   const [input, setInput] = useState<PhotoStatisticsQuery>({
     grain: 'month',
-    groupBy: 'camera',
+    groupBy: 'total',
     cameras: [],
     lenses: [],
   });
@@ -290,26 +290,30 @@ export function PhotoStatistics({
             <header className={styles.chartHeader}>
               <h2>{t('拍摄量')}</h2>
               <div className={styles.segmented} role="group" aria-label={t('曲线分组')}>
-                {(['camera', 'lens'] as const).map((groupBy) => (
+                {(['total', 'camera', 'lens'] as const).map((groupBy) => (
                   <button
                     key={groupBy}
                     type="button"
                     aria-pressed={input.groupBy === groupBy}
                     onClick={() => setInput((value) => ({ ...value, groupBy }))}
                   >
-                    {groupBy === 'camera' ? t('按相机') : t('按镜头')}
+                    {groupBy === 'total'
+                      ? t('总量')
+                      : groupBy === 'camera'
+                        ? t('按相机')
+                        : t('按镜头')}
                   </button>
                 ))}
               </div>
               <div className={styles.segmented} role="group" aria-label={t('时间粒度')}>
-                {(['year', 'month', 'day'] as const).map((grain) => (
+                {(['year', 'month'] as const).map((grain) => (
                   <button
                     key={grain}
                     type="button"
                     aria-pressed={input.grain === grain}
                     onClick={() => setInput((value) => ({ ...value, grain }))}
                   >
-                    {grain === 'year' ? t('年') : grain === 'month' ? t('月') : t('日')}
+                    {grain === 'year' ? t('年') : t('月')}
                   </button>
                 ))}
               </div>

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
@@ -33,22 +33,22 @@ describe('photo statistics', () => {
   it('shows three charts, calendar gaps, totals and unknown dates', async () => {
     get.mockResolvedValue(data);
     mount();
-    expect(await screen.findByRole('img', { name: '拍摄量折线图' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: '拍摄量曲线图' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '相机使用量柱状图' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: '镜头使用量柱状图' })).toBeInTheDocument();
     expect(screen.getByText('拍摄日期未知')).toBeInTheDocument();
-    const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+    const chart = screen.getByRole('img', { name: '拍摄量曲线图' });
     expect(screen.queryByRole('slider')).not.toBeInTheDocument();
     fireEvent.focus(chart);
     fireEvent.keyDown(chart, { key: 'Home' });
     fireEvent.keyDown(chart, { key: 'ArrowRight' });
-    expect(screen.getByText('2024-02', { selector: 'strong' })).toBeInTheDocument();
-    expect(screen.getByText('Camera A：0')).toBeInTheDocument();
+    expect(screen.getByText('2024-02', { selector: 'time' })).toBeInTheDocument();
+    expect(within(screen.getByRole('status')).getByText('0')).toBeInTheDocument();
   });
   it('combines camera and lens filters and switches the time series dimension', async () => {
     get.mockResolvedValue(data);
     mount();
-    await screen.findByRole('img', { name: '拍摄量折线图' });
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A' }));
     fireEvent.click(screen.getByRole('button', { name: '镜头筛选' }));
@@ -77,7 +77,7 @@ describe('statistics interactions', () => {
   it('applies inclusive dates, rejects inverted dates and resets the range', async () => {
     get.mockResolvedValue(data);
     mount();
-    await screen.findByRole('img', { name: '拍摄量折线图' });
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
     fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
     fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2025-01-01' } });
     fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2024-01-01' } });
@@ -98,7 +98,7 @@ describe('statistics interactions', () => {
   it('supports deselection and clearing equipment choices', async () => {
     get.mockResolvedValue(data);
     mount();
-    await screen.findByRole('img', { name: '拍摄量折线图' });
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
     fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Camera A' }));
     await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
@@ -142,9 +142,10 @@ describe('statistics interactions', () => {
     expect(other).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(other);
     expect(other).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.focus(screen.getByRole('img', { name: '拍摄量折线图' }));
-    expect(screen.getByText('其他设备（合并）：3')).toBeInTheDocument();
-    expect(screen.getByText('未知相机：2')).toBeInTheDocument();
+    fireEvent.focus(screen.getByRole('img', { name: '拍摄量曲线图' }));
+    expect(screen.getByRole('status')).toHaveTextContent('其他设备（合并）');
+    expect(within(screen.getByRole('status')).getByText('3')).toBeInTheDocument();
+    expect(screen.getByRole('status')).not.toHaveTextContent('未知相机');
   });
 });
 
@@ -196,7 +197,7 @@ it('shows full equipment names, shares and a direct filter action without a hori
 it('searches full device lists, exposes active filters and clears them together', async () => {
   get.mockResolvedValue(data);
   mount();
-  await screen.findByRole('img', { name: '拍摄量折线图' });
+  await screen.findByRole('img', { name: '拍摄量曲线图' });
   fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
   fireEvent.change(screen.getByLabelText('搜索设备'), { target: { value: 'Camera B' } });
   expect(screen.queryByRole('checkbox', { name: 'Camera A' })).not.toBeInTheDocument();
@@ -212,7 +213,7 @@ it('searches full device lists, exposes active filters and clears them together'
 it('filters from a ranked device row and supports a recent-year shortcut', async () => {
   get.mockResolvedValue(data);
   mount();
-  await screen.findByRole('img', { name: '拍摄量折线图' });
+  await screen.findByRole('img', { name: '拍摄量曲线图' });
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].cameras).toEqual(['Camera A']));
   fireEvent.click(screen.getByRole('button', { name: '相机：Camera A' }));
@@ -238,20 +239,23 @@ it('adapts the fixed-height chart to its container and supports pointer and keyb
   );
   vi.stubGlobal('PointerEvent', MouseEvent);
   const view = render(<PhotoTimeChart data={data} />);
-  const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+  const chart = screen.getByRole('img', { name: '拍摄量曲线图' });
   act(() =>
     resize?.([{ contentRect: { width: 620 } } as ResizeObserverEntry], {} as ResizeObserver),
   );
   expect(chart.getAttribute('viewBox')).toBe('0 0 620 216');
   vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 620 } as DOMRect);
-  fireEvent.pointerMove(chart, { clientX: 100 });
-  expect(screen.getByText('Camera A：5')).toBeInTheDocument();
+  fireEvent.pointerMove(view.container.querySelector('[data-curve-hit="Camera A"]')!, {
+    clientX: 100,
+  });
+  expect(screen.getByRole('status')).toHaveTextContent('Camera A');
+  expect(within(screen.getByRole('status')).getByText('5')).toBeInTheDocument();
   fireEvent.pointerLeave(chart);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
   fireEvent.focus(chart);
   fireEvent.keyDown(chart, { key: 'End' });
   fireEvent.keyDown(chart, { key: 'ArrowLeft' });
-  expect(screen.getByText('2024-02', { selector: 'strong' })).toBeInTheDocument();
+  expect(screen.getByText('2024-02', { selector: 'time' })).toBeInTheDocument();
   fireEvent.keyDown(chart, { key: 'Tab' });
   fireEvent.blur(chart);
   expect(screen.queryByRole('status')).not.toBeInTheDocument();
@@ -274,30 +278,49 @@ it('does not keep another owner or privacy scope visible while a new query loads
   );
   get.mockResolvedValue(data);
   const view = render(content('owner', true));
-  await screen.findByRole('img', { name: '拍摄量折线图' });
+  await screen.findByRole('img', { name: '拍摄量曲线图' });
   get.mockReturnValue(new Promise(() => {}));
   view.rerender(content('other', false));
-  expect(screen.queryByRole('img', { name: '拍摄量折线图' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('img', { name: '拍摄量曲线图' })).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('正在加载统计…');
 });
 
 it('starts with one total curve, offers year and month intervals and uses cubic paths', async () => {
-  get.mockResolvedValue({ ...data, groupBy: 'total', points: [{ key: '', period: '2024-01', count: 2 }, { key: '', period: '2024-03', count: 3 }] });
+  get.mockResolvedValue({
+    ...data,
+    groupBy: 'total',
+    points: [
+      { key: '', period: '2024-01', count: 2 },
+      { key: '', period: '2024-03', count: 3 },
+    ],
+  });
   const view = mount();
-  await screen.findByRole('img', { name: '拍摄量折线图' });
+  await screen.findByRole('img', { name: '拍摄量曲线图' });
   expect(get.mock.calls[0][0].groupBy).toBe('total');
   expect(screen.getByRole('button', { name: '总量' })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.getByRole('button', { name: '年' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '月' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: '日' })).not.toBeInTheDocument();
   expect(view.container.querySelector('polyline')).toBeNull();
-  expect(view.container.querySelector('path[data-statistics-curve]')?.getAttribute('d')).toContain(' C ');
+  expect(view.container.querySelector('path[data-statistics-curve]')?.getAttribute('d')).toContain(
+    ' C ',
+  );
 });
 
 it('shows only the curve under the pointer and hides its compact tooltip when leaving', () => {
   vi.stubGlobal('PointerEvent', MouseEvent);
-  const view = render(<PhotoTimeChart data={{ ...data, points: [{ period: '2024-01', key: 'Camera A', count: 5 }, { period: '2024-01', key: 'Camera B', count: 2 }] }} />);
-  const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+  const view = render(
+    <PhotoTimeChart
+      data={{
+        ...data,
+        points: [
+          { period: '2024-01', key: 'Camera A', count: 5 },
+          { period: '2024-01', key: 'Camera B', count: 2 },
+        ],
+      }}
+    />,
+  );
+  const chart = screen.getByRole('img', { name: '拍摄量曲线图' });
   vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 1000 } as DOMRect);
   fireEvent.pointerMove(chart, { clientX: 32, clientY: 90 });
   expect(screen.queryByRole('status')).not.toBeInTheDocument();

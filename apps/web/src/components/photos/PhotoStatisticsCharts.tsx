@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { t } from '../../i18n';
-import type { PhotoStatisticsData, PhotoUsage } from '../../lib/photo-statistics-api';
+import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
+import type { PhotoUsage } from '../../lib/photo-statistics-api';
+import { smoothStatisticsPath } from './photo-statistics-curve';
 import styles from './PhotoStatistics.module.css';
 
-// Restrained tones plus dash patterns distinguish series without turning rankings into a rainbow.
 const tones = [
   '#bac7d2',
   '#8ca5b8',
@@ -23,11 +24,15 @@ function seriesStyle(key: string | null, options: string[]) {
     dash: ['', '6 3', '2 3', '9 3 2 3'][index % 4],
   };
 }
-export const deviceLabel = (key: string | null, kind: 'camera' | 'lens') =>
-  key === null ? t('其他设备（合并）') : key || (kind === 'camera' ? t('未知相机') : t('未知镜头'));
+export const deviceLabel = (key: string | null, kind: 'total' | 'camera' | 'lens') =>
+  kind === 'total'
+    ? t('总拍摄量')
+    : key === null
+      ? t('其他设备（合并）')
+      : key || (kind === 'camera' ? t('未知相机') : t('未知镜头'));
 
 export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<{ index: number; key: string | null } | null>(null);
   const [hidden, setHidden] = useState<Set<string | null>>(new Set());
   const [highlight, setHighlight] = useState<string | null | undefined>();
   const [width, setWidth] = useState(1000);
@@ -42,42 +47,96 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
     observer.observe(element);
     return () => observer.disconnect();
   }, [data.periods.length]);
-  const keys = [...new Set(data.points.map((point) => point.key))];
-  const values = new Map(
-    data.points.map((point) => [JSON.stringify([point.period, point.key]), point.count]),
+  const keys = useMemo(() => [...new Set(data.points.map((point) => point.key))], [data.points]);
+  const values = useMemo(
+    () =>
+      new Map(data.points.map((point) => [JSON.stringify([point.period, point.key]), point.count])),
+    [data.points],
   );
-  const count = (period: string, key: string | null) =>
-    values.get(JSON.stringify([period, key])) ?? 0;
-  const options = data.groupBy === 'camera' ? data.cameraOptions : data.lensOptions;
-  const visible = keys.filter((key) => !hidden.has(key));
-  const ceiling = Math.max(
-    4,
-    Math.ceil(
+  const count = useCallback(
+    (period: string, key: string | null) => values.get(JSON.stringify([period, key])) ?? 0,
+    [values],
+  );
+  const options =
+    data.groupBy === 'total'
+      ? ['']
+      : data.groupBy === 'camera'
+        ? data.cameraOptions
+        : data.lensOptions;
+  const visible = useMemo(() => keys.filter((key) => !hidden.has(key)), [keys, hidden]);
+  const ceiling = useMemo(
+    () =>
       Math.max(
-        1,
-        ...data.points.filter((point) => !hidden.has(point.key)).map((point) => point.count),
-      ) / 4,
-    ) * 4,
+        4,
+        Math.ceil(
+          Math.max(
+            1,
+            ...data.points.filter((point) => !hidden.has(point.key)).map((point) => point.count),
+          ) / 4,
+        ) * 4,
+      ),
+    [data.points, hidden],
   );
   const height = 216,
     left = 32,
     right = 12,
     top = 12,
     bottom = 30;
-  const x = (index: number) =>
-    left +
-    (data.periods.length > 1 ? index / (data.periods.length - 1) : 0.5) * (width - left - right);
-  const y = (value: number) => height - bottom - (value / ceiling) * (height - top - bottom);
+  const x = useCallback(
+    (index: number) =>
+      left +
+      (data.periods.length > 1 ? index / (data.periods.length - 1) : 0.5) * (width - left - right),
+    [data.periods.length, width],
+  );
+  const y = useCallback(
+    (value: number) => height - bottom - (value / ceiling) * (height - top - bottom),
+    [ceiling],
+  );
+  // Geometry stays cached while the pointer moves; only the active marker and tooltip change.
+  const paths = useMemo(
+    () =>
+      new Map(
+        visible.map((key) => [
+          key,
+          smoothStatisticsPath(
+            data.periods.map((period, index) => [x(index), y(count(period, key))]),
+          ),
+        ]),
+      ),
+    [visible, data.periods, x, y, count],
+  );
   const current = Math.min(
-    selected ?? data.periods.length - 1,
+    selected?.index ?? data.periods.length - 1,
     Math.max(0, data.periods.length - 1),
   );
+  const activeKey = highlight !== undefined ? highlight : selected?.key;
   const tickCount = Math.min(width < 500 ? 4 : 7, data.periods.length);
   const ticks = new Set(
     Array.from({ length: tickCount }, (_, i) =>
       Math.round((i * (data.periods.length - 1)) / Math.max(1, tickCount - 1)),
     ),
   );
+  function inspectCurve(
+    event: PointerEvent<SVGPathElement | SVGCircleElement>,
+    key: string | null,
+  ) {
+    const rect = event.currentTarget.ownerSVGElement?.getBoundingClientRect();
+    if (rect?.width)
+      setSelected({
+        key,
+        index: Math.max(
+          0,
+          Math.min(
+            data.periods.length - 1,
+            Math.round(
+              ((((event.clientX - rect.left) / rect.width) * width - left) /
+                (width - left - right)) *
+                (data.periods.length - 1),
+            ),
+          ),
+        ),
+      });
+  }
   return (
     <>
       <div className={styles.legend}>
@@ -120,44 +179,35 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
             viewBox={`0 0 ${width} ${height}`}
             role="img"
             tabIndex={0}
-            aria-label={t('拍摄量折线图')}
+            aria-label={t('拍摄量曲线图')}
             aria-describedby={description}
-            onFocus={() => setSelected((value) => value ?? data.periods.length - 1)}
+            onFocus={() => {
+              const key = visible[0];
+              if (key !== undefined)
+                setSelected((value) => value ?? { key, index: data.periods.length - 1 });
+            }}
             onBlur={() => setSelected(null)}
+            onPointerLeave={() => setSelected(null)}
             onKeyDown={(event) => {
               if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
               event.preventDefault();
-              setSelected(
-                event.key === 'Home'
-                  ? 0
-                  : event.key === 'End'
-                    ? data.periods.length - 1
-                    : Math.max(
-                        0,
-                        Math.min(
-                          data.periods.length - 1,
-                          current + (event.key === 'ArrowLeft' ? -1 : 1),
-                        ),
-                      ),
-              );
-            }}
-            onPointerLeave={() => setSelected(null)}
-            onPointerMove={(event) => {
-              const rect = event.currentTarget.getBoundingClientRect();
-              if (rect.width)
-                setSelected(
-                  Math.max(
-                    0,
-                    Math.min(
-                      data.periods.length - 1,
-                      Math.round(
-                        ((((event.clientX - rect.left) / rect.width) * width - left) /
-                          (width - left - right)) *
-                          (data.periods.length - 1),
-                      ),
-                    ),
-                  ),
-                );
+              const key = selected ? selected.key : visible[0];
+              if (key !== undefined)
+                setSelected({
+                  key,
+                  index:
+                    event.key === 'Home'
+                      ? 0
+                      : event.key === 'End'
+                        ? data.periods.length - 1
+                        : Math.max(
+                            0,
+                            Math.min(
+                              data.periods.length - 1,
+                              current + (event.key === 'ArrowLeft' ? -1 : 1),
+                            ),
+                          ),
+                });
             }}
           >
             {Array.from({ length: 5 }, (_, i) => (
@@ -191,31 +241,51 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
               return (
                 <g
                   key={JSON.stringify(key)}
-                  opacity={highlight === undefined || highlight === key ? 1 : 0.18}
+                  opacity={activeKey === undefined || activeKey === key ? 1 : 0.18}
                 >
-                  <polyline
+                  <path
+                    data-statistics-curve={key ?? '__other__'}
+                    d={paths.get(key)}
                     fill="none"
                     stroke={style.color}
                     strokeDasharray={style.dash}
-                    strokeWidth={highlight === key ? 2.4 : 1.6}
-                    strokeLinejoin="round"
-                    points={data.periods
-                      .map((period, i) => `${x(i)},${y(count(period, key))}`)
-                      .join(' ')}
+                    strokeWidth={activeKey === key ? 2.4 : 1.6}
                   />
-                  {data.periods.length === 1 && (
-                    <circle
-                      cx={x(0)}
-                      cy={y(count(data.periods[0], key))}
-                      r="3"
-                      fill={style.color}
+                  {data.periods.length === 1 ? (
+                    <>
+                      <circle
+                        cx={x(0)}
+                        cy={y(count(data.periods[0], key))}
+                        r="3"
+                        fill={style.color}
+                      />
+                      <circle
+                        data-curve-hit={key ?? '__other__'}
+                        cx={x(0)}
+                        cy={y(count(data.periods[0], key))}
+                        r="8"
+                        fill="transparent"
+                        onPointerMove={(event) => inspectCurve(event, key)}
+                        onPointerLeave={() => setSelected(null)}
+                      />
+                    </>
+                  ) : (
+                    <path
+                      data-curve-hit={key ?? '__other__'}
+                      d={paths.get(key)}
+                      fill="none"
+                      stroke="transparent"
+                      strokeWidth="10"
+                      style={{ pointerEvents: 'stroke', cursor: 'crosshair' }}
+                      onPointerMove={(event) => inspectCurve(event, key)}
+                      onPointerLeave={() => setSelected(null)}
                     />
                   )}
                 </g>
               );
             })}
             {selected !== null && (
-              <>
+              <g pointerEvents="none">
                 <line
                   x1={x(current)}
                   x2={x(current)}
@@ -223,16 +293,13 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
                   y2={height - bottom}
                   className={styles.cursor}
                 />
-                {visible.map((key) => (
-                  <circle
-                    key={JSON.stringify(key)}
-                    cx={x(current)}
-                    cy={y(count(data.periods[current], key))}
-                    r="3"
-                    fill={seriesStyle(key, options).color}
-                  />
-                ))}
-              </>
+                <circle
+                  cx={x(current)}
+                  cy={y(count(data.periods[current], selected.key))}
+                  r="3"
+                  fill={seriesStyle(selected.key, options).color}
+                />
+              </g>
             )}
           </svg>
           {selected !== null && (
@@ -240,16 +307,18 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
               className={styles.chartTooltip}
               role="status"
               style={{
-                left: `clamp(0px, ${(x(current) / width) * 100}% - 120px, calc(100% - 260px))`,
+                left: `clamp(0px, ${(x(current) / width) * 100}% - 110px, calc(100% - 220px))`,
+                top: Math.max(
+                  4,
+                  Math.min(height - 72, y(count(data.periods[current], selected.key)) - 64),
+                ),
               }}
             >
-              <strong>{data.periods[current]}</strong>
-              {visible.map((key) => (
-                <span key={JSON.stringify(key)}>
-                  {deviceLabel(key, data.groupBy)}：
-                  {count(data.periods[current], key).toLocaleString()}
-                </span>
-              ))}
+              <span>{deviceLabel(selected.key, data.groupBy)}</span>
+              <div>
+                <time>{data.periods[current]}</time>
+                <strong>{count(data.periods[current], selected.key).toLocaleString()}</strong>
+              </div>
             </div>
           )}
         </div>
@@ -257,7 +326,7 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
         <p className={styles.empty}>{t('没有可用于时间曲线的拍摄日期')}</p>
       )}
       <p id={description} className={styles.chartHint}>
-        {t('悬停查看数量，方向键切换时间，点击图例显示或隐藏曲线。')}
+        {t('悬停曲线查看该设备数量，方向键切换时间。')}
       </p>
       {keys.includes(null) && (
         <p className={styles.hint}>
@@ -267,7 +336,6 @@ export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
     </>
   );
 }
-
 export function PhotoUsageChart({
   items,
   kind,

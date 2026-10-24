@@ -289,7 +289,7 @@
   position: absolute;
   pointer-events: none;
   top: 6px;
-  width: min(260px, 100%);
+  width: min(220px, 100%);
   display: grid;
   gap: 5px;
   padding: 10px 12px;
@@ -460,4 +460,20 @@
     column-gap: 6px;
     grid-template-columns: 18px minmax(0, 1fr) 38px 43px;
   }
+}
+
+.chartTooltip > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.chartTooltip time {
+  font-size: 10px;
+  color: #9da5ae;
+}
+.chartTooltip > div strong {
+  margin: 0;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
 }
