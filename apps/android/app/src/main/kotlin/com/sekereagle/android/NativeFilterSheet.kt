@@ -107,7 +107,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 ) {
                     Text(
                         if (state.busy) "正在保存…"
-                        else if (state.searchOpen && !editingTags && panel != "评分") "完成选择" else "应用"
+                        else if (state.searchOpen && !editingTags && panel != "评分") "查看结果" else "应用"
                     )
                 }
             }
@@ -125,7 +125,6 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                         state.optionStatus[NativeOptionSection.TAGS] ?: NativeOptionStatus(),
                         if (panel == "筛选") 240.dp else height * 0.45f,
                         !state.busy,
-                        matchAny = !editingTags,
                     ) { selected ->
                         if (editingTags) tags = selected else draft = draft.copy(tags = selected)
                     }
@@ -164,7 +163,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 }
                 if (panel == "格式" || panel == "筛选") {
                     NativeOptionFeedback(state, NativeOptionSection.FORMATS, "格式", panel, model)
-                    Text("格式 · 任意一种即可", color = NativeMuted)
+                    Text("格式", color = NativeMuted)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         NativeChoiceChip(
                             draft.formats.isEmpty(),
@@ -190,7 +189,6 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                 }
                 if (panel == "时间" || panel == "筛选") {
                     Text("导入时间", style = MaterialTheme.typography.titleMedium)
-                    Text("按手机所在时区筛选导入日期；列表仍沿用当前所选的排序。", color = NativeMuted)
                     fun pick(value: String, change: (String) -> Unit) {
                         val date =
                             runCatching { LocalDate.parse(value) }.getOrDefault(LocalDate.now())
@@ -266,7 +264,7 @@ fun NativeFilterSheet(state: GalleryState, model: NativeGalleryViewModel) {
                                 else -> NativeFilters()
                             }
                     }) {
-                        Text(if (panel == "筛选") "清空条件" else "不限")
+                        Text(if (panel == "筛选") "清空条件" else if (panel == "标签") "清空" else "不限")
                     }
             }
         }

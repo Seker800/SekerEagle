@@ -177,8 +177,7 @@ class NativeSearchTest {
             compose.waitForIdle()
             captureNativeEvidence("native-search-tags.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
-            compose.onNodeWithTag("native-search").assertExists()
-            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
+            compose.onNodeWithTag("native-search").assertDoesNotExist()
             await { !model.state.value.loading }
             assertEquals(setOf("tag8999"), model.state.value.filters.tags)
             main { model.logout() }
@@ -249,20 +248,14 @@ class NativeSearchTest {
             main {
                 model.openSearch()
                 model.updateSearchDraft("new keyword")
-                model.openFilters("标签")
+                model.openFilters("筛选")
             }
             await { !model.state.value.optionsLoading }
             compose.onNodeWithText("标签1").performClick()
-            compose.onNodeWithTag("filter-submit").performClick()
+            compose.onNodeWithText("PNG").performScrollTo().performClick()
             assertTrue(model.state.value.searchOpen)
             assertTrue(model.state.value.filters.tags.isEmpty())
-            main { model.openFilters("格式") }
-            await { !model.state.value.optionsLoading }
-            compose.onNodeWithText("PNG").performClick()
-            compose.onNodeWithTag("filter-submit").performClick()
-            compose.onNodeWithTag("condition:tag:tag1").assertExists()
-            compose.onNodeWithTag("condition:format:png").assertExists()
-            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
+            compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading }
             assertEquals("new keyword", model.state.value.query)
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
@@ -316,7 +309,6 @@ class NativeSearchTest {
             captureNativeEvidence("native-search-combined.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
             assertEquals("flower", model.state.value.searchDraft)
-            compose.onNodeWithTag("search-submit").assertIsDisplayed().performClick()
             await { !model.state.value.loading }
             val filters = model.state.value.filters
             assertEquals("Camera A", filters.camera)

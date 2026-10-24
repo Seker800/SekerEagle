@@ -87,12 +87,6 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(top = 30.dp)) {
             Text("按条件查找", color = NativeMuted, fontSize = 13.sp)
-            Text(
-                "不同类别同时满足；标签、格式多选时，匹配其中任意一个即可。",
-                Modifier.padding(top = 8.dp, bottom = 12.dp),
-                color = NativeMuted,
-                fontSize = 13.sp,
-            )
             FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -130,13 +124,6 @@ fun NativeSearch(state: GalleryState, model: NativeGalleryViewModel) {
                     )
                 }
             }
-            if (state.history.isEmpty())
-                Text(
-                    "搜索后会在这里保留最近的关键词",
-                    Modifier.padding(top = 16.dp),
-                    color = NativeMuted,
-                    fontSize = 13.sp,
-                )
         }
         Button(
             { submit(query) },

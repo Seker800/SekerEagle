@@ -25,7 +25,6 @@ internal fun NativeTagPicker(
     status: NativeOptionStatus,
     maxHeight: Dp,
     enabled: Boolean,
-    matchAny: Boolean,
     change: (Set<String>) -> Unit,
 ) {
     var query by rememberSaveable { mutableStateOf("") }
@@ -37,19 +36,13 @@ internal fun NativeTagPicker(
                     choices.filter { it.matches(normalized) }
                 }
         }
-    Text(
-        if (matchAny) "标签 · 任意一个即可（已选 ${selected.size}／100）" else "选择标签（已选 ${selected.size}／100）",
-        color = NativeMuted,
-    )
     OutlinedTextField(
         query,
         { query = it.take(200) },
         singleLine = true,
         modifier = Modifier.fillMaxWidth().testTag("tag-search"),
-        label = { Text("搜索标签名称或拼音") },
+        label = { Text("搜索标签") },
     )
-    if (selected.isNotEmpty())
-        TextButton({ change(emptySet()) }, enabled = enabled) { Text("清除已选标签") }
     if (matches.isEmpty() && !status.loading && status.error == null)
         Text(if (choices.isEmpty()) "当前模式暂无可用标签" else "没有匹配的标签", color = NativeMuted)
     if (selected.size >= 100) Text("每次最多选择 100 个标签，请先取消部分选择", color = NativeMuted)
@@ -109,7 +102,7 @@ internal fun NativeValuePicker(
         remember(values, query) {
             values.filter { normalizeTagSearch(it).contains(normalizeTagSearch(query)) }
         }
-    Text("$label · 单选", color = NativeMuted)
+    Text(label, color = NativeMuted)
     OutlinedTextField(
         query,
         { query = it.take(200) },

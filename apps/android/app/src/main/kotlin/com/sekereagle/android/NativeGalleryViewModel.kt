@@ -728,8 +728,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     fun confirmFilters(filters: NativeFilters) {
         if (state.value.busy || filters.validationError() != null) return
         cancelOptions()
-        if (state.value.searchOpen)
-            mutable.value = state.value.copy(searchFilters = filters, filterPanel = null)
+        if (state.value.searchOpen) search(state.value.searchDraft, filters)
         else applyFilters(filters)
     }
 
