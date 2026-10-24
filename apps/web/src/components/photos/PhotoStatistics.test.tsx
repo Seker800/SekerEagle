@@ -280,3 +280,35 @@ it('does not keep another owner or privacy scope visible while a new query loads
   expect(screen.queryByRole('img', { name: '拍摄量折线图' })).not.toBeInTheDocument();
   expect(screen.getByRole('status')).toHaveTextContent('正在加载统计…');
 });
+
+it('starts with one total curve, offers year and month intervals and uses cubic paths', async () => {
+  get.mockResolvedValue({ ...data, groupBy: 'total', points: [{ key: '', period: '2024-01', count: 2 }, { key: '', period: '2024-03', count: 3 }] });
+  const view = mount();
+  await screen.findByRole('img', { name: '拍摄量折线图' });
+  expect(get.mock.calls[0][0].groupBy).toBe('total');
+  expect(screen.getByRole('button', { name: '总量' })).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('button', { name: '年' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '月' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: '日' })).not.toBeInTheDocument();
+  expect(view.container.querySelector('polyline')).toBeNull();
+  expect(view.container.querySelector('path[data-statistics-curve]')?.getAttribute('d')).toContain(' C ');
+});
+
+it('shows only the curve under the pointer and hides its compact tooltip when leaving', () => {
+  vi.stubGlobal('PointerEvent', MouseEvent);
+  const view = render(<PhotoTimeChart data={{ ...data, points: [{ period: '2024-01', key: 'Camera A', count: 5 }, { period: '2024-01', key: 'Camera B', count: 2 }] }} />);
+  const chart = screen.getByRole('img', { name: '拍摄量折线图' });
+  vi.spyOn(chart, 'getBoundingClientRect').mockReturnValue({ left: 0, width: 1000 } as DOMRect);
+  fireEvent.pointerMove(chart, { clientX: 32, clientY: 90 });
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  const hit = view.container.querySelector('[data-curve-hit="Camera B"]');
+  expect(hit).not.toBeNull();
+  fireEvent.pointerMove(hit!, { clientX: 32, clientY: 90 });
+  const tooltip = screen.getByRole('status');
+  expect(tooltip).toHaveTextContent('Camera B');
+  expect(tooltip).not.toHaveTextContent('Camera A');
+  expect(tooltip).toHaveTextContent('2');
+  fireEvent.pointerLeave(hit!);
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
