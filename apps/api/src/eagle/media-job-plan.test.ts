@@ -6,6 +6,14 @@ import {
   needsImagePyramid,
 } from './media-job-plan';
 
+test('new uploads and reconciliation never recreate retired AI tag generation', () => {
+  const input = { ownerId: 'owner', assetId: 'asset', assetRevision: 1, width: 800, height: 600 };
+  for (const jobs of [buildImageProcessingJobs(input), buildMissingImageProcessingJobs(input, [])]) {
+    assert.ok(jobs.every((job) => job.kind !== 'GENERATE_AI_TAGS'));
+    assert.ok(jobs.some((job) => job.kind === 'GENERATE_EMBEDDING'));
+  }
+});
+
 test('large images get dependent palette and pyramid jobs after renditions', () => {
   const jobs = buildImageProcessingJobs(
     { ownerId: 'owner-1', assetId: 'asset-1', assetRevision: 2, width: 8_000, height: 6_000 },
