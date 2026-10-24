@@ -49,10 +49,7 @@ class NativeActivity : ComponentActivity() {
      * disk. Clear them once so a restarted legacy task cannot resurrect an unencrypted session.
      */
     private fun clearLegacyWebSessionOnce() {
-        val settings = BackupSettings(this)
-        if (settings.flag("legacy", "web-session-cleared-v1", false)) return
-        if (runCatching { LegacyWebSession.clear() }.isSuccess)
-            settings.setFlag("legacy", "web-session-cleared-v1", true)
+        LegacyWebSession.migrate(this) {}
     }
 
     override fun onNewIntent(intent: Intent) {

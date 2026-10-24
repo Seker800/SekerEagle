@@ -48,6 +48,13 @@ public final class MainActivity extends Activity {
     super.onCreate(state);
     settings = new BackupSettings(this);
     nativeHost = getIntent().getBooleanExtra("nativeHost", false);
+    if (!nativeHost && !settings.flag("legacy", "web-session-cleared-v1", false)) {
+      LegacyWebSession.migrate(this, () -> {
+        startActivity(new Intent(this, NativeActivity.class));
+        finish();
+      });
+      return;
+    }
     activeScope = settings.active();
     autoPending = true;
     if (!settings.active().isEmpty() && !BackupService.isRunning(settings.active())) {
@@ -417,6 +424,32 @@ public final class MainActivity extends Activity {
                 });
           }
         });
+  }
+
+  void revokeBackupAuthorization() {
+    String scope = activeScope;
+    if (scope.isEmpty()) return;
+    pause();
+    settings.setFlag(scope, "enabled", false);
+    settings.setFlag(scope, "auto", false);
+    io.execute(() -> {
+      try {
+        String token = settings.token(scope);
+        if (!token.isEmpty()) {
+          try { new ApiClient(settings.origin(), token).request("DELETE", "/api/tokens/current", null); }
+          catch (ApiClient.Failure failure) {
+            if (failure.status != 401) throw failure;
+          }
+        }
+        settings.clearToken(scope);
+        runOnUiThread(() -> {
+          toast("手机备份授权已撤销，再次使用需重新启用");
+          if (scope.equals(activeScope)) show("backup");
+        });
+      } catch (Exception failure) {
+        runOnUiThread(() -> toast("备份已停用，但服务器授权撤销未确认，请联网后重试"));
+      }
+    });
   }
 
   void startBackup() {

@@ -277,6 +277,17 @@ final class BackupScreen extends ScrollView {
                     new String[] {android.Manifest.permission.POST_NOTIFICATIONS}, 74);
             }));
     Ui.divider(content);
+    content.addView(Ui.row(activity, R.drawable.ic_shield, "撤销手机备份授权",
+        "停止备份并使这台手机保存的备份令牌失效", () -> {
+          sheet.dismiss();
+          new com.google.android.material.dialog.MaterialAlertDialogBuilder(activity)
+              .setTitle("撤销手机备份授权？")
+              .setMessage("手机文件和服务器备份都会保留。再次备份需要重新启用授权。")
+              .setNegativeButton("取消", null)
+              .setPositiveButton("撤销授权", (dialog, which) -> activity.revokeBackupAuthorization())
+              .show();
+        }));
+    Ui.divider(content);
     content.addView(
         Ui.row(
             activity,

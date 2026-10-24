@@ -34,6 +34,8 @@ public final class MobileBackupTest {
   public void setUp() throws Exception {
     context = getInstrumentation().getTargetContext();
     settings = new BackupSettings(context);
+    // This suite intentionally exercises the retained host after native migration.
+    settings.setFlag("legacy", "web-session-cleared-v1", true);
     String[] permissions =
         android.os.Build.VERSION.SDK_INT >= 33
             ? new String[] {
