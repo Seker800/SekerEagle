@@ -5,7 +5,12 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { EagleProcessingPage } from './EagleProcessingPage';
 import { EagleAiTagSetupPanel } from './EagleAiTagSetupPanel';
-import { taskFamilyLabels, taskStepLabel, taskWaitLabel } from './task-center-labels';
+import {
+  taskExecutionLabel,
+  taskFamilyLabels,
+  taskStepLabel,
+  taskWaitLabel,
+} from './task-center-labels';
 import styles from './EagleTaskCenter.module.css';
 
 export function EagleTaskCenter({
@@ -189,6 +194,7 @@ export function EagleTaskCenter({
                 <TaskCard
                   key={group.id}
                   group={group}
+                  schedule={summary.settings}
                   busy={retry.isPending || policy.isPending}
                   onRetry={() => retry.mutate(group.id)}
                   onPolicy={(next) => policy.mutate({ family: group.id, ...next })}
@@ -234,33 +240,42 @@ export function EagleTaskCenter({
 
 function TaskCard({
   group,
+  schedule,
   busy,
   onRetry,
   onPolicy,
   onReview,
 }: {
   group: TaskGroup;
+  schedule: BackgroundSchedule;
   busy: boolean;
   onRetry: () => void;
   onPolicy: (next: { paused: boolean; priority: number }) => void;
   onReview?: () => void;
 }) {
-  const [title, description] = taskFamilyLabels(group.id);
+  const [title, description, dependency, compute] = taskFamilyLabels(group.id);
   const remaining = group.queued + group.running + group.failed;
   const retryable = !['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(group.id);
   return (
     <article className={styles.card}>
       <header>
         <h2>{title}</h2>
-        <span>
-          {group.background
-            ? t('按后台安排执行')
-            : group.id === 'APPROVALS'
-              ? t('人工决定')
-              : t('自动维护')}
-        </span>
       </header>
       <p>{description}</p>
+      <dl className={styles.facts}>
+        <div>
+          <dt>{t('依赖')}</dt>
+          <dd>{dependency}</dd>
+        </div>
+        <div>
+          <dt>{t('运算')}</dt>
+          <dd>{compute}</dd>
+        </div>
+        <div>
+          <dt>{t('执行')}</dt>
+          <dd>{taskExecutionLabel(group, schedule)}</dd>
+        </div>
+      </dl>
       <div className={styles.counts}>
         {group.id !== 'APPROVALS' && (
           <strong>

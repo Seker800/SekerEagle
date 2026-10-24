@@ -16,6 +16,25 @@
   gap: 16px;
   flex-wrap: wrap;
 }
+.facts {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 16px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.facts > div {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 6px;
+}
+.facts dt {
+  color: var(--ui-muted);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
 .header {
   justify-content: space-between;
   margin-bottom: 24px;

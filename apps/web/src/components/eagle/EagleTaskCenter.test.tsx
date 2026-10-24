@@ -78,13 +78,35 @@ describe('unified task center', () => {
     await screen.findByRole('heading', { name: '2B 向量搜图' });
     expect(within(screen.getByRole('article')).getByText('已暂停')).toBeVisible();
   });
+  it.each([
+    ['ALWAYS', '随时'],
+    ['MANUAL', '已暂停'],
+  ])('shows the saved %s schedule without inventing a time window', async (mode, label) => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+      ...summary,
+      settings: { ...summary.settings, mode },
+    });
+    mount();
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
+    expect(within(screen.getByRole('article')).getByText(label)).toBeVisible();
+  });
+  it('explains location-triggered updates even while scheduled analysis is paused', async () => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+      ...summary,
+      settings: { ...summary.settings, mode: 'MANUAL' },
+      groups: [{ ...summary.groups[0]!, id: 'PHOTO_MAP', background: false }],
+    });
+    mount();
+    await screen.findByRole('heading', { name: '照片位置索引' });
+    expect(within(screen.getByRole('article')).getByText('位置变化后分批更新')).toBeVisible();
+  });
   it('shows remaining work including failures and keeps completed counts in details', async () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
       ...summary,
       groups: [{ ...summary.groups[0]!, running: 1, failed: 2 }],
     });
     mount();
-    await screen.findByRole('heading', { name: '图片内容搜索' });
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
     const card = within(screen.getByRole('article'));
     expect(card.getByText('剩余 15 项')).toBeVisible();
     expect(card.queryByText('已完成 8')).not.toBeInTheDocument();
@@ -95,13 +117,13 @@ describe('unified task center', () => {
       groups: [{ ...summary.groups[0]!, queued: 0, waiting: [] }],
     });
     mount();
-    await screen.findByRole('heading', { name: '图片内容搜索' });
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
     expect(within(screen.getByRole('article')).getByText('已就绪')).toBeVisible();
   });
   it('groups work by purpose and explains waits before exposing technical steps', async () => {
     mount();
     expect(await screen.findByRole('heading', { name: '任务中心' })).toBeVisible();
-    expect(await screen.findByRole('heading', { name: '图片内容搜索' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: '2B 向量搜图' })).toBeVisible();
     expect(screen.getByText(/等待运行时段/)).toBeVisible();
     expect(screen.getByText('生成图片向量')).not.toBeVisible();
     fireEvent.click(screen.getByText('查看处理步骤'));
@@ -110,7 +132,7 @@ describe('unified task center', () => {
   });
   it('lets an ordinary owner pause background work while explaining essential work continues', async () => {
     mount();
-    await screen.findByRole('heading', { name: '图片内容搜索' });
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
     fireEvent.change(screen.getByRole('combobox', { name: '后台运行方式' }), {
       target: { value: 'MANUAL' },
     });
@@ -129,7 +151,7 @@ describe('unified task center', () => {
     mount();
     expect(await screen.findByRole('alert')).toHaveTextContent('读取失败');
     fireEvent.click(screen.getByRole('button', { name: '重试加载' }));
-    await screen.findByRole('heading', { name: '图片内容搜索' });
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
     fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '22:00' } });
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     await waitFor(() => expect(api.fetchEagleTaskCenter).toHaveBeenCalledTimes(3));
@@ -137,7 +159,7 @@ describe('unified task center', () => {
   });
   it('pauses one work category and can prioritize it without changing the global schedule', async () => {
     mount();
-    await screen.findByRole('heading', { name: '图片内容搜索' });
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
     fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
     await waitFor(() =>
       expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({
