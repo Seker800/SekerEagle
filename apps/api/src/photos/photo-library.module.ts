@@ -1,3 +1,5 @@
+import { PhotoStatisticsController } from './photo-statistics.controller';
+import { PhotoStatisticsService } from './photo-statistics.service';
 import { PhotoMapService } from './photo-map.service';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
@@ -86,6 +88,7 @@ export class PhotoPrivacyVisibilityController {
   controllers: [
     PhotosController,
     PhotoManagementController,
+    PhotoStatisticsController,
     PhotoAgentController,
     PhotoPrivacyVisibilityController,
     PhotoUploadsController,
@@ -96,6 +99,7 @@ export class PhotoPrivacyVisibilityController {
   providers: [
     PhotoManagementService,
     PhotoMapService,
+    PhotoStatisticsService,
     PhotoAgentService,
     PhotoRevisionObserver,
     { provide: LIBRARY_REVISION_OBSERVER, useExisting: PhotoRevisionObserver },

@@ -358,6 +358,7 @@ export function checkLibrarySharing(sources) {
     const allowed = new Set([
       'PhotoManagementService',
       'PhotoMapService',
+      'PhotoStatisticsService',
       'PhotoRevisionObserver',
       'PhotoAgentService',
     ]);
