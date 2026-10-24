@@ -54,7 +54,7 @@ class NativeReviewTest {
                                 when {
                                     path == "/api/auth/me" ->
                                         """{"user":{"id":"owner","email":"test@example.invalid"},"desktopCache":{"deploymentId":"review"}}"""
-                                    path.contains("/timeline") -> """{"days":[],"total":180}"""
+                                    path.contains("/timeline") -> """{"days":[{"date":"2026-10-20","before":"2026-10-21T00:00:00Z","count":180,"offset":0}],"total":180}"""
                                     path.contains("/assets?") -> {
                                         val start =
                                             Regex("(?:cursor|offset)=([0-9]+)")
@@ -103,6 +103,25 @@ class NativeReviewTest {
         if (credential)
             await { !result.state.value.loading && result.state.value.items.isNotEmpty() }
         return result
+    }
+
+    @Test
+    fun prependingInsideTheVisibleDayKeepsTheSamePhotoAtTheSamePosition() {
+        Server().use { server ->
+            val model = model(server)
+            await { model.state.value.timeline?.days?.isNotEmpty() == true }
+            main { model.jumpToDay(model.state.value.timeline!!.days.first(), 60) }
+            await { !model.state.value.loading && model.state.value.items.firstOrNull()?.id == "asset60" }
+            compose.setContent { NativeGalleryApp(model) {} }
+            compose.onNodeWithTag("asset:asset60").assertIsDisplayed()
+            val before = compose.onNodeWithTag("asset:asset60").fetchSemanticsNode().boundsInRoot.top
+            main { model.loadPrevious() }
+            await { !model.state.value.loading && model.state.value.windowOffset == 0L }
+            compose.onNodeWithTag("asset:asset60").assertIsDisplayed()
+            val after = compose.onNodeWithTag("asset:asset60").fetchSemanticsNode().boundsInRoot.top
+            assertEquals("Prepending must preserve the visible photo, including its date header", before, after, 2f)
+            main { model.logout() }
+        }
     }
 
     @Test
