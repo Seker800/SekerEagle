@@ -1,4 +1,6 @@
 export const enUS = {
+  'Eagle 批量导入由导入端管理，尚未接入实时状态；历史记录不计入这里的运行任务。':
+    'Eagle batch imports are managed by the importer and have no live status integration; historical records are excluded from running tasks here.',
   计算ing: 'Computing',
   排队ing: 'Queued',
   '已停止（{{count}}项失败）': 'Stopped ({{count}} failed)',

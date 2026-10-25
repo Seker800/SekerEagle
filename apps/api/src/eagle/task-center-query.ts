@@ -1,6 +1,6 @@
 import { Prisma, type LibraryMode } from '@prisma/client';
 
-/** Aggregate in PostgreSQL: never load every resource or expose private task payloads. */
+/** Aggregate live sources only. External import history has no heartbeat protocol and is not activity evidence. */
 export function taskCenterQuery(
   ownerId: string,
   libraryMode: LibraryMode,
@@ -61,10 +61,7 @@ export function taskCenterQuery(
       LEFT JOIN "EagleAsset" a ON a.id=s."eagleAssetId" AND a."ownerId"=s."uploaderId" AND a."libraryMode"=s."libraryMode"
       WHERE s."uploaderId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
         AND (${includePrivate} OR a.id IS NULL OR NOT a."isPrivate")
-      UNION ALL
-      SELECT 'IMPORTS','IMPORTS','',CASE WHEN status='RUNNING' THEN 'RUNNING' WHEN status IN ('PARTIAL','FAILED') THEN 'FAILED'
-        WHEN status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,'QUEUED',NULL::timestamptz
-      FROM "EagleImportRun" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND status<>'CANCELLED'
+
     )
     SELECT family,step,version,status,reason,count(*) AS count,min("nextAt") AS "nextAt"
     FROM facts GROUP BY family,step,version,status,reason ORDER BY family,step,status,reason
