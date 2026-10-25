@@ -54,11 +54,17 @@ class EagleWorkspaceCache {
     return () => {
       if (released) return;
       released = true;
-      this.#references -= 1;
       // An unlocked workspace is never retained across navigation. This also
       // removes private catalogs/details, rather than merely hiding their cards.
-      if (privateVisible) this.client.removeQueries({ queryKey: this.#keys.root });
-      this.#collect();
+      if (privateVisible) {
+        this.client.removeQueries({ queryKey: this.#keys.root });
+        this.store.clear();
+        this.thumbnails.dispose();
+      }
+      this.#references -= 1;
+      // React can replay effect cleanup/setup in one turn. Purge private data
+      // immediately, but defer destroying the resource owner until setup finishes.
+      queueMicrotask(() => this.#collect());
     };
   }
 

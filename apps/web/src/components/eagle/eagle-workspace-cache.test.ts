@@ -43,7 +43,7 @@ describe('workspace cache lifetime', () => {
     expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).not.toBe(cache);
   });
 
-  it('keeps resources while another list or mounted consumer still needs them', () => {
+  it('keeps resources while another list or mounted consumer still needs them', async () => {
     const { client, cache, keys } = fixture();
     const first = cache.retain(false);
     const second = cache.retain(false);
@@ -56,16 +56,18 @@ describe('workspace cache lifetime', () => {
     expect(dispose).not.toHaveBeenCalled();
     second();
     second();
+    await Promise.resolve();
     expect(dispose).toHaveBeenCalledOnce();
   });
 
-  it('discards unlocked pages, catalogs and thumbnails when leaving the workspace', () => {
+  it('discards unlocked pages, catalogs and thumbnails when leaving the workspace', async () => {
     const { client, cache, keys } = fixture();
     client.setQueryData(keys.manualTags, [{ name: 'private' }]);
     const dispose = vi.spyOn(cache.thumbnails, 'dispose');
     cache.retain(true)();
+    await Promise.resolve();
     expect(client.getQueryCache().findAll({ queryKey: keys.root })).toHaveLength(0);
-    expect(dispose).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledTimes(2);
     expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).not.toBe(cache);
   });
 
@@ -91,11 +93,12 @@ describe('workspace cache lifetime', () => {
     releaseReplay();
   });
 
-  it('releases an empty workspace with no loaded list', () => {
+  it('releases an empty workspace with no loaded list', async () => {
     const client = new QueryClient();
     clients.push(client);
     const cache = getEagleWorkspaceCache(client, 'owner', 'PHOTO');
     cache.retain(false)();
+    await Promise.resolve();
     expect(getEagleWorkspaceCache(client, 'owner', 'PHOTO')).not.toBe(cache);
   });
 });
