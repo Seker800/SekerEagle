@@ -82,3 +82,124 @@ test('reuses a candidate window while revalidating its IDs before every claim', 
     'cached hints must be revalidated',
   );
 });
+
+test('notifications invalidate only the resource that gains work; reconnect and legacy policies clear both', async () => {
+  const { invalidateMediaCandidates } = await import('./scheduled-media-candidates');
+  let nas = 0,
+    embedding = 0;
+  const selectors = {
+    NAS: {
+      invalidate: () => {
+        nas++;
+      },
+    },
+    EMBEDDING: {
+      invalidate: () => {
+        embedding++;
+      },
+    },
+  };
+  invalidateMediaCandidates(selectors, 'media-progress');
+  invalidateMediaCandidates(selectors, 'EagleTagSemanticBuild');
+  assert.equal(nas + embedding, 0);
+  invalidateMediaCandidates(selectors, 'media-ready:NAS');
+  invalidateMediaCandidates(selectors, 'media-ready:EMBEDDING');
+  assert.deepEqual([nas, embedding], [1, 1]);
+  for (const payload of [undefined, 'EagleMediaJob', 'EagleTaskPolicy', 'EagleProcessingSetting'])
+    invalidateMediaCandidates(selectors, payload);
+  assert.deepEqual([nas, embedding], [5, 5]);
+});
+
+test('a policy notification during discovery cannot repopulate or publish a stale window', async () => {
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async () => {
+        await held;
+        return [{ id: 'stale' }];
+      },
+    } as never,
+    () => false,
+  );
+  const reading = select({ where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput);
+  select.invalidate();
+  release();
+  assert.deepEqual(await reading, []);
+});
+
+test('empty windows expire, retained windows are bounded and supported lane/kind filters stay typed', async (context) => {
+  let now = 0,
+    reads = 0;
+  context.mock.method(Date, 'now', () => now);
+  const queries: string[] = [];
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        reads++;
+        queries.push(sql.text);
+        return [];
+      },
+    } as never,
+    () => true,
+    'NAS',
+  );
+  const input = {
+    where: {
+      lane: 'MAINTENANCE',
+      kind: 'GENERATE_PREVIEW',
+      processorVersion: { notIn: ['disabled'] },
+    },
+    take: 50,
+  } as ClaimFindManyInput;
+  await select(input);
+  await select(input);
+  assert.deepEqual({ reads }, { reads: 1 });
+  now = 1001;
+  await select(input);
+  assert.deepEqual({ reads }, { reads: 2 });
+  assert.ok(queries.every((sql) => !sql.includes('AND job.kind::text')));
+  for (let n = 0; n < 26; n++)
+    await select({
+      ...input,
+      where: { ...input.where, processorVersion: { notIn: [`version-${n}`] } },
+    });
+  const prior = reads;
+  await select(input);
+  assert.equal(reads, prior + 1, 'the oldest window was evicted');
+});
+
+test('invalidation during validation prevents the old result being published', async () => {
+  let reads = 0;
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async () => {
+        if (++reads === 2) select.invalidate();
+        return [{ id: 'old' }];
+      },
+    } as never,
+    () => false,
+  );
+  assert.deepEqual(
+    await select({
+      where: { lane: 'INTERACTIVE', kind: { not: 'GENERATE_AI_TAGS', in: ['GENERATE_THUMBNAIL'] } },
+      take: 50,
+    } as ClaimFindManyInput),
+    [],
+  );
+});
+
+test('an exhausted positive window refills immediately rather than idling until another resource wakes', async () => {
+  let discoveries = 0, validations = 0;
+  const select = createScheduledMediaSelector({ $queryRaw: async (sql: { text: string }) => {
+    if (!sql.text.includes('job.id IN')) return [{ id: ++discoveries === 1 ? 'old' : 'next' }];
+    validations++;
+    return validations === 1 ? [{ id: 'old' }] : validations === 2 ? [] : [{ id: 'next' }];
+  } } as never, () => false, 'EMBEDDING');
+  const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
+  await select(input);
+  assert.deepEqual(await select(input), [{ id: 'next' }]);
+  assert.equal(discoveries, 2);
+});
