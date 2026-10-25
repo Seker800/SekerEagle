@@ -157,7 +157,7 @@ test('empty windows expire, retained windows are bounded and supported lane/kind
   await select(input);
   await select(input);
   assert.deepEqual({ reads }, { reads: 1 });
-  now = 1001;
+  now = 30001;
   await select(input);
   assert.deepEqual({ reads }, { reads: 2 });
   assert.ok(queries.every((sql) => !sql.includes('AND job.kind::text')));

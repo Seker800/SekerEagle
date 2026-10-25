@@ -100,7 +100,9 @@ export function createScheduledMediaSelector(
         if (version !== generation) return [];
         window = {
           ids: rows.map((row) => row.id),
-          expiresAt: Date.now() + (rows.length ? 30000 : 1000),
+          // NOTIFY invalidates new work immediately. Empty recent/lane windows need the
+          // same 30s fallback as the scheduler, or each history job rescans the pool.
+          expiresAt: Date.now() + 30000,
         };
         if (windows.size >= 24) windows.delete(windows.keys().next().value!);
         windows.set(key, window);
