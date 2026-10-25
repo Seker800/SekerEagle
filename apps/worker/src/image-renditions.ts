@@ -1,6 +1,6 @@
 import { CAMERA_RAW_EDIT_MAX_SIZE, isCameraRawMime } from '@sekereagle/library-core';
 import type { CameraDimensions } from '@sekereagle/media-core';
-import type { WebpOptions } from 'sharp';
+import sharp, { type Sharp, type WebpOptions } from 'sharp';
 
 interface ImageRenditionSpec {
   kind: 'PREVIEW' | 'THUMBNAIL';
@@ -82,4 +82,49 @@ export function canReuseImageBrowsing(
       ),
     )
   );
+}
+
+/** Decode/orient the full source once; all browse encoders consume bounded raw pixels. */
+export async function renderImageRenditions(
+  source: Sharp,
+  mimeType: string,
+  purpose: 'BROWSE' | 'DETAILS',
+) {
+  const specs = imageRenditionSpecs(mimeType, purpose);
+  if (!specs.length) return [];
+  const browse =
+    purpose === 'BROWSE'
+      ? await source
+          .clone()
+          .rotate()
+          .toColourspace('srgb')
+          .resize({ width: 1600, height: 1600, fit: 'inside', withoutEnlargement: true })
+          .raw()
+          .toBuffer({ resolveWithObject: true })
+      : null;
+  const rendered = [];
+  for (const spec of specs) {
+    const image = browse
+      ? sharp(browse.data, {
+          raw: {
+            width: browse.info.width,
+            height: browse.info.height,
+            channels: browse.info.channels,
+          },
+        })
+      : source.clone().rotate();
+    rendered.push({
+      spec,
+      output: await image
+        .resize({
+          width: spec.maxSize,
+          height: spec.maxSize,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp(spec.encoding)
+        .toBuffer({ resolveWithObject: true }),
+    });
+  }
+  return rendered;
 }

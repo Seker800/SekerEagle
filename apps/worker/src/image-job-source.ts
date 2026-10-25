@@ -1,3 +1,4 @@
+import { isCameraRawMime } from '@sekereagle/library-core';
 import type { EagleMediaJobKind } from './processing-policy';
 
 interface ImageSourceAsset {
@@ -14,8 +15,18 @@ interface ImageSourceAsset {
   }>;
 }
 
-export function selectImageJobSource(asset: ImageSourceAsset, kind: EagleMediaJobKind) {
-  if (kind === 'GENERATE_EMBEDDING' || kind === 'ANALYZE_PHOTO_FACES') {
+export function selectImageJobSource(
+  asset: ImageSourceAsset,
+  kind: EagleMediaJobKind,
+  processorVersion?: string,
+) {
+  if (
+    kind === 'GENERATE_EMBEDDING' ||
+    kind === 'ANALYZE_PHOTO_FACES' ||
+    (kind === 'GENERATE_RENDITIONS' &&
+      processorVersion === 'photo-source-details-v1' &&
+      !isCameraRawMime(asset.mimeType))
+  ) {
     const preview = asset.renditions.find(
       (rendition) =>
         rendition.kind === 'PREVIEW' &&

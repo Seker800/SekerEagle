@@ -6,8 +6,8 @@ import {
   type analyzePhotoPixels,
 } from './photo-analysis';
 
-type Analysis = ReturnType<typeof normalizePhotoExif> &
-  Partial<Awaited<ReturnType<typeof analyzePhotoPixels>>>;
+type Analysis = Partial<ReturnType<typeof normalizePhotoExif>> &
+  Partial<Awaited<ReturnType<typeof analyzePhotoPixels>>> & { processorVersion?: string };
 /** Persist pixel measurements without erasing a published edit's original exposure facts. */
 export async function persistPhotoAnalysis(
   tx: Prisma.TransactionClient,
@@ -28,7 +28,7 @@ export async function persistPhotoAnalysis(
     ...(inherited ? photoCaptureMetadata(previous) : {}),
     ...where,
     processorVersion: analysis.perceptualHash
-      ? PHOTO_ANALYSIS_VERSION
+      ? (analysis.processorVersion ?? PHOTO_ANALYSIS_VERSION)
       : (previous?.processorVersion ?? 'original-exiftool-v1'),
     captureMetadataInherited: inherited,
   };

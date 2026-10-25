@@ -13,9 +13,8 @@ import {
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import {
-  imageRenditionSpecs,
+  renderImageRenditions,
   catalogImageDimensions,
-  renditionSource,
   canReuseImageBrowsing,
 } from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
@@ -55,7 +54,8 @@ import {
   terminalAssetFailure,
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
-import { inspectLivePhotoImage } from './live-photo';
+import { inspectLivePhotoImage, inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
+import { readOwnedImageRange } from './image-range';
 import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { selectImageJobSource } from './image-job-source';
@@ -340,13 +340,20 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         'IMAGE_CONTENT_MISMATCH',
         'IMAGE_TOO_LARGE_TO_PROCESS',
       );
-    const sourceDetails = selectImageJobSource(asset, job.kind);
+    const sourceDetailsOnly = job.processorVersion === 'photo-source-details-v1';
+    const sourceDetails = selectImageJobSource(asset, job.kind, job.processorVersion);
+    if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash && !asset.sha256)
+      throw new Error('ORIGINAL_HASH_REQUIRED');
     process.stdout.write(
       `${JSON.stringify({
         event: 'eagle_media_source_selected',
         jobId: job.id,
         kind: job.kind,
-        source: sourceDetails.verifiesOriginalHash ? 'ORIGINAL' : 'THUMBNAIL',
+        source: sourceDetails.verifiesOriginalHash
+          ? 'ORIGINAL'
+          : job.kind === 'EXTRACT_COLOR_PALETTE'
+            ? 'THUMBNAIL'
+            : 'PREVIEW',
       })}\n`,
     );
     assertOwnedKey(asset.ownerId, sourceDetails.storageKey);
@@ -363,13 +370,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       );
       return;
     }
-    const sourceDetailsOnly = job.processorVersion === 'photo-source-details-v1';
     const deferDetails =
       !sourceDetailsOnly && (isCameraRawMime(asset.mimeType) || asset.libraryMode === 'PHOTO');
-    const renditionSpecs = imageRenditionSpecs(
-      sourceDetails.mimeType,
-      sourceDetailsOnly ? 'DETAILS' : 'BROWSE',
-    );
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
       return;
@@ -382,7 +384,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       object.Body as AsyncIterable<Uint8Array>,
       sourceDetails.mimeType,
       sourceDetails.storageKey,
-      async (source, originalPath, originalDimensions, embeddedThumbnail) => {
+      async (source, originalPath, originalDimensions) => {
         const metadataPromise = source.clone().metadata();
         if (job.kind === 'EXTRACT_COLOR_PALETTE') {
           const [{ data, info }, metadata] = await Promise.all([
@@ -403,28 +405,23 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           };
         }
         const metadata = await metadataPromise;
-        const rendered = [];
-        for (const spec of renditionSpecs) {
-          rendered.push({
-            spec,
-            output: await renditionSource(spec, source, embeddedThumbnail)
-              .clone()
-              .rotate()
-              .resize({
-                width: spec.maxSize,
-                height: spec.maxSize,
-                fit: 'inside',
-                withoutEnlargement: true,
-              })
-              .webp(spec.encoding)
-              .toBuffer({ resolveWithObject: true }),
-          });
-        }
+        const rendered = await renderImageRenditions(
+          source,
+          asset.mimeType,
+          sourceDetailsOnly ? 'DETAILS' : 'BROWSE',
+        );
         const photoAnalysis =
           asset.libraryMode === 'PHOTO'
             ? {
-                ...(await readPhotoExif(metadata.exif, originalPath)),
-                ...(sourceDetailsOnly ? await analyzePhotoPixels(source) : {}),
+                ...(!sourceDetailsOnly ? await readPhotoExif(metadata.exif, originalPath) : {}),
+                ...(sourceDetailsOnly
+                  ? {
+                      ...(await analyzePhotoPixels(source)),
+                      ...(!sourceDetails.verifiesOriginalHash
+                        ? { processorVersion: 'preview-laplacian-dhash-v3' }
+                        : {}),
+                    }
+                  : {}),
               }
             : null;
         const livePhoto =
@@ -433,11 +430,12 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
             : null;
         return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
       },
-      taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly,
+      sourceDetails.verifiesOriginalHash &&
+        (taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly),
       sourceDetailsOnly ? 'DEVELOP' : 'BROWSE',
     );
     process.stdout.write(
-      `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, sourceMode })}\n`,
+      `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, processorVersion: job.processorVersion, mimeType: asset.mimeType, sourceMode })}\n`,
     );
     if (sourceDetails.verifiesOriginalHash) {
       assertExpectedHash(
@@ -534,7 +532,33 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
         status: 'READY' as const,
       });
     }
-    const livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
+    let livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
+    if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash) {
+      if (asset.mimeType === 'image/jpeg') {
+        livePhoto = await inspectJpegLivePhoto(Number(asset.byteSize), (start, length) =>
+          readOwnedImageRange(
+            (input) => storage.send(new GetObjectCommand(input)),
+            {
+              bucket: s3Bucket,
+              ownerId: asset.ownerId,
+              key: asset.originalObjectKey,
+              byteSize: Number(asset.byteSize),
+            },
+            start,
+            length,
+          ),
+        );
+      } else if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') {
+        const original = await storage.send(
+          new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+        );
+        if (!original.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+        livePhoto = await inspectLivePhotoStream(
+          original.Body as AsyncIterable<Uint8Array>,
+          asset.sha256!,
+        );
+      }
+    }
     if (livePhoto?.motion) {
       const motionKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/motion.mp4`;
       await storage.send(
@@ -564,11 +588,13 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       asset,
       job,
       renditions,
-      sha256,
-      dimensions: catalogImageDimensions(
-        processed.metadata,
-        'originalDimensions' in processed ? processed.originalDimensions : undefined,
-      ),
+      sha256: sourceDetails.verifiesOriginalHash ? sha256 : asset.sha256!,
+      dimensions: sourceDetailsOnly
+        ? {}
+        : catalogImageDimensions(
+            processed.metadata,
+            'originalDimensions' in processed ? processed.originalDimensions : undefined,
+          ),
       photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
       livePhoto: livePhoto ?? null,
       scheduleFaces: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),

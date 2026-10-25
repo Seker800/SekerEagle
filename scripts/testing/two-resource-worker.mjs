@@ -33,6 +33,9 @@ let releaseNas,
 const nasGate = new Promise((resolve) => {
   releaseNas = resolve;
 });
+let detailRanges = [],
+  detailPreviewReads = 0;
+const detailOriginalSize = 20_000_000;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   if (url.pathname === '/healthz') {
@@ -50,6 +53,26 @@ const server = createServer(async (req, res) => {
         embedding: [1, ...Array(1023).fill(0)],
       }),
     );
+  } else if (req.method === 'GET' && url.pathname.endsWith('/details-original.jpg')) {
+    detailRanges.push(req.headers.range);
+    const match = req.headers.range?.match(/^bytes=(\d+)-(\d+)$/);
+    if (!match) {
+      res.writeHead(400);
+      res.end();
+      return;
+    }
+    const start = Number(match[1]),
+      end = Number(match[2]);
+    const head = Buffer.alloc(end - start + 1);
+    if (start === 0) pixels.copy(head);
+    res.writeHead(206, {
+      'content-range': `bytes ${start}-${end}/${detailOriginalSize}`,
+      'content-length': head.length,
+    });
+    res.end(head);
+  } else if (req.method === 'GET' && url.pathname.endsWith('/details-preview.jpg')) {
+    detailPreviewReads++;
+    res.end(pixels);
   } else if (req.method === 'GET' && url.pathname.endsWith('/original.jpg')) {
     receivedNas = true;
     await nasGate;
@@ -197,6 +220,100 @@ try {
   );
   log(
     'Real worker overlap passed: vector completed while NAS image input was blocked; graceful drain completed NAS work.',
+  );
+  const detailAsset = await db.eagleAsset.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'synthetic.jpg',
+      displayName: 'Synthetic details',
+      normalizedDisplayName: 'synthetic details',
+      mimeType: 'image/jpeg',
+      format: 'jpeg',
+      byteSize: detailOriginalSize,
+      sha256: digest,
+      width: 6000,
+      height: 4000,
+      mediaRevision: 1,
+      lifecycleStatus: 'READY',
+      originalObjectKey: `users/${ownerId}/assets/details/details-original.jpg`,
+      libraryAddedAt: new Date('2102-01-01Z'),
+      chronologicalAt: new Date('2001-02-03Z'),
+    },
+  });
+  await db.eagleProcessingSetting.create({
+    data: { ownerId, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  await db.eaglePhotoMetadata.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: detailAsset.id,
+      assetRevision: 1,
+      cameraModel: 'Synthetic original camera',
+      capturedAt: new Date('2001-02-03Z'),
+      processorVersion: 'original-exiftool-v1',
+    },
+  });
+  await db.eagleAssetRendition.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: detailAsset.id,
+      revision: 1,
+      kind: 'PREVIEW',
+      variant: 'default',
+      status: 'READY',
+      mimeType: 'image/jpeg',
+      byteSize: pixels.length,
+      storageKey: `users/${ownerId}/assets/details/details-preview.jpg`,
+      width: 128,
+      height: 96,
+    },
+  });
+  const detailJob = await db.eagleAssetProcessingJob.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: detailAsset.id,
+      assetRevision: 1,
+      kind: 'GENERATE_RENDITIONS',
+      processorVersion: 'photo-source-details-v1',
+      lane: 'BACKGROUND',
+      availableAt: new Date(0),
+    },
+  });
+  worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
+    env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  worker.stderr.on('data', (chunk) => {
+    stderr += chunk.toString();
+  });
+  await waitFor(
+    async () =>
+      (await db.eagleAssetProcessingJob.findUnique({ where: { id: detailJob.id } })).status ===
+      'COMPLETED',
+  );
+  const finishedDetails = once(worker, 'exit');
+  worker.kill('SIGTERM');
+  await finishedDetails;
+  assert.deepEqual(detailRanges, ['bytes=0-1048575']);
+  assert.equal(detailPreviewReads, 1);
+  const detailMetadata = await db.eaglePhotoMetadata.findUnique({
+    where: { assetId: detailAsset.id },
+  });
+  const detailPublished = await db.eagleAsset.findUnique({ where: { id: detailAsset.id } });
+  assert.equal(detailMetadata.cameraModel, 'Synthetic original camera');
+  assert.equal(detailMetadata.capturedAt.toISOString(), '2001-02-03T00:00:00.000Z');
+  assert.equal(detailMetadata.processorVersion, 'preview-laplacian-dhash-v3');
+  assert.ok(detailMetadata.perceptualHash);
+  assert.equal(detailPublished.sha256, digest);
+  assert.equal(detailPublished.width, 6000);
+  assert.equal(detailPublished.height, 4000);
+  assert.equal(detailPublished.lifecycleStatus, 'READY');
+  log(
+    'Real photo details passed: one preview read, bounded JPEG header, original EXIF/hash/dimensions preserved.',
   );
 } finally {
   releaseNas();

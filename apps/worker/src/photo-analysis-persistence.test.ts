@@ -89,13 +89,29 @@ test('pixel-only analysis retains existing EXIF and original dimensions/date', a
   const capturedAt = new Date('2001-02-03T04:05:06Z');
   const tx = {
     eaglePhotoMetadata: {
-      findFirst: async () => ({...normalizePhotoExif({Model:'Camera', DateTimeOriginal:'2001:02:03 04:05:06'}), captureMetadataInherited:false}),
-      upsert: async (args: {update: Record<string, unknown>}) => {update=args.update;},
+      findFirst: async () => ({
+        ...normalizePhotoExif({ Model: 'Camera', DateTimeOriginal: '2001:02:03 04:05:06' }),
+        captureMetadataInherited: false,
+      }),
+      upsert: async (args: { update: Record<string, unknown> }) => {
+        update = args.update;
+      },
     },
-    eagleAsset: {updateMany: async () => ({count:1})},
+    eagleAsset: { updateMany: async () => ({ count: 1 }) },
   };
-  await persistPhotoAnalysis(tx as never,{id:'a',ownerId:'o',libraryMode:'PHOTO',chronologicalAt:capturedAt,libraryAddedAt:new Date()}, {sharpnessScore:1,perceptualHash:'0011223344556677'},1);
-  assert.equal(Object.hasOwn(update,'cameraModel'),false);
-  assert.equal(Object.hasOwn(update,'capturedAt'),false);
-  assert.equal(update.sharpnessScore,1);
+  await persistPhotoAnalysis(
+    tx as never,
+    {
+      id: 'a',
+      ownerId: 'o',
+      libraryMode: 'PHOTO',
+      chronologicalAt: capturedAt,
+      libraryAddedAt: new Date(),
+    },
+    { sharpnessScore: 1, perceptualHash: '0011223344556677' },
+    1,
+  );
+  assert.equal(Object.hasOwn(update, 'cameraModel'), false);
+  assert.equal(Object.hasOwn(update, 'capturedAt'), false);
+  assert.equal(update.sharpnessScore, 1);
 });

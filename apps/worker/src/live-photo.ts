@@ -1,4 +1,7 @@
 import { parse } from 'exifr';
+import { CAMERA_MAX_IMAGE_BYTES } from '@sekereagle/library-core';
+import { Readable, Transform } from 'node:stream';
+import { createHash } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdtemp, open, readFile, rm, stat } from 'node:fs/promises';
 import { pipeline } from 'node:stream/promises';
@@ -14,24 +17,7 @@ import {
 } from '@sekereagle/media-core';
 
 export async function inspectLivePhotoImage(path: string, extractMotion = true) {
-  let identifier: string | null = null;
-  try {
-    const metadata: unknown = await parse(path, {
-      makerNote: true,
-      xmp: false,
-      icc: false,
-      iptc: false,
-      chunkSize: 65536,
-      chunkLimit: 32,
-    });
-    const makerNote =
-      metadata && typeof metadata === 'object'
-        ? (metadata as Record<string, unknown>).makerNote
-        : undefined;
-    if (makerNote instanceof Uint8Array) identifier = readAppleLivePhotoIdentifier(makerNote);
-  } catch {
-    /* Optional camera metadata is not required for a static preview. */
-  }
+  const identifier = await readLivePhotoIdentifier(path);
   const base = {
     identifier,
     motion: null as null | { data: Buffer; width: number; height: number },
@@ -107,5 +93,90 @@ async function heicMotionRange(path: string): Promise<{ start: number; length: n
     return offset === fileSize ? range : null;
   } finally {
     await handle.close();
+  }
+}
+
+async function readLivePhotoIdentifier(input: string | Buffer) {
+  let identifier: string | null = null;
+  try {
+    const metadata: unknown = await parse(input, {
+      makerNote: true,
+      xmp: false,
+      icc: false,
+      iptc: false,
+      chunkSize: 65536,
+      chunkLimit: 32,
+    });
+    const makerNote =
+      metadata && typeof metadata === 'object'
+        ? (metadata as Record<string, unknown>).makerNote
+        : undefined;
+    if (makerNote instanceof Uint8Array) identifier = readAppleLivePhotoIdentifier(makerNote);
+  } catch {
+    /* Optional camera metadata is not required for a static preview. */
+  }
+  return identifier;
+}
+
+/** JPEG camera metadata is bounded; only an explicitly declared motion tail is fetched. */
+export async function inspectJpegLivePhoto(
+  fileSize: number,
+  readRange: (start: number, length: number) => Promise<Buffer>,
+  renderMotion = renderMotionBytes,
+) {
+  if (!Number.isSafeInteger(fileSize) || fileSize < 2 || fileSize > CAMERA_MAX_IMAGE_BYTES)
+    throw new Error('LIVE_PHOTO_SIZE');
+  const headLength = Math.min(1024 * 1024, fileSize);
+  const head = await readRange(0, headLength);
+  if (head.length !== headLength) throw new Error('LIVE_PHOTO_RANGE_LENGTH');
+  if (head[0] !== 0xff || head[1] !== 0xd8) throw new Error('LIVE_PHOTO_JPEG_HEADER');
+  const identifier = await readLivePhotoIdentifier(head);
+  const range = readMotionPhotoRange(head.toString('utf8'), fileSize);
+  if (!range) return { identifier, motion: null };
+  const motion = await readRange(range.start, range.length);
+  if (motion.length !== range.length) throw new Error('LIVE_PHOTO_RANGE_LENGTH');
+  return { identifier, motion: await renderMotion(motion) };
+}
+
+async function renderMotionBytes(bytes: Buffer) {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-motion-photo-'));
+  try {
+    const input = join(directory, 'source.mp4'),
+      output = join(directory, 'playback.mp4');
+    await pipeline(Readable.from([bytes]), createWriteStream(input, { flags: 'wx' }));
+    const video = await probeCameraVideo(input, 'video/mp4');
+    if (video.durationMs > LIVE_PHOTO_MAX_DURATION_MS) return null;
+    const playback = await transcodeCameraVideo(input, output, video.durationMs);
+    if ((await stat(output)).size > LIVE_PHOTO_MAX_VIDEO_BYTES) return null;
+    return { data: await readFile(output), width: playback.width, height: playback.height };
+  } catch {
+    return null;
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** HEIC metadata may reference distant items: retain bounded streaming inspection, without image decoding. */
+export async function inspectLivePhotoStream(
+  source: AsyncIterable<Uint8Array>,
+  expectedSha256: string,
+) {
+  const directory = await mkdtemp(join(tmpdir(), 'sekereagle-live-inspect-'));
+  let size = 0;
+  const hash = createHash('sha256');
+  try {
+    const path = join(directory, 'original');
+    const budget = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        hash.update(chunk);
+        size += chunk.length;
+        callback(size > CAMERA_MAX_IMAGE_BYTES ? new Error('LIVE_PHOTO_SIZE') : null, chunk);
+      },
+    });
+    await pipeline(Readable.from(source), budget, createWriteStream(path, { flags: 'wx' }));
+    if (hash.digest('hex') !== expectedSha256) throw new Error('LIVE_PHOTO_HASH_MISMATCH');
+    return await inspectLivePhotoImage(path);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 }

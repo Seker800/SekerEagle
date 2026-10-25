@@ -59,7 +59,6 @@ export async function withProcessableImage<T>(
     image: Sharp,
     originalPath?: string,
     originalDimensions?: CameraDimensions,
-    embeddedThumbnail?: Sharp,
   ) => Promise<T>,
   retainOriginal = false,
   rawPurpose: 'BROWSE' | 'DEVELOP' = 'DEVELOP',
@@ -87,12 +86,11 @@ export async function withProcessableImage<T>(
 
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-heif-'));
   const inputPath = join(directory, 'input.heic');
-  const thumbnailPath = join(directory, 'camera-thumbnail.png');
   let outputPath = join(directory, isCameraRawMime(mimeType) ? 'decoded.tiff' : 'decoded.png');
   try {
     await pipeline(Readable.from(source), hashTap, createWriteStream(inputPath, { flags: 'wx' }));
     const originalDimensions = isCameraRawMime(mimeType)
-      ? await readCameraRaw(inputPath, outputPath, thumbnailPath, rawPurpose)
+      ? await readCameraRaw(inputPath, outputPath, undefined, rawPurpose)
       : undefined;
     if (!originalDimensions) {
       if (requiresHeifDecode(mimeType, storageKey)) await decodeHeifFile(inputPath, outputPath);
@@ -102,9 +100,6 @@ export async function withProcessableImage<T>(
       sharp(outputPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS }),
       inputPath,
       originalDimensions,
-      originalDimensions?.embeddedThumbnail
-        ? sharp(thumbnailPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS })
-        : undefined,
     );
     return {
       result,

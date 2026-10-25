@@ -21,7 +21,7 @@ def decode_raw(raw, input_limit, output_limit, output_path=None, profile=None, t
     if output_path and browse:
         from raw_thumbnail import write_raw_thumbnail
         if write_raw_thumbnail(raw, output_path, output_limit, max_size=1600,
-                               minimum_size=min(1600, max(width, height)),
+                               minimum_size=min(1024, max(width, height)),
                                expected_dimensions=(width, height)):
             with Image.open(output_path) as preview:
                 result.update(decodedWidth=preview.width, decodedHeight=preview.height,
