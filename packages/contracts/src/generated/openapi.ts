@@ -2468,6 +2468,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/agent/instructions': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoAgentController_instructions'];
+    put: operations['PhotoAgentController_saveInstructions'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/agent/photos': {
     parameters: {
       query?: never;
@@ -3522,6 +3538,10 @@ export interface components {
       dismissed?: boolean;
       /** Format: uuid */
       bestAssetId?: string;
+    };
+    UpdatePhotoAgentInstructionsDto: {
+      instructions: string;
+      revision: number;
     };
     CreatePhotoTaskDto: {
       /** @enum {string} */
@@ -7523,6 +7543,44 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoAgentController_instructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoAgentController_saveInstructions: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['UpdatePhotoAgentInstructionsDto'];
+      };
+    };
     responses: {
       200: {
         headers: {

@@ -145,6 +145,11 @@ export interface PhotoAgentInstructions {
   updatedAt: string | null;
 }
 export const getPhotoAgentInstructions = (signal?: AbortSignal) =>
-  request<PhotoAgentInstructions>(`${base}/instructions`, {signal});
-export const savePhotoAgentInstructions = (input: Pick<PhotoAgentInstructions, 'instructions' | 'revision'>) =>
-  request<PhotoAgentInstructions>(`${base}/instructions`, {method:'PUT',body:JSON.stringify(input)});
+  request<PhotoAgentInstructions>(`${base}/instructions`, { signal });
+export const savePhotoAgentInstructions = (
+  input: Pick<PhotoAgentInstructions, 'instructions' | 'revision'>,
+) =>
+  request<PhotoAgentInstructions>(`${base}/instructions`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });

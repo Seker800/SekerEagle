@@ -122,7 +122,12 @@ export function createPhotoAgentServer({ baseUrl, token, fetch: fetcher = fetch 
       limit: z.number().int().min(1).max(100).default(50),
     })
     .strict();
-  tool('photo_instructions', 'Read the owner’s saved organizing instructions before inspecting photos. Saving instructions does not start scans or authorize applying changes; stay within the current user-requested scope.', z.object({}).strict(), () => call('instructions'));
+  tool(
+    'photo_instructions',
+    'Read the owner’s saved organizing instructions before inspecting photos. Saving instructions does not start scans or authorize applying changes; stay within the current user-requested scope.',
+    z.object({}).strict(),
+    () => call('instructions'),
+  );
   tool(
     'photo_list',
     'List a bounded page of photos, capture time, timezone status, raw GPS and filename signals. Specify the requested time range and follow pagination only within it.',

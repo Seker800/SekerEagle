@@ -1282,19 +1282,24 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   const source = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } });
   const target = await prisma.eagleAsset.findUniqueOrThrow({
     where: { id: targetId },
-    include: { manualTagLinks: true, processingJobs: true },
+    include: { manualTagLinks: { include: { tag: true } }, processingJobs: true },
   });
   assert.equal(source.libraryMode, 'MATERIAL');
   assert.ok(source.deletedAt);
   assert.equal(target.libraryMode, 'PHOTO');
   assert.equal(target.isPrivate, true);
-  assert.equal(target.manualTagLinks.length, 1);
-  assert.notEqual(target.manualTagLinks[0].tagId, tag.id);
+  assert.equal(target.manualTagLinks.length, 2);
+  assert.ok(target.manualTagLinks.some((link) => link.tag.name === 'source-only'));
+  assert.notEqual(target.manualTagLinks.find((link) => link.tag.marksAssetsPrivate).tagId, tag.id);
   const { EaglePrivacyService } =
     await import('../../apps/api/dist/eagle/eagle-privacy.service.js');
   const privacy = new EaglePrivacyService(prisma, 'PHOTO');
   const settings = await privacy.getSettings(f.ownerId);
-  assert.ok(settings.tagIds.includes(target.manualTagLinks[0].tagId));
+  assert.ok(
+    settings.tagIds.includes(
+      target.manualTagLinks.find((link) => link.tag.marksAssetsPrivate).tagId,
+    ),
+  );
   await privacy.updateSettings(f.ownerId, { ...settings, expectedTagIds: settings.tagIds });
   assert.equal(
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } })).isPrivate,
@@ -1441,7 +1446,20 @@ test('sending an Apple Live Photo to materials moves both originals and keeps th
   const jobs = await prisma.eagleAssetProcessingJob.findMany({
     where: { assetId: { in: targetIds } },
   });
-  assert.ok(jobs.some((job) => job.processorVersion === 'camera-video-preview-v2'));
+  assert.ok(!jobs.some((job) => job.processorVersion === 'camera-video-preview-v2'));
+  const targetMotion = await prisma.eagleAsset.findFirst({
+    where: { id: { in: targetIds }, livePhotoRole: 'MOTION' },
+    include: { renditions: true },
+  });
+  assert.equal(targetMotion.lifecycleStatus, 'READY');
+  assert.ok(
+    targetMotion.renditions.some((r) => r.kind === 'PREVIEW' && r.mimeType === 'video/mp4'),
+  );
+  const targetStill = await prisma.eagleAsset.findFirst({
+    where: { id: { in: targetIds }, livePhotoRole: 'STILL' },
+  });
+  assert.equal(targetMotion.livePhotoIdentifier, targetStill.livePhotoIdentifier);
+  assert.notEqual(targetStill.livePhotoIdentifier, identifier);
   assert.ok(jobs.every((job) => job.libraryMode === 'MATERIAL'));
 });
 
@@ -2431,11 +2449,21 @@ test('cross-library sending reuses current browse outputs with independent keys 
       },
     });
 
-  const tag = await f.photos.createManualTag(f.ownerId,{name:'跨库保留标签'});
-  await f.photos.replaceAssetTags(f.ownerId,f.photo.id,[tag.id]);
-  const spaceId=(await prisma.eagleEmbeddingSpace.findFirstOrThrow({where:{isCurrent:true}})).id;
-  const vector='['+[1,...Array(1023).fill(0)].join(',')+']';
-  await prisma.$executeRawUnsafe(`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES ($1,$2,'PHOTO',$3,$4,$5,'READY',true,$6::vector,1,now())`,randomUUID(),f.ownerId,f.photo.id,f.photo.mediaRevision,spaceId,vector);
+  const tag = await f.photos.createManualTag(f.ownerId, { name: '跨库保留标签' });
+  await f.photos.replaceAssetTags(f.ownerId, f.photo.id, [tag.id]);
+  const spaceId = (
+    await prisma.eagleEmbeddingSpace.findFirstOrThrow({ where: { isCurrent: true } })
+  ).id;
+  const vector = '[' + [1, ...Array(1023).fill(0)].join(',') + ']';
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES ($1,$2,'PHOTO',$3,$4,$5,'READY',true,$6::vector,1,now())`,
+    randomUUID(),
+    f.ownerId,
+    f.photo.id,
+    f.photo.mediaRevision,
+    spaceId,
+    vector,
+  );
   const copies = [];
   const storage = {
     copyObject: async (a, b) => copies.push([a, b]),
@@ -2451,12 +2479,20 @@ test('cross-library sending reuses current browse outputs with independent keys 
     include: { renditions: true, processingJobs: true },
   });
   assert.equal(target.lifecycleStatus, 'READY');
-  const links=await prisma.eagleAssetManualTag.findMany({where:{assetId:target.id},include:{tag:true}});
-  assert.ok(links.some(l=>l.tag.name==='跨库保留标签' && l.tag.id!==tag.id));
-  const embeddings=await prisma.$queryRawUnsafe('SELECT embedding::text AS embedding,"assetRevision","spaceId","libraryMode" FROM "EagleAssetEmbedding" WHERE "assetId"=$1',target.id);
-  assert.equal(embeddings.length,1);assert.equal(embeddings[0].embedding,vector);
-  assert.equal(embeddings[0].libraryMode,'MATERIAL');assert.equal(embeddings[0].assetRevision,1);
-  assert.ok(!target.processingJobs.some(j=>j.kind==='GENERATE_EMBEDDING'));
+  const links = await prisma.eagleAssetManualTag.findMany({
+    where: { assetId: target.id },
+    include: { tag: true },
+  });
+  assert.ok(links.some((l) => l.tag.name === '跨库保留标签' && l.tag.id !== tag.id));
+  const embeddings = await prisma.$queryRawUnsafe(
+    'SELECT embedding::text AS embedding,"assetRevision","spaceId","libraryMode" FROM "EagleAssetEmbedding" WHERE "assetId"=$1',
+    target.id,
+  );
+  assert.equal(embeddings.length, 1);
+  assert.equal(embeddings[0].embedding, vector);
+  assert.equal(embeddings[0].libraryMode, 'MATERIAL');
+  assert.equal(embeddings[0].assetRevision, 1);
+  assert.ok(!target.processingJobs.some((j) => j.kind === 'GENERATE_EMBEDDING'));
 
   assert.equal(target.renditions.length, 3);
   assert.equal(copies.length, 4);
@@ -2474,4 +2510,167 @@ test('cross-library sending reuses current browse outputs with independent keys 
   assert.equal(listed.items.find((a) => a.id === target.id).renditions.length, 3);
   await prisma.eagleAsset.delete({ where: { id: f.photo.id } });
   assert.equal(await prisma.eagleAssetRendition.count({ where: { assetId: target.id } }), 3);
+});
+
+test('a round trip keeps archived photography and complete analyses without fake completed jobs', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  for (const [kind, variant] of [
+    ['PREVIEW', 'default'],
+    ['THUMBNAIL', '256'],
+    ['THUMBNAIL', '512'],
+  ])
+    await prisma.eagleAssetRendition.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: f.photo.id,
+        revision: 0,
+        kind,
+        variant,
+        status: 'READY',
+        storageKey: `users/${f.ownerId}/assets/${f.photo.id}/${variant}.webp`,
+        mimeType: 'image/webp',
+        byteSize: 1,
+      },
+    });
+  await prisma.eaglePhotoMetadata.create({
+    data: {
+      ownerId: f.ownerId,
+      assetId: f.photo.id,
+      assetRevision: 0,
+      processorVersion: 'preview-laplacian-dhash-v3',
+      capturedAt: new Date('2018-01-02T03:04:05Z'),
+      cameraModel: 'Test Camera',
+      sharpnessScore: 123,
+      perceptualHash: '0123456789abcdef',
+    },
+  });
+  await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.photo.id,
+      assetRevision: 0,
+      kind: 'GENERATE_RENDITIONS',
+      lane: 'BACKGROUND',
+      processorVersion: 'photo-source-details-v1',
+      status: 'COMPLETED',
+      completedAt: new Date(),
+    },
+  });
+  await prisma.eagleAssetColorAnalysis.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.photo.id,
+      assetRevision: 0,
+      processorVersion: 'color-v3-thumbnail',
+      status: 'COMPLETED',
+      isCurrent: true,
+      swatches: {
+        create: {
+          rank: 0,
+          hex: '#808080',
+          weight: 1,
+          labL: 50,
+          labA: 0,
+          labB: 0,
+        },
+      },
+    },
+  });
+  const storage = { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) };
+  const outbound = await new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(
+    f.ownerId,
+    { operationId: randomUUID(), assetIds: [f.photo.id] },
+    false,
+  );
+  const materialId = outbound.assets[0].assetId;
+  assert.equal(await prisma.eaglePhotoMetadata.count({ where: { assetId: materialId } }), 0);
+  const archive = await prisma.eagleAssetTransferFacts.findUniqueOrThrow({
+    where: {
+      ownerId_libraryMode_assetId: {
+        ownerId: f.ownerId,
+        libraryMode: 'MATERIAL',
+        assetId: materialId,
+      },
+    },
+  });
+  assert.equal(archive.photoMetadata.cameraModel, 'Test Camera');
+  assert.equal(archive.detailsReady, true);
+  const inbound = await new EagleLibraryTransferService(prisma, storage, 'MATERIAL').send(
+    f.ownerId,
+    { operationId: randomUUID(), assetIds: [materialId] },
+    false,
+  );
+  const target = await prisma.eagleAsset.findUniqueOrThrow({
+    where: { id: inbound.assets[0].assetId },
+    include: {
+      photoMetadata: true,
+      colorAnalyses: { include: { swatches: true } },
+      processingJobs: true,
+    },
+  });
+  assert.equal(target.lifecycleStatus, 'READY');
+  assert.equal(target.photoMetadata.cameraModel, 'Test Camera');
+  assert.equal(target.photoMetadata.sharpnessScore, 123);
+  assert.equal(target.photoMetadata.capturedAt.toISOString(), '2018-01-02T03:04:05.000Z');
+  assert.equal(target.colorAnalyses[0].swatches[0].hex, '#808080');
+  assert.ok(
+    !target.processingJobs.some((j) =>
+      ['GENERATE_RENDITIONS', 'EXTRACT_COLOR_PALETTE'].includes(j.kind),
+    ),
+  );
+  assert.ok(target.processingJobs.every((j) => j.status === 'PENDING'));
+});
+
+test('same-name tags with different privacy rules never change existing target tags or expose the moved image', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  for (const privateSource of [false, true]) {
+    const f = await fixtures();
+    const sourceTag = await prisma.eagleManualTag.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        name: '同名标签',
+        normalizedName: '同名标签',
+        marksAssetsPrivate: privateSource,
+      },
+    });
+    const existing = await prisma.eagleManualTag.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'MATERIAL',
+        name: '同名标签',
+        normalizedName: '同名标签',
+        marksAssetsPrivate: !privateSource,
+      },
+    });
+    await prisma.eagleAssetManualTag.create({
+      data: { ownerId: f.ownerId, libraryMode: 'PHOTO', assetId: f.photo.id, tagId: sourceTag.id },
+    });
+    await prisma.eagleAsset.update({
+      where: { id: f.photo.id },
+      data: { isPrivate: privateSource },
+    });
+    const result = await new EagleLibraryTransferService(
+      prisma,
+      { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) },
+      'PHOTO',
+    ).send(f.ownerId, { operationId: randomUUID(), assetIds: [f.photo.id] }, true);
+    const target = await prisma.eagleAsset.findUniqueOrThrow({
+      where: { id: result.assets[0].assetId },
+      include: { manualTagLinks: { include: { tag: true } } },
+    });
+    assert.equal(target.isPrivate, privateSource);
+    assert.ok(target.manualTagLinks.every((l) => l.tag.marksAssetsPrivate === privateSource));
+    assert.equal(
+      (await prisma.eagleManualTag.findUniqueOrThrow({ where: { id: existing.id } }))
+        .marksAssetsPrivate,
+      !privateSource,
+    );
+  }
 });

@@ -213,18 +213,47 @@ test('stdio entry point completes a real client handshake without starting or co
 
 test('metadata requests are honest and saved instructions are read-only', async () => {
   const calls = [];
-  const server = createPhotoAgentServer({baseUrl:'http://127.0.0.1:3000',token:'test-only',fetch:async(url,init)=>{calls.push({url,init});return new Response('{}');}});
-  const [a,b]=InMemoryTransport.createLinkedPair();
-  const client=new Client({name:'test',version:'1'});
-  await server.connect(a);await client.connect(b);
+  const server = createPhotoAgentServer({
+    baseUrl: 'http://127.0.0.1:3000',
+    token: 'test-only',
+    fetch: async (url, init) => {
+      calls.push({ url, init });
+      return new globalThis.Response('{}');
+    },
+  });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'test', version: '1' });
+  await server.connect(a);
+  await client.connect(b);
   try {
-    const result=await client.callTool({name:'photo_request_submit',arguments:{kind:'SEND_TO_MATERIAL',title:'Metadata only',rationale:'Filename explicitly marks a screenshot.',items:[{assetId:'00000000-0000-4000-8000-000000000001',evidenceIds:[],visualReviewed:false,rationale:'Filename contains Screenshot; image not viewed.'}]}});
-    assert.equal(result.isError,undefined);
-    assert.equal(JSON.parse(calls.at(-1).init.body).items[0].visualReviewed,false);
-    const instructions=await client.callTool({name:'photo_instructions',arguments:{}});
-    assert.equal(instructions.isError,undefined);
+    const result = await client.callTool({
+      name: 'photo_request_submit',
+      arguments: {
+        kind: 'SEND_TO_MATERIAL',
+        title: 'Metadata only',
+        rationale: 'Filename explicitly marks a screenshot.',
+        items: [
+          {
+            assetId: '00000000-0000-4000-8000-000000000001',
+            evidenceIds: [],
+            visualReviewed: false,
+            rationale: 'Filename contains Screenshot; image not viewed.',
+          },
+        ],
+      },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(JSON.parse(calls.at(-1).init.body).items[0].visualReviewed, false);
+    const instructions = await client.callTool({ name: 'photo_instructions', arguments: {} });
+    assert.equal(instructions.isError, undefined);
     assert.ok(calls.at(-1).url.endsWith('/instructions'));
-    assert.equal(calls.at(-1).init.method,'GET');
-    assert.ok((await client.listTools()).tools.find(t=>t.name==='photo_instructions').annotations.readOnlyHint);
-  } finally {await client.close();await server.close();}
+    assert.equal(calls.at(-1).init.method, 'GET');
+    assert.ok(
+      (await client.listTools()).tools.find((t) => t.name === 'photo_instructions').annotations
+        .readOnlyHint,
+    );
+  } finally {
+    await client.close();
+    await server.close();
+  }
 });

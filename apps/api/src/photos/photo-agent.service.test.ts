@@ -5,7 +5,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
-import { CreatePhotoTaskDto, SubmitPhotoRequestDto } from './photo-agent.dto';
+import {
+  CreatePhotoTaskDto,
+  SubmitPhotoRequestDto,
+  UpdatePhotoAgentInstructionsDto,
+} from './photo-agent.dto';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 
 test('task creation rejects partial visibility and never persists out-of-scope resources', async () => {
@@ -38,7 +42,7 @@ test('DTO rejects ownerId, excess scope and unsupported modes', async () => {
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: CreatePhotoTaskDto }));
 });
 test('accept, reject, undo and cancel are browser-only operations', () => {
-  for (const name of ['review', 'reviewRequest', 'undo', 'cancel']) {
+  for (const name of ['review', 'reviewRequest', 'undo', 'cancel', 'saveInstructions']) {
     const handler = Reflect.get(PhotoAgentController.prototype, name) as object;
     const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
     assert.ok(guards.includes(BrowserPrincipalGuard));
@@ -109,5 +113,28 @@ test('request submission rejects decision overrides and empty or oversized batch
   ])
     await assert.rejects(
       pipe.transform({ ...base, ...extra }, { type: 'body', metatype: SubmitPhotoRequestDto }),
+    );
+});
+
+test('instructions DTO accepts clear and bounded text but rejects owner, mode and execution overrides', async () => {
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  for (const instructions of ['', '仅文字检查截图'])
+    await pipe.transform(
+      { instructions, revision: 0 },
+      { type: 'body', metatype: UpdatePhotoAgentInstructionsDto },
+    );
+  for (const extra of [
+    { ownerId: 'other' },
+    { libraryMode: 'MATERIAL' },
+    { approved: true },
+    { instructions: 'x'.repeat(8001) },
+    { revision: -1 },
+    { revision: 0.5 },
+  ])
+    await assert.rejects(
+      pipe.transform(
+        { instructions: '检查截图', revision: 0, ...extra },
+        { type: 'body', metatype: UpdatePhotoAgentInstructionsDto },
+      ),
     );
 });

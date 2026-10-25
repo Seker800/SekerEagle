@@ -1,4 +1,16 @@
 import {
+  planTransferPyramid,
+  copyTransferPyramid,
+  type TransferPyramid,
+} from './eagle-transfer-pyramid';
+import { isCameraRawMime } from '@sekereagle/library-core';
+import { copyTransferFacts, transferFactIncludes } from './eagle-transfer-facts';
+import {
+  planTransferRenditions,
+  transferredBrowsingReady,
+  type TransferRendition,
+} from './eagle-transfer-renditions';
+import {
   BadRequestException,
   ConflictException,
   Injectable,
@@ -25,6 +37,8 @@ interface TransferItem {
   sourceKey: string;
   targetKey: string;
   size: string;
+  renditions?: TransferRendition[];
+  pyramid?: TransferPyramid;
 }
 export interface LibraryTransferResult {
   targetMode: LibraryMode;
@@ -132,6 +146,12 @@ export class EagleLibraryTransferService {
       ];
       const components = await this.prisma.eagleAsset.findMany({
         where: this.libraryModeWhere(ownerId, componentIds, includePrivate),
+        include: {
+          renditions: {
+            where: { status: 'READY', kind: { in: ['THUMBNAIL', 'PREVIEW', 'POSTER'] } },
+          },
+          imagePyramids: true,
+        },
       });
       if (components.length !== componentIds.length)
         throw new NotFoundException('实况照片组件不存在。');
@@ -147,6 +167,18 @@ export class EagleLibraryTransferService {
           sourceKey: row.originalObjectKey,
           targetKey: `users/${ownerId}/assets/${targetId}/original.${row.format.replace(/[^a-z0-9]/gi, '') || 'bin'}`,
           size: String(row.byteSize),
+          pyramid: planTransferPyramid(
+            ownerId,
+            targetId,
+            row.mediaRevision,
+            row.imagePyramids ?? [],
+          ),
+          renditions: planTransferRenditions(
+            ownerId,
+            targetId,
+            row.mediaRevision,
+            row.renditions ?? [],
+          ),
         };
       });
       try {
@@ -159,7 +191,7 @@ export class EagleLibraryTransferService {
             sourceMode: this.sourceMode,
             targetMode,
             sourceIds: ids,
-            plan: items.map((item) => ({ ...item })),
+            plan: JSON.parse(JSON.stringify(items)) as Prisma.InputJsonValue,
           },
         });
       } catch (error) {
@@ -205,6 +237,15 @@ export class EagleLibraryTransferService {
       assertOwnedObjectKey(ownerId, item.sourceKey);
       assertOwnedObjectKey(ownerId, item.targetKey);
       await this.storage.copyObject(item.sourceKey, item.targetKey);
+      for (const rendition of item.renditions ?? []) {
+        assertOwnedObjectKey(ownerId, rendition.sourceKey);
+        assertOwnedObjectKey(ownerId, rendition.targetKey);
+        await this.storage.copyObject(rendition.sourceKey, rendition.targetKey);
+        const copied = await this.storage.headObject(rendition.targetKey);
+        if (BigInt(copied.ContentLength ?? -1) !== BigInt(rendition.size))
+          throw new ConflictException('预览复制校验失败，请重试。');
+      }
+      if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
       const object = await this.storage.headObject(item.targetKey);
       if (BigInt(object.ContentLength ?? -1) !== BigInt(item.size))
         throw new ConflictException('原文件复制校验失败，请重试。');
@@ -225,11 +266,18 @@ export class EagleLibraryTransferService {
         await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${ownerId} AND "libraryMode"=${this.sourceMode}::"LibraryMode" AND id=ANY(${sourceIds}::text[]) ORDER BY id FOR UPDATE`;
         const sources = await tx.eagleAsset.findMany({
           where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          include: { annotation: true },
+          include: transferFactIncludes,
         });
         if (sources.length !== items.length)
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
         checkExpected(sources);
+        const liveIdentifiers = new Map<string, string>();
+        for (const source of sources)
+          if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))
+            liveIdentifiers.set(
+              source.livePhotoIdentifier,
+              items.find((item) => item.sourceId === source.id)!.targetId,
+            );
         for (const item of items) {
           const source = sources.find((row) => row.id === item.sourceId)!;
           if (
@@ -239,6 +287,38 @@ export class EagleLibraryTransferService {
             source.lifecycleStatus !== 'READY'
           )
             throw new ConflictException('图片已变化，请刷新后重新发送。');
+          const copiedRenditions = item.renditions ?? [];
+          if (
+            copiedRenditions.some(
+              (r) =>
+                !source.renditions.some(
+                  (current) =>
+                    current.id === r.id &&
+                    current.revision === item.revision &&
+                    current.status === 'READY' &&
+                    current.storageKey === r.sourceKey &&
+                    String(current.byteSize) === r.size,
+                ),
+            )
+          )
+            throw new ConflictException('预览已变化，请重新发送。');
+          if (
+            item.pyramid &&
+            !source.imagePyramids.some(
+              (p) =>
+                p.id === item.pyramid!.id &&
+                p.revision === item.revision &&
+                p.status === 'READY' &&
+                p.storagePrefix === item.pyramid!.storagePrefix &&
+                String(p.byteSize) === item.pyramid!.size,
+            )
+          )
+            throw new ConflictException('切片已变化，请重新发送。');
+          const browsingReady =
+            source.mimeType.startsWith('image/') && transferredBrowsingReady(copiedRenditions);
+          const motionReady =
+            source.livePhotoRole === 'MOTION' &&
+            copiedRenditions.some((r) => r.kind === 'PREVIEW' && r.mimeType === 'video/mp4');
           await tx.eagleAsset.create({
             data: {
               id: item.targetId,
@@ -256,12 +336,66 @@ export class EagleLibraryTransferService {
               height: source.height,
               durationMs: source.durationMs,
               rating: source.rating,
+              chronologicalAt: source.chronologicalAt,
+              livePhotoIdentifier: source.livePhotoIdentifier
+                ? liveIdentifiers.get(source.livePhotoIdentifier)
+                : null,
+              livePhotoRole: source.livePhotoRole,
               isPrivate: source.isPrivate,
               mediaRevision: 1,
-              lifecycleStatus: 'PROCESSING',
+              lifecycleStatus:
+                (browsingReady && targetMode === 'MATERIAL') || motionReady
+                  ? 'READY'
+                  : 'PROCESSING',
             },
           });
-          if (source.isPrivate) {
+          if (copiedRenditions.length)
+            await tx.eagleAssetRendition.createMany({
+              data: copiedRenditions.map((r) => ({
+                ownerId,
+                libraryMode: targetMode,
+                assetId: item.targetId,
+                kind: r.kind,
+                variant: r.variant,
+                revision: 1,
+                storageKey: r.targetKey,
+                mimeType: r.mimeType,
+                byteSize: BigInt(r.size),
+                width: r.width,
+                height: r.height,
+                status: 'READY',
+              })),
+            });
+          if (item.pyramid) {
+            const p = item.pyramid;
+            await tx.eagleImagePyramid.create({
+              data: {
+                ownerId,
+                libraryMode: targetMode,
+                assetId: item.targetId,
+                revision: 1,
+                processorVersion: p.processorVersion,
+                status: 'READY',
+                storagePrefix: p.targetPrefix,
+                tileSize: p.tileSize,
+                overlap: p.overlap,
+                format: p.format,
+                width: p.width,
+                height: p.height,
+                maxLevel: p.maxLevel,
+                tileCount: p.tileCount,
+                byteSize: BigInt(p.size),
+                completedAt: p.completedAt,
+              },
+            });
+          }
+          const facts = await copyTransferFacts(tx, ownerId, targetMode, item.targetId, source);
+          if (browsingReady && targetMode === 'PHOTO' && facts.photoMetadataReady)
+            await tx.eagleAsset.update({
+              where: { id: item.targetId, ownerId, libraryMode: targetMode },
+              data: { lifecycleStatus: 'READY' },
+            });
+          if (source.isPrivate && !facts.hasPrivateTag) {
             const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);
             await tx.eagleAssetManualTag.create({
               data: { ownerId, libraryMode: targetMode, assetId: item.targetId, tagId },
@@ -285,17 +419,26 @@ export class EagleLibraryTransferService {
                 assetRevision: 1,
                 width: source.width,
                 height: source.height,
+                renditionsReady:
+                  browsingReady && (targetMode === 'MATERIAL' || facts.photoMetadataReady),
+                needsDetails: targetMode === 'PHOTO' || isCameraRawMime(source.mimeType),
+                detailsReady: facts.detailsReady,
+                embeddingReady: facts.embeddingReady,
+                paletteReady: facts.paletteReady,
+                pyramidReady: Boolean(item.pyramid),
               })
-            : [
-                {
-                  ownerId,
-                  assetId: item.targetId,
-                  assetRevision: 1,
-                  kind: 'GENERATE_THUMBNAIL' as const,
-                  lane: 'INTERACTIVE' as const,
-                  processorVersion: 'camera-video-preview-v2',
-                },
-              ];
+            : motionReady
+              ? []
+              : [
+                  {
+                    ownerId,
+                    assetId: item.targetId,
+                    assetRevision: 1,
+                    kind: 'GENERATE_THUMBNAIL' as const,
+                    lane: 'INTERACTIVE' as const,
+                    processorVersion: 'camera-video-preview-v2',
+                  },
+                ];
           await tx.eagleAssetProcessingJob.createMany({
             data: jobs.map((job) => ({ ...job, libraryMode: targetMode })),
           });

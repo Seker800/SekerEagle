@@ -66,7 +66,12 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     (row) => filter === 'all' || (filter === 'pending' ? pending(row) : !pending(row)),
   );
   async function refresh() {
-    await client.invalidateQueries({ queryKey: ['eagle', ownerId] });
+    // Invalidate library views for their next visit without waiting for unrelated statistics.
+    await client.invalidateQueries({ queryKey: ['eagle', ownerId], refetchType: 'none' });
+    await Promise.all([
+      client.invalidateQueries({ queryKey: [...key, 'tasks'] }),
+      ...(taskId ? [client.invalidateQueries({ queryKey: [...key, 'task', taskId] })] : []),
+    ]);
   }
   return (
     <section className={styles.panel} aria-label={t('整理审批')}>
@@ -300,7 +305,14 @@ function RequestDetail({
           </button>
         </div>
       )}
-      {busy && batchTotal > 0 && <p role="status">{t('正在处理整批申请：{{value1}} / {{value2}} 张', {value1: result?.results.length ?? 0, value2: batchTotal})}</p>}
+      {busy && batchTotal > 0 && (
+        <p role="status">
+          {t('正在处理整批申请：{{value1}} / {{value2}} 张', {
+            value1: result?.results.length ?? 0,
+            value2: batchTotal,
+          })}
+        </p>
+      )}
       {error && <p role="alert">{error}</p>}
       {result && (
         <div className={styles.result} role={result.failed ? 'alert' : 'status'}>
@@ -366,7 +378,9 @@ function RequestDetail({
                     {location.latitude}, {location.longitude}
                   </p>
                 )}
-                {item.reviewBasis === 'METADATA' && <span className={styles.basis}>{t('仅文字依据 · 未看图片')}</span>}
+                {item.reviewBasis === 'METADATA' && (
+                  <span className={styles.basis}>{t('仅文字依据 · 未看图片')}</span>
+                )}
                 <p>{item.rationale}</p>
                 <details>
                   <summary>{t('查看参考依据')}</summary>
@@ -473,12 +487,37 @@ function RequestHistory({
   );
 }
 
-function ApprovalPreview({asset,kind,status}: {asset: PhotoAgentTask['assets'][number] | undefined;kind: PhotoAgentSuggestion['kind'];status: PhotoAgentSuggestion['status']}) {
- const [loaded,setLoaded] = useState(false);
- const [failed,setFailed] = useState(false);
- const available = Boolean(asset?.previewId && !asset.deletedAt);
- // Keep an already decoded preview for this mounted review card; never refetch a deleted source.
- if (asset && !failed && (available || loaded)) return <img loading="lazy" src={previewUrl(asset.id)} alt={asset.displayName} onLoad={()=>setLoaded(true)} onError={()=>setFailed(true)} />;
- const completed = status === 'ACCEPTED' || Boolean(asset?.deletedAt);
- return <span>{completed ? (kind === 'SEND_TO_MATERIAL' ? t('已发送到素材') : t('已移入回收站')) : t('预览暂不可用')}</span>;
+function ApprovalPreview({
+  asset,
+  kind,
+  status,
+}: {
+  asset: PhotoAgentTask['assets'][number] | undefined;
+  kind: PhotoAgentSuggestion['kind'];
+  status: PhotoAgentSuggestion['status'];
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const available = Boolean(asset?.previewId && !asset.deletedAt);
+  // Keep an already decoded preview for this mounted review card; never refetch a deleted source.
+  if (asset && !failed && (available || loaded))
+    return (
+      <img
+        loading="lazy"
+        src={previewUrl(asset.id)}
+        alt={asset.displayName}
+        onLoad={() => setLoaded(true)}
+        onError={() => setFailed(true)}
+      />
+    );
+  const completed = status === 'ACCEPTED' || Boolean(asset?.deletedAt);
+  return (
+    <span>
+      {completed
+        ? kind === 'SEND_TO_MATERIAL'
+          ? t('已发送到素材')
+          : t('已移入回收站')
+        : t('预览暂不可用')}
+    </span>
+  );
 }

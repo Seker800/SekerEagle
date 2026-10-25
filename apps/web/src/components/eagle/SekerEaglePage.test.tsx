@@ -262,15 +262,15 @@ async function selectAssetAndOpenInspector() {
 
 describe('SekerEaglePage', () => {
   it('loads the first page before secondary catalogs and statistics', async () => {
-    const first=createDeferred<{items:typeof asset[];nextCursor:null}>();
+    const first = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
     listEagleAssetsMock.mockReturnValue(first.promise);
     renderPage();
-    await waitFor(()=>expect(listEagleAssetsMock).toHaveBeenCalled());
+    await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalled());
     expect(listEagleManualTagsMock).not.toHaveBeenCalled();
     expect(listEagleManualTagGroupsMock).not.toHaveBeenCalled();
     expect(listEagleSmartFoldersMock).not.toHaveBeenCalled();
-    first.resolve({items:[asset],nextCursor:null});
-    await waitFor(()=>expect(listEagleManualTagsMock).toHaveBeenCalled());
+    first.resolve({ items: [asset], nextCursor: null });
+    await waitFor(() => expect(listEagleManualTagsMock).toHaveBeenCalled());
   });
 
   it('shows the library total in navigation without repeating it in the heading', async () => {
@@ -690,7 +690,7 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     await screen.findByRole('heading', { name: '全部' });
-    fireEvent.click(screen.getByRole('button', { name: '待处理 38' }));
+    fireEvent.click(await screen.findByRole('button', { name: '待处理 38' }));
     expect(
       within(screen.getByRole('navigation', { name: '待处理功能' })).getByRole('button', {
         name: '任务中心',
@@ -752,7 +752,7 @@ describe('SekerEaglePage', () => {
     const filterPanel = screen.getByRole('dialog', { name: '标签筛选' });
     const manualTagSearch = within(filterPanel).getByRole('searchbox', { name: '搜索标签' });
 
-    expect(within(filterPanel).getAllByRole('checkbox').length).toBeLessThanOrEqual(100);
+    expect((await within(filterPanel).findAllByRole('checkbox')).length).toBeLessThanOrEqual(100);
     fireEvent.change(manualTagSearch, { target: { value: '人工标签 01' } });
     fireEvent.click(within(filterPanel).getByRole('checkbox', { name: /人工标签 01/ }));
 
@@ -2106,7 +2106,7 @@ describe('SekerEaglePage', () => {
     const sidebar = screen.getByRole('navigation', { name: '素材库导航' });
 
     expect(within(sidebar).getByRole('button', { name: '标签' })).toBeInTheDocument();
-    expect(within(sidebar).getByRole('button', { name: '待处理 38' })).toBeInTheDocument();
+    expect(await within(sidebar).findByRole('button', { name: '待处理 38' })).toBeInTheDocument();
     expect(within(sidebar).getByRole('button', { name: '设置' })).toBeInTheDocument();
     expect(within(sidebar).queryByRole('button', { name: '人工标签' })).not.toBeInTheDocument();
     expect(

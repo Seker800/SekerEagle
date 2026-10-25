@@ -3,15 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getPhotoFacets } from '../../lib/photo-management-api';
 import { t } from '../../i18n';
-export function usePhotoFilterOptions(includePrivate: boolean) {
+export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
   const { ownerId, libraryMode } = useLibraryWorkspace();
   const facets = useQuery({
     queryKey: ['eagle', ownerId, 'PHOTO', 'photography-facets', includePrivate],
     queryFn: getPhotoFacets,
-    enabled: libraryMode === 'PHOTO',
+    enabled: enabled && libraryMode === 'PHOTO',
     staleTime: 30000,
   });
-  const people = usePhotoPeople(ownerId, includePrivate, libraryMode === 'PHOTO');
+  const people = usePhotoPeople(ownerId, includePrivate, enabled && libraryMode === 'PHOTO');
   const options = (values: string[] = []) => values.map((value) => ({ value, label: value }));
   return {
     CAMERA_MODEL: options(facets.data?.cameras),

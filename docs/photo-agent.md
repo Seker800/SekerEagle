@@ -4,12 +4,16 @@
 
 ## 使用方式
 
+整理审批页顶部可手写并保存「整理要求」，最多 8000 字符。按当前账号和 PHOTO 独立保存，修订号防止多页面静默覆盖；保存不启动扫描、不扩大当前授权范围。Agent 下次整理先调用只读 `photo_instructions`，再结合这次用户授权执行检查；只有浏览器能修改要求。
+
+新式发送到素材／回收申请允许 `visualReviewed:false`，持久记录 METADATA 依据并显示「仅文字依据 · 未看图片」；理由应说明采用的文件名、属性及不确定性，不能伪称看过图。补充位置与旧版 `photo_propose` 仍要求视觉核对。未看图不削弱 owner、模式、私密、版本和人工审批检查。
+
 Agent 在用户授权的照片范围内分析，并将结果整理为有标题、统一理由和逐项依据的申请。页面列出补充位置、发送到素材和移入回收站三类申请；不在本产品内定义废片或非照片的判断标准。
 
 用户先看操作、数量、理由和代表照片，再打开详情。默认选中全部待处理项，可以取消勾选部分照片后点击“同意选中申请”或“拒绝选中申请”。展开页面、勾选、刷新、轮询和等待均不会触发资源操作。长申请先展示 12 张代表照片，可显式展开完整列表；操作栏明确显示实际选中数量。已处理记录、部分成功和逐项错误均可查看。
 
 - 补充位置：保存独立位置记录，支持 CITY 城市级或 EXACT 精确坐标；精确坐标必须声明 accuracyMeters。记录来源与精度，不覆盖原始 EXIF GPS 或文件；已经有原始或补充位置的照片不接受覆盖申请。
-- 发送到素材：批准后调用共用 EagleLibraryTransferService，以申请项 ID 作为固定幂等操作 ID。复制独立目标资源并保留目标私密投影，成功后源照片进入源回收状态，不做双重归属或仅前端过滤。审批版本快照会传给共用发送服务，改变过的源照片不能按旧申请发送。发送失败不自动重试；用户再次同意时续用原发送计划，避免重复生成目标。
+- 发送到素材：批准后调用共用 EagleLibraryTransferService，以申请项 ID 作为固定幂等操作 ID。复制独立目标资源及当前版本的缩略图、预览／编辑图、已完成切片、兼容的 2B 图片向量、代表色、标签、评分与说明；摄影信息、补充位置和编辑配方按版本存档，反向发送时恢复摄影信息。目标标签独立映射且保持私密规则，不共享源对象或跨库 ID；只为缺失或不兼容结果排队。成功后源照片进入源回收状态，不做双重归属或仅前端过滤。审批版本快照会传给共用发送服务，改变过的源照片不能按旧申请发送。发送失败不自动重试；用户再次同意时续用原发送计划，避免重复生成目标。
 - 移入回收站：批准后使用共用 setEagleTrash，包含既有逻辑照片配对语义；不会永久删除。位置补充和回收可在记录中逐项撤销，但后续改动导致版本不匹配时拒绝不安全撤销。发送的调整通过素材模式既有“发送到照片”流程进行。
 
 新申请持久等待审批，expiresAt 为 null；旧版草稿任务保留原有过期行为。执行前复核账号、PHOTO、私密权限、媒体版本、行版本和证据提取时间。过时申请可以拒绝，不能静默换成新的照片内容。单项失败独立记录，不把未成功的其他项报告为成功。
@@ -22,7 +26,7 @@ Agent 在用户授权的照片范围内分析，并将结果整理为有标题�
 
 API：`POST /api/photos/agent/requests` 仅保存申请；`GET tasks`、`GET tasks/:id` 查询申请；`POST tasks/:id/review` 批量审批。批量审批及单项审核、撤销、取消均有浏览器主体与 Origin 守卫，photo:read／photo:suggest PAT 无法调用。MCP 不暴露接受、拒绝、回收、发送或撤销执行工具；只暴露读取与提交申请。判断标准和理由由 Agent 提供，系统只验证作用域、类型、快照和执行边界。
 
-网页只在手动按钮事件中执行，按最多 5 项一批提交并累计显示结果，避免大批发送形成一个过长的 HTTP 请求；断线或失败不会自动重新批准。服务端发送使用 APPLYING／FAILED 状态和原幂等计划，正常重复点击不会复制多个目标。
+网页保留当前详情已加载的图片，批准发送／回收后显示明确完成状态，不把源照片不可访问报告成预览故障；新打开的已处理记录显示操作结果。批量审核显示整批进度，不按每张重新清空图库及统计。网页只在手动按钮事件中执行，按最多 5 项一批提交并累计显示结果，避免大批发送形成一个过长的 HTTP 请求；断线或失败不会自动重新批准。服务端发送使用 APPLYING／FAILED 状态和原幂等计划，正常重复点击不会复制多个目标。
 
 旧版 photo_task_create／photo_propose 和候选工具为兼容保留；旧 CITY 任务的保守 GPS 候选规则只作用于该旧流程，不作为新申请的强制判断标准。人工同意的具体操作由申请固定，Agent 无法在审核时切换操作类型。
 
@@ -51,7 +55,7 @@ API：`POST /api/photos/agent/requests` 仅保存申请；`GET tasks`、`GET tas
 
 替换为当前机器的 Node 22、仓库路径和独立测试站点端口。入口直接运行 Node，避免 npm 启动信息混入 stdio 协议。MCP 只接受无凭据、无路径的 loopback origin，禁止重定向；图片限制为当前派生缩略图及 1 MiB，JSON 返回限制为 4 MiB。它不自行读取 `.env`，不直接连接数据库、MinIO 或模型服务。
 
-可用工具：`photo_list`、`photo_preview`、`photo_request_submit`、`photo_request_history`、`photo_task_create`、`photo_task`、`photo_city_candidates`、`photo_visual_scores`、`photo_propose`。没有修改照片的 MCP 工具。连接外部 Agent 意味着它的模型可能读取返回的元数据和预览；实际本地或云端推理由该客户端配置决定，本地 2B 检索不保证 Agent 也在本地运行。
+可用工具：`photo_instructions`、`photo_list`、`photo_preview`、`photo_request_submit`、`photo_request_history`、`photo_task_create`、`photo_task`、`photo_city_candidates`、`photo_visual_scores`、`photo_propose`。没有修改照片的 MCP 工具。连接外部 Agent 意味着它的模型可能读取返回的元数据和预览；实际本地或云端推理由该客户端配置决定，本地 2B 检索不保证 Agent 也在本地运行。
 
 将授权的分析范围和期望交给 Agent，例如：
 
@@ -69,7 +73,7 @@ API：`POST /api/photos/agent/requests` 仅保存申请；`GET tasks`、`GET tas
 
 运行 `npm run test:library-integration` 可在独立 loopback 的 sekereagle_test 执行升级、真实数据库／HTTP 与完整恢复验证。`PHOTO_AGENT_COVERAGE=1 node scripts/testing/run-library-tests.mjs` 可检查审批服务覆盖率；先完成构建并执行安全目标检查。
 
-本轮本机测试工作台支持 `PHOTO_WORKBENCH_APPROVAL_SAMPLES=1`，只为四张合成图片创建三份清楚标注的演示申请，不会自动审批。原有 27 张私有样本复用本机缓存，不重新读取群晖。运行身份从 `.omx/artifacts/photo-workbench.json` 获取；本轮日志和截图为 `.omx/artifacts/approvals-*`。生产未部署新代码或迁移。
+本轮本机测试工作台支持 `PHOTO_WORKBENCH_APPROVAL_SAMPLES=1`，只为四张合成图片创建三份清楚标注的演示申请，不会自动审批。原有 27 张私有样本复用本机缓存，不重新读取群晖。运行身份从 `.omx/artifacts/photo-workbench.json` 获取；本轮日志和截图为 `.omx/artifacts/approvals-*`。部署事实以 current-runtime.md 的最新核验为准。
 
 覆盖提交无资源写入、200 项大载荷、2 MiB 超限、PAT 不能审批、部分选择、跨主体／模式／私密与版本隔离、精度记录、拒绝过时申请、重复发送、复制中断后手动续传及撤销。完整集成还核对历史升级和完整数据库恢复。发现旧语义智能文件夹两张表缺少既定模式不可变触发器，新增独立迁移补齐，并继续通过全表模式隔离检查。
 

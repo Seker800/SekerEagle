@@ -387,6 +387,7 @@ model EagleAsset {
   vectorSuggestions              EagleVectorTagSuggestion[]
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
+  transferFacts                  EagleAssetTransferFacts?
   photoMetadata                  EaglePhotoMetadata?
   photoLocation                  EaglePhotoLocation?
   photoAgentSuggestions          EaglePhotoAgentSuggestion[]
@@ -1621,4 +1622,20 @@ model EaglePhotoMapCell {
 
   @@id([ownerId, libraryMode, snapshotId, includePrivate, level, x, y])
   @@index([ownerId, libraryMode, snapshotId, includePrivate, level, y, x], map: "EaglePhotoMapCell_snapshot_position_idx")
+}
+
+// Intrinsic facts carried across a mode boundary; these are not active PHOTO relationships.
+model EagleAssetTransferFacts {
+  ownerId String
+  libraryMode LibraryMode
+  assetId String
+  assetRevision Int
+  schemaVersion Int @default(1)
+  photoMetadata Json?
+  photoLocation Json?
+  editRecipe Json?
+  detailsReady Boolean @default(false)
+  createdAt DateTime @default(now())
+  asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@id([ownerId,libraryMode,assetId])
 }

@@ -132,6 +132,6 @@ export class ReviewPhotoRequestDto {
 }
 
 export class UpdatePhotoAgentInstructionsDto {
-  @ApiProperty({maxLength:8000}) @IsString() @MaxLength(8000) instructions!: string;
-  @ApiProperty({minimum:0}) @IsInt() @Min(0) revision!: number;
+  @ApiProperty({ maxLength: 8000 }) @IsString() @MaxLength(8000) instructions!: string;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) revision!: number;
 }
