@@ -28,3 +28,27 @@ test('FIFO fairness belongs to each lane, so reserved background turns still use
   assert.doesNotMatch(background[3]!, /DESC,\s+CASE CASE WHEN/);
   assert.ok(queries.every((sql) => !sql.includes('policy.priority')));
 });
+
+test('replacement freshness uses only the completed upload of the current owned media object', async () => {
+  let query = '';
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        query = sql.text;
+        return [];
+      },
+    } as never,
+    () => false,
+  );
+  await select({ where: { lane: 'INTERACTIVE' }, take: 50 } as ClaimFindManyInput, 'RECENT');
+  assert.match(query, /JOIN "UploadSession" current_upload/);
+  assert.match(query, /current_upload\."objectKey"=a\."originalObjectKey"/);
+  assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
+  assert.match(query, /current_upload\."libraryMode"=a\."libraryMode"/);
+  assert.match(query, /current_upload\.status='COMPLETED'/);
+  assert.match(
+    query,
+    /GREATEST\(a\."libraryAddedAt",COALESCE\(current_upload\."completedAt",a\."libraryAddedAt"\)\)/,
+  );
+  assert.doesNotMatch(query, /job\."createdAt">=/);
+});
