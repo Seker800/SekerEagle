@@ -128,6 +128,7 @@ const resourcePool = new MediaResourcePool(
   workerConcurrency,
   () => wakeScheduler?.wakeNow(),
   reportLoopError,
+  boundedInteger(process.env.EAGLE_EMBEDDING_CONCURRENCY, 1, 1, 2),
 );
 const embeddingSpaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';
 const embeddingModel = process.env.MLX_EMBEDDING_MODEL ?? 'Qwen/Qwen3-VL-Embedding-2B';

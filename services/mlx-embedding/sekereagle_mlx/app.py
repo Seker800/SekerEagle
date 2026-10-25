@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 import hmac
 import io
 import os
@@ -40,6 +43,26 @@ class Runtime:
 
 
 runtime = Runtime()
+# One dedicated MLX thread: GPU compute stays serial while HTTP receives the next image.
+inference_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-inference")
+inference_slots = threading.BoundedSemaphore(3)
+
+
+def submit_inference(function, value):
+    try:
+        future = inference_executor.submit(function, value)
+    except BaseException:
+        inference_slots.release()
+        raise
+    # A disconnected caller must not release admission while its GPU work still runs.
+    future.add_done_callback(lambda _: inference_slots.release())
+    return asyncio.shield(asyncio.wrap_future(future))
+
+
+def admit_inference():
+    if not inference_slots.acquire(blocking=False):
+        raise HTTPException(status_code=503, detail="inference capacity is busy", headers={"Retry-After": "1"})
+
 
 
 def load_runtime() -> None:
@@ -161,7 +184,16 @@ async def embed_image(
     content_type = request.headers.get("content-type", "").split(";", 1)[0].lower()
     if content_type not in {"image/jpeg", "image/png", "image/webp"}:
         raise HTTPException(status_code=415, detail="unsupported image content type")
-    body = await read_bounded_body(request)
+    admit_inference()
+    try:
+        body = await read_bounded_body(request)
+    except BaseException:
+        inference_slots.release()
+        raise
+    return await submit_inference(infer_image, body)
+
+
+def infer_image(body: bytes) -> dict[str, object]:
     try:
         with Image.open(io.BytesIO(body), formats=ALLOWED_IMAGE_FORMATS) as probe:
             probe.verify()
@@ -194,9 +226,14 @@ async def embed_text(
     require_token(authorization)
     if x_embedding_dimensions != DIMENSIONS:
         raise HTTPException(status_code=409, detail="embedding dimension contract mismatch")
+    admit_inference()
+    return await submit_inference(infer_text, input.text)
+
+
+def infer_text(text: str) -> dict[str, object]:
     with runtime.lock:
         ensure_runtime_loaded()
-        output = runtime.model.process([{"text": input.text}], processor=runtime.processor)
+        output = runtime.model.process([{"text": text}], processor=runtime.processor)
         mx.eval(output)
         vector = project_mrl(output[0].tolist(), DIMENSIONS)
         runtime.last_used_at = time.monotonic()

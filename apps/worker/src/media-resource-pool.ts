@@ -9,6 +9,7 @@ export class MediaResourcePool {
     private readonly nasConcurrency: number,
     private readonly wake: () => void,
     private readonly reportError: (error: unknown) => void,
+    private readonly embeddingConcurrency = 1,
   ) {}
   get activeCount() {
     return this.occupied.NAS + this.occupied.EMBEDDING;
@@ -23,7 +24,10 @@ export class MediaResourcePool {
     run: (job: T) => Promise<void>,
   ): Promise<void> {
     // Reserve before awaiting the claim; concurrent wake-ups cannot overfill either resource.
-    const limit = resource === 'NAS' ? this.nasConcurrency : 1;
+    const limit =
+      resource === 'NAS'
+        ? this.nasConcurrency
+        : Math.min(2, Math.max(1, this.embeddingConcurrency));
     const slots = limit - this.occupied[resource];
     if (slots <= 0 && this.claiming[resource] > 0) this.pendingWake[resource] = true;
     for (let i = 0; i < slots; i++) {

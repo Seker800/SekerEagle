@@ -163,11 +163,21 @@ test('a wake during an in-flight claim is replayed if that claim returns empty, 
 
 test('two embedding requests may overlap IO, with bounded reservations and unchanged NAS limit', async () => {
   let release!: () => void;
-  const held = new Promise<void>((done) => { release = done; });
-  const pool = new MediaResourcePool(1, () => {}, () => {}, 2);
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    2,
+  );
   let claims = 0;
   const claim = async () => ++claims;
-  await Promise.all([pool.fill('EMBEDDING', claim, async () => held), pool.fill('EMBEDDING', claim, async () => held)]);
+  await Promise.all([
+    pool.fill('EMBEDDING', claim, async () => held),
+    pool.fill('EMBEDDING', claim, async () => held),
+  ]);
   assert.equal(pool.active('EMBEDDING'), 2);
   assert.equal(claims, 2);
   await pool.fill('EMBEDDING', claim, async () => held);
