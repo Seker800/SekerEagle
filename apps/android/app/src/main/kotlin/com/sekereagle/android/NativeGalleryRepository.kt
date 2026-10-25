@@ -1,5 +1,7 @@
 package com.sekereagle.android
 
+import com.sekereagle.android.core.NativeCacheStatistics
+
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.LruCache
@@ -378,9 +380,13 @@ class NativeGalleryRepository(
             val epoch = session.authorizationEpoch()
             val local = synchronized(imagesLock) { memoryEpoch }
             val ticket = disk?.generation ?: 0
+            val statisticsTicket = disk?.statisticsTicket() ?: 0
             val version = sourceVersion
             val key = "$scope:$full:$path:$version:$ticket"
             val id = version?.let { disk?.identity(scope, path, it) }
+            fun record(outcome: NativeCacheStatistics.Outcome) {
+                if (id != null) disk?.record(outcome, statisticsTicket)
+            }
             fun checkActive() {
                 session.checkAuthorization(epoch)
                 synchronized(imagesLock) {
@@ -392,12 +398,15 @@ class NativeGalleryRepository(
                 checkActive()
                 id?.let { entry -> disk?.touch(entry) }
                 checkActive()
+                record(NativeCacheStatistics.Outcome.MEMORY)
                 return@withContext it
             }
             imageLoads[(path.hashCode() and Int.MAX_VALUE) % imageLoads.size].withLock {
                 decoding.withPermit {
                     checkActive()
                     cache.get(key)?.let {
+                        checkActive()
+                        record(NativeCacheStatistics.Outcome.MEMORY)
                         return@withPermit it
                     }
                     val cached = id?.let { disk?.read(it) }
@@ -428,6 +437,7 @@ class NativeGalleryRepository(
                                 null
                             }
                         }
+                    val diskHit = bitmap != null
                     if (bitmap == null) {
                         if (id != null && cached != null) disk?.remove(id)
                         val bytes = session.media(path)
@@ -441,6 +451,7 @@ class NativeGalleryRepository(
                         checkActive()
                         if (disk == null || ticket == disk.generation) cache.put(key, result)
                     }
+                    record(if (diskHit) NativeCacheStatistics.Outcome.DISK else NativeCacheStatistics.Outcome.DOWNLOAD)
                     result
                 }
             }

@@ -4,6 +4,9 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import com.sekereagle.android.core.NativeDiskCache
+import com.sekereagle.android.core.NativeCacheStatistics
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -37,6 +40,22 @@ internal constructor(
         get() = store.generation()
 
     internal fun invalidate() = store.invalidate()
+
+    private val counters = NativeCacheStatistics()
+    private val mutableStatistics = MutableStateFlow(counters.snapshot())
+    internal val statistics = mutableStatistics.asStateFlow()
+    internal fun statisticsTicket() = counters.token()
+
+    @Synchronized
+    internal fun record(outcome: NativeCacheStatistics.Outcome, ticket: Long) {
+        if (counters.record(outcome, ticket)) mutableStatistics.value = counters.snapshot()
+    }
+
+    @Synchronized
+    private fun resetStatistics() {
+        counters.reset()
+        mutableStatistics.value = counters.snapshot()
+    }
 
     private val keyAlias = "sekereagle-native-derived-cache-v1"
 
@@ -123,7 +142,10 @@ internal constructor(
             store.resize(mb.toLong() * MIB)
         }
 
-    internal suspend fun clear() = withContext(Dispatchers.IO) { store.clear() }
+    internal suspend fun clear() = withContext(Dispatchers.IO) {
+        store.clear()
+        resetStatistics()
+    }
 
     companion object {
         const val DEFAULT_MB = 512

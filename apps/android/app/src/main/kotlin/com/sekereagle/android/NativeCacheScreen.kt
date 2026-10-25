@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit, back: () -> Unit) {
+    val statistics by cache.statistics.collectAsState()
     var usage by remember { mutableStateOf<NativeCacheUsage?>(null) }
     var value by rememberSaveable { mutableStateOf(cache.limitMb.toString()) }
     var busy by remember { mutableStateOf(false) }
@@ -55,7 +56,7 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
             try {
                 if (clear) cache.clear() else cache.resize(amount ?: return@launch)
                 updateUsage()
-                message = if (clear) "图片缓存已清理" else "缓存上限已保存"
+                message = if (clear) "缓存已清空" else "缓存上限已保存"
             } catch (reason: kotlinx.coroutines.CancellationException) {
                 throw reason
             } catch (_: Exception) {
@@ -80,7 +81,7 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Text("图片缓存", fontSize = 24.sp)
-            Text("已下载的缩略图和预览优先从手机读取，重启后仍可复用。达到上限时自动清理最久未使用的缓存。", color = NativeMuted)
+            Text("已下载的缩略图和预览优先从手机读取，重启、覆盖升级后仍可复用。达到上限时自动清理最久未使用的缓存。", color = NativeMuted)
             usage?.let { item ->
                 Text(
                     "已使用 ${"%.1f".format(java.util.Locale.ROOT, item.bytes / NativeMediaCache.MIB.toDouble())} MB",
@@ -94,6 +95,14 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
             }
                 ?: if (message == null) CircularProgressIndicator(Modifier.size(24.dp))
                 else Text("缓存占用暂不可读取", color = NativeMuted)
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    if (statistics.requests == 0L) "缓存命中率 · 暂无记录"
+                    else "缓存命中率 ${"%.1f".format(java.util.Locale.ROOT, statistics.hitRate * 100)}%",
+                    Modifier.testTag("cache-hit-rate"),
+                )
+                Text("本次启动 · 内存 ${statistics.memoryHits} 次 · 磁盘 ${statistics.diskHits} 次 · 下载 ${statistics.downloads} 次", color = NativeMuted)
+            }
             OutlinedTextField(
                 value,
                 { if (it.length <= 5 && it.all(Char::isDigit)) value = it },
@@ -128,7 +137,7 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
                 Modifier.fillMaxWidth().heightIn(min = 48.dp),
                 enabled = !busy,
             ) {
-                Text("清理图片缓存")
+                Text("清空缓存")
             }
             message?.let { Text(it, Modifier.testTag("cache-message"), color = NativeMuted) }
             Text("仅管理手机上的缩略图和预览缓存，不删除原图、下载文件或上传任务；放大查看的原图和视频不计入此上限。", color = NativeMuted)
@@ -137,15 +146,15 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
     if (confirm)
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text("清理图片缓存？") },
-            text = { Text("清理后，再次查看未缓存的图片时会重新下载。图库原图和手机文件不会删除。") },
+            title = { Text("清空缓存？") },
+            text = { Text("清空后，再次查看未缓存的图片时会重新下载。图库原图和手机文件不会删除。") },
             dismissButton = { TextButton({ confirm = false }) { Text("取消") } },
             confirmButton = {
                 TextButton({
                     confirm = false
                     operate(true)
                 }) {
-                    Text("清理缓存")
+                    Text("清空")
                 }
             },
         )
