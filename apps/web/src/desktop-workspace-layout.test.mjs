@@ -53,3 +53,14 @@ test('recommendation tag search uses a flat list instead of cards inside a card'
   assert.match(vectorStyles, /\.tagCandidate\s*\{[^}]*min-height:\s*48px;[^}]*border:\s*0;/s);
   assert.doesNotMatch(vectorStyles, /\.tagCandidate\s*\{[^}]*border-radius:/s);
 });
+
+test('task center owns scrolling inside the height-bounded workspace', () => {
+  const css = readFileSync(
+    new URL('./components/eagle/EagleTaskCenter.module.css', import.meta.url),
+    'utf8',
+  );
+  const center = /\.center\s*\{([^}]+)\}/s.exec(css)[1];
+  assert.match(center, /min-height:\s*0/);
+  assert.match(center, /overflow-y:\s*auto/);
+  assert.match(center, /flex:\s*1/);
+});

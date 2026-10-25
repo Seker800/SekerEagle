@@ -303,3 +303,18 @@ describe('cross-library task visibility and controls', () => {
     expect(screen.getAllByText('剩余 12 项')[0]).toBeVisible();
   });
 });
+
+it('shows an explicit computing status and active step outside collapsed details', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    groups: [
+      { ...summary.groups[0], running: 1, steps: [{ ...summary.groups[0].steps[0], running: 1 }] },
+    ],
+  });
+  mount();
+  const card = (await screen.findByRole('heading', { name: '2B 向量搜图', level: 3 })).closest(
+    'article',
+  )!;
+  expect(within(card).getByText('计算ing')).toBeInTheDocument();
+  expect(within(card).getByLabelText('当前执行步骤')).toHaveTextContent('生成图片向量');
+});

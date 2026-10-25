@@ -67,3 +67,35 @@ describe('task explanations', () => {
     expect(taskStepLabel('UNKNOWN_STEP')).toBe('其他处理步骤');
   });
 });
+
+it('separates computing, queued, stopped failures and completed without hiding active work during draining', async () => {
+  const { taskStatusLabel } = await import('./task-center-labels');
+  const group: TaskGroup = {
+    id: 'EMBEDDING',
+    background: true,
+    queued: 0,
+    running: 0,
+    failed: 0,
+    completed: 10,
+    approval: 0,
+    waiting: [],
+    steps: [],
+  };
+  const schedule = { mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' };
+  expect(taskStatusLabel(group, schedule)).toBe('已完成');
+  expect(taskStatusLabel({ ...group, queued: 2 }, schedule)).toBe('排队ing');
+  expect(taskStatusLabel({ ...group, failed: 3 }, schedule)).toBe('已停止（3项失败）');
+  expect(
+    taskStatusLabel(
+      { ...group, queued: 2, failed: 1, policy: { paused: true, priority: 0 } },
+      schedule,
+    ),
+  ).toBe('已停止（1项失败）');
+  expect(taskStatusLabel({ ...group, queued: 2 }, { ...schedule, mode: 'MANUAL' })).toBe('已停止');
+  expect(
+    taskStatusLabel(
+      { ...group, running: 1, failed: 1, policy: { paused: true, priority: 0 } },
+      schedule,
+    ),
+  ).toBe('计算ing');
+});
