@@ -70,6 +70,7 @@ export function createScheduledMediaSelector(
 ) {
   const turns = new Map<string, number>();
   const windows = new Map<string, { ids: string[]; expiresAt: number }>();
+  const discoveries = new Map<string, Promise<EagleAssetProcessingJob[]>>();
   let generation = 0;
   const select = async (input: ClaimFindManyInput, age?: MediaQueueAge) => {
     const version = generation;
@@ -89,23 +90,31 @@ export function createScheduledMediaSelector(
     for (let attempt = 0; attempt < 2; attempt++) {
       let window = windows.get(key);
       if (!window || window.expiresAt <= Date.now()) {
-        const rows = await selectScheduledMediaCandidates(
-          client,
-          input,
-          preferPriority,
-          unavailable,
-          options,
-        );
+        let discovery = discoveries.get(key);
+        if (!discovery) {
+          discovery = selectScheduledMediaCandidates(
+            client,
+            input,
+            preferPriority,
+            unavailable,
+            options,
+          );
+          discoveries.set(key, discovery);
+        }
+        let rows: EagleAssetProcessingJob[];
+        try {
+          rows = await discovery;
+        } finally {
+          if (discoveries.get(key) === discovery) discoveries.delete(key);
+        }
         // A notification during discovery must not repopulate an invalidated window.
         if (version !== generation) return [];
-        window = {
-          ids: rows.map((row) => row.id),
-          // NOTIFY invalidates new work immediately. Empty recent/lane windows need the
-          // same 30s fallback as the scheduler, or each history job rescans the pool.
-          expiresAt: Date.now() + 30000,
-        };
-        if (windows.size >= 24) windows.delete(windows.keys().next().value!);
-        windows.set(key, window);
+        window = windows.get(key);
+        if (!window || window.expiresAt <= Date.now()) {
+          window = { ids: rows.map((row) => row.id), expiresAt: Date.now() + 30000 };
+          if (windows.size >= 24) windows.delete(windows.keys().next().value!);
+          windows.set(key, window);
+        }
       }
       if (!window.ids.length) return [];
       const rows = await selectScheduledMediaCandidates(
@@ -121,7 +130,7 @@ export function createScheduledMediaSelector(
       if (version !== generation) return [];
       window.ids = rows.map((row) => row.id);
       if (rows.length) return rows;
-      windows.delete(key);
+      if (windows.get(key) === window) windows.delete(key);
       // Refill once now: the other resource may stay busy for minutes, and
       // waiting for its completion/30s fallback would leave this resource idle.
     }
@@ -131,6 +140,7 @@ export function createScheduledMediaSelector(
     invalidate: () => {
       generation++;
       windows.clear();
+      discoveries.clear();
     },
   });
 }
