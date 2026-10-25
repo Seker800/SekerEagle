@@ -34,6 +34,7 @@ export function selectScheduledMediaCandidates(
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
     LEFT JOIN "UploadSession" current_upload ON current_upload."objectKey"=a."originalObjectKey"
+      AND current_upload."completedAt">=now()-interval '24 hours'
       AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
     WHERE ${options.candidateIds ? Prisma.sql`job.id IN (${Prisma.join(options.candidateIds)}) AND` : Prisma.empty}
