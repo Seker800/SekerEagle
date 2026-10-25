@@ -80,3 +80,13 @@ it('updates local grouping by content id and retains it when reimporting an ordi
   ]);
   expect((await loadPhotoLut(grouped.id)).data).toEqual(before.data);
 });
+
+it('ships fourteen Leica LUTs and keeps personal imports independent of bundled versions', async () => {
+ const bundled = (await listPhotoLuts()).filter(entry => entry.id.startsWith('bundled-'));
+ expect(bundled).toHaveLength(14);
+ expect(new Set(bundled.map(entry => entry.id)).size).toBe(14);
+ expect(bundled.every(entry => entry.size === 64 && entry.group === '徕卡')).toBe(true);
+ const personal = await importPhotoLut(file(identity));
+ expect(await listPhotoLuts()).toEqual(expect.arrayContaining([...bundled, personal]));
+ expect((await loadPhotoLut(personal.id)).data[0]).toBe(0);
+});

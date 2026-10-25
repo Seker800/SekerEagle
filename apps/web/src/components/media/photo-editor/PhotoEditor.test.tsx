@@ -1028,3 +1028,11 @@ it('server recipe saving never loads or exports the original, and preserves full
   expect(onSave).not.toHaveBeenCalled();
   expect(onSaveRecipe.mock.calls[0][0].edits.watermarkCamera).toBe('Test Camera');
 });
+
+ it('limits phone adjustment categories to tone, color and detail', async () => {
+  render(<PhotoEditor presentation="native" source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  expect(screen.getByRole('button', { name: '影调' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '色彩' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '细节' })).toBeInTheDocument();
+  for (const name of ['HSL', '曲线', '色彩分级']) expect(screen.queryByRole('button', { name })).not.toBeInTheDocument();
+ });
