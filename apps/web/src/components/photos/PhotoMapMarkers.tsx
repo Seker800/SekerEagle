@@ -58,15 +58,15 @@ export function PhotoMapMarkers({
         value1: names.get(group.cluster.id)?.label ?? t('附近区域'),
         value2: group.cluster.count,
       });
-      const radius = Math.min(2, 0.9 + Math.log10(group.cluster.count + 1) * 0.25);
+      const radius = Math.min(3.6, 2.2 + Math.log10(group.cluster.count + 1) * 0.3);
       const point = L.circleMarker(photoMapPosition(group.cluster), {
         pane: 'photoDistribution',
         renderer,
         radius,
-        color: '#c4d5e5',
-        weight: 0.4,
-        fillColor: '#8eaac3',
-        fillOpacity: 0.65,
+        color: '#ffffff',
+        weight: 0,
+        fillColor: '#ffffff',
+        fillOpacity: 1,
         opacity: 1,
       }).addTo(layer);
       point.bindTooltip(label, { direction: 'top', offset: [0, -5] });
@@ -142,8 +142,8 @@ export function PhotoMapMarkers({
       const active = id === selectedId;
       point.setRadius(active ? radius + 1.5 : radius);
       point.setStyle({
-        fillColor: active ? '#d6eaff' : '#8eaac3',
-        color: active ? '#ffffff' : '#c4d5e5',
+        fillColor: '#ffffff',
+        color: '#ffffff',
       });
     }
     for (const { group, button, marker } of activeMounts.current) {

@@ -367,3 +367,9 @@
     transition: none;
   }
 }
+
+/* One canvas layer keeps dense locations inexpensive. Gaussian shadows produce
+   a round, steadily fading halo without spokes or animated flashing. */
+.distributionGlow {
+  filter: drop-shadow(0 0 2px rgb(255 255 255 / 85%)) drop-shadow(0 0 5px rgb(200 224 255 / 55%));
+}

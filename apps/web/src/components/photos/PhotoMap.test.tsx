@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => {
     fitBounds: vi.fn(),
     remove: vi.fn(),
     invalidateSize: vi.fn(),
-    createPane: vi.fn(() => ({ style: {} })),
+    createPane: vi.fn(() => ({ style: {}, classList: { add: vi.fn() } })),
     on: vi.fn(),
     off: vi.fn(),
     getZoom: vi.fn(() => 5),

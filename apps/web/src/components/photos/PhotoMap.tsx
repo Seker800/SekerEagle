@@ -135,7 +135,9 @@ export function PhotoMap({
     citiesPane.style.pointerEvents = 'none';
     citiesPane.style.zIndex = '450';
     map.createPane('photoLocations').style.zIndex = '600';
-    map.createPane('photoDistribution').style.zIndex = '550';
+    const distributionPane = map.createPane('photoDistribution');
+    distributionPane.style.zIndex = '550';
+    distributionPane.classList.add(styles.distributionGlow);
     const labels = L.layerGroup().addTo(map),
       controller = new AbortController();
     const palette = getComputedStyle(container.current);
