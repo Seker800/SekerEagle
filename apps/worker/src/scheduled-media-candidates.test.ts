@@ -243,3 +243,31 @@ test('an empty recent cohort is reused between normal wakes but new work invalid
     'new upload/dependency/policy notifications cannot wait for expiry',
   );
 });
+
+test('concurrent pipeline claims share discovery and invalidation fences the in-flight result', async () => {
+  let reads = 0;
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async () => {
+        reads++;
+        await held;
+        return [];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
+  const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
+  const first = select(input),
+    second = select(input);
+  assert.deepEqual({ reads }, { reads: 1 });
+  select.invalidate();
+  release();
+  assert.deepEqual(await Promise.all([first, second]), [[], []]);
+  await select(input);
+  assert.deepEqual({ reads }, { reads: 2 });
+});
