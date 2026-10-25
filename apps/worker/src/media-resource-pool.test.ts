@@ -188,3 +188,46 @@ test('two embedding requests may overlap IO, with bounded reservations and uncha
   await new Promise((done) => setImmediate(done));
   assert.equal(pool.activeCount, 0);
 });
+
+test('an offline model leaves vector work unclaimed while NAS keeps progressing, then resumes without a restart', async () => {
+  let ready = false,
+    nas = 0,
+    vectors = 0;
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    2,
+  );
+  for (let i = 0; i < 3; i++) {
+    await pool.fill(
+      'EMBEDDING',
+      async () => (ready ? 'vector' : null),
+      async () => {
+        vectors++;
+      },
+    );
+    await pool.fill(
+      'NAS',
+      async () => 'color',
+      async () => {
+        nas++;
+      },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.equal(nas, 3);
+  assert.equal(vectors, 0);
+  assert.equal(pool.activeCount, 0);
+  ready = true;
+  await pool.fill(
+    'EMBEDDING',
+    async () => 'vector',
+    async () => {
+      vectors++;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(vectors, 2);
+  assert.equal(pool.activeCount, 0);
+});

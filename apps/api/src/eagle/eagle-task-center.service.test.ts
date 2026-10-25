@@ -347,3 +347,40 @@ test('pause needs no user priority, and historical priority cannot override auto
   assert.equal(write?.create.priority, 0);
   assert.equal(write?.update.priority, 0);
 });
+
+test('reports embedding health even when every vector task is already processing', async () => {
+  for (const [states, expected] of [
+    [['OFFLINE'], 'OFFLINE'],
+    [['DRIFTED'], 'DRIFTED'],
+    [['OFFLINE', 'READY'], 'READY'],
+    [[], 'UNKNOWN'],
+  ] as const) {
+    const service = new EagleTaskCenterService(
+      {
+        $queryRaw: async () => [
+          {
+            family: 'MEDIA',
+            step: 'GENERATE_EMBEDDING',
+            version: 'v1',
+            status: 'RUNNING',
+            reason: 'QUEUED',
+            count: 2n,
+            nextAt: null,
+          },
+        ],
+        eagleProcessingWorkerHeartbeat: {
+          findMany: async () =>
+            states.map((embedding) => ({
+              capabilities: { background: true, jobKinds: null, embedding },
+            })),
+        },
+        eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+        eagleTaskPolicy: { findMany: async () => [] },
+      } as never,
+      'PHOTO',
+    );
+    const result = await service.overview('owner-a');
+    assert.equal((result as { embedding?: string }).embedding, expected);
+    assert.equal(result.groups[0]?.running, 2);
+  }
+});

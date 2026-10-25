@@ -395,3 +395,32 @@ it('keeps disabled work on its card but excludes it from executable queue totals
   expect(overview).not.toHaveTextContent('剩余 60772 项');
   expect(screen.getByText('剩余 60760 项')).toBeVisible();
 });
+
+it('warns about a disconnected model while in-flight work is draining and clears after recovery', async () => {
+  const offline = {
+    ...summary,
+    embedding: 'OFFLINE',
+    groups: [{ ...summary.groups[0], running: 2, waiting: [] }],
+  };
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(offline as never);
+  mount();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型连接中断');
+  expect(screen.getByRole('alert')).toHaveTextContent('其他处理继续');
+  expect(screen.getByText('计算ing')).toBeVisible();
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...offline,
+    embedding: 'READY',
+  } as never);
+  fireEvent.click(screen.getByRole('button', { name: '刷新' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+});
+
+it('distinguishes model configuration faults from connection loss without exposing a server address', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    embedding: 'DRIFTED',
+  } as never);
+  mount();
+  expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型配置不匹配');
+  expect(screen.getByRole('alert')).not.toHaveTextContent('192.168');
+});
