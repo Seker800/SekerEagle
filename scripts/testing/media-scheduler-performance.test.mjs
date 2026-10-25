@@ -22,6 +22,21 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 after(() => db.$disconnect());
 const input = { where: { lane: 'BACKGROUND', kind: { in: ['GENERATE_EMBEDDING'] } }, take: 50 };
+test('completed upload freshness has a covering lookup without weakening current-object ownership', async () => {
+  const indexes =
+    await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='UploadSession' AND indexname='UploadSession_completed_freshness_cover_idx'`;
+  assert.equal(
+    indexes.length,
+    1,
+    'freshness lookups must avoid random reads of wide historical upload rows',
+  );
+  assert.match(
+    indexes[0].indexdef,
+    /\("objectKey"\) INCLUDE \("uploaderId", "libraryMode", "completedAt"\)/,
+  );
+  assert.match(indexes[0].indexdef, /WHERE \(status = 'COMPLETED'/);
+});
+
 async function fixture(size = 1) {
   const owner = randomUUID(),
     prefix = randomUUID();
