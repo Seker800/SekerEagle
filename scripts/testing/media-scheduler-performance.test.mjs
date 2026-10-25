@@ -44,19 +44,12 @@ test('scheduler estimates retain correlations between kind, lane, state and proc
   assert.ok(rows[0].kinds.includes('m') && rows[0].kinds.includes('f'));
 });
 
-test('completed upload freshness has a covering lookup without weakening current-object ownership', async () => {
+test('current source identity remains unique and asset validation stays covered', async () => {
   const indexes =
-    await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='UploadSession' AND indexname='UploadSession_completed_freshness_cover_idx'`;
-  assert.equal(
-    indexes.length,
-    1,
-    'freshness lookups must avoid random reads of wide historical upload rows',
-  );
-  assert.match(
-    indexes[0].indexdef,
-    /\("objectKey"\) INCLUDE \("uploaderId", "libraryMode", "completedAt"\)/,
-  );
-  assert.match(indexes[0].indexdef, /WHERE \(status = 'COMPLETED'/);
+    await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='UploadSession' AND indexname='UploadSession_objectKey_key'`;
+  assert.equal(indexes.length, 1, 'immutable object identity must stay unique');
+  assert.match(indexes[0].indexdef, /CREATE UNIQUE INDEX/);
+  assert.match(indexes[0].indexdef, /\("objectKey"\)/);
   const assetIndexes =
     await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='EagleAsset' AND indexname='EagleAsset_media_scheduler_cover_idx'`;
   assert.equal(assetIndexes.length, 1);
