@@ -347,6 +347,7 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
       400,
     );
     for (const path of [
+      `tasks/${t.id}/manual-action`,
       `tasks/${t.id}/cancel`,
       `tasks/${t.id}/review`,
       `tasks/${t.id}/suggestions/${p.id}/review`,
@@ -1062,44 +1063,221 @@ test('new metadata-only requests persist their evidence basis without applying c
     );
 });
 
-
 test('request numbers stay owner-scoped and stable; photo item numbers follow submission order', async () => {
-  const f = await fixture(), other = await fixture();
-  const make = (assetId, title) => ({kind:'DELETE',title,rationale:'仅按文字检查的明确测试理由',items:[{assetId,evidenceIds:[],visualReviewed:false,rationale:'测试文件名具有明确截图信号'}]});
-  const first = await f.service.submitRequest(f.ownerId, make(f.a.id,'first'), false);
-  const second = await f.service.submitRequest(f.ownerId, make(f.b.id,'second'), false);
-  const foreign = await other.service.submitRequest(other.ownerId, make(other.a.id,'other'), false);
-  assert.equal(first.number,1); assert.equal(second.number,2); assert.equal(foreign.number,1);
+  const f = await fixture(),
+    other = await fixture();
+  const make = (assetId, title) => ({
+    kind: 'DELETE',
+    title,
+    rationale: '仅按文字检查的明确测试理由',
+    items: [
+      { assetId, evidenceIds: [], visualReviewed: false, rationale: '测试文件名具有明确截图信号' },
+    ],
+  });
+  const first = await f.service.submitRequest(f.ownerId, make(f.a.id, 'first'), false);
+  const second = await f.service.submitRequest(f.ownerId, make(f.b.id, 'second'), false);
+  const foreign = await other.service.submitRequest(
+    other.ownerId,
+    make(other.a.id, 'other'),
+    false,
+  );
+  assert.equal(first.number, 1);
+  assert.equal(second.number, 2);
+  assert.equal(foreign.number, 1);
   const detail = await f.service.detailByNumber(f.ownerId, 1, false);
-  assert.equal(detail.id,first.id); assert.equal(detail.number,1); assert.equal(detail.suggestions[0].number,1);
-  await assert.rejects(other.service.detailByNumber(other.ownerId,2,false),/不存在/);
-  const list=await f.service.tasks(f.ownerId,{limit:20},false);
-  assert.deepEqual(list.items.map(x=>x.number),[2,1]);
+  assert.equal(detail.id, first.id);
+  assert.equal(detail.number, 1);
+  assert.equal(detail.suggestions[0].number, 1);
+  await assert.rejects(other.service.detailByNumber(other.ownerId, 2, false), /不存在/);
+  const list = await f.service.tasks(f.ownerId, { limit: 20 }, false);
+  assert.deepEqual(
+    list.items.map((x) => x.number),
+    [2, 1],
+  );
 });
 
 test('manual photo actions use current selected versions, preserve original advice and append separate human history', async () => {
-  const f=await fixture();
-  const t=await f.task('CITY'); const suggestion=await f.proposal(t);
-  const input={operationId:randomUUID(),action:'DELETE',items:[{suggestionId:suggestion.id,mediaRevision:f.a.mediaRevision,rowVersion:f.a.rowVersion}]};
-  await f.service.manualAction(f.ownerId,t.id,input,false);
-  assert.ok((await prisma.eagleAsset.findUnique({where:{id:f.a.id}})).deletedAt);
-  const detail=await f.service.detail(f.ownerId,t.id,false);
-  assert.equal(detail.suggestions[0].kind,'CITY');
-  assert.equal(detail.suggestions[0].manualAction,'DELETE');
-  assert.equal(detail.suggestions[0].status,'REJECTED');
-  assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),0);
-  await f.service.manualAction(f.ownerId,t.id,input,false);
-  const history=await f.service.history(f.ownerId,t.id,{limit:50},false);
-  assert.equal(history.items.filter(e=>e.action==='MANUAL_EXECUTED').length,1);
-  assert.ok(history.items.some(e=>e.action==='PROPOSED'));
-  const other=await fixture();
-  await assert.rejects(other.service.manualAction(other.ownerId,t.id,input,false),/不存在/);
+  const f = await fixture();
+  const t = await f.task('CITY');
+  const suggestion = await f.proposal(t);
+  const input = {
+    operationId: randomUUID(),
+    action: 'DELETE',
+    items: [
+      { suggestionId: suggestion.id, mediaRevision: f.a.mediaRevision, rowVersion: f.a.rowVersion },
+    ],
+  };
+  await f.service.manualAction(f.ownerId, t.id, input, false);
+  assert.ok((await prisma.eagleAsset.findUnique({ where: { id: f.a.id } })).deletedAt);
+  const detail = await f.service.detail(f.ownerId, t.id, false);
+  assert.equal(detail.suggestions[0].kind, 'CITY');
+  assert.equal(detail.suggestions[0].manualAction, 'DELETE');
+  assert.equal(detail.suggestions[0].status, 'REJECTED');
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 0);
+  await f.service.manualAction(f.ownerId, t.id, input, false);
+  const history = await f.service.history(f.ownerId, t.id, { limit: 50 }, false);
+  assert.equal(history.items.filter((e) => e.action === 'MANUAL_EXECUTED').length, 1);
+  assert.ok(history.items.some((e) => e.action === 'PROPOSED'));
+  const other = await fixture();
+  await assert.rejects(other.service.manualAction(other.ownerId, t.id, input, false), /不存在/);
 });
 
-test('manual selection rejects mixed scopes, stale versions and changed retry actions before writing', async()=>{
- const f=await fixture(),other=await fixture(); const t=await f.task('DELETE'),a=await f.proposal(t);
- const input={operationId:randomUUID(),action:'DELETE',items:[{suggestionId:a.id,mediaRevision:0,rowVersion:999}]};
- await assert.rejects(f.service.manualAction(f.ownerId,t.id,input,false),/变化/);
- assert.equal((await prisma.eagleAsset.findUnique({where:{id:f.a.id}})).deletedAt,null);
- await assert.rejects(f.service.manualAction(f.ownerId,t.id,{...input,items:[{suggestionId:randomUUID(),mediaRevision:0,rowVersion:1}]},false),/不存在/);
+test('manual selection rejects mixed scopes, stale versions and changed retry actions before writing', async () => {
+  const f = await fixture(),
+    other = await fixture();
+  const t = await f.task('DELETE'),
+    a = await f.proposal(t);
+  const input = {
+    operationId: randomUUID(),
+    action: 'DELETE',
+    items: [{ suggestionId: a.id, mediaRevision: 0, rowVersion: 999 }],
+  };
+  await assert.rejects(f.service.manualAction(f.ownerId, t.id, input, false), /变化/);
+  assert.equal((await prisma.eagleAsset.findUnique({ where: { id: f.a.id } })).deletedAt, null);
+  await assert.rejects(
+    f.service.manualAction(
+      f.ownerId,
+      t.id,
+      { ...input, items: [{ suggestionId: randomUUID(), mediaRevision: 0, rowVersion: 1 }] },
+      false,
+    ),
+    /不存在/,
+  );
+});
+
+test('manual send failure retries the same independent copy without approving the original location suggestion', async () => {
+  const f = await fixture();
+  await prisma.eagleAsset.update({
+    where: { id: f.a.id },
+    data: { originalObjectKey: `users/${f.ownerId}/assets/${f.a.id}/original.png` },
+  });
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  let offline = true,
+    copies = 0;
+  const transfer = new EagleLibraryTransferService(
+    prisma,
+    {
+      copyObject: async () => {
+        copies++;
+        if (offline) throw new Error('copy offline');
+      },
+      headObject: async () => ({ ContentLength: 1 }),
+    },
+    'PHOTO',
+  );
+  const service = new PhotoAgentService(prisma, {}, transfer);
+  const task = await f.task('CITY'),
+    suggestion = await f.proposal(task);
+  const input = {
+    operationId: randomUUID(),
+    action: 'SEND_TO_MATERIAL',
+    items: [
+      { suggestionId: suggestion.id, mediaRevision: f.a.mediaRevision, rowVersion: f.a.rowVersion },
+    ],
+  };
+  await assert.rejects(service.manualAction(f.ownerId, task.id, input, false), /offline/);
+  assert.equal((await prisma.eagleAsset.findUnique({ where: { id: f.a.id } })).deletedAt, null);
+  assert.equal((await service.detail(f.ownerId, task.id, false)).suggestions[0].status, 'PENDING');
+  offline = false;
+  const outcome = await service.manualAction(f.ownerId, task.id, input, false);
+  assert.equal(outcome.affectedAssetCount, 1);
+  const before = copies;
+  await service.manualAction(f.ownerId, task.id, input, false);
+  assert.equal(copies, before);
+  await assert.rejects(
+    service.manualAction(f.ownerId, task.id, { ...input, action: 'DELETE' }, false),
+    /不一致/,
+  );
+  assert.equal(await prisma.eaglePhotoLocation.count({ where: { assetId: f.a.id } }), 0);
+  assert.equal(
+    (await service.detail(f.ownerId, task.id, false)).suggestions[0].manualAction,
+    'SEND_TO_MATERIAL',
+  );
+  const history = await service.history(f.ownerId, task.id, { limit: 50 }, false);
+  assert.equal(history.items.filter((e) => e.action === 'MANUAL_EXECUTED').length, 1);
+  assert.equal(history.items.filter((e) => e.action === 'MANUAL_FAILED').length, 1);
+});
+
+test('manual multi-selection is all-or-nothing for changed or hidden photos and remains separate from prior decisions', async () => {
+  const f = await fixture();
+  const task = await f.task('DELETE');
+  const first = await f.proposal(task);
+  const second = await f.proposal(task, { assetId: f.b.id });
+  const items = [
+    { suggestionId: first.id, mediaRevision: 0, rowVersion: 1 },
+    { suggestionId: second.id, mediaRevision: 0, rowVersion: 999 },
+  ];
+  await assert.rejects(
+    f.service.manualAction(
+      f.ownerId,
+      task.id,
+      { operationId: randomUUID(), action: 'DELETE', items },
+      false,
+    ),
+    /变化/,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { id: { in: [f.a.id, f.b.id] }, deletedAt: null } }),
+    2,
+  );
+  await assert.rejects(
+    f.service.manualAction(
+      f.ownerId,
+      task.id,
+      { operationId: randomUUID(), action: 'DELETE', items: [items[0], items[0]] },
+      false,
+    ),
+    /重复/,
+  );
+  await prisma.eagleAsset.update({ where: { id: f.a.id }, data: { isPrivate: true } });
+  await assert.rejects(
+    f.service.manualAction(
+      f.ownerId,
+      task.id,
+      { operationId: randomUUID(), action: 'DELETE', items: [items[0]] },
+      false,
+    ),
+    /不存在/,
+  );
+  await prisma.eagleAsset.update({ where: { id: f.a.id }, data: { isPrivate: false } });
+  await f.service.review(f.ownerId, task.id, first.id, { action: 'REJECT' }, false);
+  await f.service.manualAction(
+    f.ownerId,
+    task.id,
+    { operationId: randomUUID(), action: 'DELETE', items: [items[0]] },
+    false,
+  );
+  const history = await f.service.history(f.ownerId, task.id, { limit: 50 }, false);
+  assert.ok(history.items.some((e) => e.action === 'REJECTED'));
+  assert.ok(history.items.some((e) => e.action === 'MANUAL_EXECUTED'));
+});
+
+test('reference allocation is concurrent-safe and immutable, and paging never renumbers older requests', async () => {
+  const f = await fixture();
+  const tasks = await Promise.all(Array.from({ length: 4 }, () => f.task('DELETE')));
+  assert.deepEqual(tasks.map((t) => t.number).sort(), [1, 2, 3, 4]);
+  let page = await f.service.tasks(f.ownerId, { limit: 2 }, false);
+  assert.deepEqual(
+    page.items.map((t) => t.number),
+    [4, 3],
+  );
+  await f.task('DELETE');
+  page = await f.service.tasks(f.ownerId, { limit: 2, after: page.next }, false);
+  assert.deepEqual(
+    page.items.map((t) => t.number),
+    [2, 1],
+  );
+  await assert.rejects(
+    prisma.eaglePhotoAgentTask.update({ where: { id: tasks[0].id }, data: { number: 99 } }),
+    /immutable/,
+  );
+  await assert.rejects(f.service.detailByNumber(f.ownerId, 0, false), /无效/);
+});
+
+test('a failed original send can be superseded by an explicit manual deletion',async()=>{
+ const f=await fixture(),task=await f.task('SEND_TO_MATERIAL'),suggestion=await f.proposal(task);
+ await prisma.eaglePhotoAgentSuggestion.update({where:{id:suggestion.id},data:{status:'FAILED'}});
+ await f.service.manualAction(f.ownerId,task.id,{operationId:randomUUID(),action:'DELETE',items:[{suggestionId:suggestion.id,mediaRevision:0,rowVersion:1}]},false);
+ assert.equal((await f.service.detail(f.ownerId,task.id,false)).suggestions[0].status,'REJECTED');
 });
