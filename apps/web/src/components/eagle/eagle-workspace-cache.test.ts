@@ -82,6 +82,15 @@ describe('workspace cache lifetime', () => {
     expect(dispose).toHaveBeenCalledOnce();
   });
 
+  it('survives a StrictMode effect replay for an unlocked workspace', () => {
+    const { client, cache } = fixture();
+    const release = cache.retain(true);
+    release();
+    const releaseReplay = cache.retain(true);
+    expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).toBe(cache);
+    releaseReplay();
+  });
+
   it('releases an empty workspace with no loaded list', () => {
     const client = new QueryClient();
     clients.push(client);
