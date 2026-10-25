@@ -210,3 +210,36 @@ test('an exhausted positive window refills immediately rather than idling until 
   assert.deepEqual(await select(input), [{ id: 'next' }]);
   assert.equal(discoveries, 2);
 });
+
+test('an empty recent cohort is reused between normal wakes but new work invalidates it immediately', async (context) => {
+  let now = 0,
+    reads = 0;
+  context.mock.method(Date, 'now', () => now);
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async () => {
+        reads++;
+        return [];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
+  const input = {
+    where: { lane: 'BACKGROUND', kind: 'GENERATE_EMBEDDING' },
+    take: 50,
+  } as ClaimFindManyInput;
+  // Preserve both priority/FIFO cohorts, without rescanning the absent recent queue for every old job.
+  for (let i = 0; i < 12; i++) {
+    now = i * 2000;
+    await select(input, 'RECENT');
+  }
+  assert.deepEqual({ reads }, { reads: 2 });
+  select.invalidate();
+  await select(input, 'RECENT');
+  assert.deepEqual(
+    { reads },
+    { reads: 3 },
+    'new upload/dependency/policy notifications cannot wait for expiry',
+  );
+});
