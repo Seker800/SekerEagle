@@ -1,28 +1,21 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { IconSend } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { t } from '../../i18n';
-import { useLibraryWorkspace } from '../../lib/library-workspace';
-import type { EagleLibraryTransferResult } from '../../lib/eagle-api';
+import { useEnqueueAssetOperation } from './useAssetOperations';
+import type { AssetOperationSummary } from '@sekereagle/library-core';
 
 export function EagleSendAssetsMenuItem({
   assetIds,
-  ownerId,
   label,
   disabled,
-  onSent,
+  onQueued,
 }: {
   assetIds: string[];
-  ownerId: string;
   label: string;
   disabled: boolean;
-  onSent: (result: EagleLibraryTransferResult) => void | Promise<void>;
+  onQueued: (result: AssetOperationSummary) => void | Promise<void>;
 }) {
-  const {
-    api: { sendEagleAssets },
-  } = useLibraryWorkspace();
-  const queryClient = useQueryClient();
-  const operationId = useRef<string | null>(null);
+  const enqueue = useEnqueueAssetOperation();
   const active = useRef(true),
     pendingRef = useRef(false);
   const [pending, setPending] = useState(false),
@@ -35,14 +28,12 @@ export function EagleSendAssetsMenuItem({
   }, []);
   async function send() {
     if (pendingRef.current) return;
-    operationId.current ??= crypto.randomUUID();
     pendingRef.current = true;
     setPending(true);
     setError(null);
     try {
-      const result = await sendEagleAssets('', { assetIds, operationId: operationId.current });
-      await queryClient.invalidateQueries({ queryKey: ['eagle', ownerId] });
-      if (active.current) await onSent(result);
+      const result = await enqueue('SEND', assetIds);
+      if (active.current) await onQueued(result);
     } catch (cause) {
       if (active.current)
         setError(cause instanceof Error ? cause.message : t('发送失败，请重试。'));
