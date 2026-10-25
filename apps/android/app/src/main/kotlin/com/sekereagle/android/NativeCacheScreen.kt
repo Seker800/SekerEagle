@@ -101,7 +101,11 @@ internal fun NativeCacheScreen(cache: NativeMediaCache, evictMemory: () -> Unit,
                     else "缓存命中率 ${"%.1f".format(java.util.Locale.ROOT, statistics.hitRate * 100)}%",
                     Modifier.testTag("cache-hit-rate"),
                 )
-                Text("本次启动 · 内存 ${statistics.memoryHits} 次 · 磁盘 ${statistics.diskHits} 次 · 下载 ${statistics.downloads} 次", color = NativeMuted)
+                Text(
+                    "内存 ${statistics.memoryHits} 次 · 磁盘 ${statistics.diskHits} 次 · 下载 ${statistics.downloads} 次",
+                    color = NativeMuted,
+                )
+                Text("本次启动统计，清空后重新计数", color = NativeMuted, fontSize = 12.sp)
             }
             OutlinedTextField(
                 value,

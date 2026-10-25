@@ -3,10 +3,8 @@ package com.sekereagle.android
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
-import com.sekereagle.android.core.NativeDiskCache
 import com.sekereagle.android.core.NativeCacheStatistics
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import com.sekereagle.android.core.NativeDiskCache
 import java.io.File
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -14,6 +12,8 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 internal data class NativeCacheUsage(
@@ -44,6 +44,7 @@ internal constructor(
     private val counters = NativeCacheStatistics()
     private val mutableStatistics = MutableStateFlow(counters.snapshot())
     internal val statistics = mutableStatistics.asStateFlow()
+
     internal fun statisticsTicket() = counters.token()
 
     @Synchronized
@@ -127,9 +128,7 @@ internal constructor(
     }
 
     internal suspend fun usage(): NativeCacheUsage =
-        withContext(Dispatchers.IO) {
-            NativeCacheUsage(store.size(), store.count(), limitMb)
-        }
+        withContext(Dispatchers.IO) { NativeCacheUsage(store.size(), store.count(), limitMb) }
 
     @android.annotation.SuppressLint(
         "UseKtx"
@@ -142,10 +141,11 @@ internal constructor(
             store.resize(mb.toLong() * MIB)
         }
 
-    internal suspend fun clear() = withContext(Dispatchers.IO) {
-        store.clear()
-        resetStatistics()
-    }
+    internal suspend fun clear() =
+        withContext(Dispatchers.IO) {
+            store.clear()
+            resetStatistics()
+        }
 
     companion object {
         const val DEFAULT_MB = 512

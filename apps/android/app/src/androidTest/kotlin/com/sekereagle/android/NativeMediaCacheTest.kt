@@ -21,6 +21,7 @@ class NativeMediaCacheTest {
     private val app = InstrumentationRegistry.getInstrumentation().targetContext
     private val directory = File(app.cacheDir, "cache-test-${java.util.UUID.randomUUID()}")
     private val cache = NativeMediaCache(app, directory)
+    private var priorLimit = NativeMediaCache.DEFAULT_MB
 
     private class Server : AutoCloseable {
         val png =
@@ -38,6 +39,7 @@ class NativeMediaCacheTest {
         val origin = "http://127.0.0.1:${socket.localPort}"
         val requests = CopyOnWriteArrayList<String>()
         @Volatile var delayMillis = 0L
+        @Volatile var invalidImage = false
         val worker =
             Thread {
                     try {
@@ -47,12 +49,13 @@ class NativeMediaCacheTest {
                             while (!reader.readLine().isEmpty()) {}
                             requests.add(path)
                             Thread.sleep(delayMillis)
+                            val response = if (invalidImage) byteArrayOf(1, 2, 3) else png
                             client.getOutputStream().apply {
                                 write(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: ${png.size}\r\nConnection: close\r\n\r\n"
+                                    "HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: ${response.size}\r\nConnection: close\r\n\r\n"
                                         .toByteArray()
                                 )
-                                write(png)
+                                write(response)
                             }
                         }
                     } catch (_: java.io.IOException) {}
@@ -67,6 +70,7 @@ class NativeMediaCacheTest {
 
     @Before
     fun reset() {
+        priorLimit = cache.limitMb
         runBlocking {
             cache.resize(512)
             cache.clear()
@@ -76,8 +80,8 @@ class NativeMediaCacheTest {
     @After
     fun cleanup() {
         runBlocking {
-            cache.resize(512)
             cache.clear()
+            cache.resize(priorLimit)
         }
         directory.deleteRecursively()
     }
@@ -171,6 +175,24 @@ class NativeMediaCacheTest {
     }
 
     @Test
+    fun unsuccessfulImageReadsDoNotSkewTheHitRate() = runBlocking {
+        Server().use { server ->
+            server.invalidImage = true
+            val (repo, path) = repository(session(server), GalleryMode.PHOTO)
+            try {
+                repo.image(path, false)
+                fail("Malformed preview must fail")
+            } catch (_: java.io.IOException) {}
+            assertEquals(0L, cache.statistics.value.requests)
+            server.invalidImage = false
+            repo.image(path, false)
+            assertEquals(1L, cache.statistics.value.requests)
+            assertEquals(1L, cache.statistics.value.downloads)
+            assertEquals(0.0, cache.statistics.value.hitRate, 0.0)
+        }
+    }
+
+    @Test
     fun concurrentRequestsCoalesceAndVersionsOwnersAndModesStaySeparate() = runBlocking {
         Server().use { server ->
             val session = session(server)
@@ -253,6 +275,7 @@ class NativeMediaCacheTest {
                 assertEquals(401, failure.status)
             }
             assertEquals(2, server.requests.size)
+            assertEquals(1L, cache.statistics.value.requests)
         }
     }
 
@@ -268,6 +291,7 @@ class NativeMediaCacheTest {
             cache.clear()
             assertEquals(Color.GREEN, pending.await().getPixel(0, 0))
             assertEquals(0, cache.usage().count)
+            assertEquals(0L, cache.statistics.value.requests)
             server.delayMillis = 0
             repo.image(path, false)
             assertEquals(2, server.requests.size)
@@ -330,7 +354,14 @@ class NativeMediaCacheTest {
         compose.waitUntil(10000) {
             compose.onAllNodesWithTag("cache-limit").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithTag("cache-hit-rate").assertTextContains("暂无记录")
+        compose.onNodeWithTag("cache-hit-rate").assertTextContains("暂无记录", substring = true)
+        val token = cache.statisticsTicket()
+        cache.record(com.sekereagle.android.core.NativeCacheStatistics.Outcome.MEMORY, token)
+        cache.record(com.sekereagle.android.core.NativeCacheStatistics.Outcome.DISK, token)
+        cache.record(com.sekereagle.android.core.NativeCacheStatistics.Outcome.DOWNLOAD, token)
+        compose.waitUntil(5000) {
+            compose.onAllNodesWithText("缓存命中率 66.7%").fetchSemanticsNodes().isNotEmpty()
+        }
         compose.onNodeWithTag("cache-size").performTextReplacement("20000")
         compose.onNodeWithText("保存上限").assertIsNotEnabled()
         compose.onNodeWithTag("cache-size").performTextReplacement("256")
@@ -366,5 +397,6 @@ class NativeMediaCacheTest {
         compose.waitUntil(10000) {
             compose.onAllNodesWithText("缓存已清空").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithTag("cache-hit-rate").assertTextContains("暂无记录", substring = true)
     }
 }
