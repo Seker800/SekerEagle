@@ -271,3 +271,39 @@ test('concurrent pipeline claims share discovery and invalidation fences the in-
   await select(input);
   assert.deepEqual({ reads }, { reads: 2 });
 });
+
+test('a failed shared discovery is released so a later wake can retry', async () => {
+  let reads = 0;
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async () => {
+        if (++reads === 1) throw Error('temporary query failure');
+        return [];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
+  const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
+  await assert.rejects(select(input), /temporary query failure/);
+  assert.deepEqual(await select(input), []);
+  assert.equal(reads, 2);
+});
+
+test('freshness resolves only uploads inside the priority horizon, never the entire historical upload table', async () => {
+  let query = '';
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        query = sql.text;
+        return [];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
+  await select({ where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput);
+  assert.match(query, /current_upload\."completedAt">=now\(\)-interval '24 hours'/);
+  assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
+  assert.match(query, /current_upload\."libraryMode"=a\."libraryMode"/);
+});
