@@ -102,3 +102,23 @@ test('reads RAF and IFD0 DNG capture fields from the original without losing GPS
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('recovers a resolved maker lens ID without replacing explicit lens models or inventing ambiguous lenses', () => {
+  const lens = 'AF-S DX VR Zoom-Nikkor 18-105mm f/3.5-5.6G ED';
+  assert.equal(normalizePhotoExif({ LensID: lens }).lensModel, lens);
+  assert.equal(
+    normalizePhotoExif({ LensModel: 'Explicit Lens', LensID: lens }).lensModel,
+    'Explicit Lens',
+  );
+  for (const LensID of [
+    19,
+    '19',
+    '9E 40 2D 6A 2C 3C A0 0E',
+    'Unknown (18-105mm)',
+    '18-105mm or 18-200mm',
+    '18-105mm?',
+    '',
+  ]) {
+    assert.equal(normalizePhotoExif({ LensID }).lensModel, null);
+  }
+});
