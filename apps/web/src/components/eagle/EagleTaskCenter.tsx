@@ -113,22 +113,10 @@ export function EagleTaskCenter({
         taskExecutionPriority(b.group.id) - taskExecutionPriority(a.group.id) ||
         a.mode.localeCompare(b.mode),
     );
-  const sections: Array<{ id: TaskSection; title: string; description: string }> = [
-    {
-      id: 'IMMEDIATE',
-      title: t('立即处理'),
-      description: t('文件入库后处理，或在数据变化后自动更新；不受后台时段限制。'),
-    },
-    {
-      id: 'SCHEDULED',
-      title: t('按时段处理'),
-      description: t('到已保存的时段自动开始；前置条件未满足时先处理其他工作。'),
-    },
-    {
-      id: 'PAUSED',
-      title: t('已暂停'),
-      description: t('这些工作不会领取新任务。下方说明暂停原因，当前步骤完成后停下。'),
-    },
+  const sections: Array<{ id: TaskSection; title: string }> = [
+    { id: 'IMMEDIATE', title: t('立即处理') },
+    { id: 'SCHEDULED', title: t('按时段处理') },
+    { id: 'PAUSED', title: t('已暂停') },
   ];
   const differentSchedules =
     entries.length > 1 &&
@@ -160,7 +148,6 @@ export function EagleTaskCenter({
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
-          <p>{t('新图优先处理，群晖与 Mac 两路并行，历史图片逐步补齐。')}</p>
         </div>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('刷新')}
@@ -277,15 +264,11 @@ export function EagleTaskCenter({
               </p>
             </form>
           )}
-          <p className={styles.rule}>
-            {t('上方优先处理轻量和必要工作；不同工作可穿插执行，不会等一类全部完成才开始下一类。')}
-          </p>
           {!cards.length && <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>}
           {sections.map((section) => (
             <section key={section.id} className={styles.section} aria-label={section.title}>
               <header className={styles.sectionHeader}>
                 <h2>{section.title}</h2>
-                <p>{section.description}</p>
               </header>
               <div className={styles.groups}>
                 {cards
@@ -424,7 +407,7 @@ function TaskCard({
               {t('失败')} {group.failed}
             </span>
           )}
-          {group.running > 0 && activeSteps.length > 0 ? (
+          {group.running > 0 && group.steps.length > 1 && activeSteps.length > 0 ? (
             <span className={styles.activeStep} aria-label={t('当前执行步骤')}>
               {activeSteps.map((step) => taskStepLabel(step.id)).join(' · ')}
             </span>
