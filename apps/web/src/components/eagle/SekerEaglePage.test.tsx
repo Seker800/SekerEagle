@@ -459,13 +459,13 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
-  it('reloads normalized asset pages after leaving and returning to a workspace', async () => {
+  it('renders retained normalized pages without another request when returning to a workspace', async () => {
     const view = renderPage('returning-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });
     view.rerender(<></>);
     view.rerender(view.renderForOwner('returning-owner'));
     await screen.findByRole('button', { name: /Owl Reference/ });
-    expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+    expect(listEagleAssetsMock).toHaveBeenCalledTimes(1);
   });
 
   it('uses a fresh cache namespace when the owner changes', async () => {
