@@ -62,7 +62,10 @@ import { extractRepresentativeColors } from './color-palette';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
-import { createScheduledMediaSelector } from './scheduled-media-candidates';
+import {
+  createScheduledMediaSelector,
+  invalidateMediaCandidates,
+} from './scheduled-media-candidates';
 import { taskPolicyAllowsSql } from '@sekereagle/library-persistence';
 import { claimNextMediaJob } from './job-claim';
 import {
@@ -181,7 +184,10 @@ async function heartbeat(): Promise<void> {
       update: { heartbeatAt: now, activeJobCount: resourcePool.activeCount, capabilities },
     });
     await recordWorkerHeartbeat();
-    if (previousReadiness !== embeddingReadiness) wakeScheduler?.wakeNow();
+    if (previousReadiness !== embeddingReadiness) {
+      selectors.EMBEDDING.invalidate();
+      wakeScheduler?.wakeNow();
+    }
   } finally {
     checkingHeartbeat = false;
   }
@@ -1344,8 +1350,10 @@ async function poll(): Promise<void> {
     }
   }
   if (stopping) return;
-  await resourcePool.fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob);
-  if (resourcePool.active('NAS') >= workerConcurrency) return;
+  void resourcePool
+    .fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob)
+    .catch(reportLoopError);
+  if (resourcePool.active('NAS') >= workerConcurrency || buildingPhotoMap) return;
   if (
     runBackgroundProcessing &&
     resourcePool.active('NAS') === 0 &&
@@ -1365,7 +1373,7 @@ async function poll(): Promise<void> {
     }
   }
 
-  await resourcePool.fill('NAS', () => claimJob('NAS'), processClaimedJob);
+  void resourcePool.fill('NAS', () => claimJob('NAS'), processClaimedJob).catch(reportLoopError);
 }
 
 interface PendingMediaWakeRow {
@@ -1568,7 +1576,10 @@ async function main(): Promise<void> {
   wakeScheduler = new JobWakeScheduler(drainAndScheduleWork, reportLoopError);
   wakeListener = new PostgresWakeListener(
     databaseUrl,
-    () => wakeScheduler?.wakeNow(),
+    (payload) => {
+      invalidateMediaCandidates(selectors, payload);
+      wakeScheduler?.wakeNow();
+    },
     reportLoopError,
   );
   await wakeListener.start();

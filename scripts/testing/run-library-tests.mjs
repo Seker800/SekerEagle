@@ -170,6 +170,10 @@ try {
     env,
     stdio: 'inherit',
   });
+  run(process.execPath, ['--test', 'scripts/testing/media-scheduler-performance.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   run(process.execPath, ['scripts/testing/two-resource-worker.mjs'], { env, stdio: 'inherit' });
   const preserved = run('docker', [
     'exec',

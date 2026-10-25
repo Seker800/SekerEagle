@@ -94,7 +94,7 @@ export class PostgresWakeListener {
 
   constructor(
     private readonly databaseUrl: string,
-    private readonly onWake: () => void,
+    private readonly onWake: (payload?: string) => void,
     private readonly reportError: (error: unknown) => void,
   ) {}
 
@@ -125,7 +125,7 @@ export class PostgresWakeListener {
     client.on('error', reconnect);
     client.on('end', () => reconnect());
     client.on('notification', (message: Notification) => {
-      if (message.channel === WORKER_WAKEUP_CHANNEL) this.onWake();
+      if (message.channel === WORKER_WAKEUP_CHANNEL) this.onWake(message.payload);
     });
     try {
       await client.connect();

@@ -370,9 +370,24 @@ it('does not repeat a single-stage task name as a current step', async () => {
 });
 
 it('keeps disabled work on its card but excludes it from executable queue totals', async () => {
-  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [...summary.groups, {
-    id: 'COLOR', background: true, availability: 'DISABLED', queued: 60760, running: 0, failed: 0, completed: 0, approval: 0, waiting: [], steps: [],
-  }] } as never);
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    groups: [
+      ...summary.groups,
+      {
+        id: 'COLOR',
+        background: true,
+        availability: 'DISABLED',
+        queued: 60760,
+        running: 0,
+        failed: 0,
+        completed: 0,
+        approval: 0,
+        waiting: [],
+        steps: [],
+      },
+    ],
+  } as never);
   mount();
   await screen.findByRole('heading', { name: '代表色提取' });
   const overview = document.querySelector('[class*="overview"]')!;
