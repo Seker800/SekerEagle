@@ -87,7 +87,9 @@ export class PhotoStatisticsQueryDto {
       'Opaque lens/device identities returned by statistics; legacy lenses remains exact LensModel filtering.',
   })
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value : [value]))
+  @Transform(({ value }: { value: unknown }) =>
+    Array.isArray(value) ? (value as unknown[]) : [value],
+  )
   @IsArray()
   @ArrayMaxSize(50)
   @IsString({ each: true })

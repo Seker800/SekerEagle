@@ -6,6 +6,7 @@ export function parsePhotoLensKey(key: string): PhotoLensIdentity | null {
     if (
       Array.isArray(value) &&
       value.length === 2 &&
+      typeof value[0] === 'string' &&
       ['lens', 'camera', 'unknown'].includes(value[0]) &&
       typeof value[1] === 'string' &&
       (value[0] === 'unknown' ? value[1] === '' : value[1].length > 0)

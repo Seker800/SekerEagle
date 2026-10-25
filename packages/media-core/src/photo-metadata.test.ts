@@ -14,7 +14,7 @@ test('original tag reader bounds its command, signs GPS coordinates and rejects 
   const script = async (output: string, exit = 0) =>
     writeFile(
       tool,
-      `#!${process.execPath}\nif(process.env.S3_SECRET_ACCESS_KEY)process.exit(99);process.stdout.write(${JSON.stringify(output)});process.exit(${exit});`,
+      `#!${process.execPath}\nif(process.env.S3_SECRET_ACCESS_KEY)process.exit(99);if(!process.argv.includes('-LensID')||!process.argv.includes('-GPSLatitude#')||process.argv.includes('-n'))process.exit(98);process.stdout.write(${JSON.stringify(output)});process.exit(${exit});`,
       { mode: 0o700 },
     );
   const secret = process.env.S3_SECRET_ACCESS_KEY;
@@ -24,6 +24,7 @@ test('original tag reader bounds its command, signs GPS coordinates and rejects 
       JSON.stringify([
         {
           Model: 'Camera',
+          LensID: 'AF-S DX 18-105mm f/3.5-5.6G',
           ImageWidth: 8192,
           ImageHeight: 6144,
           Orientation: 6,
@@ -38,6 +39,7 @@ test('original tag reader bounds its command, signs GPS coordinates and rejects 
       ]),
     );
     const tags = await readPhotoMetadataTags('./original');
+    assert.equal(tags.LensID, 'AF-S DX 18-105mm f/3.5-5.6G');
     assert.equal(tags.ImageWidth, 8192);
     assert.equal(tags.ImageHeight, 6144);
     assert.equal(tags.Orientation, 6);

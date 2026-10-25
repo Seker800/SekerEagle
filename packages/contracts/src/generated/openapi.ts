@@ -7699,6 +7699,8 @@ export interface operations {
         end?: string;
         cameras?: string[];
         lenses?: string[];
+        /** @description Opaque lens/device identities returned by statistics; legacy lenses remains exact LensModel filtering. */
+        lensKeys?: string[];
       };
       header?: never;
       path?: never;

@@ -6160,6 +6160,19 @@
                 "type": "string"
               }
             }
+          },
+          {
+            "name": "lensKeys",
+            "required": false,
+            "in": "query",
+            "description": "Opaque lens/device identities returned by statistics; legacy lenses remains exact LensModel filtering.",
+            "schema": {
+              "maxItems": 50,
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         ],
         "responses": {
