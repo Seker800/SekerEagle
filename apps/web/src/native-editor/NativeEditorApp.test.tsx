@@ -1,4 +1,3 @@
-import { File as NodeFile } from 'node:buffer';
 import { DEFAULT_PHOTO_EDITS } from '@sekereagle/library-core';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
@@ -13,7 +12,7 @@ vi.mock('../components/media/photo-editor/PhotoEditor', () => ({
       </span>
       <button
         onClick={() =>
-          void props.onSave(new File([new Uint8Array(100000)], 'copy.png'), {
+          void props.onSaveRecipe?.({
             version: 1,
             edits: DEFAULT_PHOTO_EDITS,
           })
@@ -41,23 +40,14 @@ it('offers retry after an interrupted open and starts the shared native editor a
   expect(await screen.findByText('editor:watermark:native:photo')).toBeInTheDocument();
   expect(request).toHaveBeenCalledTimes(2);
 });
-it('preserves the bounded save protocol, draft, saved-copy navigation and close', async () => {
-  vi.stubGlobal('File', NodeFile);
-  const request = vi.fn().mockResolvedValue({ asset: { originalName: 'photo.jpg' } });
+it('submits only recipe parameters and waits for server publication without sending photo bytes', async () => {
+  const request = vi.fn().mockImplementation(async (action: string) => action === 'open' ? { asset: { originalName: 'photo.jpg' } } : action === 'saveStatus' ? {status:'COMPLETED',asset:{id:'copy',name:'copy.png'}} : {});
   render(<NativeEditorApp request={request} />);
   await screen.findByText('editor:watermark:native:photo.jpg');
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(request).toHaveBeenCalledWith('save'));
-  expect(request).toHaveBeenCalledWith('begin', {
-    name: 'copy.png',
-    size: 100000,
-    recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
-  });
-  expect(
-    request.mock.calls
-      .filter(([action]) => action === 'chunk')
-      .map(([, payload]) => payload.offset),
-  ).toEqual([0, 49152, 98304]);
+  await waitFor(() => expect(request).toHaveBeenCalledWith('saveStatus'));
+  expect(request).toHaveBeenCalledWith('saveRecipe', {recipe:{version:1,edits:DEFAULT_PHOTO_EDITS}});
+  expect(request.mock.calls.some(([action]) => ['begin','chunk','save'].includes(action))).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
   fireEvent.click(screen.getByRole('button', { name: 'View' }));
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
