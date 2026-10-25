@@ -39,6 +39,7 @@ class NativeViewerMediaTest {
         val writes = CopyOnWriteArrayList<String>()
         @Volatile var revision = 1
         @Volatile var complete = false
+        @Volatile var drops = 0
 
         fun metadata() =
             JSONObject()
@@ -122,7 +123,10 @@ class NativeViewerMediaTest {
                                 "HTTP/1.1 200 OK\r\nContent-Type: $type\r\nContent-Length: ${payload.size}\r\nETag: fixture\r\nConnection: close\r\n\r\n"
                                     .toByteArray()
                             )
-                            output.write(payload)
+                            if (path.endsWith("/original") && drops > 0) {
+                                drops--
+                                output.write(payload, 0, payload.size / 2)
+                            } else output.write(payload)
                         }
                     } catch (_: java.io.IOException) {}
                 }
@@ -145,6 +149,36 @@ class NativeViewerMediaTest {
             NativeSession.open(app, fixture.origin),
             "synthetic-owner:${fixture.origin}",
         )
+    }
+
+    @Test
+    fun editorRecoversInterruptedSourceWithoutSavingPartialBytes() {
+        Fixture().use { f ->
+            f.drops = 2
+            val repo = repo(f)
+            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata(), GalleryMode.PHOTO)).use { editor ->
+                editor.request("open", JSONObject())
+                assertArrayEquals(f.png, editor.source().file.readBytes())
+                assertEquals(3, f.paths.count { it.endsWith("/original") })
+                assertTrue(f.writes.isEmpty())
+            }
+        }
+    }
+
+    @Test
+    fun editorSourceRetryIsBoundedAndCanBeRetriedByUser() {
+        Fixture().use { f ->
+            f.drops = 10
+            val repo = repo(f)
+            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata(), GalleryMode.PHOTO)).use { editor ->
+                try { editor.request("open", JSONObject()); fail("Incomplete source must fail") }
+                catch (_: java.io.IOException) {}
+                assertEquals(3, f.paths.count { it.endsWith("/original") })
+                f.drops = 0
+                editor.request("open", JSONObject())
+                assertArrayEquals(f.png, editor.source().file.readBytes())
+            }
+        }
     }
 
     @Test

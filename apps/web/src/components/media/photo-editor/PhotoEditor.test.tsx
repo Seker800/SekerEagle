@@ -947,3 +947,13 @@ it('can start Android editing on watermark without changing the web default', ()
   fireEvent.click(screen.getByRole('button', { name: '调整' }));
   expect(screen.getByRole('button', { name: '调整' })).toHaveAttribute('aria-pressed', 'true');
 });
+
+it('offers touch reset without desktop keyboard hints in the phone editor', async () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
+  await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
+  expect(screen.queryByText('双击归零 · 方向键微调 · Shift 加速')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '1' } });
+  fireEvent.click(screen.getByRole('button', { name: '重置此项' }));
+  expect(screen.getByRole('slider', { name: '曝光' })).toHaveValue('0');
+});
