@@ -23,6 +23,22 @@ def command(args):
     return result.stdout
 
 
+def read_ui(base, invoke=command, delay=time.sleep):
+    # uiautomator can exit successfully without writing XML while the activity starts.
+    # Read through `shell` so a missing file is a command failure, and retry briefly.
+    path = '/sdcard/android-lab-ui.xml'
+    for attempt in range(3):
+        try:
+            invoke(base + ['shell', 'uiautomator', 'dump', path])
+            return ET.fromstring(invoke(base + ['shell', 'cat', path]))
+        except (RuntimeError, ET.ParseError):
+            if attempt == 2:
+                raise RuntimeError('Native preview UI is unavailable') from None
+        finally:
+            invoke(base + ['shell', 'rm', '-f', path])
+        delay(.3)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--apk', type=Path)
@@ -52,11 +68,7 @@ def main():
     command(base + ['shell', 'am', 'start', '-n', PACKAGE + '/com.sekereagle.android.NativeActivity'])
 
     def ui():
-        command(base + ['shell', 'uiautomator', 'dump', '/sdcard/android-lab-ui.xml'])
-        try:
-            return ET.fromstring(command(base + ['exec-out', 'cat', '/sdcard/android-lab-ui.xml']))
-        finally:
-            command(base + ['shell', 'rm', '-f', '/sdcard/android-lab-ui.xml'])
+        return read_ui(base)
 
     def tap(node):
         x1, y1, x2, y2 = map(int, re.findall(r'\d+', node.get('bounds')))
