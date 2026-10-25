@@ -1,5 +1,5 @@
+import { useEnqueueAssetOperation } from './useAssetOperations';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   IconShare2,
   IconEdit,
@@ -71,8 +71,8 @@ function MobileViewerActions({
   more: ReactNode;
   readOnly: boolean;
 }) {
-  const { api, ownerId, libraryMode } = useLibraryWorkspace();
-  const client = useQueryClient();
+  const { api, libraryMode } = useLibraryWorkspace();
+  const enqueue = useEnqueueAssetOperation();
   const [pending, setPending] = useState(false),
     [error, setError] = useState(''),
     [downloadFallback, setDownloadFallback] = useState(false);
@@ -95,7 +95,6 @@ function MobileViewerActions({
       if (alive.current) setPending(false);
     }
   };
-  const invalidate = () => client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode] });
   const download = () =>
     run(async () => {
       await saveOriginalFile({ ...asset, libraryMode });
@@ -158,8 +157,7 @@ function MobileViewerActions({
           onClick={() => {
             if (window.confirm(t('移入当前图库回收站？可以在回收站恢复。')))
               void run(async () => {
-                await api.batchTrashEagleAssets('', [asset.id]);
-                await invalidate();
+                await enqueue('TRASH', [asset.id]);
                 onClose();
               });
           }}

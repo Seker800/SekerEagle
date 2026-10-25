@@ -85,6 +85,13 @@ vi.mock('../media/loading/thumbnailLoadService', () => ({
   },
 }));
 
+const enqueueAssetOperationMock = vi.fn();
+vi.mock('../../lib/asset-operations-api', () => ({
+  createAssetOperationsApi: () => ({
+    enqueue: (...args: unknown[]) => enqueueAssetOperationMock(...args),
+    list: async () => [],
+  }),
+}));
 const listEagleAssetsMock = vi.fn();
 const getEagleAssetMock = vi.fn();
 const getEagleAssetLocationMock = vi.fn();
@@ -366,6 +373,19 @@ describe('SekerEaglePage', () => {
       items: [{ ...asset, deletedAt: '2026-08-14T01:00:00.000Z' }],
       nextCursor: null,
     });
+    enqueueAssetOperationMock.mockResolvedValue({
+      id: 'queued',
+      kind: 'TRASH',
+      libraryMode: 'MATERIAL',
+      total: 1,
+      queued: 1,
+      running: 0,
+      completed: 0,
+      failed: 0,
+      cancelled: 0,
+      state: 'QUEUED',
+      errors: [],
+    });
     batchTrashEagleAssetsMock.mockResolvedValue({ affectedAssetCount: 1 });
     batchRestoreEagleAssetsMock.mockResolvedValue({ affectedAssetCount: 1 });
     emptyEagleTrashMock.mockResolvedValue({ affectedAssetCount: 1 });
@@ -505,31 +525,23 @@ describe('SekerEaglePage', () => {
     ).not.toHaveLength(0);
   });
 
-  it('offers sending from the single-selection context menu and removes the sent source', async () => {
-    sendEagleAssetsMock.mockImplementation(async () => {
-      listEagleAssetsMock.mockResolvedValue({ items: [], nextCursor: null });
-      return {
-        targetMode: 'PHOTO',
-        movedCount: 1,
-        componentCount: 1,
-        assets: [{ sourceId: asset.id, assetId: 'new-photo' }],
-      };
-    });
+  it('releases the context menu after accepting a send without hiding an unpublished source', async () => {
     renderPage();
     fireEvent.contextMenu(await screen.findByRole('button', { name: /Owl Reference/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: '发送到照片' }));
     await waitFor(() =>
-      expect(sendEagleAssetsMock).toHaveBeenCalledWith('', {
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'SEND',
         assetIds: [asset.id],
         operationId: expect.any(String),
       }),
     );
-    expect(
-      await screen.findByText('已发送 1 项，原图片已移入当前图库回收站。'),
-    ).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument(),
-    );
+    expect(await screen.findByText('已加入任务中心，可继续浏览。')).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: '发送到照片' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+    expect(sendEagleAssetsMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: '查看进度' }));
+    expect(await screen.findByTestId('eagle-processing-page')).toBeInTheDocument();
   });
 
   it('loads newer neighbors after locating into the middle without discarding the current page', async () => {
@@ -1633,7 +1645,11 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(card);
     fireEvent.click(screen.getByRole('menuitem', { name: '删除所选素材' }));
     await waitFor(() =>
-      expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1']),
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'TRASH',
+        assetIds: ['asset-1'],
+        operationId: expect.any(String),
+      }),
     );
     expect(screen.getByRole('complementary', { name: '素材详情' })).toHaveTextContent(
       '选择一项素材查看详情',
@@ -1645,7 +1661,11 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(card);
     fireEvent.click(screen.getByRole('menuitem', { name: '恢复所选素材' }));
     await waitFor(() =>
-      expect(batchRestoreEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1']),
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'RESTORE',
+        assetIds: ['asset-1'],
+        operationId: expect.any(String),
+      }),
     );
   });
 
@@ -1660,7 +1680,11 @@ describe('SekerEaglePage', () => {
     fireEvent.click(restoreButton);
 
     await waitFor(() => {
-      expect(batchRestoreEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1']);
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'RESTORE',
+        assetIds: ['asset-1'],
+        operationId: expect.any(String),
+      });
     });
   });
 
@@ -1691,7 +1715,13 @@ describe('SekerEaglePage', () => {
     expect(confirm).toHaveBeenCalledWith(
       '确认清空回收站？其中的全部素材将被永久删除，且无法恢复。',
     );
-    await waitFor(() => expect(emptyEagleTrashMock).toHaveBeenCalledWith('token'));
+    await waitFor(() =>
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'EMPTY_TRASH',
+        assetIds: [],
+        operationId: expect.any(String),
+      }),
+    );
     confirm.mockRestore();
   });
 
@@ -2231,7 +2261,11 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('button', { name: '测试智能标签删除' }));
 
     await waitFor(() =>
-      expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1']),
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'TRASH',
+        assetIds: ['asset-1'],
+        operationId: expect.any(String),
+      }),
     );
   });
 
@@ -2658,7 +2692,11 @@ describe('SekerEaglePage', () => {
     expect(menu).toHaveTextContent('已选择 2 项');
     fireEvent.click(within(menu).getByRole('menuitem', { name: '删除所选素材' }));
     await waitFor(() =>
-      expect(batchTrashEagleAssetsMock).toHaveBeenCalledWith('token', ['asset-1', 'asset-2']),
+      expect(enqueueAssetOperationMock).toHaveBeenCalledWith({
+        kind: 'TRASH',
+        assetIds: ['asset-1', 'asset-2'],
+        operationId: expect.any(String),
+      }),
     );
   });
   it('provides a file picker that can import the same file again after completion', async () => {

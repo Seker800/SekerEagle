@@ -1,4 +1,20 @@
 export const enUS = {
+  '发送中…': 'Sending…',
+  '处理中…': 'Processing…',
+  排队中: 'Queued',
+  '账号状态已改变，请重新登录后重试。': 'Account access changed. Sign in again to retry.',
+  '请解锁私密内容后重试。': 'Unlock private content to retry.',
+  '资源已改变，请重新选择。': 'The asset changed. Select it again.',
+  '资源已移除或不再可访问。': 'The asset was removed or is no longer accessible.',
+  '操作失败，请重试。': 'Operation failed. Try again.',
+  '已完成 {{value1}} / {{value2}} 项': 'Completed {{value1}} / {{value2}} items',
+  '已取消 {{count}} 项': 'Cancelled {{count}} items',
+  停止排队: 'Stop queued items',
+  查看失败原因: 'View failure reasons',
+  操作队列: 'Operation queue',
+  '暂时无法读取操作队列。': 'The operation queue is temporarily unavailable.',
+  '已加入任务中心，可继续浏览。': 'Added to Task Center. You can keep browsing.',
+  查看进度: 'View progress',
   '{{value1}}（未记录镜头）': '{{value1}} (lens not recorded)',
   'Eagle 批量导入由导入端管理，尚未接入实时状态；历史记录不计入这里的运行任务。':
     'Eagle batch imports are managed by the importer and have no live status integration; historical records are excluded from running tasks here.',
@@ -477,6 +493,7 @@ export const enUS = {
   未评分: 'Unrated',
   发送到素材: 'Send to Materials',
   发送到照片: 'Send to Photos',
+  '提交中…': 'Submitting…',
   '正在发送…': 'Sending…',
   '发送失败，请重试。': 'Sending failed. Please retry.',
   '已发送 {{value1}} 项，原图片已移入当前图库回收站。':

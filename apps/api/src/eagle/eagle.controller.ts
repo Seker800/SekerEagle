@@ -1,3 +1,5 @@
+import { EagleAssetOperationService } from './eagle-asset-operations.service';
+import { EnqueueAssetOperationDto, ListAssetOperationsDto } from './eagle-asset-operations.dto';
 import { CreateEditRenderDto } from './eagle-edit-render';
 import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
@@ -75,7 +77,47 @@ export class EagleController {
     private readonly media: EagleMediaService,
     private readonly privacy: EaglePrivacyService,
     @Optional() private readonly transfers?: EagleLibraryTransferService,
+    @Optional() private readonly operations?: EagleAssetOperationService,
   ) {}
+
+  @Post('operations')
+  @UseGuards(BrowserOriginGuard)
+  enqueueOperation(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: EnqueueAssetOperationDto,
+  ) {
+    if (!this.operations) throw new Error('Asset operation service is unavailable');
+    return this.operations.enqueue(principal, input);
+  }
+  @Get('operations')
+  listOperations(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Query() query: ListAssetOperationsDto,
+  ) {
+    if (!this.operations) throw new Error('Asset operation service is unavailable');
+    return this.operations.list(
+      principal.sub,
+      principal.canViewPrivate && query.publicOnly !== 'true',
+    );
+  }
+  @Post('operations/:operationId/retry')
+  @UseGuards(BrowserOriginGuard)
+  retryOperation(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('operationId', new ParseUUIDPipe({ version: '4' })) operationId: string,
+  ) {
+    if (!this.operations) throw new Error('Asset operation service is unavailable');
+    return this.operations.retry(principal, operationId);
+  }
+  @Post('operations/:operationId/cancel')
+  @UseGuards(BrowserOriginGuard)
+  cancelOperation(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('operationId', new ParseUUIDPipe({ version: '4' })) operationId: string,
+  ) {
+    if (!this.operations) throw new Error('Asset operation service is unavailable');
+    return this.operations.cancel(principal, operationId);
+  }
 
   @Post('assets/batch/send')
   @UseGuards(BrowserOriginGuard)

@@ -5,6 +5,10 @@ import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import * as api from '../../lib/eagle-task-center-api';
 import { EagleTaskCenter } from './EagleTaskCenter';
 
+const operationList = vi.hoisted(() => vi.fn(async () => []));
+vi.mock('../../lib/asset-operations-api', () => ({
+  createAssetOperationsApi: () => ({ list: operationList }),
+}));
 vi.mock('../../lib/eagle-task-center-api', () => ({
   fetchEagleTaskCenter: vi.fn(),
   updateEagleTaskSchedule: vi.fn(),
@@ -165,8 +169,12 @@ describe('unified task center', () => {
     fireEvent.click(screen.getByRole('button', { name: '重试加载' }));
     await screen.findByRole('heading', { name: '2B 向量搜图' });
     fireEvent.change(screen.getByLabelText('开始时间'), { target: { value: '22:00' } });
+    const previousOperationReads = operationList.mock.calls.length;
     fireEvent.click(screen.getByRole('button', { name: '刷新' }));
     await waitFor(() => expect(api.fetchEagleTaskCenter).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(operationList.mock.calls.length).toBeGreaterThan(previousOperationReads),
+    );
     expect(screen.getByLabelText('开始时间')).toHaveValue('22:00');
   });
   it('pauses one category without exposing or sending a manual priority', async () => {

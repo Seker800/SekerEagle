@@ -152,6 +152,19 @@ try {
       stdio: 'inherit',
     },
   );
+  run(
+    process.execPath,
+    [
+      '--experimental-test-coverage',
+      '--test-coverage-include=apps/api/dist/eagle/eagle-asset-operations.service.js',
+      '--test',
+      'scripts/testing/asset-operations.test.mjs',
+    ],
+    {
+      env,
+      stdio: 'inherit',
+    },
+  );
   // Queue claim tests run after other fixtures to avoid competing for their leases.
   run(process.execPath, ['--test', 'scripts/testing/task-center.test.mjs'], {
     env,

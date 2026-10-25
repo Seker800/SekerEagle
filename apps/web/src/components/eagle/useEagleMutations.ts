@@ -1,3 +1,4 @@
+import { useEnqueueAssetOperation } from './useAssetOperations';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
@@ -14,10 +15,7 @@ import {
 import type { MoveEagleSmartFolderInput } from './EagleSmartFolderTree';
 import type { createEagleQueryKeys } from './eagle-query-keys';
 import { moveSmartFolderInTree } from './eagle-smart-folder-order';
-import {
-  invalidateDesktopAssets,
-  invalidateDesktopAssetsAndRefresh,
-} from '../../lib/desktop-cache';
+import { invalidateDesktopAssetsAndRefresh } from '../../lib/desktop-cache';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 type EagleAssetMetadataInput = Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'>;
@@ -34,7 +32,7 @@ interface EagleMutationCallbacks {
   onMetadataSaved: (assetId: string, revision: number) => void;
   onBatchTagsApplied: () => void;
   onAssetPrivacyChanged: () => void;
-  onSelectionMutationCompleted: () => void;
+  onOperationQueued: () => void;
   onSmartFolderCreated: () => void;
   onSmartFolderUpdated: (folder: EagleSmartFolder, changes: SmartFolderChanges) => void;
 }
@@ -48,14 +46,11 @@ export function useEagleMutations(
     api: {
       batchChangeEagleManualTags,
       batchUpdateEagleAssets,
-      batchRestoreEagleAssets,
-      batchTrashEagleAssets,
       createEagleManualTag,
       createEagleManualTagGroup,
       createEagleSmartFolder,
       deleteEagleManualTag,
       deleteEagleManualTagGroup,
-      emptyEagleTrash,
       moveEagleSmartFolder,
       replaceEagleAssetManualTags,
       updateEagleAsset,
@@ -65,6 +60,7 @@ export function useEagleMutations(
     },
   } = useLibraryWorkspace();
 
+  const enqueueOperation = useEnqueueAssetOperation();
   const queryClient = useQueryClient();
   const invalidate = (...queryKeysToInvalidate: QueryKey[]) =>
     Promise.all(
@@ -246,25 +242,21 @@ export function useEagleMutations(
     },
   });
   const trashMutation = useMutation({
-    mutationFn: (assetIds: string[]) => batchTrashEagleAssets(accessToken, assetIds),
-    onSuccess: async (_result, assetIds) => {
-      await invalidateDesktopAssets(assetIds);
-      callbacks.onSelectionMutationCompleted();
-      await invalidate(queryKeys.assets);
+    mutationFn: (assetIds: string[]) => enqueueOperation('TRASH', assetIds),
+    onSuccess: () => {
+      callbacks.onOperationQueued();
     },
   });
   const restoreMutation = useMutation({
-    mutationFn: (assetIds: string[]) => batchRestoreEagleAssets(accessToken, assetIds),
-    onSuccess: async () => {
-      callbacks.onSelectionMutationCompleted();
-      await invalidate(queryKeys.assets);
+    mutationFn: (assetIds: string[]) => enqueueOperation('RESTORE', assetIds),
+    onSuccess: () => {
+      callbacks.onOperationQueued();
     },
   });
   const emptyTrashMutation = useMutation({
-    mutationFn: () => emptyEagleTrash(accessToken),
-    onSuccess: async () => {
-      callbacks.onSelectionMutationCompleted();
-      await invalidate(queryKeys.assets);
+    mutationFn: () => enqueueOperation('EMPTY_TRASH'),
+    onSuccess: () => {
+      callbacks.onOperationQueued();
     },
   });
   const smartFolderMutation = useMutation({

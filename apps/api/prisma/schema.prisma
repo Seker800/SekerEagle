@@ -180,7 +180,45 @@ model EagleLibraryTransfer {
   @@index([ownerId, sourceMode, status, updatedAt])
 }
 
+model EagleAssetOperation {
+  id String @id
+  ownerId String
+  libraryMode LibraryMode
+  kind String
+  inputIds String[]
+  authVersion Int
+  privateUntil DateTime?
+  isPrivate Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  items EagleAssetOperationItem[]
+  @@unique([ownerId, libraryMode, id])
+  @@index([ownerId, libraryMode, createdAt])
+}
+
+model EagleAssetOperationItem {
+  id String @id
+  operationId String
+  ownerId String
+  libraryMode LibraryMode
+  ordinal Int
+  assetIds String[]
+  snapshots Json
+  weight Int
+  status String @default("PENDING")
+  errorCode String?
+  leaseUntil DateTime?
+  leaseVersion Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  operation EagleAssetOperation @relation(fields: [ownerId, libraryMode, operationId], references: [ownerId, libraryMode, id], onDelete: Cascade, map: "EagleAssetOperationItem_scope_fkey")
+  @@unique([operationId, ordinal])
+  @@index([libraryMode, status, leaseUntil])
+}
+
 model User {
+  assetOperations EagleAssetOperation[]
   photoAgentPreferences EaglePhotoAgentPreference[]
   photoMapStates EaglePhotoMapState[]
   libraryTransfers EagleLibraryTransfer[]

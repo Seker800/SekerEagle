@@ -286,6 +286,110 @@
         "tags": ["DesktopBootstrap"]
       }
     },
+    "/api/eagle/operations": {
+      "post": {
+        "operationId": "EagleController_enqueueOperation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnqueueAssetOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      },
+      "get": {
+        "operationId": "EagleController_listOperations",
+        "parameters": [
+          {
+            "name": "publicOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/operations/{operationId}/retry": {
+      "post": {
+        "operationId": "EagleController_retryOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "EagleController_cancelOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/batch/send": {
       "post": {
         "operationId": "EagleController_sendAssets",
@@ -3633,6 +3737,110 @@
           }
         },
         "tags": ["EagleVector"]
+      }
+    },
+    "/api/photos/operations": {
+      "post": {
+        "operationId": "PhotosController_enqueueOperation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnqueueAssetOperationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      },
+      "get": {
+        "operationId": "PhotosController_listOperations",
+        "parameters": [
+          {
+            "name": "publicOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/operations/{operationId}/retry": {
+      "post": {
+        "operationId": "PhotosController_retryOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/operations/{operationId}/cancel": {
+      "post": {
+        "operationId": "PhotosController_cancelOperation",
+        "parameters": [
+          {
+            "name": "operationId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
       }
     },
     "/api/photos/assets/batch/send": {
@@ -7469,6 +7677,26 @@
           }
         },
         "required": ["name", "scopes"]
+      },
+      "EnqueueAssetOperationDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["SEND", "TRASH", "RESTORE", "EMPTY_TRASH"]
+          },
+          "assetIds": {
+            "maxItems": 1000,
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["operationId", "kind", "assetIds"]
       },
       "SendEagleAssetsDto": {
         "type": "object",

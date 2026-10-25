@@ -1,3 +1,4 @@
+import { AssetOperationsPanel } from './AssetOperationsPanel';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
@@ -51,7 +52,16 @@ export function EagleTaskCenter({
     isFetching: queries.some((result) => result.isFetching),
     isPending: queries.some((result) => result.isPending),
     error: queries.find((result) => result.error)?.error,
-    refetch: () => Promise.all(queries.map((result) => result.refetch())),
+    refetch: () =>
+      Promise.all([
+        ...queries.map((result) => result.refetch()),
+        client.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === 'eagle' &&
+            query.queryKey[1] === ownerId &&
+            query.queryKey[3] === 'operations',
+        }),
+      ]),
   };
   const entries = queries.flatMap((result, index) =>
     result.data
@@ -175,6 +185,7 @@ export function EagleTaskCenter({
         </div>
       )}
       {notice && <p role="status">{notice}</p>}
+      <AssetOperationsPanel includePrivate={includePrivate} scope={scope} />
       {query.isPending && <p role="status">{t('正在读取后台工作…')}</p>}
       {summary && !query.isPending && (
         <>

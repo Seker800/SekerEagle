@@ -1,3 +1,4 @@
+import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { PhotoStatistics } from '../photos/PhotoStatistics';
 import { IconChartBar } from '@tabler/icons-react';
@@ -511,6 +512,7 @@ export function SekerEaglePage({
       aiTagsEnabled:
         libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
     });
+  useAssetOperationProgress(privateVisible, secondaryReady);
   const vectorSummaryQuery = useQuery({
     queryKey: [...queryKeys.root, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
@@ -577,7 +579,8 @@ export function SekerEaglePage({
     },
     onBatchTagsApplied: () => setTagPicker(null),
     onAssetPrivacyChanged: resetAssetPrivacyState,
-    onSelectionMutationCompleted: () => {
+    onOperationQueued: () => {
+      setTransferStatus(t('已加入任务中心，可继续浏览。'));
       setPreviewAssetId(null);
       setPreviewContext(null);
       imagePreview.closePreview();
@@ -1907,6 +1910,9 @@ export function SekerEaglePage({
               {transferStatus && (
                 <div className={styles.statusBar} role="status">
                   {transferStatus}
+                  <button type="button" onClick={() => changeLibraryView('PROCESSING')}>
+                    {t('查看进度')}
+                  </button>
                 </div>
               )}
               {selectionToolbar}
@@ -2620,20 +2626,15 @@ export function SekerEaglePage({
               <EagleSendAssetsMenuItem
                 key={`${storeScope}:${[...selectedAssetIds].sort().join(',')}`}
                 assetIds={selectedAssetIds}
-                ownerId={ownerId}
                 label={libraryMode === 'PHOTO' ? t('发送到素材') : t('发送到照片')}
                 disabled={selectedTransferAssets.some((asset) => asset.lifecycleStatus !== 'READY')}
-                onSent={(result) => {
+                onQueued={() => {
                   setAssetContextMenu(null);
                   setSelectedAssetIds([]);
                   setSelectedAssetId(null);
                   setIsBatchSelection(false);
                   setSelectionMode(false);
-                  setTransferStatus(
-                    t('已发送 {{value1}} 项，原图片已移入当前图库回收站。', {
-                      value1: result.movedCount,
-                    }),
-                  );
+                  setTransferStatus(t('已加入任务中心，可继续浏览。'));
                 }}
               />
             )}

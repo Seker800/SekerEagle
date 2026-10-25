@@ -1065,8 +1065,14 @@ export class EagleService {
     return { affectedAssetCount };
   }
 
-  async emptyTrash(ownerId: string, includePrivate = false) {
+  async emptyTrash(
+    ownerId: string,
+    includePrivate = false,
+    cutoff?: Date,
+    beforeWrite?: (tx: Prisma.TransactionClient) => Promise<void>,
+  ) {
     const affectedAssetCount = await this.prisma.$transaction(async (transaction) => {
+      if (beforeWrite) await beforeWrite(transaction);
       const purgeAfter = new Date();
       const assets = await transaction.$queryRaw<Array<{ id: string; mediaRevision: number }>>(
         Prisma.sql`
@@ -1074,6 +1080,7 @@ export class EagleService {
           SET "purgeAfter" = ${purgeAfter}, "rowVersion" = "rowVersion" + 1,
               "updatedAt" = CURRENT_TIMESTAMP
           WHERE "ownerId" = ${ownerId} AND "libraryMode" = ${this.libraryMode}::"LibraryMode" AND "deletedAt" IS NOT NULL AND "purgeAfter" IS NULL
+            ${cutoff ? Prisma.sql`AND "deletedAt" <= ${cutoff}` : Prisma.empty}
             AND (${includePrivate} OR "isPrivate" = false)
           RETURNING "id", "mediaRevision"
         `,

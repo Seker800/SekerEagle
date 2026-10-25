@@ -94,6 +94,10 @@ export class EagleLibraryTransferService {
     input: SendEagleAssetsDto,
     includePrivate: boolean,
     expected?: ReadonlyMap<string, { mediaRevision: number; rowVersion: number }>,
+    guard?: {
+      beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
+      componentIds: readonly string[];
+    },
   ): Promise<LibraryTransferResult> {
     const ids = [...new Set(input.assetIds)].sort();
     if (!ids.length || ids.length !== input.assetIds.length || ids.length > 100)
@@ -115,7 +119,9 @@ export class EagleLibraryTransferService {
     ) => {
       if (
         expected &&
-        ids.some((id) => {
+        [
+          ...new Set([...ids, ...rows.filter((row) => expected.has(row.id)).map((row) => row.id)]),
+        ].some((id) => {
           const row = rows.find((candidate) => candidate.id === id),
             snapshot = expected.get(id);
           return (
@@ -207,6 +213,12 @@ export class EagleLibraryTransferService {
     const items = operation.plan as unknown as TransferItem[];
     if (!Array.isArray(items) || !items.length || items.length > 200)
       throw new ConflictException('发送计划无效。');
+    if (
+      guard &&
+      JSON.stringify(items.map((item) => item.sourceId).sort()) !==
+        JSON.stringify([...guard.componentIds].sort())
+    )
+      throw new ConflictException('实况照片组件已变化。');
     const currentSources = await this.prisma.eagleAsset.findMany({
       where: this.libraryModeWhere(
         ownerId,
@@ -271,6 +283,7 @@ export class EagleLibraryTransferService {
         if (sources.length !== items.length)
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
         checkExpected(sources);
+        if (guard) await guard.beforePublish(tx);
         const liveIdentifiers = new Map<string, string>();
         for (const source of sources)
           if (source.livePhotoIdentifier && !liveIdentifiers.has(source.livePhotoIdentifier))

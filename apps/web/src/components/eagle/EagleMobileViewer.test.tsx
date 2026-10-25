@@ -49,15 +49,19 @@ const mocks = vi.hoisted(() => ({
     getEaglePrivacySettings: vi.fn(),
     batchChangeEagleManualTags: vi.fn(),
   },
+  enqueue: vi.fn(),
   save: vi.fn(),
 }));
 vi.mock('../../lib/library-workspace', () => ({
   useLibraryWorkspace: () => ({ api: mocks.api, ownerId: 'owner', libraryMode: 'PHOTO' }),
 }));
+vi.mock('../../lib/asset-operations-api', () => ({
+  createAssetOperationsApi: () => ({ enqueue: mocks.enqueue }),
+}));
 vi.mock('../../lib/original-file-export', () => ({ saveOriginalFile: mocks.save }));
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.api.batchTrashEagleAssets.mockResolvedValue({});
+  mocks.enqueue.mockResolvedValue({ id: 'queued' });
   mocks.save.mockResolvedValue({ saved: true });
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -95,11 +99,15 @@ it('keeps read-only copies safe and confirms recoverable deletion', async () => 
   expect(edit).toHaveBeenCalledOnce();
   const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
   fireEvent.click(screen.getByRole('button', { name: '删除' }));
-  expect(mocks.api.batchTrashEagleAssets).not.toHaveBeenCalled();
+  expect(mocks.enqueue).not.toHaveBeenCalled();
   confirm.mockReturnValue(true);
   fireEvent.click(screen.getByRole('button', { name: '删除' }));
   await waitFor(() => expect(close).toHaveBeenCalledOnce());
-  expect(mocks.api.batchTrashEagleAssets).toHaveBeenCalledWith('', ['one']);
+  expect(mocks.enqueue).toHaveBeenCalledWith({
+    kind: 'TRASH',
+    assetIds: ['one'],
+    operationId: expect.any(String),
+  });
   confirm.mockRestore();
 });
 it('disables mutations for trash previews', () => {

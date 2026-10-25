@@ -52,7 +52,7 @@ export function EagleSendAssetsMenuItem({
         onClick={() => void send()}
       >
         <IconSend size={15} />
-        {pending ? t('正在发送…') : label}
+        {pending ? t('提交中…') : label}
       </button>
       {error && <small role="alert">{error}</small>}
     </>
