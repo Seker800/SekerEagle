@@ -1,5 +1,21 @@
 # 现用运行状态与交接
 
+## 2026-10-25 整理要求、文字申请与完整跨库发送已上线
+
+现用 API／web 为 `dc85f2c2b4bd85ea9931fd83bdfa5795278af796`，来源是从原生产版本单独建立的 `codex/photo-agent-instructions` 分支；没有夹带主工作区后续的安卓／收藏改动。worker 继续运行 `7f5b50147dd3f0e0d708e784574205c971cbd7e6`，本轮未重启。API、web、worker、PostgreSQL、MinIO 均健康；worker、数据库、对象存储、网关及独立封面容器身份与重启次数保持不变，网关仅 reload。API／web 的环境摘要、挂载、账号、内存及重启策略与发布前一致。
+
+数据库新增第 48 项迁移 `20261025120000_photo_agent_instructions`，保存 owner／PHOTO 整理要求及修订号、明确申请的 VISUAL／METADATA 依据，并新增独立目标媒体版本的迁移事实存档。摄影专属表的 PHOTO 约束不变。整理要求只由浏览器修改，Agent 只读；保存不启动扫描。新式发送／回收申请可以诚实声明未看图，位置申请与旧流程仍需视觉核对。批量审核保留已载入预览、显示整批进度和明确完成状态。图库先加载首屏，再加载标签、目录及统计；摄影筛选选项按需加载。
+
+显式跨库发送独立复制原件、当前缩略图／浏览与编辑预览及已完成切片，映射独立目标标签，保留私密规则、评分与说明；兼容当前空间的 2B 图片向量与代表色直接复用，不调用模型重算。摄影事实、补充位置及编辑配方带版本存档，返回照片库时恢复摄影信息；人物、连拍和源库索引关系不跨库复用。缺失或不兼容的工作才建队；已有计划按原幂等范围重试，源版本或私密变化则拒绝发布。发送后目标不依赖源存储对象。
+
+NAS 发布与回滚目录为 `maintenance/photo-approval-release-20261025-dc85f2c/`：一致性数据库归档 555,212,678 字节，SHA256 `39e53a9d9c544793b45be09044e8906bc5bcc6077a38a62745171e9f96b29998`，已核对可读目录；包含镜像、构建／迁移／部署日志、回滚覆盖文件及运行清单。当前 Compose 参数链仍读 `maintenance/processing-upgrade-20261023/release-compose.json`，本轮仅追加 API／web 覆盖。回滚应用时在完整参数链末尾追加本轮 `rollback.yml`，保留向后兼容的新增表，不自动恢复数据库。原处理开关、Mac 模型位置、固定安卓测试库与封面长期任务未调整。
+
+验收：完整 CI（架构门禁、lint、typecheck、unit、build、format、OSS）通过，网页 728 项测试通过；真实数据库的历史升级、跨库往返、私密标签冲突、幂等失败恢复与完整备份恢复通过。相关代码综合覆盖率为 94.09% 行、85.49% 分支、96.45% 函数。独立合成图库中实测保存要求后刷新仍保留、批准发送后预览继续显示、切到素材并刷新后缩略图正常。localhost 多测试服务共用 Cookie 造成的验收会话冲突已通过独立 loopback 地址隔离；没有修改生产认证规则或固定测试图库。临时验收进程与容器已退出。
+
+HTTPS readiness 返回 200，未登录的指令与素材接口返回 401，线上 HTML 与本机候选完全一致，Linux Prisma 客户端包含新模型。生产桌面页面已验证整理要求和新增申请。用户授权的 4 张文件名 Screenshot 候选使用 `visualReviewed:false` 一次提交，记录为 METADATA／PENDING，未查看图片、未自动审批或发送；此前 18 项弱线索没有纳入。之前已完成的 26 次发送只读核查时，26 个可见目标均 READY 且有当前 512 缩略图；未对旧目标覆盖用户数据。
+
+本机 MCP 启动器使用独立私有运行副本，增加只读 `photo_instructions`，保留原 photo:read／photo:suggest 权限、TLS 校验、响应预算和禁止审批的路由边界。运行代码与 PAT 均不提交；核验清单及页面证据见本机 `.omx/artifacts/photo-approval-release-20261025/` 与 `approval-production-ready.png`。核验日期：2026-10-25（北京时间，生产更新及申请提交后）；进度应重新读取接口，本文不是实时监控。
+
 ## 2026-10-25 固定安卓交互测试环境
 
 用户要求后续手机验收持续复用同一测试图库。本机入口固定为 `http://localhost:49813`，由用户级 launchd 服务 `com.sekereagle.android-lab` 托管 API、worker 和 loopback 网关；独立 PostgreSQL／MinIO 使用 `sekereagle-android-lab-db`、`sekereagle-android-lab-storage` 与持久命名卷，数据库为 `sekereagle_test`。初始照片与素材各 72 项，来自私有缓存中此前只读抽取的 27 张真实图库照片，副本补入虚构测试元数据；本轮没有再次连接或修改生产图库、群晖服务和 Mac 模型。
