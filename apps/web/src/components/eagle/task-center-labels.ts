@@ -6,6 +6,7 @@ import {
   type TaskWaitReason,
   type BackgroundSchedule,
   type TaskGroup,
+  type TaskCenterOverview,
 } from '@sekereagle/library-core';
 
 export function taskFamilyLabels(family: TaskFamily): [string, string, string, string] {
@@ -154,15 +155,31 @@ export function taskExecutionLabel(group: TaskGroup, schedule: BackgroundSchedul
   return triggers[group.id] ?? t('随时');
 }
 
-export function taskStatus(group: TaskGroup, schedule: BackgroundSchedule) {
+export function taskStatus(
+  group: TaskGroup,
+  schedule: BackgroundSchedule,
+  embedding?: TaskCenterOverview['embedding'],
+) {
+  if (
+    group.id === 'EMBEDDING' &&
+    group.queued + group.running > 0 &&
+    (embedding === 'OFFLINE' || embedding === 'DRIFTED')
+  )
+    return 'WAITING';
   if (group.running > 0) return 'RUNNING';
   if (group.queued > 0 && taskSection(group, schedule) !== 'PAUSED') return 'QUEUED';
   if (group.failed > 0 || group.queued > 0) return 'STOPPED';
   return 'COMPLETED';
 }
 
-export function taskStatusLabel(group: TaskGroup, schedule: BackgroundSchedule): string {
-  switch (taskStatus(group, schedule)) {
+export function taskStatusLabel(
+  group: TaskGroup,
+  schedule: BackgroundSchedule,
+  embedding?: TaskCenterOverview['embedding'],
+): string {
+  switch (taskStatus(group, schedule, embedding)) {
+    case 'WAITING':
+      return t('等待模型');
     case 'RUNNING':
       return t('计算ing');
     case 'QUEUED':

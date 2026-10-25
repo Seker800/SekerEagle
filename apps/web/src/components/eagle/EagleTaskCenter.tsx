@@ -8,6 +8,7 @@ import {
   type TaskFamily,
   type TaskGroup,
   type TaskSection,
+  type TaskCenterOverview,
 } from '@sekereagle/library-core';
 import { createEagleTaskCenterApi } from '../../lib/eagle-task-center-api';
 import type { LibraryMode } from '../../lib/library-api-scope';
@@ -116,7 +117,12 @@ export function EagleTaskCenter({
     entries.find((entry) => entry.mode === libraryMode)?.summary ?? entries[0]?.summary;
   const cards = entries
     .flatMap(({ mode, summary: entry }) =>
-      entry.groups.map((group) => ({ mode, group, schedule: entry.settings })),
+      entry.groups.map((group) => ({
+        mode,
+        group,
+        schedule: entry.settings,
+        embedding: entry.embedding,
+      })),
     )
     .sort(
       (a, b) =>
@@ -326,6 +332,7 @@ export function EagleTaskCenter({
                     <TaskCard
                       key={`${card.mode}:${card.group.id}`}
                       group={card.group}
+                      embedding={card.embedding}
                       schedule={card.schedule}
                       mode={card.mode}
                       busy={retry.isPending || policy.isPending}
@@ -392,6 +399,7 @@ export function EagleTaskCenter({
 
 function TaskCard({
   group,
+  embedding,
   schedule,
   mode,
   busy,
@@ -400,6 +408,7 @@ function TaskCard({
   onReview,
 }: {
   group: TaskGroup;
+  embedding?: TaskCenterOverview['embedding'];
   schedule: BackgroundSchedule;
   mode: LibraryMode;
   busy: boolean;
@@ -415,7 +424,7 @@ function TaskCard({
     group.waiting.some(
       (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
     );
-  const state = taskStatus(group, schedule);
+  const state = taskStatus(group, schedule, embedding);
   const activeSteps = group.steps.filter((step) => step.running > 0);
   const wait = group.waiting.find((item) => !['QUEUED', 'APPROVAL'].includes(item.reason));
   const execution = taskExecutionLabel(group, schedule);
@@ -443,7 +452,7 @@ function TaskCard({
             {t('待审批')} {group.approval}
           </strong>
         ) : (
-          <strong className={styles.state}>{taskStatusLabel(group, schedule)}</strong>
+          <strong className={styles.state}>{taskStatusLabel(group, schedule, embedding)}</strong>
         )}
       </header>
       <div className={styles.cardBody}>

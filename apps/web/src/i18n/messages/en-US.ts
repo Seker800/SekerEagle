@@ -1,4 +1,5 @@
 export const enUS = {
+  等待模型: 'Waiting for model',
   'Mac 模型配置不匹配，向量任务等待修复；其他处理继续。':
     'Mac model configuration mismatch. Vector tasks await repair; other processing continues.',
   'Mac 模型连接中断，向量任务等待恢复；其他处理继续。':
