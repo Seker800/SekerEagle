@@ -1,50 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
-import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
-
-describe('owner-scoped Eagle asset entity stores', () => {
-  it('keeps a shared store until its last mounted consumer releases it', () => {
-    const ownerId = crypto.randomUUID();
-    const store = getEagleAssetEntityStore(ownerId);
-    const releaseFirst = retainEagleAssetEntityStore(ownerId, store);
-    const releaseSecond = retainEagleAssetEntityStore(ownerId, store);
-
-    releaseFirst();
-    expect(getEagleAssetEntityStore(ownerId)).toBe(store);
-
-    releaseSecond();
-    expect(getEagleAssetEntityStore(ownerId)).not.toBe(store);
-  });
-
-  it('evicts every dependent page cache only after the final consumer leaves', () => {
-    const scope = crypto.randomUUID();
-    const store = getEagleAssetEntityStore(scope);
-    const firstCache = vi.fn();
-    const secondCache = vi.fn();
-    const releaseFirst = retainEagleAssetEntityStore(scope, store, firstCache);
-    const releaseSecond = retainEagleAssetEntityStore(scope, store, secondCache);
-    releaseFirst();
-    expect(firstCache).not.toHaveBeenCalled();
-    expect(secondCache).not.toHaveBeenCalled();
-    releaseSecond();
-    releaseSecond();
-    expect(firstCache).toHaveBeenCalledTimes(1);
-    expect(secondCache).toHaveBeenCalledTimes(1);
-  });
-
-  it('makes release idempotent', () => {
-    const ownerId = crypto.randomUUID();
-    const store = getEagleAssetEntityStore(ownerId);
-    const release = retainEagleAssetEntityStore(ownerId, store);
-
-    release();
-    release();
-
-    expect(getEagleAssetEntityStore(ownerId)).not.toBe(store);
-  });
-});
+import { expect, it } from 'vitest';
+import { EagleAssetEntityStore } from './eagle-asset-entity-store';
 
 it('replaces the media revision together with its renditions after original replacement', () => {
-  const store = getEagleAssetEntityStore(crypto.randomUUID());
+  const store = new EagleAssetEntityStore();
   store.upsertMany([
     {
       id: 'asset-1',

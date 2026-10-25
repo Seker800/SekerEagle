@@ -28,7 +28,7 @@ export function getEagleWorkspaceCache(
 
 class EagleWorkspaceCache {
   readonly store;
-  readonly thumbnails = new ThumbnailLoadService();
+  readonly thumbnails = new ThumbnailLoadService({ maxEntries: 512, maxBytes: 128 * 1024 * 1024 });
   readonly #keys;
   readonly #unsubscribe;
   #references = 0;

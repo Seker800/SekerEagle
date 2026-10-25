@@ -459,13 +459,36 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
-  it('renders retained normalized pages without another request when returning to a workspace', async () => {
-    const view = renderPage('returning-owner');
+  it.each(['MATERIAL', 'PHOTO'] as const)(
+    'renders retained %s pages immediately even when the next request cannot finish',
+    async (mode) => {
+      testWorkspaceMode.value = mode;
+      const view = renderPage('returning-owner');
+      await screen.findByRole('button', { name: /Owl Reference/ });
+      view.rerender(<></>);
+      listEagleAssetsMock.mockImplementation(() => new Promise(() => undefined));
+      view.rerender(view.renderForOwner('returning-owner'));
+      expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('shows cached cards while refreshing an invalidated list in the background', async () => {
+    const view = renderPage('refresh-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });
     view.rerender(<></>);
-    view.rerender(view.renderForOwner('returning-owner'));
-    await screen.findByRole('button', { name: /Owl Reference/ });
-    expect(listEagleAssetsMock).toHaveBeenCalledTimes(1);
+    const refresh = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
+    listEagleAssetsMock.mockReturnValue(refresh.promise);
+    await view.client.invalidateQueries({
+      queryKey: ['eagle', 'refresh-owner', 'MATERIAL', 'assets'],
+    });
+    view.rerender(view.renderForOwner('refresh-owner'));
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+    await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalledTimes(2));
+    await act(async () =>
+      refresh.resolve({ items: [{ ...asset, displayName: 'Updated Owl' }], nextCursor: null }),
+    );
+    expect(await screen.findByRole('button', { name: /Updated Owl/ })).toBeInTheDocument();
   });
 
   it('uses a fresh cache namespace when the owner changes', async () => {
