@@ -192,12 +192,19 @@ test('invalidation during validation prevents the old result being published', a
 });
 
 test('an exhausted positive window refills immediately rather than idling until another resource wakes', async () => {
-  let discoveries = 0, validations = 0;
-  const select = createScheduledMediaSelector({ $queryRaw: async (sql: { text: string }) => {
-    if (!sql.text.includes('job.id IN')) return [{ id: ++discoveries === 1 ? 'old' : 'next' }];
-    validations++;
-    return validations === 1 ? [{ id: 'old' }] : validations === 2 ? [] : [{ id: 'next' }];
-  } } as never, () => false, 'EMBEDDING');
+  let discoveries = 0,
+    validations = 0;
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        if (!sql.text.includes('job.id IN')) return [{ id: ++discoveries === 1 ? 'old' : 'next' }];
+        validations++;
+        return validations === 1 ? [{ id: 'old' }] : validations === 2 ? [] : [{ id: 'next' }];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
   const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
   await select(input);
   assert.deepEqual(await select(input), [{ id: 'next' }]);

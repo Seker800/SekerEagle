@@ -41,15 +41,19 @@ export function selectScheduledMediaCandidates(
       ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
       ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
       job.kind<>'GENERATE_AI_TAGS'  AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
-      (CASE WHEN job."processorVersion"='photo-source-details-v1' THEN 'BACKGROUND'::"EagleProcessingLane" ELSE job.lane END)=${input.where.lane}::"EagleProcessingLane"
+      ${
+        input.where.lane === 'BACKGROUND'
+          ? Prisma.sql`(job.lane='BACKGROUND' OR job."processorVersion"='photo-source-details-v1')`
+          : Prisma.sql`(job.lane=${input.where.lane}::"EagleProcessingLane" AND job."processorVersion"<>'photo-source-details-v1')`
+      }
       AND ((job.status='PENDING' AND job."availableAt"<=now()) OR (job.status='PROCESSING' AND job."lockedAt"<now()-interval '10 minutes'))
       AND (job."dependsOnJobId" IS NULL OR dependency.status='COMPLETED')
       AND job."assetRevision"=a."mediaRevision" AND (a."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
       AND ${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)}
       AND (job.lane<>'BACKGROUND' AND job."processorVersion"<>'photo-source-details-v1' OR ${backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`)})
-      ${typeof kind === 'string' ? Prisma.sql`AND job.kind::text=${kind}` : Prisma.empty}
-      ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind::text<>${kind.not}` : Prisma.empty}
-      ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind::text IN (${Prisma.join(kind.in)})` : Prisma.empty}
+      ${typeof kind === 'string' ? Prisma.sql`AND job.kind=${kind}::"EagleMediaJobKind"` : Prisma.empty}
+      ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind<>${kind.not}::"EagleMediaJobKind"` : Prisma.empty}
+      ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind IN (${Prisma.join(kind.in.map((value) => Prisma.sql`${value}::"EagleMediaJobKind"`))})` : Prisma.empty}
       ${input.where.processorVersion?.notIn.length ? Prisma.sql`AND job."processorVersion" NOT IN (${Prisma.join(input.where.processorVersion.notIn)})` : Prisma.empty}
     ORDER BY (job.kind='RENDER_EDITED_COPY') DESC, (${freshness}>=now()-interval '24 hours') DESC,
       CASE WHEN ${freshness}>=now()-interval '24 hours' THEN ${freshness}
@@ -68,6 +72,7 @@ export function createScheduledMediaSelector(
   const windows = new Map<string, { ids: string[]; expiresAt: number }>();
   let generation = 0;
   const select = async (input: ClaimFindManyInput, age?: MediaQueueAge) => {
+    const version = generation;
     const turn = turns.get(input.where.lane) ?? 0;
     turns.set(input.where.lane, turn + 1);
     const preferPriority = turn % 4 !== 3;
@@ -81,33 +86,44 @@ export function createScheduledMediaSelector(
       unavailable,
     ]);
     const options = { resource, freshOnly: age === 'RECENT', historyOnly: age === 'HISTORY' };
-    let window = windows.get(key);
-    if (!window || window.expiresAt <= Date.now()) {
-      const version = generation;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let window = windows.get(key);
+      if (!window || window.expiresAt <= Date.now()) {
+        const rows = await selectScheduledMediaCandidates(
+          client,
+          input,
+          preferPriority,
+          unavailable,
+          options,
+        );
+        // A notification during discovery must not repopulate an invalidated window.
+        if (version !== generation) return [];
+        window = {
+          ids: rows.map((row) => row.id),
+          expiresAt: Date.now() + (rows.length ? 30000 : 1000),
+        };
+        if (windows.size >= 24) windows.delete(windows.keys().next().value!);
+        windows.set(key, window);
+      }
+      if (!window.ids.length) return [];
       const rows = await selectScheduledMediaCandidates(
         client,
         input,
         preferPriority,
         unavailable,
-        options,
+        {
+          ...options,
+          candidateIds: window.ids,
+        },
       );
-      // A notification during discovery must not repopulate an invalidated window.
       if (version !== generation) return [];
-      window = {
-        ids: rows.map((row) => row.id),
-        expiresAt: Date.now() + (rows.length ? 30000 : 1000),
-      };
-      if (windows.size >= 24) windows.delete(windows.keys().next().value!);
-      windows.set(key, window);
+      window.ids = rows.map((row) => row.id);
+      if (rows.length) return rows;
+      windows.delete(key);
+      // Refill once now: the other resource may stay busy for minutes, and
+      // waiting for its completion/30s fallback would leave this resource idle.
     }
-    if (!window.ids.length) return [];
-    const rows = await selectScheduledMediaCandidates(client, input, preferPriority, unavailable, {
-      ...options,
-      candidateIds: window.ids,
-    });
-    window.ids = rows.map((row) => row.id);
-    if (!rows.length) windows.delete(key);
-    return rows;
+    return [];
   };
   return Object.assign(select, {
     invalidate: () => {
@@ -115,4 +131,19 @@ export function createScheduledMediaSelector(
       windows.clear();
     },
   });
+}
+
+/** Only new eligible work or policy changes invalidate discovery; leases/heartbeats merely wake. */
+export function invalidateMediaCandidates(
+  selectors: Record<'NAS' | 'EMBEDDING', { invalidate(): void }>,
+  payload?: string,
+) {
+  if (
+    !payload ||
+    ['EagleMediaJob', 'EagleProcessingSetting', 'EagleTaskPolicy'].includes(payload)
+  ) {
+    selectors.NAS.invalidate();
+    selectors.EMBEDDING.invalidate();
+  } else if (payload === 'media-ready:NAS') selectors.NAS.invalidate();
+  else if (payload === 'media-ready:EMBEDDING') selectors.EMBEDDING.invalidate();
 }
