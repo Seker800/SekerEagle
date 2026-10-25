@@ -1009,28 +1009,36 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         if (snapshot.busy || snapshot.trash) return
         operation?.cancel()
         val request = ++generation
-        mutable.value = snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
-        mutation = viewModelScope.launch {
-            try {
-                repo.setFavorite(snapshot.mode, id, !asset.favorite)
-                val updated = withContext(Dispatchers.IO) {
-                    repo.parse(repo.connection.json("GET", "${com.sekereagle.android.core.NativeGalleryPolicy.base(snapshot.mode.name)}/assets/$id"), snapshot.mode, snapshot.sort)
-                }
-                if (generation != request) return@launch
-                mutable.value = state.value.copy(busy = false,
-                    items = state.value.items.map { if (it.id == id) updated else it })
-                // Tag options and active rule-folder membership must be re-read on leaving the viewer.
-                staleLibraries.add(snapshot.mode)
-            } catch (reason: CancellationException) {
-                throw reason
-            } catch (reason: Exception) {
-                if (generation == request) {
-                    if (reason is NativeSession.Failure && reason.status == 401) expire()
-                    else mutable.value = state.value.copy(busy = false,
-                        message = "收藏操作未确认完成，请刷新核对后重试：${reason.message.orEmpty()}")
+        mutable.value =
+            snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
+        mutation =
+            viewModelScope.launch {
+                try {
+                    repo.setFavorite(snapshot.mode, id, !asset.favorite)
+                    val updated = repo.detail(snapshot.mode, id, snapshot.sort)
+                    if (generation != request) return@launch
+                    mutable.value =
+                        state.value.copy(
+                            busy = false,
+                            items = state.value.items.map { if (it.id == id) updated else it },
+                        )
+                    // Tag options and active rule-folder membership must be re-read on leaving the
+                    // viewer.
+                    staleLibraries.add(snapshot.mode)
+                } catch (reason: CancellationException) {
+                    throw reason
+                } catch (reason: Exception) {
+                    if (generation == request) {
+                        if (reason is NativeSession.Failure && reason.status == 401) expire()
+                        else
+                            mutable.value =
+                                state.value.copy(
+                                    busy = false,
+                                    message = "收藏操作未确认完成，请刷新核对后重试：${reason.message.orEmpty()}",
+                                )
+                    }
                 }
             }
-        }
     }
 
     fun changeSelection(action: String, tags: Set<String> = emptySet(), rating: Int? = null) {

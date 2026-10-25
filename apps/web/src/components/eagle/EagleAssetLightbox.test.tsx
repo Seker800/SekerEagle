@@ -1,7 +1,18 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactElement, ReactNode } from 'react';
+import { fireEvent, render as renderView, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { EagleAssetLightbox } from './EagleAssetLightbox';
+
+function render(ui: ReactElement) {
+  const client = new QueryClient();
+  return renderView(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const videoAsset: EagleAssetListItem = {
   id: 'video-1',

@@ -134,6 +134,16 @@ class NativeGalleryRepository(
             )
         }
 
+    suspend fun detail(
+        mode: GalleryMode,
+        id: String,
+        sort: GallerySort = GallerySort.default(mode),
+    ): NativeAsset = withContext(Dispatchers.IO) {
+        val base = NativeGalleryPolicy.base(mode.name)
+        val assetId = NativeGalleryPolicy.identifier(id)
+        parse(session.json("GET", "$base/assets/$assetId"), mode, sort)
+    }
+
     suspend fun timeline(mode: GalleryMode, sort: GallerySort): NativeTimeline =
         withContext(Dispatchers.IO) {
             val zone = java.net.URLEncoder.encode(ZoneId.systemDefault().id, "UTF-8")
@@ -256,29 +266,43 @@ class NativeGalleryRepository(
             val assetId = NativeGalleryPolicy.identifier(id)
             fun findTag(): String? {
                 val tags = session.array("$base/manual-tags", 16 * 1024 * 1024)
-                return (0 until tags.length()).asSequence()
+                return (0 until tags.length())
+                    .asSequence()
                     .map { tags.getJSONObject(it) }
-                    .firstOrNull { it.getString("name") == "收藏" }?.getString("id")
+                    .firstOrNull { it.getString("name") == "收藏" }
+                    ?.getString("id")
             }
             var tagId = findTag()
             if (enabled && tagId == null) {
-                tagId = try {
-                    session.json("POST", "$base/manual-tags", JSONObject().put("name", "收藏"))
-                        .getString("id")
-                } catch (reason: NativeSession.Failure) {
-                    if (reason.status != 409) throw reason
-                    findTag() ?: throw reason
-                }
+                tagId =
+                    try {
+                        session
+                            .json("POST", "$base/manual-tags", JSONObject().put("name", "收藏"))
+                            .getString("id")
+                    } catch (reason: NativeSession.Failure) {
+                        if (reason.status != 409) throw reason
+                        findTag() ?: throw reason
+                    }
             }
             if (tagId != null) {
                 val privacy = session.json("GET", "$base/privacy-settings").getJSONArray("tagIds")
                 require((0 until privacy.length()).none { privacy.getString(it) == tagId }) {
                     "收藏标签被设为私密，请先在设置中调整。"
                 }
-                session.json("POST", "$base/assets/batch/manual-tags", JSONObject()
-                    .put("assetIds", org.json.JSONArray(listOf(assetId)))
-                    .put("addTagIds", org.json.JSONArray(if (enabled) listOf(tagId) else emptyList<String>()))
-                    .put("removeTagIds", org.json.JSONArray(if (enabled) emptyList<String>() else listOf(tagId))))
+                session.json(
+                    "POST",
+                    "$base/assets/batch/manual-tags",
+                    JSONObject()
+                        .put("assetIds", org.json.JSONArray(listOf(assetId)))
+                        .put(
+                            "addTagIds",
+                            org.json.JSONArray(if (enabled) listOf(tagId) else emptyList<String>()),
+                        )
+                        .put(
+                            "removeTagIds",
+                            org.json.JSONArray(if (enabled) emptyList<String>() else listOf(tagId)),
+                        ),
+                )
             }
         }
 
@@ -396,13 +420,14 @@ class NativeGalleryRepository(
                         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                             ?: throw IOException("预览解码失败")
                     }
-                    var bitmap = cached?.let {
-                        try {
-                            decode(it)
-                        } catch (_: Exception) {
-                            null
+                    var bitmap =
+                        cached?.let {
+                            try {
+                                decode(it)
+                            } catch (_: Exception) {
+                                null
+                            }
                         }
-                    }
                     if (bitmap == null) {
                         if (id != null && cached != null) disk?.remove(id)
                         val bytes = session.media(path)
@@ -472,9 +497,7 @@ class NativeGalleryRepository(
         fun path(kind: String): String? =
             images
                 .firstOrNull { it.optString("kind") == kind }
-                ?.let {
-                    NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id"))
-                }
+                ?.let { NativeGalleryPolicy.mediaPath(mode.name, id, it.getString("id")) }
         val movie =
             (0 until renditions.length())
                 .map { renditions.getJSONObject(it) }

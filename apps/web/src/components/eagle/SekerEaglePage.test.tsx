@@ -1,3 +1,5 @@
+import type * as PrivacyApiModule from '../../lib/eagle-privacy-api';
+import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -36,6 +38,10 @@ vi.mock('../media/photo-editor/PhotoEditor', () => ({
   },
 }));
 
+vi.mock('../../lib/eagle-privacy-api', async (original) => ({
+  ...(await original<typeof PrivacyApiModule>()),
+  getEaglePrivacySettings: async () => ({ tagIds: [] }),
+}));
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
 const testWorkspaceMode = vi.hoisted(() => ({ value: 'MATERIAL' as 'MATERIAL' | 'PHOTO' }));
 vi.mock('../../lib/library-workspace', async (original) => {
@@ -231,13 +237,15 @@ function renderPage(
   const page = (currentOwnerId: string) => (
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <SekerEaglePage
-          accessToken="token"
-          modeSwitcher={modeSwitcher}
-          ownerId={currentOwnerId}
-          canManageProcessing={canManageProcessing}
-          privacyVisibility={privacyVisibility}
-        />
+        <LibraryWorkspaceProvider ownerId={currentOwnerId} libraryMode="MATERIAL">
+          <SekerEaglePage
+            accessToken="token"
+            modeSwitcher={modeSwitcher}
+            ownerId={currentOwnerId}
+            canManageProcessing={canManageProcessing}
+            privacyVisibility={privacyVisibility}
+          />
+        </LibraryWorkspaceProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -1339,6 +1347,7 @@ describe('SekerEaglePage', () => {
     renderPage();
 
     const expectedActions = [
+      '收藏',
       '发送到照片',
       '编辑照片',
       '另存为…',
@@ -1363,6 +1372,46 @@ describe('SekerEaglePage', () => {
     expect(fireEvent.contextMenu(screen.getByTestId('eagle-image-viewer'))).toBe(true);
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
     expect(copyImageToClipboardMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the same manual favorite tag from the context menu and desktop viewer', async () => {
+    const favorite = { id: 'favorite-tag', name: '收藏' };
+    listEagleManualTagsMock.mockResolvedValue([favorite]);
+    batchChangeEagleManualTagsMock.mockImplementationOnce(async () => {
+      listEagleAssetsMock.mockResolvedValue({
+        items: [{ ...asset, manualTags: [favorite] }],
+        nextCursor: null,
+      });
+      return { affectedAssetCount: 1, privacyChangedAssetCount: 0 };
+    });
+    renderPage();
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.contextMenu(card, { clientX: 180, clientY: 120 });
+    fireEvent.click(screen.getByRole('menuitem', { name: '收藏' }));
+    await waitFor(() =>
+      expect(batchChangeEagleManualTagsMock).toHaveBeenCalledWith('', {
+        assetIds: ['asset-1'],
+        addTagIds: ['favorite-tag'],
+        removeTagIds: [],
+      }),
+    );
+    await screen.findByRole('menuitem', { name: '已收藏' });
+    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
+    getEagleAssetMock.mockResolvedValue({ ...asset, manualTags: [favorite] });
+    fireEvent.doubleClick(card);
+    const dialog = await screen.findByRole('dialog', { name: 'Owl Reference' });
+    const button = await within(dialog).findByRole('button', { name: '已收藏' });
+    await waitFor(() => expect(button).not.toBeDisabled());
+    fireEvent.click(button);
+    await waitFor(() =>
+      expect(batchChangeEagleManualTagsMock).toHaveBeenLastCalledWith('', {
+        assetIds: ['asset-1'],
+        addTagIds: [],
+        removeTagIds: ['favorite-tag'],
+      }),
+    );
+    expect(dialog).toBeInTheDocument();
+    expect(createEagleManualTagMock).not.toHaveBeenCalled();
   });
 
   it('offers Save As from the browser asset menu without a desktop bridge', async () => {
@@ -2721,7 +2770,7 @@ describe('SekerEaglePage', () => {
     trigger.focus();
     fireEvent.click(trigger);
     const menu = screen.getByRole('menu', { name: '素材操作' });
-    expect(within(menu).getByRole('menuitem', { name: '发送到照片' })).toHaveFocus();
+    expect(within(menu).getByRole('menuitem', { name: '收藏' })).toHaveFocus();
     fireEvent.keyDown(menu, { key: 'End' });
     expect(within(menu).getByRole('menuitem', { name: '删除所选素材' })).toHaveFocus();
     fireEvent.keyDown(menu, { key: 'Escape' });

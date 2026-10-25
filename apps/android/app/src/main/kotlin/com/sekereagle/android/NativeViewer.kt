@@ -15,18 +15,18 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.*
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -116,72 +116,83 @@ fun NativeViewer(
         }
         if (chrome) {
             GlassSurface(
-                Modifier.align(Alignment.TopCenter).padding(horizontal = 12.dp, vertical = 8.dp)
-                    .fillMaxWidth().testTag("viewer-top-bar"),
-                backdrop, sourceOffset, radius = 28,
+                Modifier.align(Alignment.TopCenter)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                    .fillMaxWidth()
+                    .testTag("viewer-top-bar"),
+                backdrop,
+                sourceOffset,
+                radius = 28,
             ) {
-            Row(
-                Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                IconButton({ model.back() }) { Icon(Icons.Outlined.ArrowBackIosNew, "返回图库") }
-                Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
-                    Text(
-                        asset.date + (asset.city?.let { " · $it" } ?: ""),
-                        fontSize = 18.sp,
-                        maxLines = 2,
-                    )
-                    Text(asset.time, fontSize = 13.sp, color = NativeMuted)
-                }
-                if (!asset.video)
-                    IconButton({ rotation = (rotation + 90) % 360 }) {
-                        Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton({ model.back() }) { Icon(Icons.Outlined.ArrowBackIosNew, "返回图库") }
+                    Column(Modifier.weight(1f).padding(horizontal = 8.dp)) {
+                        Text(
+                            asset.date + (asset.city?.let { " · $it" } ?: ""),
+                            fontSize = 18.sp,
+                            maxLines = 2,
+                        )
+                        Text(asset.time, fontSize = 13.sp, color = NativeMuted)
                     }
-            }
+                    if (!asset.video)
+                        IconButton({ rotation = (rotation + 90) % 360 }) {
+                            Icon(Icons.AutoMirrored.Outlined.RotateRight, "旋转照片")
+                        }
+                }
             }
             if (!state.trash) {
                 GlassSurface(
-                    Modifier.align(Alignment.BottomCenter).padding(horizontal = 24.dp, vertical = 16.dp)
-                        .widthIn(max = 360.dp).fillMaxWidth().testTag("viewer-tools"),
-                    backdrop, sourceOffset,
+                    Modifier.align(Alignment.BottomCenter)
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                        .widthIn(max = 360.dp)
+                        .fillMaxWidth()
+                        .testTag("viewer-tools"),
+                    backdrop,
+                    sourceOffset,
                 ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                ) {
-                    ViewerTool(Icons.Outlined.DeleteOutline, "删除", !state.busy && !shareBusy) {
-                        deleting = true
-                    }
-                    ViewerTool(
-                        if (asset.favorite) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
-                        if (asset.favorite) "取消收藏" else "收藏",
-                        !state.busy && !shareBusy,
-                        tint = if (asset.favorite) Color(0xFFFF8AA5) else Color.White,
-                        caption = if (asset.favorite) "已收藏" else "收藏",
-                    ) { model.toggleFavorite(asset.id) }
-                    if (!asset.video)
-                        ViewerTool(Icons.Outlined.Edit, "编辑", !shareBusy) { editing = true }
-                    ViewerTool(Icons.Outlined.Share, "发送", !shareBusy) {
-                        shareBusy = true
-                        scope.launch {
-                            try {
-                                shareNativeAsset(
-                                    context,
-                                    repo,
-                                    state.mode,
-                                    asset,
-                                    shareCancellation,
-                                )
-                            } catch (reason: kotlinx.coroutines.CancellationException) {
-                                throw reason
-                            } catch (reason: Exception) {
-                                error = reason.message ?: "发送失败，请重试"
-                            } finally {
-                                shareBusy = false
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        ViewerTool(Icons.Outlined.DeleteOutline, "删除", !state.busy && !shareBusy) {
+                            deleting = true
+                        }
+                        ViewerTool(
+                            if (asset.favorite) Icons.Outlined.Favorite
+                            else Icons.Outlined.FavoriteBorder,
+                            if (asset.favorite) "取消收藏" else "收藏",
+                            !state.busy && !shareBusy,
+                            tint = if (asset.favorite) Color(0xFFFF8AA5) else Color.White,
+                            caption = if (asset.favorite) "已收藏" else "收藏",
+                        ) {
+                            model.toggleFavorite(asset.id)
+                        }
+                        if (!asset.video)
+                            ViewerTool(Icons.Outlined.Edit, "编辑", !state.busy && !shareBusy) { editing = true }
+                        ViewerTool(Icons.Outlined.Share, "发送", !state.busy && !shareBusy) {
+                            shareBusy = true
+                            scope.launch {
+                                try {
+                                    shareNativeAsset(
+                                        context,
+                                        repo,
+                                        state.mode,
+                                        asset,
+                                        shareCancellation,
+                                    )
+                                } catch (reason: kotlinx.coroutines.CancellationException) {
+                                    throw reason
+                                } catch (reason: Exception) {
+                                    error = reason.message ?: "发送失败，请重试"
+                                } finally {
+                                    shareBusy = false
+                                }
                             }
                         }
                     }
-                }
                 }
             }
         }
@@ -229,8 +240,11 @@ private fun ViewerTool(
     caption: String = label,
     action: () -> Unit,
 ) {
-    TextButton(onClick = action, enabled = enabled,
-        colors = ButtonDefaults.textButtonColors(contentColor = tint)) {
+    TextButton(
+        onClick = action,
+        enabled = enabled,
+        colors = ButtonDefaults.textButtonColors(contentColor = tint),
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(icon, label, Modifier.size(24.dp))
             Text(caption, fontSize = 12.sp)

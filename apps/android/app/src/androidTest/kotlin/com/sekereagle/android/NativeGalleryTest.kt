@@ -367,21 +367,23 @@ class NativeGalleryTest {
         val id = firstAsset()
         val session = NativeSession.open(context, credentials.getString("origin"))
         val repo = NativeGalleryRepository(session, "favorite-test")
-        kotlinx.coroutines.runBlocking {
-            repo.setFavorite(GalleryMode.PHOTO, id, false)
-        }
+        kotlinx.coroutines.runBlocking { repo.setFavorite(GalleryMode.PHOTO, id, false) }
         compose.onNodeWithTag("asset:$id").performClick()
         compose.onNodeWithContentDescription("收藏").performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithContentDescription("取消收藏").fetchSemanticsNodes().isNotEmpty()
         }
         compose.onNodeWithTag("native-viewer").assertExists()
-        assertTrue(repo.parse(session.json("GET", "/api/photos/assets/$id"), GalleryMode.PHOTO).favorite)
+        assertTrue(
+            repo.parse(session.json("GET", "/api/photos/assets/$id"), GalleryMode.PHOTO).favorite
+        )
         compose.onNodeWithContentDescription("取消收藏").performClick()
         compose.waitUntil(15_000) {
             compose.onAllNodesWithContentDescription("收藏").fetchSemanticsNodes().isNotEmpty()
         }
-        assertFalse(repo.parse(session.json("GET", "/api/photos/assets/$id"), GalleryMode.PHOTO).favorite)
+        assertFalse(
+            repo.parse(session.json("GET", "/api/photos/assets/$id"), GalleryMode.PHOTO).favorite
+        )
         compose.onNodeWithTag("native-viewer").assertExists()
         capture("native-viewer-favorite-glass.png")
     }
@@ -482,17 +484,13 @@ class NativeGalleryTest {
         fun choose(label: String) {
             compose.onNodeWithContentDescription("视图选项").performClick()
             compose.onNodeWithText(label).performClick()
-            compose.waitUntil(15_000) {
-                !currentModel().state.value.loading
-            }
+            compose.waitUntil(15_000) { !currentModel().state.value.loading }
         }
         fun verify(mode: String, sort: String) {
             val base = com.sekereagle.android.core.NativeGalleryPolicy.base(mode)
             val expected =
                 session.json("GET", "$base/assets?limit=60&sort=$sort").getJSONArray("items")
-            compose.waitUntil(15_000) {
-                !currentModel().state.value.loading
-            }
+            compose.waitUntil(15_000) { !currentModel().state.value.loading }
             assertEquals(
                 (0 until expected.length()).map { expected.getJSONObject(it).getString("id") },
                 currentModel().state.value.items.map { it.id },

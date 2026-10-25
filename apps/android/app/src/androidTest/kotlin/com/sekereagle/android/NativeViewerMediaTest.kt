@@ -366,7 +366,7 @@ class NativeViewerMediaTest {
     fun originalRejectsStaleRevisionAndCancelledEditorCannotReadOrWrite() {
         Fixture().use { f ->
             val repo = repo(f)
-            val asset = repo.parse(f.metadata(), GalleryMode.PHOTO)
+            val asset = runBlocking { repo.detail(GalleryMode.PHOTO, "source") }
             f.revision = 2
             try {
                 runBlocking {
