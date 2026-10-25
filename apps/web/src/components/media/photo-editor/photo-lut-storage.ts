@@ -1,3 +1,9 @@
+import bundled from './bundled-luts/manifest.json';
+const bundledUrls = import.meta.glob('./bundled-luts/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+}) as Record<string, string>;
 import { decode } from 'fast-png';
 import { photoLutFileName } from './photo-lut-groups';
 import { parseCubeLut, parsePngLut, pngLutLayout, type PhotoLut } from './photo-lut';
@@ -27,7 +33,11 @@ export async function listPhotoLuts(): Promise<PhotoLutEntry[]> {
     return await new Promise((resolve, reject) => {
       const req = db.transaction('entries').objectStore('entries').getAll();
       req.onsuccess = () =>
-        resolve((req.result as PhotoLutEntry[]).sort((a, b) => a.name.localeCompare(b.name)));
+        resolve(
+          [...bundled, ...(req.result as PhotoLutEntry[])].sort((a, b) =>
+            a.name.localeCompare(b.name),
+          ),
+        );
       req.onerror = () => reject(new Error('LUT_STORAGE_UNAVAILABLE'));
     });
   } finally {
@@ -35,6 +45,20 @@ export async function listPhotoLuts(): Promise<PhotoLutEntry[]> {
   }
 }
 export async function loadPhotoLut(id: string): Promise<PhotoLut> {
+  const builtin = bundled.find((entry) => entry.id === id);
+  if (builtin) {
+    const response = await fetch(bundledUrls[`./bundled-luts/${builtin.file}`]);
+    if (!response.ok) throw new Error('LUT_NOT_FOUND');
+    const bytes = await response.arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    if (
+      Array.from(new Uint8Array(digest), (value) => value.toString(16).padStart(2, '0')).join(
+        '',
+      ) !== builtin.sha256
+    )
+      throw new Error('INVALID_LUT');
+    return decodeFile({ name: builtin.file } as File, bytes);
+  }
   const db = await open();
   try {
     return await new Promise((resolve, reject) => {

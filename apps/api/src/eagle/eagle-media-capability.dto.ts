@@ -53,6 +53,12 @@ export class EagleVideoMediaCapabilityDto {
 }
 
 export class EagleMediaCapabilitiesDto {
+  @ApiProperty({
+    enum: [1],
+    description: 'Supported server photo recipe protocol, not worker readiness.',
+  })
+  serverPhotoEditing!: 1;
+
   @ApiProperty({ enum: [1], example: 1 })
   version!: 1;
 

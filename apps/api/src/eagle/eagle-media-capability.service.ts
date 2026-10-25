@@ -50,6 +50,7 @@ function storedFormats(
 
 const CAPABILITIES: EagleMediaCapabilitiesDto = Object.freeze({
   version: 1 as const,
+  serverPhotoEditing: 1 as const,
   images: Object.freeze({
     mimeTypes: Object.freeze([...new Set(EAGLE_IMAGE_MIME_BY_EXTENSION.values())]),
     extensions: Object.freeze([...EAGLE_IMAGE_MIME_BY_EXTENSION.keys()]),

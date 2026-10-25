@@ -1,0 +1,142 @@
+[
+  {
+    "id": "bundled-leica-1",
+    "name": "VIV",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 0,
+    "file": "1.png",
+    "sha256": "d11d7a49ad0347c01202532daac8f016594a14720b7532dca7cdbd77c51131b9"
+  },
+  {
+    "id": "bundled-leica-2",
+    "name": "NAT",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 1,
+    "file": "2.png",
+    "sha256": "b92a8fe15a587df10d0adbc3cb2efc990557c0fe5cc7b8537546b43c7ac437a4"
+  },
+  {
+    "id": "bundled-leica-3",
+    "name": "单色",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 2,
+    "file": "3.png",
+    "sha256": "554421b4830839d6b350ece1ee1f162cdbdd8121ed3dba1b6aa1b7483c2b821a"
+  },
+  {
+    "id": "bundled-leica-4",
+    "name": "单色HC",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 3,
+    "file": "4.png",
+    "sha256": "0e1ef8ba9e4507aeff67f6a3b8cae25a9a0586595902dd241694c70a35d610e6"
+  },
+  {
+    "id": "bundled-leica-92",
+    "name": "漂棕",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 4,
+    "file": "92.png",
+    "sha256": "a7e7fea0769764b47ad40a32eb9f269488f3096c16b041508db8d6ac071eed34"
+  },
+  {
+    "id": "bundled-leica-93",
+    "name": "单色蓝",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 5,
+    "file": "93.png",
+    "sha256": "ca86fcccdd7bd6e52611cbadb55b2948f195e2e2470147cd047030d3c597d330"
+  },
+  {
+    "id": "bundled-leica-248",
+    "name": "CHR",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 6,
+    "file": "248.png",
+    "sha256": "41afa573768ebe37dc9ad3935d80e3698d3c28af3f3ca9f246e6b0d2260d8dc2"
+  },
+  {
+    "id": "bundled-leica-249",
+    "name": "CLS",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 7,
+    "file": "249.png",
+    "sha256": "ecfb9760f6439993feeaeaa088afbbb14d6dcbfe8ae4646f829fae3a45f0b66a"
+  },
+  {
+    "id": "bundled-leica-250",
+    "name": "CNT",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 8,
+    "file": "250.png",
+    "sha256": "672675546c270064aa86ef1f8f74d137f04d9b4284de02cea238a5e33dc4b35e"
+  },
+  {
+    "id": "bundled-leica-251",
+    "name": "ETN",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 9,
+    "file": "251.png",
+    "sha256": "f3d38a1d25b3e84818fdcf9300a44a960772bd033cb8c3731233087e1050a64b"
+  },
+  {
+    "id": "bundled-leica-252",
+    "name": "BRS",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 10,
+    "file": "252.png",
+    "sha256": "9505b97dd2e51b6bd8c73bb3ee5d2380e0460438f5665ebc26ea9e1b7f982655"
+  },
+  {
+    "id": "bundled-leica-253",
+    "name": "TEL",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 11,
+    "file": "253.png",
+    "sha256": "aaf17ade1c1b31c9870243e26cb51aa267fc328898c5a9d7b5ac2606c0f2768b"
+  },
+  {
+    "id": "bundled-leica-162",
+    "name": "Nat",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 12,
+    "file": "162.png",
+    "sha256": "e788c7790aa1322dc5678dad8ea686c74099c5fc899dd49bde7fdf9f6f7e1cd8"
+  },
+  {
+    "id": "bundled-leica-164",
+    "name": "IA",
+    "size": 64,
+    "group": "徕卡",
+    "groupOrder": 0,
+    "order": 13,
+    "file": "164.png",
+    "sha256": "771fe3775d4c4f42ae36c6061d869545c15a9d22cdf53c84de4d6da3ebf620f5"
+  }
+]

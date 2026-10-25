@@ -29,6 +29,7 @@ internal class NativeEditorSession(
     private var jobId: String? = null
     private var lut = StringBuilder()
     private var lutSize = 0
+    private var serverEditing = false
     private var saved: JSONObject? = null
     @Volatile private var closed = false
 
@@ -51,6 +52,7 @@ internal class NativeEditorSession(
         session.checkAuthorization(epoch)
         return when (action) {
             "open" -> {
+                serverEditing = read("$base/media-capabilities").optInt("serverPhotoEditing") == 1
                 val entry = read("$path/edit-recipe").optJSONObject("entry")
                 if (entry != null) {
                     val id =
@@ -70,6 +72,7 @@ internal class NativeEditorSession(
                 }
                 JSONObject()
                     .put("asset", source().metadata)
+                    .put("serverEditing", serverEditing)
                     .put(
                         "edits",
                         entry?.optJSONObject("recipe")?.optJSONObject("edits") ?: JSONObject.NULL,
@@ -102,6 +105,7 @@ internal class NativeEditorSession(
                 JSONObject()
             }
             "saveRecipe" -> {
+                check(serverEditing) { "服务器编辑服务尚未更新，暂时无法保存成片。" }
                 require(lut.length == lutSize)
                 val recipe = input.getJSONObject("recipe")
                 require(recipe.toString().length <= 65536)

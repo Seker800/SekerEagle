@@ -59,6 +59,7 @@ export function PhotoEditor({
   onClose,
   onSave,
   onSaveRecipe,
+  saveUnavailable,
   initialMetadata,
   initialEdits,
   onDraftChange,
@@ -67,6 +68,7 @@ export function PhotoEditor({
 }: {
   initialTab?: Tab;
   presentation?: 'web' | 'native';
+  saveUnavailable?: string;
   source: string;
   previewSource?: string;
   sourceSize?: { width: number; height: number };
@@ -417,6 +419,7 @@ export function PhotoEditor({
     : '';
   async function savePhoto() {
     if (
+      saveUnavailable ||
       sourceConflict ||
       outputTooLarge ||
       !loaded ||
@@ -635,6 +638,7 @@ export function PhotoEditor({
           className={styles.exportButton}
           disabled={
             !loaded ||
+            Boolean(saveUnavailable) ||
             sourceConflict ||
             (tab !== 'crop' && outputTooLarge) ||
             busy ||
@@ -718,6 +722,11 @@ export function PhotoEditor({
           <div className={styles.error} role="alert">
             {outputWarning}
           </div>
+        )}
+        {saveUnavailable && (
+          <p className={styles.error} role="status">
+            {saveUnavailable}
+          </p>
         )}
         {(sourceConflict || error) && (
           <div className={styles.error} role="alert">

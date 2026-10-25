@@ -5,7 +5,7 @@ import type { EagleAssetListItem } from '../lib/eagle-api';
 import type { PhotoEdits } from '@sekereagle/library-core';
 import { t } from '../i18n';
 type Request = <T>(action: string, payload?: unknown) => Promise<T>;
-type Source = { asset: EagleAssetListItem; edits?: PhotoEdits };
+type Source = { asset: EagleAssetListItem; edits?: PhotoEdits; serverEditing?: boolean };
 
 /** The native bridge owns transport; this surface owns loading, retry and the shared editor. */
 export function NativeEditorApp({ request }: { request: Request }) {
@@ -49,6 +49,9 @@ export function NativeEditorApp({ request }: { request: Request }) {
   const { asset, edits } = source;
   return (
     <PhotoEditor
+      saveUnavailable={
+        source.serverEditing ? undefined : t('服务器编辑服务尚未更新，暂时无法保存成片。')
+      }
       presentation="native"
       initialTab="watermark"
       source="/source"
@@ -65,6 +68,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
         await request('showSaved');
       }}
       onSaveRecipe={async (recipe, lut) => {
+        if (!source.serverEditing) throw new Error(t('服务器编辑服务尚未更新，暂时无法保存成片。'));
         await request('lutBegin', { size: lut?.length ?? 0 });
         if (lut)
           for (let offset = 0; offset < lut.length; offset += 48 * 1024) {

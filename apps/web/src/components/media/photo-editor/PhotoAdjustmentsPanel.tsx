@@ -132,17 +132,19 @@ export function PhotoAdjustmentsPanel({
     >
       <div className={styles.adjustmentCategoryRow}>
         <ScrollableToolRow className={styles.adjustmentGroups} label={t('调整分类')}>
-          {ADJUSTMENT_GROUPS.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              aria-pressed={visibleGroup === item.id}
-              disabled={disabled}
-              onClick={() => selectGroup(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {ADJUSTMENT_GROUPS.filter((item) => !compact || basicGroups.includes(item.id)).map(
+            (item) => (
+              <button
+                type="button"
+                key={item.id}
+                aria-pressed={visibleGroup === item.id}
+                disabled={disabled}
+                onClick={() => selectGroup(item.id)}
+              >
+                {item.label}
+              </button>
+            ),
+          )}
         </ScrollableToolRow>
         <button
           type="button"

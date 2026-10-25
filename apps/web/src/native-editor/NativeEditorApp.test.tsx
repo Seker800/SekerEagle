@@ -6,11 +6,13 @@ import { NativeEditorApp } from './NativeEditorApp';
 import type { PhotoEditor } from '../components/media/photo-editor/PhotoEditor';
 vi.mock('../components/media/photo-editor/PhotoEditor', () => ({
   PhotoEditor: (props: ComponentProps<typeof PhotoEditor>) => (
-    <div><span>{props.saveUnavailable}</span>
+    <div>
+      <span>{props.saveUnavailable}</span>
       <span>
         editor:{props.initialTab}:{props.presentation}:{props.name}
       </span>
-      <button disabled={Boolean(props.saveUnavailable)}
+      <button
+        disabled={Boolean(props.saveUnavailable)}
         onClick={() =>
           void props.onSaveRecipe?.({
             version: 1,
@@ -92,11 +94,11 @@ it('shows a useful fallback for an unknown loading failure and lets the user clo
 });
 
 it('blocks saving with an actionable explanation when an older server has no renderer', async () => {
- const request = vi.fn().mockResolvedValue(source);
- render(<NativeEditorApp request={request} />);
- await screen.findByText('editor:watermark:native:photo');
- expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
- expect(screen.getByText('服务器编辑服务尚未更新，暂时无法保存成片。')).toBeInTheDocument();
- fireEvent.click(screen.getByRole('button', { name: 'Save' }));
- expect(request).toHaveBeenCalledTimes(1);
+  const request = vi.fn().mockResolvedValue(source);
+  render(<NativeEditorApp request={request} />);
+  await screen.findByText('editor:watermark:native:photo');
+  expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+  expect(screen.getByText('服务器编辑服务尚未更新，暂时无法保存成片。')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(request).toHaveBeenCalledTimes(1);
 });

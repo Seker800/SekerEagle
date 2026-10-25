@@ -1,4 +1,6 @@
 export const enUS = {
+  '服务器编辑服务尚未更新，暂时无法保存成片。':
+    'The server editing service needs an update before photos can be saved.',
   重置此项: 'Reset adjustment',
   '补齐 RAW 编辑图、动态视频、清晰度和相似特征。':
     'Generate RAW editing images, motion video, sharpness and similarity features.',

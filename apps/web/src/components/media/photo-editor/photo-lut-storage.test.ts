@@ -3,6 +3,8 @@ import { encode } from 'fast-png';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { importPhotoLut, listPhotoLuts, loadPhotoLut } from './photo-lut-storage';
+const personalLuts = async () =>
+  (await listPhotoLuts()).filter((entry) => !entry.id.startsWith('bundled-'));
 const identity =
   'LUT_3D_SIZE 2\n' +
   Array.from({ length: 8 }, (_, i) => [i & 1, (i >> 1) & 1, (i >> 2) & 1].join(' ')).join('\n');
@@ -14,17 +16,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 it('persists tables and metadata atomically, deduplicates content and loads by immutable id', async () => {
-  expect(await listPhotoLuts()).toEqual([]);
+  expect(await personalLuts()).toEqual([]);
   const entry = await importPhotoLut(file(identity));
   await importPhotoLut(file(identity));
-  expect(await listPhotoLuts()).toEqual([entry]);
+  expect(await personalLuts()).toEqual([entry]);
   const table = await loadPhotoLut(entry.id);
   expect(table.size).toBe(2);
   expect(ArrayBuffer.isView(table.data)).toBe(true);
   expect(table.data.BYTES_PER_ELEMENT).toBe(4);
   await expect(loadPhotoLut('missing')).rejects.toThrow('LUT_NOT_FOUND');
   await importPhotoLut(file(identity + '\n# second', 'Another.cube'));
-  expect((await listPhotoLuts()).map((e) => e.name)).toEqual(['Another', 'Identity']);
+  expect((await personalLuts()).map((e) => e.name)).toEqual(['Another', 'Identity']);
 });
 it('rejects empty, oversized, unsupported and malformed files without changing the library', async () => {
   for (const value of [
@@ -35,7 +37,7 @@ it('rejects empty, oversized, unsupported and malformed files without changing t
     file('x'.repeat(16 * 1024 * 1024 + 1)),
   ])
     await expect(importPhotoLut(value)).rejects.toThrow();
-  expect(await listPhotoLuts()).toEqual([]);
+  expect(await personalLuts()).toEqual([]);
 });
 it('imports raw RGB even with alpha, validates dimensions and rejects corrupted PNGs', async () => {
   const data = new Uint8Array(64 * 64 * 4);
@@ -75,18 +77,18 @@ it('updates local grouping by content id and retains it when reimporting an ordi
   const before = await loadPhotoLut(grouped.id);
   const ordinary = await importPhotoLut(file(identity));
   expect(ordinary.id).toBe(grouped.id);
-  expect(await listPhotoLuts()).toEqual([
+  expect(await personalLuts()).toEqual([
     expect.objectContaining({ id: grouped.id, group: 'Priority', groupOrder: 1, order: 2 }),
   ]);
   expect((await loadPhotoLut(grouped.id)).data).toEqual(before.data);
 });
 
 it('ships fourteen Leica LUTs and keeps personal imports independent of bundled versions', async () => {
- const bundled = (await listPhotoLuts()).filter(entry => entry.id.startsWith('bundled-'));
- expect(bundled).toHaveLength(14);
- expect(new Set(bundled.map(entry => entry.id)).size).toBe(14);
- expect(bundled.every(entry => entry.size === 64 && entry.group === '徕卡')).toBe(true);
- const personal = await importPhotoLut(file(identity));
- expect(await listPhotoLuts()).toEqual(expect.arrayContaining([...bundled, personal]));
- expect((await loadPhotoLut(personal.id)).data[0]).toBe(0);
+  const bundled = (await listPhotoLuts()).filter((entry) => entry.id.startsWith('bundled-'));
+  expect(bundled).toHaveLength(14);
+  expect(new Set(bundled.map((entry) => entry.id)).size).toBe(14);
+  expect(bundled.every((entry) => entry.size === 64 && entry.group === '徕卡')).toBe(true);
+  const personal = await importPhotoLut(file(identity));
+  expect(await listPhotoLuts()).toEqual(expect.arrayContaining([...bundled, personal]));
+  expect((await loadPhotoLut(personal.id)).data[0]).toBe(0);
 });
