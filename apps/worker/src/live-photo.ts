@@ -47,14 +47,7 @@ export async function inspectLivePhotoImage(path: string, extractMotion = true) 
       createReadStream(path, { start: range.start, end: range.start + range.length - 1 }),
       createWriteStream(input, { flags: 'wx' }),
     );
-    const video = await probeCameraVideo(input, 'video/mp4');
-    if (video.durationMs > LIVE_PHOTO_MAX_DURATION_MS) return base;
-    const playback = await transcodeCameraVideo(input, output, video.durationMs);
-    if ((await stat(output)).size > LIVE_PHOTO_MAX_VIDEO_BYTES) return base;
-    return {
-      identifier,
-      motion: { data: await readFile(output), width: playback.width, height: playback.height },
-    };
+    return { identifier, motion: await renderMotionFile(input, output) };
   } catch {
     return base;
   } finally {
@@ -130,12 +123,57 @@ export async function inspectJpegLivePhoto(
   const head = await readRange(0, headLength);
   if (head.length !== headLength) throw new Error('LIVE_PHOTO_RANGE_LENGTH');
   if (head[0] !== 0xff || head[1] !== 0xd8) throw new Error('LIVE_PHOTO_JPEG_HEADER');
-  const identifier = await readLivePhotoIdentifier(head);
+  const identifier = await readJpegIdentifier(head, fileSize, readRange);
   const range = readMotionPhotoRange(head.toString('utf8'), fileSize);
   if (!range) return { identifier, motion: null };
   const motion = await readRange(range.start, range.length);
   if (motion.length !== range.length) throw new Error('LIVE_PHOTO_RANGE_LENGTH');
   return { identifier, motion: await renderMotion(motion) };
+}
+
+/** Walk JPEG segment headers, skipping pixel/ICC payloads even when EXIF is stored late. */
+async function readJpegIdentifier(
+  head: Buffer,
+  fileSize: number,
+  readRange: (start: number, length: number) => Promise<Buffer>,
+) {
+  const read = async (start: number, length: number) => {
+    if (start + length > fileSize) return null;
+    const bytes =
+      start + length <= head.length
+        ? head.subarray(start, start + length)
+        : await readRange(start, length);
+    if (bytes.length !== length) throw new Error('LIVE_PHOTO_RANGE_LENGTH');
+    return bytes;
+  };
+  let offset = 2;
+  for (let count = 0; count < 4096 && offset < fileSize; count++) {
+    const marker = await read(offset, 2);
+    if (!marker || marker[0] !== 0xff || marker[1] === 0xda || marker[1] === 0xd9) return null;
+    if (marker[1] === 0xff) {
+      offset++;
+      continue;
+    }
+    if (marker[1] === 0x01 || (marker[1]! >= 0xd0 && marker[1]! <= 0xd7)) {
+      offset += 2;
+      continue;
+    }
+    const header = await read(offset, 4);
+    if (!header) return null;
+    const length = header.readUInt16BE(2);
+    if (length < 2 || offset + 2 + length > fileSize) return null;
+    if (marker[1] === 0xe1) {
+      const segment = await read(offset, 2 + length);
+      if (segment && segment.toString('ascii', 4, 10) === 'Exif\0\0') {
+        const identifier = await readLivePhotoIdentifier(
+          Buffer.concat([Buffer.from([0xff, 0xd8]), segment, Buffer.from([0xff, 0xd9])]),
+        );
+        if (identifier) return identifier;
+      }
+    }
+    offset += 2 + length;
+  }
+  return null;
 }
 
 async function renderMotionBytes(bytes: Buffer) {
@@ -144,16 +182,20 @@ async function renderMotionBytes(bytes: Buffer) {
     const input = join(directory, 'source.mp4'),
       output = join(directory, 'playback.mp4');
     await pipeline(Readable.from([bytes]), createWriteStream(input, { flags: 'wx' }));
-    const video = await probeCameraVideo(input, 'video/mp4');
-    if (video.durationMs > LIVE_PHOTO_MAX_DURATION_MS) return null;
-    const playback = await transcodeCameraVideo(input, output, video.durationMs);
-    if ((await stat(output)).size > LIVE_PHOTO_MAX_VIDEO_BYTES) return null;
-    return { data: await readFile(output), width: playback.width, height: playback.height };
+    return await renderMotionFile(input, output);
   } catch {
     return null;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+}
+
+async function renderMotionFile(input: string, output: string) {
+  const video = await probeCameraVideo(input, 'video/mp4');
+  if (video.durationMs > LIVE_PHOTO_MAX_DURATION_MS) return null;
+  const playback = await transcodeCameraVideo(input, output, video.durationMs);
+  if ((await stat(output)).size > LIVE_PHOTO_MAX_VIDEO_BYTES) return null;
+  return { data: await readFile(output), width: playback.width, height: playback.height };
 }
 
 /** HEIC metadata may reference distant items: retain bounded streaming inspection, without image decoding. */

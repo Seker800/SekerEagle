@@ -1500,6 +1500,7 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
     process.stdout.write(
       `${JSON.stringify({
         event: 'eagle_media_job_completed',
+        processorVersion: job.processorVersion,
         resource: job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : 'NAS',
         elapsedMs: Date.now() - startedAt,
         jobId: job.id,

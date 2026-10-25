@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
 import { log } from 'node:console';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
