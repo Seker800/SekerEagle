@@ -224,8 +224,20 @@ export class EagleTaskCenterService {
             ? 'ENABLED'
             : 'DISABLED';
     }
+    const embeddingStates = workers
+      .filter((worker) => supports(worker.capabilities, 'EMBEDDING', 'GENERATE_EMBEDDING'))
+      .map(
+        (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
+      );
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
+      embedding: embeddingStates.includes('READY')
+        ? 'READY'
+        : embeddingStates.includes('DRIFTED')
+          ? 'DRIFTED'
+          : embeddingStates.includes('OFFLINE')
+            ? 'OFFLINE'
+            : 'UNKNOWN',
       settings,
       groups: TASK_FAMILIES.flatMap((id) => groups.get(id) ?? []),
       refreshedAt: now.toISOString(),

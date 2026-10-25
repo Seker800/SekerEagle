@@ -1,4 +1,8 @@
 export const enUS = {
+  'Mac 模型配置不匹配，向量任务等待修复；其他处理继续。':
+    'Mac model configuration mismatch. Vector tasks await repair; other processing continues.',
+  'Mac 模型连接中断，向量任务等待恢复；其他处理继续。':
+    'Mac model disconnected. Vector tasks await reconnection; other processing continues.',
   '发送中…': 'Sending…',
   '处理中…': 'Processing…',
   排队中: 'Queued',

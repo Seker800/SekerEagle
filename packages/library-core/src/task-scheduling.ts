@@ -106,6 +106,7 @@ export interface WorkerTaskCapabilities {
 }
 export interface TaskCenterOverview {
   worker: 'ONLINE' | 'OFFLINE';
+  embedding?: 'READY' | 'OFFLINE' | 'DRIFTED' | 'UNKNOWN';
   settings: BackgroundSchedule & { timeZone: 'Asia/Shanghai' };
   groups: TaskGroup[];
   refreshedAt: string;

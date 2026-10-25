@@ -144,6 +144,32 @@ export function EagleTaskCenter({
         }
       : null);
   const error = save.error ?? retry.error ?? policy.error ?? query.error;
+  const modelStates = entries.flatMap(({ summary: entry }) => {
+    const affected = entry.groups.some(
+      (group) =>
+        (group.id === 'EMBEDDING' && group.queued + group.running > 0) ||
+        (group.id === 'SMART_FOLDERS' &&
+          group.steps.some(
+            (step) => step.id === 'SMART_FOLDER_QUERY' && step.queued + step.running > 0,
+          )),
+    );
+    if (!affected) return [];
+    return [
+      entry.embedding ??
+        (entry.groups.some((group) => group.waiting.some((wait) => wait.reason === 'MODEL_DRIFTED'))
+          ? 'DRIFTED'
+          : entry.groups.some((group) =>
+                group.waiting.some((wait) => wait.reason === 'MODEL_OFFLINE'),
+              )
+            ? 'OFFLINE'
+            : 'UNKNOWN'),
+    ];
+  });
+  const modelIssue = modelStates.includes('DRIFTED')
+    ? 'DRIFTED'
+    : modelStates.includes('OFFLINE')
+      ? 'OFFLINE'
+      : null;
   const total = cards.reduce(
     (sum, { group, schedule }) => {
       const paused = taskSection(group, schedule) === 'PAUSED';
@@ -189,6 +215,13 @@ export function EagleTaskCenter({
         </div>
       )}
       {notice && <p role="status">{notice}</p>}
+      {modelIssue && (
+        <p role="alert" className={styles.error}>
+          {modelIssue === 'DRIFTED'
+            ? t('Mac 模型配置不匹配，向量任务等待修复；其他处理继续。')
+            : t('Mac 模型连接中断，向量任务等待恢复；其他处理继续。')}
+        </p>
+      )}
       <AssetOperationsPanel includePrivate={includePrivate} scope={scope} />
       {query.isPending && <p role="status">{t('正在读取后台工作…')}</p>}
       {summary && !query.isPending && (
