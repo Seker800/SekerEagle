@@ -127,13 +127,36 @@ test('a slow embedding claim does not block repeated NAS work and cannot overfil
 
 test('a wake during an in-flight claim is replayed if that claim returns empty, without idle polling loops', async () => {
   let resolve!: (value: string | null) => void;
-  const delayed = new Promise<string | null>((done) => { resolve = done; });
+  const delayed = new Promise<string | null>((done) => {
+    resolve = done;
+  });
   let wakes = 0;
-  const pool = new MediaResourcePool(1, () => { wakes++; }, () => {});
-  const filling = pool.fill('EMBEDDING', () => delayed, async () => {});
-  await pool.fill('EMBEDDING', async () => { throw Error('slot already reserved'); }, async () => {});
-  resolve(null); await filling;
+  const pool = new MediaResourcePool(
+    1,
+    () => {
+      wakes++;
+    },
+    () => {},
+  );
+  const filling = pool.fill(
+    'EMBEDDING',
+    () => delayed,
+    async () => {},
+  );
+  await pool.fill(
+    'EMBEDDING',
+    async () => {
+      throw Error('slot already reserved');
+    },
+    async () => {},
+  );
+  resolve(null);
+  await filling;
   assert.equal(wakes, 1, 'the notification must not be lost when discovery is invalidated');
-  await pool.fill('EMBEDDING', async () => null, async () => {});
+  await pool.fill(
+    'EMBEDDING',
+    async () => null,
+    async () => {},
+  );
   assert.equal(wakes, 1, 'an ordinary empty queue must not schedule a busy loop');
 });

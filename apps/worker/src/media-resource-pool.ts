@@ -3,6 +3,8 @@ export type MediaResource = 'NAS' | 'EMBEDDING';
 /** Independent bounded execution slots over the existing durable, lease-fenced job queue. */
 export class MediaResourcePool {
   private readonly occupied: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0 };
+  private readonly claiming: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0 };
+  private readonly pendingWake: Record<MediaResource, boolean> = { NAS: false, EMBEDDING: false };
   constructor(
     private readonly nasConcurrency: number,
     private readonly wake: () => void,
@@ -23,20 +25,24 @@ export class MediaResourcePool {
     // Reserve before awaiting the claim; concurrent wake-ups cannot overfill either resource.
     const limit = resource === 'NAS' ? this.nasConcurrency : 1;
     const slots = limit - this.occupied[resource];
+    if (slots <= 0 && this.claiming[resource] > 0) this.pendingWake[resource] = true;
     for (let i = 0; i < slots; i++) {
       if (this.occupied[resource] >= limit) return;
       this.occupied[resource]++;
+      this.claiming[resource]++;
       let job: T | null;
       try {
         job = await claim();
       } catch (error) {
-        this.occupied[resource]--;
+        this.releaseEmptyClaim(resource);
         throw error;
       }
       if (job === null) {
-        this.occupied[resource]--;
+        this.releaseEmptyClaim(resource);
         return;
       }
+      this.claiming[resource]--;
+      this.pendingWake[resource] = false;
       void Promise.resolve()
         .then(() => run(job))
         .catch(this.reportError)
@@ -44,6 +50,14 @@ export class MediaResourcePool {
           this.occupied[resource]--;
           this.wake();
         });
+    }
+  }
+  private releaseEmptyClaim(resource: MediaResource) {
+    this.claiming[resource]--;
+    this.occupied[resource]--;
+    if (this.pendingWake[resource]) {
+      this.pendingWake[resource] = false;
+      this.wake();
     }
   }
 }
