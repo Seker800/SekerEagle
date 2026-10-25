@@ -59,3 +59,21 @@ it('refreshes both mode caches even when the user leaves while sending', async (
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['eagle', 'owner'] }));
   expect(onSent).not.toHaveBeenCalled();
 });
+
+it('releases the menu while the accepted transfer is still running', async () => {
+  send.mockImplementationOnce(() => new Promise(() => undefined));
+  const accepted = vi.fn();
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <EagleSendAssetsMenuItem
+        ownerId="owner"
+        assetIds={['one', 'two']}
+        label="发送到照片"
+        disabled={false}
+        onSent={accepted}
+      />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(screen.getByRole('menuitem'));
+  await waitFor(() => expect(accepted).toHaveBeenCalledOnce());
+});
