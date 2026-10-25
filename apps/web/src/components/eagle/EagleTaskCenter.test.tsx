@@ -62,13 +62,17 @@ beforeEach(() => {
   });
 });
 describe('unified task center', () => {
-  it('explains dependencies, computation and the actual schedule in compact rows', async () => {
+  it('keeps one status and remaining count visible while technical facts stay collapsed', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
     const card = within(screen.getByRole('article'));
+    expect(card.getByText('预览图 + Mac 2B 模型')).not.toBeVisible();
+    expect(card.getByText('Mac · 较重')).not.toBeVisible();
+    expect(card.getByText('排队ing')).toBeVisible();
+    expect(card.getByText('剩余 12 项')).toBeVisible();
+    expect(card.queryByText('计算图片向量，用于文字和相似图搜索。')).not.toBeInTheDocument();
+    fireEvent.click(card.getByText('查看处理步骤'));
     expect(card.getByText('预览图 + Mac 2B 模型')).toBeVisible();
-    expect(card.getByText('Mac · 较重')).toBeVisible();
-    expect(card.getByText('23:00–06:00')).toBeVisible();
     expect(screen.queryByText('按后台安排执行')).not.toBeInTheDocument();
     expect(screen.queryByText('自动维护')).not.toBeInTheDocument();
   });
@@ -114,14 +118,15 @@ describe('unified task center', () => {
     expect(card.getByText('剩余 15 项')).toBeVisible();
     expect(card.queryByText('已完成 8')).not.toBeInTheDocument();
   });
-  it('shows ready when all work is completed instead of a historical completion count', async () => {
+  it('shows completion once without a second ready label', async () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
       ...summary,
       groups: [{ ...summary.groups[0]!, queued: 0, waiting: [] }],
     });
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
-    expect(within(screen.getByRole('article')).getByText('已就绪')).toBeVisible();
+    expect(within(screen.getByRole('article')).getByText('已完成')).toBeVisible();
+    expect(within(screen.getByRole('article')).queryByText('已就绪')).not.toBeInTheDocument();
   });
   it('groups work by purpose and explains waits before exposing technical steps', async () => {
     mount();
