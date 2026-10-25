@@ -15,6 +15,8 @@ import { getLocale, t } from '../../i18n';
 import { EagleProcessingPage } from './EagleProcessingPage';
 import {
   taskExecutionLabel,
+  taskStatus,
+  taskStatusLabel,
   taskFamilyLabels,
   taskStepLabel,
   taskWaitLabel,
@@ -154,7 +156,7 @@ export function EagleTaskCenter({
     { running: 0, queued: 0, failed: 0, approval: 0 },
   );
   return (
-    <section className={styles.center} aria-label={t('任务中心')}>
+    <section className={styles.center} aria-label={t('任务中心')} tabIndex={0}>
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
@@ -379,12 +381,23 @@ function TaskCard({
       (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
     );
   return (
-    <article className={styles.card}>
+    <article className={styles.card} data-state={taskStatus(group, schedule)}>
       <header>
         <h3>{title}</h3>
+        {group.id !== 'APPROVALS' && (
+          <strong className={styles.state}>{taskStatusLabel(group, schedule)}</strong>
+        )}
         <span className={styles.badge}>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
       </header>
       <p>{description}</p>
+      {group.running > 0 && group.steps.some((step) => step.running > 0) && (
+        <p className={styles.activeStep} aria-label={t('当前执行步骤')}>
+          {group.steps
+            .filter((step) => step.running > 0)
+            .map((step) => `${taskStepLabel(step.id)} × ${step.running}`)
+            .join(' · ')}
+        </p>
+      )}
       <dl className={styles.facts}>
         <div>
           <dt>{t('依赖')}</dt>

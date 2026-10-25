@@ -1,6 +1,7 @@
 import { t } from '../../i18n';
 import {
   TASK_FAMILIES,
+  taskSection,
   type TaskFamily,
   type TaskWaitReason,
   type BackgroundSchedule,
@@ -112,6 +113,7 @@ const waits: Record<TaskWaitReason, () => string> = {
 };
 const steps: Record<string, () => string> = {
   SMART_FOLDER_QUERY: () => t('分析文件夹描述'),
+  RENDER_EDITED_COPY: () => t('生成编辑成片'),
   GENERATE_RENDITIONS: () => t('生成缩略图与预览图'),
   GENERATE_THUMBNAIL: () => t('生成缩略图'),
   GENERATE_PREVIEW: () => t('生成预览图'),
@@ -150,4 +152,26 @@ export function taskExecutionLabel(group: TaskGroup, schedule: BackgroundSchedul
     IMPORTS: t('导入客户端触发'),
   };
   return triggers[group.id] ?? t('随时');
+}
+
+export function taskStatus(group: TaskGroup, schedule: BackgroundSchedule) {
+  if (group.running > 0) return 'RUNNING';
+  if (group.queued > 0 && taskSection(group, schedule) !== 'PAUSED') return 'QUEUED';
+  if (group.failed > 0 || group.queued > 0) return 'STOPPED';
+  return 'COMPLETED';
+}
+
+export function taskStatusLabel(group: TaskGroup, schedule: BackgroundSchedule): string {
+  switch (taskStatus(group, schedule)) {
+    case 'RUNNING':
+      return t('计算ing');
+    case 'QUEUED':
+      return t('排队ing');
+    case 'STOPPED':
+      return group.failed > 0
+        ? t('已停止（{{count}}项失败）', { count: group.failed })
+        : t('已停止');
+    case 'COMPLETED':
+      return t('已完成');
+  }
 }

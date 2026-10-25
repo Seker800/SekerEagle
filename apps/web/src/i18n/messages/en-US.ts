@@ -1,4 +1,9 @@
 export const enUS = {
+  计算ing: 'Computing',
+  排队ing: 'Queued',
+  '已停止（{{count}}项失败）': 'Stopped ({{count}} failed)',
+  当前执行步骤: 'Current processing steps',
+  生成编辑成片: 'Render edited photo',
   '正在保存参数…': 'Saving adjustments…',
   参数已保存: 'Adjustments saved',
   '服务器编辑服务尚未更新，暂时无法保存成片。':
