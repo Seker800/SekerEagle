@@ -101,6 +101,12 @@ class EmbeddedThumbnailTests(unittest.TestCase):
         self.assertFalse(self.module.write_raw_thumbnail(self.raw, self.path, 50_000_000,
                          max_size=1600, minimum_size=1600, expected_dimensions=(4000,4000)))
 
+    def test_older_camera_1024_preview_is_usable_without_upscaling(self):
+        self.jpeg(size=(1024,768))
+        self.assertTrue(self.module.write_raw_thumbnail(self.raw,self.path,50_000_000,
+                        max_size=1600,minimum_size=1024,expected_dimensions=(4000,3000)))
+        with Image.open(self.path) as image: self.assertEqual(image.size,(1024,768))
+
     def test_output_errors_are_not_misreported_as_missing_preview(self):
         self.jpeg()
         Path(self.path).write_bytes(b'previous')

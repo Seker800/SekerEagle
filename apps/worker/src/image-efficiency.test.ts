@@ -86,3 +86,23 @@ test('ordinary photo details select only a current browse preview; RAW editing r
     /READY_PREVIEW_MISSING/,
   );
 });
+
+test('small transparent images are never enlarged; RAW edit stays lossless on its independent source', async () => {
+  const source = sharp({
+    create: {
+      width: 60,
+      height: 40,
+      channels: 4,
+      background: { r: 120, g: 80, b: 40, alpha: 0.5 },
+    },
+  });
+  for (const rendition of await renderImageRenditions(source, 'image/png', 'BROWSE')) {
+    assert.equal(rendition.output.info.width, 60);
+    assert.equal((await sharp(rendition.output.data).metadata()).hasAlpha, true);
+  }
+  const [edit] = await renderImageRenditions(source, 'image/x-fuji-raf', 'DETAILS');
+  assert.equal(edit?.spec.variant, 'edit');
+  assert.equal(edit?.spec.encoding.lossless, true);
+  assert.equal(edit?.output.info.width, 60);
+  assert.deepEqual(await renderImageRenditions(source, 'image/jpeg', 'DETAILS'), []);
+});
