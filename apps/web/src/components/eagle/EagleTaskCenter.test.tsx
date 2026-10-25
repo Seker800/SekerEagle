@@ -368,3 +368,15 @@ it('does not repeat a single-stage task name as a current step', async () => {
   expect(card.queryByLabelText('当前执行步骤')).not.toBeInTheDocument();
   expect(card.getByText('生成图片向量')).not.toBeVisible();
 });
+
+it('keeps disabled work on its card but excludes it from executable queue totals', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [...summary.groups, {
+    id: 'COLOR', background: true, availability: 'DISABLED', queued: 60760, running: 0, failed: 0, completed: 0, approval: 0, waiting: [], steps: [],
+  }] } as never);
+  mount();
+  await screen.findByRole('heading', { name: '代表色提取' });
+  const overview = document.querySelector('[class*="overview"]')!;
+  expect(overview).toHaveTextContent('剩余 12 项');
+  expect(overview).not.toHaveTextContent('剩余 60772 项');
+  expect(screen.getByText('剩余 60760 项')).toBeVisible();
+});
