@@ -313,19 +313,28 @@ describe('cross-library task visibility and controls', () => {
   });
 });
 
-it('shows an explicit computing status and active step outside collapsed details', async () => {
+it('shows the active step for a category with several processing stages', async () => {
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
     ...summary,
     groups: [
-      { ...summary.groups[0], running: 1, steps: [{ ...summary.groups[0].steps[0], running: 1 }] },
+      {
+        ...summary.groups[0],
+        id: 'BROWSE',
+        background: false,
+        running: 1,
+        steps: [
+          { ...summary.groups[0].steps[0], id: 'GENERATE_PREVIEW', running: 1 },
+          { ...summary.groups[0].steps[0], id: 'PROBE_MEDIA', running: 0 },
+        ],
+      },
     ],
   });
   mount();
-  const card = (await screen.findByRole('heading', { name: '2B 向量搜图', level: 3 })).closest(
+  const card = (await screen.findByRole('heading', { name: '缩略图与预览', level: 3 })).closest(
     'article',
   )!;
   expect(within(card).getByText('计算ing')).toBeInTheDocument();
-  expect(within(card).getByLabelText('当前执行步骤')).toHaveTextContent('生成图片向量');
+  expect(within(card).getByLabelText('当前执行步骤')).toHaveTextContent('生成预览图');
 });
 
 it('explains that external batch import records are not live worker activity', async () => {
@@ -335,4 +344,19 @@ it('explains that external batch import records are not live worker activity', a
       'Eagle 批量导入由导入端管理，尚未接入实时状态；历史记录不计入这里的运行任务。',
     ),
   ).toBeInTheDocument();
+});
+
+it('does not repeat a single-stage task name as a current step', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    groups: [
+      { ...summary.groups[0], running: 1, steps: [{ ...summary.groups[0].steps[0], running: 1 }] },
+    ],
+  });
+  mount();
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
+  const card = within(screen.getByRole('article'));
+  expect(card.getByText('计算ing')).toBeVisible();
+  expect(card.queryByLabelText('当前执行步骤')).not.toBeInTheDocument();
+  expect(card.getByText('生成图片向量')).not.toBeVisible();
 });
