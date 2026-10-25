@@ -22,6 +22,7 @@ const fields = [
   'Make',
   'Model',
   'LensModel',
+  'LensID',
   'DateTimeOriginal',
   'OffsetTimeOriginal',
   'FocalLength',
@@ -44,7 +45,12 @@ export async function readPhotoMetadataTags(
   try {
     ({ stdout } = await run(
       process.env.EXIFTOOL_PATH?.trim() || 'exiftool',
-      ['-json', '-n', ...fields.map((field) => `-${field}`), '--', resolve(originalPath)],
+      [
+        '-json',
+        ...fields.map((field) => `-${field}${field === 'LensID' ? '' : '#'}`),
+        '--',
+        resolve(originalPath),
+      ],
       { env: mediaSubprocessEnvironment(), timeout: 30_000, maxBuffer: 256 * 1024 },
     ));
   } catch (error) {

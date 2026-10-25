@@ -2,13 +2,20 @@ import { parse } from 'exifr';
 import { readPhotoMetadataTags } from '@sekereagle/media-core';
 import type { Sharp } from 'sharp';
 
-export const PHOTO_ANALYSIS_VERSION = 'original-exiftool-laplacian-dhash-v2';
+export const PHOTO_ANALYSIS_VERSION = 'original-exiftool-lensid-laplacian-dhash-v3';
 const text = (value: unknown) =>
   typeof value === 'string' ? value.normalize('NFKC').trim().slice(0, 240) || null : null;
 const numeric = (value: unknown, min = 0, max = 1e9) =>
   typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
     ? value
     : null;
+
+/** ExifTool may resolve maker-specific lens IDs when standard LensModel is absent. */
+function resolvedLensId(value: unknown) {
+  const lens = text(value);
+  if (!lens || /\bunknown\b|\bor\b|\?/i.test(lens)) return null;
+  return /\b\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?\s*mm\b/i.test(lens) ? lens : null;
+}
 
 /** EXIF wall-clock dates have no timezone unless OffsetTimeOriginal is supplied. */
 export function normalizePhotoExif(exif: Record<string, unknown>) {
@@ -40,7 +47,7 @@ export function normalizePhotoExif(exif: Record<string, unknown>) {
     captureTimeZoneKnown: capturedAt !== null && known,
     cameraMake: text(exif.Make),
     cameraModel: text(exif.Model),
-    lensModel: text(exif.LensModel),
+    lensModel: text(exif.LensModel) ?? resolvedLensId(exif.LensID),
     focalLength: numeric(exif.FocalLength),
     aperture: numeric(exif.FNumber),
     exposureSeconds: numeric(exif.ExposureTime),
