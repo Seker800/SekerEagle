@@ -375,7 +375,7 @@ function TaskCard({
   onPolicy: (paused: boolean) => void;
   onReview?: () => void;
 }) {
-  const [title, description, dependency, compute] = taskFamilyLabels(group.id);
+  const [title, , dependency, compute] = taskFamilyLabels(group.id);
   const remaining = group.queued + group.running + group.failed;
   const retryable = !['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(group.id);
   const disabled =
@@ -383,128 +383,128 @@ function TaskCard({
     group.waiting.some(
       (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
     );
+  const state = taskStatus(group, schedule);
+  const activeSteps = group.steps.filter((step) => step.running > 0);
+  const wait = group.waiting.find((item) => !['QUEUED', 'APPROVAL'].includes(item.reason));
+  const execution = taskExecutionLabel(group, schedule);
+  const reason =
+    remaining === 0 || group.running > 0
+      ? null
+      : disabled || group.policy?.paused || (group.background && schedule.mode === 'MANUAL')
+        ? execution
+        : wait
+          ? wait.reason === 'SCHEDULE'
+            ? schedule.mode === 'NIGHT'
+              ? `${taskWaitLabel(wait.reason)} · ${execution}`
+              : taskWaitLabel(wait.reason)
+            : taskWaitLabel(wait.reason)
+          : null;
   return (
-    <article className={styles.card} data-state={taskStatus(group, schedule)}>
+    <article className={styles.card} data-state={state}>
       <header>
-        <h3>{title}</h3>
-        {group.id !== 'APPROVALS' && (
+        <div className={styles.identity}>
+          <h3>{title}</h3>
+          <span className={styles.badge}>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
+        </div>
+        {group.id === 'APPROVALS' ? (
+          <strong className={styles.state}>
+            {t('待审批')} {group.approval}
+          </strong>
+        ) : (
           <strong className={styles.state}>{taskStatusLabel(group, schedule)}</strong>
         )}
-        <span className={styles.badge}>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
       </header>
-      <p>{description}</p>
-      {group.running > 0 && group.steps.some((step) => step.running > 0) && (
-        <p className={styles.activeStep} aria-label={t('当前执行步骤')}>
-          {group.steps
-            .filter((step) => step.running > 0)
-            .map((step) => `${taskStepLabel(step.id)} × ${step.running}`)
-            .join(' · ')}
-        </p>
-      )}
-      <dl className={styles.facts}>
-        <div>
-          <dt>{t('依赖')}</dt>
-          <dd>{dependency}</dd>
-        </div>
-        <div>
-          <dt>{t('运算')}</dt>
-          <dd>{compute}</dd>
-        </div>
-        <div>
-          <dt>{t('执行')}</dt>
-          <dd>{taskExecutionLabel(group, schedule)}</dd>
-        </div>
-      </dl>
-      <div className={styles.counts}>
-        {group.id !== 'APPROVALS' && (
-          <strong>
-            {remaining > 0 ? t('剩余 {{count}} 项', { count: remaining }) : t('已就绪')}
-          </strong>
-        )}
-        {group.running > 0 && (
-          <span>
-            {t('运行中')} {group.running}
-          </span>
-        )}
-        {group.queued > 0 && (
-          <span>
-            {t('等待')} {group.queued}
-          </span>
-        )}
-        {group.failed > 0 && (
-          <span className={styles.error}>
-            {t('失败')} {group.failed}
-          </span>
-        )}
-        {group.approval > 0 && (
-          <span>
-            {t('待审批')} {group.approval}
-          </span>
-        )}
-      </div>
-      {group.waiting.map((wait) => (
-        <p key={`${wait.reason}:${wait.nextAt}`} className={styles.wait}>
-          {taskWaitLabel(wait.reason)} · {wait.count}
-          {wait.nextAt && (
-            <>
-              {' '}
-              ·{' '}
-              {new Date(wait.nextAt).toLocaleString(getLocale(), {
-                timeZone: 'Asia/Shanghai',
-                month: 'numeric',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-              })}{' '}
-              {t('北京时间')}
-            </>
+      <div className={styles.cardBody}>
+        <div className={styles.progress}>
+          {remaining > 0 &&
+            !(state === 'STOPPED' && remaining === group.failed) &&
+            group.id !== 'APPROVALS' && <span>{t('剩余 {{count}} 项', { count: remaining })}</span>}
+          {group.failed > 0 && state !== 'STOPPED' && (
+            <span className={styles.error}>
+              {t('失败')} {group.failed}
+            </span>
           )}
-        </p>
-      ))}
-      {group.failed > 0 && retryable && (
-        <button type="button" disabled={busy} onClick={onRetry}>
-          {t('重试失败任务')}
-        </button>
-      )}
-      {group.id === 'APPROVALS' && onReview && (
-        <button type="button" onClick={onReview}>
-          {t('去审批')}
-        </button>
-      )}
-      {disabled && (
-        <p className={styles.wait}>{t('需要启用服务器处理能力，修改时段或点击继续不会启动。')}</p>
-      )}
-      {group.background && !disabled && (
-        <div className={styles.policy}>
-          {schedule.mode !== 'MANUAL' && (
+          {group.running > 0 && activeSteps.length > 0 ? (
+            <span className={styles.activeStep} aria-label={t('当前执行步骤')}>
+              {activeSteps.map((step) => taskStepLabel(step.id)).join(' · ')}
+            </span>
+          ) : reason ? (
+            <span className={styles.wait}>{reason}</span>
+          ) : null}
+          {group.id === 'APPROVALS' && !onReview && (
+            <span className={styles.wait}>{t('请进入对应图库审批。')}</span>
+          )}
+        </div>
+        <div className={styles.actions}>
+          {group.failed > 0 && retryable && (
+            <button type="button" disabled={busy} onClick={onRetry}>
+              {t('重试失败任务')}
+            </button>
+          )}
+          {group.id === 'APPROVALS' && onReview && (
+            <button type="button" onClick={onReview}>
+              {t('去审批')}
+            </button>
+          )}
+          {group.background && !disabled && schedule.mode !== 'MANUAL' && (
             <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
               {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
             </button>
           )}
-          {group.policy?.paused ? (
-            <span>{t('你已暂停')}</span>
-          ) : schedule.mode === 'MANUAL' ? (
-            <span>{t('后台处理已整体暂停，请修改上方运行方式。')}</span>
-          ) : null}
         </div>
-      )}
-      {group.id === 'APPROVALS' && !onReview && <p>{t('请进入对应图库审批。')}</p>}
-      <details>
-        <summary>{t('查看处理步骤')}</summary>
-        <ul>
-          {group.steps.map((step) => (
-            <li key={step.id}>
-              <span>{taskStepLabel(step.id)}</span>
-              <span>
-                {t('已完成')} {step.completed} · {t('运行中')} {step.running} · {t('等待')}{' '}
-                {step.queued} · {t('失败')} {step.failed}
-              </span>
-            </li>
+      </div>
+      {group.id !== 'APPROVALS' && (
+        <details>
+          <summary>{t('查看处理步骤')}</summary>
+          <dl className={styles.facts}>
+            <div>
+              <dt>{t('依赖')}</dt>
+              <dd>{dependency}</dd>
+            </div>
+            <div>
+              <dt>{t('运算')}</dt>
+              <dd>{compute}</dd>
+            </div>
+            {!reason?.includes(execution) && (
+              <div>
+                <dt>{t('执行')}</dt>
+                <dd>{execution}</dd>
+              </div>
+            )}
+          </dl>
+          {group.waiting.map((item) => (
+            <p key={`${item.reason}:${item.nextAt}`} className={styles.wait}>
+              {taskWaitLabel(item.reason)} · {item.count}
+              {item.nextAt && (
+                <>
+                  {' '}
+                  ·{' '}
+                  {new Date(item.nextAt).toLocaleString(getLocale(), {
+                    timeZone: 'Asia/Shanghai',
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false,
+                  })}{' '}
+                  {t('北京时间')}
+                </>
+              )}
+            </p>
           ))}
-        </ul>
-        <small>{t('这里统计处理步骤，同一张图片可能包含多个步骤。')}</small>
-      </details>
+          <ul>
+            {group.steps.map((step) => (
+              <li key={step.id}>
+                <span>{taskStepLabel(step.id)}</span>
+                <span>
+                  {t('已完成')} {step.completed} · {t('运行中')} {step.running} · {t('等待')}{' '}
+                  {step.queued} · {t('失败')} {step.failed}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </article>
   );
 }

@@ -13,8 +13,7 @@
 .header,
 .card header,
 .overview,
-.schedule,
-.counts {
+.schedule {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -112,47 +111,76 @@
   gap: 12px;
 }
 .card {
-  padding: 18px;
+  min-width: 0;
+  padding: 14px 16px;
   border: 1px solid var(--ui-line);
   border-radius: 10px;
   background: var(--ui-panel);
 }
 .card header {
   justify-content: space-between;
+  gap: 8px 16px;
+}
+.identity {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  min-width: 0;
 }
-.card header > span,
-.card small {
-  font-size: 11px;
-  color: var(--ui-muted);
+.cardBody {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 10px;
 }
-.counts {
+.progress,
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+.progress {
+  min-width: 0;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  gap: 12px;
+}
+.actions {
+  flex-shrink: 0;
+  gap: 8px;
+}
+.actions:empty,
+.cardBody:has(.progress:empty):has(.actions:empty) {
+  display: none;
 }
 .card .wait {
-  margin: 8px 0;
+  color: var(--ui-muted);
   font-size: 12px;
 }
 .card details {
-  margin-top: 16px;
+  margin-top: 10px;
   font-size: 12px;
+}
+.card details[open] {
   border-top: 1px solid var(--ui-line);
-  padding-top: 12px;
+  padding-top: 10px;
 }
 .card summary {
+  width: fit-content;
   cursor: pointer;
   color: var(--ui-muted);
+  font-size: 11px;
 }
 .card ul {
   padding: 0;
+  margin: 10px 0 0;
   list-style: none;
 }
 .card li {
   display: grid;
   gap: 5px;
-  margin-bottom: 12px;
+  margin-top: 10px;
 }
 .card li > span:last-child {
   color: var(--ui-muted);
@@ -173,19 +201,6 @@
 .settings > button {
   margin: 0 10px 12px 0;
 }
-.policy {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-top: 12px;
-  font-size: 12px;
-}
-.policy label {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-
 .scope {
   display: flex;
   align-items: center;
@@ -220,61 +235,16 @@
   border-radius: 4px;
   padding: 2px 7px;
 }
-.card {
-  display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1fr) minmax(180px, 1fr);
-  gap: 8px 24px;
-  align-items: start;
-  padding: 16px;
-}
-.card > header {
-  grid-column: 1;
-  grid-row: 1;
-  justify-content: flex-start;
-}
-.card > p:not(.wait):not(.activeStep) {
-  grid-column: 1;
-  grid-row: 2;
-  margin: 0;
-}
-.card > .facts {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  margin: 0;
-}
-.card > .counts {
-  grid-column: 3;
-  grid-row: 1;
-  align-content: start;
-}
-.card > .wait,
-.card > .policy,
-.card > button {
-  grid-column: 3;
-  margin: 0;
-}
-.card > details {
-  grid-column: 1 / -1;
-  margin-top: 4px;
-  padding-top: 8px;
-}
-@media (max-width: 1000px) {
-  .card {
-    display: block;
-  }
-  .card > .facts,
-  .card > .counts,
-  .card > .wait,
-  .card > .policy {
-    margin-top: 10px;
-  }
-  .card > details {
-    margin-top: 12px;
-  }
-}
 @media (max-width: 640px) {
   .center {
     padding: 16px;
+  }
+  .cardBody {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .card {
+    padding: 12px;
   }
 }
 
@@ -292,10 +262,7 @@
 .card[data-state='RUNNING'] .state {
   color: var(--ui-accent-text);
 }
-.card > .activeStep {
-  grid-column: 1 / -1;
-  grid-row: auto;
+.card .activeStep {
   color: var(--ui-accent-text);
   font-size: 12px;
-  margin: 6px 0;
 }

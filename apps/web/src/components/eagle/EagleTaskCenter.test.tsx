@@ -95,7 +95,9 @@ describe('unified task center', () => {
     });
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
-    expect(within(screen.getByRole('article')).getByText(label)).toBeVisible();
+    const card = within(screen.getByRole('article'));
+    if (mode === 'ALWAYS') fireEvent.click(card.getByText('查看处理步骤'));
+    expect(card.getByText(label)).toBeVisible();
   });
   it('explains location-triggered updates even while scheduled analysis is paused', async () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
@@ -105,7 +107,9 @@ describe('unified task center', () => {
     });
     mount();
     await screen.findByRole('heading', { name: '照片位置索引' });
-    expect(within(screen.getByRole('article')).getByText('位置变化后分批更新')).toBeVisible();
+    const card = within(screen.getByRole('article'));
+    fireEvent.click(card.getByText('查看处理步骤'));
+    expect(card.getByText('位置变化后分批更新')).toBeVisible();
   });
   it('shows remaining work including failures and keeps completed counts in details', async () => {
     vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
@@ -132,7 +136,7 @@ describe('unified task center', () => {
     mount();
     expect(await screen.findByRole('heading', { name: '任务中心' })).toBeVisible();
     expect(await screen.findByRole('heading', { name: '2B 向量搜图' })).toBeVisible();
-    expect(screen.getByText(/等待运行时段/)).toBeVisible();
+    expect(screen.getByText(/等待运行时段/, { selector: 'span' })).toBeVisible();
     expect(screen.getByText('生成图片向量')).not.toBeVisible();
     fireEvent.click(screen.getByText('查看处理步骤'));
     expect(screen.getByText('生成图片向量')).toBeVisible();
