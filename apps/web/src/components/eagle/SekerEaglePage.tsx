@@ -134,7 +134,7 @@ import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
-import { getEagleAssetEntityStore, retainEagleAssetEntityStore } from './eagle-asset-entity-store';
+import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
 import { useEagleReferenceData } from './useEagleReferenceData';
@@ -145,7 +145,6 @@ import {
   selectVisibleMasonryItemsFromIndex,
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
-import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import styles from './SekerEaglePage.module.css';
 interface SekerEaglePageProps {
   modeSwitcher?: ReactNode;
@@ -301,7 +300,11 @@ export function SekerEaglePage({
     return createEagleQueryKeys(ownerId, libraryMode);
   }, [ownerId, libraryMode]);
   const thumbnailScheduler = useMemo(() => new MediaLoadScheduler(), [ownerId]);
-  const thumbnailLoadService = useMemo(() => new ThumbnailLoadService(), [ownerId]);
+  const workspaceCache = useMemo(
+    () => getEagleWorkspaceCache(queryClient, ownerId, libraryMode),
+    [queryClient, ownerId, libraryMode],
+  );
+  const thumbnailLoadService = workspaceCache.thumbnails;
   const assetViewport = useEagleAssetViewport();
   const assetViewportRef = assetViewport.elementRef;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
@@ -472,14 +475,8 @@ export function SekerEaglePage({
       activeSmartFolderId && smartFolderOrder === 'RELEVANCE' ? 'RELEVANCE' : undefined,
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
-  const assetStore = useMemo(() => getEagleAssetEntityStore(storeScope), [storeScope]);
-  useEffect(
-    () =>
-      retainEagleAssetEntityStore(storeScope, assetStore, () => {
-        queryClient.removeQueries({ queryKey: queryKeys.assets });
-      }),
-    [assetStore, queryClient, queryKeys.assets, storeScope],
-  );
+  const assetStore = workspaceCache.store;
+  useEffect(() => workspaceCache.retain(privateVisible), [workspaceCache, privateVisible]);
   const assetStoreRevision = useSyncExternalStore(
     assetStore.subscribe,
     assetStore.getSnapshot,
@@ -901,9 +898,8 @@ export function SekerEaglePage({
   useEffect(
     () => () => {
       thumbnailScheduler.clear({ abortActive: true });
-      thumbnailLoadService.dispose();
     },
-    [thumbnailLoadService, thumbnailScheduler],
+    [thumbnailScheduler],
   );
   useEffect(() => {
     const sentinel = pageSentinelRef.current;
