@@ -2404,3 +2404,74 @@ test('PAT issuance rejects stale accounts and self-revocation preserves other cr
   await assert.rejects(service.authenticate(current.token), /PAT 无效或已过期/);
   await assert.rejects(service.create(f.ownerId, 'disabled', ['asset:write'], 2), /登录状态已失效/);
 });
+
+test('cross-library sending reuses current browse outputs with independent keys and no source dependency', async () => {
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const f = await fixtures();
+  for (const [kind, variant] of [
+    ['PREVIEW', 'default'],
+    ['THUMBNAIL', '256'],
+    ['THUMBNAIL', '512'],
+  ])
+    await prisma.eagleAssetRendition.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: f.photo.id,
+        revision: f.photo.mediaRevision,
+        kind,
+        variant,
+        status: 'READY',
+        storageKey: `users/${f.ownerId}/assets/${f.photo.id}/renditions/${variant}.webp`,
+        mimeType: 'image/webp',
+        byteSize: 1,
+        width: 512,
+        height: 512,
+      },
+    });
+
+  const tag = await f.photos.createManualTag(f.ownerId,{name:'跨库保留标签'});
+  await f.photos.replaceAssetTags(f.ownerId,f.photo.id,[tag.id]);
+  const spaceId=(await prisma.eagleEmbeddingSpace.findFirstOrThrow({where:{isCurrent:true}})).id;
+  const vector='['+[1,...Array(1023).fill(0)].join(',')+']';
+  await prisma.$executeRawUnsafe(`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES ($1,$2,'PHOTO',$3,$4,$5,'READY',true,$6::vector,1,now())`,randomUUID(),f.ownerId,f.photo.id,f.photo.mediaRevision,spaceId,vector);
+  const copies = [];
+  const storage = {
+    copyObject: async (a, b) => copies.push([a, b]),
+    headObject: async () => ({ ContentLength: 1 }),
+  };
+  const result = await new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(
+    f.ownerId,
+    { operationId: randomUUID(), assetIds: [f.photo.id] },
+    false,
+  );
+  const target = await prisma.eagleAsset.findUniqueOrThrow({
+    where: { id: result.assets[0].assetId },
+    include: { renditions: true, processingJobs: true },
+  });
+  assert.equal(target.lifecycleStatus, 'READY');
+  const links=await prisma.eagleAssetManualTag.findMany({where:{assetId:target.id},include:{tag:true}});
+  assert.ok(links.some(l=>l.tag.name==='跨库保留标签' && l.tag.id!==tag.id));
+  const embeddings=await prisma.$queryRawUnsafe('SELECT embedding::text AS embedding,"assetRevision","spaceId","libraryMode" FROM "EagleAssetEmbedding" WHERE "assetId"=$1',target.id);
+  assert.equal(embeddings.length,1);assert.equal(embeddings[0].embedding,vector);
+  assert.equal(embeddings[0].libraryMode,'MATERIAL');assert.equal(embeddings[0].assetRevision,1);
+  assert.ok(!target.processingJobs.some(j=>j.kind==='GENERATE_EMBEDDING'));
+
+  assert.equal(target.renditions.length, 3);
+  assert.equal(copies.length, 4);
+  assert.ok(
+    target.renditions.every(
+      (r) =>
+        r.libraryMode === 'MATERIAL' &&
+        r.assetId === target.id &&
+        r.revision === 1 &&
+        r.storageKey.startsWith(`users/${f.ownerId}/assets/${target.id}/`),
+    ),
+  );
+  assert.ok(!target.processingJobs.some((j) => j.processorVersion === 'rendition-v2'));
+  const listed = await f.materials.listAssets(f.ownerId, { limit: 40 });
+  assert.equal(listed.items.find((a) => a.id === target.id).renditions.length, 3);
+  await prisma.eagleAsset.delete({ where: { id: f.photo.id } });
+  assert.equal(await prisma.eagleAssetRendition.count({ where: { assetId: target.id } }), 3);
+});
