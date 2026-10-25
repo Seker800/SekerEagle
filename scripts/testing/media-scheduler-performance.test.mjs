@@ -321,3 +321,79 @@ test('real camera video playback belongs to VIDEO, respects deployment availabil
   assert.ok(!overview.groups.find((group) => group.id === 'BROWSE'));
   assert.deepEqual(await service.retry(f.owner, 'VIDEO'), { retried: 1 });
 });
+
+test('restricting upload freshness preserves recent/history ordering, replacements and owner/mode boundaries', async () => {
+  const f = await fixture(6);
+  const assets = await db.eagleAsset.findMany({
+    where: { ownerId: f.owner },
+    orderBy: { id: 'asc' },
+  });
+  const now = Date.now(),
+    hour = 3600_000;
+  for (let n = 0; n < assets.length; n++) {
+    await db.eagleAsset.update({
+      where: { id: assets[n].id },
+      data: {
+        libraryAddedAt: new Date(now - (n === 2 ? 2 : 72) * hour),
+        chronologicalAt: new Date(now - 96 * hour + n * 1000),
+      },
+    });
+    await db.uploadSession.create({
+      data: {
+        uploaderId: f.owner,
+        libraryMode: n === 5 ? 'MATERIAL' : 'PHOTO',
+        originalName: 'synthetic.jpg',
+        mimeType: 'image/jpeg',
+        size: 1,
+        objectKey: n === 3 ? `users/${f.owner}/superseded-source` : assets[n].originalObjectKey,
+        multipartUploadId: randomUUID(),
+        status: 'COMPLETED',
+        completedAt: n === 4 ? null : new Date(now - ([0, 3, 5].includes(n) ? 1 : 72) * hour),
+      },
+    });
+  }
+  for (const options of [{}, { freshOnly: true }, { historyOnly: true }]) {
+    let query;
+    await selectScheduledMediaCandidates(
+      {
+        $queryRaw: async (q) => {
+          query = q;
+          return [];
+        },
+      },
+      { ...input, take: 1000 },
+      true,
+      false,
+      { resource: 'EMBEDDING', ...options },
+    );
+    const reference = query.text.replace(
+      'AND current_upload."completedAt">=now()-interval \'24 hours\'',
+      '',
+    );
+    assert.notEqual(
+      reference,
+      query.text,
+      'the reference removes only the optimized horizon restriction',
+    );
+    const expected = await db.$queryRawUnsafe(reference, ...query.values);
+    const actual = await db.$queryRaw(query);
+    assert.deepEqual(
+      actual.map((x) => x.id),
+      expected.map((x) => x.id),
+    );
+    const own = actual
+      .filter((x) => x.ownerId === f.owner)
+      .map((x) => x.assetId)
+      .sort();
+    const indices = options.freshOnly
+      ? [0, 2]
+      : options.historyOnly
+        ? [1, 3, 4, 5]
+        : [0, 1, 2, 3, 4, 5];
+    assert.deepEqual(own, indices.map((n) => assets[n].id).sort());
+  }
+  await db.eagleAssetProcessingJob.updateMany({
+    where: { ownerId: f.owner },
+    data: { status: 'COMPLETED', completedAt: new Date() },
+  });
+});

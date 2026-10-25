@@ -28,6 +28,8 @@ export function selectScheduledMediaCandidates(
     Prisma.sql`job."libraryMode"`,
     family,
   );
+  // Only uploads inside the 24h priority horizon can affect freshness: older
+  // uploads cannot promote an old asset or outrank the addedAt of a recent one.
   // The immutable current object key identifies the media version, including replacements.
   // A maintenance job or an upload of a superseded/different owner's object cannot promote it.
   const freshness = Prisma.sql`CASE WHEN job.kind='RENDER_EDITED_COPY' THEN job."createdAt" ELSE GREATEST(a."libraryAddedAt",COALESCE(current_upload."completedAt",a."libraryAddedAt")) END`;
