@@ -1,3 +1,5 @@
+import { performManualPhotoAction, manualActionsBySuggestion } from './photo-agent-manual';
+import type { ManualPhotoActionDto } from './photo-agent.dto';
 import { readPhotoInstructions, savePhotoInstructions } from './photo-agent-instructions';
 import type { UpdatePhotoAgentInstructionsDto } from './photo-agent.dto';
 import {
@@ -154,7 +156,7 @@ export class PhotoAgentService {
         expiresAt: request ? null : new Date(Date.now() + 24 * 3600000),
         ...(request ? { title: request.title, rationale: request.rationale } : {}),
       },
-      select: { id: true, kind: true, status: true, expiresAt: true },
+      select: { id: true, number: true, kind: true, status: true, expiresAt: true },
     });
   }
   async submitRequest(ownerId: string, input: SubmitPhotoRequestDto, includePrivate: boolean) {
@@ -179,7 +181,7 @@ export class PhotoAgentService {
         const context = await this.task(tx, ownerId, task.id, includePrivate, true);
         for (const item of input.items)
           await this.proposeInTransaction(tx, ownerId, task.id, item, includePrivate, context);
-        return { id: task.id, count: input.items.length };
+        return { id: task.id, number: task.number, count: input.items.length };
       },
       { timeout: 30000 },
     );
@@ -210,12 +212,24 @@ export class PhotoAgentService {
     return { task, assets, frozen };
   }
   async tasks(ownerId: string, input: PhotoAgentQueryDto, includePrivate: boolean) {
+    const cursor = input.after
+      ? await this.prisma.eaglePhotoAgentTask.findFirst({
+          where: { id: input.after, ownerId, libraryMode: 'PHOTO' },
+          select: { number: true },
+        })
+      : null;
+    if (input.after && !cursor) throw new NotFoundException('整理任务不存在。');
     const rows = await this.prisma.eaglePhotoAgentTask.findMany({
-      where: { ownerId, libraryMode: 'PHOTO', ...(input.after ? { id: { gt: input.after } } : {}) },
-      orderBy: { id: 'asc' },
+      where: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        ...(cursor ? { number: { lt: cursor.number } } : {}),
+      },
+      orderBy: { number: 'desc' },
       take: input.limit + 1,
       select: {
         id: true,
+        number: true,
         kind: true,
         status: true,
         createdAt: true,
@@ -237,7 +251,7 @@ export class PhotoAgentService {
         const proposals = await this.prisma.eaglePhotoAgentSuggestion.findMany({
           where: { taskId: row.id, ownerId, libraryMode: 'PHOTO' },
           select: { assetId: true, status: true },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { number: 'asc' },
         });
         visible.push({
           ...summary,
@@ -262,10 +276,12 @@ export class PhotoAgentService {
       const { task, assets } = await this.task(tx, ownerId, id, includePrivate);
       const suggestions = await tx.eaglePhotoAgentSuggestion.findMany({
         where: { ownerId, libraryMode: 'PHOTO', taskId: id },
-        orderBy: { id: 'asc' },
+        orderBy: { number: 'asc' },
       });
+      const manual = await manualActionsBySuggestion(tx, ownerId, id);
       return {
         id: task.id,
+        number: task.number,
         kind: task.kind,
         status: task.status,
         expiresAt: task.expiresAt,
@@ -273,9 +289,34 @@ export class PhotoAgentService {
         rationale: task.rationale,
         createdAt: task.createdAt,
         assets: assets.map(serialize),
-        suggestions,
+        suggestions: suggestions.map((s) => ({ ...s, manualAction: manual.get(s.id) ?? null })),
       };
     });
+  }
+  async detailByNumber(ownerId: string, number: number, includePrivate: boolean) {
+    if (!Number.isSafeInteger(number) || number < 1 || number > 2147483647)
+      throw new BadRequestException('建议编号无效。');
+    const task = await this.prisma.eaglePhotoAgentTask.findFirst({
+      where: { ownerId, libraryMode: 'PHOTO', number },
+    });
+    if (!task) throw new NotFoundException('整理任务不存在。');
+    return this.detail(ownerId, task.id, includePrivate);
+  }
+  manualAction(
+    ownerId: string,
+    taskId: string,
+    input: ManualPhotoActionDto,
+    includePrivate: boolean,
+  ) {
+    return performManualPhotoAction(
+      this.prisma,
+      this.transfer,
+      ownerId,
+      taskId,
+      input,
+      includePrivate,
+      (tx) => this.task(tx, ownerId, taskId, includePrivate),
+    );
   }
   async history(
     ownerId: string,

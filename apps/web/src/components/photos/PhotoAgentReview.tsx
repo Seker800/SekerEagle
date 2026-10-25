@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { EagleAssetActionMenu } from '../eagle/EagleAssetActionMenu';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   IconArrowLeft,
@@ -10,6 +11,8 @@ import {
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
+  manualPhotoRequestAction,
+  type ManualPhotoAction,
   listPhotoAgentTasks,
   getPhotoAgentTask,
   getPhotoAgentHistory,
@@ -79,7 +82,7 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
         <IconShieldCheck size={21} aria-hidden />
         <div>
           <h2>{t('由 Agent 提议，由你决定')}</h2>
-          <p>{t('申请不会自动执行。只有你手动点击同意，才会补充位置、发送到素材或移入回收站。')}</p>
+          <p>{t('申请不会自动执行。你可以同意建议，也可以选中照片直接处理。')}</p>
         </div>
       </header>
       {!taskId && <PhotoAgentInstructions key={ownerId} ownerId={ownerId} />}
@@ -133,6 +136,9 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
               onClick={() => setTaskId(row.id)}
             >
               <div className={styles.requestTop}>
+                <span className={styles.number}>
+                  {t('建议 {{value1}}', { value1: row.number })}
+                </span>
                 <span className={styles.kind}>{kindLabel(row.kind)}</span>
                 <span>{t('{{value1}} 张', { value1: row.assetCount })}</span>
                 <span className={styles.badge}>{pending(row) ? t('待处理') : t('已处理')}</span>
@@ -197,14 +203,97 @@ function RequestDetail({
   const eligible = task.suggestions.filter((item) =>
     ['PENDING', 'FAILED', 'APPLYING'].includes(item.status),
   );
+  const selectable = task.suggestions.filter((item) => {
+    const asset = task.assets.find((a) => a.id === item.assetId);
+    return asset && !asset.deletedAt && item.status !== 'APPLYING';
+  });
   const [selected, setSelected] = useState(() => new Set(eligible.map((item) => item.id)));
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const anchor = useRef<string | null>(null);
+  const manualIds = useRef(new Map<string, string>());
+  const [manualMessage, setManualMessage] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [batchTotal, setBatchTotal] = useState(0);
   const [result, setResult] = useState<PhotoRequestReviewResult | null>(null);
   const chosen = eligible.filter((item) => selected.has(item.id));
+  const manualChosen = selectable.filter((item) => selected.has(item.id));
   const shown = expanded ? task.suggestions : task.suggestions.slice(0, 12);
+  function choose(id: string, additive = false, range = false) {
+    if (busy || !selectable.some((i) => i.id === id)) return;
+    const previousAnchor = anchor.current;
+    anchor.current = id;
+    setSelected((current) => {
+      if (range && previousAnchor) {
+        const ids = selectable.map((i) => i.id),
+          a = ids.indexOf(previousAnchor),
+          b = ids.indexOf(id);
+        if (a >= 0 && b >= 0)
+          return new Set([...current, ...ids.slice(Math.min(a, b), Math.max(a, b) + 1)]);
+      }
+      if (!additive) return new Set([id]);
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function openMenu(id: string, x: number, y: number) {
+    if (busy || !selectable.some((i) => i.id === id)) return;
+    if (!selected.has(id)) setSelected(new Set([id]));
+    anchor.current = id;
+    setMenu({
+      x: Math.max(8, Math.min(x, window.innerWidth - 240)),
+      y: Math.max(8, Math.min(y, window.innerHeight - 150)),
+    });
+  }
+  async function manual(action: ManualPhotoAction) {
+    if (busy || !manualChosen.length) return;
+    const items = manualChosen.map((item) => {
+      const asset = task.assets.find((a) => a.id === item.assetId)!;
+      return {
+        suggestionId: item.id,
+        mediaRevision: asset.mediaRevision,
+        rowVersion: asset.rowVersion,
+      };
+    });
+    setMenu(null);
+    setBusy(true);
+    setError('');
+    setResult(null);
+    setBatchTotal(0);
+    setManualMessage('');
+    let affected = 0;
+    try {
+      for (let offset = 0; offset < items.length; offset += 100) {
+        const chunk = items.slice(offset, offset + 100),
+          key = JSON.stringify({ action, items: chunk });
+        let operationId = manualIds.current.get(key);
+        if (!operationId) {
+          operationId = crypto.randomUUID();
+          manualIds.current.set(key, operationId);
+        }
+        const receipt = await manualPhotoRequestAction(task.id, {
+          operationId,
+          action,
+          items: chunk,
+        });
+        affected += receipt.affectedAssetCount;
+        manualIds.current.delete(key);
+        setSelected(
+          (current) =>
+            new Set([...current].filter((id) => !chunk.some((i) => i.suggestionId === id))),
+        );
+        setManualMessage(t('已手动处理 {{value1}} 张照片', { value1: affected }));
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('操作失败'));
+    } finally {
+      await refresh();
+      setBusy(false);
+    }
+  }
   async function review(action: 'ACCEPT' | 'REJECT') {
     const ids = chosen
       .filter((item) => action === 'ACCEPT' || item.status === 'PENDING')
@@ -254,6 +343,7 @@ function RequestDetail({
   return (
     <section className={styles.detail} aria-label={t('申请详情')}>
       <div className={styles.requestTop}>
+        <span className={styles.number}>{t('建议 {{value1}}', { value1: task.number })}</span>
         <span className={styles.kind}>{kindLabel(task.kind)}</span>
         <span>{t('{{value1}} 张', { value1: task.suggestions.length })}</span>
       </div>
@@ -269,42 +359,57 @@ function RequestDetail({
             : t('同意后移入照片回收站，可在回收站恢复。')}
       </div>
       {closed && <p role="status">{t('申请已关闭或过期，不能执行新操作。')}</p>}
-      {!!eligible.length && !closed && (
+      {Boolean(selectable.length || eligible.length) && (
         <div className={styles.approvalBar}>
           <label>
             <input
               type="checkbox"
               disabled={busy}
-              checked={chosen.length === eligible.length}
+              checked={manualChosen.length === selectable.length}
               onChange={(event) =>
-                setSelected(new Set(event.target.checked ? eligible.map((item) => item.id) : []))
+                setSelected(new Set(event.target.checked ? selectable.map((item) => item.id) : []))
               }
             />
-            {t('全选待处理项')}
+            {t('全选照片')}
           </label>
           <span>
             {t('已选 {{value1}} / {{value2}} 张', {
-              value1: chosen.length,
-              value2: eligible.length,
+              value1: manualChosen.length,
+              value2: selectable.length,
             })}
           </span>
           <button
             className={styles.agree}
             type="button"
-            disabled={busy || !chosen.length}
+            disabled={busy || closed || !chosen.length}
             onClick={() => void review('ACCEPT')}
           >
             {busy ? t('正在执行…') : t('同意选中申请')}
           </button>
           <button
             type="button"
-            disabled={busy || !chosen.some((item) => item.status === 'PENDING')}
+            disabled={busy || closed || !chosen.some((item) => item.status === 'PENDING')}
             onClick={() => void review('REJECT')}
           >
             {t('拒绝选中申请')}
           </button>
+          <button
+            type="button"
+            disabled={busy || !manualChosen.length}
+            onClick={(event) => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              setMenu({
+                x: Math.max(8, Math.min(rect.left, window.innerWidth - 240)),
+                y: Math.max(8, Math.min(rect.bottom + 4, window.innerHeight - 150)),
+              });
+            }}
+          >
+            {t('处理选中照片')}
+          </button>
         </div>
       )}
+      {busy && batchTotal === 0 && <p role="status">{t('正在处理选中的照片…')}</p>}
+      {manualMessage && <p role="status">{manualMessage}</p>}
       {busy && batchTotal > 0 && (
         <p role="status">
           {t('正在处理整批申请：{{value1}} / {{value2}} 张', {
@@ -343,10 +448,40 @@ function RequestDetail({
           const asset = task.assets.find((asset) => asset.id === item.assetId);
           const location = item.kind === 'CITY' ? (item.value as PhotoCity) : null;
           return (
-            <article className={styles.photo} key={item.id}>
+            <article
+              className={styles.photo}
+              key={item.id}
+              data-selected={selected.has(item.id)}
+              onClick={(event) => {
+                if (!(event.target as HTMLElement).closest('button,input,summary,details,a'))
+                  choose(item.id, event.ctrlKey || event.metaKey, event.shiftKey);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                openMenu(item.id, event.clientX, event.clientY);
+              }}
+            >
+              <span className={styles.photoNumber}>
+                {task.number}.{item.number}
+              </span>
               <div className={styles.image}>
-                <ApprovalPreview asset={asset} kind={item.kind} status={item.status} />
-                {['PENDING', 'FAILED', 'APPLYING'].includes(item.status) && !closed && (
+                <button
+                  type="button"
+                  className={styles.selectPhoto}
+                  disabled={busy || !selectable.some((i) => i.id === item.id)}
+                  aria-label={t('选择照片 {{value1}}', { value1: `${task.number}.${item.number}` })}
+                  aria-pressed={selected.has(item.id)}
+                  onClick={(event) =>
+                    choose(item.id, event.ctrlKey || event.metaKey, event.shiftKey)
+                  }
+                >
+                  <ApprovalPreview
+                    asset={asset}
+                    kind={item.manualAction ?? item.kind}
+                    status={item.status}
+                  />
+                </button>
+                {selectable.some((i) => i.id === item.id) && (
                   <input
                     type="checkbox"
                     disabled={busy}
@@ -365,7 +500,13 @@ function RequestDetail({
               </div>
               <div className={styles.photoBody}>
                 <h3>{asset?.displayName || t('照片')}</h3>
-                <span className={styles.itemStatus}>{statusLabel(item.status)}</span>
+                <span className={styles.itemStatus}>
+                  {item.manualAction
+                    ? item.manualAction === 'DELETE'
+                      ? t('已手动移入回收站')
+                      : t('已手动发送到素材')
+                    : statusLabel(item.status)}
+                </span>
                 {location && (
                   <p>
                     {location.name} ·{' '}
@@ -397,11 +538,13 @@ function RequestDetail({
                     })}
                   <p>{t('理由由 Agent 提交，请结合照片内容判断。')}</p>
                 </details>
-                {item.status === 'ACCEPTED' && item.kind !== 'SEND_TO_MATERIAL' && (
-                  <button type="button" disabled={busy} onClick={() => void undo(item.id)}>
-                    {t('撤销此项操作')}
-                  </button>
-                )}
+                {item.status === 'ACCEPTED' &&
+                  !item.manualAction &&
+                  item.kind !== 'SEND_TO_MATERIAL' && (
+                    <button type="button" disabled={busy} onClick={() => void undo(item.id)}>
+                      {t('撤销此项操作')}
+                    </button>
+                  )}
               </div>
             </article>
           );
@@ -411,6 +554,30 @@ function RequestDetail({
         <button className={styles.more} type="button" onClick={() => setExpanded(true)}>
           {t('展开全部 {{value1}} 张照片', { value1: task.suggestions.length })}
         </button>
+      )}
+      {menu && manualChosen.length > 0 && (
+        <EagleAssetActionMenu
+          position={menu}
+          count={manualChosen.length}
+          onClose={() => setMenu(null)}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => void manual('SEND_TO_MATERIAL')}
+          >
+            {t('发送到素材')}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={busy}
+            onClick={() => void manual('DELETE')}
+          >
+            {t('移入回收站')}
+          </button>
+        </EagleAssetActionMenu>
       )}
       <RequestHistory task={task} includePrivate={includePrivate} />
     </section>
@@ -433,6 +600,9 @@ function RequestHistory({
     refetchInterval: 10000,
   });
   const labels = {
+    MANUAL_STARTED: t('开始人工处理'),
+    MANUAL_EXECUTED: t('人工处理完成'),
+    MANUAL_FAILED: t('人工处理失败'),
     PROPOSED: t('提交申请'),
     REJECTED: t('拒绝申请'),
     EXECUTED: t('执行成功'),
@@ -463,6 +633,18 @@ function RequestHistory({
                 {task.assets.find((asset) => asset.id === event.assetId)?.displayName ||
                   t('整份申请')}
               </span>
+              {event.details.input && (
+                <small>
+                  {event.details.input.action === 'DELETE' ? t('移入回收站') : t('发送到素材')} ·{' '}
+                  {event.details.targets
+                    ?.map((target) => {
+                      const item = task.suggestions.find((s) => s.id === target.suggestionId);
+                      return item ? `${task.number}.${item.number}` : '';
+                    })
+                    .filter(Boolean)
+                    .join('、')}
+                </small>
+              )}
               {event.details.legacySnapshot && <small>{t('升级前状态快照')}</small>}
               {event.details.value?.name && (
                 <small>

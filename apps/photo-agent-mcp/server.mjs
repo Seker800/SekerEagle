@@ -152,9 +152,15 @@ export function createPhotoAgentServer({ baseUrl, token, fetch: fetcher = fetch 
   );
   tool(
     'photo_task',
-    'Read task progress, photos, evidence and human review outcomes. Do not repeat rejected suggestions.',
-    z.object({ taskId: uuid }).strict(),
-    (args) => call(`tasks/${args.taskId}`),
+    'Read a request by taskId or its stable owner-scoped number shown in SekerEagle. Each photo also has a stable number within the request. Read progress, evidence and actual human decisions; never repeat rejected suggestions.',
+    z
+      .object({ taskId: uuid.optional(), number: z.number().int().positive().optional() })
+      .strict()
+      .refine(
+        (args) => Boolean(args.taskId) !== Boolean(args.number),
+        'Provide either taskId or number.',
+      ),
+    (args) => call(args.taskId ? `tasks/${args.taskId}` : `tasks/by-number/${args.number}`),
   );
   tool(
     'photo_request_history',

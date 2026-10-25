@@ -6,6 +6,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
 import {
+  ManualPhotoActionDto,
   CreatePhotoTaskDto,
   SubmitPhotoRequestDto,
   UpdatePhotoAgentInstructionsDto,
@@ -42,7 +43,14 @@ test('DTO rejects ownerId, excess scope and unsupported modes', async () => {
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: CreatePhotoTaskDto }));
 });
 test('accept, reject, undo and cancel are browser-only operations', () => {
-  for (const name of ['review', 'reviewRequest', 'undo', 'cancel', 'saveInstructions']) {
+  for (const name of [
+    'review',
+    'reviewRequest',
+    'undo',
+    'cancel',
+    'saveInstructions',
+    'manualAction',
+  ]) {
     const handler = Reflect.get(PhotoAgentController.prototype, name) as object;
     const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
     assert.ok(guards.includes(BrowserPrincipalGuard));
@@ -137,4 +145,27 @@ test('instructions DTO accepts clear and bounded text but rejects owner, mode an
         { type: 'body', metatype: UpdatePhotoAgentInstructionsDto },
       ),
     );
+});
+
+test('manual selection DTO rejects injected ownership, unsafe actions, duplicate-free version bounds and oversized batches', async () => {
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  const item = {
+    suggestionId: '00000000-0000-4000-8000-000000000001',
+    mediaRevision: 0,
+    rowVersion: 1,
+  };
+  const valid = {
+    operationId: '00000000-0000-4000-8000-000000000002',
+    action: 'DELETE',
+    items: [item],
+  };
+  await pipe.transform(valid, { type: 'body', metatype: ManualPhotoActionDto });
+  for (const input of [
+    { ...valid, ownerId: 'other' },
+    { ...valid, action: 'PURGE' },
+    { ...valid, items: [] },
+    { ...valid, items: [{ ...item, rowVersion: 0 }] },
+    { ...valid, items: Array.from({ length: 101 }, () => item) },
+  ])
+    await assert.rejects(pipe.transform(input, { type: 'body', metatype: ManualPhotoActionDto }));
 });

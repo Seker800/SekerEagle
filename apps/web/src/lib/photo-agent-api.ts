@@ -21,6 +21,8 @@ export interface AgentPhoto {
   filenameSignals?: string[];
 }
 export interface PhotoAgentSuggestion {
+  number: number;
+  manualAction?: ManualPhotoAction | null;
   id: string;
   assetId: string;
   kind: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
@@ -31,6 +33,7 @@ export interface PhotoAgentSuggestion {
   evidence: Array<{ id: string }>;
 }
 export interface PhotoAgentTaskSummary {
+  number: number;
   id: string;
   kind: 'CITY' | 'NON_PHOTO' | 'SEND_TO_MATERIAL' | 'DELETE';
   status: 'OPEN' | 'CANCELLED';
@@ -123,9 +126,14 @@ export interface PhotoAgentEvent {
     | 'UNDONE'
     | 'CANCELLED'
     | 'REVIEW_FAILED'
-    | 'UNDO_FAILED';
+    | 'UNDO_FAILED'
+    | 'MANUAL_STARTED'
+    | 'MANUAL_EXECUTED'
+    | 'MANUAL_FAILED';
   createdAt: string;
   details: {
+    input?: { action: ManualPhotoAction };
+    targets?: Array<{ suggestionId: string; assetId: string }>;
     kind?: string;
     legacySnapshot?: boolean;
     value?: PhotoCity;
@@ -153,3 +161,17 @@ export const savePhotoAgentInstructions = (
     method: 'PUT',
     body: JSON.stringify(input),
   });
+
+export type ManualPhotoAction = 'SEND_TO_MATERIAL' | 'DELETE';
+export const manualPhotoRequestAction = (
+  taskId: string,
+  input: {
+    operationId: string;
+    action: ManualPhotoAction;
+    items: Array<{ suggestionId: string; mediaRevision: number; rowVersion: number }>;
+  },
+) =>
+  request<{ affectedAssetCount: number; action: ManualPhotoAction }>(
+    `${base}/tasks/${encodeURIComponent(taskId)}/manual-action`,
+    { method: 'POST', body: JSON.stringify(input) },
+  );

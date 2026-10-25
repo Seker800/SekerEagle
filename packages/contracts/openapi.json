@@ -6609,6 +6609,58 @@
         "tags": ["photo-agent"]
       }
     },
+    "/api/photos/agent/tasks/{id}/manual-action": {
+      "post": {
+        "operationId": "PhotoAgentController_manualAction",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManualPhotoActionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
+    "/api/photos/agent/tasks/by-number/{number}": {
+      "get": {
+        "operationId": "PhotoAgentController_detailByNumber",
+        "parameters": [
+          {
+            "name": "number",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
     "/api/photos/agent/tasks/{id}/history": {
       "get": {
         "operationId": "PhotoAgentController_history",
@@ -8674,6 +8726,43 @@
           }
         },
         "required": ["suggestionIds", "action"]
+      },
+      "ManualPhotoItemDto": {
+        "type": "object",
+        "properties": {
+          "suggestionId": {
+            "type": "string"
+          },
+          "mediaRevision": {
+            "type": "number",
+            "minimum": 0
+          },
+          "rowVersion": {
+            "type": "number",
+            "minimum": 1
+          }
+        },
+        "required": ["suggestionId", "mediaRevision", "rowVersion"]
+      },
+      "ManualPhotoActionDto": {
+        "type": "object",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string",
+            "enum": ["SEND_TO_MATERIAL", "DELETE"]
+          },
+          "items": {
+            "maxItems": 100,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ManualPhotoItemDto"
+            }
+          }
+        },
+        "required": ["operationId", "action", "items"]
       },
       "InferPhotoCitiesDto": {
         "type": "object",

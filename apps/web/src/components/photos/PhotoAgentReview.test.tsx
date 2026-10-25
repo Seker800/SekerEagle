@@ -4,6 +4,7 @@ import { beforeEach, it, expect, vi } from 'vitest';
 import { PhotoAgentReview } from './PhotoAgentReview';
 import type { PhotoAgentTask } from '../../lib/photo-agent-api';
 const mocks = vi.hoisted(() => ({
+  manual: vi.fn(),
   review: vi.fn(),
   undo: vi.fn(),
   detail: vi.fn(),
@@ -18,12 +19,14 @@ vi.mock('../../lib/photo-agent-api', () => ({
   getPhotoAgentHistory: mocks.history,
   getPhotoAgentInstructions: mocks.instructions,
   savePhotoAgentInstructions: mocks.saveInstructions,
+  manualPhotoRequestAction: mocks.manual,
   reviewPhotoRequest: mocks.review,
   undoPhotoAgentSuggestion: mocks.undo,
 }));
 function fixture(): PhotoAgentTask {
   return {
     id: 'task',
+    number: 7,
     kind: 'DELETE',
     status: 'OPEN',
     expiresAt: null,
@@ -38,7 +41,8 @@ function fixture(): PhotoAgentTask {
       deletedAt: null,
       previewId: 'preview',
     })),
-    suggestions: ['one', 'two'].map((id) => ({
+    suggestions: ['one', 'two'].map((id, index) => ({
+      number: index + 1,
       id,
       assetId: id,
       kind: 'DELETE',
@@ -61,6 +65,7 @@ beforeEach(() => {
     items: [
       {
         id: 'task',
+        number: 7,
         kind: 'DELETE',
         status: 'OPEN',
         assetCount: 2,
@@ -74,6 +79,7 @@ beforeEach(() => {
   });
   mocks.detail.mockResolvedValue(fixture());
   mocks.history.mockResolvedValue({ items: [], next: null });
+  mocks.manual.mockResolvedValue({ affectedAssetCount: 1, action: 'DELETE' });
   mocks.review.mockImplementation(async (_task, ids: string[]) => ({
     succeeded: ids.length,
     failed: 0,
@@ -252,4 +258,71 @@ it('keeps already loaded thumbnails stable after a successful batch send', async
   await waitFor(() => expect(mocks.detail).toHaveBeenCalledTimes(2));
   expect(screen.getByRole('img', { name: 'one' })).toBe(first);
   expect(screen.queryByText('预览暂不可用')).not.toBeInTheDocument();
+});
+
+it('shows stable request and photo numbers and right-click targets only the clicked photo unless already selected', async () => {
+  await open();
+  expect(screen.getByText('建议 7')).toBeInTheDocument();
+  expect(screen.getByText('7.1')).toBeInTheDocument();
+  expect(screen.getByText('7.2')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: '全选照片' }));
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }), { clientX: 100, clientY: 100 });
+  expect(screen.getByRole('menuitem', { name: '发送到素材' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: '移入回收站' }));
+  await waitFor(() =>
+    expect(mocks.manual).toHaveBeenCalledWith(
+      'task',
+      expect.objectContaining({
+        action: 'DELETE',
+        items: [{ suggestionId: 'one', mediaRevision: 1, rowVersion: 1 }],
+      }),
+    ),
+  );
+  expect(mocks.review).not.toHaveBeenCalled();
+});
+it('supports multiselect manual actions independently from accepting the original recommendation', async () => {
+  mocks.manual.mockResolvedValue({ affectedAssetCount: 2 });
+  await open();
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }), { clientX: 100, clientY: 100 });
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await waitFor(() =>
+    expect(mocks.manual).toHaveBeenCalledWith(
+      'task',
+      expect.objectContaining({
+        action: 'SEND_TO_MATERIAL',
+        items: [
+          { suggestionId: 'one', mediaRevision: 1, rowVersion: 1 },
+          { suggestionId: 'two', mediaRevision: 1, rowVersion: 1 },
+        ],
+      }),
+    ),
+  );
+  expect(mocks.review).not.toHaveBeenCalled();
+});
+
+it('supports single click, modifier multi-select and shift ranges without executing actions', async () => {
+  await open();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.1' }));
+  expect(screen.getByRole('checkbox', { name: '选择 one' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: '选择 two' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.2' }), { ctrlKey: true });
+  expect(screen.getByRole('checkbox', { name: '选择 two' })).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.2' }));
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.1' }), { shiftKey: true });
+  expect(screen.getByText('已选 2 / 2 张')).toBeInTheDocument();
+  expect(mocks.manual).not.toHaveBeenCalled();
+});
+it('never automatically retries manual sends and retains the operation identifier for an explicit retry', async () => {
+  mocks.manual
+    .mockRejectedValueOnce(new Error('发送失败'))
+    .mockResolvedValue({ affectedAssetCount: 2, action: 'SEND_TO_MATERIAL' });
+  await open();
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await screen.findByRole('alert');
+  expect(mocks.manual).toHaveBeenCalledTimes(1);
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await waitFor(() => expect(mocks.manual).toHaveBeenCalledTimes(2));
+  expect(mocks.manual.mock.calls[0][1].operationId).toBe(mocks.manual.mock.calls[1][1].operationId);
 });

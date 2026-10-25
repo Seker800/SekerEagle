@@ -135,3 +135,22 @@ export class UpdatePhotoAgentInstructionsDto {
   @ApiProperty({ maxLength: 8000 }) @IsString() @MaxLength(8000) instructions!: string;
   @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) revision!: number;
 }
+
+export class ManualPhotoItemDto {
+  @ApiProperty() @IsUUID('4') suggestionId!: string;
+  @ApiProperty({ minimum: 0 }) @IsInt() @Min(0) mediaRevision!: number;
+  @ApiProperty({ minimum: 1 }) @IsInt() @Min(1) rowVersion!: number;
+}
+export class ManualPhotoActionDto {
+  @ApiProperty() @IsUUID('4') operationId!: string;
+  @ApiProperty({ enum: ['SEND_TO_MATERIAL', 'DELETE'] })
+  @IsIn(['SEND_TO_MATERIAL', 'DELETE'])
+  action!: 'SEND_TO_MATERIAL' | 'DELETE';
+  @ApiProperty({ type: [ManualPhotoItemDto], maxItems: 100 })
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(100)
+  @ValidateNested({ each: true })
+  @Type(() => ManualPhotoItemDto)
+  items!: ManualPhotoItemDto[];
+}

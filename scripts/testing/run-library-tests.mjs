@@ -120,6 +120,7 @@ try {
             '--experimental-test-coverage',
             '--test-coverage-include=apps/api/dist/photos/photo-agent.service.js',
             '--test-coverage-include=apps/api/dist/photos/photo-agent-instructions.js',
+            '--test-coverage-include=apps/api/dist/photos/photo-agent-manual.js',
             '--test-coverage-include=apps/api/dist/eagle/eagle-library-transfer.service.js',
             '--test-coverage-include=apps/api/dist/eagle/eagle-transfer-*.js',
             '--test-coverage-exclude=**/*.test.js',

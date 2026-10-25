@@ -1,4 +1,5 @@
 import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { t } from '../../i18n';
 import styles from './EagleAssetActionMenu.module.css';
 
@@ -22,7 +23,7 @@ export function EagleAssetActionMenu({
       if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
     };
   }, []);
-  return (
+  return createPortal(
     <>
       <button
         className={styles.dismiss}
@@ -72,6 +73,7 @@ export function EagleAssetActionMenu({
         <div className={styles.title}>{t('已选择 {{value1}} 项', { value1: count })}</div>
         {children}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }

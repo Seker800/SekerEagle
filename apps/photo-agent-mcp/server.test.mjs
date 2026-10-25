@@ -257,3 +257,29 @@ test('metadata requests are honest and saved instructions are read-only', async 
     await server.close();
   }
 });
+
+test('Agent can read a request by its stable number without access to manual execution', async () => {
+  const calls = [];
+  const server = createPhotoAgentServer({
+    baseUrl: 'http://127.0.0.1:3000',
+    token: 'test-only',
+    fetch: async (url) => {
+      calls.push(url);
+      return new globalThis.Response('{}');
+    },
+  });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: 'test', version: '1' });
+  await server.connect(a);
+  await client.connect(b);
+  try {
+    const result = await client.callTool({ name: 'photo_task', arguments: { number: 7 } });
+    assert.ok(!result.isError);
+    assert.ok(calls[0].endsWith('/tasks/by-number/7'));
+    const bad = await client.callTool({ name: 'photo_task', arguments: { number: 0 } });
+    assert.equal(bad.isError, true);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
