@@ -28,6 +28,7 @@ class RawPolicyTests(unittest.TestCase):
         self.raw.unpack.assert_not_called()
         self.raw.postprocess.assert_not_called()
         self.assertTrue(result["embeddedPreview"])
+        self.assertEqual(thumb.call_args.kwargs["minimum_size"], 1024)
         self.assertEqual(result["width"], 8736)
 
     def test_browsing_falls_back_to_sensor_decode_if_embedded_preview_is_unusable(self):
