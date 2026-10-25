@@ -318,3 +318,12 @@ it('shows an explicit computing status and active step outside collapsed details
   expect(within(card).getByText('计算ing')).toBeInTheDocument();
   expect(within(card).getByLabelText('当前执行步骤')).toHaveTextContent('生成图片向量');
 });
+
+it('explains that external batch import records are not live worker activity', async () => {
+  mount();
+  expect(
+    await screen.findByText(
+      'Eagle 批量导入由导入端管理，尚未接入实时状态；历史记录不计入这里的运行任务。',
+    ),
+  ).toBeInTheDocument();
+});

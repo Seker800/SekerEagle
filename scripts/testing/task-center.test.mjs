@@ -509,3 +509,42 @@ test('separate resource claims prioritize new uploads over newer-dated historica
     'PROCESSING',
   );
 });
+
+test('historical import records without a live protocol never imply a running background task', async () => {
+  const f = await fixture();
+  const library = await prisma.eagleExternalLibrary.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      externalLibraryId: randomUUID(),
+      displayName: 'Synthetic historical import',
+    },
+  });
+  const run = await prisma.eagleImportRun.create({
+    data: {
+      ownerId: f.owner,
+      libraryMode: 'PHOTO',
+      externalLibraryId: library.id,
+      idempotencyKey: randomUUID(),
+      manifestVersion: 1,
+      status: 'RUNNING',
+      declaredItemCount: 100,
+      importedItemCount: 97,
+      failedItemCount: 2,
+      stagedItemCount: 1,
+      updatedAt: new Date('2026-08-18T14:15:43Z'),
+    },
+  });
+  for (const privateVisible of [false, true])
+    assert.equal(
+      (await f.service.overview(f.owner, privateVisible)).groups.some(
+        (group) => group.id === 'IMPORTS',
+      ),
+      false,
+    );
+  assert.equal(
+    (await prisma.eagleImportRun.findUniqueOrThrow({ where: { id: run.id } })).status,
+    'RUNNING',
+    'Overview must not rewrite historical import state',
+  );
+});
