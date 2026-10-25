@@ -285,20 +285,17 @@ try {
       availableAt: new Date(0),
     },
   });
-  const versionUpload = await db.uploadSession.create({
-    data: {
-      uploaderId: ownerId,
-      libraryMode: 'PHOTO',
-      kind: 'EAGLE_ASSET',
-      status: 'COMPLETED',
-      originalName: 'replacement.jpg',
-      mimeType: 'image/jpeg',
-      size: detailOriginalSize,
-      objectKey: detailAsset.originalObjectKey,
-      multipartUploadId: 'synthetic-only',
-      completedAt: new Date('2102-01-01Z'),
-    },
-  });
+  const uploadData = {
+    uploaderId: ownerId,
+    kind: 'EAGLE_ASSET',
+    status: 'COMPLETED',
+    originalName: 'replacement.jpg',
+    mimeType: 'image/jpeg',
+    size: detailOriginalSize,
+    objectKey: detailAsset.originalObjectKey,
+    multipartUploadId: 'synthetic-only',
+    completedAt: new Date('2102-01-01Z'),
+  };
   const freshCandidates = () =>
     selectScheduledMediaCandidates(
       db,
@@ -307,16 +304,19 @@ try {
       false,
       { freshOnly: true, resource: 'NAS' },
     );
-  assert.ok((await freshCandidates()).some((job) => job.id === detailJob.id));
-  await db.uploadSession.update({
-    where: { id: versionUpload.id },
-    data: { libraryMode: 'MATERIAL' },
+  const wrongModeUpload = await db.uploadSession.create({
+    data: { ...uploadData, libraryMode: 'MATERIAL' },
   });
   assert.ok(!(await freshCandidates()).some((job) => job.id === detailJob.id));
   await db.uploadSession.update({
-    where: { id: versionUpload.id },
-    data: { libraryMode: 'PHOTO', status: 'INITIATED' },
+    where: { id: wrongModeUpload.id },
+    data: { objectKey: detailAsset.originalObjectKey + '-other-mode' },
   });
+  const versionUpload = await db.uploadSession.create({
+    data: { ...uploadData, libraryMode: 'PHOTO' },
+  });
+  assert.ok((await freshCandidates()).some((job) => job.id === detailJob.id));
+  await db.uploadSession.update({ where: { id: versionUpload.id }, data: { status: 'INITIATED' } });
   assert.ok(!(await freshCandidates()).some((job) => job.id === detailJob.id));
   await db.uploadSession.update({
     where: { id: versionUpload.id },
