@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, link, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 export const LAB_KIND = 'sekereagle-android-lab-v1';
@@ -36,10 +36,14 @@ export async function ensureLabConfig(directory) {
     storageSecret: randomBytes(32).toString('hex'),
     jwtSecret: randomBytes(32).toString('hex'),
   };
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  await writeFile(temporary, JSON.stringify(config, null, 2), { mode: 0o600, flag: 'wx' });
   try {
-    await writeFile(path, JSON.stringify(config, null, 2), { mode: 0o600, flag: 'wx' });
+    await link(temporary, path);
   } catch (error) {
     if (error.code !== 'EEXIST') throw error;
+  } finally {
+    await unlink(temporary);
   }
   return assertLabConfig(JSON.parse(await readFile(path, 'utf8')));
 }

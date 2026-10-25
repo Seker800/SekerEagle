@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -50,6 +50,20 @@ function run(command, args, env = process.env) {
     throw new Error(`${command.split('/').at(-1)} failed during isolated device verification`);
   return result.stdout;
 }
+export async function restorePersistentPreview(workspace, invoke = spawnSync) {
+  if (
+    !(await stat(join(workspace, '.local/android-lab/config.json')).then(
+      () => true,
+      () => false,
+    ))
+  )
+    return null;
+  return invoke('python3', [join(workspace, 'scripts/testing/android-lab-preview.py')], {
+    cwd: workspace,
+    env: process.env,
+    stdio: 'inherit',
+  });
+}
 async function main() {
   const manifest = JSON.parse(
     await readFile(join(root, '.omx/artifacts/photo-workbench.json'), 'utf8'),
@@ -77,5 +91,10 @@ async function main() {
   );
   if (result.error) throw result.error;
   process.exitCode = result.status ?? 1;
+  const restored = await restorePersistentPreview(root);
+  if (restored && restored.status !== 0) {
+    process.exitCode ||= 1;
+    process.stderr.write('Restore the persistent test preview with npm run android:lab:preview.\n');
+  }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

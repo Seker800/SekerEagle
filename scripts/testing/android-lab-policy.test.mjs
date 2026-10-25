@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -80,5 +80,20 @@ test('fixed real-photo recipes cover both libraries and useful positive filter c
           row.format === 'jpeg',
       ),
     );
+  }
+});
+
+test('parallel startup shares one complete configuration and corrupt state is never replaced', async () => {
+  const { ensureLabConfig } = await policy();
+  const dir = await mkdtemp(join(tmpdir(), 'eagle-lab-race-'));
+  try {
+    const copies = await Promise.all(Array.from({ length: 20 }, () => ensureLabConfig(dir)));
+    for (const copy of copies) assert.deepEqual(copy, copies[0]);
+    const path = join(dir, 'config.json');
+    await writeFile(path, 'damaged configuration');
+    await assert.rejects(ensureLabConfig(dir));
+    assert.equal(await readFile(path, 'utf8'), 'damaged configuration');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
