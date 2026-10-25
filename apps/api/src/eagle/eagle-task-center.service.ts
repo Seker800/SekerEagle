@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
 import { Prisma, EagleMediaJobKind, type LibraryMode } from '@prisma/client';
-import { lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
+import { mediaTaskFamilySql, lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,
@@ -95,8 +95,8 @@ export class EagleTaskCenterService {
         family === 'DETAILS'
           ? Prisma.sql`j."processorVersion"='photo-source-details-v1'`
           : family === 'VIDEO'
-            ? Prisma.sql`j."processorVersion" LIKE 'video-playback-%'`
-            : Prisma.sql`j.kind::text IN (${Prisma.join(kinds)}) AND j."processorVersion"<>'photo-source-details-v1' AND j."processorVersion" NOT LIKE 'video-playback-%'`;
+            ? Prisma.sql`${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}='VIDEO'`
+            : Prisma.sql`j.kind::text IN (${Prisma.join(kinds)}) AND j."processorVersion"<>'photo-source-details-v1' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}<>'VIDEO'`;
       const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
         WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
           FROM "EagleAsset" a WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode" AND j.status='FAILED'

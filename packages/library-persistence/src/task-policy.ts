@@ -14,7 +14,7 @@ export function taskPrioritySql(_owner: Prisma.Sql, _mode: Prisma.Sql, family: P
 }
 export function mediaTaskFamilySql(kind: Prisma.Sql, version: Prisma.Sql) {
   return Prisma.sql`CASE WHEN ${version}='photo-source-details-v1' THEN 'DETAILS'
-    WHEN ${version} LIKE 'video-playback-%' THEN 'VIDEO'
+    WHEN (${version} LIKE 'video-playback-%' OR ${version} LIKE 'camera-video-playback-%') THEN 'VIDEO'
     WHEN ${kind}::text='GENERATE_EMBEDDING' THEN 'EMBEDDING'
     WHEN ${kind}::text='ANALYZE_PHOTO_FACES' THEN 'FACES'
     WHEN ${kind}::text='EXTRACT_COLOR_PALETTE' THEN 'COLOR'

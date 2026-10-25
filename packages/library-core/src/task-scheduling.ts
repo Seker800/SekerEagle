@@ -113,7 +113,8 @@ export interface TaskCenterOverview {
 
 export function mediaTaskFamily(kind: string, version: string): TaskFamily {
   if (version === 'photo-source-details-v1') return 'DETAILS';
-  if (version.startsWith('video-playback-')) return 'VIDEO';
+  if (version.startsWith('video-playback-') || version.startsWith('camera-video-playback-'))
+    return 'VIDEO';
   const families: Record<string, TaskFamily> = {
     GENERATE_EMBEDDING: 'EMBEDDING',
     ANALYZE_PHOTO_FACES: 'FACES',

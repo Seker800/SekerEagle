@@ -17,7 +17,11 @@ test('FIFO fairness belongs to each lane, so reserved background turns still use
   const input = (lane: 'INTERACTIVE' | 'BACKGROUND') =>
     ({ where: { lane }, take: 50 }) as ClaimFindManyInput;
   for (let turn = 0; turn < 4; turn++) {
-    for (let i = 0; i < 3; i++) await select(input('INTERACTIVE'));
+    for (let i = 0; i < 3; i++) {
+      select.invalidate();
+      await select(input('INTERACTIVE'));
+    }
+    select.invalidate();
     await select(input('BACKGROUND'));
   }
   const background = queries
@@ -55,16 +59,26 @@ test('replacement freshness uses only the completed upload of the current owned 
 
 test('reuses a candidate window while revalidating its IDs before every claim', async () => {
   const queries: string[] = [];
-  const select = createScheduledMediaSelector({
-    $queryRaw: async (sql: { text: string }) => {
-      queries.push(sql.text);
-      return [{ id: 'job-1' }];
-    },
-  } as never, () => false, 'EMBEDDING');
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        queries.push(sql.text);
+        return [{ id: 'job-1' }];
+      },
+    } as never,
+    () => false,
+    'EMBEDDING',
+  );
   const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
   await select(input, 'HISTORY');
   await select(input, 'HISTORY');
-  assert.equal(queries.filter((sql) => !sql.includes('job.id IN')).length, 1,
-    'a second claim must not scan the whole backlog again');
-  assert.ok(queries.some((sql) => sql.includes('job.id IN')), 'cached hints must be revalidated');
+  assert.equal(
+    queries.filter((sql) => !sql.includes('job.id IN')).length,
+    1,
+    'a second claim must not scan the whole backlog again',
+  );
+  assert.ok(
+    queries.some((sql) => sql.includes('job.id IN')),
+    'cached hints must be revalidated',
+  );
 });

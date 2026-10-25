@@ -14,7 +14,12 @@ export function selectScheduledMediaCandidates(
   input: ClaimFindManyInput,
   preferPriority = true,
   embeddingUnavailable = false,
-  options: { resource?: 'NAS' | 'EMBEDDING'; freshOnly?: boolean; historyOnly?: boolean } = {},
+  options: {
+    resource?: 'NAS' | 'EMBEDDING';
+    freshOnly?: boolean;
+    historyOnly?: boolean;
+    candidateIds?: readonly string[];
+  } = {},
 ) {
   const kind = input.where.kind;
   const family = mediaTaskFamilySql(Prisma.sql`job.kind`, Prisma.sql`job."processorVersion"`);
@@ -31,7 +36,8 @@ export function selectScheduledMediaCandidates(
     LEFT JOIN "UploadSession" current_upload ON current_upload."objectKey"=a."originalObjectKey"
       AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
-    WHERE ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
+    WHERE ${options.candidateIds ? Prisma.sql`job.id IN (${Prisma.join(options.candidateIds)}) AND` : Prisma.empty}
+      ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
       ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
       ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
       job.kind<>'GENERATE_AI_TAGS'  AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
@@ -59,13 +65,54 @@ export function createScheduledMediaSelector(
   resource?: 'NAS' | 'EMBEDDING',
 ) {
   const turns = new Map<string, number>();
-  return (input: ClaimFindManyInput, age?: MediaQueueAge) => {
+  const windows = new Map<string, { ids: string[]; expiresAt: number }>();
+  let generation = 0;
+  const select = async (input: ClaimFindManyInput, age?: MediaQueueAge) => {
     const turn = turns.get(input.where.lane) ?? 0;
     turns.set(input.where.lane, turn + 1);
-    return selectScheduledMediaCandidates(client, input, turn % 4 !== 3, embeddingUnavailable(), {
-      resource,
-      freshOnly: age === 'RECENT',
-      historyOnly: age === 'HISTORY',
+    const preferPriority = turn % 4 !== 3;
+    const unavailable = embeddingUnavailable();
+    const key = JSON.stringify([
+      input.where.lane,
+      input.where.kind,
+      input.where.processorVersion,
+      age,
+      preferPriority,
+      unavailable,
+    ]);
+    const options = { resource, freshOnly: age === 'RECENT', historyOnly: age === 'HISTORY' };
+    let window = windows.get(key);
+    if (!window || window.expiresAt <= Date.now()) {
+      const version = generation;
+      const rows = await selectScheduledMediaCandidates(
+        client,
+        input,
+        preferPriority,
+        unavailable,
+        options,
+      );
+      // A notification during discovery must not repopulate an invalidated window.
+      if (version !== generation) return [];
+      window = {
+        ids: rows.map((row) => row.id),
+        expiresAt: Date.now() + (rows.length ? 30000 : 1000),
+      };
+      if (windows.size >= 24) windows.delete(windows.keys().next().value!);
+      windows.set(key, window);
+    }
+    if (!window.ids.length) return [];
+    const rows = await selectScheduledMediaCandidates(client, input, preferPriority, unavailable, {
+      ...options,
+      candidateIds: window.ids,
     });
+    window.ids = rows.map((row) => row.id);
+    if (!rows.length) windows.delete(key);
+    return rows;
   };
+  return Object.assign(select, {
+    invalidate: () => {
+      generation++;
+      windows.clear();
+    },
+  });
 }
