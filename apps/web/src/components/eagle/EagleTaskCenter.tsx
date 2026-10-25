@@ -370,18 +370,18 @@ function TaskCard({
   const activeSteps = group.steps.filter((step) => step.running > 0);
   const wait = group.waiting.find((item) => !['QUEUED', 'APPROVAL'].includes(item.reason));
   const execution = taskExecutionLabel(group, schedule);
-  const reason =
-    remaining === 0 || group.running > 0
-      ? null
-      : disabled || group.policy?.paused || (group.background && schedule.mode === 'MANUAL')
-        ? execution
-        : wait
-          ? wait.reason === 'SCHEDULE'
-            ? schedule.mode === 'NIGHT'
-              ? `${taskWaitLabel(wait.reason)} · ${execution}`
-              : taskWaitLabel(wait.reason)
-            : taskWaitLabel(wait.reason)
-          : null;
+  const isWaiting = remaining > 0 && group.running === 0;
+  const executionAsReason =
+    isWaiting &&
+    (disabled || group.policy?.paused || (group.background && schedule.mode === 'MANUAL'));
+  const scheduledWait = isWaiting && wait?.reason === 'SCHEDULE' && schedule.mode === 'NIGHT';
+  let reason: string | null = null;
+  if (executionAsReason) {
+    reason = execution;
+  } else if (isWaiting && wait) {
+    reason = taskWaitLabel(wait.reason);
+    if (scheduledWait) reason += ` · ${execution}`;
+  }
   return (
     <article className={styles.card} data-state={state}>
       <header>
@@ -448,7 +448,7 @@ function TaskCard({
               <dt>{t('运算')}</dt>
               <dd>{compute}</dd>
             </div>
-            {!reason?.includes(execution) && (
+            {!executionAsReason && !scheduledWait && (
               <div>
                 <dt>{t('执行')}</dt>
                 <dd>{execution}</dd>
