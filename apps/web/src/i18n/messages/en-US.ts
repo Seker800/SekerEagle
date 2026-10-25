@@ -1254,6 +1254,7 @@ export const enUS = {
   已选择: 'Selected',
   '已选择 {{value1}} 个标签': '{{value1}} Tags Selected',
   '已移动 {{value1}} 项素材{{value2}}': 'Moved {{value1}} assets to {{value2}}',
+  '已暂停 {{count}} 项': 'Paused: {{count}} steps',
   已暂停: 'Paused',
   '已重新排队 {{value1}} 个失败任务。': '{{value1}} Failed Tasks Requeued.',
   已自动保存: 'Auto-saved',

@@ -145,13 +145,17 @@ export function EagleTaskCenter({
       : null);
   const error = save.error ?? retry.error ?? policy.error ?? query.error;
   const total = cards.reduce(
-    (sum, { group }) => ({
-      running: sum.running + group.running,
-      queued: sum.queued + group.queued,
-      failed: sum.failed + group.failed,
-      approval: sum.approval + group.approval,
-    }),
-    { running: 0, queued: 0, failed: 0, approval: 0 },
+    (sum, { group, schedule }) => {
+      const paused = taskSection(group, schedule) === 'PAUSED';
+      return {
+        running: sum.running + group.running,
+        queued: sum.queued + (paused ? 0 : group.queued),
+        failed: sum.failed + (paused ? 0 : group.failed),
+        approval: sum.approval + group.approval,
+        paused: sum.paused + (paused ? group.queued + group.failed : 0),
+      };
+    },
+    { running: 0, queued: 0, failed: 0, approval: 0, paused: 0 },
   );
   return (
     <section className={styles.center} aria-label={t('任务中心')} tabIndex={0}>
@@ -190,6 +194,7 @@ export function EagleTaskCenter({
       {summary && !query.isPending && (
         <>
           <div className={styles.overview}>
+            {total.paused > 0 && <span>{t('已暂停 {{count}} 项', { count: total.paused })}</span>}
             <span>
               {t('剩余 {{count}} 项', {
                 count: (total?.queued ?? 0) + (total?.running ?? 0) + (total?.failed ?? 0),
