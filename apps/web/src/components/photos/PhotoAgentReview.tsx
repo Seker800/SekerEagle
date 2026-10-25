@@ -82,7 +82,7 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
         <IconShieldCheck size={21} aria-hidden />
         <div>
           <h2>{t('由 Agent 提议，由你决定')}</h2>
-          <p>{t('申请不会自动执行。只有你手动点击同意，才会补充位置、发送到素材或移入回收站。')}</p>
+          <p>{t('申请不会自动执行。你可以同意建议，也可以选中照片直接处理。')}</p>
         </div>
       </header>
       {!taskId && <PhotoAgentInstructions key={ownerId} ownerId={ownerId} />}
@@ -408,6 +408,7 @@ function RequestDetail({
           </button>
         </div>
       )}
+      {busy && batchTotal === 0 && <p role="status">{t('正在处理选中的照片…')}</p>}
       {manualMessage && <p role="status">{manualMessage}</p>}
       {busy && batchTotal > 0 && (
         <p role="status">
@@ -451,6 +452,10 @@ function RequestDetail({
               className={styles.photo}
               key={item.id}
               data-selected={selected.has(item.id)}
+              onClick={(event) => {
+                if (!(event.target as HTMLElement).closest('button,input,summary,details,a'))
+                  choose(item.id, event.ctrlKey || event.metaKey, event.shiftKey);
+              }}
               onContextMenu={(event) => {
                 event.preventDefault();
                 openMenu(item.id, event.clientX, event.clientY);

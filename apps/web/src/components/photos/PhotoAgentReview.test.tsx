@@ -299,3 +299,30 @@ it('supports multiselect manual actions independently from accepting the origina
   );
   expect(mocks.review).not.toHaveBeenCalled();
 });
+
+it('supports single click, modifier multi-select and shift ranges without executing actions', async () => {
+  await open();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.1' }));
+  expect(screen.getByRole('checkbox', { name: '选择 one' })).toBeChecked();
+  expect(screen.getByRole('checkbox', { name: '选择 two' })).not.toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.2' }), { ctrlKey: true });
+  expect(screen.getByRole('checkbox', { name: '选择 two' })).toBeChecked();
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.2' }));
+  fireEvent.click(screen.getByRole('button', { name: '选择照片 7.1' }), { shiftKey: true });
+  expect(screen.getByText('已选 2 / 2 张')).toBeInTheDocument();
+  expect(mocks.manual).not.toHaveBeenCalled();
+});
+it('never automatically retries manual sends and retains the operation identifier for an explicit retry', async () => {
+  mocks.manual
+    .mockRejectedValueOnce(new Error('发送失败'))
+    .mockResolvedValue({ affectedAssetCount: 2, action: 'SEND_TO_MATERIAL' });
+  await open();
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await screen.findByRole('alert');
+  expect(mocks.manual).toHaveBeenCalledTimes(1);
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await waitFor(() => expect(mocks.manual).toHaveBeenCalledTimes(2));
+  expect(mocks.manual.mock.calls[0][1].operationId).toBe(mocks.manual.mock.calls[1][1].operationId);
+});

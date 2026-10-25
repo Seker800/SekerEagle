@@ -439,6 +439,34 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
       },
     );
     assert.equal(response.status, 201, await response.text());
+    const current = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } });
+    const manualBody = {
+      operationId: randomUUID(),
+      action: 'DELETE',
+      items: [
+        {
+          suggestionId: p.id,
+          mediaRevision: current.mediaRevision,
+          rowVersion: current.rowVersion,
+        },
+      ],
+    };
+    for (const [origin, status] of [
+      ['http://untrusted.invalid', 403],
+      ['http://localhost:8180', 201],
+    ]) {
+      const manual = await fetch(`${base}/api/photos/agent/tasks/${t.id}/manual-action`, {
+        method: 'POST',
+        headers: {
+          cookie: `${ACCESS_COOKIE_NAME}=${session.accessToken}`,
+          'content-type': 'application/json',
+          origin,
+        },
+        body: JSON.stringify(manualBody),
+      });
+      assert.equal(manual.status, status, await manual.text());
+    }
+    assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt);
   } finally {
     await app.close();
   }
@@ -1123,8 +1151,7 @@ test('manual photo actions use current selected versions, preserve original advi
 });
 
 test('manual selection rejects mixed scopes, stale versions and changed retry actions before writing', async () => {
-  const f = await fixture(),
-    other = await fixture();
+  const f = await fixture();
   const t = await f.task('DELETE'),
     a = await f.proposal(t);
   const input = {
@@ -1275,9 +1302,26 @@ test('reference allocation is concurrent-safe and immutable, and paging never re
   await assert.rejects(f.service.detailByNumber(f.ownerId, 0, false), /无效/);
 });
 
-test('a failed original send can be superseded by an explicit manual deletion',async()=>{
- const f=await fixture(),task=await f.task('SEND_TO_MATERIAL'),suggestion=await f.proposal(task);
- await prisma.eaglePhotoAgentSuggestion.update({where:{id:suggestion.id},data:{status:'FAILED'}});
- await f.service.manualAction(f.ownerId,task.id,{operationId:randomUUID(),action:'DELETE',items:[{suggestionId:suggestion.id,mediaRevision:0,rowVersion:1}]},false);
- assert.equal((await f.service.detail(f.ownerId,task.id,false)).suggestions[0].status,'REJECTED');
+test('a failed original send can be superseded by an explicit manual deletion', async () => {
+  const f = await fixture(),
+    task = await f.task('SEND_TO_MATERIAL'),
+    suggestion = await f.proposal(task);
+  await prisma.eaglePhotoAgentSuggestion.update({
+    where: { id: suggestion.id },
+    data: { status: 'FAILED' },
+  });
+  await f.service.manualAction(
+    f.ownerId,
+    task.id,
+    {
+      operationId: randomUUID(),
+      action: 'DELETE',
+      items: [{ suggestionId: suggestion.id, mediaRevision: 0, rowVersion: 1 }],
+    },
+    false,
+  );
+  assert.equal(
+    (await f.service.detail(f.ownerId, task.id, false)).suggestions[0].status,
+    'REJECTED',
+  );
 });

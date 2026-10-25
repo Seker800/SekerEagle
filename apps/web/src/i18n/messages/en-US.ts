@@ -1,4 +1,8 @@
 export const enUS = {
+  '申请不会自动执行。你可以同意建议，也可以选中照片直接处理。':
+    'Requests never run automatically. Accept the suggestion or select photos to handle them directly.',
+  '正在处理选中的照片…': 'Processing selected photos…',
+
   '建议 {{value1}}': 'Suggestion {{value1}}',
   全选照片: 'Select all photos',
   '选择照片 {{value1}}': 'Select photo {{value1}}',
