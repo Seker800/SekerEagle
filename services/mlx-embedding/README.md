@@ -26,6 +26,17 @@ The authenticated surface is intentionally narrow: `/health/live`,
 bounded image/text embedding endpoints. Image bodies are streamed into a fixed
 20 MiB ceiling and URLs or host file paths are never accepted.
 
+## Bounded inference pipeline
+
+HTTP receipt and health checks run independently of inference. A dedicated worker
+thread serializes image decode, model loading and Metal inference; the existing
+runtime lock also protects idle unload. At most three authenticated image/text
+requests are admitted (including the streamed body); excess work returns 503 with
+Retry-After. Disconnects keep their reservation until compute actually finishes.
+The NAS worker can opt into `EAGLE_EMBEDDING_CONCURRENCY=2` to overlap image I/O
+with this single GPU lane. The default remains one; model, resolution and vector
+space are unchanged. API text search shares the same bounded host admission.
+
 ## License
 
 This component directly imports the GPLv3 `mlx-embeddings` package and is
