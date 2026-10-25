@@ -991,3 +991,40 @@ it('keeps phone save feedback short without placing a long output filename over 
   await waitFor(() => expect(open).toHaveBeenCalledWith('copy'));
   expect(screen.queryByText(/output-with-a-very-long-filename/)).not.toBeInTheDocument();
 });
+
+it('server recipe saving never loads or exports the original, and preserves full-size crop metadata', async () => {
+  const paths: string[] = [];
+  vi.stubGlobal(
+    'Image',
+    class {
+      naturalWidth = 800;
+      naturalHeight = 600;
+      onload: (() => void) | null = null;
+      set src(value: string) {
+        paths.push(value);
+        if (value) queueMicrotask(() => this.onload?.());
+      }
+    },
+  );
+  const onSaveRecipe = vi.fn().mockResolvedValue({ id: 'server-copy', name: 'copy.png' });
+  const onSave = vi.fn();
+  render(
+    <PhotoEditor
+      source="/original-forbidden.jpg"
+      previewSource="/thumbnail.webp"
+      sourceSize={{ width: 4000, height: 3000 }}
+      initialMetadata={{ camera: 'Test Camera' }}
+      name="photo.jpg"
+      onClose={vi.fn()}
+      onSave={onSave}
+      onSaveRecipe={onSaveRecipe}
+    />,
+  );
+  const button = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(onSaveRecipe).toHaveBeenCalledOnce());
+  expect(paths).not.toContain('/original-forbidden.jpg');
+  expect(onSave).not.toHaveBeenCalled();
+  expect(onSaveRecipe.mock.calls[0][0].edits.watermarkCamera).toBe('Test Camera');
+});

@@ -261,3 +261,11 @@ test('statistics remains a named photography extension and cannot replace common
     'shared-providers',
   );
 });
+
+test('rejects a browser-only pixel kernel replacing the shared server renderer', () => {
+  rejectsMutation(
+    'apps/web/src/components/media/photo-editor/photo-editor-photon.ts',
+    () => 'export function processPhotoPixels() { return new Uint8Array(); }',
+    'shared-photo-render',
+  );
+});

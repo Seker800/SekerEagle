@@ -8,7 +8,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --require ts-node/register --test src/**/*.test.ts",
     "start": "node dist/main.js",
-    "pretest": "npm --prefix ../.. run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/media-core && npm --prefix ../.. run build --workspace @sekereagle/library-persistence",
+    "pretest": "npm --prefix ../.. run build --workspace @sekereagle/library-core && npm --prefix ../.. run build --workspace @sekereagle/photo-render-core && npm run build --workspace @sekereagle/media-core && npm --prefix ../.. run build --workspace @sekereagle/library-persistence",
     "test:leases": "node --require ts-node/register --experimental-test-coverage --test-coverage-include=src/tag-build-lease.ts --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80 --test src/tag-build-lease.test.ts"
   },
   "dependencies": {
@@ -23,7 +23,8 @@
     "@sekereagle/library-core": "*",
     "@sekereagle/media-core": "*",
     "@sekereagle/library-persistence": "*",
-    "@sekereagle/eagle-filter-core": "*"
+    "@sekereagle/eagle-filter-core": "*",
+    "@sekereagle/photo-render-core": "*"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

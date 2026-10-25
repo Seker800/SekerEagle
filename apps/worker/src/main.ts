@@ -1,3 +1,4 @@
+import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
 import { runPhotoMapBuildStep } from './photo-map-build';
@@ -231,6 +232,10 @@ async function canClaimBackgroundForOwner(
 }
 
 async function processJob(job: EagleAssetProcessingJob): Promise<void> {
+  if (job.kind === 'RENDER_EDITED_COPY') {
+    await renderEditedCopy(prisma, storage, s3Bucket, job);
+    return;
+  }
   if (job.kind === 'PURGE_ASSET') {
     await purgeAsset(job);
     return;
@@ -1195,7 +1200,11 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
 
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const terminal = isPermanentMediaValidationError(error) || job.attempts >= 12;
+  const terminal =
+    isPermanentMediaValidationError(error) ||
+    (job.kind === 'RENDER_EDITED_COPY' &&
+      (message.startsWith('EDIT_SOURCE_') || job.attempts >= 3)) ||
+    job.attempts >= 12;
   const delaySeconds = Math.min(3_600, 2 ** Math.min(job.attempts, 12));
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({

@@ -337,6 +337,76 @@
         "tags": ["eagle"]
       }
     },
+    "/api/eagle/assets/{assetId}/edit-renders": {
+      "post": {
+        "operationId": "EagleController_createEditRender",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEditRenderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
+    "/api/eagle/assets/{assetId}/edit-renders/{jobId}": {
+      "get": {
+        "operationId": "EagleController_readEditRender",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle"]
+      }
+    },
     "/api/eagle/assets/{assetId}/edit-recipe": {
       "get": {
         "operationId": "EagleController_getEditRecipe",
@@ -3606,6 +3676,76 @@
                 }
               }
             }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/{assetId}/edit-renders": {
+      "post": {
+        "operationId": "PhotosController_createEditRender",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEditRenderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          }
+        ],
+        "tags": ["eagle", "photos"]
+      }
+    },
+    "/api/photos/assets/{assetId}/edit-renders/{jobId}": {
+      "get": {
+        "operationId": "PhotosController_readEditRender",
+        "parameters": [
+          {
+            "name": "assetId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
           }
         },
         "security": [
@@ -7408,6 +7548,27 @@
           }
         },
         "required": ["version", "images", "videos"]
+      },
+      "CreateEditRenderDto": {
+        "type": "object",
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "mediaRevision": {
+            "type": "number"
+          },
+          "rowVersion": {
+            "type": "number"
+          },
+          "recipe": {
+            "type": "object"
+          },
+          "lut": {
+            "type": "string"
+          }
+        },
+        "required": ["requestId", "mediaRevision", "rowVersion", "recipe"]
       },
       "SaveEagleEditRecipeDto": {
         "type": "object",

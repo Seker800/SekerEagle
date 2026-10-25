@@ -27,7 +27,8 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "typescript": "^5.9.3",
-    "vite": "^6.4.0"
+    "vite": "^6.4.0",
+    "@sekereagle/photo-render-core": "*"
   },
   "devDependencies": {
     "@napi-rs/canvas": "1.0.11",

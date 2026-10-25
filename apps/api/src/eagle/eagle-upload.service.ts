@@ -1,5 +1,6 @@
 import {
-  inheritedPrivacyTag,
+  editedCopyTag,
+  inheritEditedCopyDetails,
   preserveReplacementPrivacy,
   syncAssetPrivacy,
 } from '@sekereagle/library-persistence';
@@ -524,24 +525,7 @@ export class EagleUploadService {
           } else {
             const assetDisplayName = browserCapture?.displayName ?? displayName;
             const editedTag = copySource
-              ? await transaction.eagleManualTag.upsert({
-                  where: {
-                    ownerId_libraryMode_normalizedName: {
-                      ownerId: session.uploaderId,
-                      libraryMode: this.libraryMode,
-                      normalizedName: '已编辑',
-                    },
-                    libraryMode: this.libraryMode,
-                  },
-                  create: {
-                    ownerId: session.uploaderId,
-                    libraryMode: this.libraryMode,
-                    name: '已编辑',
-                    normalizedName: '已编辑',
-                  },
-                  update: {},
-                  select: { id: true, marksAssetsPrivate: true },
-                })
+              ? await editedCopyTag(transaction, session.uploaderId, this.libraryMode)
               : null;
             await transaction.eagleAsset.create({
               data: {
@@ -584,36 +568,14 @@ export class EagleUploadService {
                   },
                 });
               }
-              if (copySource.annotation)
-                await transaction.eagleAssetAnnotation.create({
-                  data: {
-                    ownerId: session.uploaderId,
-                    libraryMode: this.libraryMode,
-                    assetId,
-                    description: copySource.annotation.description,
-                    sourceUrl: copySource.annotation.sourceUrl,
-                  },
-                });
-              const tagIds = new Set(copySource.manualTagLinks.map((link) => link.tagId));
-              if (editedTag) tagIds.add(editedTag.id);
-              if (
-                copySource.isPrivate &&
-                !copySource.manualTagLinks.some((link) => link.tag.marksAssetsPrivate)
-              )
-                tagIds.add(
-                  await inheritedPrivacyTag(transaction, session.uploaderId, this.libraryMode),
-                );
-              if (tagIds.size)
-                await transaction.eagleAssetManualTag.createMany({
-                  data: [...tagIds].map((tagId) => ({
-                    ownerId: session.uploaderId,
-                    libraryMode: this.libraryMode,
-                    assetId,
-                    tagId,
-                    assignedByUser: true,
-                    assignmentProvenance: 'USER_ASSIGNED',
-                  })),
-                });
+              await inheritEditedCopyDetails(
+                transaction,
+                session.uploaderId,
+                this.libraryMode,
+                assetId,
+                copySource,
+                editedTag,
+              );
             }
             if (copySource && copySourceId) {
               await this.revisionObserver?.onEditedCopyCreated?.(

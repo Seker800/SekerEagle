@@ -1,3 +1,4 @@
+import { CreateEditRenderDto } from './eagle-edit-render';
 import { AssetTimelineDto, AssetTimelineResponseDto } from './eagle.dto';
 import { safeMediaResponse } from '../common/media-response';
 import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
@@ -89,6 +90,23 @@ export class EagleController {
     return this.mediaCapabilities.getCapabilities();
   }
 
+  @Post('assets/:assetId/edit-renders')
+  @UseGuards(BrowserOriginGuard)
+  createEditRender(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', ParseUUIDPipe) id: string,
+    @Body() input: CreateEditRenderDto,
+  ) {
+    return this.eagle.createEditRender(principal.sub, id, input, principal.canViewPrivate);
+  }
+  @Get('assets/:assetId/edit-renders/:jobId')
+  readEditRender(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('assetId', ParseUUIDPipe) id: string,
+    @Param('jobId', ParseUUIDPipe) jobId: string,
+  ) {
+    return this.eagle.readEditRender(principal.sub, id, jobId, principal.canViewPrivate);
+  }
   @Get('assets/:assetId/edit-recipe')
   getEditRecipe(
     @CurrentPrincipal() principal: AuthPrincipal,

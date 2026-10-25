@@ -1,3 +1,8 @@
+import { inheritedPrivacyTag } from './privacy-tag';
+export { inheritedPrivacyTag } from './privacy-tag';
+export * from './media-job-plan';
+export { editedCopyTag, inheritEditedCopyDetails } from './edited-copy';
+export { inheritPhotoEditedCopy } from './photo-edited-copy';
 import { Prisma, type LibraryMode } from '@prisma/client';
 export { backgroundScheduleSql } from './background-schedule';
 export { taskPolicyAllowsSql, taskPrioritySql, mediaTaskFamilySql } from './task-policy';
@@ -79,24 +84,6 @@ export async function syncAssetPrivacy(
     data: { isPrivate: true, rowVersion: { increment: 1 } },
   });
   return madePublic.count + madePrivate.count;
-}
-
-/** Explicit private label for derived/replaced content without copying biometric analysis. */
-export async function inheritedPrivacyTag(
-  transaction: Prisma.TransactionClient,
-  ownerId: string,
-  libraryMode: LibraryMode,
-) {
-  for (let suffix = 0; suffix < 100; suffix++) {
-    const name = suffix ? `继承私密 ${suffix + 1}` : '继承私密';
-    const tag = await transaction.eagleManualTag.upsert({
-      where: { ownerId_libraryMode_normalizedName: { ownerId, libraryMode, normalizedName: name } },
-      update: {},
-      create: { ownerId, libraryMode, name, normalizedName: name, marksAssetsPrivate: true },
-    });
-    if (tag.marksAssetsPrivate) return tag.id;
-  }
-  throw new Error('无法创建继承私密标签，请调整同名标签后重试。');
 }
 
 interface ReplacementPrivacyAsset {

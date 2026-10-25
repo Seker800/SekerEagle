@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PhotoEditor } from '../components/media/photo-editor/PhotoEditor';
 import { eaglePhotoWatermarkMetadata } from '../components/eagle/EaglePhotoEditing';
 import type { EagleAssetListItem } from '../lib/eagle-api';
@@ -9,6 +9,13 @@ type Source = { asset: EagleAssetListItem; edits?: PhotoEdits };
 
 /** The native bridge owns transport; this surface owns loading, retry and the shared editor. */
 export function NativeEditorApp({ request }: { request: Request }) {
+  const activeSave = useRef(true);
+  useEffect(() => {
+    activeSave.current = true;
+    return () => {
+      activeSave.current = false;
+    };
+  }, []);
   const [source, setSource] = useState<Source>();
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -45,6 +52,10 @@ export function NativeEditorApp({ request }: { request: Request }) {
       presentation="native"
       initialTab="watermark"
       source="/source"
+      previewSource="/source"
+      sourceSize={
+        asset.width && asset.height ? { width: asset.width, height: asset.height } : undefined
+      }
       name={asset.displayName || asset.originalName}
       initialMetadata={eaglePhotoWatermarkMetadata(asset)}
       initialEdits={edits}
@@ -53,13 +64,25 @@ export function NativeEditorApp({ request }: { request: Request }) {
       onOpenSaved={async () => {
         await request('showSaved');
       }}
-      onSave={async (file, recipe) => {
-        await request('begin', { name: file.name, size: file.size, recipe });
-        for (let offset = 0; offset < file.size; offset += 48 * 1024) {
-          const bytes = new Uint8Array(await file.slice(offset, offset + 48 * 1024).arrayBuffer());
-          await request('chunk', { offset, data: btoa(String.fromCharCode(...bytes)) });
+      onSaveRecipe={async (recipe, lut) => {
+        await request('lutBegin', { size: lut?.length ?? 0 });
+        if (lut)
+          for (let offset = 0; offset < lut.length; offset += 48 * 1024) {
+            await request('lutChunk', { offset, data: lut.slice(offset, offset + 48 * 1024) });
+          }
+        await request('saveRecipe', { recipe });
+        while (activeSave.current) {
+          const result = await request<{
+            status: string;
+            message?: string;
+            asset?: { id: string; name: string };
+          }>('saveStatus');
+          if (result.status === 'COMPLETED' && result.asset) return result.asset;
+          if (result.status === 'FAILED')
+            throw new Error(result.message || t('照片保存失败，请重试。'));
+          await new Promise((resolve) => window.setTimeout(resolve, 1500));
         }
-        return request<{ id: string; name: string }>('save');
+        throw new Error(t('编辑会话已失效，请重新打开。'));
       }}
     />
   );

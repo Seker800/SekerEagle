@@ -260,6 +260,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/assets/{assetId}/edit-renders': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleController_createEditRender'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/assets/{assetId}/edit-renders/{jobId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleController_readEditRender'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/assets/{assetId}/edit-recipe': {
     parameters: {
       query?: never;
@@ -1596,6 +1628,38 @@ export interface paths {
       cookie?: never;
     };
     get: operations['PhotosController_getMediaCapabilities'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/edit-renders': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotosController_createEditRender'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/assets/{assetId}/edit-renders/{jobId}': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotosController_readEditRender'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3303,6 +3367,13 @@ export interface components {
       images: components['schemas']['EagleImageMediaCapabilityDto'];
       videos: components['schemas']['EagleVideoMediaCapabilityDto'];
     };
+    CreateEditRenderDto: {
+      requestId: string;
+      mediaRevision: number;
+      rowVersion: number;
+      recipe: Record<string, never>;
+      lut?: string;
+    };
     SaveEagleEditRecipeDto: {
       mediaRevision: number;
       recipe: Record<string, never>;
@@ -3923,6 +3994,49 @@ export interface operations {
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
         };
+      };
+    };
+  };
+  EagleController_createEditRender: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEditRenderDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleController_readEditRender: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+        jobId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };
@@ -6050,6 +6164,49 @@ export interface operations {
         content: {
           'application/json': components['schemas']['EagleMediaCapabilitiesDto'];
         };
+      };
+    };
+  };
+  PhotosController_createEditRender: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['CreateEditRenderDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotosController_readEditRender: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        assetId: string;
+        jobId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

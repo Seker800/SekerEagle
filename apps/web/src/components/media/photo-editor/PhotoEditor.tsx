@@ -1,3 +1,5 @@
+import { writePortableLut } from '@sekereagle/photo-render-core/portable-lut';
+import { loadPhotoLut } from './photo-lut-storage';
 import { useCompactLayout } from '../../../hooks/useCompactLayout';
 import { loadEditablePhoto, renderEditedPhotoFile } from './photo-editor-export';
 import type { PhotoEditRecipe } from '@sekereagle/library-core';
@@ -56,6 +58,7 @@ export function PhotoEditor({
   name,
   onClose,
   onSave,
+  onSaveRecipe,
   initialMetadata,
   initialEdits,
   onDraftChange,
@@ -74,7 +77,8 @@ export function PhotoEditor({
   onCopyEdits?: (recipe: PhotoEditRecipe) => void;
   onOpenSaved?: (assetId: string) => Promise<void>;
   onClose: () => void;
-  onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
+  onSaveRecipe?: (recipe: PhotoEditRecipe, lut?: string) => Promise<SavedPhoto>;
+  onSave?: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
 }) {
   const compactLayout = useCompactLayout();
   const compact = presentation === 'native' || compactLayout;
@@ -427,6 +431,26 @@ export function PhotoEditor({
     setBusy(true);
     setError('');
     try {
+      if (onSaveRecipe) {
+        const recipe: PhotoEditRecipe = {
+          version: 1,
+          edits: {
+            ...edits,
+            watermarkCamera: edits.watermarkCamera ?? metadata.camera ?? null,
+            watermarkParameters: edits.watermarkParameters ?? metadata.parameters ?? null,
+            watermarkCapturedAt: edits.watermarkCapturedAt ?? metadata.capturedAt ?? null,
+          },
+        };
+        const lut = edits.filter.startsWith('lut:')
+          ? writePortableLut(await loadPhotoLut(edits.filter.slice(4)))
+          : undefined;
+        const result = await onSaveRecipe(recipe, lut);
+        setSavedName(result.name);
+        setSavedId(result.id);
+        setSaved(true);
+        return;
+      }
+      if (!onSave) throw new Error('PHOTO_SAVE_UNAVAILABLE');
       const saveKey = JSON.stringify({ source, edits, metadata });
       let file = pendingSaveRef.current?.key === saveKey ? pendingSaveRef.current.file : undefined;
       if (!file) {
@@ -456,7 +480,11 @@ export function PhotoEditor({
         setSourceConflict(true);
         setError(t('原照片或保存条件已变化，请关闭后重新打开编辑器。'));
       } else {
-        setError(cause instanceof ApiError ? cause.message : t('照片保存失败，请重试。'));
+        setError(
+          cause instanceof ApiError || (onSaveRecipe && cause instanceof Error)
+            ? cause.message
+            : t('照片保存失败，请重试。'),
+        );
       }
     } finally {
       setBusy(false);

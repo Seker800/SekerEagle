@@ -127,3 +127,15 @@ for (const [name, before, after] of [
     copy.set(path, copy.get(path).replace(before, after));
     assert.throws(() => assertNativeBoundary(copy));
   });
+
+for (const forbidden of [
+  'repo.original(context, mode, asset, cancellation)',
+  'NativeUploadApi(session)',
+]) {
+  test(`editor cannot regress to original/download-upload pipeline: ${forbidden}`, () => {
+    const mutated = new Map(files);
+    const path = 'app/src/main/kotlin/com/sekereagle/android/NativeEditorSession.kt';
+    mutated.set(path, mutated.get(path) + '\n' + forbidden);
+    assert.throws(() => assertNativeBoundary(mutated), /server recipe saves/);
+  });
+}

@@ -41,13 +41,25 @@ it('offers retry after an interrupted open and starts the shared native editor a
   expect(request).toHaveBeenCalledTimes(2);
 });
 it('submits only recipe parameters and waits for server publication without sending photo bytes', async () => {
-  const request = vi.fn().mockImplementation(async (action: string) => action === 'open' ? { asset: { originalName: 'photo.jpg' } } : action === 'saveStatus' ? {status:'COMPLETED',asset:{id:'copy',name:'copy.png'}} : {});
+  const request = vi
+    .fn()
+    .mockImplementation(async (action: string) =>
+      action === 'open'
+        ? { asset: { originalName: 'photo.jpg' } }
+        : action === 'saveStatus'
+          ? { status: 'COMPLETED', asset: { id: 'copy', name: 'copy.png' } }
+          : {},
+    );
   render(<NativeEditorApp request={request} />);
   await screen.findByText('editor:watermark:native:photo.jpg');
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(request).toHaveBeenCalledWith('saveStatus'));
-  expect(request).toHaveBeenCalledWith('saveRecipe', {recipe:{version:1,edits:DEFAULT_PHOTO_EDITS}});
-  expect(request.mock.calls.some(([action]) => ['begin','chunk','save'].includes(action))).toBe(false);
+  expect(request).toHaveBeenCalledWith('saveRecipe', {
+    recipe: { version: 1, edits: DEFAULT_PHOTO_EDITS },
+  });
+  expect(
+    request.mock.calls.some(([action]) => ['begin', 'chunk', 'save'].includes(String(action))),
+  ).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
   fireEvent.click(screen.getByRole('button', { name: 'View' }));
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));

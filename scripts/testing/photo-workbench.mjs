@@ -1,3 +1,4 @@
+import { verifyServerEdits } from './server-edits-acceptance.mjs';
 import { URLSearchParams } from 'node:url';
 import { serveMapArchive } from '../maps/serve-map-archive.mjs';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
@@ -1269,6 +1270,17 @@ try {
       'Task center HTTP acceptance passed: ordinary owner, Origin, strict DTOs and immutable mode scope.',
     );
   }
+  if (process.env.PHOTO_WORKBENCH_SERVER_EDITS === '1')
+    await verifyServerEdits({
+      api,
+      upload,
+      db,
+      storage: s3,
+      bucket: storageBucket,
+      origin,
+      accessToken,
+      ownerId: owner.id,
+    });
   if (basic) {
     console.log(
       'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',

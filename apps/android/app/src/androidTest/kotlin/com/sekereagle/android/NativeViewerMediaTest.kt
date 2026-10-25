@@ -42,6 +42,7 @@ class NativeViewerMediaTest {
         @Volatile var drops = 0
         @Volatile var revisionAfterDrop = false
         @Volatile var originalStatus = 200
+        @Volatile var previewVariant = "browse"
 
         fun metadata() =
             JSONObject()
@@ -54,7 +55,23 @@ class NativeViewerMediaTest {
                 .put("mediaRevision", revision)
                 .put("mimeType", "image/png")
                 .put("byteSize", png.size)
-                .put("renditions", org.json.JSONArray())
+                .put(
+                    "renditions",
+                    org.json
+                        .JSONArray()
+                        .put(
+                            JSONObject()
+                                .put("id", "browse")
+                                .put("revision", revision)
+                                .put("kind", "PREVIEW")
+                                .put("variant", previewVariant)
+                                .put("status", "READY")
+                                .put("mimeType", "image/png")
+                                .put("byteSize", png.size)
+                                .put("width", 100)
+                                .put("height", 80)
+                        ),
+                )
                 .put("chronologicalAt", "2026-10-20T12:00:00Z")
                 .put(
                     "photoMetadata",
@@ -96,11 +113,19 @@ class NativeViewerMediaTest {
                             if (method != "GET") writes.add("$method $path ${String(body)}")
                             val payload =
                                 when {
-                                    path.endsWith("/original") -> png
+                                    path.endsWith("/original") || path.contains("/renditions/") ->
+                                        png
                                     path.endsWith("/edit-recipe") ->
                                         "{\"entry\":null}".toByteArray()
                                     path.endsWith("/assets/source") ->
                                         metadata().toString().toByteArray()
+                                    path.endsWith("/edit-renders") ->
+                                        "{\"id\":\"render-job\"}".toByteArray()
+                                    path.endsWith("/edit-renders/render-job") -> {
+                                        complete = true
+                                        "{\"status\":\"COMPLETED\",\"asset\":{\"id\":\"saved\",\"name\":\"saved.png\"}}"
+                                            .toByteArray()
+                                    }
                                     path.endsWith("/parts/1") ->
                                         "{\"uploadUrl\":\"$origin/sekereagle-assets/synthetic?X-Amz-Signature=abc\"}"
                                             .toByteArray()
@@ -119,13 +144,18 @@ class NativeViewerMediaTest {
                                     else -> "{}".toByteArray()
                                 }
                             val type =
-                                if (path.endsWith("/original")) "image/png" else "application/json"
+                                if (path.endsWith("/original") || path.contains("/renditions/"))
+                                    "image/png"
+                                else "application/json"
                             val output = client.getOutputStream()
                             output.write(
                                 "HTTP/1.1 ${if (path.endsWith("/original")) originalStatus else 200} Result\r\nContent-Type: $type\r\nContent-Length: ${payload.size}\r\nETag: fixture\r\nConnection: close\r\n\r\n"
                                     .toByteArray()
                             )
-                            if (path.endsWith("/original") && drops > 0) {
+                            if (
+                                (path.endsWith("/original") || path.contains("/renditions/")) &&
+                                    drops > 0
+                            ) {
                                 drops--
                                 if (revisionAfterDrop) revision++
                                 output.write(payload, 0, payload.size / 2)
@@ -168,7 +198,8 @@ class NativeViewerMediaTest {
                 .use { editor ->
                     editor.request("open", JSONObject())
                     assertArrayEquals(f.png, editor.source().file.readBytes())
-                    assertEquals(3, f.paths.count { it.endsWith("/original") })
+                    assertEquals(3, f.paths.count { it.contains("/renditions/") })
+                    assertFalse(f.paths.any { it.endsWith("/original") })
                     assertTrue(f.writes.isEmpty())
                 }
         }
@@ -190,10 +221,39 @@ class NativeViewerMediaTest {
                         editor.request("open", JSONObject())
                         fail("Incomplete source must fail")
                     } catch (_: java.io.IOException) {}
-                    assertEquals(3, f.paths.count { it.endsWith("/original") })
+                    assertEquals(3, f.paths.count { it.contains("/renditions/") })
+                    assertFalse(f.paths.any { it.endsWith("/original") })
                     f.drops = 0
                     editor.request("open", JSONObject())
                     assertArrayEquals(f.png, editor.source().file.readBytes())
+                }
+        }
+    }
+
+    @Test
+    fun editorNeverFallsBackToAnOriginalOrFullEditRendition() {
+        Fixture().use { f ->
+            f.previewVariant = "edit"
+            val repo = repo(f)
+            NativeEditorSession(
+                    app,
+                    repo,
+                    GalleryMode.PHOTO,
+                    repo.parse(f.metadata(), GalleryMode.PHOTO),
+                )
+                .use { editor ->
+                    try {
+                        editor.request("open", JSONObject())
+                        fail("Browsing preview is required")
+                    } catch (_: java.io.IOException) {}
+                    assertFalse(
+                        f.paths.any {
+                            it.endsWith("/original") ||
+                                it.contains("/renditions/") ||
+                                it.contains("/uploads")
+                        }
+                    )
+                    assertTrue(f.writes.isEmpty())
                 }
         }
     }
@@ -278,39 +338,33 @@ class NativeViewerMediaTest {
                     assertEquals(f.png.size.toLong(), editor.source().file.length())
                     val recipe = JSONObject("{\"version\":1,\"edits\":{}}")
                     editor.request("draft", JSONObject().put("recipe", recipe))
-                    editor.request(
-                        "begin",
-                        JSONObject()
-                            .put("name", "edited.png")
-                            .put("size", f.png.size)
-                            .put("recipe", recipe),
+                    editor.request("saveRecipe", JSONObject().put("recipe", recipe))
+                    val result = editor.request("saveStatus", JSONObject()) as JSONObject
+                    assertEquals("saved", result.getJSONObject("asset").getString("id"))
+                    editor.request("saveRecipe", JSONObject().put("recipe", recipe))
+                    val requests =
+                        f.writes.filter {
+                            it.startsWith("POST /api/eagle/assets/source/edit-renders ")
+                        }
+                    assertEquals(2, requests.size)
+                    assertEquals(
+                        JSONObject(requests[0].substringAfter("edit-renders "))
+                            .getString("requestId"),
+                        JSONObject(requests[1].substringAfter("edit-renders "))
+                            .getString("requestId"),
                     )
-                    editor.request(
-                        "chunk",
-                        JSONObject()
-                            .put("offset", 0)
-                            .put(
-                                "data",
-                                android.util.Base64.encodeToString(
-                                    f.png,
-                                    android.util.Base64.NO_WRAP,
-                                ),
-                            ),
-                    )
-                    val result = editor.request("save", JSONObject()) as JSONObject
-                    assertEquals("saved", result.getString("id"))
-                    editor.request("save", JSONObject())
-                    assertEquals(1, f.writes.count { it.startsWith("POST /api/eagle/uploads ") })
-                    val declaration = f.writes.single { it.startsWith("POST /api/eagle/uploads ") }
-                    assertTrue(declaration.contains("CREATE_COPY"))
-                    assertTrue(declaration.contains("copySourceRowVersion\":3"))
+                    assertTrue(requests[0].contains("rowVersion\":3"))
+                    assertFalse(f.paths.any { it.endsWith("/original") || it.contains("/uploads") })
                     assertFalse(f.paths.any { it.startsWith("/api/photos") })
                     try {
                         editor.request("/api/auth/me", JSONObject())
                         fail("Arbitrary API must be rejected")
                     } catch (_: java.io.IOException) {}
                     try {
-                        editor.request("chunk", JSONObject().put("offset", 0).put("data", "YQ=="))
+                        editor.request(
+                            "lutChunk",
+                            JSONObject().put("offset", 1).put("data", "YQ=="),
+                        )
                         fail("Out of order chunk must be rejected")
                     } catch (_: IllegalArgumentException) {}
                 }
@@ -438,7 +492,11 @@ class NativeViewerMediaTest {
                 println("EDITOR SAVE PATHS: " + f.paths)
                 throw error
             }
-            assertEquals(1, f.writes.count { it.startsWith("POST /api/photos/uploads ") })
+            assertEquals(
+                1,
+                f.writes.count { it.startsWith("POST /api/photos/assets/source/edit-renders ") },
+            )
+            assertFalse(f.paths.any { it.endsWith("/original") || it.contains("/uploads") })
             js("fetch('https://forbidden.example.invalid/private').catch(()=>undefined)")
             assertFalse(f.paths.any { it.contains("private") })
             compose.waitUntil(10000) {

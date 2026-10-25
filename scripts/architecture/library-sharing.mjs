@@ -18,6 +18,7 @@ export function readLibrarySources(root) {
     'apps/api/src/eagle',
     'apps/api/src/photos',
     'packages/library-core/src',
+    'packages/photo-render-core/src',
   ]) {
     visit(join(root, directory));
   }
@@ -153,6 +154,31 @@ function modeGuarded(node) {
 export function checkLibrarySharing(sources) {
   const errors = [];
   const report = (file, rule, message) => errors.push({ file, rule, message });
+  // Browser adapters cannot grow a second pixel/crop/watermark implementation.
+  for (const name of [
+    'photo-editor-photon',
+    'photo-editor-tone',
+    'photo-editor-detail',
+    'photo-editor-watermark',
+    'photo-editor-model',
+    'photo-editor-color-mixer',
+    'photo-editor-denoise',
+    'photo-editor-dehaze',
+  ]) {
+    const file = `apps/web/src/components/media/photo-editor/${name}.ts`;
+    const source = sources.get(file) ?? '';
+    const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+    if (
+      tree.statements.length !== 1 ||
+      !ts.isExportDeclaration(tree.statements[0]) ||
+      tree.statements[0].moduleSpecifier?.text !== `@sekereagle/photo-render-core/${name}`
+    )
+      report(
+        file,
+        'shared-photo-render',
+        'Browser and server must use the canonical photo-render-core implementation.',
+      );
+  }
   const trees = new Map();
   for (const file of [
     ...Object.keys(composition),

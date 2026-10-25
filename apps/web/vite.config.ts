@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@sekereagle/photo-render-core': fileURLToPath(
+        new URL('../../packages/photo-render-core/src', import.meta.url),
+      ),
       '@sekereagle/library-core': fileURLToPath(
         new URL('../../packages/library-core/src/index.ts', import.meta.url),
       ),

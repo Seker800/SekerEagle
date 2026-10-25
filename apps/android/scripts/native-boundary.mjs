@@ -35,6 +35,14 @@ export function assertNativeBoundary(files) {
     if (/Native(?:Photo|Material)(?:Repository|Viewer|Gallery)/.test(source))
       throw new Error('Both modes must use the shared native gallery implementation.');
   }
+  const editor =
+    files.get('app/src/main/kotlin/com/sekereagle/android/NativeEditorSession.kt') ?? '';
+  if (
+    /repo\.original\(|NativeUploadApi|"begin"\s*->|"chunk"\s*->/.test(editor) ||
+    !editor.includes('repo.editorPreview(') ||
+    !editor.includes('/edit-renders')
+  )
+    throw new Error('Editor must use browsing previews and server recipe saves only.');
   const model =
     files.get('app/src/main/kotlin/com/sekereagle/android/NativeGalleryViewModel.kt') ?? '';
   const screen =

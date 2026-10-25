@@ -1,3 +1,4 @@
+import { createEditRender, readEditRender, CreateEditRenderDto } from './eagle-edit-render';
 import { readSmartFolderPage } from './eagle-smart-folder-page';
 import { encodeImageSearchCursor, decodeImageSearchCursor } from './eagle-search-cursor';
 import { rankSmartFolderMatches } from './eagle-smart-folder-ranking';
@@ -154,6 +155,17 @@ export class EagleService {
     @Optional() @Inject(LIBRARY_MODE) private readonly libraryMode: LibraryMode = 'MATERIAL',
   ) {}
 
+  createEditRender(
+    ownerId: string,
+    assetId: string,
+    input: CreateEditRenderDto,
+    includePrivate = false,
+  ) {
+    return createEditRender(this.prisma, ownerId, this.libraryMode, assetId, input, includePrivate);
+  }
+  readEditRender(ownerId: string, assetId: string, id: string, includePrivate = false) {
+    return readEditRender(this.prisma, ownerId, this.libraryMode, assetId, id, includePrivate);
+  }
   getEditRecipe(ownerId: string, assetId: string, includePrivate = false) {
     return readEagleEditRecipe(this.prisma, ownerId, this.libraryMode, assetId, includePrivate);
   }

@@ -6,6 +6,7 @@ COPY apps/api/package.json apps/api/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/web/package.json apps/web/package.json
 COPY packages/library-core/package.json packages/library-core/package.json
+COPY packages/photo-render-core/package.json packages/photo-render-core/package.json
 COPY packages/library-persistence/package.json packages/library-persistence/package.json
 COPY packages/media-core/package.json packages/media-core/package.json
 COPY packages/config/package.json packages/config/package.json
@@ -15,12 +16,13 @@ COPY packages/vector-core/package.json packages/vector-core/package.json
 RUN npm install --global npm@10.9.4 && npm ci
 COPY apps/api apps/api
 COPY packages/library-core packages/library-core
+COPY packages/photo-render-core packages/photo-render-core
 COPY packages/library-persistence packages/library-persistence
 COPY packages/media-core packages/media-core
 COPY packages/config packages/config
 COPY packages/eagle-filter-core packages/eagle-filter-core
 COPY packages/vector-core packages/vector-core
-RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api
+RUN npm run db:generate && npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/photo-render-core && npm run build --workspace @sekereagle/library-persistence && npm run build --workspace @sekereagle/media-core && npm run build --workspace @sekereagle/config && npm run build --workspace @sekereagle/eagle-filter-core && npm run build --workspace @sekereagle/vector-core && npm run build --workspace @sekereagle/api
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && printf '%s\n' 'deb https://deb.debian.org/debian bookworm-backports main' > /etc/apt/sources.list.d/sekereagle-media.list && apt-get update && apt-get install -y --no-install-recommends ffmpeg python3 python3-venv libimage-exiftool-perl openssl && apt-get install -y --no-install-recommends -t bookworm-backports libheif-examples libheif-plugin-libde265 && rm -rf /var/lib/apt/lists/*
@@ -33,6 +35,7 @@ COPY --from=build /sekereagle/node_modules ./node_modules
 COPY --from=build /sekereagle/apps/api ./apps/api
 COPY --from=build /sekereagle/packages/config ./packages/config
 COPY --from=build /sekereagle/packages/library-core ./packages/library-core
+COPY --from=build /sekereagle/packages/photo-render-core ./packages/photo-render-core
 COPY --from=build /sekereagle/packages/library-persistence ./packages/library-persistence
 COPY --from=build /sekereagle/packages/media-core ./packages/media-core
 COPY --from=build /sekereagle/packages/eagle-filter-core ./packages/eagle-filter-core

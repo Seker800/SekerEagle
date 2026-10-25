@@ -63,6 +63,7 @@ enum EagleAiTagStatus {
 }
 
 enum EagleMediaJobKind {
+  RENDER_EDITED_COPY
   ANALYZE_PHOTO_FACES
   GENERATE_RENDITIONS
   GENERATE_THUMBNAIL
@@ -373,6 +374,7 @@ model EagleAsset {
   aiTagLinks                     EagleAssetAiTag[]
   aiAnalysisRuns                 EagleAiAnalysisRun[]
   processingJobs                 EagleAssetProcessingJob[]
+  editRenderResults              EagleEditRender[]
   imagePyramids                  EagleImagePyramid[]
   colorAnalyses                  EagleAssetColorAnalysis[]
   uploadSessions                 UploadSession[]
@@ -1174,6 +1176,7 @@ model EagleAssetProcessingJob {
   asset            EagleAsset                @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   dependsOnJob     EagleAssetProcessingJob?  @relation("EagleMediaJobDependency", fields: [ownerId, libraryMode, dependsOnJobId], references: [ownerId, libraryMode, id], onDelete: SetNull)
   dependentJobs    EagleAssetProcessingJob[] @relation("EagleMediaJobDependency")
+  editRender       EagleEditRender?
 
   @@unique([assetId, kind, assetRevision, processorVersion])
   @@unique([ownerId, libraryMode, id])
@@ -1609,4 +1612,19 @@ model EaglePhotoMapCell {
 
   @@id([ownerId, libraryMode, snapshotId, includePrivate, level, x, y])
   @@index([ownerId, libraryMode, snapshotId, includePrivate, level, y, x], map: "EaglePhotoMapCell_snapshot_position_idx")
+}
+
+model EagleEditRender {
+  jobId String @id
+  ownerId String
+  libraryMode LibraryMode
+  requestId String
+  sourceRowVersion Int
+  recipe Json
+  lut String?
+  resultAssetId String?
+  job EagleAssetProcessingJob @relation(fields: [ownerId, libraryMode, jobId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  result EagleAsset? @relation(fields: [ownerId, libraryMode, resultAssetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  @@unique([ownerId, libraryMode, requestId])
+  @@unique([ownerId, libraryMode, jobId])
 }

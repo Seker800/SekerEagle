@@ -124,11 +124,29 @@ test('status reads scope both source and result and never expose raw failure/obj
   assert.ok(!JSON.stringify(status).includes('secret'));
 });
 
-test('idempotency compares canonical intent independently of JSON field order', async()=>{
-  let existing: {jobId:string;job:{processorVersion:string}} | null=null;
-  const tx={ $queryRaw:async()=>[],eagleAsset:{findFirst:async()=>({mimeType:'image/jpeg',mediaRevision:1,rowVersion:3})},eagleEditRender:{findUnique:async()=>existing},eagleAssetProcessingJob:{create:async({data}:{data:{id:string;processorVersion:string}})=>{existing={jobId:data.id,job:{processorVersion:data.processorVersion}};}}};
-  const db={$transaction:async(run:(client:unknown)=>Promise<unknown>)=>run(tx)} as unknown as PrismaService;
-  const first=await createEditRender(db,'owner','PHOTO','source',input,false);
-  const reordered={recipe:input.recipe,rowVersion:input.rowVersion,mediaRevision:input.mediaRevision,requestId:input.requestId};
-  assert.deepEqual(await createEditRender(db,'owner','PHOTO','source',reordered,false),first);
+test('idempotency compares canonical intent independently of JSON field order', async () => {
+  let existing: { jobId: string; job: { processorVersion: string } } | null = null;
+  const tx = {
+    $queryRaw: async () => [],
+    eagleAsset: {
+      findFirst: async () => ({ mimeType: 'image/jpeg', mediaRevision: 1, rowVersion: 3 }),
+    },
+    eagleEditRender: { findUnique: async () => existing },
+    eagleAssetProcessingJob: {
+      create: async ({ data }: { data: { id: string; processorVersion: string } }) => {
+        existing = { jobId: data.id, job: { processorVersion: data.processorVersion } };
+      },
+    },
+  };
+  const db = {
+    $transaction: async (run: (client: unknown) => Promise<unknown>) => run(tx),
+  } as unknown as PrismaService;
+  const first = await createEditRender(db, 'owner', 'PHOTO', 'source', input, false);
+  const reordered = {
+    recipe: input.recipe,
+    rowVersion: input.rowVersion,
+    mediaRevision: input.mediaRevision,
+    requestId: input.requestId,
+  };
+  assert.deepEqual(await createEditRender(db, 'owner', 'PHOTO', 'source', reordered, false), first);
 });

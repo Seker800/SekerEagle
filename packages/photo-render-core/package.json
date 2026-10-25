@@ -1,0 +1,117 @@
+{
+  "name": "@sekereagle/photo-render-core",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server-render.d.ts",
+      "default": "./dist/server-render.js"
+    },
+    "./photo-editor-model": {
+      "types": "./dist/photo-editor-model.d.ts",
+      "default": "./dist/photo-editor-model.js"
+    },
+    "./photo-editor-advanced-model": {
+      "types": "./dist/photo-editor-advanced-model.d.ts",
+      "default": "./dist/photo-editor-advanced-model.js"
+    },
+    "./photo-editor-tone": {
+      "types": "./dist/photo-editor-tone.d.ts",
+      "default": "./dist/photo-editor-tone.js"
+    },
+    "./photo-editor-extended-tone": {
+      "types": "./dist/photo-editor-extended-tone.d.ts",
+      "default": "./dist/photo-editor-extended-tone.js"
+    },
+    "./photo-editor-detail": {
+      "types": "./dist/photo-editor-detail.d.ts",
+      "default": "./dist/photo-editor-detail.js"
+    },
+    "./photo-editor-color-mixer": {
+      "types": "./dist/photo-editor-color-mixer.d.ts",
+      "default": "./dist/photo-editor-color-mixer.js"
+    },
+    "./photo-editor-denoise": {
+      "types": "./dist/photo-editor-denoise.d.ts",
+      "default": "./dist/photo-editor-denoise.js"
+    },
+    "./photo-editor-dehaze": {
+      "types": "./dist/photo-editor-dehaze.d.ts",
+      "default": "./dist/photo-editor-dehaze.js"
+    },
+    "./photo-editor-photon": {
+      "types": "./dist/photo-editor-photon.d.ts",
+      "default": "./dist/photo-editor-photon.js"
+    },
+    "./photo-lut": {
+      "types": "./dist/photo-lut.d.ts",
+      "default": "./dist/photo-lut.js"
+    },
+    "./photo-watermark-model": {
+      "types": "./dist/photo-watermark-model.d.ts",
+      "default": "./dist/photo-watermark-model.js"
+    },
+    "./photo-watermark-background": {
+      "types": "./dist/photo-watermark-background.d.ts",
+      "default": "./dist/photo-watermark-background.js"
+    },
+    "./photo-watermark-drawing": {
+      "types": "./dist/photo-watermark-drawing.d.ts",
+      "default": "./dist/photo-watermark-drawing.js"
+    },
+    "./photo-watermark-layouts": {
+      "types": "./dist/photo-watermark-layouts.d.ts",
+      "default": "./dist/photo-watermark-layouts.js"
+    },
+    "./photo-editor-watermark": {
+      "types": "./dist/photo-editor-watermark.d.ts",
+      "default": "./dist/photo-editor-watermark.js"
+    },
+    "./photo-editor-limits": {
+      "types": "./dist/photo-editor-limits.d.ts",
+      "default": "./dist/photo-editor-limits.js"
+    },
+    "./photo-editor-geometry": {
+      "types": "./dist/photo-editor-geometry.d.ts",
+      "default": "./dist/photo-editor-geometry.js"
+    },
+    "./portable-lut": {
+      "types": "./dist/portable-lut.d.ts",
+      "default": "./dist/portable-lut.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --require ts-node/register --test src/*.test.ts",
+    "pretest": "npm run build --workspace @sekereagle/library-core"
+  },
+  "dependencies": {
+    "@sekereagle/library-core": "*",
+    "@silvia-odwyer/photon": "0.3.3",
+    "@napi-rs/canvas": "1.0.11",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "ts-node": "^10.9.2",
+    "@types/node": "^22.10.2"
+  },
+  "typesVersions": {
+    "*": {
+      "server": [
+        "dist/server-render.d.ts"
+      ],
+      "*": [
+        "dist/*"
+      ]
+    }
+  }
+}

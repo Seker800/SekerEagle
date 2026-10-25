@@ -6,6 +6,7 @@ import {
 } from '@sekereagle/library-core';
 export type EagleBackgroundProcessingMode = 'ALWAYS' | 'NIGHT' | 'MANUAL';
 export type EagleMediaJobKind =
+  | 'RENDER_EDITED_COPY'
   | 'GENERATE_RENDITIONS'
   | 'GENERATE_THUMBNAIL'
   | 'GENERATE_PREVIEW'
@@ -31,6 +32,7 @@ export interface ClaimedEagleMediaJob {
 }
 
 const LANE_BY_KIND: Record<EagleMediaJobKind, EagleProcessingLane> = {
+  RENDER_EDITED_COPY: 'INTERACTIVE',
   GENERATE_RENDITIONS: 'INTERACTIVE',
   GENERATE_THUMBNAIL: 'INTERACTIVE',
   GENERATE_PREVIEW: 'INTERACTIVE',

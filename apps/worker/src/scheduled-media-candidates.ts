@@ -25,7 +25,7 @@ export function selectScheduledMediaCandidates(
   );
   // The immutable current object key identifies the media version, including replacements.
   // A maintenance job or an upload of a superseded/different owner's object cannot promote it.
-  const freshness = Prisma.sql`GREATEST(a."libraryAddedAt",COALESCE(current_upload."completedAt",a."libraryAddedAt"))`;
+  const freshness = Prisma.sql`CASE WHEN job.kind='RENDER_EDITED_COPY' THEN job."createdAt" ELSE GREATEST(a."libraryAddedAt",COALESCE(current_upload."completedAt",a."libraryAddedAt")) END`;
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
     LEFT JOIN "UploadSession" current_upload ON current_upload."objectKey"=a."originalObjectKey"
@@ -45,7 +45,7 @@ export function selectScheduledMediaCandidates(
       ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind::text<>${kind.not}` : Prisma.empty}
       ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind::text IN (${Prisma.join(kind.in)})` : Prisma.empty}
       ${input.where.processorVersion?.notIn.length ? Prisma.sql`AND job."processorVersion" NOT IN (${Prisma.join(input.where.processorVersion.notIn)})` : Prisma.empty}
-    ORDER BY (${freshness}>=now()-interval '24 hours') DESC,
+    ORDER BY (job.kind='RENDER_EDITED_COPY') DESC, (${freshness}>=now()-interval '24 hours') DESC,
       CASE WHEN ${freshness}>=now()-interval '24 hours' THEN ${freshness}
         WHEN a."libraryMode"='PHOTO' THEN a."chronologicalAt" ELSE a."libraryAddedAt" END DESC,
       ${preferPriority ? Prisma.sql`${priority} DESC,` : Prisma.empty} job."availableAt",job."createdAt",job.id LIMIT ${input.take}

@@ -6,8 +6,8 @@ android {
         applicationId 'com.sekereagle.android'
         minSdk 30
         targetSdk 36
-        versionCode 25
-        versionName '0.9.8'
+        versionCode 26
+        versionName '0.9.9'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     buildFeatures { buildConfig true; compose true }
@@ -81,6 +81,7 @@ tasks.register('generateEditor', Exec) {
     inputs.file rootProject.file('../web/vite.config.ts')
     inputs.file rootProject.file('../../package-lock.json')
     inputs.dir rootProject.file('../../packages/library-core/src')
+    inputs.dir rootProject.file('../../packages/photo-render-core/src')
     inputs.dir rootProject.file('../../packages/eagle-filter-core/src')
     inputs.file rootProject.file('scripts/build-editor.mjs')
     outputs.dir layout.buildDirectory.dir('generated/editor-assets')
