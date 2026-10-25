@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { IconRotateClockwise } from '@tabler/icons-react';
+import { useCompactLayout } from '../../../hooks/useCompactLayout';
 import { t } from '../../../i18n';
 import type { PhotoEdits } from './photo-editor-model';
 import {
@@ -15,6 +16,7 @@ import { PhotoToolPanel } from './PhotoToolPanel';
 import { ScrollableToolRow } from './ScrollableToolRow';
 
 export function PhotoAdjustmentsPanel({
+  touch = false,
   edits,
   disabled,
   canReset,
@@ -26,6 +28,7 @@ export function PhotoAdjustmentsPanel({
   onGestureStart,
   onGestureCommit,
 }: {
+  touch?: boolean;
   edits: PhotoEdits;
   disabled: boolean;
   canReset: boolean;
@@ -37,6 +40,8 @@ export function PhotoAdjustmentsPanel({
   onGestureStart: () => void;
   onGestureCommit: () => void;
 }) {
+  const compactLayout = useCompactLayout();
+  const compact = touch || compactLayout;
   const [group, setGroup] = useState<AdjustmentGroup>('tone');
   const [selection, setSelection] = useState<Record<AdjustmentGroup, string>>({
     tone: 'exposure',
@@ -95,7 +100,7 @@ export function PhotoAdjustmentsPanel({
                         type="button"
                         className={styles.axisLabel}
                         disabled={disabled}
-                        title={t('双击重置此项')}
+                        title={compact ? undefined : t('双击重置此项')}
                         onDoubleClick={() => onResetOption(option)}
                       >
                         {option.axisLabel}
@@ -107,8 +112,21 @@ export function PhotoAdjustmentsPanel({
             ) : (
               renderControl(selected)
             )}
+            {compact && (
+              <button
+                type="button"
+                className={styles.parameterReset}
+                aria-label={t('重置此项')}
+                disabled={disabled || edits[selected.key] === 0}
+                onClick={() => onResetOption(selected)}
+              >
+                <IconRotateClockwise size={18} />
+              </button>
+            )}
           </div>
-          <p className={styles.parameterHint}>{t('双击归零 · 方向键微调 · Shift 加速')}</p>
+          {!compact && (
+            <p className={styles.parameterHint}>{t('双击归零 · 方向键微调 · Shift 加速')}</p>
+          )}
         </>
       }
     >
@@ -177,7 +195,7 @@ export function PhotoAdjustmentsPanel({
               disabled={disabled}
               aria-pressed={selected.id === option.id}
               aria-label={option.label}
-              title={`${option.label} · ${t('双击重置此项')}`}
+              title={compact ? option.label : `${option.label} · ${t('双击重置此项')}`}
               onClick={() => {
                 setGroup(option.group);
                 setVisibleGroup(option.group);

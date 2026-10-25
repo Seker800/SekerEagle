@@ -1326,3 +1326,112 @@
     min-height: 38px;
   }
 }
+
+/* A saved copy stays discoverable without covering the preview with a filename banner. */
+.compactSaveNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-height: 30px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--photo-muted);
+}
+.editor .compactSaveNotice button {
+  min-height: 30px;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--photo-accent);
+}
+.editor .parameterReset {
+  flex-shrink: 0;
+  width: 36px;
+  min-height: 40px;
+  padding: 0;
+}
+
+/* Native presentation shares the editor's behavior and matches the gallery's glass surfaces. */
+.editor[data-presentation='native'] {
+  --photo-bg: #000;
+  --photo-panel: #000;
+  --photo-accent: #91b1ff;
+  --photo-muted: #98989f;
+  --photo-line: #ffffff24;
+  grid-template-rows: 56px minmax(100px, 1fr) var(--photo-controls-size, 178px) 60px;
+  font-size: 12px;
+}
+.editor[data-presentation='native'] .header,
+.editor[data-presentation='native'] .tabs {
+  background: linear-gradient(#ffffff08, #ffffff00), #202023a3;
+  border: 0.6px solid #ffffff24;
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  border-radius: 28px;
+  margin: 4px 10px;
+}
+.editor[data-presentation='native'] .header {
+  padding: 0 6px;
+  gap: 2px;
+}
+.editor[data-presentation='native'] .history {
+  border: 0;
+  padding: 0;
+}
+.editor[data-presentation='native'] .title span {
+  max-width: 100%;
+  font-size: 11px;
+}
+.editor[data-presentation='native'] .title small {
+  color: var(--photo-muted);
+  font-size: 10px;
+}
+.editor[data-presentation='native'] .exportButton {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+.editor[data-presentation='native'] .tabs {
+  justify-self: center;
+  width: 86%;
+  max-width: 360px;
+  padding: 3px;
+  gap: 2px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-self: center;
+}
+.editor[data-presentation='native'] .tabs button {
+  min-width: 0;
+  min-height: 42px;
+  font-size: 13px;
+  padding: 4px;
+}
+.editor[data-presentation='native'] .tabs button[aria-pressed='true'] {
+  background: #ffffff12;
+  color: var(--photo-accent);
+}
+.editor[data-presentation='native'] .toolScrollViewport {
+  scrollbar-width: none;
+}
+.editor[data-presentation='native'] .toolScrollViewport::-webkit-scrollbar {
+  display: none;
+}
+.editor[data-presentation='native'] .adjustmentOptions {
+  grid-auto-columns: 64px;
+  min-height: 68px;
+  gap: 8px;
+}
+.editor[data-presentation='native'] .adjustmentOptions button {
+  min-height: 60px;
+  border: 0.6px solid #ffffff16;
+  border-radius: 18px;
+  background: #202023a3;
+  font-size: 11px;
+}
+.editor[data-presentation='native'] .adjustmentOptions button[aria-pressed='true'] {
+  background: #91b1ff24;
+  border-color: #91b1ff55;
+  color: var(--photo-accent);
+}
+.editor[data-presentation='native'] .adjustmentOptions button[aria-pressed='true'] > span {
+  color: var(--photo-accent);
+}

@@ -9,6 +9,31 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
+/** Retry only interrupted reads; mutations, authorization and validation failures never retry. */
+internal suspend fun <T> retryOriginalRead(
+    cancellation: NativeTransferCancellation,
+    read: (Int) -> T,
+): T {
+    for (attempt in 0..2) {
+        cancellation.check()
+        try {
+            return read(attempt)
+        } catch (reason: IOException) {
+            cancellation.check()
+            if (
+                reason !is java.net.SocketException &&
+                    reason !is java.net.SocketTimeoutException &&
+                    reason !is java.net.ProtocolException &&
+                    reason !is java.io.EOFException
+            )
+                throw reason
+            if (attempt == 2) throw IOException("照片读取中断，请检查网络后重试", reason)
+            kotlinx.coroutines.delay(250L * (attempt + 1))
+        }
+    }
+    error("读取重试已结束")
+}
+
 /** Private, short-lived files. No original enters the thumbnail cache or a gallery prefetch. */
 internal class NativeOriginal(val file: File, val metadata: JSONObject) : AutoCloseable {
     override fun close() {
@@ -30,7 +55,10 @@ internal suspend fun NativeGalleryRepository.original(
                 "/assets/" +
                 NativeGalleryPolicy.identifier(asset.id)
         val epoch = connection.authorizationEpoch()
-        val metadata = connection.jsonAtEpoch(epoch, "GET", base, cancellation = cancellation)
+        val metadata =
+            retryOriginalRead(cancellation) {
+                connection.jsonAtEpoch(epoch, "GET", base, cancellation = cancellation)
+            }
         if (metadata.getInt("mediaRevision") != asset.revision) throw IOException("原件已更新，请刷新后重试")
         var sourcePath = "$base/original"
         var size = metadata.getLong("byteSize")
@@ -71,15 +99,23 @@ internal suspend fun NativeGalleryRepository.original(
         val directory = File(context.cacheDir, "viewer-originals").apply { mkdirs() }
         val file = File.createTempFile("source-", ".media", directory)
         try {
-            file.outputStream().use { output ->
-                connection.downloadOriginal(sourcePath, size, mime, output, cancellation) {}
+            fun validateCurrent() {
+                val current =
+                    connection.jsonAtEpoch(epoch, "GET", base, cancellation = cancellation)
+                if (
+                    current.getInt("mediaRevision") != asset.revision ||
+                        current.getLong("byteSize") != metadata.getLong("byteSize")
+                )
+                    throw IOException("读取期间原件发生变化，请刷新后重试")
             }
-            val current = connection.jsonAtEpoch(epoch, "GET", base, cancellation = cancellation)
-            if (
-                current.getInt("mediaRevision") != asset.revision ||
-                    current.getLong("byteSize") != metadata.getLong("byteSize")
-            )
-                throw IOException("读取期间原件发生变化，请刷新后重试")
+            retryOriginalRead(cancellation) { attempt ->
+                connection.checkAuthorization(epoch)
+                if (attempt > 0) validateCurrent()
+                file.outputStream().use { output ->
+                    connection.downloadOriginal(sourcePath, size, mime, output, cancellation) {}
+                }
+                validateCurrent()
+            }
             cancellation.check()
             NativeOriginal(file, JSONObject(metadata.toString()).put("sourceMime", mime))
         } catch (reason: Throwable) {

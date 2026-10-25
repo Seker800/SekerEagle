@@ -40,6 +40,8 @@ class NativeViewerMediaTest {
         @Volatile var revision = 1
         @Volatile var complete = false
         @Volatile var drops = 0
+        @Volatile var revisionAfterDrop = false
+        @Volatile var originalStatus = 200
 
         fun metadata() =
             JSONObject()
@@ -120,11 +122,12 @@ class NativeViewerMediaTest {
                                 if (path.endsWith("/original")) "image/png" else "application/json"
                             val output = client.getOutputStream()
                             output.write(
-                                "HTTP/1.1 200 OK\r\nContent-Type: $type\r\nContent-Length: ${payload.size}\r\nETag: fixture\r\nConnection: close\r\n\r\n"
+                                "HTTP/1.1 ${if (path.endsWith("/original")) originalStatus else 200} Result\r\nContent-Type: $type\r\nContent-Length: ${payload.size}\r\nETag: fixture\r\nConnection: close\r\n\r\n"
                                     .toByteArray()
                             )
                             if (path.endsWith("/original") && drops > 0) {
                                 drops--
+                                if (revisionAfterDrop) revision++
                                 output.write(payload, 0, payload.size / 2)
                             } else output.write(payload)
                         }
@@ -156,12 +159,18 @@ class NativeViewerMediaTest {
         Fixture().use { f ->
             f.drops = 2
             val repo = repo(f)
-            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata(), GalleryMode.PHOTO)).use { editor ->
-                editor.request("open", JSONObject())
-                assertArrayEquals(f.png, editor.source().file.readBytes())
-                assertEquals(3, f.paths.count { it.endsWith("/original") })
-                assertTrue(f.writes.isEmpty())
-            }
+            NativeEditorSession(
+                    app,
+                    repo,
+                    GalleryMode.PHOTO,
+                    repo.parse(f.metadata(), GalleryMode.PHOTO),
+                )
+                .use { editor ->
+                    editor.request("open", JSONObject())
+                    assertArrayEquals(f.png, editor.source().file.readBytes())
+                    assertEquals(3, f.paths.count { it.endsWith("/original") })
+                    assertTrue(f.writes.isEmpty())
+                }
         }
     }
 
@@ -170,14 +179,69 @@ class NativeViewerMediaTest {
         Fixture().use { f ->
             f.drops = 10
             val repo = repo(f)
-            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata(), GalleryMode.PHOTO)).use { editor ->
-                try { editor.request("open", JSONObject()); fail("Incomplete source must fail") }
-                catch (_: java.io.IOException) {}
-                assertEquals(3, f.paths.count { it.endsWith("/original") })
-                f.drops = 0
-                editor.request("open", JSONObject())
-                assertArrayEquals(f.png, editor.source().file.readBytes())
+            NativeEditorSession(
+                    app,
+                    repo,
+                    GalleryMode.PHOTO,
+                    repo.parse(f.metadata(), GalleryMode.PHOTO),
+                )
+                .use { editor ->
+                    try {
+                        editor.request("open", JSONObject())
+                        fail("Incomplete source must fail")
+                    } catch (_: java.io.IOException) {}
+                    assertEquals(3, f.paths.count { it.endsWith("/original") })
+                    f.drops = 0
+                    editor.request("open", JSONObject())
+                    assertArrayEquals(f.png, editor.source().file.readBytes())
+                }
+        }
+    }
+
+    @Test
+    fun interruptedSourceCannotRetryIntoAReplacementVersion() {
+        Fixture().use { f ->
+            f.drops = 1
+            f.revisionAfterDrop = true
+            val repo = repo(f)
+            try {
+                runBlocking {
+                    repo.original(
+                        app,
+                        GalleryMode.PHOTO,
+                        repo.parse(f.metadata(), GalleryMode.PHOTO),
+                        NativeTransferCancellation(),
+                        editable = true,
+                    )
+                }
+                fail("Replacement must not be edited as the original version")
+            } catch (reason: java.io.IOException) {
+                assertTrue(reason.message.orEmpty().contains("变化"))
             }
+            assertEquals(1, f.paths.count { it.endsWith("/original") })
+        }
+    }
+
+    @Test
+    fun sourcePermissionFailureIsNotRetried() {
+        Fixture().use { f ->
+            f.originalStatus = 403
+            val repo = repo(f)
+            try {
+                runBlocking {
+                    repo.original(
+                        app,
+                        GalleryMode.PHOTO,
+                        repo.parse(f.metadata(), GalleryMode.PHOTO),
+                        NativeTransferCancellation(),
+                        editable = true,
+                    )
+                }
+                fail("Forbidden source")
+            } catch (reason: NativeSession.Failure) {
+                assertEquals(403, reason.status)
+            }
+            assertEquals(1, f.paths.count { it.endsWith("/original") })
         }
     }
 

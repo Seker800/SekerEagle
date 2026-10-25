@@ -45,3 +45,28 @@ body,
 #root > section[role='dialog'] {
   height: 100%;
 }
+
+:root {
+  --ui-text: #fff;
+  --ui-accent: #91b1ff;
+  --ui-accent-rgb: 145 177 255;
+  --ui-on-accent: #0b1324;
+  --ui-muted: #98989f;
+  --ui-radius-control: 16px;
+}
+.loading {
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+}
+.loading-actions {
+  display: flex;
+  gap: 12px;
+}
+.loading button {
+  min-height: 44px;
+  border-radius: 24px;
+  background: #202023a3;
+  border-color: #ffffff24;
+  backdrop-filter: blur(22px);
+}

@@ -949,11 +949,45 @@ it('can start Android editing on watermark without changing the web default', ()
 });
 
 it('offers touch reset without desktop keyboard hints in the phone editor', async () => {
-  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
   render(<PhotoEditor source="/photo.png" name="Photo.png" onClose={vi.fn()} onSave={vi.fn()} />);
   await waitFor(() => expect(screen.getByRole('slider', { name: '曝光' })).toBeEnabled());
   expect(screen.queryByText('双击归零 · 方向键微调 · Shift 加速')).not.toBeInTheDocument();
   fireEvent.change(screen.getByRole('slider', { name: '曝光' }), { target: { value: '1' } });
   fireEvent.click(screen.getByRole('button', { name: '重置此项' }));
   expect(screen.getByRole('slider', { name: '曝光' })).toHaveValue('0');
+});
+
+it('keeps phone save feedback short without placing a long output filename over the image', async () => {
+  vi.stubGlobal('matchMedia', () => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  }));
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
+    callback(new Blob(['png'], { type: 'image/png' })),
+  );
+  const open = vi.fn().mockResolvedValue(undefined);
+  render(
+    <PhotoEditor
+      presentation="native"
+      source="/photo.png"
+      name="Input.png"
+      onClose={vi.fn()}
+      onSave={vi
+        .fn()
+        .mockResolvedValue({ id: 'copy', name: 'output-with-a-very-long-filename.png' })}
+      onOpenSaved={open}
+    />,
+  );
+  const save = screen.getByRole('button', { name: '保存到相册' });
+  await waitFor(() => expect(save).toBeEnabled());
+  fireEvent.click(save);
+  fireEvent.click(await screen.findByRole('button', { name: '查看已保存照片' }));
+  await waitFor(() => expect(open).toHaveBeenCalledWith('copy'));
+  expect(screen.queryByText(/output-with-a-very-long-filename/)).not.toBeInTheDocument();
 });

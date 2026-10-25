@@ -86,7 +86,7 @@ fun NativeViewer(
         }
         return
     }
-    Box(Modifier.fillMaxSize().background(Color.Black).testTag("native-viewer")) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black).testTag("native-viewer")) {
         HorizontalPager(
             pager,
             Modifier.fillMaxSize()
@@ -125,7 +125,7 @@ fun NativeViewer(
                 radius = 28,
             ) {
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 66.dp).padding(horizontal = 8.dp),
+                    Modifier.fillMaxWidth().heightIn(min = 54.dp).padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     IconButton({ model.back() }) { Icon(Icons.Outlined.ArrowBackIosNew, "返回图库") }
@@ -146,15 +146,15 @@ fun NativeViewer(
             if (!state.trash) {
                 GlassSurface(
                     Modifier.align(Alignment.BottomCenter)
-                        .padding(horizontal = 24.dp, vertical = 16.dp)
-                        .widthIn(max = 360.dp)
-                        .fillMaxWidth()
+                        .padding(bottom = 12.dp)
+                        .width(minOf(maxWidth * 0.86f, 360.dp))
+                        .height(54.dp)
                         .testTag("viewer-tools"),
                     backdrop,
                     sourceOffset,
                 ) {
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp),
+                        Modifier.fillMaxSize().padding(horizontal = 4.dp, vertical = 3.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly,
                     ) {
                         ViewerTool(Icons.Outlined.DeleteOutline, "删除", !state.busy && !shareBusy) {
@@ -171,7 +171,9 @@ fun NativeViewer(
                             model.toggleFavorite(asset.id)
                         }
                         if (!asset.video)
-                            ViewerTool(Icons.Outlined.Edit, "编辑", !state.busy && !shareBusy) { editing = true }
+                            ViewerTool(Icons.Outlined.Edit, "编辑", !state.busy && !shareBusy) {
+                                editing = true
+                            }
                         ViewerTool(Icons.Outlined.Share, "发送", !state.busy && !shareBusy) {
                             shareBusy = true
                             scope.launch {
@@ -243,11 +245,13 @@ private fun ViewerTool(
     TextButton(
         onClick = action,
         enabled = enabled,
+        modifier = Modifier.height(48.dp).width(64.dp),
+        contentPadding = PaddingValues(0.dp),
         colors = ButtonDefaults.textButtonColors(contentColor = tint),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(icon, label, Modifier.size(24.dp))
-            Text(caption, fontSize = 12.sp)
+            Icon(icon, label, Modifier.size(22.dp))
+            Text(caption, fontSize = 10.sp, lineHeight = 12.sp)
         }
     }
 }

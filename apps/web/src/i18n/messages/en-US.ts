@@ -1,4 +1,5 @@
 export const enUS = {
+  重置此项: 'Reset adjustment',
   '补齐 RAW 编辑图、动态视频、清晰度和相似特征。':
     'Generate RAW editing images, motion video, sharpness and similarity features.',
   '新图优先处理，群晖与 Mac 两路并行，历史图片逐步补齐。':

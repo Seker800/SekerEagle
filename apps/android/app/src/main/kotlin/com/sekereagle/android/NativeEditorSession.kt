@@ -42,6 +42,12 @@ internal class NativeEditorSession(
         return source ?: throw IOException("照片尚未就绪")
     }
 
+    private fun read(path: String): JSONObject = runBlocking {
+        retryOriginalRead(cancellation) {
+            session.jsonAtEpoch(epoch, "GET", path, cancellation = cancellation)
+        }
+    }
+
     @Synchronized
     fun request(action: String, input: JSONObject): Any {
         check(!closed) { "编辑会话已关闭" }
@@ -49,26 +55,18 @@ internal class NativeEditorSession(
         session.checkAuthorization(epoch)
         return when (action) {
             "open" -> {
-                val entry =
-                    session
-                        .jsonAtEpoch(epoch, "GET", "$path/edit-recipe", cancellation = cancellation)
-                        .optJSONObject("entry")
+                val entry = read("$path/edit-recipe").optJSONObject("entry")
                 if (entry != null) {
                     val id =
                         entry.optString("baseAssetId").takeUnless { it.isEmpty() || it == "null" }
                             ?: asset.id
-                    val original =
-                        session.jsonAtEpoch(
-                            epoch,
-                            "GET",
-                            "$base/assets/${NativeGalleryPolicy.identifier(id)}",
-                            cancellation = cancellation,
-                        )
+                    val original = read("$base/assets/${NativeGalleryPolicy.identifier(id)}")
                     if (original.getInt("mediaRevision") != entry.getInt("baseMediaRevision"))
                         throw IOException("原照片已变化，无法恢复编辑参数")
                     asset = repo.parse(original, mode)
                 }
                 source?.close()
+                source = null
                 source = runBlocking {
                     repo.original(context, mode, asset, cancellation, editable = true)
                 }

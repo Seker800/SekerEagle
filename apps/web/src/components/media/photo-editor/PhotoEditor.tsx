@@ -1,3 +1,4 @@
+import { useCompactLayout } from '../../../hooks/useCompactLayout';
 import { loadEditablePhoto, renderEditedPhotoFile } from './photo-editor-export';
 import type { PhotoEditRecipe } from '@sekereagle/library-core';
 import { ApiError } from '../../../lib/api-error';
@@ -48,6 +49,7 @@ type History = { past: PhotoEdits[]; current: PhotoEdits; future: PhotoEdits[] }
 
 export function PhotoEditor({
   initialTab = 'adjust',
+  presentation = 'web',
   source,
   previewSource,
   sourceSize,
@@ -61,6 +63,7 @@ export function PhotoEditor({
   onOpenSaved,
 }: {
   initialTab?: Tab;
+  presentation?: 'web' | 'native';
   source: string;
   previewSource?: string;
   sourceSize?: { width: number; height: number };
@@ -73,6 +76,8 @@ export function PhotoEditor({
   onClose: () => void;
   onSave: (file: File, recipe?: PhotoEditRecipe) => Promise<SavedPhoto>;
 }) {
+  const compactLayout = useCompactLayout();
+  const compact = presentation === 'native' || compactLayout;
   const [history, setHistory] = useState<History>({
     past: [],
     current: { ...DEFAULT_PHOTO_EDITS, ...initialEdits },
@@ -543,6 +548,7 @@ export function PhotoEditor({
       ref={dialogRef}
       tabIndex={-1}
       className={styles.editor}
+      data-presentation={presentation}
       role="dialog"
       aria-modal="true"
       aria-label={t('编辑照片')}
@@ -701,18 +707,34 @@ export function PhotoEditor({
         )}
         <div className={styles.stageBottom}>
           {tab === 'watermark' && compareControl}
-          <span className={styles.renderState} role="status">
-            {rendering
-              ? t('正在更新…')
-              : copied
-                ? t('参数已复制，可返回图库多选后套用。')
-                : saved
-                  ? t('已保存到相册')
-                  : ''}
-          </span>
+          {compact && saved ? (
+            <div className={styles.compactSaveNotice} role="status">
+              <span>{t('已保存到相册')}</span>
+              {onOpenSaved && (
+                <button
+                  type="button"
+                  aria-label={t('查看已保存照片')}
+                  disabled={busy}
+                  onClick={() => void openSavedPhoto()}
+                >
+                  {t('查看已保存照片')}
+                </button>
+              )}
+            </div>
+          ) : (
+            <span className={styles.renderState} role="status">
+              {rendering
+                ? t('正在更新…')
+                : copied
+                  ? t('参数已复制，可返回图库多选后套用。')
+                  : saved
+                    ? t('已保存到相册')
+                    : ''}
+            </span>
+          )}
         </div>
       </main>
-      {saved && (
+      {saved && !compact && (
         <div className={styles.saveNotice} role="status">
           {t('已保存到相册')} · {savedName}
           {onOpenSaved && (
@@ -729,6 +751,7 @@ export function PhotoEditor({
         >
           {tab === 'adjust' && (
             <PhotoAdjustmentsPanel
+              touch={compact}
               edits={edits}
               disabled={!loaded || busy}
               canReset={PHOTO_ADJUSTMENTS.some(

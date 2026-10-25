@@ -39,7 +39,7 @@ public final class NativeDownloadPolicy {
       total += count;
       progress.accept(total);
     }
-    if (total != expected) throw new IOException("下载不完整，请重试");
+    if (total != expected) throw new java.io.EOFException("下载不完整，请重试");
     checkActive.run();
   }
 
