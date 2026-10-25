@@ -84,3 +84,56 @@ test('claim failures and execution failures release only their own resource and 
   assert.equal(errors.length, 1);
   assert.equal(wakes, 1);
 });
+
+test('a slow embedding claim does not block repeated NAS work and cannot overfill the reserved slot', async () => {
+  let resolve!: (value: string | null) => void;
+  const slow = new Promise<string | null>((done) => {
+    resolve = done;
+  });
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+  );
+  const claiming = pool.fill(
+    'EMBEDDING',
+    () => slow,
+    async () => {},
+  );
+  let completed = 0;
+  for (let i = 0; i < 3; i++) {
+    await pool.fill(
+      'NAS',
+      async () => 'nas',
+      async () => {
+        completed++;
+      },
+    );
+    await new Promise((done) => setImmediate(done));
+  }
+  await pool.fill(
+    'EMBEDDING',
+    async () => {
+      throw Error('must not issue a concurrent claim');
+    },
+    async () => {},
+  );
+  assert.equal(completed, 3);
+  assert.equal(pool.active('EMBEDDING'), 1);
+  resolve(null);
+  await claiming;
+  assert.equal(pool.activeCount, 0);
+});
+
+test('a wake during an in-flight claim is replayed if that claim returns empty, without idle polling loops', async () => {
+  let resolve!: (value: string | null) => void;
+  const delayed = new Promise<string | null>((done) => { resolve = done; });
+  let wakes = 0;
+  const pool = new MediaResourcePool(1, () => { wakes++; }, () => {});
+  const filling = pool.fill('EMBEDDING', () => delayed, async () => {});
+  await pool.fill('EMBEDDING', async () => { throw Error('slot already reserved'); }, async () => {});
+  resolve(null); await filling;
+  assert.equal(wakes, 1, 'the notification must not be lost when discovery is invalidated');
+  await pool.fill('EMBEDDING', async () => null, async () => {});
+  assert.equal(wakes, 1, 'an ordinary empty queue must not schedule a busy loop');
+});
