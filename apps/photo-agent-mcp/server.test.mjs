@@ -265,7 +265,7 @@ test('Agent can read a request by its stable number without access to manual exe
     token: 'test-only',
     fetch: async (url) => {
       calls.push(url);
-      return new Response('{}');
+      return new globalThis.Response('{}');
     },
   });
   const [a, b] = InMemoryTransport.createLinkedPair();

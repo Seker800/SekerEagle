@@ -81,7 +81,7 @@ export async function performManualPhotoAction(
         libraryMode: 'PHOTO',
         taskId,
         id: { in: start.targets.map((t) => t.suggestionId) },
-        status: 'PENDING',
+        status: { in: ['PENDING', 'FAILED'] },
       },
       data: { status: 'REJECTED', reviewedAt: new Date() },
     });
@@ -123,7 +123,7 @@ export async function performManualPhotoAction(
         throw new NotFoundException('整理建议不存在。');
       const targets = canonical.items.map((item) => {
         const suggestion = suggestions.find((s) => s.id === item.suggestionId)!;
-        if (['APPLYING', 'FAILED'].includes(suggestion.status))
+        if (suggestion.status === 'APPLYING')
           throw new ConflictException('原申请尚未执行完成，请先处理原申请。');
         const asset = context.assets.find((a) => a.id === suggestion.assetId);
         if (

@@ -205,7 +205,7 @@ function RequestDetail({
   );
   const selectable = task.suggestions.filter((item) => {
     const asset = task.assets.find((a) => a.id === item.assetId);
-    return asset && !asset.deletedAt && !['APPLYING', 'FAILED'].includes(item.status);
+    return asset && !asset.deletedAt && item.status !== 'APPLYING';
   });
   const [selected, setSelected] = useState(() => new Set(eligible.map((item) => item.id)));
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
