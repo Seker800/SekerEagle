@@ -406,7 +406,8 @@ it('warns about a disconnected model while in-flight work is draining and clears
   mount();
   expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型连接中断');
   expect(screen.getByRole('alert')).toHaveTextContent('其他处理继续');
-  expect(screen.getByText('计算ing')).toBeVisible();
+  expect(screen.getByText('等待模型')).toBeVisible();
+  expect(screen.queryByText('计算ing')).not.toBeInTheDocument();
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
     ...offline,
     embedding: 'READY',
