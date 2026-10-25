@@ -227,3 +227,50 @@ def test_inference_keeps_event_loop_responsive_and_bounds_admission(monkeypatch)
     assert maximum == 1
     assert len(set(threads)) == 1
     assert threads[0] != threading.get_ident()
+
+
+def test_cancelled_http_request_holds_capacity_until_compute_finishes(monkeypatch):
+    import asyncio
+    import threading
+    import httpx2
+
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "schedule_idle_unload", lambda: None)
+    started = threading.Event()
+    finish = threading.Event()
+
+    class HeldModel(FakeModel):
+        def process(self, inputs, processor):
+            started.set()
+            assert finish.wait(3)
+            return super().process(inputs, processor)
+
+    service.runtime.model = HeldModel()
+    service.runtime.processor = object()
+
+    async def exercise():
+        headers = {"authorization": "Bearer test-secret", "x-embedding-dimensions": "1024"}
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=service.app), base_url="http://test") as client:
+            tasks = [asyncio.create_task(client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)) for _ in range(3)]
+            try:
+                for _ in range(100):
+                    if started.is_set():
+                        break
+                    await asyncio.sleep(0.005)
+                assert started.is_set()
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                busy = await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)
+                assert busy.status_code == 503
+            finally:
+                finish.set()
+            # All three callbacks must return their slot even though their callers left.
+            for _ in range(100):
+                if service.inference_slots._value == 3:
+                    break
+                await asyncio.sleep(0.01)
+            assert service.inference_slots._value == 3
+            assert (await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)).status_code == 200
+
+    asyncio.run(exercise())
