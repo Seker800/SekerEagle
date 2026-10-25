@@ -1,3 +1,4 @@
+import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { mobileViewerPresentation } from './EagleMobileViewer';
 import { isCameraVideoMime } from '@sekereagle/library-core';
@@ -97,6 +98,10 @@ export function EagleAssetLightbox({
       collection={collection}
       actions={
         <>
+          <EagleFavoriteButton
+            assets={[asset]}
+            disabled={Boolean(asset.deletedAt) || loading || Boolean(loadError)}
+          />
           {!loading && !loadError && onLocate && (
             <EagleLocateAssetButton assetId={asset.id} onLocate={onLocate} />
           )}

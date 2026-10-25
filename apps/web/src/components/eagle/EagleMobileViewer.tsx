@@ -3,45 +3,18 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   IconShare2,
   IconEdit,
-  IconHeart,
-  IconHeartFilled,
   IconTrash,
   IconDotsCircleHorizontal,
   IconDownload,
 } from '@tabler/icons-react';
-import { getLocale, t, tForLocale } from '../../i18n';
+import { getLocale, t } from '../../i18n';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { saveOriginalFile } from '../../lib/original-file-export';
 import type { EagleMobileViewerPresentation } from './EagleViewerShell';
 import styles from './EagleMobileViewer.module.css';
-type ViewerApi = Pick<
-  ReturnType<typeof useLibraryWorkspace>['api'],
-  | 'listEagleManualTags'
-  | 'createEagleManualTag'
-  | 'batchChangeEagleManualTags'
-  | 'getEaglePrivacySettings'
->;
-// A persisted tag name must stay stable when the UI language changes.
-const FAVORITE_TAG = tForLocale('zh-CN', '收藏');
-/** Favorites reuse a visible manual tag; never silently attach a privacy rule. */
-export async function toggleViewerFavorite(
-  api: ViewerApi,
-  asset: EagleAssetListItem,
-  favorite: boolean,
-) {
-  const tags = await api.listEagleManualTags('');
-  let tag = tags.find((item) => item.name === FAVORITE_TAG);
-  if (!favorite && !tag) tag = await api.createEagleManualTag('', { name: FAVORITE_TAG });
-  if (!tag) return;
-  const privacy = await api.getEaglePrivacySettings();
-  if (privacy.tagIds.includes(tag.id)) throw new Error(t('收藏标签被设为私密，请先在设置中调整。'));
-  await api.batchChangeEagleManualTags('', {
-    assetIds: [asset.id],
-    addTagIds: favorite ? [] : [tag.id],
-    removeTagIds: favorite ? [tag.id] : [],
-  });
-}
+import { EagleFavoriteButton } from './EagleFavoriteButton';
+export { toggleViewerFavorite } from './EagleFavoriteButton';
 export function mobileViewerPresentation(
   asset: EagleAssetListItem,
   onClose: () => void,
@@ -100,13 +73,6 @@ function MobileViewerActions({
 }) {
   const { api, ownerId, libraryMode } = useLibraryWorkspace();
   const client = useQueryClient();
-  const [favorite, setFavorite] = useState(
-    () => asset.manualTags?.some((tag) => tag.name === FAVORITE_TAG) ?? false,
-  );
-  useEffect(
-    () => setFavorite(asset.manualTags?.some((tag) => tag.name === FAVORITE_TAG) ?? false),
-    [asset.manualTags],
-  );
   const [pending, setPending] = useState(false),
     [error, setError] = useState(''),
     [downloadFallback, setDownloadFallback] = useState(false);
@@ -185,22 +151,7 @@ function MobileViewerActions({
           <IconEdit />
           <span>{t('编辑')}</span>
         </button>
-        <button
-          type="button"
-          aria-pressed={favorite}
-          title={t('使用收藏标签')}
-          disabled={pending || readOnly}
-          onClick={() =>
-            void run(async () => {
-              await toggleViewerFavorite(api, asset, favorite);
-              if (alive.current) setFavorite(!favorite);
-              await invalidate();
-            })
-          }
-        >
-          {favorite ? <IconHeartFilled /> : <IconHeart />}
-          <span>{favorite ? t('已收藏') : t('收藏')}</span>
-        </button>
+        <EagleFavoriteButton assets={[asset]} disabled={pending || readOnly} />
         <button
           type="button"
           disabled={pending || readOnly}

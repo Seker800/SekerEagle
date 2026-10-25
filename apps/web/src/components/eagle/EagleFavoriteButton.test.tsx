@@ -20,7 +20,13 @@ beforeEach(() => {
   api.batchChangeEagleManualTags.mockResolvedValue({});
 });
 const assets = [
-  { id: 'one', manualTags: [{ id: 'favorite', name: '收藏' }, { id: 'other', name: '旅行' }] },
+  {
+    id: 'one',
+    manualTags: [
+      { id: 'favorite', name: '收藏' },
+      { id: 'other', name: '旅行' },
+    ],
+  },
   { id: 'two', manualTags: [] },
 ] as unknown as EagleAssetListItem[];
 function show(items = assets) {
@@ -36,12 +42,16 @@ it('favorites a mixed selection and removes only the favorite tag on the second 
   const remove = await screen.findByRole('menuitem', { name: '已收藏' });
   await waitFor(() => expect(remove).not.toBeDisabled());
   expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
-    assetIds: ['one', 'two'], addTagIds: ['favorite'], removeTagIds: [],
+    assetIds: ['one', 'two'],
+    addTagIds: ['favorite'],
+    removeTagIds: [],
   });
   fireEvent.click(remove);
   await screen.findByRole('menuitem', { name: '收藏' });
   expect(api.batchChangeEagleManualTags).toHaveBeenLastCalledWith('', {
-    assetIds: ['one', 'two'], addTagIds: [], removeTagIds: ['favorite'],
+    assetIds: ['one', 'two'],
+    addTagIds: [],
+    removeTagIds: ['favorite'],
   });
 });
 it('keeps the current state on failure and permits retry', async () => {
@@ -55,7 +65,9 @@ it('keeps the current state on failure and permits retry', async () => {
 });
 it('reuses the winner when another client creates the same tag concurrently', async () => {
   api.listEagleManualTags.mockResolvedValueOnce([]);
-  api.createEagleManualTag.mockRejectedValueOnce(Object.assign(new Error('exists'), { status: 409 }));
+  api.createEagleManualTag.mockRejectedValueOnce(
+    Object.assign(new Error('exists'), { status: 409 }),
+  );
   await setLibraryFavorite(api, ['one'], true);
   expect(api.batchChangeEagleManualTags).toHaveBeenCalledOnce();
 });

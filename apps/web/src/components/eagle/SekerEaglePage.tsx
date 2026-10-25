@@ -1,3 +1,4 @@
+import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { PhotoStatistics } from '../photos/PhotoStatistics';
 import { IconChartBar } from '@tabler/icons-react';
 import { EagleSmartFolderStatus } from './EagleSmartFolderStatus';
@@ -2592,6 +2593,9 @@ export function SekerEaglePage({
           count={selectedAssetIds.length}
           onClose={() => setAssetContextMenu(null)}
         >
+          {libraryView !== 'TRASH' && selectedTransferAssets.length === selectedAssetIds.length && (
+            <EagleFavoriteButton assets={selectedTransferAssets} role="menuitem" />
+          )}
           {libraryView !== 'TRASH' &&
             selectedTransferAssets.length === selectedAssetIds.length &&
             selectedTransferAssets.every((asset) => asset.mimeType.startsWith('image/')) && (

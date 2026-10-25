@@ -827,6 +827,10 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                 }
                 else -> return false
             }
+        if (s.viewerId != null && state.value.viewerId == null && staleLibraries.remove(s.mode)) {
+            mutable.value = state.value.copy(options = NativeOptions(), optionStatus = emptyMap())
+            refresh()
+        }
         refreshTransfersWhenIdle()
         return true
     }
@@ -996,6 +1000,37 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         "每次最多选择 100 项，超出部分未选择"
                     else null,
             )
+    }
+
+    fun toggleFavorite(id: String) {
+        val snapshot = state.value
+        val repo = repository ?: return
+        val asset = snapshot.items.firstOrNull { it.id == id } ?: return
+        if (snapshot.busy || snapshot.trash) return
+        operation?.cancel()
+        val request = ++generation
+        mutable.value = snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
+        mutation = viewModelScope.launch {
+            try {
+                repo.setFavorite(snapshot.mode, id, !asset.favorite)
+                val updated = withContext(Dispatchers.IO) {
+                    repo.parse(repo.connection.json("GET", "${com.sekereagle.android.core.NativeGalleryPolicy.base(snapshot.mode.name)}/assets/$id"), snapshot.mode, snapshot.sort)
+                }
+                if (generation != request) return@launch
+                mutable.value = state.value.copy(busy = false,
+                    items = state.value.items.map { if (it.id == id) updated else it })
+                // Tag options and active rule-folder membership must be re-read on leaving the viewer.
+                staleLibraries.add(snapshot.mode)
+            } catch (reason: CancellationException) {
+                throw reason
+            } catch (reason: Exception) {
+                if (generation == request) {
+                    if (reason is NativeSession.Failure && reason.status == 401) expire()
+                    else mutable.value = state.value.copy(busy = false,
+                        message = "收藏操作未确认完成，请刷新核对后重试：${reason.message.orEmpty()}")
+                }
+            }
+        }
     }
 
     fun changeSelection(action: String, tags: Set<String> = emptySet(), rating: Int? = null) {

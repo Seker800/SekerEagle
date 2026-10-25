@@ -1,3 +1,4 @@
+import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { mobileViewerPresentation } from './EagleMobileViewer';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
@@ -380,6 +381,12 @@ export function EagleImageViewer({
       collection={collection}
       actions={
         <>
+          {asset && (
+            <EagleFavoriteButton
+              assets={[asset]}
+              disabled={readOnly || loading || Boolean(error)}
+            />
+          )}
           {!loading && !error && onLocate && image.assetId && (
             <EagleLocateAssetButton assetId={image.assetId} onLocate={onLocate} />
           )}
