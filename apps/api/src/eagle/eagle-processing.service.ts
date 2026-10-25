@@ -322,7 +322,11 @@ export class EagleProcessingService {
         };
         const repairsBefore = repairIds.length;
         for (const job of existingByAssetRevision.get(key) ?? []) {
-          if (job.status === 'COMPLETED' && outputs[job.kind] === false) repairIds.push(job.id);
+          const ready =
+            job.processorVersion === 'photo-source-details-v1'
+              ? fact?.detailsReady
+              : outputs[job.kind];
+          if (job.status === 'COMPLETED' && ready === false) repairIds.push(job.id);
         }
         const jobs = buildMissingImageProcessingJobs(
           {

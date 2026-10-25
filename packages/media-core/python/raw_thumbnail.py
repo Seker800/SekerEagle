@@ -6,7 +6,8 @@ MAX_PREVIEW_BYTES = 64 * 1024 * 1024
 THUMBNAIL_SIZE = 512
 
 
-def write_raw_thumbnail(raw, output_path, pixel_limit):
+def write_raw_thumbnail(raw, output_path, pixel_limit, max_size=THUMBNAIL_SIZE,
+                        minimum_size=THUMBNAIL_SIZE, expected_dimensions=None):
     try:
         thumbnail = raw.extract_thumb()
     except Exception:
@@ -18,7 +19,7 @@ def write_raw_thumbnail(raw, output_path, pixel_limit):
         with Image.open(io.BytesIO(thumbnail.data)) as image:
             if (image.format != 'JPEG' or min(image.size) <= 0
                     or image.width * image.height > pixel_limit
-                    or max(image.size) < THUMBNAIL_SIZE):
+                    or max(image.size) < minimum_size):
                 return False
             image.load()
             orientation = image.getexif().get(274)
@@ -30,7 +31,11 @@ def write_raw_thumbnail(raw, output_path, pixel_limit):
                             6: Image.Transpose.ROTATE_270}.get(raw.sizes.flip)
                 if rotation is not None:
                     normalized = normalized.transpose(rotation)
-            normalized.thumbnail((THUMBNAIL_SIZE, THUMBNAIL_SIZE), Image.Resampling.LANCZOS)
+            if expected_dimensions:
+                width, height = expected_dimensions
+                if abs(normalized.width / normalized.height / (width / height) - 1) > 0.02:
+                    return False
+            normalized.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
     except (OSError, ValueError, Image.DecompressionBombError):
         return False
     # Keep the camera's color profile. The shared image encoder converts to sRGB.

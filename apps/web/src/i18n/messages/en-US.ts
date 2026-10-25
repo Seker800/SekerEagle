@@ -1,4 +1,8 @@
 export const enUS = {
+  '补齐 RAW 编辑图、动态视频、清晰度和相似特征。':
+    'Generate RAW editing images, motion video, sharpness and similarity features.',
+  '新图优先处理，群晖与 Mac 两路并行，历史图片逐步补齐。':
+    'New images come first. NAS and Mac processing run in parallel while the backlog is filled gradually.',
   '部分安排未保存，请核对各库当前设置后重试。':
     'Some schedules could not be saved. Check each library and try again.',
   立即处理: 'Immediate processing',

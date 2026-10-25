@@ -27,6 +27,8 @@ interface ImagePublication {
   photoAnalysis: Parameters<typeof persistPhotoAnalysis>[2] | null;
   livePhoto: { identifier: string | null } | null;
   scheduleFaces: boolean;
+  deferDetails?: boolean;
+  preserveBrowseState?: boolean;
 }
 const defaults = {
   lockPrivacy: lockOwnerPrivacyProjection,
@@ -102,6 +104,22 @@ export async function publishImage(
           create: rendition,
           update: rendition,
         });
+      if (input.deferDetails)
+        await tx.eagleAssetProcessingJob.createMany({
+          data: [
+            {
+              ownerId: asset.ownerId,
+              libraryMode: asset.libraryMode,
+              assetId: asset.id,
+              assetRevision: job.assetRevision,
+              kind: 'GENERATE_RENDITIONS',
+              processorVersion: 'photo-source-details-v1',
+              lane: 'BACKGROUND',
+              dependsOnJobId: job.id,
+            },
+          ],
+          skipDuplicates: true,
+        });
       if (asset.libraryMode === 'PHOTO' && input.scheduleFaces)
         await tx.eagleAssetProcessingJob.createMany({
           data: [
@@ -120,7 +138,7 @@ export async function publishImage(
         });
       if (photoAnalysis) {
         await dependencies.persistAnalysis(tx, asset, photoAnalysis, job.assetRevision);
-        await dependencies.group(tx, asset.ownerId, asset.id);
+        if (photoAnalysis.perceptualHash) await dependencies.group(tx, asset.ownerId, asset.id);
       }
       await tx.eagleAsset.updateMany({
         where: {
@@ -130,12 +148,12 @@ export async function publishImage(
           mediaRevision: job.assetRevision,
         },
         data: {
-          lifecycleStatus: 'READY',
-          mediaErrorCode: null,
+          ...(input.preserveBrowseState ? {} : { lifecycleStatus: 'READY', mediaErrorCode: null }),
           sha256,
           ...dimensions,
-          livePhotoIdentifier: livePhoto?.identifier ?? null,
-          livePhotoRole: livePhoto?.identifier ? 'STILL' : null,
+          ...(livePhoto?.identifier
+            ? { livePhotoIdentifier: livePhoto.identifier, livePhotoRole: 'STILL' }
+            : {}),
         },
       });
       await dependencies.syncPrivacy(tx, asset.ownerId, [asset.id], asset.libraryMode);

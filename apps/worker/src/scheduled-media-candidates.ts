@@ -5,6 +5,7 @@ import {
   taskPrioritySql,
   mediaTaskFamilySql,
 } from '@sekereagle/library-persistence';
+import type { MediaQueueAge } from './media-queue-policy';
 import type { ClaimFindManyInput } from './job-claim';
 
 /** Apply policies before the bounded candidate window, so paused work cannot hide runnable jobs. */
@@ -13,6 +14,7 @@ export function selectScheduledMediaCandidates(
   input: ClaimFindManyInput,
   preferPriority = true,
   embeddingUnavailable = false,
+  options: { resource?: 'NAS' | 'EMBEDDING'; freshOnly?: boolean; historyOnly?: boolean } = {},
 ) {
   const kind = input.where.kind;
   const family = mediaTaskFamilySql(Prisma.sql`job.kind`, Prisma.sql`job."processorVersion"`);
@@ -24,7 +26,10 @@ export function selectScheduledMediaCandidates(
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
-    WHERE job.kind<>'GENERATE_AI_TAGS' AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
+    WHERE ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
+      ${options.freshOnly ? Prisma.sql`a."libraryAddedAt">=now()-interval '24 hours' AND` : Prisma.empty}
+      ${options.historyOnly ? Prisma.sql`a."libraryAddedAt"<now()-interval '24 hours' AND` : Prisma.empty}
+      job.kind<>'GENERATE_AI_TAGS'  AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
       (CASE WHEN job."processorVersion"='photo-source-details-v1' THEN 'BACKGROUND'::"EagleProcessingLane" ELSE job.lane END)=${input.where.lane}::"EagleProcessingLane"
       AND ((job.status='PENDING' AND job."availableAt"<=now()) OR (job.status='PROCESSING' AND job."lockedAt"<now()-interval '10 minutes'))
       AND (job."dependsOnJobId" IS NULL OR dependency.status='COMPLETED')
@@ -35,7 +40,10 @@ export function selectScheduledMediaCandidates(
       ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind::text<>${kind.not}` : Prisma.empty}
       ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind::text IN (${Prisma.join(kind.in)})` : Prisma.empty}
       ${input.where.processorVersion?.notIn.length ? Prisma.sql`AND job."processorVersion" NOT IN (${Prisma.join(input.where.processorVersion.notIn)})` : Prisma.empty}
-    ORDER BY ${preferPriority ? Prisma.sql`${priority} DESC,` : Prisma.empty} job."availableAt",job."createdAt",job.id LIMIT ${input.take}
+    ORDER BY (a."libraryAddedAt">=now()-interval '24 hours') DESC,
+      CASE WHEN a."libraryAddedAt">=now()-interval '24 hours' THEN a."libraryAddedAt"
+        WHEN a."libraryMode"='PHOTO' THEN a."chronologicalAt" ELSE a."libraryAddedAt" END DESC,
+      ${preferPriority ? Prisma.sql`${priority} DESC,` : Prisma.empty} job."availableAt",job."createdAt",job.id LIMIT ${input.take}
   `);
 }
 
@@ -43,11 +51,16 @@ export function selectScheduledMediaCandidates(
 export function createScheduledMediaSelector(
   client: Pick<PrismaClient, '$queryRaw'>,
   embeddingUnavailable: () => boolean,
+  resource?: 'NAS' | 'EMBEDDING',
 ) {
   const turns = new Map<string, number>();
-  return (input: ClaimFindManyInput) => {
+  return (input: ClaimFindManyInput, age?: MediaQueueAge) => {
     const turn = turns.get(input.where.lane) ?? 0;
     turns.set(input.where.lane, turn + 1);
-    return selectScheduledMediaCandidates(client, input, turn % 4 !== 3, embeddingUnavailable());
+    return selectScheduledMediaCandidates(client, input, turn % 4 !== 3, embeddingUnavailable(), {
+      resource,
+      freshOnly: age === 'RECENT',
+      historyOnly: age === 'HISTORY',
+    });
   };
 }

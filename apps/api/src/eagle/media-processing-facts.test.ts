@@ -4,7 +4,17 @@ import { readMediaProcessingFacts } from './media-processing-facts';
 
 test('basic browsing readiness does not require a RAW edit derivative and keeps owner, mode and version fences', async () => {
   let query = { sql: '', values: [] as unknown[] };
-  await readMediaProcessingFacts({ $queryRaw: async (input: typeof query) => { query = input; return []; } } as never, 'owner', 'PHOTO', ['asset']);
+  await readMediaProcessingFacts(
+    {
+      $queryRaw: async (input: typeof query) => {
+        query = input;
+        return [];
+      },
+    } as never,
+    'owner',
+    'PHOTO',
+    ['asset'],
+  );
   const browsing = query.sql.slice(0, query.sql.indexOf('AS "renditionsReady"'));
   assert.doesNotMatch(browsing, /variant='edit'/);
   assert.ok(query.values.includes('owner'));

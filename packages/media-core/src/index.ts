@@ -19,6 +19,7 @@ export interface CameraRawDimensions extends CameraDimensions {
   decodedWidth?: number;
   decodedHeight?: number;
   embeddedThumbnail?: boolean;
+  embeddedPreview?: boolean;
 }
 export interface CameraVideoProbe {
   format?: { format_name?: string; duration?: string; tags?: Record<string, string> };
@@ -178,6 +179,7 @@ export async function readCameraRaw(
   inputPath: string,
   outputPath?: string,
   thumbnailPath?: string,
+  purpose: 'BROWSE' | 'DEVELOP' = 'DEVELOP',
 ): Promise<CameraRawDimensions> {
   const script = join(__dirname, '../python/raw_image.py');
   const { stdout } = await run(
@@ -188,6 +190,7 @@ export async function readCameraRaw(
       String(CAMERA_MAX_RAW_PIXELS),
       String(CAMERA_MAX_DECODED_RAW_PIXELS),
       ...(outputPath ? [outputPath, ...(thumbnailPath ? [thumbnailPath] : [])] : []),
+      ...(purpose === 'BROWSE' && outputPath ? ['--browse'] : []),
     ],
     {
       timeout: outputPath ? 180_000 : 60_000,

@@ -153,7 +153,7 @@ test('rejects foreign or stale renditions before writes', async () => {
 test('normal photos still persist exposure facts, group and schedule enabled face analysis', async () => {
   const f = fixture();
   Object.assign(f.input, {
-    photoAnalysis: {},
+    photoAnalysis: { perceptualHash: 'hash', sharpnessScore: 4 },
     livePhoto: { identifier: 'live' },
     scheduleFaces: true,
   });
@@ -172,4 +172,44 @@ test('materials use the same publisher without photography locks or analysis', a
     f.calls.some((x) => x.operation === 'group-lock' || x.operation === 'faces'),
     false,
   );
+});
+
+test('lightweight publication schedules one scoped details task only after a current lease is fenced', async () => {
+  const f = fixture();
+  Object.assign(f.input, { deferDetails: true });
+  await f.run();
+  const followup = f.calls.find((x) => x.operation === 'faces')!.input as {
+    data: Array<Record<string, unknown>>;
+    skipDuplicates: boolean;
+  };
+  assert.equal(followup.skipDuplicates, true);
+  assert.deepEqual(followup.data[0], {
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    assetId: 'asset',
+    assetRevision: 0,
+    kind: 'GENERATE_RENDITIONS',
+    processorVersion: 'photo-source-details-v1',
+    lane: 'BACKGROUND',
+    dependsOnJobId: 'job',
+  });
+  const lost = fixture(0);
+  Object.assign(lost.input, { deferDetails: true });
+  assert.equal(await lost.run(), false);
+  assert.equal(
+    lost.calls.some((x) => x.operation === 'faces'),
+    false,
+  );
+});
+
+test('details publication preserves an already browsable asset and its live-photo identity', async () => {
+  const f = fixture();
+  Object.assign(f.input, { preserveBrowseState: true });
+  await f.run();
+  const update = (
+    f.calls.find((x) => x.operation === 'asset')!.input as { data: Record<string, unknown> }
+  ).data;
+  assert.equal('lifecycleStatus' in update, false);
+  assert.equal('livePhotoIdentifier' in update, false);
+  assert.equal('mediaErrorCode' in update, false);
 });

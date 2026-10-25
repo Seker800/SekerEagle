@@ -1,3 +1,5 @@
+import { mediaQueueAgeOrder } from './media-queue-policy';
+import { MediaResourcePool, type MediaResource } from './media-resource-pool';
 import { runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { publishImage } from './image-publication';
@@ -10,7 +12,12 @@ import {
 } from './video-processing-policy';
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
-import { imageRenditionSpecs, catalogImageDimensions, renditionSource } from './image-renditions';
+import {
+  imageRenditionSpecs,
+  catalogImageDimensions,
+  renditionSource,
+  canReuseImageBrowsing,
+} from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
@@ -20,6 +27,7 @@ import {
   nextBackgroundTime,
   CAMERA_MAX_IMAGE_BYTES,
   isCameraVideoMime,
+  isCameraRawMime,
 } from '@sekereagle/library-core';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
@@ -100,7 +108,6 @@ let buildingPhotoMap = false;
 let photoMapTimer: NodeJS.Timeout | undefined;
 let lastPhotoMapStep = 0;
 let stopping = false;
-let activeJobCount = 0;
 let activeTagBuildCount = 0;
 let deletingObjects = false;
 const runBackgroundProcessing = backgroundProcessingEnabled(
@@ -113,6 +120,11 @@ const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
   ? Math.min(4, Math.max(1, configuredConcurrency))
   : 1;
+const resourcePool = new MediaResourcePool(
+  workerConcurrency,
+  () => wakeScheduler?.wakeNow(),
+  reportLoopError,
+);
 const embeddingSpaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';
 const embeddingModel = process.env.MLX_EMBEDDING_MODEL ?? 'Qwen/Qwen3-VL-Embedding-2B';
 const embeddingRevision =
@@ -162,10 +174,10 @@ async function heartbeat(): Promise<void> {
         version: workerVersion,
         startedAt: now,
         heartbeatAt: now,
-        activeJobCount,
+        activeJobCount: resourcePool.activeCount,
         capabilities,
       },
-      update: { heartbeatAt: now, activeJobCount, capabilities },
+      update: { heartbeatAt: now, activeJobCount: resourcePool.activeCount, capabilities },
     });
     await recordWorkerHeartbeat();
     if (previousReadiness !== embeddingReadiness) wakeScheduler?.wakeNow();
@@ -174,20 +186,33 @@ async function heartbeat(): Promise<void> {
   }
 }
 
-const selectMediaCandidates = createScheduledMediaSelector(
-  prisma,
-  () => embeddingReadiness !== 'READY',
-);
-let claimSequence = 0;
-async function claimJob(): Promise<EagleAssetProcessingJob | null> {
-  const sequence = claimSequence++;
-  return claimNextMediaJob(prisma, {
-    selectCandidates: selectMediaCandidates,
-    canClaimBackground: canClaimBackgroundForOwner,
-    allowedJobKinds,
-    excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
-    laneOrder: mediaLaneOrder(sequence),
-  });
+const selectors = {
+  NAS: createScheduledMediaSelector(prisma, () => embeddingReadiness !== 'READY', 'NAS'),
+  EMBEDDING: createScheduledMediaSelector(
+    prisma,
+    () => embeddingReadiness !== 'READY',
+    'EMBEDDING',
+  ),
+};
+const claimSequence: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0 };
+async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJob | null> {
+  if (
+    stopping ||
+    (resource === 'EMBEDDING' && (!runBackgroundProcessing || embeddingReadiness !== 'READY'))
+  )
+    return null;
+  const sequence = claimSequence[resource]++;
+  for (const age of mediaQueueAgeOrder(sequence)) {
+    const job = await claimNextMediaJob(prisma, {
+      selectCandidates: (input) => selectors[resource](input, age),
+      canClaimBackground: canClaimBackgroundForOwner,
+      allowedJobKinds,
+      excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
+      laneOrder: resource === 'EMBEDDING' ? ['BACKGROUND'] : mediaLaneOrder(sequence),
+    });
+    if (job) return job;
+  }
+  return null;
 }
 
 async function canClaimBackgroundForOwner(
@@ -270,6 +295,22 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     return;
   }
 
+  if (asset.mimeType.startsWith('image/') && canReuseImageBrowsing(job, asset)) {
+    await publishImage(prisma, {
+      asset,
+      job,
+      renditions: [],
+      sha256: asset.sha256!,
+      dimensions: {},
+      photoAnalysis: null,
+      livePhoto: null,
+      scheduleFaces: false,
+      deferDetails: asset.libraryMode === 'PHOTO' || isCameraRawMime(asset.mimeType),
+      preserveBrowseState: true,
+    });
+    return;
+  }
+
   assertOwnedKey(asset.ownerId, asset.originalObjectKey);
   if (job.kind === 'EXTRACT_COLOR_PALETTE') {
     await prisma.eagleAssetColorAnalysis.upsert({
@@ -323,14 +364,21 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       return;
     }
     const sourceDetailsOnly = job.processorVersion === 'photo-source-details-v1';
-    const renditionSpecs = imageRenditionSpecs(sourceDetails.mimeType).filter(
-      (spec) => !sourceDetailsOnly || spec.variant === 'edit',
+    const deferDetails =
+      !sourceDetailsOnly && (isCameraRawMime(asset.mimeType) || asset.libraryMode === 'PHOTO');
+    const renditionSpecs = imageRenditionSpecs(
+      sourceDetails.mimeType,
+      sourceDetailsOnly ? 'DETAILS' : 'BROWSE',
     );
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
       return;
     }
-    const { result: processed, sha256 } = await withProcessableImage(
+    const {
+      result: processed,
+      sha256,
+      sourceMode,
+    } = await withProcessableImage(
       object.Body as AsyncIterable<Uint8Array>,
       sourceDetails.mimeType,
       sourceDetails.storageKey,
@@ -373,23 +421,29 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           });
         }
         const photoAnalysis =
-          asset.libraryMode === 'PHOTO' && !sourceDetailsOnly
+          asset.libraryMode === 'PHOTO'
             ? {
                 ...(await readPhotoExif(metadata.exif, originalPath)),
-                ...(await analyzePhotoPixels(source)),
+                ...(sourceDetailsOnly ? await analyzePhotoPixels(source) : {}),
               }
             : null;
         const livePhoto =
-          originalPath &&
-          (taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly)
+          originalPath && (sourceDetailsOnly || !deferDetails)
             ? await inspectLivePhotoImage(originalPath)
             : null;
         return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
       },
       taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly,
+      sourceDetailsOnly ? 'DEVELOP' : 'BROWSE',
+    );
+    process.stdout.write(
+      `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, sourceMode })}\n`,
     );
     if (sourceDetails.verifiesOriginalHash) {
-      assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
+      assertExpectedHash(
+        asset.uploadSessions[0]?.eagleState?.expectedContentSha256 ?? asset.sha256,
+        sha256,
+      );
     }
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
       await prisma.$transaction(async (transaction) => {
@@ -518,6 +572,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
       livePhoto: livePhoto ?? null,
       scheduleFaces: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
+      deferDetails,
+      preserveBrowseState: sourceDetailsOnly,
     });
     return;
   }
@@ -1252,10 +1308,12 @@ async function poll(): Promise<void> {
       void processClaimedTagBuild(build).catch(reportLoopError);
     }
   }
-  if (stopping || activeJobCount >= workerConcurrency) return;
+  if (stopping) return;
+  await resourcePool.fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob);
+  if (resourcePool.active('NAS') >= workerConcurrency) return;
   if (
     runBackgroundProcessing &&
-    activeJobCount === 0 &&
+    resourcePool.active('NAS') === 0 &&
     activeTagBuildCount === 0 &&
     !buildingSmartFolder &&
     !buildingPhotoMap &&
@@ -1272,12 +1330,7 @@ async function poll(): Promise<void> {
     }
   }
 
-  while (!stopping && activeJobCount < workerConcurrency) {
-    const job = await claimJob();
-    if (!job) return;
-    activeJobCount += 1;
-    void processClaimedJob(job).catch(reportLoopError);
-  }
+  await resourcePool.fill('NAS', () => claimJob('NAS'), processClaimedJob);
 }
 
 interface PendingMediaWakeRow {
@@ -1363,7 +1416,7 @@ async function drainAndScheduleWork(): Promise<void> {
   if (stopping) return;
   await propagateFailedDependencies(prisma);
   await poll();
-  if (!stopping && activeJobCount === 0) {
+  if (!stopping && resourcePool.activeCount === 0) {
     wakeScheduler?.scheduleAt(await nextQueueWakeAt());
   }
 }
@@ -1396,6 +1449,7 @@ async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<voi
 
 async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
   const startedRss = process.memoryUsage().rss;
+  const startedAt = Date.now();
   let leaseHeld = true;
   let renewing = false;
   const renewal = setInterval(() => {
@@ -1420,6 +1474,8 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
     process.stdout.write(
       `${JSON.stringify({
         event: 'eagle_media_job_completed',
+        resource: job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : 'NAS',
+        elapsedMs: Date.now() - startedAt,
         jobId: job.id,
         kind: job.kind,
         rssBeforeMiB: startedRss / 1024 / 1024,
@@ -1433,7 +1489,6 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
     process.stderr.write(`failed media job ${job.id}: ${message}\n`);
   } finally {
     clearInterval(renewal);
-    activeJobCount -= 1;
     wakeScheduler?.wakeNow();
   }
 }
@@ -1457,7 +1512,7 @@ async function stop(signal: string): Promise<void> {
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
   while (
-    activeJobCount > 0 ||
+    resourcePool.activeCount > 0 ||
     activeTagBuildCount > 0 ||
     buildingSmartFolder ||
     buildingPhotoMap ||
@@ -1515,9 +1570,19 @@ async function main(): Promise<void> {
         buildingSmartFolder = false;
       }
     };
-    smartFolderTimer = setInterval(() => void tick().catch(reportLoopError), 5_000);
+    const queueFolderStep = () => {
+      if (stopping || resourcePool.active('EMBEDDING')) return;
+      void resourcePool
+        .fill(
+          'EMBEDDING',
+          () => Promise.resolve(stopping ? null : true),
+          async () => tick(),
+        )
+        .catch(reportLoopError);
+    };
+    smartFolderTimer = setInterval(queueFolderStep, 5_000);
     smartFolderTimer.unref();
-    void tick().catch(reportLoopError);
+    queueFolderStep();
   }
   if (runBackgroundProcessing) {
     photoMapTimer = setInterval(() => wakeScheduler?.wakeNow(), 15000);

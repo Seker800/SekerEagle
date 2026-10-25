@@ -158,7 +158,7 @@ export function EagleTaskCenter({
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
-          <p>{t('系统按依赖、计算成本和等待时间自动安排，无需手动设置优先级。')}</p>
+          <p>{t('新图优先处理，群晖与 Mac 两路并行，历史图片逐步补齐。')}</p>
         </div>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('刷新')}

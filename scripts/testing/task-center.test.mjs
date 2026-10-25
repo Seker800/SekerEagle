@@ -254,8 +254,14 @@ test('fixed light-work order ignores legacy priority, applies pause before the l
   await prisma.eagleProcessingSetting.create({
     data: { ownerId: f.owner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
   });
-  const normal = await f.job(await f.asset(), { availableAt: new Date('1900-01-01T00:00:00Z') });
-  const urgent = await f.job(await f.asset(), {
+  const sameDates = {
+    libraryAddedAt: new Date('2100-01-01Z'),
+    chronologicalAt: new Date('2020-01-01Z'),
+  };
+  const normal = await f.job(await f.asset(sameDates), {
+    availableAt: new Date('1900-01-01T00:00:00Z'),
+  });
+  const urgent = await f.job(await f.asset(sameDates), {
     kind: 'EXTRACT_COLOR_PALETTE',
     availableAt: new Date('1900-01-02T00:00:00Z'),
   });
@@ -425,5 +431,81 @@ test('retirement migration revokes old leases and preserves generated tags and s
       throw rollback;
     }),
     (error) => error === rollback,
+  );
+});
+
+test('separate resource claims prioritize new uploads over newer-dated historical photos, then newest historical capture', async () => {
+  const f = await fixture();
+  await prisma.eagleProcessingSetting.create({
+    data: { ownerId: f.owner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  const recent = await f.asset({
+    libraryAddedAt: new Date(),
+    chronologicalAt: new Date('2010-01-01Z'),
+  });
+  const historyNew = await f.asset({
+    libraryAddedAt: new Date('2020-01-01Z'),
+    chronologicalAt: new Date('2025-01-01Z'),
+  });
+  const historyOld = await f.asset({
+    libraryAddedAt: new Date('2021-01-01Z'),
+    chronologicalAt: new Date('2022-01-01Z'),
+  });
+  const jobs = [];
+  for (const a of [historyOld, historyNew, recent]) jobs.push(await f.job(a));
+  const browse = await f.job(recent, { kind: 'GENERATE_RENDITIONS', lane: 'INTERACTIVE' });
+  const input = { where: { lane: 'BACKGROUND' }, take: 10000 };
+  const select = async (resource, freshOnly = false) =>
+    (
+      await selectScheduledMediaCandidates(prisma, input, true, false, { resource, freshOnly })
+    ).filter((row) => row.ownerId === f.owner);
+  assert.deepEqual(
+    (await select('EMBEDDING')).map((row) => row.assetId),
+    [recent.id, historyNew.id, historyOld.id],
+  );
+  assert.deepEqual(
+    (await select('EMBEDDING', true)).map((row) => row.assetId),
+    [recent.id],
+  );
+  const historicalOnly = (
+    await selectScheduledMediaCandidates(prisma, input, true, false, {
+      resource: 'EMBEDDING',
+      historyOnly: true,
+    })
+  ).filter((row) => row.ownerId === f.owner);
+  assert.deepEqual(
+    historicalOnly.map((row) => row.assetId),
+    [historyNew.id, historyOld.id],
+  );
+  assert.equal((await select('NAS')).length, 0);
+  const nas = (
+    await selectScheduledMediaCandidates(
+      prisma,
+      { ...input, where: { lane: 'INTERACTIVE' } },
+      true,
+      false,
+      { resource: 'NAS' },
+    )
+  ).filter((row) => row.ownerId === f.owner);
+  assert.deepEqual(
+    nas.map((row) => row.id),
+    [browse.id],
+  );
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: jobs[2].id },
+    data: { status: 'PROCESSING', lockedAt: new Date() },
+  });
+  const newlyUploaded = await f.asset({
+    libraryAddedAt: new Date(Date.now() + 1000),
+    chronologicalAt: new Date('2000-01-01Z'),
+  });
+  const next = await f.job(newlyUploaded);
+  await prisma.$executeRaw(
+    Prisma.sql`UPDATE "EagleMediaJob" SET "availableAt"=now()-interval '1 second' WHERE id=${next.id}`,
+  );
+  assert.equal((await select('EMBEDDING'))[0].id, next.id);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUnique({ where: { id: jobs[2].id } })).status,
+    'PROCESSING',
   );
 });

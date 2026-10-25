@@ -62,7 +62,8 @@ export async function withProcessableImage<T>(
     embeddedThumbnail?: Sharp,
   ) => Promise<T>,
   retainOriginal = false,
-): Promise<{ result: T; sha256: string }> {
+  rawPurpose: 'BROWSE' | 'DEVELOP' = 'DEVELOP',
+): Promise<{ result: T; sha256: string; sourceMode: 'IMAGE' | 'RAW_EMBEDDED' | 'RAW_DEVELOPED' }> {
   const hash = createHash('sha256');
   const hashTap = new Transform({
     transform(chunk: Buffer, _encoding, callback) {
@@ -78,7 +79,7 @@ export async function withProcessableImage<T>(
         resultPromise,
         pipeline(Readable.from(source), hashTap, image),
       ]);
-      return { result, sha256: hash.digest('hex') };
+      return { result, sha256: hash.digest('hex'), sourceMode: 'IMAGE' };
     } catch (error) {
       throw classifyImageInputError(error);
     }
@@ -91,7 +92,7 @@ export async function withProcessableImage<T>(
   try {
     await pipeline(Readable.from(source), hashTap, createWriteStream(inputPath, { flags: 'wx' }));
     const originalDimensions = isCameraRawMime(mimeType)
-      ? await readCameraRaw(inputPath, outputPath, thumbnailPath)
+      ? await readCameraRaw(inputPath, outputPath, thumbnailPath, rawPurpose)
       : undefined;
     if (!originalDimensions) {
       if (requiresHeifDecode(mimeType, storageKey)) await decodeHeifFile(inputPath, outputPath);
@@ -105,7 +106,15 @@ export async function withProcessableImage<T>(
         ? sharp(thumbnailPath, { failOn: 'error', limitInputPixels: MAX_EAGLE_IMAGE_INPUT_PIXELS })
         : undefined,
     );
-    return { result, sha256: hash.digest('hex') };
+    return {
+      result,
+      sha256: hash.digest('hex'),
+      sourceMode: isCameraRawMime(mimeType)
+        ? originalDimensions?.embeddedPreview
+          ? 'RAW_EMBEDDED'
+          : 'RAW_DEVELOPED'
+        : 'IMAGE',
+    };
   } catch (error) {
     throw classifyImageInputError(error);
   } finally {

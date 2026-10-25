@@ -24,7 +24,7 @@ test('FIFO fairness belongs to each lane, so reserved background turns still use
     .filter((sql) => sql.includes('SELECT job.*'))
     .filter((_, index) => index % 4 === 3);
   assert.equal(background.length, 4);
-  for (const sql of background.slice(0, 3)) assert.match(sql, /ORDER BY CASE/);
-  assert.doesNotMatch(background[3]!, /ORDER BY CASE/);
+  for (const sql of background.slice(0, 3)) assert.match(sql, /DESC,\s+CASE CASE WHEN/);
+  assert.doesNotMatch(background[3]!, /DESC,\s+CASE CASE WHEN/);
   assert.ok(queries.every((sql) => !sql.includes('policy.priority')));
 });

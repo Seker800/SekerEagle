@@ -47,7 +47,40 @@ test('only thumbnails prefer the camera JPEG; editing and ordinary previews reta
 });
 
 test('browsing excludes expensive editing derivatives and details never replace browsing', () => {
-  assert.deepEqual(imageRenditionSpecs('image/x-fuji-raf', 'BROWSE').map(spec => spec.variant), ['default', '256', '512']);
-  assert.deepEqual(imageRenditionSpecs('image/x-fuji-raf', 'DETAILS').map(spec => spec.variant), ['edit']);
+  assert.deepEqual(
+    imageRenditionSpecs('image/x-fuji-raf', 'BROWSE').map((spec) => spec.variant),
+    ['default', '256', '512'],
+  );
+  assert.deepEqual(
+    imageRenditionSpecs('image/x-fuji-raf', 'DETAILS').map((spec) => spec.variant),
+    ['edit'],
+  );
   assert.deepEqual(imageRenditionSpecs('image/jpeg', 'DETAILS'), []);
+});
+
+test('normal repair reuses current browse outputs without reopening the original; explicit refresh and missing outputs do not', async () => {
+  const { canReuseImageBrowsing } = await import('./image-renditions');
+  const job = { kind: 'GENERATE_RENDITIONS', processorVersion: 'rendition-v2', assetRevision: 3 };
+  const asset = {
+    lifecycleStatus: 'READY',
+    sha256: 'hash',
+    width: 6000,
+    height: 4000,
+    renditions: [
+      { kind: 'PREVIEW', variant: 'default', revision: 3, status: 'READY' },
+      { kind: 'THUMBNAIL', variant: '256', revision: 3, status: 'READY' },
+      { kind: 'THUMBNAIL', variant: '512', revision: 3, status: 'READY' },
+    ],
+  };
+  assert.equal(canReuseImageBrowsing(job, asset), true);
+  assert.equal(
+    canReuseImageBrowsing({ ...job, processorVersion: 'raw-embedded-thumbnail-v3' }, asset),
+    false,
+  );
+  assert.equal(canReuseImageBrowsing({ ...job, assetRevision: 4 }, asset), false);
+  assert.equal(canReuseImageBrowsing(job, { ...asset, sha256: null }), false);
+  assert.equal(
+    canReuseImageBrowsing(job, { ...asset, renditions: asset.renditions.slice(1) }),
+    false,
+  );
 });

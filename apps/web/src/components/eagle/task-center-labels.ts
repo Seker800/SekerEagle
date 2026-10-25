@@ -17,7 +17,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
     ],
     DETAILS: [
       t('高清与动态组件'),
-      t('补齐 RAW 编辑图和动态照片视频。'),
+      t('补齐 RAW 编辑图、动态视频、清晰度和相似特征。'),
       t('原文件 + 解码工具'),
       t('图库服务器 · 较重'),
     ],

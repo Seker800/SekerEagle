@@ -24,6 +24,8 @@ export function buildImageProcessingJobs(
     width: number | null;
     height: number | null;
     renditionsReady?: boolean;
+    detailsReady?: boolean;
+    needsDetails?: boolean;
     paletteReady?: boolean;
     pyramidReady?: boolean;
     embeddingReady?: boolean;
@@ -41,6 +43,8 @@ export function buildMissingImageProcessingJobs(
     width: number | null;
     height: number | null;
     renditionsReady?: boolean;
+    detailsReady?: boolean;
+    needsDetails?: boolean;
     paletteReady?: boolean;
     pyramidReady?: boolean;
     embeddingReady?: boolean;
@@ -68,6 +72,20 @@ export function buildMissingImageProcessingJobs(
       lane: 'INTERACTIVE',
       processorVersion: RENDITION_PROCESSOR_VERSION,
       dependsOnJobId: null,
+    });
+  }
+  if (
+    input.needsDetails &&
+    !input.detailsReady &&
+    !existingJobs.some((job) => job.processorVersion === 'photo-source-details-v1')
+  ) {
+    jobs.push({
+      id: randomUUID(),
+      ...common,
+      kind: 'GENERATE_RENDITIONS',
+      lane: 'BACKGROUND',
+      processorVersion: 'photo-source-details-v1',
+      dependsOnJobId: renditionJobId,
     });
   }
   const hasPalette = existingJobs.some(

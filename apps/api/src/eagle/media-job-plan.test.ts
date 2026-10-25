@@ -182,3 +182,26 @@ test('missing analysis can depend on ready renditions after rendition job prunin
     ['GENERATE_EMBEDDING', null],
   ]);
 });
+
+test('missing heavyweight details are queued separately without rebuilding ready browsing', () => {
+  const jobs = buildMissingImageProcessingJobs(
+    {
+      ownerId: 'owner',
+      assetId: 'asset',
+      assetRevision: 3,
+      width: 6000,
+      height: 4000,
+      renditionsReady: true,
+      paletteReady: true,
+      pyramidReady: true,
+      embeddingReady: true,
+      needsDetails: true,
+      detailsReady: false,
+    },
+    [],
+  );
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0]?.processorVersion, 'photo-source-details-v1');
+  assert.equal(jobs[0]?.lane, 'BACKGROUND');
+  assert.equal(jobs[0]?.dependsOnJobId, null);
+});
