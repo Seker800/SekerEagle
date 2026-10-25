@@ -43,6 +43,20 @@ describe('workspace cache lifetime', () => {
     expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).not.toBe(cache);
   });
 
+  it('collects an idle workspace through the actual query garbage collector', async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({ defaultOptions: { queries: { gcTime: 25 } } });
+    clients.push(client);
+    const cache = getEagleWorkspaceCache(client, 'owner', 'PHOTO');
+    const keys = createEagleQueryKeys('owner', 'PHOTO');
+    client.setQueryData(keys.assetList('ACTIVE', {}), { pages: [] });
+    const dispose = vi.spyOn(cache.thumbnails, 'dispose');
+    cache.retain(false)();
+    await vi.advanceTimersByTimeAsync(26);
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(getEagleWorkspaceCache(client, 'owner', 'PHOTO')).not.toBe(cache);
+  });
+
   it('keeps resources while another list or mounted consumer still needs them', async () => {
     const { client, cache, keys } = fixture();
     const first = cache.retain(false);
