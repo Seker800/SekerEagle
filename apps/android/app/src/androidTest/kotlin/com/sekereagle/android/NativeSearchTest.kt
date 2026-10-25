@@ -310,10 +310,25 @@ class NativeSearchTest {
                 model.openFilters("筛选")
             }
             await { !model.state.value.optionsLoading }
-            compose.onNodeWithText("Camera A").performScrollTo().performClick()
-            compose.onNodeWithText("Lens B").performScrollTo().performClick()
-            compose.onNodeWithText("4 ★").performScrollTo().performClick()
-            compose.onNodeWithText("有 GPS").performScrollTo().performClick()
+            fun chooseVisible(text: String) {
+                repeat(8) {
+                    if (
+                        runCatching { compose.onNodeWithText(text).assertIsDisplayed() }.isSuccess
+                    ) {
+                        compose.onNodeWithText(text).performClick()
+                        return
+                    }
+                    compose.onNodeWithTag("native-filter-sheet").performTouchInput {
+                        swipeUp(startY = height * 0.75f, endY = height * 0.3f, durationMillis = 400)
+                    }
+                    compose.waitForIdle()
+                }
+                compose.onNodeWithText(text).assertIsDisplayed().performClick()
+            }
+            chooseVisible("Camera A")
+            chooseVisible("Lens B")
+            chooseVisible("4 ★")
+            chooseVisible("有 GPS")
             compose.waitForIdle()
             captureNativeEvidence("native-search-combined.png")
             compose.onNodeWithTag("filter-submit").assertIsDisplayed().performClick()
@@ -583,6 +598,52 @@ class NativeSearchTest {
             assertFalse(server.paths.last { it.contains("/assets?") }.contains("smartFolderId="))
             assertEquals("flower", model.state.value.query)
             assertEquals(setOf("tag1"), model.state.value.filters.tags)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun smartFoldersRetryIndependentlyAndKeepSelectionsScopedAcrossModes() {
+        Server().use { server ->
+            val model = model(server)
+            val restoration = androidx.compose.ui.test.junit4.StateRestorationTester(compose)
+            restoration.setContent { NativeGalleryApp(model) {} }
+            main {
+                model.openSearch()
+                model.openFilters("智能文件夹")
+            }
+            await { !model.state.value.optionsLoading }
+            compose.onNodeWithText("收藏 / 旅行").performClick()
+            restoration.emulateSavedInstanceStateRestore()
+            compose.onNodeWithText("收藏 / 旅行").assertIsSelected()
+            compose.onNodeWithTag("filter-submit").performClick()
+            await { !model.state.value.loading }
+            assertEquals("photo-child", model.state.value.filters.smartFolderId)
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            await { !model.state.value.loading }
+            assertEquals("", model.state.value.filters.smartFolderId)
+            server.folderStatus = 503
+            main {
+                model.openSearch()
+                model.openFilters("智能文件夹")
+            }
+            await { !model.state.value.optionsLoading }
+            assertNotNull(model.state.value.optionStatus[NativeOptionSection.SMART_FOLDERS]?.error)
+            assertTrue(model.state.value.options.folders.isEmpty())
+            server.folderStatus = 200
+            compose.onNodeWithText("重新加载智能文件夹").performClick()
+            await { !model.state.value.optionsLoading }
+            assertEquals("material-child", model.state.value.options.folders.last().id)
+            compose.onNodeWithText("收藏 / 旅行").performClick()
+            compose.onNodeWithText("取消").performClick()
+            assertEquals("", model.state.value.filters.smartFolderId)
+            main {
+                model.back()
+                model.switchMode(GalleryMode.PHOTO)
+            }
+            await { !model.state.value.loading }
+            assertEquals("photo-child", model.state.value.filters.smartFolderId)
+            assertEquals("photo-child", model.state.value.options.folders.last().id)
             main { model.logout() }
         }
     }

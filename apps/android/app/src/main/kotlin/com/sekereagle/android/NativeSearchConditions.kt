@@ -21,8 +21,8 @@ import androidx.compose.ui.unit.dp
 fun NativeSearchConditions(
     state: GalleryState,
     model: NativeGalleryViewModel,
-    showKeyword: Boolean = true,
     modifier: Modifier = Modifier,
+    showKeyword: Boolean = true,
     singleLine: Boolean = false,
 ) {
     val conditions: @Composable () -> Unit = {

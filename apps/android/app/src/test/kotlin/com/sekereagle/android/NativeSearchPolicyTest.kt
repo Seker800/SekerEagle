@@ -111,4 +111,55 @@ class NativeSearchPolicyTest {
         assertEquals("opaque", tag.id)
         assertEquals("ＡＢ 标签", tag.name)
     }
+
+    @Test
+    fun smartFolderUsesItsIdentityAndRemovingItPreservesOtherConditions() {
+        val filters =
+            NativeFilters(
+                tags = setOf("tag"),
+                formats = setOf("png"),
+                smartFolderId = "folder&gps=WITH",
+            )
+        assertTrue(filters.active)
+        assertEquals("folder&gps=WITH", filters.parameters()["smartFolderId"])
+        assertTrue(filters.parameters().querySuffix().contains("smartFolderId=folder%26gps%3DWITH"))
+        assertEquals(filters.copy(smartFolderId = ""), filters.without("smartFolder"))
+        assertEquals(
+            "智能文件夹：父 / 子",
+            filters
+                .tokens(emptyList(), listOf(NativeChoice("folder&gps=WITH", "父 / 子")))
+                .first()
+                .label,
+        )
+    }
+
+    @Test
+    fun folderPathsDisambiguateNamesAndTerminateForMissingOrCyclicParents() {
+        val choices =
+            nativeFolderChoices(
+                listOf(
+                    NativeFolder("a", "照片"),
+                    NativeFolder("b", "素材"),
+                    NativeFolder("c", "旅行", "a"),
+                    NativeFolder("d", "旅行", "b"),
+                    NativeFolder("e", "孤立", "missing"),
+                    NativeFolder("f", "循环", "f"),
+                )
+            )
+        assertEquals(listOf("照片", "素材", "照片 / 旅行", "素材 / 旅行", "孤立", "循环"), choices.map { it.label })
+        assertEquals(6, choices.map { it.id }.toSet().size)
+    }
+
+    @Test
+    fun folderOptionsMergeWithoutErasingOtherCatalogs() {
+        val before = NativeOptions(tags = listOf(NativeTag("tag", "标签")), formats = listOf("png"))
+        val after =
+            before.merge(
+                NativeOptionSection.SMART_FOLDERS,
+                NativeOptions(folders = listOf(NativeChoice("folder", "收藏"))),
+            )
+        assertEquals(before.tags, after.tags)
+        assertEquals(before.formats, after.formats)
+        assertEquals("folder", after.folders.single().id)
+    }
 }
