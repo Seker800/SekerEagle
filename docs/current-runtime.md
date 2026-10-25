@@ -1,5 +1,19 @@
 # 现用运行状态与交接
 
+## 2026-10-25 图片处理优化生产发布
+
+用户本次授权将此前本地修改推送并发布生产，覆盖这些修改原有的仅本机限制。已部署代码为 `7f5b50147dd3f0e0d708e784574205c971cbd7e6`，已推送 `codex/map-distribution-points`；API、worker、web 同步运行对应 `nas-7f5b50147dd3f0e0d708e784574205c971cbd7e6` 镜像。此次包含任务中心三栏、固定调度、群晖媒体／Mac 向量双路、RAW 快速浏览、浏览尺寸复用、普通照片分析使用预览及替换版本优先。安卓固定测试环境未发布到群晖，不将本机测试服务作为生产依赖。
+
+生产于北京时间 09:13 切换并通过健康检查。保留原时段、单项暂停、部署白名单与模型路由；颜色、切片、视频、人脸和标签索引等原有运维停用状态不变。worker 等当前步骤正常完成后再替换，默认群晖一路、Mac 一路；RAW 编辑仍预先排后台，向量仍遵守已保存时段，不将此前讨论的按需编辑／绕过时段误写为已实施。
+
+备份与回滚保存在 NAS 私有 `maintenance/processing-release-20261025-7f5b501/`。一致性数据库归档为 547,176,527 字节，已核验 SHA256 与归档目录，另存原服务／Compose 摘要、镜像构建日志及 `rollback.yml`。现用 Compose 参数仍从 `maintenance/processing-upgrade-20261023/release-compose.json` 的 `command` 读取，已追加本次 `runtime-override.yml`。回滚应用时在完整参数链末尾追加本次 `rollback.yml`，不自动恢复数据库。数据库仍为原 47 项迁移，没有待应用迁移；未 seed、重导入或恢复数据。原 PostgreSQL、MinIO、网关及已完成的独立封面容器身份／重启次数保留，网关仅重载路由；三项应用的环境摘要、内存、账号与重启策略一致，API／worker 挂载保持原样。
+
+API 按当前锁文件安装 Linux 依赖并重新生成 Prisma Client；worker 复用原 Linux 运行库并覆盖新程序和媒体脚本。已逐项比对外部依赖图、Prisma schema 与 Python requirements 未变，锁文件唯一差异是 library-persistence 声明现有 library-core 工作区依赖；兼容性证据保存在本次私有目录，不混入宿主原生模块。三个镜像均为 AMD64、带固定源码修订。两个 Node 镜像的 sharp／bcrypt／Prisma／共享库检查与 worker 的 21 项 RAW Python 测试通过；本机全量依赖审计为零漏洞。
+
+验收：固定代码快照的完整工程检查、真实 PostgreSQL 历史升级与完整恢复通过，OSS 清单另在干净主工作区核验。生产 HTTPS readiness 为 200；双模式任务接口未登录均为 401，退役 AI 标签生成接口均为 404；线上 HTML 与固定候选逐字节一致。真实 MinIO 原文件读取通过严格 Content-Range 与 4096 字节检查。新 worker 启动后已完成 8 项浏览、2 项普通照片分析和 3 项向量；同一核验时刻浏览与向量各运行 1 项，心跳 activeJobCount 为 2，模型 READY，未新增 FAILED 任务。该数量是启动后验收快照，不是实时监控或全库速度承诺；这一批为 JPEG，不能拿它直接对比之前 RAW 的平均耗时。原有失败记录未自动重试，地图索引当时仍为 PENDING，不表示已完成。
+
+本机证据为 `.omx/artifacts/processing-production-20261025/`，生产镜像、原服务摘要、回滚及检查记录见上述 NAS 私有目录。核验日期：2026-10-25（北京时间，发布后）。以下同日／此前“仅本地”章节保留阶段记录，当前部署以本节为准。
+
 ## 2026-10-25 固定安卓交互测试环境
 
 用户要求后续手机验收持续复用同一测试图库。本机入口固定为 `http://localhost:49813`，由用户级 launchd 服务 `com.sekereagle.android-lab` 托管 API、worker 和 loopback 网关；独立 PostgreSQL／MinIO 使用 `sekereagle-android-lab-db`、`sekereagle-android-lab-storage` 与持久命名卷，数据库为 `sekereagle_test`。初始照片与素材各 72 项，来自私有缓存中此前只读抽取的 27 张真实图库照片，副本补入虚构测试元数据；本轮没有再次连接或修改生产图库、群晖服务和 Mac 模型。
