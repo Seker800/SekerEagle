@@ -35,6 +35,20 @@ test('completed upload freshness has a covering lookup without weakening current
     /\("objectKey"\) INCLUDE \("uploaderId", "libraryMode", "completedAt"\)/,
   );
   assert.match(indexes[0].indexdef, /WHERE \(status = 'COMPLETED'/);
+  const assetIndexes =
+    await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='EagleAsset' AND indexname='EagleAsset_media_scheduler_cover_idx'`;
+  assert.equal(assetIndexes.length, 1);
+  for (const field of [
+    'ownerId',
+    'libraryMode',
+    'mediaRevision',
+    'deletedAt',
+    'isPrivate',
+    'originalObjectKey',
+    'libraryAddedAt',
+    'chronologicalAt',
+  ])
+    assert.ok(assetIndexes[0].indexdef.includes(`"${field}"`));
 });
 
 async function fixture(size = 1) {
