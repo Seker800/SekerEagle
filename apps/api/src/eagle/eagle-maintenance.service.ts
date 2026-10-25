@@ -66,21 +66,41 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
         ORDER BY "updatedAt", id LIMIT 100 FOR UPDATE SKIP LOCKED
       `;
       for (const plan of plans) {
-        const items = plan.plan as Array<{ targetKey: string; targetId: string }>;
+        const items = plan.plan as Array<{
+          targetKey: string;
+          targetId: string;
+          renditions?: Array<{ targetKey: string }>;
+          pyramid?: { targetPrefix: string };
+        }>;
         if (!Array.isArray(items) || !items.length || items.length > 200)
           throw new Error('Invalid transfer cleanup plan');
-        const objectKeys = items.map((item) => {
-          assertOwnedObjectKey(plan.ownerId, item.targetKey);
-          if (!item.targetKey.startsWith(`users/${plan.ownerId}/assets/${item.targetId}/`))
-            throw new Error('Invalid transfer cleanup key');
-          return item.targetKey;
+        const prefixes: string[] = [];
+        const objectKeys = items.flatMap((item) => {
+          if (item.pyramid) {
+            const prefix = item.pyramid.targetPrefix;
+            assertOwnedObjectKey(plan.ownerId, prefix);
+            if (
+              !prefix.startsWith(`users/${plan.ownerId}/assets/${item.targetId}/`) ||
+              !prefix.endsWith('/')
+            )
+              throw new Error('Invalid transfer cleanup prefix');
+            prefixes.push(prefix);
+          }
+          const keys = [item.targetKey, ...(item.renditions ?? []).map((r) => r.targetKey)];
+          if (keys.length > 17) throw new Error('Invalid transfer cleanup plan');
+          for (const key of keys) {
+            assertOwnedObjectKey(plan.ownerId, key);
+            if (!key.startsWith(`users/${plan.ownerId}/assets/${item.targetId}/`))
+              throw new Error('Invalid transfer cleanup key');
+          }
+          return keys;
         });
         await tx.eagleLibraryTransfer.update({
           where: { id: plan.id, ownerId: plan.ownerId, sourceMode: plan.sourceMode },
           data: { status: 'ABANDONED', updatedAt: now },
         });
         await tx.eagleObjectDeletion.create({
-          data: { ownerId: plan.ownerId, libraryMode: plan.targetMode, objectKeys, prefixes: [] },
+          data: { ownerId: plan.ownerId, libraryMode: plan.targetMode, objectKeys, prefixes },
         });
       }
       // Keep tombstones and revisit them daily: a delayed object copy may finish after deletion.

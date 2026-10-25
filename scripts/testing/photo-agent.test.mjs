@@ -308,6 +308,24 @@ test('real HTTP rejects PAT review and cross-scope requests but permits photo-sc
       .create(f.ownerId, 'test-photo-agent', ['photo:read', 'photo:suggest']);
     const read = await app.get(PatService).create(f.ownerId, 'test-read', ['photo:read']);
     const auth = { authorization: `Bearer ${pat.token}`, 'content-type': 'application/json' };
+    assert.equal(
+      (await fetch(`${base}/api/photos/agent/instructions`, { headers: auth })).status,
+      200,
+    );
+    assert.equal(
+      (
+        await fetch(`${base}/api/photos/agent/instructions`, {
+          method: 'PUT',
+          headers: auth,
+          body: JSON.stringify({
+            instructions: 'Agent must not overwrite owner rules',
+            revision: 0,
+          }),
+        })
+      ).status,
+      403,
+    );
+
     assert.equal((await fetch(`${base}/api/photos/agent/photos`)).status, 401);
     assert.equal((await fetch(`${base}/api/photos/agent/photos`, { headers: auth })).status, 200);
     // Malformed compressed bodies must fail through the parser callback, without terminating HTTP.
@@ -963,4 +981,83 @@ test('delete audit freezes all logical photo components and undo refuses later m
   );
   for (const id of [f.a.id, motion.id])
     assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id } })).deletedAt);
+});
+
+test('organizing instructions are owner scoped, revision fenced, clearable and PHOTO only', async () => {
+  const f = await fixture(),
+    other = await fixture();
+  assert.deepEqual(await f.service.instructions(f.ownerId), {
+    instructions: '',
+    revision: 0,
+    updatedAt: null,
+  });
+  const first = await f.service.saveInstructions(f.ownerId, {
+    instructions: '仅文字筛选，不读图；先提交申请。',
+    revision: 0,
+  });
+  assert.equal(first.revision, 1);
+  assert.equal((await f.service.instructions(other.ownerId)).instructions, '');
+  await assert.rejects(
+    f.service.saveInstructions(f.ownerId, { instructions: 'stale', revision: 0 }),
+    /其他页面/,
+  );
+  await assert.rejects(
+    f.service.saveInstructions(f.ownerId, { instructions: 'stale', revision: 7 }),
+    /其他页面/,
+  );
+  assert.equal(
+    (await f.service.saveInstructions(f.ownerId, { instructions: '', revision: 1 })).revision,
+    2,
+  );
+  assert.equal((await f.service.instructions(f.ownerId)).instructions, '');
+  await assert.rejects(
+    prisma.eaglePhotoAgentPreference.update({
+      where: { ownerId_libraryMode: { ownerId: f.ownerId, libraryMode: 'PHOTO' } },
+      data: { libraryMode: 'MATERIAL' },
+    }),
+  );
+});
+
+test('new metadata-only requests persist their evidence basis without applying changes', async () => {
+  const f = await fixture();
+  const input = {
+    kind: 'SEND_TO_MATERIAL',
+    title: '仅文字筛选',
+    rationale: '只依据Screenshot文件名，未看图片，等待人工确认。',
+    items: [
+      {
+        assetId: f.a.id,
+        evidenceIds: [],
+        visualReviewed: false,
+        rationale: '文件名含Screenshot，未查看图片。',
+      },
+    ],
+  };
+  const result = await f.service.submitRequest(f.ownerId, input, false);
+  const task = await f.service.detail(f.ownerId, result.id, false);
+  assert.equal(task.suggestions[0].reviewBasis, 'METADATA');
+  assert.equal(task.suggestions[0].status, 'PENDING');
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.a.id } })).deletedAt,
+    null,
+  );
+  const history = await f.service.history(f.ownerId, result.id, { limit: 20 }, false);
+  assert.equal(history.items[0].details.reviewBasis, 'METADATA');
+  await assert.rejects(
+    f.service.submitRequest(
+      f.ownerId,
+      { ...input, kind: 'CITY', items: [{ ...input.items[0], assetId: f.b.id, city }] },
+      false,
+    ),
+    /查看照片/,
+  );
+  for (const bad of [await f.add('MATERIAL'), await f.add('PHOTO', { isPrivate: true })])
+    await assert.rejects(
+      f.service.submitRequest(
+        f.ownerId,
+        { ...input, items: [{ ...input.items[0], assetId: bad.id }] },
+        false,
+      ),
+      /不存在/,
+    );
 });

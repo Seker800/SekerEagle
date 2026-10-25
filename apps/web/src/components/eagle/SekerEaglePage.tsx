@@ -383,28 +383,9 @@ export function SekerEaglePage({
     setAssetDragStatus(null);
     setAiTagReferenceRequested(false);
   }, [ownerId, libraryMode]);
-  const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
-    useEagleReferenceData(accessToken, queryKeys, {
-      aiTagsEnabled:
-        libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
-    });
   const workspaceSection = getWorkspaceSection(libraryView);
-  const vectorSummaryQuery = useQuery({
-    queryKey: [...queryKeys.root, 'vector-summary'],
-    queryFn: fetchEagleVectorSummary,
-    staleTime: 60_000,
-    refetchInterval:
-      workspaceSection === 'PENDING' ? 10_000 : workspaceSection === 'SETTINGS' ? 30_000 : false,
-  });
-  const vectorSummary = vectorSummaryQuery.data;
-  const unavailableSuggestionCount = Math.max(
-    0,
-    (vectorSummary?.suggestions.unclassified ?? 0) - (vectorSummary?.suggestions.pending ?? 0),
-  );
-  const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
   const isAssetView =
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
-  const photoFieldOptions = usePhotoFilterOptions(privateVisible);
   const showsAssetControls = libraryMode !== 'PHOTO' || photoView === 'timeline';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
   const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
@@ -521,6 +502,36 @@ export function SekerEaglePage({
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
+  const secondaryReady =
+    !isAssetView ||
+    !showsAssetControls ||
+    assetsQuery.isFetched ||
+    filtersExpanded ||
+    isSmartFolderDialogOpen;
+  const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
+    useEagleReferenceData(accessToken, queryKeys, {
+      enabled: secondaryReady,
+      aiTagsEnabled:
+        libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
+    });
+  const vectorSummaryQuery = useQuery({
+    queryKey: [...queryKeys.root, 'vector-summary'],
+    queryFn: fetchEagleVectorSummary,
+    staleTime: 60_000,
+    enabled: secondaryReady,
+    refetchInterval:
+      workspaceSection === 'PENDING' ? 10_000 : workspaceSection === 'SETTINGS' ? 30_000 : false,
+  });
+  const vectorSummary = vectorSummaryQuery.data;
+  const unavailableSuggestionCount = Math.max(
+    0,
+    (vectorSummary?.suggestions.unclassified ?? 0) - (vectorSummary?.suggestions.pending ?? 0),
+  );
+  const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
+  const photoFieldOptions = usePhotoFilterOptions(
+    privateVisible,
+    filtersExpanded || isSmartFolderDialogOpen,
+  );
   const resetAssetPrivacyState = useCallback(() => {
     thumbnailScheduler.clear({ abortActive: true });
     thumbnailLoadService.dispose();
@@ -614,6 +625,7 @@ export function SekerEaglePage({
     queryKeys,
     privateVisible,
     privacyRulesRevision,
+    secondaryReady,
   );
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();
@@ -2006,7 +2018,17 @@ export function SekerEaglePage({
                       </button>
                     )}
                     {assetsQuery.isLoading && (
-                      <div className={styles.emptyState}>{t('正在加载个人素材库…')}</div>
+                      <div
+                        className={styles.loadingGrid}
+                        role="status"
+                        aria-label={
+                          libraryMode === 'PHOTO' ? t('正在加载照片…') : t('正在加载素材…')
+                        }
+                      >
+                        {Array.from({ length: 12 }, (_, index) => (
+                          <div key={index} className={styles.loadingTile} aria-hidden="true" />
+                        ))}
+                      </div>
                     )}
                     {assetsQuery.isError && (
                       <div className={styles.emptyState}>

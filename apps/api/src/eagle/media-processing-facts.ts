@@ -26,7 +26,8 @@ export function readMediaProcessingFacts(
        AND EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='THUMBNAIL' AND r.variant='512' AND r.status='READY')
       ) AS "renditionsReady",
       (a."libraryMode"='PHOTO' OR a."mimeType" IN (${Prisma.join(CAMERA_MEDIA_FORMATS.filter((format) => format.kind === 'raw').map((format) => format.mimeType))})) AS "needsDetails",
-      (EXISTS (SELECT 1 FROM "EagleMediaJob" j WHERE j."assetId"=a.id AND j."ownerId"=a."ownerId" AND j."libraryMode"=a."libraryMode" AND j."assetRevision"=a."mediaRevision" AND j."processorVersion"='photo-source-details-v1' AND j.status='COMPLETED')
+      ((EXISTS (SELECT 1 FROM "EagleMediaJob" j WHERE j."assetId"=a.id AND j."ownerId"=a."ownerId" AND j."libraryMode"=a."libraryMode" AND j."assetRevision"=a."mediaRevision" AND j."processorVersion"='photo-source-details-v1' AND j.status='COMPLETED')
+        OR EXISTS (SELECT 1 FROM "EagleAssetTransferFacts" f WHERE f."ownerId"=a."ownerId" AND f."libraryMode"=a."libraryMode" AND f."assetId"=a.id AND f."assetRevision"=a."mediaRevision" AND f."schemaVersion"=1 AND f."detailsReady"))
        AND (a."mimeType" NOT IN (${Prisma.join(CAMERA_MEDIA_FORMATS.filter((format) => format.kind === 'raw').map((format) => format.mimeType))})
          OR EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."assetId"=a.id AND r.revision=a."mediaRevision" AND r.kind='PREVIEW' AND r.variant='edit' AND r.status='READY'))
        AND (a."libraryMode"<>'PHOTO' OR EXISTS (SELECT 1 FROM "EaglePhotoMetadata" m WHERE m."assetId"=a.id AND m."assetRevision"=a."mediaRevision" AND m."perceptualHash" IS NOT NULL AND m."sharpnessScore" IS NOT NULL))) AS "detailsReady",

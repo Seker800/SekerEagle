@@ -27,6 +27,7 @@ export interface PhotoAgentSuggestion {
   status: 'PENDING' | 'APPLYING' | 'FAILED' | 'ACCEPTED' | 'REJECTED' | 'UNDONE';
   value: PhotoCity | { category: string };
   rationale: string;
+  reviewBasis?: 'VISUAL' | 'METADATA';
   evidence: Array<{ id: string }>;
 }
 export interface PhotoAgentTaskSummary {
@@ -137,3 +138,18 @@ export const getPhotoAgentHistory = (taskId: string, after?: string, signal?: Ab
     `${base}/tasks/${encodeURIComponent(taskId)}/history?limit=20${after ? `&after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
+
+export interface PhotoAgentInstructions {
+  instructions: string;
+  revision: number;
+  updatedAt: string | null;
+}
+export const getPhotoAgentInstructions = (signal?: AbortSignal) =>
+  request<PhotoAgentInstructions>(`${base}/instructions`, { signal });
+export const savePhotoAgentInstructions = (
+  input: Pick<PhotoAgentInstructions, 'instructions' | 'revision'>,
+) =>
+  request<PhotoAgentInstructions>(`${base}/instructions`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });

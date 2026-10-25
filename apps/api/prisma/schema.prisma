@@ -181,6 +181,7 @@ model EagleLibraryTransfer {
 }
 
 model User {
+  photoAgentPreferences EaglePhotoAgentPreference[]
   photoMapStates EaglePhotoMapState[]
   libraryTransfers EagleLibraryTransfer[]
   photoPeople EaglePhotoPerson[]
@@ -388,6 +389,7 @@ model EagleAsset {
   vectorSuggestions              EagleVectorTagSuggestion[]
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
+  transferFacts                  EagleAssetTransferFacts?
   photoMetadata                  EaglePhotoMetadata?
   photoLocation                  EaglePhotoLocation?
   photoAgentSuggestions          EaglePhotoAgentSuggestion[]
@@ -1411,6 +1413,16 @@ model EagleAssetEditRecipe {
   @@index([ownerId,libraryMode,baseAssetId])
 }
 
+model EaglePhotoAgentPreference {
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  instructions String @default("")
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields:[ownerId],references:[id],onDelete:Cascade)
+  @@id([ownerId,libraryMode])
+}
+
 model EaglePhotoAgentTask {
   id String @id @default(uuid())
   ownerId String
@@ -1444,6 +1456,7 @@ model EaglePhotoAgentEvent {
 }
 
 model EaglePhotoAgentSuggestion {
+  reviewBasis String @default("VISUAL")
   id String @id @default(uuid())
   ownerId String
   libraryMode LibraryMode @default(PHOTO)
@@ -1627,4 +1640,20 @@ model EagleEditRender {
   result EagleAsset? @relation(fields: [ownerId, libraryMode, resultAssetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
   @@unique([ownerId, libraryMode, requestId])
   @@unique([ownerId, libraryMode, jobId])
+}
+
+// Intrinsic facts carried across a mode boundary; these are not active PHOTO relationships.
+model EagleAssetTransferFacts {
+  ownerId String
+  libraryMode LibraryMode
+  assetId String
+  assetRevision Int
+  schemaVersion Int @default(1)
+  photoMetadata Json?
+  photoLocation Json?
+  editRecipe Json?
+  detailsReady Boolean @default(false)
+  createdAt DateTime @default(now())
+  asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@id([ownerId,libraryMode,assetId])
 }

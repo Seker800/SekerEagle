@@ -9,6 +9,7 @@ export function useEagleLibraryCount(
   queryKeys: ReturnType<typeof createEagleQueryKeys>,
   privateVisible: boolean,
   privacyRevision: number,
+  enabled = true,
 ) {
   const { api } = useLibraryWorkspace();
   return useQuery({
@@ -16,6 +17,7 @@ export function useEagleLibraryCount(
     queryFn: () =>
       api.countEagleAssets(accessToken, { version: EAGLE_FILTER_QUERY_VERSION, conditions: [] }),
     staleTime: 30_000,
+    enabled,
     refetchInterval: 30_000,
     select: (result) => result.count,
   });

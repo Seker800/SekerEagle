@@ -1,3 +1,5 @@
+import { readPhotoInstructions, savePhotoInstructions } from './photo-agent-instructions';
+import type { UpdatePhotoAgentInstructionsDto } from './photo-agent.dto';
 import {
   BadRequestException,
   ConflictException,
@@ -83,6 +85,12 @@ export class PhotoAgentService {
     private readonly search: EagleImageSearchService,
     @Optional() private readonly transfer?: EagleLibraryTransferService,
   ) {}
+  instructions(ownerId: string) {
+    return readPhotoInstructions(this.prisma, ownerId);
+  }
+  saveInstructions(ownerId: string, input: UpdatePhotoAgentInstructionsDto) {
+    return savePhotoInstructions(this.prisma, ownerId, input);
+  }
   async photos(ownerId: string, input: PhotoAgentQueryDto, includePrivate: boolean) {
     if (input.from && input.to && Date.parse(input.from) >= Date.parse(input.to))
       throw new BadRequestException('时间范围无效。');
@@ -327,7 +335,11 @@ export class PhotoAgentService {
       context ?? (await this.task(tx, ownerId, id, includePrivate, true));
     const asset = assets.find((a) => a.id === input.assetId);
     if (!asset || asset.deletedAt) throw new NotFoundException('照片不存在。');
-    if (!input.visualReviewed) throw new BadRequestException('请先查看照片画面并核对证据。');
+    if (
+      !input.visualReviewed &&
+      (!task.title || !['SEND_TO_MATERIAL', 'DELETE'].includes(task.kind))
+    )
+      throw new BadRequestException('位置与旧版申请请先查看照片画面并核对证据。');
     const snapshot = frozen.find((a) => a.id === asset.id)!;
     if (
       asset.mediaRevision !== snapshot.mediaRevision ||
@@ -426,6 +438,7 @@ export class PhotoAgentService {
         value: json(task.kind === 'CITY' ? input.city! : { category: task.kind }),
         evidence: json(evidence),
         rationale: input.rationale,
+        reviewBasis: input.visualReviewed ? 'VISUAL' : 'METADATA',
       },
     });
     await appendPhotoAgentEvent(
@@ -438,6 +451,7 @@ export class PhotoAgentService {
         kind: task.kind,
         value: created.value,
         rationale: created.rationale,
+        reviewBasis: created.reviewBasis,
         evidence: created.evidence,
         before: snapshotOf(asset),
       },

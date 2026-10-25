@@ -1160,3 +1160,15 @@
 .assetViewport[data-bidirectional='true'] {
   overflow-anchor: none;
 }
+
+.loadingGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
+  gap: 10px;
+  padding: 12px;
+}
+.loadingTile {
+  height: 180px;
+  border-radius: 5px;
+  background: var(--eagle-panel-raised);
+}

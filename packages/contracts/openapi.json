@@ -6170,6 +6170,38 @@
         "tags": ["photo-statistics"]
       }
     },
+    "/api/photos/agent/instructions": {
+      "get": {
+        "operationId": "PhotoAgentController_instructions",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      },
+      "put": {
+        "operationId": "PhotoAgentController_saveInstructions",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePhotoAgentInstructionsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-agent"]
+      }
+    },
     "/api/photos/agent/photos": {
       "get": {
         "operationId": "PhotoAgentController_photos",
@@ -8274,6 +8306,20 @@
             "format": "uuid"
           }
         }
+      },
+      "UpdatePhotoAgentInstructionsDto": {
+        "type": "object",
+        "properties": {
+          "instructions": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "revision": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": ["instructions", "revision"]
       },
       "CreatePhotoTaskDto": {
         "type": "object",

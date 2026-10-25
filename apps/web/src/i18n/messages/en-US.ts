@@ -4,6 +4,23 @@ export const enUS = {
   '服务器编辑服务尚未更新，暂时无法保存成片。':
     'The server editing service needs an update before photos can be saved.',
   重置此项: 'Reset adjustment',
+
+  整理要求: 'Organizing instructions',
+  '告诉 Agent 检查哪些照片、按什么标准判断，以及建议怎么处理。保存后，Agent 下次整理时读取；不会自动开始扫描。':
+    'Tell the Agent what to inspect, how to judge it, and what to propose. The Agent reads saved instructions on its next run; saving does not start a scan.',
+  '例如：只按文件名和属性检查截图，不读取图片；明确的截图建议发送到素材，拿不准的保留。所有操作先提交申请，由我审批。':
+    'Example: Inspect filenames and attributes only, without reading images. Propose sending clear screenshots to Materials; keep uncertain items. Submit every change for my approval.',
+  整理要求已保存: 'Organizing instructions saved',
+  '保存失败，请重试。': 'Could not save. Please retry.',
+  保存要求: 'Save instructions',
+  重新加载要求: 'Reload instructions',
+  '正在加载整理要求…': 'Loading organizing instructions…',
+  '正在处理整批申请：{{value1}} / {{value2}} 张':
+    'Processing the batch: {{value1}} / {{value2}} images',
+  '仅文字依据 · 未看图片': 'Metadata only · Image not viewed',
+  已发送到素材: 'Sent to Materials',
+  已移入回收站: 'Moved to Trash',
+  '正在加载素材…': 'Loading materials…',
   '补齐 RAW 编辑图、动态视频、清晰度和相似特征。':
     'Generate RAW editing images, motion video, sharpness and similarity features.',
   '新图优先处理，群晖与 Mac 两路并行，历史图片逐步补齐。':
