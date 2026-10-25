@@ -9,6 +9,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import sharp from 'sharp';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+import { selectScheduledMediaCandidates } from '../../apps/worker/dist/scheduled-media-candidates.js';
 
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
@@ -238,7 +239,7 @@ try {
       mediaRevision: 1,
       lifecycleStatus: 'READY',
       originalObjectKey: `users/${ownerId}/assets/details/details-original.jpg`,
-      libraryAddedAt: new Date('2102-01-01Z'),
+      libraryAddedAt: new Date('2000-01-01Z'),
       chronologicalAt: new Date('2001-02-03Z'),
     },
   });
@@ -284,6 +285,49 @@ try {
       availableAt: new Date(0),
     },
   });
+  const versionUpload = await db.uploadSession.create({
+    data: {
+      uploaderId: ownerId,
+      libraryMode: 'PHOTO',
+      kind: 'EAGLE_ASSET',
+      status: 'COMPLETED',
+      originalName: 'replacement.jpg',
+      mimeType: 'image/jpeg',
+      size: detailOriginalSize,
+      objectKey: detailAsset.originalObjectKey,
+      multipartUploadId: 'synthetic-only',
+      completedAt: new Date('2102-01-01Z'),
+    },
+  });
+  const freshCandidates = () =>
+    selectScheduledMediaCandidates(
+      db,
+      { where: { lane: 'BACKGROUND', kind: 'GENERATE_RENDITIONS' }, take: 50 },
+      true,
+      false,
+      { freshOnly: true, resource: 'NAS' },
+    );
+  assert.ok((await freshCandidates()).some((job) => job.id === detailJob.id));
+  await db.uploadSession.update({
+    where: { id: versionUpload.id },
+    data: { libraryMode: 'MATERIAL' },
+  });
+  assert.ok(!(await freshCandidates()).some((job) => job.id === detailJob.id));
+  await db.uploadSession.update({
+    where: { id: versionUpload.id },
+    data: { libraryMode: 'PHOTO', status: 'INITIATED' },
+  });
+  assert.ok(!(await freshCandidates()).some((job) => job.id === detailJob.id));
+  await db.uploadSession.update({
+    where: { id: versionUpload.id },
+    data: { status: 'COMPLETED', objectKey: detailAsset.originalObjectKey + '-superseded' },
+  });
+  assert.ok(!(await freshCandidates()).some((job) => job.id === detailJob.id));
+  await db.uploadSession.update({
+    where: { id: versionUpload.id },
+    data: { objectKey: detailAsset.originalObjectKey },
+  });
+  assert.ok((await freshCandidates()).some((job) => job.id === detailJob.id));
   worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
     env,
     stdio: ['ignore', 'ignore', 'pipe'],

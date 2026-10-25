@@ -23,12 +23,17 @@ export function selectScheduledMediaCandidates(
     Prisma.sql`job."libraryMode"`,
     family,
   );
+  // The immutable current object key identifies the media version, including replacements.
+  // A maintenance job or an upload of a superseded/different owner's object cannot promote it.
+  const freshness = Prisma.sql`GREATEST(a."libraryAddedAt",COALESCE(current_upload."completedAt",a."libraryAddedAt"))`;
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
+    LEFT JOIN "UploadSession" current_upload ON current_upload."objectKey"=a."originalObjectKey"
+      AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
     WHERE ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
-      ${options.freshOnly ? Prisma.sql`a."libraryAddedAt">=now()-interval '24 hours' AND` : Prisma.empty}
-      ${options.historyOnly ? Prisma.sql`a."libraryAddedAt"<now()-interval '24 hours' AND` : Prisma.empty}
+      ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
+      ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
       job.kind<>'GENERATE_AI_TAGS'  AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
       (CASE WHEN job."processorVersion"='photo-source-details-v1' THEN 'BACKGROUND'::"EagleProcessingLane" ELSE job.lane END)=${input.where.lane}::"EagleProcessingLane"
       AND ((job.status='PENDING' AND job."availableAt"<=now()) OR (job.status='PROCESSING' AND job."lockedAt"<now()-interval '10 minutes'))
@@ -40,8 +45,8 @@ export function selectScheduledMediaCandidates(
       ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind::text<>${kind.not}` : Prisma.empty}
       ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind::text IN (${Prisma.join(kind.in)})` : Prisma.empty}
       ${input.where.processorVersion?.notIn.length ? Prisma.sql`AND job."processorVersion" NOT IN (${Prisma.join(input.where.processorVersion.notIn)})` : Prisma.empty}
-    ORDER BY (a."libraryAddedAt">=now()-interval '24 hours') DESC,
-      CASE WHEN a."libraryAddedAt">=now()-interval '24 hours' THEN a."libraryAddedAt"
+    ORDER BY (${freshness}>=now()-interval '24 hours') DESC,
+      CASE WHEN ${freshness}>=now()-interval '24 hours' THEN ${freshness}
         WHEN a."libraryMode"='PHOTO' THEN a."chronologicalAt" ELSE a."libraryAddedAt" END DESC,
       ${preferPriority ? Prisma.sql`${priority} DESC,` : Prisma.empty} job."availableAt",job."createdAt",job.id LIMIT ${input.take}
   `);
