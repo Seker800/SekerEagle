@@ -43,7 +43,7 @@
   opacity: 0.45;
   cursor: default;
 }
-.panel :is(button, input, summary):focus-visible {
+.panel :is(button, input, textarea, summary):focus-visible {
   outline: 2px solid var(--eagle-accent);
   outline-offset: 3px;
 }
@@ -349,3 +349,9 @@
     grid-column: 1 / -1;
   }
 }
+
+.instructions { padding:16px 0; border-bottom:1px solid var(--eagle-line); display:grid; gap:10px; }
+.instructions > label {font-size:14px;font-weight:600;}
+.instructions textarea {box-sizing:border-box;width:100%;min-height:100px;resize:vertical;max-height:360px;border:1px solid var(--eagle-line);border-radius:5px;background:var(--eagle-panel);color:var(--eagle-text);font:inherit;font-size:13px;line-height:1.65;padding:10px;}
+.instructionActions {display:flex;align-items:center;flex-wrap:wrap;gap:10px;font-size:12px;}
+.basis {display:block;font-size:11px;color:var(--eagle-muted);margin-block:6px;}

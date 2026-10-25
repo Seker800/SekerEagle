@@ -179,3 +179,5 @@ npm run ci:check
 ## 2026-10-24 AI 标签生成退役
 
 按用户要求同时移除素材／照片的生成设置、扫描与重试 Controller、客户端及 worker 执行。保留共用历史标签读取／筛选，不新增专属实现或 provider；历史任务枚举与表仅为升级兼容保留，领取、计数和重试排除退役类型。
+
+2026-10-25 整理要求使用摄影专属偏好表与现有 PhotoAgentService／Controller；不新增 provider 或通用 Controller。发送派生图复用共用 EagleLibraryTransferService 的持久计划与复制校验，两种模式使用同一实现。审批预览和整批进度属于审批页面呈现，不复制通用图库缩略图能力。

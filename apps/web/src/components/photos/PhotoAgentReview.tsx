@@ -22,6 +22,7 @@ import {
   type PhotoRequestReviewResult,
 } from '../../lib/photo-agent-api';
 import styles from './PhotoAgentReview.module.css';
+import { PhotoAgentInstructions } from './PhotoAgentInstructions';
 
 const kindLabel = (kind: PhotoAgentTaskSummary['kind']) =>
   kind === 'CITY' ? t('补充位置') : kind === 'SEND_TO_MATERIAL' ? t('发送到素材') : t('移入回收站');
@@ -76,6 +77,7 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
           <p>{t('申请不会自动执行。只有你手动点击同意，才会补充位置、发送到素材或移入回收站。')}</p>
         </div>
       </header>
+      {!taskId && <PhotoAgentInstructions key={ownerId} ownerId={ownerId} />}
       {taskId ? (
         <button className={styles.back} type="button" onClick={() => setTaskId('')}>
           <IconArrowLeft size={14} aria-hidden />
@@ -194,6 +196,7 @@ function RequestDetail({
   const [expanded, setExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [batchTotal, setBatchTotal] = useState(0);
   const [result, setResult] = useState<PhotoRequestReviewResult | null>(null);
   const chosen = eligible.filter((item) => selected.has(item.id));
   const shown = expanded ? task.suggestions : task.suggestions.slice(0, 12);
@@ -203,6 +206,7 @@ function RequestDetail({
       .map((item) => item.id);
     if (!ids.length) return;
     setBusy(true);
+    setBatchTotal(ids.length);
     setError('');
     setResult(null);
     try {
@@ -296,6 +300,7 @@ function RequestDetail({
           </button>
         </div>
       )}
+      {busy && batchTotal > 0 && <p role="status">{t('正在处理整批申请：{{value1}} / {{value2}} 张', {value1: result?.results.length ?? 0, value2: batchTotal})}</p>}
       {error && <p role="alert">{error}</p>}
       {result && (
         <div className={styles.result} role={result.failed ? 'alert' : 'status'}>
@@ -328,11 +333,7 @@ function RequestDetail({
           return (
             <article className={styles.photo} key={item.id}>
               <div className={styles.image}>
-                {asset?.previewId && !asset.deletedAt ? (
-                  <img loading="lazy" src={previewUrl(asset.id)} alt={asset.displayName} />
-                ) : (
-                  <span>{t('预览暂不可用')}</span>
-                )}
+                <ApprovalPreview asset={asset} kind={item.kind} status={item.status} />
                 {['PENDING', 'FAILED', 'APPLYING'].includes(item.status) && !closed && (
                   <input
                     type="checkbox"
@@ -365,6 +366,7 @@ function RequestDetail({
                     {location.latitude}, {location.longitude}
                   </p>
                 )}
+                {item.reviewBasis === 'METADATA' && <span className={styles.basis}>{t('仅文字依据 · 未看图片')}</span>}
                 <p>{item.rationale}</p>
                 <details>
                   <summary>{t('查看参考依据')}</summary>
@@ -469,4 +471,14 @@ function RequestHistory({
       )}
     </details>
   );
+}
+
+function ApprovalPreview({asset,kind,status}: {asset: PhotoAgentTask['assets'][number] | undefined;kind: PhotoAgentSuggestion['kind'];status: PhotoAgentSuggestion['status']}) {
+ const [loaded,setLoaded] = useState(false);
+ const [failed,setFailed] = useState(false);
+ const available = Boolean(asset?.previewId && !asset.deletedAt);
+ // Keep an already decoded preview for this mounted review card; never refetch a deleted source.
+ if (asset && !failed && (available || loaded)) return <img loading="lazy" src={previewUrl(asset.id)} alt={asset.displayName} onLoad={()=>setLoaded(true)} onError={()=>setFailed(true)} />;
+ const completed = status === 'ACCEPTED' || Boolean(asset?.deletedAt);
+ return <span>{completed ? (kind === 'SEND_TO_MATERIAL' ? t('已发送到素材') : t('已移入回收站')) : t('预览暂不可用')}</span>;
 }

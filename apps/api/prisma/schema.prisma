@@ -180,6 +180,7 @@ model EagleLibraryTransfer {
 }
 
 model User {
+  photoAgentPreferences EaglePhotoAgentPreference[]
   photoMapStates EaglePhotoMapState[]
   libraryTransfers EagleLibraryTransfer[]
   photoPeople EaglePhotoPerson[]
@@ -1408,6 +1409,16 @@ model EagleAssetEditRecipe {
   @@index([ownerId,libraryMode,baseAssetId])
 }
 
+model EaglePhotoAgentPreference {
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  instructions String @default("")
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+  owner User @relation(fields:[ownerId],references:[id],onDelete:Cascade)
+  @@id([ownerId,libraryMode])
+}
+
 model EaglePhotoAgentTask {
   id String @id @default(uuid())
   ownerId String
@@ -1441,6 +1452,7 @@ model EaglePhotoAgentEvent {
 }
 
 model EaglePhotoAgentSuggestion {
+  reviewBasis String @default("VISUAL")
   id String @id @default(uuid())
   ownerId String
   libraryMode LibraryMode @default(PHOTO)

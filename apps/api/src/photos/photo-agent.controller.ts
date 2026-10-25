@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Res,
   SetMetadata,
@@ -25,6 +26,7 @@ import { EagleMediaService } from '../eagle/eagle-media.service';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoAgentService } from './photo-agent.service';
 import {
+  UpdatePhotoAgentInstructionsDto,
   CreatePhotoTaskDto,
   InferPhotoCitiesDto,
   PhotoAgentQueryDto,
@@ -44,6 +46,15 @@ export class PhotoAgentController {
     private readonly agent: PhotoAgentService,
     private readonly media: EagleMediaService,
   ) {}
+  @Get('instructions') instructions(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.agent.instructions(p.sub);
+  }
+  @Put('instructions') @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard) saveInstructions(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Body() dto: UpdatePhotoAgentInstructionsDto,
+  ) {
+    return this.agent.saveInstructions(p.sub, dto);
+  }
   @Get('photos') photos(@CurrentPrincipal() p: AuthPrincipal, @Query() q: PhotoAgentQueryDto) {
     return this.agent.photos(p.sub, q, p.canViewPrivate);
   }

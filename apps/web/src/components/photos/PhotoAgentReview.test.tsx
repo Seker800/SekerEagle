@@ -201,6 +201,7 @@ it('keeps operation history collapsed below photo cards', async () => {
 it('saves owner instructions explicitly without starting scans or approving requests', async () => {
  mount();
  const field=await screen.findByRole('textbox',{name:'整理要求'});
+ await waitFor(()=>expect(field).toBeEnabled());
  fireEvent.change(field,{target:{value:'仅按文件名检查截图'}});
  expect(mocks.saveInstructions).not.toHaveBeenCalled();
  fireEvent.click(screen.getByRole('button',{name:'保存要求'}));
