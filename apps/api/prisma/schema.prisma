@@ -1421,6 +1421,7 @@ model EaglePhotoAgentPreference {
 }
 
 model EaglePhotoAgentTask {
+  number Int @default(dbgenerated())
   id String @id @default(uuid())
   ownerId String
   libraryMode LibraryMode @default(PHOTO)
@@ -1434,6 +1435,7 @@ model EaglePhotoAgentTask {
   suggestions EaglePhotoAgentSuggestion[]
   events EaglePhotoAgentEvent[]
   @@unique([ownerId, libraryMode, id])
+  @@unique([ownerId, libraryMode, number])
   @@index([ownerId, libraryMode, createdAt, id])
 }
 
@@ -1453,6 +1455,7 @@ model EaglePhotoAgentEvent {
 }
 
 model EaglePhotoAgentSuggestion {
+  number Int @default(dbgenerated())
   reviewBasis String @default("VISUAL")
   id String @id @default(uuid())
   ownerId String
@@ -1472,6 +1475,7 @@ model EaglePhotoAgentSuggestion {
   asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   task EaglePhotoAgentTask @relation(fields:[ownerId,libraryMode,taskId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   @@unique([taskId, assetId])
+  @@unique([taskId, number])
   @@index([ownerId,libraryMode,assetId,assetRevision,status])
 }
 

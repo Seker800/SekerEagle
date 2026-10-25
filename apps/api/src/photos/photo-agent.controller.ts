@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  ParseIntPipe,
   Post,
   Put,
   Query,
@@ -27,6 +28,7 @@ import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoAgentService } from './photo-agent.service';
 import {
   UpdatePhotoAgentInstructionsDto,
+  ManualPhotoActionDto,
   CreatePhotoTaskDto,
   InferPhotoCitiesDto,
   PhotoAgentQueryDto,
@@ -90,6 +92,21 @@ export class PhotoAgentController {
     @Body() dto: ReviewPhotoRequestDto,
   ) {
     return this.agent.reviewBatch(p.sub, id, dto, p.canViewPrivate);
+  }
+  @Post('tasks/:id/manual-action')
+  @UseGuards(BrowserPrincipalGuard, BrowserOriginGuard)
+  manualAction(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Body() dto: ManualPhotoActionDto,
+  ) {
+    return this.agent.manualAction(p.sub, id, dto, p.canViewPrivate);
+  }
+  @Get('tasks/by-number/:number') detailByNumber(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('number', ParseIntPipe) number: number,
+  ) {
+    return this.agent.detailByNumber(p.sub, number, p.canViewPrivate);
   }
   @Get('tasks/:id/history') history(
     @CurrentPrincipal() p: AuthPrincipal,

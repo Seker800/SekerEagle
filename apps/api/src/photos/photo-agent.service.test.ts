@@ -42,7 +42,14 @@ test('DTO rejects ownerId, excess scope and unsupported modes', async () => {
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: CreatePhotoTaskDto }));
 });
 test('accept, reject, undo and cancel are browser-only operations', () => {
-  for (const name of ['review', 'reviewRequest', 'undo', 'cancel', 'saveInstructions']) {
+  for (const name of [
+    'review',
+    'reviewRequest',
+    'undo',
+    'cancel',
+    'saveInstructions',
+    'manualAction',
+  ]) {
     const handler = Reflect.get(PhotoAgentController.prototype, name) as object;
     const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
     assert.ok(guards.includes(BrowserPrincipalGuard));

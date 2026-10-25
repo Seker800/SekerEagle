@@ -42,7 +42,7 @@ function fixture(): PhotoAgentTask {
       previewId: 'preview',
     })),
     suggestions: ['one', 'two'].map((id, index) => ({
-      number: index+1,
+      number: index + 1,
       id,
       assetId: id,
       kind: 'DELETE',
@@ -79,6 +79,7 @@ beforeEach(() => {
   });
   mocks.detail.mockResolvedValue(fixture());
   mocks.history.mockResolvedValue({ items: [], next: null });
+  mocks.manual.mockResolvedValue({ affectedAssetCount: 1, action: 'DELETE' });
   mocks.review.mockImplementation(async (_task, ids: string[]) => ({
     succeeded: ids.length,
     failed: 0,
@@ -259,22 +260,42 @@ it('keeps already loaded thumbnails stable after a successful batch send', async
   expect(screen.queryByText('预览暂不可用')).not.toBeInTheDocument();
 });
 
-it('shows stable request and photo numbers and right-click targets only the clicked photo unless already selected', async()=>{
- await open();
- expect(screen.getByText('建议 7')).toBeInTheDocument();
- expect(screen.getByText('7.1')).toBeInTheDocument(); expect(screen.getByText('7.2')).toBeInTheDocument();
- fireEvent.click(screen.getByRole('checkbox',{name:'全选待处理项'}));
- fireEvent.contextMenu(screen.getByRole('img',{name:'one'}),{clientX:100,clientY:100});
- expect(screen.getByRole('menuitem',{name:'发送到素材'})).toBeInTheDocument();
- fireEvent.click(screen.getByRole('menuitem',{name:'移入回收站'}));
- await waitFor(()=>expect(mocks.manual).toHaveBeenCalledWith('task',expect.objectContaining({action:'DELETE',items:[{suggestionId:'one',mediaRevision:1,rowVersion:1}]})));
- expect(mocks.review).not.toHaveBeenCalled();
+it('shows stable request and photo numbers and right-click targets only the clicked photo unless already selected', async () => {
+  await open();
+  expect(screen.getByText('建议 7')).toBeInTheDocument();
+  expect(screen.getByText('7.1')).toBeInTheDocument();
+  expect(screen.getByText('7.2')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('checkbox', { name: '全选照片' }));
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }), { clientX: 100, clientY: 100 });
+  expect(screen.getByRole('menuitem', { name: '发送到素材' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('menuitem', { name: '移入回收站' }));
+  await waitFor(() =>
+    expect(mocks.manual).toHaveBeenCalledWith(
+      'task',
+      expect.objectContaining({
+        action: 'DELETE',
+        items: [{ suggestionId: 'one', mediaRevision: 1, rowVersion: 1 }],
+      }),
+    ),
+  );
+  expect(mocks.review).not.toHaveBeenCalled();
 });
-it('supports multiselect manual actions independently from accepting the original recommendation',async()=>{
- mocks.manual.mockResolvedValue({affectedAssetCount:2});
- await open();
- fireEvent.contextMenu(screen.getByRole('img',{name:'one'}),{clientX:100,clientY:100});
- fireEvent.click(screen.getByRole('menuitem',{name:'发送到素材'}));
- await waitFor(()=>expect(mocks.manual).toHaveBeenCalledWith('task',expect.objectContaining({action:'SEND_TO_MATERIAL',items:[{suggestionId:'one',mediaRevision:1,rowVersion:1},{suggestionId:'two',mediaRevision:1,rowVersion:1}]})));
- expect(mocks.review).not.toHaveBeenCalled();
+it('supports multiselect manual actions independently from accepting the original recommendation', async () => {
+  mocks.manual.mockResolvedValue({ affectedAssetCount: 2 });
+  await open();
+  fireEvent.contextMenu(screen.getByRole('img', { name: 'one' }), { clientX: 100, clientY: 100 });
+  fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+  await waitFor(() =>
+    expect(mocks.manual).toHaveBeenCalledWith(
+      'task',
+      expect.objectContaining({
+        action: 'SEND_TO_MATERIAL',
+        items: [
+          { suggestionId: 'one', mediaRevision: 1, rowVersion: 1 },
+          { suggestionId: 'two', mediaRevision: 1, rowVersion: 1 },
+        ],
+      }),
+    ),
+  );
+  expect(mocks.review).not.toHaveBeenCalled();
 });

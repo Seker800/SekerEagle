@@ -1,4 +1,15 @@
 export const enUS = {
+  '建议 {{value1}}': 'Suggestion {{value1}}',
+  全选照片: 'Select all photos',
+  '选择照片 {{value1}}': 'Select photo {{value1}}',
+  处理选中照片: 'Manage selected photos',
+  '已手动处理 {{value1}} 张照片': 'Manually handled {{value1}} photos',
+  已手动移入回收站: 'Manually moved to Trash',
+  已手动发送到素材: 'Manually sent to Materials',
+  开始人工处理: 'Manual action started',
+  人工处理完成: 'Manual action completed',
+  人工处理失败: 'Manual action failed',
+
   整理要求: 'Organizing instructions',
   '告诉 Agent 检查哪些照片、按什么标准判断，以及建议怎么处理。保存后，Agent 下次整理时读取；不会自动开始扫描。':
     'Tell the Agent what to inspect, how to judge it, and what to propose. The Agent reads saved instructions on its next run; saving does not start a scan.',
