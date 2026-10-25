@@ -179,3 +179,51 @@ def test_embedding_endpoint_rejects_non_allowlisted_image_content(monkeypatch):
     )
 
     assert response.status_code == 422
+
+
+def test_inference_keeps_event_loop_responsive_and_bounds_admission(monkeypatch):
+    import asyncio
+    import threading
+    import time
+    import httpx2
+
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "schedule_idle_unload", lambda: None)
+    active = 0
+    maximum = 0
+    threads = []
+
+    class SlowModel(FakeModel):
+        def process(self, inputs, processor):
+            nonlocal active, maximum
+            active += 1
+            maximum = max(maximum, active)
+            threads.append(threading.get_ident())
+            time.sleep(0.15)
+            active -= 1
+            return super().process(inputs, processor)
+
+    service.runtime.model = SlowModel()
+    service.runtime.processor = object()
+
+    async def exercise():
+        transport = httpx2.ASGITransport(app=service.app)
+        headers = {"authorization": "Bearer test-secret", "x-embedding-dimensions": "1024"}
+        async with httpx2.AsyncClient(transport=transport, base_url="http://test") as client:
+            started = time.monotonic()
+            tasks = [asyncio.create_task(client.post("/v1/embeddings/image", content=image_bytes(), headers={**headers, "content-type": "image/jpeg"})) for _ in range(3)]
+            await asyncio.sleep(0.03)
+            assert time.monotonic() - started < 0.12, "inference must not block the HTTP event loop"
+            health = await client.get("/health/live", headers=headers)
+            assert health.status_code == 200
+            busy = await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)
+            assert busy.status_code == 503
+            assert busy.headers["retry-after"] == "1"
+            assert all(r.status_code == 200 for r in await asyncio.gather(*tasks))
+            recovered = await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)
+            assert recovered.status_code == 200
+
+    asyncio.run(exercise())
+    assert maximum == 1
+    assert len(set(threads)) == 1
+    assert threads[0] != threading.get_ident()

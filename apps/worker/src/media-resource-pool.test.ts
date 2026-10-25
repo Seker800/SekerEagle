@@ -160,3 +160,21 @@ test('a wake during an in-flight claim is replayed if that claim returns empty, 
   );
   assert.equal(wakes, 1, 'an ordinary empty queue must not schedule a busy loop');
 });
+
+test('two embedding requests may overlap IO, with bounded reservations and unchanged NAS limit', async () => {
+  let release!: () => void;
+  const held = new Promise<void>((done) => { release = done; });
+  const pool = new MediaResourcePool(1, () => {}, () => {}, 2);
+  let claims = 0;
+  const claim = async () => ++claims;
+  await Promise.all([pool.fill('EMBEDDING', claim, async () => held), pool.fill('EMBEDDING', claim, async () => held)]);
+  assert.equal(pool.active('EMBEDDING'), 2);
+  assert.equal(claims, 2);
+  await pool.fill('EMBEDDING', claim, async () => held);
+  await pool.fill('NAS', claim, async () => held);
+  assert.equal(pool.active('NAS'), 1);
+  assert.equal(claims, 3);
+  release();
+  await new Promise((done) => setImmediate(done));
+  assert.equal(pool.activeCount, 0);
+});
