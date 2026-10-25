@@ -22,6 +22,17 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 after(() => db.$disconnect());
 const input = { where: { lane: 'BACKGROUND', kind: { in: ['GENERATE_EMBEDDING'] } }, take: 50 };
+test('recent uploads use a time-leading covering index instead of probing every historical object key', async () => {
+  const rows =
+    await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='UploadSession' AND indexname='UploadSession_recent_freshness_cover_idx'`;
+  assert.equal(rows.length, 1);
+  assert.match(
+    rows[0].indexdef,
+    /\("completedAt" DESC\) INCLUDE \("objectKey", "uploaderId", "libraryMode"\)/,
+  );
+  assert.match(rows[0].indexdef, /WHERE \(status = 'COMPLETED'/);
+});
+
 test('scheduler estimates retain correlations between kind, lane, state and processor', async () => {
   const rows =
     await db.$queryRaw`SELECT stxkind::text AS kinds FROM pg_statistic_ext WHERE stxname='EagleMediaJob_scheduler_selectivity'`;
