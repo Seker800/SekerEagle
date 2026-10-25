@@ -148,6 +148,29 @@ class NativeMediaCacheTest {
     }
 
     @Test
+    fun hitRateTracksSuccessfulLoadsAcrossMemoryDiskAndDownloadAndResetsOnClear() = runBlocking {
+        Server().use { server ->
+            val (repo, path) = repository(session(server), GalleryMode.PHOTO)
+            repo.image(path, false)
+            repo.image(path, false)
+            repo.evictImages()
+            repo.image(path, false)
+            val stats = cache.statistics.value
+            assertEquals(3L, stats.requests)
+            assertEquals(1L, stats.memoryHits)
+            assertEquals(1L, stats.diskHits)
+            assertEquals(1L, stats.downloads)
+            assertEquals(2.0 / 3, stats.hitRate, 0.000001)
+            assertEquals(1, server.requests.size)
+            cache.clear()
+            repo.evictImages()
+            assertEquals(0L, cache.statistics.value.requests)
+            repo.image(path, false)
+            assertEquals(1L, cache.statistics.value.downloads)
+        }
+    }
+
+    @Test
     fun concurrentRequestsCoalesceAndVersionsOwnersAndModesStaySeparate() = runBlocking {
         Server().use { server ->
             val session = session(server)
@@ -307,6 +330,7 @@ class NativeMediaCacheTest {
         compose.waitUntil(10000) {
             compose.onAllNodesWithTag("cache-limit").fetchSemanticsNodes().isNotEmpty()
         }
+        compose.onNodeWithTag("cache-hit-rate").assertTextContains("暂无记录")
         compose.onNodeWithTag("cache-size").performTextReplacement("20000")
         compose.onNodeWithText("保存上限").assertIsNotEnabled()
         compose.onNodeWithTag("cache-size").performTextReplacement("256")
@@ -337,10 +361,10 @@ class NativeMediaCacheTest {
             )
             .use { it.readBytes() }
 
-        compose.onNodeWithText("清理图片缓存").performScrollTo().performClick()
-        compose.onNodeWithText("清理缓存", substring = false).performClick()
+        compose.onNodeWithText("清空缓存").performScrollTo().performClick()
+        compose.onNodeWithText("清空", substring = false).performClick()
         compose.waitUntil(10000) {
-            compose.onAllNodesWithText("图片缓存已清理").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("缓存已清空").fetchSemanticsNodes().isNotEmpty()
         }
     }
 }
