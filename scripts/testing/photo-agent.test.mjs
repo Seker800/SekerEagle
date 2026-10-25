@@ -1061,3 +1061,45 @@ test('new metadata-only requests persist their evidence basis without applying c
       /不存在/,
     );
 });
+
+
+test('request numbers stay owner-scoped and stable; photo item numbers follow submission order', async () => {
+  const f = await fixture(), other = await fixture();
+  const make = (assetId, title) => ({kind:'DELETE',title,rationale:'仅按文字检查的明确测试理由',items:[{assetId,evidenceIds:[],visualReviewed:false,rationale:'测试文件名具有明确截图信号'}]});
+  const first = await f.service.submitRequest(f.ownerId, make(f.a.id,'first'), false);
+  const second = await f.service.submitRequest(f.ownerId, make(f.b.id,'second'), false);
+  const foreign = await other.service.submitRequest(other.ownerId, make(other.a.id,'other'), false);
+  assert.equal(first.number,1); assert.equal(second.number,2); assert.equal(foreign.number,1);
+  const detail = await f.service.detailByNumber(f.ownerId, 1, false);
+  assert.equal(detail.id,first.id); assert.equal(detail.number,1); assert.equal(detail.suggestions[0].number,1);
+  await assert.rejects(other.service.detailByNumber(other.ownerId,2,false),/不存在/);
+  const list=await f.service.tasks(f.ownerId,{limit:20},false);
+  assert.deepEqual(list.items.map(x=>x.number),[2,1]);
+});
+
+test('manual photo actions use current selected versions, preserve original advice and append separate human history', async () => {
+  const f=await fixture();
+  const t=await f.task('CITY'); const suggestion=await f.proposal(t);
+  const input={operationId:randomUUID(),action:'DELETE',items:[{suggestionId:suggestion.id,mediaRevision:f.a.mediaRevision,rowVersion:f.a.rowVersion}]};
+  await f.service.manualAction(f.ownerId,t.id,input,false);
+  assert.ok((await prisma.eagleAsset.findUnique({where:{id:f.a.id}})).deletedAt);
+  const detail=await f.service.detail(f.ownerId,t.id,false);
+  assert.equal(detail.suggestions[0].kind,'CITY');
+  assert.equal(detail.suggestions[0].manualAction,'DELETE');
+  assert.equal(detail.suggestions[0].status,'REJECTED');
+  assert.equal(await prisma.eaglePhotoLocation.count({where:{assetId:f.a.id}}),0);
+  await f.service.manualAction(f.ownerId,t.id,input,false);
+  const history=await f.service.history(f.ownerId,t.id,{limit:50},false);
+  assert.equal(history.items.filter(e=>e.action==='MANUAL_EXECUTED').length,1);
+  assert.ok(history.items.some(e=>e.action==='PROPOSED'));
+  const other=await fixture();
+  await assert.rejects(other.service.manualAction(other.ownerId,t.id,input,false),/不存在/);
+});
+
+test('manual selection rejects mixed scopes, stale versions and changed retry actions before writing', async()=>{
+ const f=await fixture(),other=await fixture(); const t=await f.task('DELETE'),a=await f.proposal(t);
+ const input={operationId:randomUUID(),action:'DELETE',items:[{suggestionId:a.id,mediaRevision:0,rowVersion:999}]};
+ await assert.rejects(f.service.manualAction(f.ownerId,t.id,input,false),/变化/);
+ assert.equal((await prisma.eagleAsset.findUnique({where:{id:f.a.id}})).deletedAt,null);
+ await assert.rejects(f.service.manualAction(f.ownerId,t.id,{...input,items:[{suggestionId:randomUUID(),mediaRevision:0,rowVersion:1}]},false),/不存在/);
+});
