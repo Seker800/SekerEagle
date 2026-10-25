@@ -44,6 +44,13 @@ export function App() {
     DEFAULT_PRIVACY_VISIBILITY,
   );
   const [privacyRulesRevision, setPrivacyRulesRevision] = useState(0);
+  const sessionOwnerId = user?.id;
+  useEffect(() => {
+    if (!sessionOwnerId) return;
+    return () => {
+      queryClient.removeQueries({ queryKey: ['eagle', sessionOwnerId] });
+    };
+  }, [queryClient, sessionOwnerId]);
   const checkSession = useCallback(async () => {
     if (checkInFlight.current) return;
     checkInFlight.current = true;
