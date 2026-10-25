@@ -261,6 +261,18 @@ async function selectAssetAndOpenInspector() {
 }
 
 describe('SekerEaglePage', () => {
+  it('loads the first page before secondary catalogs and statistics', async () => {
+    const first=createDeferred<{items:typeof asset[];nextCursor:null}>();
+    listEagleAssetsMock.mockReturnValue(first.promise);
+    renderPage();
+    await waitFor(()=>expect(listEagleAssetsMock).toHaveBeenCalled());
+    expect(listEagleManualTagsMock).not.toHaveBeenCalled();
+    expect(listEagleManualTagGroupsMock).not.toHaveBeenCalled();
+    expect(listEagleSmartFoldersMock).not.toHaveBeenCalled();
+    first.resolve({items:[asset],nextCursor:null});
+    await waitFor(()=>expect(listEagleManualTagsMock).toHaveBeenCalled());
+  });
+
   it('shows the library total in navigation without repeating it in the heading', async () => {
     countEagleAssetsMock.mockResolvedValue({ count: 72100 });
     renderPage();
