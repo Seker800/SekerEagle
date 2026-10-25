@@ -231,6 +231,78 @@ try {
   const beforeBulk = (await service.get(owner, false, {})).total;
   for (let i = 0; i < 130; i++) await make();
   assert.equal((await service.get(owner, false, {})).total, beforeBulk + 130);
+  const lensOwner = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: lensOwner,
+      email: `${lensOwner}@example.invalid`,
+      passwordHash: 'synthetic-test-only',
+    },
+  });
+  for (const metadata of [
+    { cameraModel: ' Phone A ', lensModel: null },
+    { cameraModel: 'Phone A', lensModel: '   ' },
+    { cameraModel: 'Phone B', lensModel: null },
+    { cameraModel: 'Camera C', lensModel: 'Phone A' },
+    { cameraModel: null, cameraMake: 'Maker Only', lensModel: null },
+    { cameraModel: null, cameraMake: null, lensModel: null },
+    { cameraModel: 'Camera C', lensModel: '["camera","Phone A"]' },
+  ])
+    await make({ ownerId: lensOwner }, metadata);
+  await make(
+    { ownerId: lensOwner, isPrivate: true },
+    { cameraModel: 'Private Phone', lensModel: null },
+  );
+  await make(
+    { ownerId: lensOwner },
+    { assetRevision: 0, cameraModel: 'Stale Phone', lensModel: null },
+  );
+  const key = (kind, name) => JSON.stringify([kind, name]);
+  const lensData = await service.get(lensOwner, false, { groupBy: 'lens' });
+  assert.equal(lensData.total, 8);
+  assert.equal(lensData.lenses.find((x) => x.key === key('camera', 'Phone A'))?.count, 2);
+  assert.equal(lensData.lenses.find((x) => x.key === key('lens', 'Phone A'))?.count, 1);
+  assert.equal(lensData.lenses.find((x) => x.key === key('camera', 'Maker Only'))?.count, 1);
+  assert.equal(lensData.lenses.find((x) => x.key === key('unknown', ''))?.count, 2);
+  assert.equal(
+    lensData.lenses.reduce((n, x) => n + x.count, 0),
+    lensData.total,
+  );
+  assert.ok(!lensData.lensOptions.includes(key('camera', 'Private Phone')));
+  assert.ok(!lensData.lensOptions.includes(key('camera', 'Stale Phone')));
+  const selected = await service.get(lensOwner, false, {
+    groupBy: 'lens',
+    lensKeys: [key('camera', 'Phone A')],
+  });
+  assert.equal(selected.total, 2);
+  assert.ok(selected.points.every((x) => x.key === key('camera', 'Phone A')));
+  assert.equal(
+    (await service.get(lensOwner, false, { lensKeys: [key('camera', 'Private Phone')] })).total,
+    0,
+  );
+  assert.equal(
+    (await service.get(lensOwner, true, { lensKeys: [key('camera', 'Private Phone')] })).total,
+    1,
+  );
+  assert.equal((await service.get(lensOwner, false, { lenses: ['Phone A'] })).total, 1);
+  assert.equal(
+    (await service.get(lensOwner, false, { lenses: [key('camera', 'Phone A')] })).total,
+    1,
+  );
+  assert.equal(
+    (await service.get(lensOwner, false, { lensKeys: [key('camera', "Phone A' OR true --")] }))
+      .total,
+    0,
+  );
+  assert.equal(
+    (
+      await service.get(lensOwner, false, {
+        cameras: ['Phone B'],
+        lensKeys: [key('camera', 'Phone A')],
+      })
+    ).total,
+    0,
+  );
   log(
     'Photo statistics PostgreSQL integration passed: full counts, device intersections, local dates, calendar gaps, private/owner/mode/version isolation, unknown fields and bounded series.',
   );
