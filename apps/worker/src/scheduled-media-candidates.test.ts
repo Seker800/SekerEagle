@@ -52,3 +52,19 @@ test('replacement freshness uses only the completed upload of the current owned 
   );
   assert.doesNotMatch(query, /job\."createdAt">=/);
 });
+
+test('reuses a candidate window while revalidating its IDs before every claim', async () => {
+  const queries: string[] = [];
+  const select = createScheduledMediaSelector({
+    $queryRaw: async (sql: { text: string }) => {
+      queries.push(sql.text);
+      return [{ id: 'job-1' }];
+    },
+  } as never, () => false, 'EMBEDDING');
+  const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
+  await select(input, 'HISTORY');
+  await select(input, 'HISTORY');
+  assert.equal(queries.filter((sql) => !sql.includes('job.id IN')).length, 1,
+    'a second claim must not scan the whole backlog again');
+  assert.ok(queries.some((sql) => sql.includes('job.id IN')), 'cached hints must be revalidated');
+});

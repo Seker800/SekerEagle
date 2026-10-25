@@ -66,3 +66,7 @@ test('task sections explain actual execution without turning temporary waits int
   assert.ok(taskExecutionPriority('EMBEDDING') > taskExecutionPriority('DETAILS'));
   assert.ok(taskExecutionPriority('DETAILS') > taskExecutionPriority('PYRAMID'));
 });
+
+test('actual camera video playback processors never masquerade as browsing jobs', () => {
+  assert.equal(mediaTaskFamily('GENERATE_PREVIEW', 'camera-video-playback-v1'), 'VIDEO');
+});
