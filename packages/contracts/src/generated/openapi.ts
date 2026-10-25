@@ -3360,6 +3360,11 @@ export interface components {
     };
     EagleMediaCapabilitiesDto: {
       /**
+       * @description Supported server photo recipe protocol, not worker readiness.
+       * @enum {number}
+       */
+      serverPhotoEditing: 1;
+      /**
        * @example 1
        * @enum {number}
        */

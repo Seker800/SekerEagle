@@ -106,10 +106,10 @@ export function PhotoEditor({
       setDraftStatus('');
       return;
     }
-    setDraftStatus(t('正在自动保存…'));
+    setDraftStatus(presentation === 'native' ? t('正在保存参数…') : t('正在自动保存…'));
     const timer = setTimeout(() => {
       pendingDraftWrites.current++;
-      setDraftStatus(t('正在自动保存…'));
+      setDraftStatus(presentation === 'native' ? t('正在保存参数…') : t('正在自动保存…'));
       draftQueue.current = draftQueue.current
         .catch(() => undefined)
         .then(() => latestDraft.current?.({ version: 1, edits }))
@@ -117,7 +117,8 @@ export function PhotoEditor({
           () => {
             pendingDraftWrites.current--;
             persistedDraftKey.current = key;
-            if (currentDraftKey.current === key) setDraftStatus(t('已自动保存'));
+            if (currentDraftKey.current === key)
+              setDraftStatus(presentation === 'native' ? t('参数已保存') : t('已自动保存'));
           },
           () => {
             pendingDraftWrites.current--;
@@ -126,7 +127,7 @@ export function PhotoEditor({
         );
     }, 500);
     return () => clearTimeout(timer);
-  }, [edits, onDraftChange]);
+  }, [edits, onDraftChange, presentation]);
   const [tab, setTab] = useState<Tab>(initialTab);
   const [loaded, setLoaded] = useState<HTMLImageElement | null>(null);
   const imageWidth = sourceSize?.width ?? loaded?.naturalWidth ?? 1;

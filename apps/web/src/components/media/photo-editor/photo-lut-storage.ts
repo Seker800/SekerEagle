@@ -1,12 +1,12 @@
 import bundled from './bundled-luts/manifest.json';
-const bundledUrls = import.meta.glob('./bundled-luts/*.png', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-}) as Record<string, string>;
 import { decode } from 'fast-png';
 import { photoLutFileName } from './photo-lut-groups';
 import { parseCubeLut, parsePngLut, pngLutLayout, type PhotoLut } from './photo-lut';
+const bundledUrls = import.meta.glob<string>('./bundled-luts/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+});
 export interface PhotoLutEntry {
   id: string;
   name: string;

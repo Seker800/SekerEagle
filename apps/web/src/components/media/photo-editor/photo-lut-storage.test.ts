@@ -1,4 +1,7 @@
 import { File as NodeFile } from 'node:buffer';
+import bundled from './bundled-luts/manifest.json';
+import { readFile } from 'node:fs/promises';
+import { writePortableLut, readPortableLut } from '@sekereagle/photo-render-core/portable-lut';
 import { encode } from 'fast-png';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -91,4 +94,40 @@ it('ships fourteen Leica LUTs and keeps personal imports independent of bundled 
   const personal = await importPhotoLut(file(identity));
   expect(await listPhotoLuts()).toEqual(expect.arrayContaining([...bundled, personal]));
   expect((await loadPhotoLut(personal.id)).data[0]).toBe(0);
+});
+
+it.each(bundled)(
+  'decodes packaged $name offline and serializes it for server rendering',
+  async (entry) => {
+    const fetch = vi.fn(async (url: string) => {
+      const name = /([0-9]+\.png)/.exec(url)![1];
+      const bytes = await readFile(
+        `${process.cwd()}/src/components/media/photo-editor/bundled-luts/${name}`,
+      );
+      return { ok: true, arrayBuffer: async () => Uint8Array.from(bytes).buffer };
+    });
+    vi.stubGlobal('fetch', fetch);
+    {
+      const lut = await loadPhotoLut(entry.id);
+      expect(lut.data).toHaveLength(64 ** 3 * 3);
+      const portable = writePortableLut(lut);
+      expect(portable.length).toBeLessThan(4_500_000);
+      expect(
+        Buffer.from(readPortableLut(portable).data.buffer).equals(Buffer.from(lut.data.buffer)),
+      ).toBe(true);
+    }
+    expect(fetch).toHaveBeenCalledTimes(1);
+  },
+);
+it('rejects unavailable or altered bundled bytes', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: false })),
+  );
+  await expect(loadPhotoLut('bundled-leica-1')).rejects.toThrow('LUT_NOT_FOUND');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => ({ ok: true, arrayBuffer: async () => new Uint8Array([1, 2]).buffer })),
+  );
+  await expect(loadPhotoLut('bundled-leica-1')).rejects.toThrow('INVALID_LUT');
 });

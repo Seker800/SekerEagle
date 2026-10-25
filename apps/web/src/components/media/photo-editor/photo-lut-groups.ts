@@ -6,7 +6,7 @@ export interface PhotoFilterGroup {
   label: string;
   items: { id: PhotoFilter; label: string }[];
 }
-/** Optional local convention: 01-Group__02-Name.cube. No private catalog is bundled. */
+/** Optional local convention: 01-Group__02-Name.cube. Personal entries remain separate from the immutable bundled catalog. */
 export function photoLutFileName(
   filename: string,
 ): Pick<PhotoLutEntry, 'name' | 'group' | 'groupOrder' | 'order'> {

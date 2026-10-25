@@ -1,4 +1,6 @@
 export const enUS = {
+  '正在保存参数…': 'Saving adjustments…',
+  参数已保存: 'Adjustments saved',
   '服务器编辑服务尚未更新，暂时无法保存成片。':
     'The server editing service needs an update before photos can be saved.',
   重置此项: 'Reset adjustment',

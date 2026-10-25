@@ -10,6 +10,7 @@ const service = new EagleMediaCapabilityService();
 test('publishes frozen camera capabilities with separate image and video budgets', () => {
   const capabilities = service.getCapabilities();
   assert.equal(capabilities.version, 1);
+  assert.equal(capabilities.serverPhotoEditing, 1);
   assert.ok(Object.isFrozen(capabilities));
   assert.deepEqual(capabilities.images.extensions, [
     '.jpg',

@@ -37,6 +37,7 @@ class NativeViewerMediaTest {
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
         val writes = CopyOnWriteArrayList<String>()
+        @Volatile var supportsEditing = true
         @Volatile var revision = 1
         @Volatile var complete = false
         @Volatile var drops = 0
@@ -115,6 +116,14 @@ class NativeViewerMediaTest {
                                 when {
                                     path.endsWith("/original") || path.contains("/renditions/") ->
                                         png
+                                    path.endsWith("/media-capabilities") ->
+                                        JSONObject()
+                                            .put(
+                                                "serverPhotoEditing",
+                                                if (supportsEditing) 1 else 0,
+                                            )
+                                            .toString()
+                                            .toByteArray()
                                     path.endsWith("/edit-recipe") ->
                                         "{\"entry\":null}".toByteArray()
                                     path.endsWith("/assets/source") ->
@@ -182,6 +191,33 @@ class NativeViewerMediaTest {
             NativeSession.open(app, fixture.origin),
             "synthetic-owner:${fixture.origin}",
         )
+    }
+
+    @Test
+    fun olderServerCanPreviewButCannotSubmitUnsupportedRender() {
+        Fixture().use { f ->
+            f.supportsEditing = false
+            val repo = repo(f)
+            NativeEditorSession(
+                    app,
+                    repo,
+                    GalleryMode.PHOTO,
+                    repo.parse(f.metadata(), GalleryMode.PHOTO),
+                )
+                .use { editor ->
+                    val opened = editor.request("open", JSONObject()) as JSONObject
+                    assertFalse(opened.getBoolean("serverEditing"))
+                    assertArrayEquals(f.png, editor.source().file.readBytes())
+                    try {
+                        editor.request("saveRecipe", JSONObject())
+                        fail("Unsupported render must be blocked before submitting")
+                    } catch (error: IllegalStateException) {
+                        assertTrue(error.message!!.contains("服务器编辑服务尚未更新"))
+                    }
+                    assertTrue(f.writes.isEmpty())
+                    assertFalse(f.paths.any { it.endsWith("/original") })
+                }
+        }
     }
 
     @Test
@@ -436,6 +472,33 @@ class NativeViewerMediaTest {
             compose.waitUntil(10000) {
                 js("Boolean(document.querySelector('input[type=range]'))") == "true"
             }
+            assertEquals(
+                "true",
+                js(
+                    "document.querySelector('input[type=range]').getBoundingClientRect().width / innerWidth >= 0.7"
+                ),
+            )
+            assertEquals(
+                "true",
+                js(
+                    "['HSL','曲线','色彩分级'].every(label => !Array.from(document.querySelectorAll('button')).some(b=>b.textContent.trim()===label))"
+                ),
+            )
+            val adjustmentScreenshot =
+                InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+            java.io
+                .File(app.getExternalFilesDir(null), "native-adjustments-editor.png")
+                .outputStream()
+                .use { adjustmentScreenshot.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            adjustmentScreenshot.recycle()
+            js(
+                "Array.from(document.querySelectorAll('button')).find(b=>b.textContent.trim()==='滤镜')?.click()"
+            )
+            compose.waitUntil(10000) {
+                js("Boolean(document.querySelector('button[aria-label=VIV]:not(:disabled)'))") ==
+                    "true"
+            }
+            js("document.querySelector('button[aria-label=VIV]').click()")
             js(
                 "Array.from(document.querySelectorAll('button')).find(b => b.textContent.trim()==='水印')?.click()"
             )

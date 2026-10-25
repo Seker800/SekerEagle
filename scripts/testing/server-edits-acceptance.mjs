@@ -1,4 +1,7 @@
 import { Buffer } from 'node:buffer';
+import { readFile } from 'node:fs/promises';
+import { decode } from 'fast-png';
+import { parsePngLut } from '../../packages/photo-render-core/dist/photo-lut.js';
 import { log } from 'node:console';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
@@ -138,14 +141,19 @@ export async function verifyServerEdits({
     (await db.eagleAsset.findUniqueOrThrow({ where: { id: materialCopy.id } })).libraryMode,
     'MATERIAL',
   );
-  // A realistic 33³ personal LUT exceeds the normal JSON parser limit; only this route permits it.
-  const size = 33,
-    data = new Float32Array(size ** 3 * 3);
-  for (let b = 0; b < size; b++)
-    for (let g = 0; g < size; g++)
-      for (let r = 0; r < size; r++)
-        data.set([r / (size - 1), g / (size - 1), b / (size - 1)], ((b * size + g) * size + r) * 3);
-  const lut = writePortableLut({ size, data, domainMin: [0, 0, 0], domainMax: [1, 1, 1] });
+  // The packaged 64³ Leica table exercises the actual ~4.2 MB wire payload.
+  const png = decode(
+    await readFile(
+      new URL(
+        '../../apps/web/src/components/media/photo-editor/bundled-luts/1.png',
+        import.meta.url,
+      ),
+    ),
+    { checkCrc: true },
+  );
+  const lut = writePortableLut(parsePngLut(png.data, png.width, png.height, png.channels));
+  assert.equal((await api('/photos/media-capabilities')).serverPhotoEditing, 1);
+  assert.equal((await api('/eagle/media-capabilities')).serverPhotoEditing, 1);
   const lutJob = await api(path, {
     ...input,
     requestId: randomUUID(),
@@ -161,6 +169,6 @@ export async function verifyServerEdits({
     'stale source cannot publish as current',
   );
   log(
-    'Server photo edits passed: full-resolution output, canonical effects, personal LUT, idempotency, owner/mode/Origin/DTO/version boundaries.',
+    'Server photo edits passed: full-resolution output, canonical effects, packaged 64³ Leica LUT, idempotency, owner/mode/Origin/DTO/version boundaries.',
   );
 }

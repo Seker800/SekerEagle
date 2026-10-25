@@ -1435,3 +1435,75 @@
 .editor[data-presentation='native'] .adjustmentOptions button[aria-pressed='true'] > span {
   color: var(--photo-accent);
 }
+
+/* Reserve phone adjustment width for the gesture, with values above the track. */
+.editor[data-presentation='native'] .parameterRow {
+  position: relative;
+  gap: 8px;
+  padding-top: 18px;
+  min-height: 64px;
+}
+.editor[data-presentation='native'] .parameterRow > .slider {
+  order: -1;
+  display: block;
+  position: relative;
+}
+.editor[data-presentation='native'] .parameterRow .precisionRow {
+  display: block;
+}
+.editor[data-presentation='native'] .parameterRow .precisionRow button {
+  display: none;
+}
+.editor[data-presentation='native'] .parameterRow .precisionRow input {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+}
+.editor[data-presentation='native'] .parameterRow .numberInput {
+  position: absolute;
+  right: 0;
+  top: -20px;
+  width: 58px;
+  min-height: 24px;
+  padding: 0;
+  font-size: 12px;
+}
+.editor[data-presentation='native'] .parameterReset {
+  position: absolute;
+  left: 0;
+  top: 0;
+  min-height: 28px;
+  width: 32px;
+  padding: 0;
+}
+.editor[data-presentation='native'] .adjustmentCategoryRow {
+  min-height: 36px;
+}
+.editor[data-presentation='native'] .adjustmentGroups {
+  justify-content: center;
+  gap: 12px;
+}
+.editor[data-presentation='native'] .adjustmentOptions {
+  grid-auto-columns: 76px;
+  gap: 6px;
+  min-height: 72px;
+}
+.editor[data-presentation='native'] .adjustmentOptions button {
+  min-height: 68px;
+}
+.editor[data-presentation='native'] .header {
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.editor[data-presentation='native'] .header > button,
+.editor[data-presentation='native'] .history button {
+  background: #202023a3;
+  border: 0.6px solid #ffffff24;
+  border-radius: 24px;
+  min-height: 40px;
+}
+.editor[data-presentation='native'] .title span {
+  display: none;
+}

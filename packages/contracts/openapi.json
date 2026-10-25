@@ -7535,6 +7535,11 @@
       "EagleMediaCapabilitiesDto": {
         "type": "object",
         "properties": {
+          "serverPhotoEditing": {
+            "type": "number",
+            "enum": [1],
+            "description": "Supported server photo recipe protocol, not worker readiness."
+          },
           "version": {
             "type": "number",
             "enum": [1],
@@ -7547,7 +7552,7 @@
             "$ref": "#/components/schemas/EagleVideoMediaCapabilityDto"
           }
         },
-        "required": ["version", "images", "videos"]
+        "required": ["serverPhotoEditing", "version", "images", "videos"]
       },
       "CreateEditRenderDto": {
         "type": "object",
