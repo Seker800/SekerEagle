@@ -1580,7 +1580,15 @@ test('purge commits asset deletion and detached upload/capture pointers before r
   );
   await assert.rejects(f.materials.setTrash(f.ownerId, [f.material.id], true), NotFoundException);
   const pending = await prisma.eagleAssetProcessingJob.findFirst({
-    where: { assetId: f.material.id, kind: 'PURGE_ASSET' },
+    // The fixture contains an obsolete revision too; the real scheduler only
+    // leases the current media version, independently of the database plan.
+    where: {
+      ownerId: f.ownerId,
+      libraryMode: 'MATERIAL',
+      assetId: f.material.id,
+      assetRevision: f.material.mediaRevision,
+      kind: 'PURGE_ASSET',
+    },
   });
   assert.equal(pending.status, 'PENDING');
   const job = await prisma.eagleAssetProcessingJob.update({
