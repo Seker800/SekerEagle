@@ -9,11 +9,15 @@ const mocks = vi.hoisted(() => ({
   detail: vi.fn(),
   list: vi.fn(),
   history: vi.fn(),
+  instructions: vi.fn(),
+  saveInstructions: vi.fn(),
 }));
 vi.mock('../../lib/photo-agent-api', () => ({
   listPhotoAgentTasks: mocks.list,
   getPhotoAgentTask: mocks.detail,
   getPhotoAgentHistory: mocks.history,
+  getPhotoAgentInstructions: mocks.instructions,
+  savePhotoAgentInstructions: mocks.saveInstructions,
   reviewPhotoRequest: mocks.review,
   undoPhotoAgentSuggestion: mocks.undo,
 }));
@@ -47,6 +51,8 @@ function fixture(): PhotoAgentTask {
 }
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.instructions.mockResolvedValue({ instructions: "", revision: 0, updatedAt: null });
+  mocks.saveInstructions.mockResolvedValue({ instructions: "仅按文件名检查截图", revision: 1, updatedAt: "2026-10-25T00:00:00Z" });
   mocks.list.mockResolvedValue({
     items: [
       {
@@ -190,4 +196,25 @@ it('keeps operation history collapsed below photo cards', async () => {
     cards.at(-1)!.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
   expect(mocks.review).not.toHaveBeenCalled();
+});
+
+it('saves owner instructions explicitly without starting scans or approving requests', async () => {
+ mount();
+ const field=await screen.findByRole('textbox',{name:'整理要求'});
+ fireEvent.change(field,{target:{value:'仅按文件名检查截图'}});
+ expect(mocks.saveInstructions).not.toHaveBeenCalled();
+ fireEvent.click(screen.getByRole('button',{name:'保存要求'}));
+ await waitFor(()=>expect(mocks.saveInstructions).toHaveBeenCalledWith({instructions:'仅按文件名检查截图',revision:0}));
+ expect(await screen.findByText('整理要求已保存')).toBeInTheDocument();
+ expect(mocks.review).not.toHaveBeenCalled();
+});
+it('labels metadata-only requests and completed transfers without unavailable preview errors', async () => {
+ const task=fixture();task.kind='SEND_TO_MATERIAL';
+ task.assets=task.assets.map(a=>({...a,deletedAt:'2026-10-25T00:00:00Z'}));
+ task.suggestions=task.suggestions.map(a=>({...a,kind:'SEND_TO_MATERIAL',status:'ACCEPTED',reviewBasis:'METADATA'}));
+ mocks.detail.mockResolvedValue(task);
+ await open();
+ expect(screen.getAllByText('仅文字依据 · 未看图片')).toHaveLength(2);
+ expect(screen.getAllByText('已发送到素材')).toHaveLength(2);
+ expect(screen.queryByText('预览暂不可用')).not.toBeInTheDocument();
 });
