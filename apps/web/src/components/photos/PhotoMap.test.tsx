@@ -351,7 +351,12 @@ it('keeps every dense position as an interactive canvas dot when thumbnail cards
   await screen.findByText('全库 120 张带位置照片');
   await waitFor(() => expect(mocks.dots).toHaveBeenCalledTimes(120));
   expect(
-    mocks.dots.mock.calls.every(([, options]) => (options as { radius: number }).radius < 1.2),
+    mocks.dots.mock.calls.every(
+      ([, options]) =>
+        (options as { radius: number; fillColor: string; fillOpacity: number }).radius >= 2.2 &&
+        (options as { fillColor: string }).fillColor === '#ffffff' &&
+        (options as { fillOpacity: number }).fillOpacity === 1,
+    ),
   ).toBe(true);
   expect(markerButtons()).toHaveLength(9);
   const point = mocks.dots.mock.results[70].value as { on: ReturnType<typeof vi.fn> };
