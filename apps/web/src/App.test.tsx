@@ -143,3 +143,21 @@ it.each(['late-success', 'aborted-request'])(
     expect(screen.queryByRole('heading', { name: '无法连接素材库' })).not.toBeInTheDocument();
   },
 );
+
+it('removes both workspace caches when a running session expires', async () => {
+  requestMock.mockResolvedValueOnce(userResponse());
+  requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
+  const client = new QueryClient();
+  render(
+    <QueryClientProvider client={client}>
+      <App />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('素材图库');
+  client.setQueryData(['eagle', 'owner-1', 'MATERIAL', 'assets'], ['material']);
+  client.setQueryData(['eagle', 'owner-1', 'PHOTO', 'assets'], ['photo']);
+  requestMock.mockRejectedValueOnce(new ApiError('登录已过期', 401, null));
+  fireEvent(window, new Event('online'));
+  await screen.findByRole('heading', { name: '登录素材库' });
+  expect(client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-1'] })).toHaveLength(0);
+});
