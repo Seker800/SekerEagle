@@ -227,7 +227,10 @@ try {
   );
   assert.ok(crowded.cameras.length > 24);
   await assert.rejects(service.get(owner, false, { grain: 'day', start: '2000-01-01' }));
-  assert.equal((await service.get(owner, false, { groupBy: 'lens' })).points[0].key, 'L1');
+  assert.equal(
+    (await service.get(owner, false, { groupBy: 'lens' })).points[0].key,
+    JSON.stringify(['lens', 'L1']),
+  );
   const beforeBulk = (await service.get(owner, false, {})).total;
   for (let i = 0; i < 130; i++) await make();
   assert.equal((await service.get(owner, false, {})).total, beforeBulk + 130);

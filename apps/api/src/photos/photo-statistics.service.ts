@@ -76,7 +76,12 @@ export class PhotoStatisticsService {
     const [summary] = await this.prisma.$queryRaw<Summary[]>(Prisma.sql`
       WITH scoped AS MATERIALIZED (
         SELECT COALESCE(NULLIF(BTRIM(m."cameraModel"), ''), '') AS camera,
-          COALESCE(NULLIF(BTRIM(m."lensModel"), ''), '') AS lens,
+          COALESCE(NULLIF(BTRIM(m."lensModel"), ''), '') AS raw_lens,
+          CASE WHEN NULLIF(BTRIM(m."lensModel"), '') IS NOT NULL
+            THEN array_to_json(ARRAY['lens', BTRIM(m."lensModel")])::text
+            WHEN COALESCE(NULLIF(BTRIM(m."cameraModel"), ''), NULLIF(BTRIM(m."cameraMake"), '')) IS NOT NULL
+            THEN array_to_json(ARRAY['camera', COALESCE(NULLIF(BTRIM(m."cameraModel"), ''), NULLIF(BTRIM(m."cameraMake"), ''))])::text
+            ELSE array_to_json(ARRAY['unknown', ''])::text END AS lens,
           CASE WHEN m."capturedAt" IS NULL THEN NULL
             WHEN m."capturedLocal" ~ '^\\d{4}-\\d{2}-\\d{2}T' THEN LEFT(m."capturedLocal", 10)
             ELSE TO_CHAR(m."capturedAt" AT TIME ZONE 'UTC', 'YYYY-MM-DD') END AS day
@@ -89,7 +94,8 @@ export class PhotoStatisticsService {
       ), filtered AS MATERIALIZED (
         SELECT * FROM scoped WHERE true
           ${query.cameras?.length ? Prisma.sql`AND camera IN (${Prisma.join(query.cameras)})` : Prisma.empty}
-          ${query.lenses?.length ? Prisma.sql`AND lens IN (${Prisma.join(query.lenses)})` : Prisma.empty}
+          ${query.lenses?.length ? Prisma.sql`AND raw_lens IN (${Prisma.join(query.lenses)})` : Prisma.empty}
+          ${query.lensKeys?.length ? Prisma.sql`AND lens IN (${Prisma.join(query.lensKeys)})` : Prisma.empty}
           ${query.start ? Prisma.sql`AND day >= ${query.start}` : Prisma.empty}
           ${query.end ? Prisma.sql`AND day <= ${query.end}` : Prisma.empty}
       ), camera_counts AS (SELECT camera AS key, count(*)::int AS count FROM filtered GROUP BY camera),

@@ -28,6 +28,10 @@ test('statistics validates dates, filters and rejects identity or privacy overri
     { grain: 'hour' },
     { start: '2024-02-30' },
     { cameras: Array(51).fill('a') },
+    { lensKeys: ['not-an-identity'] },
+    { lensKeys: ['["owner","other"]'] },
+    { lensKeys: [JSON.stringify(['camera', 'x'.repeat(2048)])] },
+    { lensKeys: Array(51).fill('["camera","Phone"]') },
   ]) {
     await assert.rejects(
       pipe.transform(input, { type: 'query', metatype: PhotoStatisticsQueryDto }),
@@ -38,6 +42,11 @@ test('statistics validates dates, filters and rejects identity or privacy overri
     { type: 'query', metatype: PhotoStatisticsQueryDto },
   );
   assert.deepEqual(value.cameras, ['A']);
+  const lens = await pipe.transform(
+    { lensKeys: '["camera","Phone"]' },
+    { type: 'query', metatype: PhotoStatisticsQueryDto },
+  );
+  assert.deepEqual(lens.lensKeys, ['["camera","Phone"]']);
 });
 
 test('statistics uses full library with current metadata and authenticated visibility', async () => {

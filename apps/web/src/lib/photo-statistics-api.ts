@@ -1,3 +1,4 @@
+import { parsePhotoLensKey } from '@sekereagle/library-core';
 import { request } from './api-client';
 export interface PhotoStatisticsQuery {
   grain: 'day' | 'week' | 'month' | 'year';
@@ -28,6 +29,7 @@ export function getPhotoStatistics(input: PhotoStatisticsQuery, signal?: AbortSi
   if (input.start) params.set('start', input.start);
   if (input.end) params.set('end', input.end);
   for (const key of ['cameras', 'lenses'] as const)
-    for (const value of input[key]) params.append(key, value);
+    for (const value of input[key])
+      params.append(key === 'lenses' && parsePhotoLensKey(value) ? 'lensKeys' : key, value);
   return request<PhotoStatisticsData>(`/api/photos/photography/statistics?${params}`, { signal });
 }

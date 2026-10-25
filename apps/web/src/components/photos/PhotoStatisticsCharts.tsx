@@ -1,3 +1,4 @@
+import { parsePhotoLensKey } from '@sekereagle/library-core';
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { t } from '../../i18n';
 import type { PhotoStatisticsData } from '../../lib/photo-statistics-api';
@@ -24,12 +25,15 @@ function seriesStyle(key: string | null, options: string[]) {
     dash: ['', '6 3', '2 3', '9 3 2 3'][index % 4],
   };
 }
-export const deviceLabel = (key: string | null, kind: 'total' | 'camera' | 'lens') =>
-  kind === 'total'
-    ? t('总拍摄量')
-    : key === null
-      ? t('其他设备（合并）')
-      : key || (kind === 'camera' ? t('未知相机') : t('未知镜头'));
+export function deviceLabel(key: string | null, kind: 'total' | 'camera' | 'lens') {
+  if (kind === 'total') return t('总拍摄量');
+  if (key === null) return t('其他设备（合并）');
+  if (kind === 'camera') return key || t('未知相机');
+  const lens = parsePhotoLensKey(key);
+  if (!lens) return key || t('未知镜头');
+  if (lens[0] === 'camera') return t('{{value1}}（未记录镜头）', { value1: lens[1] });
+  return lens[0] === 'lens' ? lens[1] : t('未知镜头');
+}
 
 export function PhotoTimeChart({ data }: { data: PhotoStatisticsData }) {
   const [selected, setSelected] = useState<{

@@ -1,3 +1,4 @@
+import { parsePhotoLensKey } from '@sekereagle/library-core';
 import { Transform } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -22,6 +23,19 @@ function CalendarDate() {
           /^\d{4}-\d{2}-\d{2}$/.test(value) &&
           Number.isFinite(Date.parse(`${value}T00:00:00Z`)) &&
           new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value,
+      },
+    });
+}
+function LensKey() {
+  return (target: object, propertyName: string) =>
+    registerDecorator({
+      name: 'lensKey',
+      target: target.constructor,
+      propertyName,
+      options: { each: true },
+      validator: {
+        validate: (value: unknown) =>
+          typeof value === 'string' && parsePhotoLensKey(value) !== null,
       },
     });
 }
@@ -66,4 +80,18 @@ export class PhotoStatisticsQueryDto {
   @IsString({ each: true })
   @MaxLength(240, { each: true })
   lenses?: string[];
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: 50,
+    description:
+      'Opaque lens/device identities returned by statistics; legacy lenses remains exact LensModel filtering.',
+  })
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => (Array.isArray(value) ? value : [value]))
+  @IsArray()
+  @ArrayMaxSize(50)
+  @IsString({ each: true })
+  @MaxLength(2048, { each: true })
+  @LensKey()
+  lensKeys?: string[];
 }

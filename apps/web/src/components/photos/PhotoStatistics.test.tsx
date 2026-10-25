@@ -422,5 +422,5 @@ it('labels camera fallback separately from a real lens with the same name and fi
   await screen.findByRole('button', { name: /Phone A（未记录镜头）/ });
   fireEvent.click(screen.getByRole('button', { name: /Phone A（未记录镜头）/ }));
   await waitFor(() => expect(get.mock.calls.at(-1)?.[0].lenses).toEqual([fallback]));
-  expect(screen.getByRole('button', { name: /^Phone A 2/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: '镜头：Phone A' })).toBeInTheDocument();
 });
