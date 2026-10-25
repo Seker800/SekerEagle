@@ -22,6 +22,17 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const db = new PrismaClient();
 after(() => db.$disconnect());
 const input = { where: { lane: 'BACKGROUND', kind: { in: ['GENERATE_EMBEDDING'] } }, take: 50 };
+test('scheduler estimates retain correlations between kind, lane, state and processor', async () => {
+  const rows =
+    await db.$queryRaw`SELECT stxkind::text AS kinds FROM pg_statistic_ext WHERE stxname='EagleMediaJob_scheduler_selectivity'`;
+  assert.equal(
+    rows.length,
+    1,
+    'independent selectivity estimates must not turn a large ready pool into random nested lookups',
+  );
+  assert.ok(rows[0].kinds.includes('m') && rows[0].kinds.includes('f'));
+});
+
 test('completed upload freshness has a covering lookup without weakening current-object ownership', async () => {
   const indexes =
     await db.$queryRaw`SELECT indexdef FROM pg_indexes WHERE schemaname='public' AND tablename='UploadSession' AND indexname='UploadSession_completed_freshness_cover_idx'`;
