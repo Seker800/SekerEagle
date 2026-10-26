@@ -105,30 +105,71 @@ test('all manual media requeues reset exhausted recovery budgets and fence old e
   const { EagleVectorService } = await import('../../apps/api/dist/eagle/eagle-vector.service.js');
   const { EagleService } = await import('../../apps/api/dist/eagle/eagle.service.js');
   for (const mode of ['PHOTO', 'MATERIAL']) {
-    for (const action of ['single', 'bulk', 'vector', 'purge']) {
+    for (const action of [
+      'single',
+      'bulk',
+      'vector',
+      'purge',
+      'reconcile',
+      'scanMissing',
+      'restore',
+    ]) {
       const f = await fixture();
       const a = await f.asset({
         libraryMode: mode,
-        ...(action === 'purge' ? { deletedAt: new Date() } : {}),
+        lifecycleStatus: 'READY',
+        ...(action === 'purge' || action === 'restore' ? { deletedAt: new Date() } : {}),
       });
+      const { EMBEDDING_PROCESSOR_VERSION } =
+        await import('../../apps/api/dist/eagle/media-job-plan.js');
+      const state = ['reconcile', 'scanMissing', 'restore'].includes(action)
+        ? 'COMPLETED'
+        : 'FAILED';
       const job = await f.job(a, {
+        processorVersion: EMBEDDING_PROCESSOR_VERSION,
+        lastError: action === 'restore' ? 'ASSET_TRASHED' : null,
         kind: action === 'purge' ? 'PURGE_ASSET' : 'GENERATE_EMBEDDING',
-        status: 'FAILED',
+        status: state,
         recoveryCount: 3,
         leaseVersion: 7,
         attempts: 12,
       });
-      const foreign = await f.job(await f.asset({ ownerId: f.other, libraryMode: mode }), {
-        status: 'FAILED',
-        recoveryCount: 3,
-        leaseVersion: 7,
-      });
+      const foreign = await f.job(
+        await f.asset({
+          ownerId: f.other,
+          libraryMode: mode,
+          ...(action === 'purge' || action === 'restore' ? { deletedAt: new Date() } : {}),
+        }),
+        {
+          kind: action === 'purge' ? 'PURGE_ASSET' : 'GENERATE_EMBEDDING',
+          processorVersion: EMBEDDING_PROCESSOR_VERSION,
+          lastError: action === 'restore' ? 'ASSET_TRASHED' : null,
+          status: state,
+          recoveryCount: 3,
+          leaseVersion: 7,
+        },
+      );
       if (action === 'single')
         await new EagleProcessingService(prisma, mode).retry(f.owner, job.id);
       if (action === 'bulk') await new EagleProcessingService(prisma, mode).retryFailed(f.owner);
       if (action === 'vector')
         await new EagleVectorService(prisma, mode).retryFailedEmbeddings(f.owner);
       if (action === 'purge') await new EagleService(prisma, undefined, mode).emptyTrash(f.owner);
+      if (action === 'reconcile') await new EagleProcessingService(prisma, mode).reconcile(f.owner);
+      if (action === 'scanMissing')
+        await new EagleVectorService(prisma, mode).scanMissingEmbeddings(f.owner);
+      if (action === 'restore') {
+        const { setEagleTrash } = await import('../../apps/api/dist/eagle/eagle-trash.js');
+        await prisma.$transaction((tx) =>
+          setEagleTrash(tx, { ownerId: f.owner, libraryMode: mode }, [a.id], true),
+        );
+      }
+      if (action !== 'purge')
+        assert.equal(
+          (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } })).lifecycleStatus,
+          'READY',
+          `${mode}/${action} must not block a ready source`,
+        );
       const current = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({
         where: { id: job.id },
       });
@@ -139,7 +180,7 @@ test('all manual media requeues reset exhausted recovery budgets and fence old e
       const other = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({
         where: { id: foreign.id },
       });
-      assert.equal(other.status, 'FAILED');
+      assert.equal(other.status, state);
       assert.equal(other.recoveryCount, 3);
       assert.equal(other.leaseVersion, 7);
     }
@@ -970,4 +1011,26 @@ test('recent source activity follows owner, mode, current version and private vi
   });
   assert.equal((await current()).lastActivityAt, '2029-01-01T00:00:00.000Z');
   assert.ok((await current()).management);
+});
+
+test('retrying failed edited copies never makes the ready source depend on the render job', async () => {
+  const { EagleProcessingService } =
+    await import('../../apps/api/dist/eagle/eagle-processing.service.js');
+  for (const mode of ['PHOTO', 'MATERIAL'])
+    for (const bulk of [false, true]) {
+      const f = await fixture();
+      const a = await f.asset({ libraryMode: mode, lifecycleStatus: 'READY' });
+      const j = await f.job(a, { kind: 'RENDER_EDITED_COPY', status: 'FAILED' });
+      const service = new EagleProcessingService(prisma, mode);
+      if (bulk) await service.retryFailed(f.owner);
+      else await service.retry(f.owner, j.id);
+      assert.equal(
+        (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: a.id } })).lifecycleStatus,
+        'READY',
+      );
+      assert.equal(
+        (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: j.id } })).status,
+        'PENDING',
+      );
+    }
 });

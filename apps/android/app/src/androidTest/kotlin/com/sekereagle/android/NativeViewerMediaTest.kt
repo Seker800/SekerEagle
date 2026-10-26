@@ -419,6 +419,9 @@ class NativeViewerMediaTest {
                 editor.request("open", JSONObject())
                 val input = JSONObject().put("recipe", JSONObject("{\"version\":1,\"edits\":{}}"))
                 editor.request("saveRecipe", input)
+                f.renderStatus = "PENDING"
+                editor.request("saveStatus", JSONObject())
+                editor.request("saveRecipe", input)
                 f.renderStatus = "FAILED"
                 editor.request("saveStatus", JSONObject())
                 editor.request("saveRecipe", input)
@@ -426,9 +429,10 @@ class NativeViewerMediaTest {
                 editor.request("saveStatus", JSONObject())
                 editor.request("saveRecipe", input)
                 val ids = f.writes.filter { it.startsWith("POST ") }.map { JSONObject(it.substringAfter("edit-renders ")).getString("requestId") }
-                assertEquals(3, ids.size)
-                assertNotEquals(ids[0], ids[1])
-                assertEquals(ids[1], ids[2])
+                assertEquals(4, ids.size)
+                assertEquals(ids[0], ids[1])
+                assertNotEquals(ids[1], ids[2])
+                assertEquals(ids[2], ids[3])
             }
         }
     }
