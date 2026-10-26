@@ -187,3 +187,29 @@ export function taskSection(group: TaskGroup, schedule: BackgroundSchedule): Tas
     return 'PAUSED';
   return group.background && schedule.mode !== 'ALWAYS' ? 'SCHEDULED' : 'IMMEDIATE';
 }
+
+export const MEDIA_BROWSE_BLOCKING_KINDS = [
+  'GENERATE_RENDITIONS',
+  'GENERATE_THUMBNAIL',
+  'GENERATE_PREVIEW',
+  'PROBE_MEDIA',
+] as const;
+export function mediaTaskBlocksAssetReady(kind: string, version = '') {
+  return (
+    mediaTaskFamily(kind, version) === 'BROWSE' &&
+    (MEDIA_BROWSE_BLOCKING_KINDS as readonly string[]).includes(kind)
+  );
+}
+
+export interface TaskTransitionEvent {
+  id: string;
+  jobId: string;
+  step: string;
+  fromStatus: string | null;
+  toStatus: string;
+  leaseVersion: number;
+  attempts: number;
+  recoveryCount: number;
+  occurredAt: string;
+}
+

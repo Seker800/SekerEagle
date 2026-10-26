@@ -4,17 +4,12 @@ import {
   decideTask,
   taskGroupPresentation,
   resolveTaskPresentation,
-  mediaClaimTransition,
-  MEDIA_LEASE_MS,
-  mediaCompletion,
-  mediaFailure,
-  mediaWaitData,
-  mediaTaskBlocksAssetReady,
   taskBucketDecision,
   taskModelReadiness,
   workerSupportsTask,
 } from './task-engine';
-import type { TaskGroup } from './task-scheduling';
+import {mediaTaskBlocksAssetReady, type TaskGroup} from './task-scheduling';
+import {mediaClaimTransition, MEDIA_LEASE_MS, mediaCompletion, mediaFailure, mediaWaitData} from './media-task-lifecycle';
 const now = new Date('2026-10-26T04:00:00Z');
 const ready = {
   paused: false,

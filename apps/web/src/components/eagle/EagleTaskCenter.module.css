@@ -219,15 +219,8 @@
 .sectionHeader h2 {
   font-size: 17px;
 }
-.sectionHeader p {
-  margin: 6px 0 0;
-}
 .center h3 {
   font-size: 14px;
-  margin: 0;
-}
-.center .empty {
-  padding: 12px 0;
   margin: 0;
 }
 .badge {

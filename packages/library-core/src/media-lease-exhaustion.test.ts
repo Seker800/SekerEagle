@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {MEDIA_LEASE_MS, mediaClaimTransition, mediaFailure} from './task-engine';
+import {MEDIA_LEASE_MS, mediaClaimTransition, mediaFailure} from './media-task-lifecycle';
 
 const now = new Date('2026-10-26T04:00:00Z');
 const expiredBefore = new Date(now.getTime() - MEDIA_LEASE_MS);

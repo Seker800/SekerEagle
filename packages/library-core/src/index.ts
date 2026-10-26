@@ -39,3 +39,4 @@ export * from './photo-statistics-lens';
 export * from './asset-operations';
 
 export * from './task-engine';
+export * from './media-task-lifecycle';
