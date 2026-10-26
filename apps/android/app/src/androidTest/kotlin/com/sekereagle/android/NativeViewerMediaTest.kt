@@ -37,6 +37,8 @@ class NativeViewerMediaTest {
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
         val writes = CopyOnWriteArrayList<String>()
+        @Volatile var renderStatus = "COMPLETED"
+        @Volatile var frozenRecipe = false
         @Volatile var supportsEditing = true
         @Volatile var revision = 1
         @Volatile var complete = false
@@ -125,14 +127,16 @@ class NativeViewerMediaTest {
                                             .toString()
                                             .toByteArray()
                                     path.endsWith("/edit-recipe") ->
-                                        "{\"entry\":null}".toByteArray()
+                                        (if (frozenRecipe && path.contains("/assets/edited/"))
+                                            """{"entry":{"baseAssetId":"source","baseMediaRevision":1,"recipe":{"edits":{"marker":"frozen"}}}}"""
+                                        else "{\"entry\":null}").toByteArray()
                                     path.endsWith("/assets/source") ->
                                         metadata().toString().toByteArray()
                                     path.endsWith("/edit-renders") ->
                                         "{\"id\":\"render-job\"}".toByteArray()
                                     path.endsWith("/edit-renders/render-job") -> {
                                         complete = true
-                                        "{\"status\":\"COMPLETED\",\"asset\":{\"id\":\"saved\",\"name\":\"saved.png\"}}"
+                                        "{\"status\":\"$renderStatus\",\"asset\":{\"id\":\"saved\",\"name\":\"saved.png\"}}"
                                             .toByteArray()
                                     }
                                     path.endsWith("/parts/1") ->
@@ -404,6 +408,49 @@ class NativeViewerMediaTest {
                         fail("Out of order chunk must be rejected")
                     } catch (_: IllegalArgumentException) {}
                 }
+        }
+    }
+
+    @Test
+    fun failedSaveGetsNewIdentityButSuccessfulRetryKeepsIdentity() {
+        Fixture().use { f ->
+            val repo = repo(f)
+            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata(), GalleryMode.PHOTO)).use { editor ->
+                editor.request("open", JSONObject())
+                val input = JSONObject().put("recipe", JSONObject("{\"version\":1,\"edits\":{}}"))
+                editor.request("saveRecipe", input)
+                f.renderStatus = "FAILED"
+                editor.request("saveStatus", JSONObject())
+                editor.request("saveRecipe", input)
+                f.renderStatus = "COMPLETED"
+                editor.request("saveStatus", JSONObject())
+                editor.request("saveRecipe", input)
+                val ids = f.writes.filter { it.startsWith("POST ") }.map { JSONObject(it.substringAfter("edit-renders ")).getString("requestId") }
+                assertEquals(3, ids.size)
+                assertNotEquals(ids[0], ids[1])
+                assertEquals(ids[1], ids[2])
+            }
+        }
+    }
+
+    @Test
+    fun interruptedEditedCopyOpenRetainsItsFrozenRecipe() {
+        Fixture().use { f ->
+            f.frozenRecipe = true
+            f.drops = 3
+            val repo = repo(f)
+            NativeEditorSession(app, repo, GalleryMode.PHOTO, repo.parse(f.metadata().put("id", "edited"), GalleryMode.PHOTO)).use { editor ->
+                try {
+                    editor.request("open", JSONObject())
+                    fail("Interrupted preview must fail")
+                } catch (_: java.io.IOException) {}
+                f.drops = 0
+                val opened = editor.request("open", JSONObject()) as JSONObject
+                assertEquals("frozen", opened.getJSONObject("edits").getString("marker"))
+                assertEquals(2, f.paths.count { it.endsWith("/assets/edited/edit-recipe") })
+                assertFalse(f.paths.any { it.endsWith("/assets/source/edit-recipe") })
+                assertFalse(f.paths.any { it.endsWith("/original") })
+            }
         }
     }
 

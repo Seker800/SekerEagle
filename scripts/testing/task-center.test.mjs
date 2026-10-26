@@ -62,6 +62,90 @@ async function fixture() {
   return { owner, other, asset, job, service: new EagleTaskCenterService(prisma, 'PHOTO') };
 }
 
+test('accepted and rejected approvals both appear in scoped completion history', async () => {
+  const f = await fixture();
+  const task = await prisma.eaglePhotoAgentTask.create({
+    data: { ownerId: f.owner, kind: 'DELETE', scope: {} },
+  });
+  for (const status of ['ACCEPTED', 'REJECTED']) {
+    const a = await f.asset();
+    await prisma.eaglePhotoAgentSuggestion.create({
+      data: {
+        ownerId: f.owner,
+        taskId: task.id,
+        assetId: a.id,
+        assetRevision: a.mediaRevision,
+        assetRowVersion: a.rowVersion,
+        kind: 'DELETE',
+        value: {},
+        evidence: {},
+        rationale: 'Synthetic',
+        status,
+      },
+    });
+  }
+  const history = await f.service.overview(f.owner, false, 'HISTORY');
+  assert.equal(history.groups.find((g) => g.id === 'APPROVALS')?.completed, 2);
+  assert.equal(
+    (await f.service.overview(f.other, false, 'HISTORY')).groups.find((g) => g.id === 'APPROVALS')
+      ?.completed ?? 0,
+    0,
+  );
+  assert.equal(
+    (
+      await new EagleTaskCenterService(prisma, 'MATERIAL').overview(f.owner, false, 'HISTORY')
+    ).groups.find((g) => g.id === 'APPROVALS')?.completed ?? 0,
+    0,
+  );
+});
+
+test('all manual media requeues reset exhausted recovery budgets and fence old executors', async () => {
+  const { EagleProcessingService } =
+    await import('../../apps/api/dist/eagle/eagle-processing.service.js');
+  const { EagleVectorService } = await import('../../apps/api/dist/eagle/eagle-vector.service.js');
+  const { EagleService } = await import('../../apps/api/dist/eagle/eagle.service.js');
+  for (const mode of ['PHOTO', 'MATERIAL']) {
+    for (const action of ['single', 'bulk', 'vector', 'purge']) {
+      const f = await fixture();
+      const a = await f.asset({
+        libraryMode: mode,
+        ...(action === 'purge' ? { deletedAt: new Date() } : {}),
+      });
+      const job = await f.job(a, {
+        kind: action === 'purge' ? 'PURGE_ASSET' : 'GENERATE_EMBEDDING',
+        status: 'FAILED',
+        recoveryCount: 3,
+        leaseVersion: 7,
+        attempts: 12,
+      });
+      const foreign = await f.job(await f.asset({ ownerId: f.other, libraryMode: mode }), {
+        status: 'FAILED',
+        recoveryCount: 3,
+        leaseVersion: 7,
+      });
+      if (action === 'single')
+        await new EagleProcessingService(prisma, mode).retry(f.owner, job.id);
+      if (action === 'bulk') await new EagleProcessingService(prisma, mode).retryFailed(f.owner);
+      if (action === 'vector')
+        await new EagleVectorService(prisma, mode).retryFailedEmbeddings(f.owner);
+      if (action === 'purge') await new EagleService(prisma, undefined, mode).emptyTrash(f.owner);
+      const current = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      assert.equal(current.recoveryCount, 0, `${mode}/${action} must restore recovery budget`);
+      assert.equal(current.attempts, 0);
+      assert.equal(current.status, 'PENDING');
+      assert.equal(current.leaseVersion, 8, `${mode}/${action} must fence the old executor`);
+      const other = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({
+        where: { id: foreign.id },
+      });
+      assert.equal(other.status, 'FAILED');
+      assert.equal(other.recoveryCount, 3);
+      assert.equal(other.leaseVersion, 7);
+    }
+  }
+});
+
 test('task overview uses current visible resources and never crosses owner or mode', async () => {
   const f = await fixture();
   await f.job(await f.asset());
