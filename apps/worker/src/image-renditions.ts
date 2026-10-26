@@ -2,7 +2,7 @@ import { CAMERA_RAW_EDIT_MAX_SIZE, isCameraRawMime } from '@sekereagle/library-c
 import type { CameraDimensions } from '@sekereagle/media-core';
 import sharp, { type Sharp, type WebpOptions } from 'sharp';
 
-interface ImageRenditionSpec {
+export interface ImageRenditionSpec {
   kind: 'PREVIEW' | 'THUMBNAIL';
   variant: string;
   maxSize: number;

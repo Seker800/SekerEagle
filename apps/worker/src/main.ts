@@ -1,3 +1,4 @@
+import { processImageWork } from './image-work';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
@@ -14,7 +15,6 @@ import {
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import {
-  renderImageRenditions,
   catalogImageDimensions,
   canReuseImageBrowsing,
 } from './image-renditions';
@@ -56,10 +56,8 @@ import {
   terminalAssetFailure,
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
-import { inspectLivePhotoImage, inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
+import { inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
 import { readOwnedImageRange } from './image-range';
-import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
-import { extractRepresentativeColors } from './color-palette';
 import { selectImageJobSource } from './image-job-source';
 import { withProcessableImage } from './image-media';
 import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
@@ -393,63 +391,13 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
       return;
     }
-    const {
-      result: processed,
-      sha256,
-      sourceMode,
-    } = await withProcessableImage(
-      object.Body as AsyncIterable<Uint8Array>,
-      sourceDetails.mimeType,
-      sourceDetails.storageKey,
-      async (source, originalPath, originalDimensions) => {
-        const metadataPromise = source.clone().metadata();
-        if (job.kind === 'EXTRACT_COLOR_PALETTE') {
-          const [{ data, info }, metadata] = await Promise.all([
-            source
-              .clone()
-              .rotate()
-              .toColourspace('srgb')
-              .resize({ width: 192, height: 192, fit: 'inside', withoutEnlargement: true })
-              .ensureAlpha()
-              .raw()
-              .toBuffer({ resolveWithObject: true }),
-            metadataPromise,
-          ]);
-          return {
-            metadata,
-            palette: extractRepresentativeColors(data, info.channels, info.width * info.height, 6),
-            rendered: null,
-          };
-        }
-        const metadata = await metadataPromise;
-        const rendered = await renderImageRenditions(
-          source,
-          asset.mimeType,
-          sourceDetailsOnly ? 'DETAILS' : 'BROWSE',
-        );
-        const photoAnalysis =
-          asset.libraryMode === 'PHOTO'
-            ? {
-                ...(!sourceDetailsOnly ? await readPhotoExif(metadata.exif, originalPath) : {}),
-                ...(sourceDetailsOnly
-                  ? {
-                      ...(await analyzePhotoPixels(source)),
-                      ...(!sourceDetails.verifiesOriginalHash
-                        ? { processorVersion: 'preview-laplacian-dhash-v3' }
-                        : {}),
-                    }
-                  : {}),
-              }
-            : null;
-        const livePhoto =
-          originalPath && (sourceDetailsOnly || !deferDetails)
-            ? await inspectLivePhotoImage(originalPath)
-            : null;
-        return { metadata, originalDimensions, palette: null, rendered, photoAnalysis, livePhoto };
-      },
-      sourceDetails.verifiesOriginalHash &&
-        (taskBlocksAssetReady(job.kind, job.processorVersion) || sourceDetailsOnly),
-      sourceDetailsOnly ? 'DEVELOP' : 'BROWSE',
+    const imageWork = {
+      assetMimeType: asset.mimeType, sourceMimeType: sourceDetails.mimeType,
+      kind: job.kind, processorVersion:job.processorVersion, mode: asset.libraryMode, detailsOnly: sourceDetailsOnly,
+      verifiesOriginalHash: sourceDetails.verifiesOriginalHash,
+    };
+    const {result: processed, sha256, sourceMode} = await processImageWork(
+      object.Body as AsyncIterable<Uint8Array>, imageWork,
     );
     process.stdout.write(
       `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, processorVersion: job.processorVersion, mimeType: asset.mimeType, sourceMode })}\n`,
