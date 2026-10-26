@@ -8,6 +8,7 @@ import {
   mediaCompletion,
   mediaFailure,
   mediaWaitData,
+  mediaTaskBlocksAssetReady,
   taskBucketDecision,
   taskModelReadiness,
   workerSupportsTask,
@@ -320,16 +321,42 @@ test('presentation reflects paused draining and model recovery without trusting 
   assert.equal(mediaWaitData(0, 1000, 'WAIT').attempts, 0);
 });
 
-
 test('primary blocking reason follows the shared precedence rather than bucket arrival order', () => {
-  const waiting = [{reason: 'DEPENDENCY' as const, count: 2, nextAt: null}, {reason: 'MODEL_OFFLINE' as const, count: 1, nextAt: null}];
-  assert.equal(taskGroupPresentation({...group, waiting}, schedule).reason, 'MODEL_OFFLINE');
-  assert.equal(taskGroupPresentation({...group, waiting: [...waiting].reverse()}, schedule).reason, 'MODEL_OFFLINE');
+  const waiting = [
+    { reason: 'DEPENDENCY' as const, count: 2, nextAt: null },
+    { reason: 'MODEL_OFFLINE' as const, count: 1, nextAt: null },
+  ];
+  assert.equal(taskGroupPresentation({ ...group, waiting }, schedule).reason, 'MODEL_OFFLINE');
+  assert.equal(
+    taskGroupPresentation({ ...group, waiting: [...waiting].reverse() }, schedule).reason,
+    'MODEL_OFFLINE',
+  );
+});
+
+test('an idle paused group keeps its pause reason even while its model is offline', () => {
+  assert.equal(
+    taskGroupPresentation({ ...group, policy: { paused: true, priority: 0 } }, schedule, 'OFFLINE')
+      .status,
+    'STOPPED',
+  );
+  assert.equal(
+    taskGroupPresentation(
+      { ...group, running: 1, policy: { paused: true, priority: 0 } },
+      schedule,
+      'OFFLINE',
+    ).status,
+    'WAITING',
+  );
+  assert.equal(
+    taskGroupPresentation({ ...group, running: 1 }, schedule, 'READY', 'OFFLINE').reason,
+    'WORKER_OFFLINE',
+  );
 });
 
 
-test('an idle paused group keeps its pause reason even while its model is offline', () => {
-  assert.equal(taskGroupPresentation({...group, policy: {paused: true, priority: 0}}, schedule, 'OFFLINE').status, 'STOPPED');
-  assert.equal(taskGroupPresentation({...group, running: 1, policy: {paused: true, priority: 0}}, schedule, 'OFFLINE').status, 'WAITING');
-  assert.equal(taskGroupPresentation({...group, running: 1}, schedule, 'READY', 'OFFLINE').reason, 'WORKER_OFFLINE');
+test('retrying an edited copy never turns its ready source back into processing', () => {
+  assert.equal(mediaTaskBlocksAssetReady('RENDER_EDITED_COPY', 'v1'), false);
+  assert.equal(mediaTaskBlocksAssetReady('GENERATE_THUMBNAIL', 'v1'), true);
+  assert.equal(mediaTaskBlocksAssetReady('GENERATE_RENDITIONS', 'photo-source-details-v1'), false);
+  assert.equal(mediaTaskBlocksAssetReady('GENERATE_PREVIEW', 'camera-video-playback-v1'), false);
 });
