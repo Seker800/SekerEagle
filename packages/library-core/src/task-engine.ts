@@ -53,10 +53,14 @@ export function taskGroupPresentation(
   embedding?: string,
 ): TaskPresentation {
   const section = taskSection(group, schedule);
-  const blocked = group.waiting.filter((wait) => wait.reason !== 'QUEUED');
+  const blocked = group.waiting.filter((wait) => wait.reason !== 'QUEUED' && wait.count > 0);
   const allBlocked =
     group.queued > 0 && blocked.reduce((sum, wait) => sum + wait.count, 0) >= group.queued;
-  const reason = allBlocked ? (blocked[0]?.reason ?? null) : group.approval > 0 ? 'APPROVAL' : null;
+  const reason = allBlocked
+    ? (TASK_GATES.find(([, reason]) => blocked.some((wait) => wait.reason === reason))?.[1] ?? null)
+    : group.approval > 0
+      ? 'APPROVAL'
+      : null;
   if (
     group.id === 'EMBEDDING' &&
     group.running + group.queued > 0 &&
@@ -184,29 +188,75 @@ export function taskBucketDecision(input: {
 }
 
 export interface TaskTransitionEvent {
-  id: string; jobId: string; step: string; fromStatus: string | null; toStatus: string;
-  leaseVersion: number; attempts: number; recoveryCount: number; occurredAt: string;
+  id: string;
+  jobId: string;
+  step: string;
+  fromStatus: string | null;
+  toStatus: string;
+  leaseVersion: number;
+  attempts: number;
+  recoveryCount: number;
+  occurredAt: string;
 }
 
 interface MediaExecution {
-  id: string; ownerId: string; libraryMode: 'MATERIAL' | 'PHOTO'; assetId: string; assetRevision: number; leaseVersion: number;
+  id: string;
+  ownerId: string;
+  libraryMode: 'MATERIAL' | 'PHOTO';
+  assetId: string;
+  assetRevision: number;
+  leaseVersion: number;
 }
 export function mediaExecutionGuard(job: MediaExecution) {
-  return {id: job.id, ownerId: job.ownerId, libraryMode: job.libraryMode, assetId: job.assetId,
-    assetRevision: job.assetRevision, status: 'PROCESSING' as const, leaseVersion: job.leaseVersion};
+  return {
+    id: job.id,
+    ownerId: job.ownerId,
+    libraryMode: job.libraryMode,
+    assetId: job.assetId,
+    assetRevision: job.assetRevision,
+    status: 'PROCESSING' as const,
+    leaseVersion: job.leaseVersion,
+  };
 }
 export function mediaCompletion(job: MediaExecution, now = new Date()) {
-  return {where: mediaExecutionGuard(job), data: {status: 'COMPLETED' as const, completedAt: now, lockedAt: null, lastError: null}};
+  return {
+    where: mediaExecutionGuard(job),
+    data: { status: 'COMPLETED' as const, completedAt: now, lockedAt: null, lastError: null },
+  };
 }
 /** Adapters classify permanent media errors. The core owns budget, backoff and guarded state changes. */
-export function mediaFailure(job: MediaExecution & {attempts: number; kind: string}, error: string, permanent: boolean, now = new Date()) {
-  const terminal = permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
-  const data = terminal ? {status: 'FAILED' as const, completedAt: now, lockedAt: null, lastError: error.slice(0,1000)}
-    : {status: 'PENDING' as const, availableAt: new Date(now.getTime() + Math.min(3600, 2 ** Math.min(job.attempts, MEDIA_FAILURE_LIMIT)) * 1000), lockedAt: null, lastError: error.slice(0,1000)};
-  return {terminal, where: mediaExecutionGuard(job), data};
+export function mediaFailure(
+  job: MediaExecution & { attempts: number; kind: string },
+  error: string,
+  permanent: boolean,
+  now = new Date(),
+) {
+  const terminal =
+    permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
+  const data = terminal
+    ? {
+        status: 'FAILED' as const,
+        completedAt: now,
+        lockedAt: null,
+        lastError: error.slice(0, 1000),
+      }
+    : {
+        status: 'PENDING' as const,
+        availableAt: new Date(
+          now.getTime() + Math.min(3600, 2 ** Math.min(job.attempts, MEDIA_FAILURE_LIMIT)) * 1000,
+        ),
+        lockedAt: null,
+        lastError: error.slice(0, 1000),
+      };
+  return { terminal, where: mediaExecutionGuard(job), data };
 }
 /** External service backpressure or outage is a wait, not a bad-image failure. */
 export function mediaWaitData(attempts: number, delayMs: number, code: string, now = new Date()) {
-  return {status: 'PENDING' as const, attempts: Math.max(0,attempts-1),
-    availableAt: new Date(now.getTime()+delayMs), lockedAt: null, lastError: code};
+  return {
+    status: 'PENDING' as const,
+    attempts: Math.max(0, attempts - 1),
+    availableAt: new Date(now.getTime() + delayMs),
+    lockedAt: null,
+    lastError: code,
+  };
 }

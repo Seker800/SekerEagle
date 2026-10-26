@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   taskSection,
+  taskGroupPresentation,
   taskExecutionPriority,
   type BackgroundSchedule,
   type TaskFamily,
@@ -203,21 +204,22 @@ export function EagleTaskCenter({
             {showHistory ? t('返回当前任务') : t('已完成记录')}
           </button>
         </div>
+        <label className={styles.scope}>
+          {t('查看范围')}
+          <select
+            value={scope}
+            onChange={(event) => setScope(event.target.value as 'ALL' | LibraryMode)}
+          >
+            <option value="ALL">{t('全部图库')}</option>
+            <option value="MATERIAL">{t('素材')}</option>
+            <option value="PHOTO">{t('照片')}</option>
+          </select>
+        </label>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('刷新')}
         </button>
       </header>
-      <label className={styles.scope}>
-        {t('查看范围')}
-        <select
-          value={scope}
-          onChange={(event) => setScope(event.target.value as 'ALL' | LibraryMode)}
-        >
-          <option value="ALL">{t('全部图库')}</option>
-          <option value="MATERIAL">{t('素材')}</option>
-          <option value="PHOTO">{t('照片')}</option>
-        </select>
-      </label>
+
       {error && (
         <div role="alert" className={styles.error}>
           {error.message}
@@ -338,6 +340,7 @@ export function EagleTaskCenter({
             items={cards}
             renderDetails={(card) => (
               <TaskCard
+                includePrivate={includePrivate}
                 group={card.group}
                 embedding={card.embedding}
                 schedule={card.schedule}
@@ -364,8 +367,8 @@ export function EagleTaskCenter({
               {showDetails && <EagleProcessingPage canManageProcessing />}
             </section>
           )}
-          <aside className={styles.external}>
-            <h2>{t('其他设备与维护')}</h2>
+          <details className={styles.external}>
+            <summary>{t('其他设备与维护')}</summary>
             <p>
               {t(
                 '手机传输由手机的传输列表管理。独立封面维护和宿主备份尚未接入此处的实时状态，不计入上方进度。',
@@ -374,7 +377,7 @@ export function EagleTaskCenter({
             <p>
               {t('Eagle 批量导入由导入端管理，尚未接入实时状态；历史记录不计入这里的运行任务。')}
             </p>
-          </aside>
+          </details>
         </>
       )}
     </section>
@@ -412,7 +415,8 @@ function TaskCard({
     );
   const state = taskStatus(group, schedule, embedding);
   const activeSteps = group.steps.filter((step) => step.running > 0);
-  const wait = group.waiting.find((item) => !['QUEUED', 'APPROVAL'].includes(item.reason));
+  const decision = group.presentation ?? taskGroupPresentation(group, schedule, embedding);
+  const wait = group.waiting.find((item) => item.reason === decision.reason);
   const execution = taskExecutionLabel(group, schedule);
   const isWaiting = remaining > 0 && group.running === 0;
   const executionAsReason =
