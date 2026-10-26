@@ -114,11 +114,11 @@ export class EagleTaskCenterService {
     return { retried };
   }
 
-  async overview(ownerId: string, includePrivate = false): Promise<TaskCenterOverview> {
+  async overview(ownerId: string, includePrivate = false, scope: 'ACTIVE' | 'HISTORY' = 'ACTIVE'): Promise<TaskCenterOverview> {
     const now = new Date();
     const [buckets, workers, setting, policies] = await Promise.all([
       this.prisma.$queryRaw<TaskBucket[]>(
-        taskCenterQuery(ownerId, this.libraryMode, includePrivate),
+        taskCenterQuery(ownerId, this.libraryMode, includePrivate, scope),
       ),
       this.prisma.eagleProcessingWorkerHeartbeat.findMany({
         where: { heartbeatAt: { gte: new Date(now.getTime() - 45000), lte: now } },

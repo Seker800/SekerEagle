@@ -6,6 +6,7 @@ export function taskCenterQuery(
   ownerId: string,
   libraryMode: LibraryMode,
   includePrivate: boolean,
+  scope: 'ACTIVE' | 'HISTORY' = 'ACTIVE',
 ) {
   return Prisma.sql`
     WITH facts AS (
@@ -20,6 +21,7 @@ export function taskCenterQuery(
       FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
       LEFT JOIN "EagleMediaJob" d ON j.status<>'COMPLETED' AND d.id=j."dependsOnJobId" AND d."ownerId"=j."ownerId" AND d."libraryMode"=j."libraryMode"
       WHERE j.kind<>'GENERATE_AI_TAGS' AND j."ownerId"=${ownerId} AND j."libraryMode"=${libraryMode}::"LibraryMode"
+        ${scope === 'HISTORY' ? Prisma.sql`AND j.status='COMPLETED'` : Prisma.sql`AND j.status<>'COMPLETED'`}
         AND j."assetRevision"=a."mediaRevision" AND (${includePrivate} OR NOT a."isPrivate")
         AND (a."deletedAt" IS NULL OR j.kind='PURGE_ASSET')
       UNION ALL
@@ -29,7 +31,7 @@ export function taskCenterQuery(
         CASE WHEN s."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,s."availableAt"
       FROM "EagleSmartFolderSemanticSnapshot" s
       WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
-        AND s.status IN ('PENDING','BUILDING','READY','FAILED')
+        ${scope === 'HISTORY' ? Prisma.sql`AND s.status='READY'` : Prisma.sql`AND s.status IN ('PENDING','BUILDING','FAILED')`}
       UNION ALL
       SELECT 'TAG_INDEX','TAG_INDEX','',
         CASE WHEN b.status='COMPLETED' THEN 'COMPLETED' WHEN b.status='FAILED' THEN 'FAILED'
@@ -37,15 +39,17 @@ export function taskCenterQuery(
         CASE WHEN b."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,b."availableAt"
       FROM "EagleTagSemanticBuild" b JOIN "EagleManualTag" t ON t.id=b."tagId" AND t."ownerId"=b."ownerId" AND t."libraryMode"=b."libraryMode"
       WHERE b."ownerId"=${ownerId} AND b."libraryMode"=${libraryMode}::"LibraryMode" AND (${includePrivate} OR NOT t."marksAssetsPrivate")
+        ${scope === 'HISTORY' ? Prisma.sql`AND b.status='COMPLETED'` : Prisma.sql`AND b.status<>'COMPLETED'`}
       UNION ALL
       SELECT 'PHOTO_MAP','PHOTO_MAP','',
         CASE WHEN "dirtyAt" IS NULL THEN 'COMPLETED' WHEN "lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
         CASE WHEN "availableAt">now() AND "lastError" IS NOT NULL THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
       FROM "EaglePhotoMapState" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode"
+        ${scope === 'HISTORY' ? Prisma.sql`AND "dirtyAt" IS NULL` : Prisma.sql`AND "dirtyAt" IS NOT NULL`}
       UNION ALL
       SELECT 'CLEANUP','OBJECT_DELETION','',CASE WHEN status='PROCESSING' AND "lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING' ELSE 'QUEUED' END,
         CASE WHEN "availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
-      FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate}
+      FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate} AND ${scope === 'ACTIVE'}
       UNION ALL
       SELECT 'APPROVALS','APPROVALS','',CASE WHEN s.status='PENDING' THEN 'APPROVAL' WHEN s.status='FAILED' THEN 'FAILED'
         WHEN s.status='APPLYING' THEN 'RUNNING' ELSE 'COMPLETED' END,'APPROVAL',NULL::timestamptz
@@ -54,6 +58,7 @@ export function taskCenterQuery(
       WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode" AND s."assetRevision"=a."mediaRevision"
         AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
         AND (t."expiresAt" IS NULL OR t."expiresAt">now()) AND t.status='OPEN'
+        ${scope === 'HISTORY' ? Prisma.sql`AND s.status IN ('APPLIED','REJECTED')` : Prisma.sql`AND s.status IN ('PENDING','APPLYING','FAILED')`}
       UNION ALL
       SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
         WHEN j.status='FAILED' THEN 'FAILED' WHEN j.status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,
@@ -62,6 +67,7 @@ export function taskCenterQuery(
       LEFT JOIN "EagleAsset" a ON a.id=s."eagleAssetId" AND a."ownerId"=s."uploaderId" AND a."libraryMode"=s."libraryMode"
       WHERE s."uploaderId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
         AND (${includePrivate} OR a.id IS NULL OR NOT a."isPrivate")
+        ${scope === 'HISTORY' ? Prisma.sql`AND j.status='COMPLETED'` : Prisma.sql`AND j.status<>'COMPLETED'`}
 
     )
     SELECT family,step,version,status,reason,count(*) AS count,min("nextAt") AS "nextAt"

@@ -46,6 +46,10 @@ export class EagleTaskCenterController {
   overview(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.tasks.overview(principal.sub, principal.canViewPrivate);
   }
+  @Get('history')
+  history(@CurrentPrincipal() principal: AuthPrincipal) {
+    return this.tasks.overview(principal.sub, principal.canViewPrivate, 'HISTORY');
+  }
   @Patch('policy')
   @UseGuards(BrowserOriginGuard)
   policy(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: TaskPolicyDto) {

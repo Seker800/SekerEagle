@@ -159,6 +159,7 @@ export const taskExecutionPriority = (family: TaskFamily): number =>
 
 export type TaskSection = 'IMMEDIATE' | 'SCHEDULED' | 'PAUSED' | 'REVIEW';
 export function taskSection(group: TaskGroup, schedule: BackgroundSchedule): TaskSection {
+  if (group.presentation) return group.presentation.section;
   if (group.id === 'APPROVALS') return 'REVIEW';
   if (
     group.availability === 'DISABLED' ||

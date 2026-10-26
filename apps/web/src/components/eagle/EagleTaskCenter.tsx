@@ -37,6 +37,7 @@ export function EagleTaskCenter({
   const { ownerId, libraryMode, api } = useLibraryWorkspace();
   const client = useQueryClient();
   const key = ['task-center', ownerId];
+  const [showHistory, setShowHistory] = useState(false);
   const [scope, setScope] = useState<'ALL' | LibraryMode>('ALL');
   const modes: LibraryMode[] = scope === 'ALL' ? ['MATERIAL', 'PHOTO'] : [scope];
   const otherMode = libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
@@ -44,9 +45,9 @@ export function EagleTaskCenter({
   const apiFor = (mode: LibraryMode) => (mode === libraryMode ? api : otherApi);
   const queries = useQueries({
     queries: modes.map((mode) => ({
-      queryKey: [...key, mode, includePrivate],
-      queryFn: ({ signal }: { signal: AbortSignal }) => apiFor(mode).fetchEagleTaskCenter(signal),
-      refetchInterval: 10000,
+      queryKey: [...key, mode, includePrivate, showHistory ? 'HISTORY' : 'ACTIVE'],
+      queryFn: ({ signal }: { signal: AbortSignal }) => showHistory ? apiFor(mode).fetchEagleTaskHistory(signal) : apiFor(mode).fetchEagleTaskCenter(signal),
+      refetchInterval: showHistory ? false : 10000,
     })),
   });
   const query = {
@@ -81,6 +82,7 @@ export function EagleTaskCenter({
     setDraft(null);
     setNotice('');
     setShowDetails(false);
+    setShowHistory(false);
   }, [ownerId, libraryMode, includePrivate, scope]);
   const save = useMutation({
     mutationFn: async (settings: BackgroundSchedule) => {
@@ -194,6 +196,9 @@ export function EagleTaskCenter({
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
+          <button type="button" aria-pressed={showHistory} onClick={() => setShowHistory(!showHistory)}>
+            {showHistory ? t('返回当前任务') : t('已完成记录')}
+          </button>
         </div>
         <button type="button" onClick={() => void query.refetch()} disabled={query.isFetching}>
           {t('刷新')}
@@ -457,6 +462,7 @@ function TaskCard({
       </header>
       <div className={styles.cardBody}>
         <div className={styles.progress}>
+          {group.completed > 0 && remaining === 0 && <span>{t('已完成')} {group.completed}</span>}
           {remaining > 0 &&
             !(state === 'STOPPED' && remaining === group.failed) &&
             group.id !== 'APPROVALS' && <span>{t('剩余 {{count}} 项', { count: remaining })}</span>}

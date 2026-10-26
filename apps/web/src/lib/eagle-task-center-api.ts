@@ -20,6 +20,7 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
         body: JSON.stringify(policy),
       }),
     fetchEagleTaskCenter: (signal?: AbortSignal) => request<TaskCenterOverview>('', { signal }),
+    fetchEagleTaskHistory: (signal?: AbortSignal) => request<TaskCenterOverview>('/history', { signal }),
     updateEagleTaskSchedule: (settings: BackgroundSchedule) =>
       request<TaskCenterOverview['settings']>('/settings', {
         method: 'PATCH',
