@@ -10,6 +10,7 @@ import {
 import { EagleController } from '../eagle/eagle.controller';
 import { EagleUploadController } from '../eagle/eagle-upload.controller';
 import { EagleVectorController } from '../eagle/eagle-vector.controller';
+import { EagleTaskCenterController } from '../eagle/eagle-task-center.controller';
 import { EagleProcessingController } from '../eagle/eagle-processing.controller';
 import { EagleModule, EAGLE_LIBRARY_PROVIDERS } from '../eagle/eagle.module';
 import { EagleMaintenanceService } from '../eagle/eagle-maintenance.service';
@@ -20,6 +21,7 @@ import {
   PhotoUploadsController,
   PhotoVectorsController,
   PhotoProcessingController,
+  PhotoTaskCenterController,
 } from './photo-library.module';
 
 const pairs = [
@@ -27,6 +29,7 @@ const pairs = [
   [EagleUploadController, PhotoUploadsController],
   [EagleVectorController, PhotoVectorsController],
   [EagleProcessingController, PhotoProcessingController],
+  [EagleTaskCenterController, PhotoTaskCenterController],
 ] as const;
 for (const [material, photo] of pairs) {
   test(`${photo.name} exposes every common route through the exact inherited handler`, () => {

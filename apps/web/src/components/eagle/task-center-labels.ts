@@ -37,7 +37,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('Mac · 较重'),
     ],
     FACES: [
-      t('人脸检测与匹配'),
+      t('人物识别'),
       t('检测人脸并计算特征，用于人物分组。'),
       t('预览图 + YuNet / SFace 模型'),
       t('图库服务器 · 较重'),
@@ -166,6 +166,10 @@ export function taskStatusLabel(
 ): string {
   const presentation = resolveTaskPresentation(group, schedule, embedding);
   switch (presentation.status) {
+    case 'UNSCANNED':
+      return t('尚未扫描');
+    case 'EMPTY':
+      return t('暂无可扫描照片');
     case 'WAITING': {
       const { reason } = presentation;
       return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED'

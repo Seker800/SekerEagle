@@ -1,4 +1,9 @@
 export const enUS = {
+  尚未扫描: 'Not scanned',
+  暂无可扫描照片: 'No photos ready to scan',
+  扫描未分析照片: 'Scan unanalyzed photos',
+  '未扫描 {{count}} 张': '{{count}} photos not scanned',
+
   最近状态变化: 'Recent transitions',
   暂无转换记录: 'No recorded transitions',
   中断后恢复: 'Recovered after interruption',

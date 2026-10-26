@@ -113,6 +113,14 @@ export function EagleTaskCenter({
       await client.invalidateQueries({ queryKey: key });
     },
   });
+  const start = useMutation({
+    mutationFn: ({ mode, family }: { mode: LibraryMode; family: TaskFamily }) =>
+      apiFor(mode).startEagleTaskFamily(family),
+    onSuccess: async (result) => {
+      setNotice(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
+      await client.invalidateQueries({ queryKey: key });
+    },
+  });
   const policy = useMutation({
     mutationFn: ({ mode, ...input }: { mode: LibraryMode; family: TaskFamily; paused: boolean }) =>
       apiFor(mode).updateEagleTaskPolicy(input),
@@ -152,7 +160,7 @@ export function EagleTaskCenter({
           nightEnd: summary.settings.nightEnd,
         }
       : null);
-  const error = save.error ?? retry.error ?? policy.error ?? query.error;
+  const error = save.error ?? retry.error ?? policy.error ?? start.error ?? query.error;
   const modelStates = entries.map(({ summary: entry }) =>
     entry.modelIssue !== undefined
       ? entry.modelIssue
@@ -331,7 +339,8 @@ export function EagleTaskCenter({
                 embedding={card.embedding}
                 schedule={card.schedule}
                 mode={card.mode}
-                busy={retry.isPending || policy.isPending}
+                busy={retry.isPending || policy.isPending || start.isPending}
+                onStart={() => start.mutate({ mode: card.mode, family: card.group.id })}
                 onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
                 onPolicy={(paused) =>
                   policy.mutate({ mode: card.mode, family: card.group.id, paused })
@@ -378,6 +387,7 @@ function TaskCard({
   mode,
   busy,
   onRetry,
+  onStart,
   onPolicy,
   onReview,
 }: {
@@ -388,6 +398,7 @@ function TaskCard({
   mode: LibraryMode;
   busy: boolean;
   onRetry: () => void;
+  onStart: () => void;
   onPolicy: (paused: boolean) => void;
   onReview?: () => void;
 }) {
@@ -399,7 +410,7 @@ function TaskCard({
   const decision = resolveTaskPresentation(group, schedule, embedding);
   const wait = group.waiting.find((item) => item.reason === decision.reason);
   const execution = taskExecutionLabel(group, schedule);
-  const isWaiting = remaining > 0 && group.running === 0;
+  const isWaiting = (remaining > 0 || (group.unscanned ?? 0) > 0) && group.running === 0;
   const executionAsReason =
     isWaiting && (management.execution === 'DISABLED' || management.execution === 'PAUSED');
   const scheduledWait = isWaiting && wait?.reason === 'SCHEDULE' && schedule.mode === 'NIGHT';
@@ -427,6 +438,9 @@ function TaskCard({
       </header>
       <div className={styles.cardBody}>
         <div className={styles.progress}>
+          {(group.unscanned ?? 0) > 0 && (
+            <span>{t('未扫描 {{count}} 张', { count: group.unscanned })}</span>
+          )}
           {group.completed > 0 && remaining === 0 && (
             <span>
               {t('已完成')} {group.completed}
@@ -452,6 +466,11 @@ function TaskCard({
           )}
         </div>
         <div className={styles.actions}>
+          {management.canStart && (
+            <button type="button" disabled={busy} onClick={onStart}>
+              {t('扫描未分析照片')}
+            </button>
+          )}
           {management.canRetry && (
             <button type="button" disabled={busy} onClick={onRetry}>
               {t('重试失败任务')}

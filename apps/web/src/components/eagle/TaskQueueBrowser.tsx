@@ -68,6 +68,8 @@ export function TaskQueueBrowser({
           <option value="QUEUED">{t('排队ing')}</option>
           <option value="WAITING">{t('等待执行')}</option>
           <option value="STOPPED">{t('已停止')}</option>
+          <option value="UNSCANNED">{t('尚未扫描')}</option>
+          <option value="EMPTY">{t('暂无可扫描照片')}</option>
           <option value="COMPLETED">{t('已完成')}</option>
         </select>
       </div>
@@ -111,6 +113,9 @@ export function TaskQueueBrowser({
                         <span className={styles.mode}>
                           {mode === 'PHOTO' ? t('照片') : t('素材')}
                         </span>
+                        {(group.unscanned ?? 0) > 0 && (
+                          <small>{t('未扫描 {{count}} 张', { count: group.unscanned })}</small>
+                        )}
                         <small>
                           {taskFamilyLabels(group.id)[3]}
                           {running.length > 0 && group.steps.length > 1

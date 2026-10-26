@@ -57,6 +57,7 @@ import {
 import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/config';
 import {
   parseProcessingJobKinds,
+  availableProcessingJobKinds,
   taskBlocksAssetReady,
   terminalAssetFailure,
 } from './processing-policy';
@@ -124,8 +125,10 @@ let deletingObjects = false;
 const runBackgroundProcessing = backgroundProcessingEnabled(
   process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
 );
-const allowedJobKinds = parseProcessingJobKinds(process.env.EAGLE_PROCESSING_JOB_KINDS);
-const runTagBuilds = runBackgroundProcessing && allowedJobKinds === undefined;
+const configuredJobKinds = parseProcessingJobKinds(process.env.EAGLE_PROCESSING_JOB_KINDS);
+const facesConfigured = Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR);
+const allowedJobKinds = availableProcessingJobKinds(configuredJobKinds, facesConfigured);
+const runTagBuilds = runBackgroundProcessing && configuredJobKinds === undefined;
 const runVideoTranscoding = videoTranscodingEnabled(process.env.EAGLE_VIDEO_TRANSCODING_ENABLED);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
 const workerConcurrency = Number.isSafeInteger(configuredConcurrency)
@@ -178,6 +181,7 @@ async function heartbeat(): Promise<void> {
         runBackgroundProcessing &&
         (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING')),
       photoMap: runBackgroundProcessing,
+      faces: facesConfigured,
     };
     await prisma.eagleProcessingWorkerHeartbeat.upsert({
       where: { workerId },

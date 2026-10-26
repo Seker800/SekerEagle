@@ -88,6 +88,10 @@ export function taskGroupPresentation(
   if (group.queued > 0 && section === 'PAUSED') return { status: 'STOPPED', section, reason };
   if (allBlocked || group.approval > 0) return { status: 'WAITING', section, reason };
   if (group.queued > 0) return { status: 'QUEUED', section, reason };
+  if (group.failed === 0 && (group.unscanned ?? 0) > 0)
+    return { status: 'UNSCANNED', section, reason };
+  if (group.failed + group.completed === 0 && group.unscanned === 0)
+    return { status: 'EMPTY', section, reason };
   return { status: group.failed > 0 ? 'STOPPED' : 'COMPLETED', section, reason };
 }
 
@@ -109,6 +113,7 @@ export function workerSupportsTask(value: unknown, family: TaskFamily, step: str
   if (!value || typeof value !== 'object' || !('background' in value)) return true;
   const capability = value as WorkerTaskCapabilities;
   if (isBackgroundFamily(family) && !capability.background) return false;
+  if (family === 'FACES' && capability.faces === false) return false;
   if (family === 'VIDEO' && !capability.video) return false;
   if (family === 'SMART_FOLDERS') return capability.smartFolders;
   if (family === 'TAG_INDEX') return capability.tagBuilds;
@@ -183,6 +188,7 @@ export function taskGroupManagement(
     );
   const paused = group.policy?.paused ?? false;
   return {
+    canStart: group.id === 'FACES' && (group.unscanned ?? 0) > 0 && !disabled,
     canRetry: group.failed > 0 && taskFamilyRetryable(group.id),
     canPause:
       CONTROLLABLE_TASK_FAMILIES.some((family) => family === group.id) &&

@@ -1460,6 +1460,22 @@ export interface paths {
     patch: operations['EagleTaskCenterController_policy'];
     trace?: never;
   };
+  '/api/eagle/tasks/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['EagleTaskCenterController_start'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/tasks/retry': {
     parameters: {
       query?: never;
@@ -3380,6 +3396,22 @@ export interface paths {
     patch: operations['PhotoTaskCenterController_policy'];
     trace?: never;
   };
+  '/api/photos/tasks/start': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations['PhotoTaskCenterController_start'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/tasks/retry': {
     parameters: {
       query?: never;
@@ -3768,6 +3800,10 @@ export interface components {
       paused: boolean;
       /** @deprecated */
       priority?: number;
+    };
+    StartTaskFamilyDto: {
+      /** @enum {string} */
+      family: 'FACES';
     };
     RetryTaskFamilyDto: {
       /** @enum {string} */
@@ -6216,6 +6252,27 @@ export interface operations {
     };
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_start: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartTaskFamilyDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };
@@ -9126,6 +9183,27 @@ export interface operations {
     };
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_start: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['StartTaskFamilyDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };

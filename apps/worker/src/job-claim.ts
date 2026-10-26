@@ -81,6 +81,7 @@ export async function claimNextMediaJob(
   client: MediaJobClaimClient,
   options: ClaimMediaJobOptions,
 ): Promise<EagleAssetProcessingJob | null> {
+  if (options.allowedJobKinds?.length === 0) return null;
   const now = options.now ?? new Date();
   const staleBefore = new Date(now.getTime() - MEDIA_LEASE_MS);
 

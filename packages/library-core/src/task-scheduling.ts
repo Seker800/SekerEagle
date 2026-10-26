@@ -78,13 +78,15 @@ export interface TaskCounts {
 export interface TaskStep extends TaskCounts {
   id: string;
 }
-export type TaskDisplayStatus = 'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING';
+export type TaskDisplayStatus =
+  'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING' | 'UNSCANNED' | 'EMPTY';
 export interface TaskPresentation {
   status: TaskDisplayStatus;
   section: TaskSection;
   reason: TaskWaitReason | null;
 }
 export interface TaskManagement {
+  canStart?: boolean;
   canRetry: boolean;
   canPause: boolean;
   paused: boolean;
@@ -95,6 +97,7 @@ export interface TaskGroup extends TaskCounts {
   lastActivityAt?: string | null;
   id: TaskFamily;
   background: boolean;
+  unscanned?: number;
   presentation?: TaskPresentation;
   availability?: 'ENABLED' | 'DISABLED' | 'UNKNOWN';
   policy?: { paused: boolean; priority: number };
@@ -113,6 +116,7 @@ export const CONTROLLABLE_TASK_FAMILIES = [
 ] as const;
 export interface WorkerTaskCapabilities {
   embedding?: 'READY' | 'OFFLINE' | 'DRIFTED';
+  faces?: boolean;
   background: boolean;
   jobKinds: string[] | null;
   video: boolean;

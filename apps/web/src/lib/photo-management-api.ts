@@ -30,7 +30,7 @@ export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
     { signal },
   );
 export const scanPhotoPeople = () =>
-  request<{ queued: number; scanned: number; limit: number }>(`${base}/people/scan`, {
+  request<{ queued: number; scanned: number; limit: number | null }>(`${base}/people/scan`, {
     method: 'POST',
     body: '{}',
   });

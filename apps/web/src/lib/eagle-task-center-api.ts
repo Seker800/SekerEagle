@@ -24,6 +24,12 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(policy),
       }),
+    startEagleTaskFamily: (family: TaskFamily) =>
+      request<{ queued: number }>('/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ family }),
+      }),
     fetchEagleTaskCenter: (signal?: AbortSignal) => request<TaskCenterOverview>('', { signal }),
     fetchEagleTaskHistory: (signal?: AbortSignal) =>
       request<TaskCenterOverview>('/history', { signal }),
@@ -49,6 +55,7 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
 }
 export const {
   fetchEagleTaskCenter,
+  startEagleTaskFamily,
   fetchEagleTaskHistory,
   fetchEagleTaskEvents,
   updateEagleTaskSchedule,

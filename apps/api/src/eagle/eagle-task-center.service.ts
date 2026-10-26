@@ -1,9 +1,16 @@
-import { Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Optional,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import {
   mediaTaskFamilySql,
   mediaBlocksAssetReadySql,
   lockOwnerPrivacyProjection,
+  queuePhotoFaceScan,
 } from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
@@ -57,6 +64,14 @@ export class EagleTaskCenterService {
       update: { paused, priority },
       select: { family: true, paused: true, priority: true },
     });
+  }
+
+  async start(ownerId: string, family: TaskFamily, includePrivate = false) {
+    if (this.libraryMode !== 'PHOTO' || family !== 'FACES')
+      throw new NotFoundException('没有可启动的扫描任务。');
+    if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
+      throw new BadRequestException('本地人物模型尚未配置。');
+    return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
   }
 
   async retry(ownerId: string, family: TaskFamily, includePrivate = false) {
@@ -194,6 +209,10 @@ export class EagleTaskCenterService {
       if (!step) {
         step = { id: bucket.step, ...counts() };
         group.steps.push(step);
+      }
+      if (bucket.status === 'UNSCANNED') {
+        group.unscanned = Number(bucket.count);
+        continue;
       }
       const fields: Record<string, keyof TaskCounts> = {
         QUEUED: 'queued',

@@ -3534,6 +3534,28 @@
         "tags": ["EagleTaskCenter"]
       }
     },
+    "/api/eagle/tasks/start": {
+      "post": {
+        "operationId": "EagleTaskCenterController_start",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTaskFamilyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
     "/api/eagle/tasks/retry": {
       "post": {
         "operationId": "EagleTaskCenterController_retry",
@@ -7621,6 +7643,28 @@
         "tags": ["PhotoTaskCenter"]
       }
     },
+    "/api/photos/tasks/start": {
+      "post": {
+        "operationId": "PhotoTaskCenterController_start",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTaskFamilyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
     "/api/photos/tasks/retry": {
       "post": {
         "operationId": "PhotoTaskCenterController_retry",
@@ -8591,6 +8635,16 @@
           }
         },
         "required": ["family", "paused"]
+      },
+      "StartTaskFamilyDto": {
+        "type": "object",
+        "properties": {
+          "family": {
+            "type": "string",
+            "enum": ["FACES"]
+          }
+        },
+        "required": ["family"]
       },
       "RetryTaskFamilyDto": {
         "type": "object",

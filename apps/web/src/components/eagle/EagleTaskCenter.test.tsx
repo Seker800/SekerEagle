@@ -15,6 +15,7 @@ vi.mock('../../lib/eagle-task-center-api', () => ({
   fetchEagleTaskEvents: vi.fn(),
   updateEagleTaskSchedule: vi.fn(),
   retryEagleTaskFamily: vi.fn(),
+  startEagleTaskFamily: vi.fn(),
   updateEagleTaskPolicy: vi.fn(),
   createEagleTaskCenterApi: vi.fn(),
 }));
@@ -68,6 +69,7 @@ beforeEach(() => {
     updateEagleTaskSchedule: vi.fn().mockResolvedValue(summary.settings),
     updateEagleTaskPolicy: vi.fn(),
     retryEagleTaskFamily: vi.fn(),
+    startEagleTaskFamily: vi.fn(),
   });
 });
 describe('unified task center', () => {
@@ -461,4 +463,89 @@ it('honors server management and model warnings without rebuilding them in the p
   expect(
     screen.queryByText('Mac 模型连接中断，向量任务等待恢复；其他处理继续。'),
   ).not.toBeInTheDocument();
+});
+
+it('shows unscanned photo coverage and starts a durable scan in the photo scope', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
+  const start = vi.fn().mockResolvedValue({ queued: 1201 });
+  vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
+    ...api.createEagleTaskCenterApi('PHOTO'),
+    startEagleTaskFamily: start,
+    fetchEagleTaskCenter: vi.fn().mockResolvedValue({
+      ...summary,
+      groups: [
+        {
+          id: 'FACES',
+          background: true,
+          unscanned: 1201,
+          availability: 'ENABLED',
+          queued: 0,
+          running: 0,
+          failed: 0,
+          completed: 0,
+          approval: 0,
+          waiting: [],
+          steps: [],
+        },
+      ],
+    }),
+  });
+  mount();
+  const heading = await screen.findByRole('heading', { name: '人物识别' });
+  const card = within(heading.closest('article')!);
+  expect(card.getByText('尚未扫描')).toBeVisible();
+  expect(card.getByText('未扫描 1201 张')).toBeVisible();
+  expect(card.queryByText('已完成')).not.toBeInTheDocument();
+  fireEvent.click(card.getByRole('button', { name: '扫描未分析照片' }));
+  await waitFor(() => expect(start).toHaveBeenCalledWith('FACES'));
+  expect(await screen.findByText('已加入 1201 个本地人脸分析任务')).toBeVisible();
+  expect(api.updateEagleTaskPolicy).not.toHaveBeenCalled();
+});
+it.each(['DISABLED', 'ENABLED'] as const)(
+  'keeps disabled models and empty coverage honest: %s',
+  async (availability) => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
+    vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
+      ...api.createEagleTaskCenterApi('PHOTO'),
+      fetchEagleTaskCenter: vi.fn().mockResolvedValue({
+        ...summary,
+        groups: [
+          {
+            id: 'FACES',
+            background: true,
+            unscanned: availability === 'DISABLED' ? 2 : 0,
+            availability,
+            queued: 0,
+            running: 0,
+            failed: 0,
+            completed: 0,
+            approval: 0,
+            waiting: [],
+            steps: [],
+          },
+        ],
+      }),
+    });
+    mount();
+    const heading = await screen.findByRole('heading', { name: '人物识别' });
+    const card = within(heading.closest('article')!);
+    if (availability === 'DISABLED')
+      expect(card.queryByRole('button', { name: '扫描未分析照片' })).not.toBeInTheDocument();
+    else expect(card.getByText('暂无可扫描照片')).toBeVisible();
+    if (availability === 'DISABLED') expect(card.getByText('服务器未启用')).toBeVisible();
+    expect(card.queryByText('已完成')).not.toBeInTheDocument();
+  },
+);
+
+it('allows pausing a completed category before new automatic work arrives', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    groups: [{ ...summary.groups[0]!, queued: 0, waiting: [] }],
+  });
+  mount();
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
+  fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
+  await waitFor(() =>
+    expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({ family: 'EMBEDDING', paused: true }),
+  );
 });

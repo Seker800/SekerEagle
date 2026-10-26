@@ -1,4 +1,5 @@
 import {
+  unscannedPhotoFacesSql,
   mediaStaleBeforeSql,
   mediaTaskFactsSql,
   taskBackoffFactsSql,
@@ -74,6 +75,14 @@ export function taskCenterQuery(
 
     )
     SELECT family,step,version,status,reason,count(*) AS count,min("nextAt") AS "nextAt",max("lastActivityAt") AS "lastActivityAt"
-    FROM facts GROUP BY family,step,version,status,reason ORDER BY family,step,status,reason
+    FROM facts GROUP BY family,step,version,status,reason
+    ${
+      libraryMode === 'PHOTO' && scope === 'ACTIVE'
+        ? Prisma.sql`UNION ALL
+      SELECT 'FACES','ANALYZE_PHOTO_FACES','','UNSCANNED','QUEUED',count(*),NULL::timestamptz,NULL::timestamptz
+      FROM (${unscannedPhotoFacesSql(ownerId, includePrivate)}) unscanned`
+        : Prisma.empty
+    }
+    ORDER BY family,step,status,reason
   `;
 }

@@ -8,11 +8,14 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { encodeEagleAssetCursor } from '../eagle/eagle-cursor';
-import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacy,
+  queuePhotoFaceScan,
+} from '@sekereagle/library-persistence';
 import { previewSelect, serializePreview } from './photo-preview';
 import { suggestPhotoGroups } from './photo-grouping';
 
-const MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
 const visible = (ownerId: string, includePrivate: boolean): Prisma.EagleAssetWhereInput => ({
   ownerId,
   libraryMode: 'PHOTO',
@@ -131,44 +134,7 @@ export class PhotoManagementService {
   async scanFaces(ownerId: string, includePrivate: boolean) {
     if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
       throw new BadRequestException('本地人物模型尚未配置，请按照片功能文档安装模型运行环境。');
-    const assets = await this.prisma.$queryRaw<
-      Array<{ id: string; mediaRevision: number }>
-    >(Prisma.sql`
-      SELECT asset.id, asset."mediaRevision" FROM "EagleAsset" asset
-      WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = 'PHOTO'
-        AND asset."deletedAt" IS NULL AND asset."lifecycleStatus" = 'READY'
-        AND asset."mimeType" LIKE 'image/%' AND (${includePrivate} OR asset."isPrivate" = false)
-        AND EXISTS (SELECT 1 FROM "EagleAssetRendition" r WHERE r."ownerId" = asset."ownerId" AND r."libraryMode" = asset."libraryMode" AND r."assetId" = asset.id AND r.revision = asset."mediaRevision" AND r.kind = 'PREVIEW' AND r.status = 'READY')
-        AND NOT EXISTS (SELECT 1 FROM "EagleMediaJob" job WHERE job."ownerId" = asset."ownerId" AND job."libraryMode" = asset."libraryMode" AND job."assetId" = asset.id AND job."assetRevision" = asset."mediaRevision" AND job.kind = 'ANALYZE_PHOTO_FACES' AND job."processorVersion" = ${MODEL_VERSION} AND (job.status IN ('COMPLETED','PROCESSING','FAILED') OR (job.status = 'PENDING' AND job.lane = 'INTERACTIVE')))
-      ORDER BY asset.id LIMIT 500
-    `);
-    const result = await this.prisma.eagleAssetProcessingJob.createMany({
-      data: assets.map((asset) => ({
-        ownerId,
-        libraryMode: 'PHOTO',
-        assetId: asset.id,
-        assetRevision: asset.mediaRevision,
-        kind: 'ANALYZE_PHOTO_FACES',
-        processorVersion: MODEL_VERSION,
-        lane: 'INTERACTIVE',
-      })),
-      skipDuplicates: true,
-    });
-    const promoted = assets.length
-      ? await this.prisma.eagleAssetProcessingJob.updateMany({
-          where: {
-            ownerId,
-            libraryMode: 'PHOTO',
-            kind: 'ANALYZE_PHOTO_FACES',
-            processorVersion: MODEL_VERSION,
-            status: 'PENDING',
-            lane: 'BACKGROUND',
-            OR: assets.map((asset) => ({ assetId: asset.id, assetRevision: asset.mediaRevision })),
-          },
-          data: { lane: 'INTERACTIVE', availableAt: new Date() },
-        })
-      : { count: 0 };
-    return { queued: result.count + promoted.count, scanned: assets.length, limit: 500 };
+    return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
   }
   private async requirePerson(
     tx: Prisma.TransactionClient,

@@ -301,3 +301,22 @@ test('stale windows cannot resurrect terminal jobs or steal live leases', async 
   );
   assert.equal(writes, 0);
 });
+
+test('an empty effective allowlist is idle and never builds a candidate SQL query', async () => {
+  let queries = 0;
+  assert.equal(
+    await claimNextMediaJob({} as never, {
+      allowedJobKinds: [],
+      onLeaseExhausted: async () => {
+        throw new Error('Unexpected exhausted lease');
+      },
+      selectCandidates: async () => {
+        queries++;
+        return [];
+      },
+      canClaimBackground: async () => true,
+    }),
+    null,
+  );
+  assert.equal(queries, 0);
+});

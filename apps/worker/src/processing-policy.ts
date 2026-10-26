@@ -61,6 +61,16 @@ export function parseProcessingJobKinds(
   return Object.freeze([...new Set(kinds as EagleMediaJobKind[])]);
 }
 
+/** Missing optional models leave work queued, instead of consuming retries. */
+export function availableProcessingJobKinds(
+  configured: readonly EagleMediaJobKind[] | undefined,
+  facesConfigured: boolean,
+): readonly EagleMediaJobKind[] | undefined {
+  if (facesConfigured) return configured;
+  const kinds = configured ?? (Object.keys(LANE_BY_KIND) as EagleMediaJobKind[]);
+  return kinds.filter((kind) => kind !== 'ANALYZE_PHOTO_FACES' && kind !== 'GENERATE_AI_TAGS');
+}
+
 export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] =
   MEDIA_BROWSE_BLOCKING_KINDS;
 

@@ -44,6 +44,7 @@ const operations = {
       nightStart: '23:00',
       nightEnd: '06:00',
     }),
+  taskStart: (mode: LibraryMode) => createEagleTaskCenterApi(mode).startEagleTaskFamily('FACES'),
   taskRetry: (mode: LibraryMode) =>
     createEagleTaskCenterApi(mode).retryEagleTaskFamily('EMBEDDING'),
   taskPolicy: (mode: LibraryMode) =>
