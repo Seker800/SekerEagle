@@ -8,8 +8,9 @@ const contract = { model: 'Qwen/Qwen3-VL-Embedding-2B', revision: 'fixed', dimen
 const node = (id, extra = {}) => ({
   id,
   name: id,
-  url: id==='mac'?'http://127.0.0.1:11435':'http://127.0.0.1:11436',
-  hostId:'test-host',hostMaxConcurrent:8,
+  url: id === 'mac' ? 'http://127.0.0.1:11435' : 'http://127.0.0.1:11436',
+  hostId: 'test-host',
+  hostMaxConcurrent: 8,
   token: 'local-test-token',
   accelerator: 'metal',
   operations: ['embedding'],
@@ -150,12 +151,19 @@ test('bad model contracts fail closed; offline node does not block another', asy
 });
 test('media capabilities are explicit and share the host hard limit', async (t) => {
   const { fleet } = await fixture(t, [
-    node('cpu', { operations: ['image', 'faces'], reserveInteractive: 0, maxConcurrent: 1 }),
+    node('cpu', {
+      operations: ['image', 'faces'],
+      faceVersion: 'yunet-2023mar-sface-2021dec-v1',
+      reserveInteractive: 0,
+      maxConcurrent: 1,
+    }),
   ]);
   fleet.markHealth('cpu', {
     status: 'ready',
     protocol: 'sekereagle-media-v1',
+    imageEncoding: 'SEI1',
     operations: ['image', 'faces'],
+    faceVersion: 'yunet-2023mar-sface-2021dec-v1',
   });
   assert.equal(fleet.acquire('embedding', false), null);
   const a = fleet.acquire('image', false);
@@ -233,20 +241,90 @@ test('invalid persisted policies cannot bypass enrolled capacity after restart',
   assert.equal(fleet.snapshot().revision, 0);
 });
 
-test('initial validation never persists duplicate IDs or endpoints',async t=>{
- const directory=await mkdtemp(join(tmpdir(),'eagle-init-'));t.after(()=>rm(directory,{recursive:true,force:true}));const fleet=new Fleet({directory,contract});
- await assert.rejects(fleet.initialize([node('mac'),node('mac')]),/DUPLICATE/);
- await assert.rejects(readFile(join(directory,'state.json')),/ENOENT/);
- await fleet.initialize([node('mac')]);
- await assert.rejects(fleet.enroll({expectedRevision:0,node:node('other',{url:'http://127.0.0.1:11435'})}),/DUPLICATE/);
+test('initial validation never persists duplicate IDs or endpoints', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'eagle-init-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const fleet = new Fleet({ directory, contract });
+  await assert.rejects(fleet.initialize([node('mac'), node('mac')]), /DUPLICATE/);
+  await assert.rejects(readFile(join(directory, 'state.json')), /ENOENT/);
+  await fleet.initialize([node('mac')]);
+  await assert.rejects(
+    fleet.enroll({ expectedRevision: 0, node: node('other', { url: 'http://127.0.0.1:11435' }) }),
+    /DUPLICATE/,
+  );
 });
-test('restart waits for actual prior compute and rejects an undersized backend',async t=>{
- const {fleet}=await fixture(t);fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:1,limit:3}});assert.equal(fleet.acquire('embedding',true),null);
- fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:1}});assert.equal(fleet.snapshot().nodes[0].health,'DRIFTED');
- fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:3}});assert.ok(fleet.acquire('embedding',true));
+test('restart waits for actual prior compute and rejects an undersized backend', async (t) => {
+  const { fleet } = await fixture(t);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 1, limit: 3 },
+  });
+  assert.equal(fleet.acquire('embedding', true), null);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 0, limit: 1 },
+  });
+  assert.equal(fleet.snapshot().nodes[0].health, 'DRIFTED');
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 0, limit: 3 },
+  });
+  assert.ok(fleet.acquire('embedding', true));
 });
-test('separate endpoints on one physical host share a hard cap and search reserve',async t=>{
- const {fleet}=await fixture(t,[node('mac',{hostId:'box',hostMaxConcurrent:3,maxConcurrent:2}),node('media',{hostId:'box',hostMaxConcurrent:3,maxConcurrent:2,reserveInteractive:0,accelerator:'cpu',operations:['image']})]);
- fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:2}});fleet.markHealth('media',{status:'ready',protocol:'sekereagle-media-v1',operations:['image'],capacity:{inFlight:0,limit:2}});
- const a=fleet.acquire('embedding',false),b=fleet.acquire('image',false);assert.ok(a&&b);assert.equal(fleet.acquire('image',false),null);assert.ok(fleet.acquire('embedding',true));assert.equal(fleet.acquire('image',true),null);
+test('separate endpoints on one physical host share a hard cap and search reserve', async (t) => {
+  const { fleet } = await fixture(t, [
+    node('mac', { hostId: 'box', hostMaxConcurrent: 3, maxConcurrent: 2 }),
+    node('media', {
+      hostId: 'box',
+      hostMaxConcurrent: 3,
+      maxConcurrent: 2,
+      reserveInteractive: 0,
+      accelerator: 'cpu',
+      operations: ['image'],
+    }),
+  ]);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 0, limit: 2 },
+  });
+  fleet.markHealth('media', {
+    status: 'ready',
+    protocol: 'sekereagle-media-v1',
+    imageEncoding: 'SEI1',
+    operations: ['image'],
+    capacity: { inFlight: 0, limit: 2 },
+  });
+  const a = fleet.acquire('embedding', false),
+    b = fleet.acquire('image', false);
+  assert.ok(a && b);
+  assert.equal(fleet.acquire('image', false), null);
+  assert.ok(fleet.acquire('embedding', true));
+  assert.equal(fleet.acquire('image', true), null);
+});
+
+test('host metrics are numeric diagnostics and unknown fields never escape', async (t) => {
+  const { fleet } = await fixture(t);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    memory: { activeBytes: 42, cacheBytes: 100, secret: 'not-returned' },
+    system: { freeMemoryBytes: 1000, token: 'not-returned' },
+  });
+  const state = fleet.snapshot();
+  assert.equal(state.nodes[0].memory.activeBytes, 42);
+  assert.ok(!JSON.stringify(state).includes('not-returned'));
+});
+
+test('advertised background capacity is capped by the physical host, not endpoint sum',async t=>{
+ const {fleet}=await fixture(t,[node('mac',{hostMaxConcurrent:3}),node('cuda',{hostMaxConcurrent:3,accelerator:'cuda'})]);
+ fleet.markHealth('mac',{...contract,status:'ready',metal:true});fleet.markHealth('cuda',{...contract,status:'ready',accelerator:'cuda'});assert.equal(fleet.snapshot().backgroundLimit,2);
 });
