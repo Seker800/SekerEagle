@@ -397,3 +397,9 @@ test('API publishes authoritative state without confusing partially blocked grou
   assert.deepEqual((result.groups[0] as unknown as {presentation: unknown}).presentation,
     {status: 'WAITING', section: 'IMMEDIATE', reason: 'MODEL_OFFLINE'});
 });
+
+
+test('live polling excludes completed history before aggregating media jobs', async () => {
+  const {taskCenterQuery} = await import('./task-center-query');
+  assert.match(taskCenterQuery('owner-a', 'PHOTO', false).sql, /AND j\.status<>'COMPLETED'/);
+});
