@@ -1,0 +1,9 @@
+# Activate only after the coordinator and worker candidate are verified.
+# Existing execution credentials are preserved; administrator credentials never enter API/worker.
+services:
+  api:
+    environment:
+      MLX_EMBEDDING_URL: http://compute-coordinator:11436
+  worker:
+    environment:
+      MLX_EMBEDDING_URL: http://compute-coordinator:11436

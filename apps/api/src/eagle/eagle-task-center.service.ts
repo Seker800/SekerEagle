@@ -13,6 +13,7 @@ import {
 } from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
+  sanitizeComputeRuntime,
   TASK_FAMILIES,
   backgroundScheduleAllows,
   isBackgroundFamily,
@@ -131,7 +132,11 @@ export class EagleTaskCenterService {
     return { retried };
   }
 
-  async overview(ownerId: string, includePrivate = false): Promise<TaskCenterOverview> {
+  async overview(
+    ownerId: string,
+    includePrivate = false,
+    includeCompute = false,
+  ): Promise<TaskCenterOverview> {
     const now = new Date();
     const [buckets, workers, setting, policies] = await Promise.all([
       this.prisma.$queryRaw<TaskBucket[]>(
@@ -252,6 +257,16 @@ export class EagleTaskCenterService {
         (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
       );
     return {
+      ...(includeCompute
+        ? {
+            compute:
+              workers
+                .map((w) =>
+                  sanitizeComputeRuntime((w.capabilities as { compute?: unknown } | null)?.compute),
+                )
+                .find(Boolean) ?? undefined,
+          }
+        : {}),
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
       embedding: embeddingStates.includes('READY')
         ? 'READY'

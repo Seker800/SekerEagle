@@ -276,3 +276,18 @@
   cursor: pointer;
   margin-bottom: 10px;
 }
+
+.compute {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+}
+.compute > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+}
+.compute > div > span:first-child {
+  font-weight: 600;
+}

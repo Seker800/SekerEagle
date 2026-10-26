@@ -498,9 +498,34 @@ test('missing face runtime disables face execution without hiding unscanned cove
   assert.equal(group.unscanned, 2);
 });
 
-test('only admin task overview exposes sanitized machine capacity',async()=>{
- const compute={revision:2,backgroundLimit:2,nodes:[{id:'mac',name:'Mac',accelerator:'metal',enabled:true,health:'READY',concurrency:2,inFlight:1,operations:['embedding'],token:'do-not-leak',url:'private-address'}]};
- const service=new EagleTaskCenterService({$queryRaw:async()=>[],eagleProcessingWorkerHeartbeat:{findMany:async()=>[{capabilities:{compute}}]},eagleProcessingSetting:{findUnique:async()=>null},eagleTaskPolicy:{findMany:async()=>[]}} as never);
- assert.equal((await service.overview('owner',false)).compute,undefined);
- const admin=await service.overview('owner',false,true);assert.equal(admin.compute?.nodes[0]?.name,'Mac');assert.ok(!JSON.stringify(admin).includes('do-not-leak'));assert.ok(!JSON.stringify(admin).includes('private-address'));
+test('only admin task overview exposes sanitized machine capacity', async () => {
+  const compute = {
+    revision: 2,
+    backgroundLimit: 2,
+    nodes: [
+      {
+        id: 'mac',
+        name: 'Mac',
+        accelerator: 'metal',
+        enabled: true,
+        health: 'READY',
+        concurrency: 2,
+        inFlight: 1,
+        operations: ['embedding'],
+        token: 'do-not-leak',
+        url: 'private-address',
+      },
+    ],
+  };
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [],
+    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { compute } }] },
+    eagleProcessingSetting: { findUnique: async () => null },
+    eagleTaskPolicy: { findMany: async () => [] },
+  } as never);
+  assert.equal((await service.overview('owner', false)).compute, undefined);
+  const admin = await service.overview('owner', false, true);
+  assert.equal(admin.compute?.nodes[0]?.name, 'Mac');
+  assert.ok(!JSON.stringify(admin).includes('do-not-leak'));
+  assert.ok(!JSON.stringify(admin).includes('private-address'));
 });

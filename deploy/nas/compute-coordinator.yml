@@ -1,0 +1,27 @@
+# Append to the recorded current Compose chain; never use as a replacement stack.
+services:
+  compute-coordinator:
+    image: sekereagle/compute-coordinator:${EAGLE_COMPUTE_IMAGE_TAG:?Set the verified image tag}
+    user: '${EAGLE_COMPUTE_UID:-1000}:${EAGLE_COMPUTE_GID:-1000}'
+    environment:
+      EAGLE_COMPUTE_STATE_DIR: /state
+      EAGLE_COMPUTE_BIND: 0.0.0.0
+      EAGLE_COMPUTE_PORT: '11436'
+      EAGLE_COMPUTE_EXECUTION_TOKEN_FILE: /credentials/execution-token
+      EAGLE_COMPUTE_ADMIN_TOKEN_FILE: /credentials/admin-token
+    volumes:
+      - ${EAGLE_COMPUTE_PRIVATE_DIR:?Set the private compute directory}/state:/state
+      - ${EAGLE_COMPUTE_PRIVATE_DIR}/credentials:/credentials:ro
+    ports:
+      - '127.0.0.1:11436:11436'
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '2'

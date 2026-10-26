@@ -511,7 +511,27 @@ it('allows pausing a completed category before new automatic work arrives', asyn
   );
 });
 
-it('shows machine allocation from the admin summary without exposing deployment details',async()=>{
- vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({...summary,compute:{revision:1,backgroundLimit:2,nodes:[{id:'mac',name:'Mac',accelerator:'metal',enabled:true,health:'READY',concurrency:2,inFlight:1,operations:['embedding']}]}});
- mount();expect(await screen.findByText('计算设备')).toBeInTheDocument();expect(screen.getByText('Mac')).toBeInTheDocument();
+it('shows machine allocation from the admin summary without exposing deployment details', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    compute: {
+      revision: 1,
+      backgroundLimit: 2,
+      nodes: [
+        {
+          id: 'mac',
+          name: 'Mac',
+          accelerator: 'metal',
+          enabled: true,
+          health: 'READY',
+          concurrency: 2,
+          inFlight: 1,
+          operations: ['embedding'],
+        },
+      ],
+    },
+  });
+  mount();
+  expect(await screen.findByText('计算设备')).toBeInTheDocument();
+  expect(screen.getByText('Mac')).toBeInTheDocument();
 });

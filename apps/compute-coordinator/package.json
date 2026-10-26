@@ -1,0 +1,18 @@
+{
+  "name": "@sekereagle/compute-coordinator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "node main.mjs serve",
+    "mcp": "node mcp.mjs",
+    "build": "node --check main.mjs && node --check fleet.mjs && node --check server.mjs && node --check mcp.mjs && node --check control.mjs",
+    "typecheck": "npm run build",
+    "test": "node --experimental-test-coverage --test-coverage-include=fleet.mjs --test-coverage-include=server.mjs --test *.test.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "^4.6.7"
+  }
+}

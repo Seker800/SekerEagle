@@ -37,3 +37,5 @@ export * from './photo-capture-metadata';
 export * from './task-scheduling';
 export * from './photo-statistics-lens';
 export * from './asset-operations';
+
+export * from './compute-runtime';

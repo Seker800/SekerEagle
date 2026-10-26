@@ -216,7 +216,18 @@ test('invalid and oversized policies do not mutate persisted state', async (t) =
   assert.equal(fleet.snapshot().revision, 0);
 });
 
-test('invalid persisted policies cannot bypass enrolled capacity after restart',async t=>{
- const {fleet,directory}=await fixture(t);const state=JSON.parse(await readFile(join(directory,'state.json'),'utf8'));state.policies.mac={enabled:true,concurrency:999,operations:['embedding'],expiresAt:200000,reason:'corrupt'};await writeFile(join(directory,'state.json'),JSON.stringify(state));
- const restarted=new Fleet({directory,contract,now:()=>100000});await assert.rejects(restarted.initialize(),/INVALID_STATE/);assert.equal(fleet.snapshot().revision,0);
+test('invalid persisted policies cannot bypass enrolled capacity after restart', async (t) => {
+  const { fleet, directory } = await fixture(t);
+  const state = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8'));
+  state.policies.mac = {
+    enabled: true,
+    concurrency: 999,
+    operations: ['embedding'],
+    expiresAt: 200000,
+    reason: 'corrupt',
+  };
+  await writeFile(join(directory, 'state.json'), JSON.stringify(state));
+  const restarted = new Fleet({ directory, contract, now: () => 100000 });
+  await assert.rejects(restarted.initialize(), /INVALID_STATE/);
+  assert.equal(fleet.snapshot().revision, 0);
 });

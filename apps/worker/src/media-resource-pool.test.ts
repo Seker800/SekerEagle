@@ -232,30 +232,82 @@ test('an offline model leaves vector work unclaimed while NAS keeps progressing,
   assert.equal(pool.activeCount, 0);
 });
 
- test('live capacity can grow and drain without cancelling active jobs', async () => {
- let release!: () => void;
- const pool = new MediaResourcePool(1, () => {}, () => {}, 1);
- let runs=0;
- const run = () => {runs++; return new Promise<void>(resolve => {release=resolve;});};
- await pool.fill('EMBEDDING', async()=>1, run);
- pool.setEmbeddingLimit(0);
- await pool.fill('EMBEDDING', async()=>1, run);
- assert.equal(runs,1);
- release(); await new Promise(resolve=>setImmediate(resolve));
- assert.equal(pool.activeCount,0);
- pool.setEmbeddingLimit(4);
- await pool.fill('EMBEDDING', async()=>1, async()=>{runs++;});
- await new Promise(resolve=>setImmediate(resolve));
- assert.equal(runs,5);
- assert.throws(()=>pool.setEmbeddingLimit(100));
- });
+test('live capacity can grow and drain without cancelling active jobs', async () => {
+  let release!: () => void;
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+  );
+  let runs = 0;
+  const run = () => {
+    runs++;
+    return new Promise<void>((resolve) => {
+      release = resolve;
+    });
+  };
+  await pool.fill('EMBEDDING', async () => 1, run);
+  pool.setEmbeddingLimit(0);
+  await pool.fill('EMBEDDING', async () => 1, run);
+  assert.equal(runs, 1);
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(pool.activeCount, 0);
+  pool.setEmbeddingLimit(4);
+  await pool.fill(
+    'EMBEDDING',
+    async () => 1,
+    async () => {
+      runs++;
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runs, 5);
+  assert.throws(() => pool.setEmbeddingLimit(100));
+});
 
-test('remote media has separate capacity and cannot increase NAS execution',async()=>{
- const pool=new MediaResourcePool(1,()=>{},()=>{},1);
- pool.setRemoteMediaLimit(2);let remote=0,nas=0;let end!:()=>void;
- const waiting=new Promise<void>(resolve=>{end=resolve;});
- await pool.fill('REMOTE_MEDIA',async()=>1,async()=>{remote++;await waiting;});
- await pool.fill('NAS',async()=>1,async()=>{nas++;await waiting;});
- assert.equal(remote,2);assert.equal(nas,1);assert.equal(pool.activeCount,3);
- pool.setRemoteMediaLimit(0);await pool.fill('REMOTE_MEDIA',async()=>1,async()=>{remote++;});assert.equal(remote,2);end();
+test('remote media has separate capacity and cannot increase NAS execution', async () => {
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+  );
+  pool.setRemoteMediaLimit(2);
+  let remote = 0,
+    nas = 0;
+  let end!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    end = resolve;
+  });
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => 1,
+    async () => {
+      remote++;
+      await waiting;
+    },
+  );
+  await pool.fill(
+    'NAS',
+    async () => 1,
+    async () => {
+      nas++;
+      await waiting;
+    },
+  );
+  assert.equal(remote, 2);
+  assert.equal(nas, 1);
+  assert.equal(pool.activeCount, 3);
+  pool.setRemoteMediaLimit(0);
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => 1,
+    async () => {
+      remote++;
+    },
+  );
+  assert.equal(remote, 2);
+  end();
 });

@@ -256,7 +256,27 @@ test('verified coordinator reports live capacity without pretending to be Metal'
   assert.equal(client.computeRuntime?.backgroundLimit, 4);
 });
 
-test('an enrolled pool without an available embedding host is offline, not contract drift',async()=>{
- const client=new EmbeddingClient({baseUrl:'http://127.0.0.1:11436',token:'test',modelId:'expected',modelRevision:'revision',dimensions:2,timeoutMs:1000,maxPayloadBytes:1024,fetch:async()=>Response.json({status:'offline',model:'expected',revision:'revision',dimensions:2,accelerator:'pool',protocol:'sekereagle-compute-v1',capacity:{backgroundLimit:0},fleet:{revision:1,nodes:[]}})});
- assert.equal(await client.readiness(),'OFFLINE');assert.equal(client.computeRuntime?.backgroundLimit,0);
+test('an enrolled pool without an available embedding host is offline, not contract drift', async () => {
+  const client = new EmbeddingClient({
+    baseUrl: 'http://127.0.0.1:11436',
+    token: 'test',
+    modelId: 'expected',
+    modelRevision: 'revision',
+    dimensions: 2,
+    timeoutMs: 1000,
+    maxPayloadBytes: 1024,
+    fetch: async () =>
+      Response.json({
+        status: 'offline',
+        model: 'expected',
+        revision: 'revision',
+        dimensions: 2,
+        accelerator: 'pool',
+        protocol: 'sekereagle-compute-v1',
+        capacity: { backgroundLimit: 0 },
+        fleet: { revision: 1, nodes: [] },
+      }),
+  });
+  assert.equal(await client.readiness(), 'OFFLINE');
+  assert.equal(client.computeRuntime?.backgroundLimit, 0);
 });

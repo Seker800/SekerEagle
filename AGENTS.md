@@ -37,3 +37,9 @@
 - 人工／模拟器交互验收默认使用固定测试图库 <http://localhost:49813>，先读[安卓固定测试图库](docs/android-test-lab.md)；使用 `npm run android:lab:preview` 恢复预览，不为每次界面演示新建临时环境。
 - 入口不可用时先运行 `npm run android:lab:status`，按固定图库文档恢复原服务；不得通过换端口、新建测试库或删除持久卷替代故障修复。
 - 固定测试数据、账号、用户手工修改与 `.local/android-lab`、持久卷须保留；启动／更新不得重置或重新铺数据，也不得为让验收通过而回填用户删除的资源或覆盖修改。自动化回归继续隔离，不能以固定库为测试目标，结束后恢复固定预览。
+
+## 多机计算调度
+
+- 日常查看／调整计算节点先读 `docs/compute-fleet.md`。使用专用 MCP 的 `compute_status`／`compute_set_policy`；当前会话尚未加载 MCP 时，可用 `node apps/compute-coordinator/control.mjs status` 和 `policy <私有策略文件>`，不要输出凭据或用修改源码代替日常分工。
+- 先读取当前修订，再提交有期限且不超过已验证容量的策略。节点停止接单不等于图库暂停；不能覆盖用户的类别暂停、时段、owner／模式或版本／租约守卫。
+- 新节点、驱动、模型或能力先隔离验证再登记；不能靠伪造 Metal 状态、降低输入规格或跳过向量兼容验证接入。

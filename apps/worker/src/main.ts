@@ -1,3 +1,6 @@
+import { computePolicySignature } from './compute-runtime';
+import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
+import { remoteMediaKinds } from './compute-runtime';
 import { processImageWork } from './image-work';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
@@ -14,10 +17,7 @@ import {
 } from './video-processing-policy';
 import { backgroundProcessingEnabled, mediaBackgroundAllowed } from './processing-policy';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
-import {
-  catalogImageDimensions,
-  canReuseImageBrowsing,
-} from './image-renditions';
+import { catalogImageDimensions, canReuseImageBrowsing } from './image-renditions';
 import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease';
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
@@ -52,7 +52,6 @@ import { assertSafeRuntimeTarget, describeRuntimeTarget } from '@sekereagle/conf
 import {
   parseProcessingJobKinds,
   availableProcessingJobKinds,
-  taskBlocksAssetReady,
   terminalAssetFailure,
 } from './processing-policy';
 import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
@@ -119,7 +118,7 @@ const runBackgroundProcessing = backgroundProcessingEnabled(
 );
 const configuredJobKinds = parseProcessingJobKinds(process.env.EAGLE_PROCESSING_JOB_KINDS);
 const facesConfigured = Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR);
-const allowedJobKinds = availableProcessingJobKinds(configuredJobKinds, facesConfigured);
+let allowedJobKinds = availableProcessingJobKinds(configuredJobKinds, facesConfigured);
 const runTagBuilds = runBackgroundProcessing && configuredJobKinds === undefined;
 const runVideoTranscoding = videoTranscodingEnabled(process.env.EAGLE_VIDEO_TRANSCODING_ENABLED);
 const configuredConcurrency = Number(process.env.EAGLE_INTERACTIVE_CONCURRENCY ?? '1');
@@ -131,6 +130,11 @@ const resourcePool = new MediaResourcePool(
   () => wakeScheduler?.wakeNow(),
   reportLoopError,
   boundedInteger(process.env.EAGLE_EMBEDDING_CONCURRENCY, 1, 1, 2),
+);
+const legacyEmbeddingLimit = boundedInteger(process.env.EAGLE_EMBEDDING_CONCURRENCY, 1, 1, 2);
+const remoteMediaClient = new RemoteMediaClient(
+  process.env.MLX_EMBEDDING_URL ?? 'http://host.docker.internal:11435',
+  process.env.MLX_EMBEDDING_TOKEN ?? '',
 );
 const embeddingSpaceId = process.env.MLX_EMBEDDING_SPACE_ID ?? 'qwen3-vl-embedding-2b-1024-v1';
 const embeddingModel = process.env.MLX_EMBEDDING_MODEL ?? 'Qwen/Qwen3-VL-Embedding-2B';
@@ -157,11 +161,28 @@ async function heartbeat(): Promise<void> {
   checkingHeartbeat = true;
   try {
     const previousReadiness = embeddingReadiness;
-    if (
-      runBackgroundProcessing &&
-      (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))
-    )
-      embeddingReadiness = await embeddingClient.readiness();
+    const previousCompute = computePolicySignature(embeddingClient.computeRuntime);
+    embeddingReadiness = await embeddingClient.readiness();
+    const runtime = embeddingClient.computeRuntime;
+    resourcePool.setEmbeddingLimit(runtime?.backgroundLimit ?? legacyEmbeddingLimit);
+    const remoteKinds = remoteMediaKinds(runtime);
+    allowedJobKinds = availableProcessingJobKinds(
+      configuredJobKinds,
+      facesConfigured || remoteKinds.includes('ANALYZE_PHOTO_FACES'),
+    );
+    resourcePool.setRemoteMediaLimit(
+      Math.min(
+        16,
+        runtime?.nodes
+          .filter(
+            (n) =>
+              n.enabled &&
+              n.health === 'READY' &&
+              n.operations.some((op) => op === 'image' || op === 'faces'),
+          )
+          .reduce((sum, n) => sum + n.concurrency, 0) ?? 0,
+      ),
+    );
     const now = new Date();
     const capabilities = {
       embedding: embeddingReadiness,
@@ -173,7 +194,8 @@ async function heartbeat(): Promise<void> {
         runBackgroundProcessing &&
         (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING')),
       photoMap: runBackgroundProcessing,
-      faces: facesConfigured,
+      faces: facesConfigured || remoteKinds.includes('ANALYZE_PHOTO_FACES'),
+      compute: runtime ? (JSON.parse(JSON.stringify(runtime)) as Prisma.InputJsonValue) : null,
     };
     await prisma.eagleProcessingWorkerHeartbeat.upsert({
       where: { workerId },
@@ -188,6 +210,12 @@ async function heartbeat(): Promise<void> {
       update: { heartbeatAt: now, activeJobCount: resourcePool.activeCount, capabilities },
     });
     await recordWorkerHeartbeat();
+    if (previousCompute !== computePolicySignature(runtime)) {
+      selectors.NAS.invalidate();
+      selectors.REMOTE_MEDIA.invalidate();
+      selectors.EMBEDDING.invalidate();
+      wakeScheduler?.wakeNow();
+    }
     if (previousReadiness !== embeddingReadiness) {
       selectors.EMBEDDING.invalidate();
       wakeScheduler?.wakeNow();
@@ -198,26 +226,44 @@ async function heartbeat(): Promise<void> {
 }
 
 const selectors = {
-  NAS: createScheduledMediaSelector(prisma, () => embeddingReadiness !== 'READY', 'NAS'),
+  REMOTE_MEDIA: createScheduledMediaSelector(
+    prisma,
+    () => embeddingReadiness !== 'READY',
+    'REMOTE_MEDIA',
+  ),
+  NAS: createScheduledMediaSelector(
+    prisma,
+    () => embeddingReadiness !== 'READY',
+    'NAS',
+    () => remoteMediaKinds(embeddingClient.computeRuntime),
+  ),
   EMBEDDING: createScheduledMediaSelector(
     prisma,
     () => embeddingReadiness !== 'READY',
     'EMBEDDING',
   ),
 };
-const claimSequence: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0 };
+const claimSequence: Record<MediaResource, number> = { NAS: 0, EMBEDDING: 0, REMOTE_MEDIA: 0 };
 async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJob | null> {
   if (
     stopping ||
     (resource === 'EMBEDDING' && (!runBackgroundProcessing || embeddingReadiness !== 'READY'))
   )
     return null;
+  const remoteKinds = remoteMediaKinds(embeddingClient.computeRuntime);
+  const claimKinds =
+    resource === 'REMOTE_MEDIA'
+      ? remoteKinds.filter((k) => !allowedJobKinds || allowedJobKinds.includes(k))
+      : resource === 'NAS' && !facesConfigured
+        ? allowedJobKinds?.filter((k) => k !== 'ANALYZE_PHOTO_FACES')
+        : allowedJobKinds;
+  if (resource === 'REMOTE_MEDIA' && !remoteKinds.length) return null;
   const sequence = claimSequence[resource]++;
   for (const age of mediaQueueAgeOrder(sequence)) {
     const job = await claimNextMediaJob(prisma, {
       selectCandidates: (input) => selectors[resource](input, age),
       canClaimBackground: canClaimBackgroundForOwner,
-      allowedJobKinds,
+      allowedJobKinds: claimKinds,
       excludedProcessorVersions: runVideoTranscoding ? [] : [VIDEO_PLAYBACK_PROCESSOR_VERSION],
       laneOrder: resource === 'EMBEDDING' ? ['BACKGROUND'] : mediaLaneOrder(sequence),
     });
@@ -241,7 +287,7 @@ async function canClaimBackgroundForOwner(
   return mediaBackgroundAllowed(settings, kind);
 }
 
-async function processJob(job: EagleAssetProcessingJob): Promise<void> {
+async function processJob(job: EagleAssetProcessingJob, remoteRequired = false): Promise<void> {
   if (job.kind === 'RENDER_EDITED_COPY') {
     await renderEditedCopy(prisma, storage, s3Bucket, job);
     return;
@@ -294,6 +340,8 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     });
     return;
   }
+  if (remoteRequired && !asset.mimeType.startsWith('image/'))
+    throw new RemoteMediaUnavailableError();
   if (job.kind === 'ANALYZE_PHOTO_FACES') {
     if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
     const preview = selectImageJobSource(asset, job.kind);
@@ -306,7 +354,11 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       object.Body as AsyncIterable<Uint8Array>,
       20 * 1024 * 1024,
     );
-    await persistPhotoFaces(prisma, job, await inferPhotoFaces(bytes));
+    await persistPhotoFaces(
+      prisma,
+      job,
+      remoteRequired ? await remoteMediaClient.faces(bytes) : await inferPhotoFaces(bytes),
+    );
     return;
   }
 
@@ -392,12 +444,21 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
       return;
     }
     const imageWork = {
-      assetMimeType: asset.mimeType, sourceMimeType: sourceDetails.mimeType,
-      kind: job.kind, processorVersion:job.processorVersion, mode: asset.libraryMode, detailsOnly: sourceDetailsOnly,
+      assetMimeType: asset.mimeType,
+      sourceMimeType: sourceDetails.mimeType,
+      kind: job.kind,
+      processorVersion: job.processorVersion,
+      mode: asset.libraryMode,
+      detailsOnly: sourceDetailsOnly,
       verifiesOriginalHash: sourceDetails.verifiesOriginalHash,
     };
-    const {result: processed, sha256, sourceMode} = await processImageWork(
-      object.Body as AsyncIterable<Uint8Array>, imageWork,
+    const {
+      result: processed,
+      sha256,
+      sourceMode,
+    } = await (remoteRequired ? remoteMediaClient.image.bind(remoteMediaClient) : processImageWork)(
+      object.Body as AsyncIterable<Uint8Array>,
+      imageWork,
     );
     process.stdout.write(
       `${JSON.stringify({ event: 'eagle_image_rendered', jobId: job.id, processorVersion: job.processorVersion, mimeType: asset.mimeType, sourceMode })}\n`,
@@ -562,7 +623,9 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
           ),
       photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
       livePhoto: livePhoto ?? null,
-      scheduleFaces: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
+      scheduleFaces:
+        facesConfigured ||
+        remoteMediaKinds(embeddingClient.computeRuntime).includes('ANALYZE_PHOTO_FACES'),
       deferDetails,
       preserveBrowseState: sourceDetailsOnly,
     });
@@ -1138,6 +1201,19 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 }
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
+  if (error instanceof RemoteMediaUnavailableError) {
+    await prisma.eagleAssetProcessingJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      data: {
+        status: 'PENDING',
+        attempts: Math.max(0, job.attempts - 1),
+        availableAt: new Date(Date.now() + 1000),
+        lockedAt: null,
+        lastError: 'WAITING_REMOTE_MEDIA_CAPACITY',
+      },
+    });
+    return;
+  }
   const retry = embeddingRetry(error, job.attempts);
   if (retry) {
     if (retry.offline) embeddingReadiness = 'OFFLINE';
@@ -1297,6 +1373,13 @@ async function poll(): Promise<void> {
   void resourcePool
     .fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob)
     .catch(reportLoopError);
+  void resourcePool
+    .fill(
+      'REMOTE_MEDIA',
+      () => claimJob('REMOTE_MEDIA'),
+      (job) => processClaimedJob(job, true),
+    )
+    .catch(reportLoopError);
   if (resourcePool.active('NAS') >= workerConcurrency || buildingPhotoMap) return;
   if (
     runBackgroundProcessing &&
@@ -1434,7 +1517,10 @@ async function processClaimedTagBuild(build: EagleTagSemanticBuild): Promise<voi
   }
 }
 
-async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
+async function processClaimedJob(
+  job: EagleAssetProcessingJob,
+  remoteRequired = false,
+): Promise<void> {
   const startedRss = process.memoryUsage().rss;
   const startedAt = Date.now();
   let leaseHeld = true;
@@ -1457,12 +1543,13 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
   }, 60_000);
   renewal.unref();
   try {
-    await processJob(job);
+    await processJob(job, remoteRequired);
     process.stdout.write(
       `${JSON.stringify({
         event: 'eagle_media_job_completed',
         processorVersion: job.processorVersion,
-        resource: job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : 'NAS',
+        resource:
+          job.kind === 'GENERATE_EMBEDDING' ? 'EMBEDDING' : remoteRequired ? 'REMOTE_MEDIA' : 'NAS',
         elapsedMs: Date.now() - startedAt,
         jobId: job.id,
         kind: job.kind,

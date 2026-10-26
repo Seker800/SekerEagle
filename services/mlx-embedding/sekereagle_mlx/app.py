@@ -29,6 +29,10 @@ DIMENSIONS = int(os.getenv("MLX_EMBEDDING_DIMENSIONS", "1024"))
 MAX_BODY_BYTES = int(os.getenv("MLX_EMBEDDING_MAX_PAYLOAD_BYTES", str(20 * 1024 * 1024)))
 TOKEN = os.getenv("MLX_EMBEDDING_TOKEN", "")
 IDLE_UNLOAD_SECONDS = max(0, int(os.getenv("MLX_EMBEDDING_IDLE_UNLOAD_SECONDS", "900")))
+CACHE_LIMIT_BYTES = int(os.getenv("MLX_EMBEDDING_CACHE_LIMIT_BYTES", str(4 * 1024**3)))
+if not 0 < CACHE_LIMIT_BYTES <= 8 * 1024**3:
+    raise ValueError("MLX cache limit must be between 1 byte and 8 GiB")
+mx.set_cache_limit(CACHE_LIMIT_BYTES)
 ALLOWED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
 BODY_READ_TIMEOUT_SECONDS = 30.0
 
@@ -180,6 +184,12 @@ def healthz(authorization: str | None = Header(default=None)) -> dict[str, objec
         "dimensions": DIMENSIONS,
         "metal": mx.default_device() == mx.gpu,
         "capacity": inference_slots.snapshot(),
+        "memory": {
+            "cacheLimitBytes": CACHE_LIMIT_BYTES,
+            "activeBytes": mx.get_active_memory(),
+            "cacheBytes": mx.get_cache_memory(),
+            "peakBytes": mx.get_peak_memory(),
+        },
     }
 
 

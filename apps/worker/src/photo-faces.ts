@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import type { EagleAssetProcessingJob, PrismaClient } from '@prisma/client';
 
 export const FACE_MODEL_VERSION = PHOTO_FACE_MODEL_VERSION;
-interface FaceDetection {
+export interface FaceDetection {
   box: number[];
   confidence: number;
   embedding: number[];

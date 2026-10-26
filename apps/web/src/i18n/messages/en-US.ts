@@ -1,4 +1,10 @@
 export const enUS = {
+  '设备分工可由 Agent 调整；图库的暂停与时段安排仍然生效。':
+    'Agent can adjust device allocation; library pauses and schedules still apply.',
+  图片处理: 'Image processing',
+  停止接单: 'Draining',
+  配置不匹配: 'Configuration mismatch',
+  计算设备: 'Compute devices',
   尚未扫描: 'Not scanned',
   暂无可扫描照片: 'No photos ready to scan',
   扫描未分析照片: 'Scan unanalyzed photos',

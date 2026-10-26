@@ -1,3 +1,4 @@
+import { parseComputeRuntime, type ComputeRuntime } from './compute-runtime';
 export type EmbeddingClientErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'HOST_UNAVAILABLE'
@@ -39,6 +40,7 @@ interface EmbeddingResponse {
 }
 
 export class EmbeddingClient {
+  computeRuntime: ComputeRuntime | null = null;
   private readonly request: typeof fetch;
 
   constructor(private readonly options: EmbeddingClientOptions) {
@@ -46,6 +48,7 @@ export class EmbeddingClient {
   }
 
   async readiness(): Promise<'READY' | 'OFFLINE' | 'DRIFTED'> {
+    this.computeRuntime = null;
     try {
       const response = await this.request(`${stripTrailingSlash(this.options.baseUrl)}/healthz`, {
         headers: { authorization: `Bearer ${this.options.token}` },
@@ -58,12 +61,24 @@ export class EmbeddingClient {
         revision?: unknown;
         dimensions?: unknown;
         metal?: unknown;
+        accelerator?: unknown;
+        protocol?: unknown;
       };
+      this.computeRuntime = parseComputeRuntime(data);
+      if (
+        this.computeRuntime &&
+        data.accelerator === 'pool' &&
+        data.status === 'offline' &&
+        data.model === this.options.modelId &&
+        data.revision === this.options.modelRevision &&
+        data.dimensions === this.options.dimensions
+      )
+        return 'OFFLINE';
       return data.status === 'ready' &&
         data.model === this.options.modelId &&
         data.revision === this.options.modelRevision &&
         data.dimensions === this.options.dimensions &&
-        data.metal === true
+        (data.metal === true || (data.accelerator === 'pool' && this.computeRuntime !== null))
         ? 'READY'
         : 'DRIFTED';
     } catch {

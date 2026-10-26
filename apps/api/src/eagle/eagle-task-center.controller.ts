@@ -49,7 +49,7 @@ export class EagleTaskCenterController {
   ) {}
   @Get()
   overview(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.tasks.overview(principal.sub, principal.canViewPrivate);
+    return this.tasks.overview(principal.sub, principal.canViewPrivate, principal.role === 'ADMIN');
   }
   @Patch('policy')
   @UseGuards(BrowserOriginGuard)

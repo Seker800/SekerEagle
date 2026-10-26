@@ -1,3 +1,4 @@
+import type { ComputeRuntime } from './compute-runtime';
 export interface BackgroundSchedule {
   mode: string;
   nightStart: string;
@@ -107,6 +108,7 @@ export interface WorkerTaskCapabilities {
   photoMap: boolean;
 }
 export interface TaskCenterOverview {
+  compute?: ComputeRuntime;
   worker: 'ONLINE' | 'OFFLINE';
   embedding?: 'READY' | 'OFFLINE' | 'DRIFTED' | 'UNKNOWN';
   settings: BackgroundSchedule & { timeZone: 'Asia/Shanghai' };

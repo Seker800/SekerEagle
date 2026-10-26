@@ -265,6 +265,40 @@ export function EagleTaskCenter({
                 : t('处理服务离线')}
             </span>
           </div>
+          {summary?.compute && (
+            <section aria-label={t('计算设备')} className={styles.compute}>
+              <strong>{t('计算设备')}</strong>
+              {summary.compute.nodes.map((node) => (
+                <div key={node.id}>
+                  <span>{node.name}</span>
+                  <span>
+                    {node.health === 'OFFLINE'
+                      ? t('离线')
+                      : node.health === 'DRIFTED'
+                        ? t('配置不匹配')
+                        : !node.enabled
+                          ? t('停止接单')
+                          : t('在线')}
+                  </span>
+                  <span>
+                    {t('运行中')} {node.inFlight} / {node.concurrency}
+                  </span>
+                  <span>
+                    {node.operations
+                      .map((op) =>
+                        op === 'embedding'
+                          ? t('图片向量')
+                          : op === 'image'
+                            ? t('图片处理')
+                            : t('人物'),
+                      )
+                      .join(' · ')}
+                  </span>
+                </div>
+              ))}
+              <small>{t('设备分工可由 Agent 调整；图库的暂停与时段安排仍然生效。')}</small>
+            </section>
+          )}
           <small>{t('这里统计处理步骤，同一张图片可能包含多个步骤。')}</small>
           {query.error && <p>{t('部分图库读取失败，当前合计仅包含已加载的图库。')}</p>}
           {settings && (
