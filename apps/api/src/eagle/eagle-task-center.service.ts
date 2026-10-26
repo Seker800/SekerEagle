@@ -11,6 +11,7 @@ import {
   isBackgroundFamily,
   mediaTaskFamily,
   type TaskCounts,
+  type TaskTransitionEvent,
   type TaskCenterOverview,
   type TaskFamily,
   type TaskGroup,
@@ -114,7 +115,25 @@ export class EagleTaskCenterService {
     return { retried };
   }
 
-  async overview(ownerId: string, includePrivate = false, scope: 'ACTIVE' | 'HISTORY' = 'ACTIVE'): Promise<TaskCenterOverview> {
+  async events(ownerId: string, family: TaskFamily, includePrivate = false): Promise<TaskTransitionEvent[]> {
+    const rows = await this.prisma.$queryRaw<Array<Omit<TaskTransitionEvent, 'id' | 'occurredAt'> & {id: bigint; occurredAt: Date}>>(Prisma.sql`
+      SELECT e.id, e."jobId", j.kind::text AS step, e."fromStatus", e."toStatus", e."leaseVersion", e.attempts, e."recoveryCount", e."occurredAt"
+      FROM "EagleMediaJobEvent" e
+      JOIN "EagleMediaJob" j ON j.id=e."jobId" AND j."ownerId"=e."ownerId" AND j."libraryMode"=e."libraryMode"
+      JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode" AND a."mediaRevision"=j."assetRevision"
+      WHERE e."ownerId"=${ownerId} AND e."libraryMode"=${this.libraryMode}::"LibraryMode"
+        AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
+        AND j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}
+      ORDER BY e.id DESC LIMIT 30
+    `);
+    return rows.map((row) => ({...row, id: row.id.toString(), occurredAt: row.occurredAt.toISOString()}));
+  }
+
+  async overview(
+    ownerId: string,
+    includePrivate = false,
+    scope: 'ACTIVE' | 'HISTORY' = 'ACTIVE',
+  ): Promise<TaskCenterOverview> {
     const now = new Date();
     const [buckets, workers, setting, policies] = await Promise.all([
       this.prisma.$queryRaw<TaskBucket[]>(
@@ -175,11 +194,16 @@ export class EagleTaskCenterService {
       group[field] += count;
       step[field] += count;
       if (field !== 'queued' && field !== 'approval') continue;
-      const {reason, nextAt} = taskBucketDecision({
-        family, step: bucket.step, reason: bucket.reason,
+      const { reason, nextAt } = taskBucketDecision({
+        family,
+        step: bucket.step,
+        reason: bucket.reason,
         nextAt: bucket.nextAt?.toISOString() ?? null,
-        approval: field === 'approval', paused: group.policy?.paused ?? false,
-        workers: workers.map((worker) => worker.capabilities), schedule: settings, now,
+        approval: field === 'approval',
+        paused: group.policy?.paused ?? false,
+        workers: workers.map((worker) => worker.capabilities),
+        schedule: settings,
+        now,
       });
       const wait = group.waiting.find(
         (entry) => entry.reason === reason && entry.nextAt === nextAt,
@@ -194,13 +218,20 @@ export class EagleTaskCenterService {
         : !workers.length
           ? 'UNKNOWN'
           : group.steps.some((step) =>
-                workers.some((worker) => workerSupportsTask(worker.capabilities, group.id, step.id)),
+                workers.some((worker) =>
+                  workerSupportsTask(worker.capabilities, group.id, step.id),
+                ),
               )
             ? 'ENABLED'
             : 'DISABLED';
     }
-    const embedding = taskModelReadiness(workers.map((worker) => worker.capabilities), 'EMBEDDING', 'GENERATE_EMBEDDING');
-    for (const group of groups.values()) group.presentation = taskGroupPresentation(group, settings, embedding);
+    const embedding = taskModelReadiness(
+      workers.map((worker) => worker.capabilities),
+      'EMBEDDING',
+      'GENERATE_EMBEDDING',
+    );
+    for (const group of groups.values())
+      group.presentation = taskGroupPresentation(group, settings, embedding);
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
       embedding,

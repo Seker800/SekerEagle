@@ -1,3 +1,4 @@
+import { TaskTransitionHistory } from './TaskTransitionHistory';
 import { TaskQueueBrowser } from './TaskQueueBrowser';
 import { AssetOperationsPanel } from './AssetOperationsPanel';
 import { useEffect, useMemo, useState } from 'react';
@@ -46,7 +47,10 @@ export function EagleTaskCenter({
   const queries = useQueries({
     queries: modes.map((mode) => ({
       queryKey: [...key, mode, includePrivate, showHistory ? 'HISTORY' : 'ACTIVE'],
-      queryFn: ({ signal }: { signal: AbortSignal }) => showHistory ? apiFor(mode).fetchEagleTaskHistory(signal) : apiFor(mode).fetchEagleTaskCenter(signal),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        showHistory
+          ? apiFor(mode).fetchEagleTaskHistory(signal)
+          : apiFor(mode).fetchEagleTaskCenter(signal),
       refetchInterval: showHistory ? false : 10000,
     })),
   });
@@ -191,7 +195,11 @@ export function EagleTaskCenter({
       <header className={styles.header}>
         <div>
           <h1>{t('任务中心')}</h1>
-          <button type="button" aria-pressed={showHistory} onClick={() => setShowHistory(!showHistory)}>
+          <button
+            type="button"
+            aria-pressed={showHistory}
+            onClick={() => setShowHistory(!showHistory)}
+          >
             {showHistory ? t('返回当前任务') : t('已完成记录')}
           </button>
         </div>
@@ -260,72 +268,89 @@ export function EagleTaskCenter({
           <small>{t('这里统计处理步骤，同一张图片可能包含多个步骤。')}</small>
           {query.error && <p>{t('部分图库读取失败，当前合计仅包含已加载的图库。')}</p>}
           {settings && (
-            <details className={styles.settings}><summary>{t('后台安排')}</summary><form
-              className={styles.schedule}
-              onSubmit={(event) => {
-                event.preventDefault();
-                setNotice('');
-                save.mutate(settings);
-              }}
-            >
-              <label>
-                {scope === 'ALL' ? t('全部图库的后台运行方式') : t('后台运行方式')}
-                <select
-                  value={settings.mode}
-                  onChange={(event) => setDraft({ ...settings, mode: event.target.value })}
-                >
-                  <option value="ALWAYS">{t('随时处理')}</option>
-                  <option value="NIGHT">{t('按时段处理')}</option>
-                  <option value="MANUAL">{t('暂停')}</option>
-                </select>
-              </label>
-              {settings.mode === 'NIGHT' && (
-                <>
-                  <label>
-                    {t('开始时间')}
-                    <input
-                      type="time"
-                      required
-                      value={settings.nightStart}
-                      onChange={(event) =>
-                        setDraft({ ...settings, nightStart: event.target.value })
-                      }
-                    />
-                  </label>
-                  <label>
-                    {t('结束时间')}
-                    <input
-                      type="time"
-                      required
-                      value={settings.nightEnd}
-                      onChange={(event) => setDraft({ ...settings, nightEnd: event.target.value })}
-                    />
-                  </label>
-                  <span>{t('北京时间')}</span>
-                </>
-              )}
-              <button type="submit" disabled={save.isPending}>
-                {save.isPending ? t('保存中…') : t('保存安排')}
-              </button>
-              {differentSchedules && (
-                <p>
-                  {t('素材与照片当前安排不同，卡片显示各自生效的安排；保存后统一应用到两个库。')}
-                </p>
-              )}
-              <p>
-                {t(
-                  '暂停后不再领取新的分析任务，当前步骤完成后停下；基础浏览、地图索引和必要清理继续运行。',
+            <details className={styles.settings}>
+              <summary>{t('后台安排')}</summary>
+              <form
+                className={styles.schedule}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setNotice('');
+                  save.mutate(settings);
+                }}
+              >
+                <label>
+                  {scope === 'ALL' ? t('全部图库的后台运行方式') : t('后台运行方式')}
+                  <select
+                    value={settings.mode}
+                    onChange={(event) => setDraft({ ...settings, mode: event.target.value })}
+                  >
+                    <option value="ALWAYS">{t('随时处理')}</option>
+                    <option value="NIGHT">{t('按时段处理')}</option>
+                    <option value="MANUAL">{t('暂停')}</option>
+                  </select>
+                </label>
+                {settings.mode === 'NIGHT' && (
+                  <>
+                    <label>
+                      {t('开始时间')}
+                      <input
+                        type="time"
+                        required
+                        value={settings.nightStart}
+                        onChange={(event) =>
+                          setDraft({ ...settings, nightStart: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      {t('结束时间')}
+                      <input
+                        type="time"
+                        required
+                        value={settings.nightEnd}
+                        onChange={(event) =>
+                          setDraft({ ...settings, nightEnd: event.target.value })
+                        }
+                      />
+                    </label>
+                    <span>{t('北京时间')}</span>
+                  </>
                 )}
-              </p>
-            </form></details>
+                <button type="submit" disabled={save.isPending}>
+                  {save.isPending ? t('保存中…') : t('保存安排')}
+                </button>
+                {differentSchedules && (
+                  <p>
+                    {t('素材与照片当前安排不同，卡片显示各自生效的安排；保存后统一应用到两个库。')}
+                  </p>
+                )}
+                <p>
+                  {t(
+                    '暂停后不再领取新的分析任务，当前步骤完成后停下；基础浏览、地图索引和必要清理继续运行。',
+                  )}
+                </p>
+              </form>
+            </details>
           )}
           {!cards.length && <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>}
-          <TaskQueueBrowser key={`${ownerId}:${includePrivate}:${scope}:${showHistory}`} items={cards}
-            renderDetails={(card) => <TaskCard group={card.group} embedding={card.embedding}
-              schedule={card.schedule} mode={card.mode} busy={retry.isPending || policy.isPending}
-              onRetry={() => retry.mutate({mode: card.mode, family: card.group.id})}
-              onPolicy={(paused) => policy.mutate({mode: card.mode, family: card.group.id, paused})}
-              onReview={card.mode === libraryMode ? onReview : undefined} />} />
+          <TaskQueueBrowser
+            key={`${ownerId}:${includePrivate}:${scope}:${showHistory}`}
+            items={cards}
+            renderDetails={(card) => (
+              <TaskCard
+                group={card.group}
+                embedding={card.embedding}
+                schedule={card.schedule}
+                mode={card.mode}
+                busy={retry.isPending || policy.isPending}
+                onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
+                onPolicy={(paused) =>
+                  policy.mutate({ mode: card.mode, family: card.group.id, paused })
+                }
+                onReview={card.mode === libraryMode ? onReview : undefined}
+              />
+            )}
+          />
           {canManageProcessing && (
             <section className={styles.settings}>
               <h2>{t('处理记录')}</h2>
@@ -357,6 +382,7 @@ export function EagleTaskCenter({
 }
 
 function TaskCard({
+  includePrivate,
   group,
   embedding,
   schedule,
@@ -366,6 +392,7 @@ function TaskCard({
   onPolicy,
   onReview,
 }: {
+  includePrivate: boolean;
   group: TaskGroup;
   embedding?: TaskCenterOverview['embedding'];
   schedule: BackgroundSchedule;
@@ -416,7 +443,11 @@ function TaskCard({
       </header>
       <div className={styles.cardBody}>
         <div className={styles.progress}>
-          {group.completed > 0 && remaining === 0 && <span>{t('已完成')} {group.completed}</span>}
+          {group.completed > 0 && remaining === 0 && (
+            <span>
+              {t('已完成')} {group.completed}
+            </span>
+          )}
           {remaining > 0 &&
             !(state === 'STOPPED' && remaining === group.failed) &&
             group.id !== 'APPROVALS' && <span>{t('剩余 {{count}} 项', { count: remaining })}</span>}
@@ -506,6 +537,7 @@ function TaskCard({
           </ul>
         </details>
       )}
+      <TaskTransitionHistory mode={mode} family={group.id} includePrivate={includePrivate} />
     </article>
   );
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { IsIn, IsBoolean, IsInt, Min, Max, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import {
@@ -17,6 +17,11 @@ import { UpdateEagleProcessingSettingsDto } from './eagle-processing.dto';
 
 export class RetryTaskFamilyDto {
   @ApiProperty({ enum: [...TASK_FAMILIES] })
+  @IsIn(TASK_FAMILIES)
+  family!: TaskFamily;
+}
+export class TaskEventsQueryDto {
+  @ApiProperty({enum: [...TASK_FAMILIES]})
   @IsIn(TASK_FAMILIES)
   family!: TaskFamily;
 }
@@ -49,6 +54,10 @@ export class EagleTaskCenterController {
   @Get('history')
   history(@CurrentPrincipal() principal: AuthPrincipal) {
     return this.tasks.overview(principal.sub, principal.canViewPrivate, 'HISTORY');
+  }
+  @Get('events')
+  events(@CurrentPrincipal() principal: AuthPrincipal, @Query() query: TaskEventsQueryDto) {
+    return this.tasks.events(principal.sub, query.family, principal.canViewPrivate);
   }
   @Patch('policy')
   @UseGuards(BrowserOriginGuard)
