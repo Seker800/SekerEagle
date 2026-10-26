@@ -5,7 +5,7 @@ import {
   type TaskGroup,
   type TaskCenterOverview,
 } from '@sekereagle/library-core';
-import { t } from '../../i18n';
+import { t, getLocale } from '../../i18n';
 import type { LibraryMode } from '../../lib/library-api-scope';
 import {
   taskFamilyLabels,
@@ -146,6 +146,20 @@ export function TaskQueueBrowser({
         {current && (
           <aside className={styles.inspector} aria-label={t('任务详情')} key={keyFor(current)}>
             {renderDetails(current)}
+            {current.group.lastActivityAt && (
+              <p className={styles.activity}>
+                {t('最近活动')}{' '}
+                <time dateTime={current.group.lastActivityAt}>
+                  {new Date(current.group.lastActivityAt).toLocaleString(getLocale(), {
+                    month: 'numeric',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}
+                </time>
+              </p>
+            )}
           </aside>
         )}
       </div>

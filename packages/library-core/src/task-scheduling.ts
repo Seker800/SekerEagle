@@ -92,6 +92,7 @@ export interface TaskManagement {
 }
 export interface TaskGroup extends TaskCounts {
   management?: TaskManagement;
+  lastActivityAt?: string | null;
   id: TaskFamily;
   background: boolean;
   presentation?: TaskPresentation;

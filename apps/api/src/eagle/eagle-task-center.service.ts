@@ -37,6 +37,7 @@ interface TaskBucket {
   reason: TaskWaitReason;
   count: bigint;
   nextAt: Date | null;
+  lastActivityAt: Date | null;
 }
 const counts = () => ({ queued: 0, running: 0, failed: 0, completed: 0, approval: 0 });
 
@@ -186,6 +187,9 @@ export class EagleTaskCenterService {
         };
         groups.set(family, group);
       }
+      const activity = bucket.lastActivityAt?.toISOString();
+      if (activity && (!group.lastActivityAt || activity > group.lastActivityAt))
+        group.lastActivityAt = activity;
       let step = group.steps.find((entry) => entry.id === bucket.step);
       if (!step) {
         step = { id: bucket.step, ...counts() };

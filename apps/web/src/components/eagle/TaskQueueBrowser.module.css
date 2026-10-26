@@ -144,3 +144,10 @@
   align-items: stretch;
   gap: 10px;
 }
+
+.activity {
+  margin: 0;
+  padding: 0 12px 12px;
+  font-size: 11px;
+  color: var(--ui-muted);
+}
