@@ -7,8 +7,8 @@
   "scripts": {
     "start": "node main.mjs serve",
     "mcp": "node mcp.mjs",
-    "build": "node --check main.mjs && node --check fleet.mjs && node --check server.mjs && node --check mcp.mjs && node --check control.mjs",
-    "typecheck": "npm run build",
+    "build": "node --check main.mjs && node --check fleet.mjs && node --check server.mjs && node --check mcp.mjs && node --check control.mjs && node --check ssh-bridge.mjs",
+    "typecheck": "npm run build && node --check ssh-bridge.mjs",
     "test": "node --experimental-test-coverage --test-coverage-include=fleet.mjs --test-coverage-include=server.mjs --test *.test.mjs"
   },
   "dependencies": {

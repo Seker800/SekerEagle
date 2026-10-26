@@ -2,11 +2,23 @@
 
 安卓人工／模拟器交互验收固定入口：<http://localhost:49813>。恢复预览运行 `npm run android:lab:preview`，启动与故障处理见[安卓固定测试图库](android-test-lab.md)。持续复用原账号和数据，不能用临时回归工作台替代此入口。
 
-## 2026-10-27 多机热调度候选（切换前）
+## 2026-10-27 多机热调度已上线，Windows 等待接机
 
-本轮用户授权先准备 Agent 驱动的 Mac／NAS／Windows 3090 工作分配。已合并下节现用生产版本，新增独立协调服务、受限 Agent 控制、远端图片／人脸通路、主机总容量与 worker 内存准入；日常策略可热改，原业务队列和暂停／时段／权限／租约／发布守卫保留。Windows 尚未提供 SSH 入口，CUDA 安装、真实显存与跨后端向量一致性仍待接机验收；未验证节点不能启用。详见 [多机计算与 Agent 控制](compute-fleet.md)。
+按用户授权准备 Agent 驱动的 NAS／Mac／Windows 3090 分工。本轮合并保留下节现用人物扫描与任务核心，应用发布提交为 `502900f0576d4bcd17b8e76ecc059181d7305603`；API、worker、web 及独立 compute-coordinator 运行镜像均为 `sekereagle/{服务名}:nas-502900f0576d4bcd17b8e76ecc059181d7305603`。Mac 的管理桥接独立从本机仓库启动，属于后续管理通道适配，不把它误记为已重建的 NAS 应用镜像。源码、实际镜像、进程与当前完整 Compose 链分别核对。
 
-本段当前仅说明候选：生产仍以下节镜像与实时核验为准，尚未把现用 worker 改到协调服务，Mac 缓存预算也尚未通过服务重启激活。测试使用隔离数据库与合成 HTTP 节点，不能作为真实硬件提速成绩。切换和回退必须使用当前完整 Compose 链，保留现用人物扫描版本，不用历史安装脚本覆盖。核验日期：2026-10-27，北京时间。
+北京时间约 02:02 完成切流。旧 worker 自然排空，退出码 0、无 OOM；三个应用健康／零重启，协调服务运行正常、256 MiB 内存限制。原数据库、MinIO、gateway 与已完成封面容器身份／重启次数保留，网关仅 reload；原应用内存、挂载和除预期模型 URL 外的全部环境摘要相等。当前 API／worker 的模型地址为内部 `http://compute-coordinator:11436`，执行凭据保持原值，管理凭据不进入 API／worker。NAS 内核不支持 PIDs 限额，Docker 忽略该可选限制，不能把模板中的 pids_limit 当作本机已经强制执行。
+
+目前登记且已启用的是 Mac GPU：实际接收上限 3、保留 1 项交互搜索名额，后台上限 2，单张协议不变。协调器根据已验证能力、健康、宿主总名额及观测耗时选节点。策略可通过 Agent 热改，禁用／缩容只停止后续接单，已开始的任务完成后退出；不新建业务积压队列，不越过原 owner／模式／私密／版本／依赖／租约／公平／时段／暂停和发布事务。远端图片／人脸执行通路已经过隔离 HTTP／数据库验证；当前没有宣称 Mac CPU 执行器或 Windows GPU 已安装并接单。视频、切片等继续使用 NAS 原通道。Windows 尚未提供 SSH 地址，后续先安装执行器、测容量与跨后端向量一致性，再登记验证并放量，不能仅凭平均余弦值批准混用。详见[多机计算与 Agent 控制](compute-fleet.md)。
+
+现用群晖拒绝 SSH TCP 端口转发，实机报 administratively prohibited；原本轮新建的转发 LaunchAgent 已撤下。Mac 当前使用 `com.sekereagle.compute-control` 启动 `apps/compute-coordinator/ssh-bridge.mjs`，只监听 loopback 11436，通过已核对主机指纹的 `SekerDesign` SSH 命令和 stdin 转发三个固定管理端点，不修改群晖全局 SSH 设置。NAS 管理凭据仅在协调容器内读取，stdout 不含凭据；本机凭据和客户端配置为 owner-only 私有文件。Codex 已新增 `sekereagle-compute` MCP，仅含 compute_status／compute_set_policy 两个工具；写后核对原有配置语义未变。当前聊天也可使用 `control.mjs`。管理写超时后先重读版本和策略，不能盲目重试；日常分工调整无需再次发布图库。
+
+通过真实 MCP stdio→本机桥接→SSH→协调服务完成 Mac drain→真实在途归零→resume，worker 未重启、原图库安排与暂停摘要保持。随后正常重启原 `com.sekereagle.mlx-embedding` 加载 4 GiB 缓存预算；模型位置、固定修订、1600px 既有输入、1024 维与归一化保持。64×48 合成灰图真实推理输出 1024 维、范数 1；推理期间健康接口最大延迟约 0.19 秒。恢复接单后一次观测 MLX active 约 3.96 GiB、cache 约 1.72 GiB、peak active 约 4.97 GiB，预算为 4 GiB；这是 allocator 计数，不是进程 footprint 或整机内存上限，也不承诺系统历史 swap 立即清空。
+
+北京时间 02:02:24–02:16:46 的实际接续样本完成向量 203 项、切片 13 项、颜色 16 项；新增 FAILED 与过期租约均为零。此窗口包含正常切换与缓存重启，只证明接续，不作等负载吞吐提升或完成日期承诺；动态进度以后重新读取。没有用用户原图作测试，没有新建生产合成账号或发起全库人物扫描，没有重置、seed、重导入、批量重试或覆盖用户资源，固定安卓图库未更改。迁移仍为 57 项，无新增迁移。
+
+最终备份与回退位于 NAS 私有 `maintenance/compute-fleet-20261027-final/`，700,268,660 字节，SHA256 `b35821f3e054e26b84abb503e0596fb5b01630f8ee6f9bbb26ddf4dea61af1e5`，已核对完整解压读取与时效。该部署目录及上级实测不在 Git 工作树内，运维脚本也加了 fail-closed 检查；凭据／备份不提交。本轮较早 `compute-fleet-20261027/` 的旁路候选未切流，不能把它当实际发布。现用完整命令仍只从 `maintenance/processing-upgrade-20261023/release-compose.json` 读取，末尾已追加 final 目录 `runtime-override.yml`，不要再重复叠加模板。正常回退在完整链后追加本目录 `rollback.yml`，恢复三个旧应用镜像 ID 与原 Mac URL；不自动恢复数据库。回滚异常时以实际容器、before-compose 副本与 recovery-required 记录为准，不能仅看一次保存的链判定成功。
+
+全仓架构／共用契约、lint、typecheck、unit、build、格式与 OSS 检查及隔离 PostgreSQL 历史升级／完整恢复／真实 worker 热调回归通过；两项任务前已有前端时序用例在并行重跑中偶发失败，全部网页文件改以串行调度重跑全仓测试通过，未跳过测试、未更改相关业务代码。26 项发布故障注入与管理桥接实际 SSH／MCP 验收留档。DeepSeek 独立审查按模块多轮完成；超时及指纹 stale 的轮次未当通过，实质问题修复后复审，低收益／原有问题独立取舍并记录。证据位于本机 `.omx/artifacts/compute-fleet-20261026/`。核验日期：2026-10-27，北京时间；本节采样不是实时队列数量。
 
 ## 2026-10-26 人物扫描整合已合并 main 并发布生产
 

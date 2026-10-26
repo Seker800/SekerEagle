@@ -27,7 +27,9 @@ NAS、向量、远端媒体是独立有界通道。远端任务失联不会退�
 
 首次通过 `main.mjs init <私有登记文件>` 创建状态。登记文件为 `{ "nodes": [...] }`；节点字段为 id、name、url、token、accelerator、operations、maxConcurrent、reserveInteractive、verified、enabled，以及同机多端点必填的 hostId、hostMaxConcurrent。URL 仅允许有显式端口的私网／loopback IPv4 字面地址，禁止受保护的旧 NAS 地址、凭据、路径及重定向。仅连接本项目计算服务，不能把其他服务登记为计算端点。
 
-运行中通过 `main.mjs enroll <私有登记文件>` 登记节点，文件为 `{ "expectedRevision": 版本, "node": 节点 }`。本机管理 URL 来自 EAGLE_COMPUTE_ADMIN_URL，默认 http://127.0.0.1:11436；远程 NAS 应先使用已核对主机指纹的 SSH loopback 隧道。已有节点必须先停止接单且 inFlight 为零才能重新登记。verified=true 是完成独立验证后的运维登记声明，不由健康响应自动授予。登记容量和模型兼容验证属于显式运维，MCP 不暴露登记或凭据接口。
+运行中通过 `main.mjs enroll <私有登记文件>` 登记节点，文件为 `{ "expectedRevision": 版本, "node": 节点 }`。本机管理 URL 来自 EAGLE_COMPUTE_ADMIN_URL，默认 http://127.0.0.1:11436；现用 NAS 通过下述 SSH 命令桥接管理（该 NAS 已禁用 TCP 端口转发），连接时严格核对主机指纹。已有节点必须先停止接单，确认旧端点健康的实际 capacity.inFlight 与宿主 hostInFlight 都为零后才能重新登记；不能只凭本地请求计数为零就换 URL。verified=true 是完成独立验证后的运维登记声明，不由健康响应自动授予。登记容量和模型兼容验证属于显式运维，MCP 不暴露登记或凭据接口。
+
+现用 Mac 运行独立 `ssh-bridge.mjs`（设置 EAGLE_COMPUTE_SSH_TARGET 为已核对的 NAS SSH 别名、EAGLE_COMPUTE_ADMIN_TOKEN_FILE 为私有本地凭据文件）。它仅监听 loopback 11436，校验本地管理凭据后，通过固定的 SSH 命令和 stdin 向本项目协调容器转发三个管理端点；请求内容不进入 shell 参数，NAS 管理凭据在容器内部读取，不经 stdout 返回。每次请求有时限、字节和两项在途上限。无需启用 NAS 全局端口转发。输入接收和 SSH 分段各有时限；管理写请求若超时，其提交状态未知，必须先重读 revision／当前策略，不能盲目重试。MCP 仍只暴露 status／set_policy，登记仍为运维接口。现用部署若已采用运行文档记录的生成覆盖文件，不重复叠加模板 Compose 文件。
 
 当前会话未加载新 MCP 时，可使用 `node apps/compute-coordinator/control.mjs status` 或 `policy <私有策略文件>`；客户端配置默认为 `.runtime/compute-control-client.json`，仅含 loopback baseUrl 和私有 adminTokenFile 路径，权限要求同私有状态。
 
@@ -36,7 +38,7 @@ Agent 使用独立 `node apps/compute-coordinator/mcp.mjs`，只提供 compute_s
 ## Windows 接入顺序
 
 1. SSH 密钥登录后运行 `scripts/compute/windows-preflight.ps1`，检查真实 CPU／内存／驱动／WSL。
-2. 在 WSL2 的独立 Linux 文件系统内准备 CUDA 与模型服务。固定模型修订、预处理、1024 维 MRL 和归一化。CUDA 健康声明 accelerator=cuda，不能伪造 metal=true。
+2. 在 WSL2 的独立 Linux 文件系统内准备 CUDA 与模型服务。固定模型修订、预处理、1024 维 MRL 和归一化。CUDA 健康声明 accelerator=cuda，并报告真实 capacity.limit／inFlight；协调器重启后必须实际观察到 idle 才开始接单。不能伪造 metal=true。
 3. 使用独立合成／公开样本验证文字与图片向量、最差样本差异及检索排名；不能仅凭平均余弦阈值批准混用。尚未完成验证时保持 verified=false、enabled=false；未验证节点拒绝任何启用策略，MCP 不能修改验证标记。
 4. 测定单张吞吐、峰值显存和小批量表现，批准保守 maxConcurrent。当前协调协议仍单张请求，不把批量试验当成已发布能力。
 5. 经私有运维文件登记节点，再由 Agent 逐步启用、观察和回退。无需更改图库代码或把业务数据库开放给 Windows。
