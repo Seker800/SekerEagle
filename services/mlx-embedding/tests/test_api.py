@@ -274,3 +274,51 @@ def test_cancelled_http_request_holds_capacity_until_compute_finishes(monkeypatc
             assert (await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)).status_code == 200
 
     asyncio.run(exercise())
+
+
+def test_stalled_uploads_have_a_total_deadline_and_return_all_admission(monkeypatch):
+    import asyncio
+    import httpx2
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "BODY_READ_TIMEOUT_SECONDS", 0.03, raising=False)
+    class StalledBody(httpx2.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"incomplete"
+            await asyncio.Event().wait()
+    async def exercise():
+        headers = {"authorization": "Bearer test-secret", "content-type": "image/jpeg", "x-embedding-dimensions": "1024"}
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=service.app), base_url="http://test") as client:
+            tasks = [asyncio.create_task(client.post("/v1/embeddings/image", content=StalledBody(), headers=headers)) for _ in range(2)]
+            try:
+                done, pending = await asyncio.wait(tasks, timeout=0.4)
+                assert not pending, "an interrupted upload must not hold model admission indefinitely"
+                assert [task.result().status_code for task in tasks] == [408, 408]
+                assert (await client.get("/healthz", headers=headers)).json()["capacity"] == {"limit": 3, "inFlight": 0, "available": 3}
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+    asyncio.run(exercise())
+
+
+def test_health_reports_receiving_capacity_and_cancellation_returns_it(monkeypatch):
+    import asyncio
+    import httpx2
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    class StalledBody(httpx2.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"incomplete"
+            await asyncio.Event().wait()
+    async def exercise():
+        headers = {"authorization": "Bearer test-secret", "content-type": "image/jpeg", "x-embedding-dimensions": "1024"}
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=service.app), base_url="http://test") as client:
+            task = asyncio.create_task(client.post("/v1/embeddings/image", content=StalledBody(), headers=headers))
+            try:
+                await asyncio.sleep(.01)
+                health = await client.get("/healthz", headers=headers)
+                assert health.json().get("capacity") == {"limit": 3, "inFlight": 1, "available": 2}
+            finally:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            assert (await client.get("/healthz", headers=headers)).json()["capacity"] == {"limit": 3, "inFlight": 0, "available": 3}
+    asyncio.run(exercise())

@@ -154,3 +154,38 @@ test('EmbeddingClient embeds a contextualized AI tag as text', async () => {
   assert.deepEqual(JSON.parse(requestedBody), { text: '图片中的具体物体或场景：汽车' });
   assert.deepEqual(result.embedding, [0.6, 0.8]);
 });
+
+test('capacity and upload waits are retryable without declaring a reachable model offline', async () => {
+  for (const [status, header, code, delay] of [
+    [503, '1', 'HOST_BUSY', 1000],
+    [503, '999999', 'HOST_BUSY', 30000],
+    [503, '-4', 'HOST_BUSY', 1000],
+    [429, undefined, 'HOST_BUSY', 1000],
+    [408, undefined, 'UPLOAD_TIMEOUT', 1000],
+    [502, undefined, 'HOST_UNAVAILABLE', undefined],
+  ] as const) {
+    const client = new EmbeddingClient({
+      baseUrl: 'http://127.0.0.1:11435',
+      token: 'test',
+      modelId: 'test',
+      modelRevision: 'v1',
+      dimensions: 2,
+      timeoutMs: 1000,
+      maxPayloadBytes: 1024,
+      fetch: async () =>
+        new Response(null, { status, headers: header ? { 'retry-after': header } : {} }),
+    });
+    await assert.rejects(
+      () => client.embedImage(Buffer.from('preview'), 'image/jpeg'),
+      (error: unknown) => {
+        assert(error instanceof EmbeddingClientError);
+        assert.equal(error.code, code);
+        assert.equal(
+          (error as EmbeddingClientError & { retryAfterMs?: number }).retryAfterMs,
+          delay,
+        );
+        return true;
+      },
+    );
+  }
+});
