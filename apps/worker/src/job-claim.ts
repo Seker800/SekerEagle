@@ -1,3 +1,4 @@
+import { MEDIA_LEASE_MS, mediaClaimTransition } from '@sekereagle/library-core';
 import type {
   EagleAssetProcessingJob,
   EagleMediaJobStatus,
@@ -6,7 +7,7 @@ import type {
 } from '@prisma/client';
 
 const CLAIM_BATCH_SIZE = 50;
-const STALE_LEASE_MS = 10 * 60 * 1_000;
+
 const LANE_ORDER: readonly EagleProcessingLane[] = ['INTERACTIVE', 'BACKGROUND', 'MAINTENANCE'];
 
 export interface ClaimFindManyInput {
@@ -36,6 +37,7 @@ interface ClaimUpdateInput {
     leaseVersion: number;
     status: EagleMediaJobStatus;
     lockedAt?: { lt: Date };
+    availableAt?: { lte: Date };
   };
   data: {
     status: 'PROCESSING';
@@ -73,7 +75,7 @@ export async function claimNextMediaJob(
   options: ClaimMediaJobOptions,
 ): Promise<EagleAssetProcessingJob | null> {
   const now = options.now ?? new Date();
-  const staleBefore = new Date(now.getTime() - STALE_LEASE_MS);
+  const staleBefore = new Date(now.getTime() - MEDIA_LEASE_MS);
 
   for (const lane of options.laneOrder ?? LANE_ORDER) {
     const kindFilter = {
@@ -117,21 +119,11 @@ export async function claimNextMediaJob(
       ) {
         continue;
       }
+      const transition = mediaClaimTransition(candidate, now);
+      if (!transition) continue;
       const claimed = await client.eagleAssetProcessingJob.updateMany({
-        where: {
-          id: candidate.id,
-          leaseVersion: candidate.leaseVersion,
-          ...(candidate.status === 'PENDING'
-            ? { status: 'PENDING' as const }
-            : { status: 'PROCESSING' as const, lockedAt: { lt: staleBefore } }),
-        },
-        data: {
-          status: 'PROCESSING',
-          lockedAt: now,
-          startedAt: candidate.startedAt ?? now,
-          attempts: { increment: 1 },
-          leaseVersion: { increment: 1 },
-        },
+        where: { id: candidate.id, ...transition.where },
+        data: transition.data,
       });
       if (claimed.count === 1) {
         return client.eagleAssetProcessingJob.findUniqueOrThrow({
