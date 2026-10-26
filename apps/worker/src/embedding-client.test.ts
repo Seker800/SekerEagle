@@ -189,3 +189,44 @@ test('capacity and upload waits are retryable without declaring a reachable mode
     );
   }
 });
+
+test('the request deadline also covers a response body that stalls after successful headers', async () => {
+  const client = new EmbeddingClient({
+    baseUrl: 'http://127.0.0.1:11435',
+    token: 'test',
+    modelId: 'test',
+    modelRevision: 'v1',
+    dimensions: 2,
+    timeoutMs: 20,
+    maxPayloadBytes: 1024,
+    fetch: async (_url, init) =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            init?.signal?.addEventListener(
+              'abort',
+              () => controller.error(new DOMException('aborted', 'AbortError')),
+              { once: true },
+            );
+            controller.enqueue(new TextEncoder().encode('{"embedding":'));
+          },
+        }),
+        { status: 200 },
+      ),
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await assert.rejects(
+      Promise.race([
+        client.embedImage(Buffer.from('preview'), 'image/jpeg'),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('response body exceeded deadline')), 200);
+        }),
+      ]),
+      (error: unknown) =>
+        error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+});

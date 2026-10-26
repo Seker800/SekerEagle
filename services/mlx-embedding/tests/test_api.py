@@ -322,3 +322,34 @@ def test_health_reports_receiving_capacity_and_cancellation_returns_it(monkeypat
                 await asyncio.gather(task, return_exceptions=True)
             assert (await client.get("/healthz", headers=headers)).json()["capacity"] == {"limit": 3, "inFlight": 0, "available": 3}
     asyncio.run(exercise())
+
+
+def test_upload_deadline_is_total_even_when_bytes_keep_arriving(monkeypatch):
+    import asyncio
+    import httpx2
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    monkeypatch.setattr(service, "BODY_READ_TIMEOUT_SECONDS", .03)
+    class TrickleBody(httpx2.AsyncByteStream):
+        async def __aiter__(self):
+            for _ in range(20):
+                await asyncio.sleep(.01)
+                yield b"more"
+    async def exercise():
+        headers = {"authorization": "Bearer test-secret", "content-type": "image/jpeg", "x-embedding-dimensions": "1024"}
+        async with httpx2.AsyncClient(transport=httpx2.ASGITransport(app=service.app), base_url="http://test") as client:
+            response = await client.post('/v1/embeddings/image', content=TrickleBody(), headers=headers)
+            assert response.status_code == 408
+            assert response.headers['connection'] == 'close'
+            assert (await client.get('/healthz', headers=headers)).json()['capacity']['available'] == 3
+    asyncio.run(exercise())
+
+
+def test_admission_detects_over_release():
+    import pytest
+    capacity = service.InferenceAdmission(1)
+    assert capacity.try_acquire()
+    assert not capacity.try_acquire()
+    capacity.release()
+    with pytest.raises(ValueError):
+        capacity.release()
+    assert capacity.snapshot() == {'limit': 1, 'inFlight': 0, 'available': 1}
