@@ -500,10 +500,13 @@ it.each(['DISABLED', 'ENABLED'] as const)(
 
 it('allows pausing a completed category before new automatic work arrives', async () => {
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
-    ...summary, groups: [{ ...summary.groups[0]!, queued: 0, waiting: [] }],
+    ...summary,
+    groups: [{ ...summary.groups[0]!, queued: 0, waiting: [] }],
   });
   mount();
   await screen.findByRole('heading', { name: '2B 向量搜图' });
   fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
-  await waitFor(() => expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({ family: 'EMBEDDING', paused: true }));
+  await waitFor(() =>
+    expect(api.updateEagleTaskPolicy).toHaveBeenCalledWith({ family: 'EMBEDDING', paused: true }),
+  );
 });

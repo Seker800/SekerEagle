@@ -249,10 +249,16 @@ test('disabled processor versions are excluded before the limited claim scan', a
 
 test('an empty effective allowlist is idle and never builds a candidate SQL query', async () => {
   let queries = 0;
-  assert.equal(await claimNextMediaJob({} as never, {
-    allowedJobKinds: [],
-    selectCandidates: async () => { queries++; return []; },
-    canClaimBackground: async () => true,
-  }), null);
+  assert.equal(
+    await claimNextMediaJob({} as never, {
+      allowedJobKinds: [],
+      selectCandidates: async () => {
+        queries++;
+        return [];
+      },
+      canClaimBackground: async () => true,
+    }),
+    null,
+  );
   assert.equal(queries, 0);
 });

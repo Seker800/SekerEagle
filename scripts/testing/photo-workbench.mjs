@@ -612,7 +612,7 @@ try {
   if (!basic) {
     const faceScan = await api('/photos/photography/people/scan', {});
     // Starting a scan accepts missing work without promoting existing jobs or bypassing pause.
-    assert.ok(faceScan.queued >= 0);
+    assert.equal(faceScan.queued, 0, 'preview publication already queued every face job');
     assert.equal(
       await db.eagleAssetProcessingJob.count({
         where: { ownerId: owner.id, kind: 'ANALYZE_PHOTO_FACES', lane: 'BACKGROUND' },
@@ -1216,8 +1216,101 @@ try {
     for (const mode of ['eagle', 'photos']) {
       const overview = await call(`/${mode}/tasks`);
       assert.equal(overview.status, 200);
-      assert.deepEqual((await overview.json()).groups, []);
+      const groups = (await overview.json()).groups;
+      if (mode === 'eagle') assert.deepEqual(groups, []);
+      else {
+        assert.equal(groups.length, 1);
+        assert.equal(groups[0].id, 'FACES');
+        assert.equal(groups[0].unscanned, 0);
+      }
     }
+    assert.equal(
+      (await call('/photos/tasks/start', 'POST', { family: 'FACES' }, origin, '')).status,
+      401,
+    );
+    assert.equal(
+      (await call('/photos/tasks/start', 'POST', { family: 'FACES' }, 'https://invalid.example'))
+        .status,
+      403,
+    );
+    assert.equal(
+      (
+        await fetch(`${origin}/api/photos/tasks/start`, {
+          method: 'POST',
+          headers: { cookie: ordinaryCookie, 'content-type': 'application/json' },
+          body: JSON.stringify({ family: 'FACES' }),
+        })
+      ).status,
+      403,
+    );
+    assert.equal((await call('/eagle/tasks/start', 'POST', { family: 'FACES' })).status, 404);
+    assert.equal((await call('/photos/tasks/start', 'POST', { family: 'COLOR' })).status, 400);
+    assert.equal(
+      (await call('/photos/tasks/start', 'POST', { family: 'FACES', ownerId: owner.id })).status,
+      400,
+    );
+    await db.eagleTaskPolicy.create({
+      data: { ownerId: ordinary.id, libraryMode: 'PHOTO', family: 'FACES', paused: true },
+    });
+    const scanAssets = [];
+    for (const isPrivate of [false, true]) {
+      const id = randomUUID();
+      const asset = await db.eagleAsset.create({
+        data: {
+          id,
+          ownerId: ordinary.id,
+          libraryMode: 'PHOTO',
+          originalName: 'synthetic.jpg',
+          displayName: 'Synthetic',
+          normalizedDisplayName: 'synthetic',
+          mimeType: 'image/jpeg',
+          format: 'jpeg',
+          byteSize: 1,
+          mediaRevision: 1,
+          lifecycleStatus: 'READY',
+          isPrivate,
+          originalObjectKey: `users/${ordinary.id}/assets/${id}/original.jpg`,
+        },
+      });
+      await db.eagleAssetRendition.create({
+        data: {
+          ownerId: ordinary.id,
+          libraryMode: 'PHOTO',
+          assetId: id,
+          kind: 'PREVIEW',
+          revision: 1,
+          variant: 'default',
+          status: 'READY',
+          storageKey: `users/${ordinary.id}/assets/${id}/preview.jpg`,
+          mimeType: 'image/jpeg',
+          byteSize: 1,
+        },
+      });
+      scanAssets.push(asset);
+    }
+    const accepted = await call('/photos/tasks/start', 'POST', { family: 'FACES' });
+    assert.equal(accepted.status, 201);
+    assert.equal((await accepted.json()).queued, 1);
+    assert.equal(
+      (await (await call('/photos/tasks/start', 'POST', { family: 'FACES' })).json()).queued,
+      0,
+    );
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({ where: { assetId: scanAssets[1].id } }),
+      0,
+    );
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({
+        where: { ownerId: ordinary.id, libraryMode: 'MATERIAL' },
+      }),
+      0,
+    );
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({
+        where: { ownerId: ordinary.id, lane: 'BACKGROUND', status: 'PENDING' },
+      }),
+      1,
+    );
     for (const mode of ['eagle', 'photos']) {
       for (const [path, method] of [
         ['summary', 'GET'],
@@ -1288,7 +1381,7 @@ try {
     );
     assert.equal(
       await db.eagleTaskPolicy.count({ where: { ownerId: ordinary.id, libraryMode: 'PHOTO' } }),
-      1,
+      2,
     );
     console.log(
       'Task center HTTP acceptance passed: ordinary owner, Origin, strict DTOs and immutable mode scope.',

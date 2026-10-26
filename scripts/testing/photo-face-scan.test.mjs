@@ -1,3 +1,4 @@
+import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
@@ -174,5 +175,63 @@ test('full scan is durable, idempotent, scoped, versioned and governed by existi
       if (previous[i] === undefined) delete process.env[key];
       else process.env[key] = previous[i];
     }
+  }
+});
+
+test('50,000 synthetic photos measure coverage polling and one-shot acceptance cost', async () => {
+  const { Prisma } = await import('@prisma/client');
+  const { unscannedPhotoFacesSql } =
+    await import('../../packages/library-persistence/dist/index.js');
+  const { performance } = await import('node:perf_hooks');
+  const owner = randomUUID();
+  try {
+    await db.user.create({
+      data: { id: owner, email: `${owner}@example.invalid`, passwordHash: 'synthetic-only' },
+    });
+    await db.$executeRaw`INSERT INTO "EagleAsset" (id,"ownerId","libraryMode","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize","originalObjectKey","lifecycleStatus","mediaRevision","updatedAt")
+      SELECT gen_random_uuid()::text,${owner},'PHOTO','synthetic.jpg','Synthetic','synthetic','image/jpeg','jpeg',1,'users/'||${owner}||'/assets/'||i||'/original.jpg','READY',1,now() FROM generate_series(1,50000) i`;
+    await db.$executeRaw`ANALYZE "EagleAsset"`;
+    await db.$executeRaw`INSERT INTO "EagleAssetRendition" (id,"ownerId","libraryMode","assetId",kind,variant,revision,"storageKey","mimeType","byteSize",status,"updatedAt")
+      SELECT gen_random_uuid()::text,"ownerId",'PHOTO',id,'PREVIEW','default',1,'users/'||${owner}||'/assets/'||id||'/preview.jpg','image/jpeg',1,'READY',now() FROM "EagleAsset" WHERE "ownerId"=${owner}`;
+    await db.$executeRaw`ANALYZE "EagleAsset"`;
+    await db.$executeRaw`ANALYZE "EagleAssetRendition"`;
+    await db.$executeRaw`ANALYZE "EagleMediaJob"`;
+    const before = await db.$queryRaw(
+      Prisma.sql`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT count(*) FROM (${unscannedPhotoFacesSql(owner, false)}) candidates`,
+    );
+    const began = performance.now();
+    assert.equal((await queuePhotoFaceScan(db, owner, false)).queued, 50000);
+    const queueMs = performance.now() - began;
+    await db.$executeRaw`ANALYZE "EagleMediaJob"`;
+    const after = await db.$queryRaw(
+      Prisma.sql`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT count(*) FROM (${unscannedPhotoFacesSql(owner, false)}) candidates`,
+    );
+    const overviewBegan = performance.now();
+    const summary = await db.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SET LOCAL statement_timeout = '10s'`;
+        return new EagleTaskCenterService(tx, 'PHOTO').overview(owner);
+      },
+      { timeout: 15000 },
+    );
+    const overviewMs = Math.round(performance.now() - overviewBegan);
+    const group = summary.groups.find((g) => g.id === 'FACES');
+    assert.equal(group.unscanned, 0);
+    assert.equal(group.queued, 50000);
+    console.log(
+      JSON.stringify({
+        syntheticOnly: true,
+        photos: 50000,
+        coverageBeforeMs: before[0]['QUERY PLAN'][0]['Execution Time'],
+        coverageAfterMs: after[0]['QUERY PLAN'][0]['Execution Time'],
+        enqueueTransactionMs: Math.round(queueMs),
+        productionTiming: false,
+        overviewMs,
+      }),
+    );
+  } finally {
+    await db.eagleAsset.deleteMany({ where: { ownerId: owner } });
+    await db.user.deleteMany({ where: { id: owner } });
+    await db.$disconnect();
   }
 });
