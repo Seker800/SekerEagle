@@ -398,3 +398,14 @@ def test_real_tcp_interrupted_upload_is_closed_and_does_not_poison_next_request(
         thread.join(5)
         listener.close()
     assert not thread.is_alive()
+
+
+def test_memory_cache_budget_and_observation_do_not_load_model(monkeypatch):
+    monkeypatch.setattr(service, "TOKEN", "test-secret")
+    service.runtime.model = None
+    service.runtime.processor = None
+    client = TestClient(service.app)
+    state = client.get("/health/ready", headers={"authorization": "Bearer test-secret"}).json()
+    assert 0 < state["memory"]["cacheLimitBytes"] <= 8 * 1024**3
+    assert state["memory"]["cacheBytes"] >= 0
+    assert state["modelState"] == "idle"
