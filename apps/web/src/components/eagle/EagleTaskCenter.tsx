@@ -506,14 +506,11 @@ function TaskCard({
               {t('去审批')}
             </button>
           )}
-          {group.background &&
-            !disabled &&
-            schedule.mode !== 'MANUAL' &&
-            (remaining > 0 || group.policy?.paused) && (
-              <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
-                {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
-              </button>
-            )}
+          {group.background && !disabled && schedule.mode !== 'MANUAL' && (
+            <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
+              {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
+            </button>
+          )}
         </div>
       </div>
       {group.id !== 'APPROVALS' && (
