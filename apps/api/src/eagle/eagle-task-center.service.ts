@@ -1,6 +1,6 @@
 import { Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
-import { Prisma, EagleMediaJobKind, type LibraryMode } from '@prisma/client';
-import { mediaTaskFamilySql, lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
+import { Prisma, type LibraryMode } from '@prisma/client';
+import { mediaTaskFamilySql, mediaBlocksAssetReadySql, lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,
@@ -91,22 +91,14 @@ export class EagleTaskCenterService {
         ).count;
       }
       if (['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(family)) return 0;
-      const kinds = Object.values(EagleMediaJobKind).filter(
-        (kind) => kind !== 'GENERATE_AI_TAGS' && mediaTaskFamily(kind, 'v1') === family,
-      );
-      const condition =
-        family === 'DETAILS'
-          ? Prisma.sql`j."processorVersion"='photo-source-details-v1'`
-          : family === 'VIDEO'
-            ? Prisma.sql`${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}='VIDEO'`
-            : Prisma.sql`j.kind::text IN (${Prisma.join(kinds)}) AND j."processorVersion"<>'photo-source-details-v1' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}<>'VIDEO'`;
+      const condition = Prisma.sql`j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}`;
       const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
         WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"recoveryCount"=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
           FROM "EagleAsset" a WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode" AND j.status='FAILED'
             AND a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode" AND a."mediaRevision"=j."assetRevision"
-            AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate") AND ${condition} RETURNING j."assetId",j."assetRevision"
+            AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate") AND ${condition} RETURNING j."assetId",j."assetRevision",j.kind,j."processorVersion"
         ), restored AS (UPDATE "EagleAsset" a SET "lifecycleStatus"='PROCESSING',"mediaErrorCode"=NULL,"updatedAt"=now()
-          FROM retried r WHERE ${family === 'BROWSE'} AND a.id=r."assetId" AND a."mediaRevision"=r."assetRevision"
+          FROM retried r WHERE ${mediaBlocksAssetReadySql(Prisma.sql`r.kind`, Prisma.sql`r."processorVersion"`)} AND a.id=r."assetId" AND a."mediaRevision"=r."assetRevision"
           RETURNING a.id)
         SELECT count(*) AS count FROM retried
       `);
@@ -242,7 +234,12 @@ export class EagleTaskCenterService {
       'GENERATE_EMBEDDING',
     );
     for (const group of groups.values())
-      group.presentation = taskGroupPresentation(group, settings, embedding, workers.length ? 'ONLINE' : 'OFFLINE');
+      group.presentation = taskGroupPresentation(
+        group,
+        settings,
+        embedding,
+        workers.length ? 'ONLINE' : 'OFFLINE',
+      );
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
       embedding,

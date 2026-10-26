@@ -548,3 +548,180 @@ test('historical import records without a live protocol never imply a running ba
     'Overview must not rewrite historical import state',
   );
 });
+
+test('decision SQL and core agree for every combination of wait gates', async () => {
+  const { TASK_GATES, decideTask } = await import('../../packages/library-core/dist/index.js');
+  const { taskWaitReasonSql, taskRunnableSql } =
+    await import('../../packages/library-persistence/dist/index.js');
+  // One SQL batch checks all 1024 combinations, including precedence collisions.
+  const cases = Array.from({ length: 1 << TASK_GATES.length }, (_, mask) => {
+    const facts = Object.fromEntries(
+      TASK_GATES.map(([gate], index) => [gate, Boolean(mask & (1 << index))]),
+    );
+    const sqlFacts = Object.fromEntries(
+      Object.entries(facts).map(([gate, value]) => [gate, Prisma.sql`${value}`]),
+    );
+    return {
+      facts,
+      sql: Prisma.sql`SELECT ${mask}::integer AS id, ${taskWaitReasonSql(sqlFacts)} AS reason, ${taskRunnableSql(sqlFacts)} AS runnable`,
+    };
+  });
+  const rows = [];
+  for (let offset = 0; offset < cases.length; offset += 128) {
+    rows.push(
+      ...(await prisma.$queryRaw(
+        Prisma.join(
+          cases.slice(offset, offset + 128).map((entry) => entry.sql),
+          ' UNION ALL ',
+        ),
+      )),
+    );
+  }
+  for (const row of rows) {
+    const decision = decideTask(cases[row.id].facts);
+    assert.equal(row.reason, decision.reason);
+    assert.equal(row.runnable, decision.runnable);
+  }
+});
+
+test('claims, interruption recovery and terminal completion leave atomic scoped history, not heartbeat noise', async () => {
+  const { claimNextMediaJob } = await import('../../apps/worker/dist/job-claim.js');
+  const f = await fixture();
+  const a = await f.asset();
+  const job = await f.job(a);
+  const options = {
+    now: new Date(),
+    selectCandidates: async () => [job],
+    canClaimBackground: async () => true,
+    onLeaseExhausted: async () => {
+      throw Error('unexpected');
+    },
+  };
+  const results = await Promise.all([
+    claimNextMediaJob(prisma, options),
+    claimNextMediaJob(prisma, options),
+  ]);
+  const claimed = results.find(Boolean);
+  assert.ok(claimed);
+  assert.equal(results.filter(Boolean).length, 1);
+  const eventWhere = { ownerId: f.owner, libraryMode: 'PHOTO', jobId: job.id };
+  assert.equal(await prisma.eagleMediaJobEvent.count({ where: eventWhere }), 2);
+  const expired = await prisma.eagleAssetProcessingJob.update({
+    where: { id: job.id },
+    data: { lockedAt: new Date(Date.now() - 600001) },
+  });
+  assert.equal(await prisma.eagleMediaJobEvent.count({ where: eventWhere }), 2);
+  const recovered = await claimNextMediaJob(prisma, {
+    ...options,
+    now: new Date(),
+    selectCandidates: async () => [expired],
+  });
+  assert.equal(recovered.recoveryCount, 1);
+  assert.equal(recovered.leaseVersion, claimed.leaseVersion + 1);
+  assert.equal(
+    (
+      await prisma.eagleAssetProcessingJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', leaseVersion: claimed.leaseVersion },
+        data: { status: 'COMPLETED' },
+      })
+    ).count,
+    0,
+  );
+  await assert.rejects(
+    prisma.$transaction(async (tx) => {
+      await tx.eagleAssetProcessingJob.update({
+        where: { id: job.id },
+        data: { status: 'COMPLETED' },
+      });
+      throw Error('rollback-test');
+    }),
+    /rollback-test/,
+  );
+  assert.equal(await prisma.eagleMediaJobEvent.count({ where: eventWhere }), 3);
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: job.id },
+    data: { status: 'COMPLETED' },
+  });
+  assert.equal(await prisma.eagleMediaJobEvent.count({ where: eventWhere }), 4);
+  assert.equal(
+    (await f.service.overview(f.owner)).groups.some((group) => group.id === 'EMBEDDING'),
+    false,
+  );
+  assert.equal(
+    (await f.service.overview(f.owner, false, 'HISTORY')).groups.find(
+      (group) => group.id === 'EMBEDDING',
+    ).completed,
+    1,
+  );
+  assert.equal(
+    await prisma.eagleMediaJobEvent.count({ where: { ...eventWhere, ownerId: f.other } }),
+    0,
+  );
+  assert.equal(
+    await prisma.eagleMediaJobEvent.count({ where: { ...eventWhere, libraryMode: 'MATERIAL' } }),
+    0,
+  );
+});
+
+test('repeated lease interruption stops recovering, and explicit owner retry resets its recovery budget', async () => {
+  const { claimNextMediaJob } = await import('../../apps/worker/dist/job-claim.js');
+  const f = await fixture();
+  const job = await f.job(await f.asset(), {
+    status: 'PROCESSING',
+    recoveryCount: 3,
+    lockedAt: new Date(Date.now() - 600001),
+  });
+  let exhausted = 0;
+  const result = await claimNextMediaJob(prisma, {
+    selectCandidates: async () => [job],
+    canClaimBackground: async () => true,
+    onLeaseExhausted: async (candidate) => {
+      exhausted++;
+      await prisma.eagleAssetProcessingJob.updateMany({
+        where: { id: candidate.id, leaseVersion: candidate.leaseVersion, status: 'PROCESSING' },
+        data: {
+          status: 'FAILED',
+          lockedAt: null,
+          completedAt: new Date(),
+          lastError: 'MEDIA_LEASE_RECOVERY_EXHAUSTED',
+        },
+      });
+    },
+  });
+  assert.equal(result, null);
+  assert.ok(exhausted > 0);
+  await f.service.retry(f.owner, 'EMBEDDING');
+  const retried = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } });
+  assert.equal(retried.status, 'PENDING');
+  assert.equal(retried.recoveryCount, 0);
+});
+
+test('transition read API excludes other owners, libraries, private and superseded media', async () => {
+  const f = await fixture();
+  const publicAsset = await f.asset();
+  const privateAsset = await f.asset({ isPrivate: true });
+  await f.job(publicAsset);
+  await f.job(privateAsset);
+  await f.job(await f.asset({ ownerId: f.other }));
+  await f.job(await f.asset({ libraryMode: 'MATERIAL' }));
+  await f.job(await f.asset(), { assetRevision: 1 });
+  assert.equal((await f.service.events(f.owner, 'EMBEDDING')).length, 1);
+  assert.equal((await f.service.events(f.owner, 'EMBEDDING', true)).length, 2);
+  await prisma.eagleAsset.update({ where: { id: publicAsset.id }, data: { isPrivate: true } });
+  assert.equal((await f.service.events(f.owner, 'EMBEDDING')).length, 0);
+  assert.equal(
+    (await new EagleTaskCenterService(prisma, 'MATERIAL').events(f.owner, 'EMBEDDING')).length,
+    1,
+  );
+});
+
+
+test('retrying edited-copy rendering preserves the original source readiness', async () => {
+  const f = await fixture();
+  const source = await f.asset({lifecycleStatus: 'READY'});
+  const job = await f.job(source, {kind: 'RENDER_EDITED_COPY', lane: 'INTERACTIVE', status: 'FAILED'});
+  assert.deepEqual(await f.service.retry(f.owner, 'BROWSE'), {retried: 1});
+  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({where: {id: source.id}})).lifecycleStatus, 'READY');
+  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where: {id: job.id}})).status, 'PENDING');
+  await prisma.eagleAssetProcessingJob.update({where: {id: job.id}, data: {status: 'COMPLETED'}});
+});

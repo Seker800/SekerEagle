@@ -1,5 +1,6 @@
 import {
   taskSection,
+  mediaTaskFamily,
   type TaskGroup,
   type BackgroundSchedule,
   type TaskWaitReason,
@@ -62,9 +63,13 @@ export function taskGroupPresentation(
     : group.approval > 0
       ? 'APPROVAL'
       : null;
-  if (worker === 'OFFLINE' && taskWorkerOwned(group.id) && group.running + group.queued > 0 &&
-      (group.running > 0 || section !== 'PAUSED'))
-    return {section, status: 'WAITING', reason: 'WORKER_OFFLINE'};
+  if (
+    worker === 'OFFLINE' &&
+    taskWorkerOwned(group.id) &&
+    group.running + group.queued > 0 &&
+    (group.running > 0 || section !== 'PAUSED')
+  )
+    return { section, status: 'WAITING', reason: 'WORKER_OFFLINE' };
   if (
     group.id === 'EMBEDDING' &&
     (group.running > 0 || section !== 'PAUSED') &&
@@ -268,4 +273,9 @@ export function mediaWaitData(attempts: number, delayMs: number, code: string, n
 
 export function taskWorkerOwned(family: TaskFamily) {
   return !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
+}
+
+export const MEDIA_BROWSE_BLOCKING_KINDS = ['GENERATE_RENDITIONS', 'GENERATE_THUMBNAIL', 'GENERATE_PREVIEW', 'PROBE_MEDIA'] as const;
+export function mediaTaskBlocksAssetReady(kind: string, version = '') {
+  return mediaTaskFamily(kind, version) === 'BROWSE' && (MEDIA_BROWSE_BLOCKING_KINDS as readonly string[]).includes(kind);
 }
