@@ -35,9 +35,13 @@ export function taskGroupPresentation(group: TaskGroup, schedule: BackgroundSche
 
 export const MEDIA_LEASE_MS = 10 * 60 * 1000;
 export const MEDIA_FAILURE_LIMIT = 12;
+export const MEDIA_RECOVERY_LIMIT = 3;
+export class MediaLeaseRecoveryExhaustedError extends Error {
+  constructor() { super('MEDIA_LEASE_RECOVERY_EXHAUSTED'); }
+}
 export interface MediaClaimState {
   status: string; availableAt: Date; lockedAt: Date | null; startedAt: Date | null;
-  attempts: number; leaseVersion: number;
+  attempts: number; leaseVersion: number; recoveryCount: number;
 }
 /** A candidate is a hint, never an execution grant. Database CAS must apply the returned guard. */
 export function mediaClaimTransition(job: MediaClaimState, now: Date) {
@@ -46,10 +50,12 @@ export function mediaClaimTransition(job: MediaClaimState, now: Date) {
   if (!(job.status === 'PENDING' && job.availableAt <= now) && !recovery) return null;
   return {
     recovery,
+    exhausted: recovery && job.recoveryCount >= MEDIA_RECOVERY_LIMIT,
     where: { leaseVersion: job.leaseVersion, status: recovery ? 'PROCESSING' as const : 'PENDING' as const,
       ...(recovery ? { lockedAt: { lt: staleBefore } } : { availableAt: { lte: now } }) },
     data: { status: 'PROCESSING' as const, lockedAt: now, startedAt: now,
-      attempts: { increment: 1 as const }, leaseVersion: { increment: 1 as const } },
+      attempts: { increment: 1 as const }, leaseVersion: { increment: 1 as const },
+      recoveryCount: { increment: recovery ? 1 : 0 } },
   };
 }
 

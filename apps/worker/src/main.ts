@@ -1,3 +1,4 @@
+import { MEDIA_FAILURE_LIMIT, MediaLeaseRecoveryExhaustedError } from '@sekereagle/library-core';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
@@ -213,6 +214,7 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
   const sequence = claimSequence[resource]++;
   for (const age of mediaQueueAgeOrder(sequence)) {
     const job = await claimNextMediaJob(prisma, {
+      onLeaseExhausted: (job) => failJob(job, new MediaLeaseRecoveryExhaustedError()),
       selectCandidates: (input) => selectors[resource](input, age),
       canClaimBackground: canClaimBackgroundForOwner,
       allowedJobKinds,
@@ -1199,10 +1201,11 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
   const terminal =
+    error instanceof MediaLeaseRecoveryExhaustedError ||
     isPermanentMediaValidationError(error) ||
     (job.kind === 'RENDER_EDITED_COPY' &&
       (message.startsWith('EDIT_SOURCE_') || job.attempts >= 3)) ||
-    job.attempts >= 12;
+    job.attempts >= MEDIA_FAILURE_LIMIT;
   const delaySeconds = Math.min(3_600, 2 ** Math.min(job.attempts, 12));
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({

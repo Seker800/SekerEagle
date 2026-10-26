@@ -191,3 +191,7 @@ npm run ci:check
 2026-10-25 整理要求使用摄影专属偏好表与现有 PhotoAgentService／Controller；不新增 provider 或通用 Controller。发送派生图复用共用 EagleLibraryTransferService 的持久计划与复制校验，两种模式使用同一实现。审批预览和整批进度属于审批页面呈现，不复制通用图库缩略图能力。
 
 审批照片选择及右键操作复用 EagleAssetActionMenu；摄影人工操作只协调已有跨库发送／回收服务与追加流水，不复制通用执行实现、不开放 Agent 执行权限。
+
+### 2026-10-26 共用任务核心
+
+任务决策、媒体分类与展示属于两库共用领域规则，放在 library-core；SQL 编译与事件持久化属于既有 library-persistence／Prisma，不新增模式 Controller、provider 或组件。源表仍为调度事实，事件表仅保留转换证据。照片私密与当前媒体版本的过滤继续在聚合和领取前执行。此变更不申请装配例外，现有结构门禁及反例继续适用。

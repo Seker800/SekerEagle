@@ -99,7 +99,7 @@ export class EagleTaskCenterService {
             ? Prisma.sql`${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}='VIDEO'`
             : Prisma.sql`j.kind::text IN (${Prisma.join(kinds)}) AND j."processorVersion"<>'photo-source-details-v1' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}<>'VIDEO'`;
       const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
-        WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
+        WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"recoveryCount"=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
           FROM "EagleAsset" a WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode" AND j.status='FAILED'
             AND a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode" AND a."mediaRevision"=j."assetRevision"
             AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate") AND ${condition} RETURNING j."assetId",j."assetRevision"

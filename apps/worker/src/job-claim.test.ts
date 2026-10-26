@@ -20,6 +20,7 @@ function job(
     assetRevision: 0,
     processorVersion: 'v1',
     attempts: 0,
+    recoveryCount: 0,
     leaseVersion: 0,
     availableAt: now,
     lockedAt: null,
@@ -53,7 +54,7 @@ test('claims an interactive job before an older background backlog', async () =>
 
   const claimed = await claimNextMediaJob(client, {
     now: new Date('2026-08-17T00:05:00.000Z'),
-    canClaimBackground: async () => true,
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true,
   });
 
   assert.equal(claimed?.id, 'interactive');
@@ -81,7 +82,7 @@ test('continues within the highest-priority lane after a contended candidate', a
 
   const claimed = await claimNextMediaJob(client, {
     now: new Date('2026-08-17T00:05:00.000Z'),
-    canClaimBackground: async () => true,
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true,
   });
 
   assert.equal(claimed?.id, 'second');
@@ -110,7 +111,7 @@ test('skips disallowed background work and falls through to maintenance', async 
 
   const claimed = await claimNextMediaJob(client, {
     now: new Date('2026-08-17T00:05:00.000Z'),
-    canClaimBackground: async () => false,
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => false,
   });
 
   assert.equal(claimed?.id, 'maintenance');
@@ -132,7 +133,7 @@ test('only queries jobs whose dependency completed successfully', async () => {
 
   await claimNextMediaJob(client, {
     now: new Date('2026-08-17T00:05:00.000Z'),
-    canClaimBackground: async () => true,
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true,
   });
 
   assert.deepEqual(capturedWhere, {
@@ -167,7 +168,7 @@ test('passes the background job kind into the independent scheduling decision', 
   };
 
   await claimNextMediaJob(client, {
-    canClaimBackground: async (ownerId, kind) => {
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async (ownerId, kind) => {
       checked.push({ ownerId, kind });
       return true;
     },
@@ -197,7 +198,7 @@ test('a paused AI backlog cannot hide ordinary background work', async () => {
   };
 
   const claimed = await claimNextMediaJob(client, {
-    canClaimBackground: async (_ownerId, kind) => kind !== 'GENERATE_AI_TAGS',
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async (_ownerId, kind) => kind !== 'GENERATE_AI_TAGS',
   });
 
   assert.equal(claimed?.id, 'embedding');
@@ -215,7 +216,7 @@ test('background permission is checked against the candidate library', async () 
     },
   };
   await claimNextMediaJob(client, {
-    canClaimBackground: async (...args) => {
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async (...args) => {
       checked.push(args);
       return true;
     },
@@ -237,7 +238,7 @@ test('disabled processor versions are excluded before the limited claim scan', a
   };
   await claimNextMediaJob(client, {
     excludedProcessorVersions: ['camera-video-playback-v1'],
-    canClaimBackground: async () => true,
+    onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true,
   });
   assert.ok(filters.length > 0);
   assert.ok(
@@ -258,6 +259,6 @@ test('stale windows cannot resurrect terminal jobs or steal live leases', async 
     updateMany: async () => { writes++; return {count: 1}; },
     findUniqueOrThrow: async () => job('done', 'INTERACTIVE'),
   }};
-  assert.equal(await claimNextMediaJob(client, { now, canClaimBackground: async () => true }), null);
+  assert.equal(await claimNextMediaJob(client, { now, onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true }), null);
   assert.equal(writes, 0);
 });

@@ -37,7 +37,7 @@ test('the database query excludes paused job kinds before the bounded candidate 
     },
   };
   const allowedJobKinds = ['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING'] as const;
-  await claimNextMediaJob(client, { allowedJobKinds, canClaimBackground: async () => true });
+  await claimNextMediaJob(client, { allowedJobKinds, onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true });
   assert.equal(queries.length, 3);
   assert.deepEqual(
     queries.map((q) => q.where.kind),
@@ -64,7 +64,7 @@ test('legacy AI tag selection is excluded even when an old caller explicitly all
         },
       },
     },
-    { allowedJobKinds: ['GENERATE_AI_TAGS'], canClaimBackground: async () => true },
+    { allowedJobKinds: ['GENERATE_AI_TAGS'], onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true },
   );
   assert.deepEqual(kinds, Array(3).fill({ not: 'GENERATE_AI_TAGS', in: ['GENERATE_AI_TAGS'] }));
 });

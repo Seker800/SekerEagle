@@ -34,7 +34,7 @@ test('presentation distinguishes all-blocked from mixed runnable work', () => {
   assert.equal(taskGroupPresentation({ ...group, id: 'APPROVALS', queued: 0, approval: 1 }, schedule).status, 'WAITING');
 });
 test('claim rejects terminal, future, live and corrupt leases at the shared expiry boundary', () => {
-  const pending = { status: 'PENDING', availableAt: now, lockedAt: null, startedAt: null, attempts: 0, leaseVersion: 2 };
+  const pending = { status: 'PENDING', availableAt: now, lockedAt: null, startedAt: null, attempts: 0, leaseVersion: 2, recoveryCount: 0 };
   assert.equal(mediaClaimTransition(pending, now)?.data.leaseVersion.increment, 1);
   assert.equal(mediaClaimTransition({ ...pending, availableAt: new Date(now.getTime()+1) }, now), null);
   assert.equal(mediaClaimTransition({ ...pending, status: 'FAILED' }, now), null);

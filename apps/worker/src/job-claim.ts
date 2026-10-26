@@ -44,6 +44,7 @@ interface ClaimUpdateInput {
     lockedAt: Date;
     startedAt: Date;
     attempts: { increment: 1 };
+    recoveryCount: { increment: number };
     leaseVersion: { increment: 1 };
   };
 }
@@ -57,6 +58,7 @@ export interface MediaJobClaimClient {
 }
 
 interface ClaimMediaJobOptions {
+  onLeaseExhausted(job: EagleAssetProcessingJob): Promise<void>;
   selectCandidates?: (input: ClaimFindManyInput) => Promise<EagleAssetProcessingJob[]>;
   now?: Date;
   excludedProcessorVersions?: string[];
@@ -120,6 +122,10 @@ export async function claimNextMediaJob(
       }
       const transition = mediaClaimTransition(candidate, now);
       if (!transition) continue;
+      if (transition.exhausted) {
+        await options.onLeaseExhausted(candidate);
+        continue;
+      }
       const claimed = await client.eagleAssetProcessingJob.updateMany({
         where: { id: candidate.id, ...transition.where },
         data: transition.data,
