@@ -8,7 +8,8 @@ const contract = { model: 'Qwen/Qwen3-VL-Embedding-2B', revision: 'fixed', dimen
 const node = (id, extra = {}) => ({
   id,
   name: id,
-  url: 'http://127.0.0.1:11435',
+  url: id==='mac'?'http://127.0.0.1:11435':'http://127.0.0.1:11436',
+  hostId:'test-host',hostMaxConcurrent:8,
   token: 'local-test-token',
   accelerator: 'metal',
   operations: ['embedding'],
@@ -230,4 +231,22 @@ test('invalid persisted policies cannot bypass enrolled capacity after restart',
   const restarted = new Fleet({ directory, contract, now: () => 100000 });
   await assert.rejects(restarted.initialize(), /INVALID_STATE/);
   assert.equal(fleet.snapshot().revision, 0);
+});
+
+test('initial validation never persists duplicate IDs or endpoints',async t=>{
+ const directory=await mkdtemp(join(tmpdir(),'eagle-init-'));t.after(()=>rm(directory,{recursive:true,force:true}));const fleet=new Fleet({directory,contract});
+ await assert.rejects(fleet.initialize([node('mac'),node('mac')]),/DUPLICATE/);
+ await assert.rejects(readFile(join(directory,'state.json')),/ENOENT/);
+ await fleet.initialize([node('mac')]);
+ await assert.rejects(fleet.enroll({expectedRevision:0,node:node('other',{url:'http://127.0.0.1:11435'})}),/DUPLICATE/);
+});
+test('restart waits for actual prior compute and rejects an undersized backend',async t=>{
+ const {fleet}=await fixture(t);fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:1,limit:3}});assert.equal(fleet.acquire('embedding',true),null);
+ fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:1}});assert.equal(fleet.snapshot().nodes[0].health,'DRIFTED');
+ fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:3}});assert.ok(fleet.acquire('embedding',true));
+});
+test('separate endpoints on one physical host share a hard cap and search reserve',async t=>{
+ const {fleet}=await fixture(t,[node('mac',{hostId:'box',hostMaxConcurrent:3,maxConcurrent:2}),node('media',{hostId:'box',hostMaxConcurrent:3,maxConcurrent:2,reserveInteractive:0,accelerator:'cpu',operations:['image']})]);
+ fleet.markHealth('mac',{...contract,status:'ready',metal:true,capacity:{inFlight:0,limit:2}});fleet.markHealth('media',{status:'ready',protocol:'sekereagle-media-v1',operations:['image'],capacity:{inFlight:0,limit:2}});
+ const a=fleet.acquire('embedding',false),b=fleet.acquire('image',false);assert.ok(a&&b);assert.equal(fleet.acquire('image',false),null);assert.ok(fleet.acquire('embedding',true));assert.equal(fleet.acquire('image',true),null);
 });

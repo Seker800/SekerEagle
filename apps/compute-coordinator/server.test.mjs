@@ -158,3 +158,8 @@ test('busy upstream quarantines node without consuming another node', async (t) 
   );
   assert.equal(fleet.snapshot().nodes[0].health, 'OFFLINE');
 });
+
+test('invalid enrollment inputs return 400 without mutating the fleet',async t=>{
+ const {call,fleet}=await setup(t);assert.equal((await call('/admin/enroll','management-token','null')).status,400);
+ assert.equal((await call('/admin/enroll','management-token',{expectedRevision:0,node:{id:'new',name:'New',url:'not-a-url'}})).status,400);assert.equal(fleet.snapshot().revision,0);
+});
