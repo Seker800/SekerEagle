@@ -36,7 +36,6 @@ export function mediaBlocksAssetReadySql(kind: Prisma.Sql, version: Prisma.Sql) 
   return Prisma.sql`${kind}::text IN (${Prisma.join(MEDIA_BROWSE_BLOCKING_KINDS)}) AND ${mediaTaskFamilySql(kind, version)}='BROWSE'`;
 }
 
-
 /** Capacity hints expire with the task's retry deadline; they never describe host health. */
 export function taskBackoffFactsSql(availableAt: Prisma.Sql, errorCode?: Prisma.Sql) {
   const retryPending = Prisma.sql`${availableAt}>now()`;
@@ -50,7 +49,10 @@ export function taskBackoffFactsSql(availableAt: Prisma.Sql, errorCode?: Prisma.
 
 /** Trusted SQL aliases only. Both queue selection and overview consume these column facts. */
 export function mediaTaskFactsSql(job: Prisma.Sql, dependency: Prisma.Sql) {
-  const backoff = taskBackoffFactsSql(Prisma.sql`${job}."availableAt"`, Prisma.sql`${job}."lastError"`);
+  const backoff = taskBackoffFactsSql(
+    Prisma.sql`${job}."availableAt"`,
+    Prisma.sql`${job}."lastError"`,
+  );
   return {
     dependencyFailed: Prisma.sql`COALESCE(${dependency}.status='FAILED', false)`,
     dependencyPending: Prisma.sql`${job}."dependsOnJobId" IS NOT NULL AND ${dependency}.status IS DISTINCT FROM 'COMPLETED'`,

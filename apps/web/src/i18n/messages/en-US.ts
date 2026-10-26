@@ -260,6 +260,7 @@ export const enUS = {
   等待运行时段: 'Waiting for scheduled hours',
   当前部署未启用: 'Disabled in this deployment',
   等待处理服务上线: 'Waiting for the processing service',
+  等待模型空闲: 'Waiting for model capacity',
   等待自动重试: 'Waiting for automatic retry',
   清理回收站资源: 'Purge trashed resources',
   删除存储对象: 'Delete storage objects',

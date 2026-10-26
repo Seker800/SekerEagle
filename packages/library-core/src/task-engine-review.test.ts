@@ -60,12 +60,39 @@ test('model-dependent folder work waits for its host without blocking matching o
   );
 });
 
-
 test('capacity wait has an expiry and never implies the host is offline', () => {
   const nextAt = '2026-10-26T04:00:01.000Z';
-  const worker = { background: true, embedding: 'READY', jobKinds: null, video: true, tagBuilds: true, smartFolders: true, photoMap: true };
-  const input = { family: 'EMBEDDING' as const, step: 'GENERATE_EMBEDDING', reason: 'MODEL_BUSY' as const, nextAt, paused: false, approval: false, workers: [worker], schedule, now: new Date('2026-10-26T04:00:00Z') };
+  const worker = {
+    background: true,
+    embedding: 'READY',
+    jobKinds: null,
+    video: true,
+    tagBuilds: true,
+    smartFolders: true,
+    photoMap: true,
+  };
+  const input = {
+    family: 'EMBEDDING' as const,
+    step: 'GENERATE_EMBEDDING',
+    reason: 'MODEL_BUSY' as const,
+    nextAt,
+    paused: false,
+    approval: false,
+    workers: [worker],
+    schedule,
+    now: new Date('2026-10-26T04:00:00Z'),
+  };
   assert.deepEqual(taskBucketDecision(input), { runnable: false, reason: 'MODEL_BUSY', nextAt });
-  assert.equal(taskBucketDecision({ ...input, workers: [{ ...worker, embedding: 'OFFLINE' }] }).reason, 'MODEL_OFFLINE');
-  assert.equal(taskGroupPresentation({ ...group, waiting: [{ reason: 'MODEL_BUSY', count: 3, nextAt }] }, schedule, 'READY').reason, 'MODEL_BUSY');
+  assert.equal(
+    taskBucketDecision({ ...input, workers: [{ ...worker, embedding: 'OFFLINE' }] }).reason,
+    'MODEL_OFFLINE',
+  );
+  assert.equal(
+    taskGroupPresentation(
+      { ...group, waiting: [{ reason: 'MODEL_BUSY', count: 3, nextAt }] },
+      schedule,
+      'READY',
+    ).reason,
+    'MODEL_BUSY',
+  );
 });

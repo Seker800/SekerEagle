@@ -553,7 +553,7 @@ test('decision SQL and core agree for every combination of wait gates', async ()
   const { TASK_GATES, decideTask } = await import('../../packages/library-core/dist/index.js');
   const { taskWaitReasonSql, taskRunnableSql } =
     await import('../../packages/library-persistence/dist/index.js');
-  // One SQL batch checks all 1024 combinations, including precedence collisions.
+  // One SQL batch checks all gate combinations, including precedence collisions.
   const cases = Array.from({ length: 1 << TASK_GATES.length }, (_, mask) => {
     const facts = Object.fromEntries(
       TASK_GATES.map(([gate], index) => [gate, Boolean(mask & (1 << index))]),
@@ -790,4 +790,79 @@ test('an exhausted stale snapshot cannot fail an execution which renewed its hea
     where: { id: job.id },
     data: { status: 'COMPLETED' },
   });
+});
+
+test('overview and claim share expiring capacity, dependency and retry facts', async () => {
+  const f = await fixture();
+  await prisma.eagleProcessingSetting.create({
+    data: { ownerId: f.owner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  const workerId = randomUUID();
+  await prisma.eagleProcessingWorkerHeartbeat.create({
+    data: {
+      workerId,
+      version: 'synthetic',
+      startedAt: new Date(),
+      heartbeatAt: new Date(),
+      activeJobCount: 0,
+      capabilities: {
+        background: true,
+        embedding: 'READY',
+        jobKinds: null,
+        video: true,
+        tagBuilds: true,
+        smartFolders: true,
+        photoMap: true,
+      },
+    },
+  });
+  try {
+    const busy = await f.job(await f.asset(), {
+      availableAt: new Date('2100-01-01Z'),
+      lastError: 'WAITING_EMBEDDING_CAPACITY',
+    });
+    const expired = await f.job(await f.asset(), {
+      availableAt: new Date('2000-01-01Z'),
+      lastError: 'WAITING_EMBEDDING_CAPACITY',
+    });
+    await f.job(await f.asset({ isPrivate: true }), {
+      availableAt: new Date('2100-01-01Z'),
+      lastError: 'WAITING_EMBEDDING_CAPACITY',
+    });
+    const dependency = await f.job(await f.asset(), { kind: 'PROBE_MEDIA', status: 'FAILED' });
+    const blocked = await f.job(await f.asset(), {
+      dependsOnJobId: dependency.id,
+      availableAt: new Date('2100-01-01Z'),
+      lastError: 'WAITING_EMBEDDING_CAPACITY',
+    });
+    const group = (await f.service.overview(f.owner)).groups.find((g) => g.id === 'EMBEDDING');
+    assert.equal(group.waiting.find((w) => w.reason === 'MODEL_BUSY').count, 1);
+    assert.equal(group.waiting.find((w) => w.reason === 'DEPENDENCY_FAILED').count, 1);
+    assert.equal(group.waiting.find((w) => w.reason === 'QUEUED').count, 1);
+    assert.equal(group.presentation.status, 'QUEUED');
+    const candidates = () =>
+      selectScheduledMediaCandidates(
+        prisma,
+        { where: { lane: 'BACKGROUND' }, take: 10000 },
+        true,
+        false,
+        { resource: 'EMBEDDING' },
+      );
+    let own = (await candidates()).filter((j) => j.ownerId === f.owner);
+    assert.ok(own.some((j) => j.id === expired.id));
+    assert.ok(!own.some((j) => j.id === busy.id || j.id === blocked.id));
+    await prisma.eagleAssetProcessingJob.update({
+      where: { id: busy.id },
+      data: { availableAt: new Date('2000-01-01Z') },
+    });
+    own = (await candidates()).filter((j) => j.ownerId === f.owner);
+    assert.ok(own.some((j) => j.id === busy.id));
+    assert.ok(
+      !(await f.service.overview(f.owner)).groups
+        .find((g) => g.id === 'EMBEDDING')
+        .waiting.some((w) => w.reason === 'MODEL_BUSY'),
+    );
+  } finally {
+    await prisma.eagleProcessingWorkerHeartbeat.delete({ where: { workerId } });
+  }
 });

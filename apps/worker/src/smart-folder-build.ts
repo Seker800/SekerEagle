@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { embeddingRetry } from './embedding-retry';
+import { embeddingBackoff } from './embedding-retry';
 import { Prisma, type PrismaClient, type EagleSmartFolderSemanticSnapshot } from '@prisma/client';
 import {
   scheduleSmartFolderSnapshot,
@@ -171,19 +171,18 @@ export async function runSmartFolderBuildStep(
       { timeout: 30_000, maxWait: 5_000 },
     );
   } catch (error) {
-    // Folder attempts increment on failure, whereas media/tag attempts increment at claim.
-    const retry = embeddingRetry(error, build.attempts + 1);
-    const attempts = retry ? retry.data.attempts : build.attempts + 1;
+    const backoff = embeddingBackoff(error);
+    const attempts = build.attempts + (backoff ? 0 : 1);
     await client.eagleSmartFolderSemanticSnapshot.updateMany({
       where: { id: build.id, leaseToken: token },
       data: {
-        ...(retry
-          ? { status: 'PENDING', availableAt: retry.data.availableAt }
+        ...(backoff
+          ? { status: 'PENDING', availableAt: new Date(Date.now() + backoff.delayMs) }
           : smartFolderRetry(attempts)),
         attempts,
         lockedUntil: null,
         leaseToken: null,
-        errorCode: retry ? retry.data.lastError : 'BUILD_UNAVAILABLE',
+        errorCode: backoff ? backoff.reason : 'BUILD_UNAVAILABLE',
       },
     });
   }

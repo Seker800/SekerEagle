@@ -35,16 +35,23 @@ let releaseNas,
 const nasGate = new Promise((resolve) => {
   releaseNas = resolve;
 });
+let healthChecks = 0,
+  modelRequests = 0;
 let detailRanges = [],
   detailPreviewReads = 0;
 const detailOriginalSize = 20_000_000;
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1');
   if (url.pathname === '/healthz') {
+    healthChecks++;
     res.setHeader('content-type', 'application/json');
     res.end(JSON.stringify({ status: 'ready', model, revision, dimensions: 1024, metal: true }));
   } else if (url.pathname === '/v1/embeddings/image') {
     for await (const chunk of req) void chunk;
+    if (++modelRequests === 1) {
+      req.socket.destroy();
+      return;
+    }
     res.setHeader('content-type', 'application/json');
     res.end(
       JSON.stringify({
@@ -175,6 +182,35 @@ try {
       availableAt: new Date(0),
     },
   });
+  // A failed request must not park unrelated vector work until the next health probe.
+  const sibling = await makeAsset('vector-sibling');
+  await db.eagleAssetRendition.create({
+    data: {
+      ownerId,
+      libraryMode: 'MATERIAL',
+      assetId: sibling.id,
+      revision: 1,
+      kind: 'PREVIEW',
+      variant: 'default',
+      status: 'READY',
+      mimeType: 'image/jpeg',
+      byteSize: pixels.length,
+      storageKey: `users/${ownerId}/assets/vector-sibling/preview.jpg`,
+      width: 128,
+      height: 96,
+    },
+  });
+  const siblingJob = await db.eagleAssetProcessingJob.create({
+    data: {
+      ownerId,
+      libraryMode: 'MATERIAL',
+      assetId: sibling.id,
+      assetRevision: 1,
+      kind: 'GENERATE_EMBEDDING',
+      lane: 'BACKGROUND',
+      availableAt: new Date(0),
+    },
+  });
   const env = {
     ...process.env,
     S3_ENDPOINT: endpoint,
@@ -205,13 +241,20 @@ try {
   await waitFor(
     async () =>
       receivedNas &&
-      (await db.eagleAssetProcessingJob.findUnique({ where: { id: vectorJob.id } })).status ===
-        'COMPLETED',
+      (await db.eagleAssetProcessingJob.count({
+        where: { id: { in: [vectorJob.id, siblingJob.id] }, status: 'COMPLETED' },
+      })) === 1,
   );
   assert.equal(
     (await db.eagleAssetProcessingJob.findUnique({ where: { id: nasJob.id } })).status,
     'PROCESSING',
   );
+  assert.equal(healthChecks, 1, 'A single request failure must not wait for another health probe');
+  const deferredVector = await db.eagleAssetProcessingJob.findFirstOrThrow({
+    where: { id: { in: [vectorJob.id, siblingJob.id] }, status: 'PENDING' },
+  });
+  assert.equal(deferredVector.lastError, 'WAITING_EMBEDDING_HOST');
+  assert.equal(deferredVector.attempts, 0);
   const finished = once(worker, 'exit');
   worker.kill('SIGTERM');
   releaseNas();
@@ -221,7 +264,7 @@ try {
     'COMPLETED',
   );
   log(
-    'Real worker overlap passed: vector completed while NAS image input was blocked; graceful drain completed NAS work.',
+    'Real worker overlap passed: a failed vector request did not stop its sibling or wait for a health probe; NAS input remained independently blocked and drained gracefully.',
   );
   const detailAsset = await db.eagleAsset.create({
     data: {

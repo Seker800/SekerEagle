@@ -118,3 +118,23 @@ it('uses the server decision instead of reinterpreting its status from browser f
     '等待处理服务',
   );
 });
+
+it('shows a bounded model capacity wait without claiming the host is offline', async () => {
+  const { taskWaitLabel, taskStatusLabel } = await import('./task-center-labels');
+  expect(taskWaitLabel('MODEL_BUSY')).toBe('等待模型空闲');
+  const group = {
+    id: 'EMBEDDING',
+    background: true,
+    queued: 1,
+    running: 0,
+    failed: 0,
+    completed: 0,
+    approval: 0,
+    waiting: [],
+    steps: [],
+    presentation: { status: 'WAITING', section: 'IMMEDIATE', reason: 'MODEL_BUSY' },
+  } as TaskGroup;
+  expect(taskStatusLabel(group, { mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' })).toBe(
+    '等待模型空闲',
+  );
+});
