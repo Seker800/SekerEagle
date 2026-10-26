@@ -267,10 +267,10 @@ def test_cancelled_http_request_holds_capacity_until_compute_finishes(monkeypatc
                 finish.set()
             # All three callbacks must return their slot even though their callers left.
             for _ in range(100):
-                if service.inference_slots._value == 3:
+                if service.inference_slots.snapshot()["available"] == 3:
                     break
                 await asyncio.sleep(0.01)
-            assert service.inference_slots._value == 3
+            assert service.inference_slots.snapshot()["available"] == 3
             assert (await client.post("/v1/embeddings/text", json={"text": "汽车"}, headers=headers)).status_code == 200
 
     asyncio.run(exercise())

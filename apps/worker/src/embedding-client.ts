@@ -1,14 +1,21 @@
 export type EmbeddingClientErrorCode =
-  'PAYLOAD_TOO_LARGE' | 'HOST_UNAVAILABLE' | 'INVALID_RESPONSE' | 'MODEL_DRIFT';
+  | 'PAYLOAD_TOO_LARGE'
+  | 'HOST_UNAVAILABLE'
+  | 'HOST_BUSY'
+  | 'UPLOAD_TIMEOUT'
+  | 'INVALID_RESPONSE'
+  | 'MODEL_DRIFT';
 
 export class EmbeddingClientError extends Error {
+  readonly retryAfterMs?: number;
   constructor(
     readonly code: EmbeddingClientErrorCode,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { retryAfterMs?: number },
   ) {
     super(message, options);
     this.name = 'EmbeddingClientError';
+    this.retryAfterMs = options?.retryAfterMs;
   }
 }
 
@@ -121,6 +128,16 @@ export class EmbeddingClient {
     } finally {
       clearTimeout(timer);
     }
+    if (response.status === 503 || response.status === 429) {
+      throw new EmbeddingClientError('HOST_BUSY', 'Embedding capacity is busy.', {
+        retryAfterMs: boundedRetryAfter(response.headers.get('retry-after')),
+      });
+    }
+    if (response.status === 408) {
+      throw new EmbeddingClientError('UPLOAD_TIMEOUT', 'Embedding upload timed out.', {
+        retryAfterMs: 1000,
+      });
+    }
     if (!response.ok) {
       throw new EmbeddingClientError(
         response.status >= 500 ? 'HOST_UNAVAILABLE' : 'INVALID_RESPONSE',
@@ -161,4 +178,15 @@ export class EmbeddingClient {
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
+}
+
+/** HTTP Retry-After supports seconds and dates; never trust it to park work indefinitely. */
+function boundedRetryAfter(value: string | null): number {
+  if (!value) return 1000;
+  const seconds = /^\d+$/.test(value.trim())
+    ? Number(value)
+    : (Date.parse(value) - Date.now()) / 1000;
+  return Number.isFinite(seconds)
+    ? Math.min(30000, Math.max(1000, Math.ceil(seconds * 1000)))
+    : 1000;
 }

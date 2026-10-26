@@ -30,6 +30,7 @@ MAX_BODY_BYTES = int(os.getenv("MLX_EMBEDDING_MAX_PAYLOAD_BYTES", str(20 * 1024 
 TOKEN = os.getenv("MLX_EMBEDDING_TOKEN", "")
 IDLE_UNLOAD_SECONDS = max(0, int(os.getenv("MLX_EMBEDDING_IDLE_UNLOAD_SECONDS", "900")))
 ALLOWED_IMAGE_FORMATS = ("JPEG", "PNG", "WEBP")
+BODY_READ_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass
@@ -45,7 +46,32 @@ class Runtime:
 runtime = Runtime()
 # One dedicated MLX thread: GPU compute stays serial while HTTP receives the next image.
 inference_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-inference")
-inference_slots = threading.BoundedSemaphore(3)
+class InferenceAdmission:
+    """Bound both receiving and computing requests; expose a consistent health snapshot."""
+    def __init__(self, limit: int):
+        self.limit = limit
+        self.in_flight = 0
+        self.lock = threading.Lock()
+
+    def try_acquire(self) -> bool:
+        with self.lock:
+            if self.in_flight >= self.limit:
+                return False
+            self.in_flight += 1
+            return True
+
+    def release(self) -> None:
+        with self.lock:
+            if self.in_flight <= 0:
+                raise ValueError("inference admission released more than once")
+            self.in_flight -= 1
+
+    def snapshot(self) -> dict[str, int]:
+        with self.lock:
+            return {"limit": self.limit, "inFlight": self.in_flight, "available": self.limit - self.in_flight}
+
+
+inference_slots = InferenceAdmission(3)
 
 
 def submit_inference(function, value):
@@ -60,7 +86,7 @@ def submit_inference(function, value):
 
 
 def admit_inference():
-    if not inference_slots.acquire(blocking=False):
+    if not inference_slots.try_acquire():
         raise HTTPException(status_code=503, detail="inference capacity is busy", headers={"Retry-After": "1"})
 
 
@@ -153,6 +179,7 @@ def healthz(authorization: str | None = Header(default=None)) -> dict[str, objec
         "revision": MODEL_REVISION,
         "dimensions": DIMENSIONS,
         "metal": mx.default_device() == mx.gpu,
+        "capacity": inference_slots.snapshot(),
     }
 
 
@@ -163,10 +190,14 @@ def model_contract(authorization: str | None = Header(default=None)) -> dict[str
 
 async def read_bounded_body(request: Request) -> bytes:
     body = bytearray()
-    async for chunk in request.stream():
-        body.extend(chunk)
-        if len(body) > MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail="image payload is too large")
+    try:
+        async with asyncio.timeout(BODY_READ_TIMEOUT_SECONDS):
+            async for chunk in request.stream():
+                body.extend(chunk)
+                if len(body) > MAX_BODY_BYTES:
+                    raise HTTPException(status_code=413, detail="image payload is too large")
+    except TimeoutError as error:
+        raise HTTPException(status_code=408, detail="image upload timed out", headers={"Connection": "close"}) from error
     if not body:
         raise HTTPException(status_code=413, detail="image payload is empty")
     return bytes(body)

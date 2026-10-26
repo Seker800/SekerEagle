@@ -6,7 +6,7 @@ import { embeddingRetry } from './embedding-retry';
 test('busy capacity and interrupted uploads preserve attempts and do not close the vector channel', () => {
   const now = new Date('2026-10-26T01:00:00Z');
   for (const code of ['HOST_BUSY', 'UPLOAD_TIMEOUT'] as const) {
-    const error = Object.assign(new EmbeddingClientError(code as never, 'temporary'), {
+    const error = Object.assign(new EmbeddingClientError(code, 'temporary'), {
       retryAfterMs: 1000,
     });
     const retry = embeddingRetry(error, 1, now);

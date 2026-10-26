@@ -72,7 +72,8 @@ import {
   isPermanentMediaValidationError,
   PermanentMediaValidationError,
 } from './media-validation-error';
-import { EmbeddingClient, EmbeddingClientError } from './embedding-client';
+import { EmbeddingClient } from './embedding-client';
+import { embeddingRetry } from './embedding-retry';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
 import {
   JobWakeScheduler,
@@ -1016,17 +1017,12 @@ async function recomputeSuggestionGeneration(
 }
 
 async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
-  if (error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE') {
-    embeddingReadiness = 'OFFLINE';
+  const retry = embeddingRetry(error, build.attempts);
+  if (retry) {
+    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
-      data: {
-        status: 'PENDING',
-        attempts: Math.max(0, build.attempts - 1),
-        availableAt: new Date(Date.now() + 30000),
-        lockedAt: null,
-        lastError: 'WAITING_EMBEDDING_HOST',
-      },
+      data: retry.data,
     });
     return;
   }
@@ -1190,17 +1186,12 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 }
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
-  if (error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE') {
-    embeddingReadiness = 'OFFLINE';
+  const retry = embeddingRetry(error, job.attempts);
+  if (retry) {
+    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleAssetProcessingJob.updateMany({
       where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: {
-        status: 'PENDING',
-        attempts: Math.max(0, job.attempts - 1),
-        availableAt: new Date(Date.now() + 30000),
-        lockedAt: null,
-        lastError: 'WAITING_EMBEDDING_HOST',
-      },
+      data: retry.data,
     });
     return;
   }
