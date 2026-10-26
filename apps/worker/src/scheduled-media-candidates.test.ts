@@ -307,3 +307,13 @@ test('freshness resolves only uploads inside the priority horizon, never the ent
   assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
   assert.match(query, /current_upload\."libraryMode"=a\."libraryMode"/);
 });
+
+test('remote image selection excludes video before the window and leaves NAS video eligible',async()=>{
+ const queries:string[]=[];const client={$queryRaw:async(q:{text:string})=>{queries.push(q.text);return [];}} as never;
+ const remote=createScheduledMediaSelector(client,()=>false,'REMOTE_MEDIA');
+ await remote({where:{lane:'INTERACTIVE'},take:50} as ClaimFindManyInput);
+ assert.match(queries[0]!,/a\."mimeType" LIKE 'image\/%'/);
+ const local=createScheduledMediaSelector(client,()=>false,'NAS',()=>['GENERATE_RENDITIONS']);
+ await local({where:{lane:'INTERACTIVE'},take:50} as ClaimFindManyInput);
+ assert.match(queries.at(-1)!,/NOT \(a\."mimeType" LIKE 'image\/%' AND job\.kind IN/);
+});
