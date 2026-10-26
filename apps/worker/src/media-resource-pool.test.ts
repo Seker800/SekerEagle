@@ -311,3 +311,9 @@ test('remote media has separate capacity and cannot increase NAS execution', asy
   assert.equal(remote, 2);
   end();
 });
+
+test('backpressure pauses the entire resource briefly, not just the rejected job',async t=>{
+ t.mock.timers.enable({apis:['Date','setTimeout']});let wakes=0,claims=0;const pool=new MediaResourcePool(1,()=>{wakes++;},()=>{},2);
+ pool.defer('EMBEDDING',1000);await pool.fill('EMBEDDING',async()=>{claims++;return null;},async()=>{});assert.equal(claims,0);
+ t.mock.timers.tick(1000);await pool.fill('EMBEDDING',async()=>{claims++;return null;},async()=>{});assert.equal(claims,1);assert.ok(wakes>0);
+});
