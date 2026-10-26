@@ -105,6 +105,14 @@ export function EagleTaskCenter({
       await client.invalidateQueries({ queryKey: key });
     },
   });
+  const start = useMutation({
+    mutationFn: ({ mode, family }: { mode: LibraryMode; family: TaskFamily }) =>
+      apiFor(mode).startEagleTaskFamily(family),
+    onSuccess: async (result) => {
+      setNotice(t('已加入 {{value1}} 个本地人脸分析任务', { value1: result.queued }));
+      await client.invalidateQueries({ queryKey: key });
+    },
+  });
   const policy = useMutation({
     mutationFn: ({ mode, ...input }: { mode: LibraryMode; family: TaskFamily; paused: boolean }) =>
       apiFor(mode).updateEagleTaskPolicy(input),
@@ -149,7 +157,7 @@ export function EagleTaskCenter({
           nightEnd: summary.settings.nightEnd,
         }
       : null);
-  const error = save.error ?? retry.error ?? policy.error ?? query.error;
+  const error = save.error ?? retry.error ?? policy.error ?? start.error ?? query.error;
   const modelStates = entries.flatMap(({ summary: entry }) => {
     const affected = entry.groups.some(
       (group) =>
@@ -335,7 +343,8 @@ export function EagleTaskCenter({
                       embedding={card.embedding}
                       schedule={card.schedule}
                       mode={card.mode}
-                      busy={retry.isPending || policy.isPending}
+                      busy={retry.isPending || policy.isPending || start.isPending}
+                      onStart={() => start.mutate({ mode: card.mode, family: card.group.id })}
                       onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
                       onPolicy={(paused) =>
                         policy.mutate({ mode: card.mode, family: card.group.id, paused })
@@ -404,6 +413,7 @@ function TaskCard({
   mode,
   busy,
   onRetry,
+  onStart,
   onPolicy,
   onReview,
 }: {
@@ -413,6 +423,7 @@ function TaskCard({
   mode: LibraryMode;
   busy: boolean;
   onRetry: () => void;
+  onStart?: () => void;
   onPolicy: (paused: boolean) => void;
   onReview?: () => void;
 }) {
@@ -457,6 +468,9 @@ function TaskCard({
       </header>
       <div className={styles.cardBody}>
         <div className={styles.progress}>
+          {(group.unscanned ?? 0) > 0 && (
+            <span>{t('未扫描 {{count}} 张', { count: group.unscanned })}</span>
+          )}
           {remaining > 0 &&
             !(state === 'STOPPED' && remaining === group.failed) &&
             group.id !== 'APPROVALS' && <span>{t('剩余 {{count}} 项', { count: remaining })}</span>}
@@ -477,6 +491,11 @@ function TaskCard({
           )}
         </div>
         <div className={styles.actions}>
+          {group.id === 'FACES' && (group.unscanned ?? 0) > 0 && (
+            <button type="button" disabled={busy || disabled || !onStart} onClick={onStart}>
+              {t('扫描未分析照片')}
+            </button>
+          )}
           {group.failed > 0 && retryable && (
             <button type="button" disabled={busy} onClick={onRetry}>
               {t('重试失败任务')}
@@ -487,11 +506,14 @@ function TaskCard({
               {t('去审批')}
             </button>
           )}
-          {group.background && !disabled && schedule.mode !== 'MANUAL' && (
-            <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
-              {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
-            </button>
-          )}
+          {group.background &&
+            !disabled &&
+            schedule.mode !== 'MANUAL' &&
+            (remaining > 0 || group.policy?.paused) && (
+              <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
+                {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
+              </button>
+            )}
         </div>
       </div>
       {group.id !== 'APPROVALS' && (

@@ -1,0 +1,178 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { test } from 'node:test';
+import { PrismaClient } from '@prisma/client';
+import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
+import {
+  queuePhotoFaceScan,
+  PHOTO_FACE_MODEL_VERSION,
+} from '../../packages/library-persistence/dist/index.js';
+import { EagleTaskCenterService } from '../../apps/api/dist/eagle/eagle-task-center.service.js';
+import { selectScheduledMediaCandidates } from '../../apps/worker/dist/scheduled-media-candidates.js';
+
+assertSafeRuntimeTarget({
+  databaseUrl: process.env.DATABASE_URL,
+  s3Endpoint: process.env.S3_ENDPOINT,
+  s3Bucket: process.env.S3_BUCKET,
+});
+assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
+const db = new PrismaClient();
+test('full scan is durable, idempotent, scoped, versioned and governed by existing pause rules', async () => {
+  const owner = randomUUID(),
+    other = randomUUID();
+  const previous = [process.env.PHOTO_FACE_PYTHON, process.env.PHOTO_FACE_MODEL_DIR];
+  process.env.PHOTO_FACE_PYTHON = 'synthetic-python';
+  process.env.PHOTO_FACE_MODEL_DIR = '/synthetic';
+  try {
+    await db.user.createMany({
+      data: [owner, other].map((id) => ({
+        id,
+        email: `${id}@example.invalid`,
+        passwordHash: 'synthetic-only',
+      })),
+    });
+    const ordinary = Array.from({ length: 1201 }, () => ({ id: randomUUID() }));
+    const variants = [
+      { isPrivate: true },
+      { ownerId: other },
+      { libraryMode: 'MATERIAL' },
+      { deletedAt: new Date() },
+      { noPreview: true },
+      { obsoletePreview: true },
+      { editPreview: true },
+    ].map((v) => ({ id: randomUUID(), ...v }));
+    const assets = [...ordinary, ...variants].map((a) => ({
+      ownerId: owner,
+      libraryMode: 'PHOTO',
+      ...a,
+    }));
+    await db.eagleAsset.createMany({
+      data: assets.map((a) => ({
+        id: a.id,
+        ownerId: a.ownerId,
+        libraryMode: a.libraryMode,
+        isPrivate: a.isPrivate,
+        deletedAt: a.deletedAt,
+        originalName: 'synthetic.jpg',
+        displayName: 'Synthetic',
+        normalizedDisplayName: 'synthetic',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        mediaRevision: 2,
+        lifecycleStatus: 'READY',
+        originalObjectKey: `users/${a.ownerId}/assets/${a.id}/original.jpg`,
+      })),
+    });
+    await db.eagleAssetRendition.createMany({
+      data: assets
+        .filter((a) => !a.noPreview)
+        .map((a) => ({
+          ownerId: a.ownerId,
+          libraryMode: a.libraryMode,
+          assetId: a.id,
+          kind: 'PREVIEW',
+          revision: a.obsoletePreview ? 1 : 2,
+          variant: a.editPreview ? 'edit' : 'default',
+          status: 'READY',
+          storageKey: `users/${a.ownerId}/assets/${a.id}/preview.jpg`,
+          mimeType: 'image/jpeg',
+          byteSize: 1,
+        })),
+    });
+    const service = new EagleTaskCenterService(db, 'PHOTO');
+    const coverage = async () =>
+      (await service.overview(owner)).groups.find((g) => g.id === 'FACES');
+    assert.equal((await coverage()).unscanned, 1201);
+    await service.policy(owner, { family: 'FACES', paused: true });
+    const accepted = await service.start(owner, 'FACES');
+    assert.equal(accepted.queued, 1201);
+    assert.equal((await coverage()).unscanned, 0);
+    assert.equal((await coverage()).queued, 1201);
+    assert.equal((await coverage()).policy.paused, true);
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({
+        where: { ownerId: owner, kind: 'ANALYZE_PHOTO_FACES', lane: 'INTERACTIVE' },
+      }),
+      0,
+    );
+    assert.equal((await queuePhotoFaceScan(db, owner, false)).queued, 0);
+    await assert.rejects(new EagleTaskCenterService(db, 'MATERIAL').start(owner, 'FACES'), {
+      status: 404,
+    });
+    const query = { where: { lane: 'BACKGROUND', kind: 'ANALYZE_PHOTO_FACES' }, take: 1500 };
+    await db.eagleProcessingSetting.create({
+      data: { ownerId: owner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+    });
+    assert.equal(
+      (await selectScheduledMediaCandidates(db, query)).filter((j) => j.ownerId === owner).length,
+      0,
+    );
+    await service.policy(owner, { family: 'FACES', paused: false });
+    assert.equal(
+      (await selectScheduledMediaCandidates(db, query)).filter((j) => j.ownerId === owner).length,
+      1201,
+    );
+    // Completed scans with zero detections are still completed; retries never duplicate a failed job.
+    const first = ordinary[0].id;
+    await db.eagleAssetProcessingJob.updateMany({
+      where: { assetId: first },
+      data: { status: 'COMPLETED', completedAt: new Date() },
+    });
+    await db.eagleAssetProcessingJob.updateMany({
+      where: { assetId: ordinary[1].id },
+      data: { status: 'FAILED', attempts: 5 },
+    });
+    assert.equal((await queuePhotoFaceScan(db, owner, false)).queued, 0);
+    assert.equal((await coverage()).completed, 1);
+    assert.equal((await coverage()).failed, 1);
+    assert.deepEqual(await service.retry(owner, 'FACES'), { retried: 1 });
+    assert.equal((await queuePhotoFaceScan(db, owner, true)).queued, 1);
+    const newConnection = new PrismaClient();
+    try {
+      assert.equal(
+        await newConnection.eagleAssetProcessingJob.count({
+          where: { ownerId: owner, processorVersion: PHOTO_FACE_MODEL_VERSION },
+        }),
+        1202,
+      );
+    } finally {
+      await newConnection.$disconnect();
+    }
+    // Simultaneous starts accept a new eligible version only once.
+    await db.eagleAsset.update({ where: { id: first }, data: { mediaRevision: 3 } });
+    await db.eagleAssetRendition.create({
+      data: {
+        ownerId: owner,
+        libraryMode: 'PHOTO',
+        assetId: first,
+        kind: 'PREVIEW',
+        revision: 3,
+        variant: 'default',
+        status: 'READY',
+        storageKey: `users/${owner}/assets/${first}/preview3.jpg`,
+        mimeType: 'image/jpeg',
+        byteSize: 1,
+      },
+    });
+    const concurrent = await Promise.all([
+      queuePhotoFaceScan(db, owner, false),
+      queuePhotoFaceScan(db, owner, false),
+    ]);
+    assert.equal(
+      concurrent.reduce((sum, result) => sum + result.queued, 0),
+      1,
+    );
+    assert.equal((await coverage()).completed, 0);
+  } finally {
+    await db.eagleAsset.deleteMany({ where: { ownerId: { in: [owner, other] } } });
+    await db.eagleTaskPolicy.deleteMany({ where: { ownerId: owner } });
+    await db.eagleProcessingSetting.deleteMany({ where: { ownerId: owner } });
+    await db.user.deleteMany({ where: { id: { in: [owner, other] } } });
+    await db.$disconnect();
+    for (const [i, key] of ['PHOTO_FACE_PYTHON', 'PHOTO_FACE_MODEL_DIR'].entries()) {
+      if (previous[i] === undefined) delete process.env[key];
+      else process.env[key] = previous[i];
+    }
+  }
+});

@@ -1,6 +1,16 @@
-import { Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Optional,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Prisma, EagleMediaJobKind, type LibraryMode } from '@prisma/client';
-import { mediaTaskFamilySql, lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
+import {
+  mediaTaskFamilySql,
+  lockOwnerPrivacyProjection,
+  queuePhotoFaceScan,
+} from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,
@@ -46,6 +56,14 @@ export class EagleTaskCenterService {
       update: { paused, priority },
       select: { family: true, paused: true, priority: true },
     });
+  }
+
+  async start(ownerId: string, family: TaskFamily, includePrivate = false) {
+    if (this.libraryMode !== 'PHOTO' || family !== 'FACES')
+      throw new NotFoundException('没有可启动的扫描任务。');
+    if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
+      throw new BadRequestException('本地人物模型尚未配置。');
+    return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
   }
 
   async retry(ownerId: string, family: TaskFamily, includePrivate = false) {
@@ -161,6 +179,10 @@ export class EagleTaskCenterService {
         step = { id: bucket.step, ...counts() };
         group.steps.push(step);
       }
+      if (bucket.status === 'UNSCANNED') {
+        group.unscanned = Number(bucket.count);
+        continue;
+      }
       const fields: Record<string, keyof TaskCounts> = {
         QUEUED: 'queued',
         RUNNING: 'running',
@@ -250,6 +272,7 @@ function supports(value: unknown, family: TaskFamily, step: string) {
   if (!value || typeof value !== 'object' || !('background' in value)) return true;
   const capability = value as WorkerTaskCapabilities;
   if (isBackgroundFamily(family) && !capability.background) return false;
+  if (family === 'FACES' && capability.faces === false) return false;
   if (family === 'VIDEO' && !capability.video) return false;
   if (family === 'SMART_FOLDERS') return capability.smartFolders;
   if (family === 'TAG_INDEX') return capability.tagBuilds;

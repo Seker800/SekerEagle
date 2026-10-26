@@ -1,3 +1,5 @@
+import { lockOwnerPrivacyProjection } from './privacy-lock';
+export { lockOwnerPrivacyProjection } from './privacy-lock';
 import { inheritedPrivacyTag } from './privacy-tag';
 export { inheritedPrivacyTag } from './privacy-tag';
 export * from './media-job-plan';
@@ -6,18 +8,6 @@ export { inheritPhotoEditedCopy } from './photo-edited-copy';
 import { Prisma, type LibraryMode } from '@prisma/client';
 export { backgroundScheduleSql } from './background-schedule';
 export { taskPolicyAllowsSql, taskPrioritySql, mediaTaskFamilySql } from './task-policy';
-
-export async function lockOwnerPrivacyProjection(
-  transaction: Prisma.TransactionClient,
-  ownerId: string,
-  libraryMode: LibraryMode = 'MATERIAL',
-): Promise<void> {
-  await transaction.$queryRaw(Prisma.sql`
-    SELECT pg_advisory_xact_lock(
-      hashtextextended(${`sekereagle:privacy:${ownerId}:${libraryMode}`}, 0)
-    )::text AS "lockResult"
-  `);
-}
 
 export async function syncAssetPrivacy(
   transaction: Prisma.TransactionClient,
@@ -136,3 +126,9 @@ export {
   matchSmartFoldersForEmbedding,
   smartFolderMatchWhere,
 } from './smart-folder-semantics';
+
+export {
+  PHOTO_FACE_MODEL_VERSION,
+  unscannedPhotoFacesSql,
+  queuePhotoFaceScan,
+} from './photo-face-scan';

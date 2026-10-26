@@ -20,6 +20,11 @@ export class RetryTaskFamilyDto {
   @IsIn(TASK_FAMILIES)
   family!: TaskFamily;
 }
+export class StartTaskFamilyDto {
+  @ApiProperty({ enum: ['FACES'] })
+  @IsIn(['FACES'])
+  family!: TaskFamily;
+}
 export class TaskPolicyDto {
   @ApiProperty({ enum: [...CONTROLLABLE_TASK_FAMILIES] })
   @IsIn(CONTROLLABLE_TASK_FAMILIES)
@@ -50,6 +55,11 @@ export class EagleTaskCenterController {
   @UseGuards(BrowserOriginGuard)
   policy(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: TaskPolicyDto) {
     return this.tasks.policy(principal.sub, input);
+  }
+  @Post('start')
+  @UseGuards(BrowserOriginGuard)
+  start(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: StartTaskFamilyDto) {
+    return this.tasks.start(principal.sub, input.family, principal.canViewPrivate);
   }
   @Post('retry')
   @UseGuards(BrowserOriginGuard)

@@ -80,6 +80,7 @@ export interface TaskStep extends TaskCounts {
 export interface TaskGroup extends TaskCounts {
   id: TaskFamily;
   background: boolean;
+  unscanned?: number;
   availability?: 'ENABLED' | 'DISABLED' | 'UNKNOWN';
   policy?: { paused: boolean; priority: number };
   waiting: Array<{ reason: TaskWaitReason; count: number; nextAt: string | null }>;
@@ -97,6 +98,7 @@ export const CONTROLLABLE_TASK_FAMILIES = [
 ] as const;
 export interface WorkerTaskCapabilities {
   embedding?: 'READY' | 'OFFLINE' | 'DRIFTED';
+  faces?: boolean;
   background: boolean;
   jobKinds: string[] | null;
   video: boolean;

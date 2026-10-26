@@ -16,8 +16,12 @@ test('scan enqueues the whole visible photo library on the background lane witho
     $executeRaw: async () => 0,
   };
   const db = {
-    $queryRaw: async () => Array.from({ length: 500 }, (_, i) => ({ id: `asset-${i}`, mediaRevision: 1 })),
-    eagleAssetProcessingJob: { createMany: async () => ({ count: 500 }), updateMany: async () => ({ count: 0 }) },
+    $queryRaw: async () =>
+      Array.from({ length: 500 }, (_, i) => ({ id: `asset-${i}`, mediaRevision: 1 })),
+    eagleAssetProcessingJob: {
+      createMany: async () => ({ count: 500 }),
+      updateMany: async () => ({ count: 0 }),
+    },
     $transaction: async (fn: (tx: unknown) => unknown) => fn(tx),
   };
   try {

@@ -1,4 +1,8 @@
-import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
+import {
+  lockOwnerPrivacyProjection,
+  syncAssetPrivacy,
+  PHOTO_FACE_MODEL_VERSION,
+} from '@sekereagle/library-persistence';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -7,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { EagleAssetProcessingJob, PrismaClient } from '@prisma/client';
 
-export const FACE_MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
+export const FACE_MODEL_VERSION = PHOTO_FACE_MODEL_VERSION;
 interface FaceDetection {
   box: number[];
   confidence: number;

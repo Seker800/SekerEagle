@@ -36,7 +36,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('Mac · 较重'),
     ],
     FACES: [
-      t('人脸检测与匹配'),
+      t('人物识别'),
       t('检测人脸并计算特征，用于人物分组。'),
       t('预览图 + YuNet / SFace 模型'),
       t('图库服务器 · 较重'),
@@ -166,6 +166,10 @@ export function taskStatus(
     (embedding === 'OFFLINE' || embedding === 'DRIFTED')
   )
     return 'WAITING';
+  if (group.queued + group.running + group.failed === 0 && (group.unscanned ?? 0) > 0)
+    return 'UNSCANNED';
+  if (group.unscanned === 0 && group.queued + group.running + group.failed + group.completed === 0)
+    return 'EMPTY';
   if (group.running > 0) return 'RUNNING';
   if (group.queued > 0 && taskSection(group, schedule) !== 'PAUSED') return 'QUEUED';
   if (group.failed > 0 || group.queued > 0) return 'STOPPED';
@@ -178,6 +182,10 @@ export function taskStatusLabel(
   embedding?: TaskCenterOverview['embedding'],
 ): string {
   switch (taskStatus(group, schedule, embedding)) {
+    case 'EMPTY':
+      return t('暂无可扫描照片');
+    case 'UNSCANNED':
+      return t('尚未扫描');
     case 'WAITING':
       return t('等待模型');
     case 'RUNNING':

@@ -386,15 +386,105 @@ test('reports embedding health even when every vector task is already processing
 });
 
 test('photo task center exposes unscanned faces before any face job exists', async () => {
-  const service = new EagleTaskCenterService({
-    $queryRaw: async () => [{ family: 'FACES', step: 'ANALYZE_PHOTO_FACES', version: 'v1', status: 'UNSCANNED', reason: 'QUEUED', count: 1201n, nextAt: null }],
-    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces: true } }] },
-    eagleProcessingSetting: { findUnique: async () => null },
-    eagleTaskPolicy: { findMany: async () => [] },
-  } as never, 'PHOTO');
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        {
+          family: 'FACES',
+          step: 'ANALYZE_PHOTO_FACES',
+          version: 'v1',
+          status: 'UNSCANNED',
+          reason: 'QUEUED',
+          count: 1201n,
+          nextAt: null,
+        },
+      ],
+      eagleProcessingWorkerHeartbeat: {
+        findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces: true } }],
+      },
+      eagleProcessingSetting: { findUnique: async () => null },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'PHOTO',
+  );
   const result = await service.overview('owner', false);
   const face = result.groups.find((group) => group.id === 'FACES');
   assert.equal((face as unknown as { unscanned: number }).unscanned, 1201);
   assert.equal(face?.queued, 0);
   assert.equal(face?.completed, 0);
+});
+
+test('scan start derives owner and private visibility from principal and requires browser Origin', async () => {
+  const { StartTaskFamilyDto } = await import('./eagle-task-center.controller');
+  const calls: unknown[] = [];
+  const controller = new EagleTaskCenterController(
+    {
+      start: async (...args: unknown[]) => {
+        calls.push(args);
+        return { queued: 0 };
+      },
+    } as never,
+    {} as never,
+  );
+  const handler = Object.getOwnPropertyDescriptor(EagleTaskCenterController.prototype, 'start')!
+    .value as object;
+  assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);
+  await controller.start({ sub: 'owner-a', canViewPrivate: false } as never, { family: 'FACES' });
+  assert.deepEqual(calls, [['owner-a', 'FACES', false]]);
+  assert.equal(
+    (await validate(Object.assign(new StartTaskFamilyDto(), { family: 'FACES' }))).length,
+    0,
+  );
+  assert.ok(
+    (await validate(Object.assign(new StartTaskFamilyDto(), { family: 'EMBEDDING' }))).length,
+  );
+});
+
+test('scan start refuses material mode, unsupported families and unconfigured runtime without writes', async () => {
+  for (const [mode, family] of [
+    ['MATERIAL', 'FACES'],
+    ['PHOTO', 'COLOR'],
+  ] as const) {
+    await assert.rejects(new EagleTaskCenterService({} as never, mode).start('owner', family), {
+      status: 404,
+    });
+  }
+  const previous = process.env.PHOTO_FACE_PYTHON;
+  delete process.env.PHOTO_FACE_PYTHON;
+  try {
+    await assert.rejects(new EagleTaskCenterService({} as never, 'PHOTO').start('owner', 'FACES'), {
+      status: 400,
+    });
+  } finally {
+    if (previous !== undefined) process.env.PHOTO_FACE_PYTHON = previous;
+  }
+});
+
+test('missing face runtime disables face execution without hiding unscanned coverage', async () => {
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        {
+          family: 'FACES',
+          step: 'ANALYZE_PHOTO_FACES',
+          version: 'v1',
+          status: 'UNSCANNED',
+          reason: 'QUEUED',
+          count: 2n,
+          nextAt: null,
+        },
+      ],
+      eagleProcessingWorkerHeartbeat: {
+        findMany: async () => [
+          { capabilities: { background: true, jobKinds: null, faces: false } },
+        ],
+      },
+      eagleProcessingSetting: { findUnique: async () => null },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'PHOTO',
+  );
+  const group = (await service.overview('owner')).groups[0]!;
+  assert.equal(group.availability, 'DISABLED');
+  assert.equal(group.unscanned, 2);
 });
