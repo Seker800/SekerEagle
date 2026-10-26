@@ -64,8 +64,12 @@ export function taskGroupPresentation(
     (group.running > 0 || section !== 'PAUSED')
   )
     return { section, status: 'WAITING', reason: 'WORKER_OFFLINE' };
-  const activeSteps = group.steps.filter((step) => group.running > 0 ? step.running > 0 : step.queued > 0);
-  const needsModel = group.id === 'EMBEDDING' || (activeSteps.length > 0 && activeSteps.every((step) => taskNeedsModel(group.id, step.id)));
+  const activeSteps = group.steps.filter((step) =>
+    group.running > 0 ? step.running > 0 : step.queued > 0,
+  );
+  const needsModel =
+    group.id === 'EMBEDDING' ||
+    (activeSteps.length > 0 && activeSteps.every((step) => taskNeedsModel(group.id, step.id)));
   if (
     needsModel &&
     (group.running > 0 || section !== 'PAUSED') &&
@@ -77,21 +81,23 @@ export function taskGroupPresentation(
       status: 'WAITING',
       reason: embedding === 'DRIFTED' ? 'MODEL_DRIFTED' : 'MODEL_OFFLINE',
     };
-  if (group.running > 0) return {status: 'RUNNING', section, reason};
-  if (group.queued > 0 && section === 'PAUSED') return {status: 'STOPPED', section, reason};
-  if (allBlocked || group.approval > 0) return {status: 'WAITING', section, reason};
-  if (group.queued > 0) return {status: 'QUEUED', section, reason};
-  return {status: group.failed > 0 ? 'STOPPED' : 'COMPLETED', section, reason};
+  if (group.running > 0) return { status: 'RUNNING', section, reason };
+  if (group.queued > 0 && section === 'PAUSED') return { status: 'STOPPED', section, reason };
+  if (allBlocked || group.approval > 0) return { status: 'WAITING', section, reason };
+  if (group.queued > 0) return { status: 'QUEUED', section, reason };
+  return { status: group.failed > 0 ? 'STOPPED' : 'COMPLETED', section, reason };
 }
 
 /** Compatibility boundary: consumers honor server presentation; computation itself never reads it. */
 export function resolveTaskPresentation(
-  group: TaskGroup, schedule: BackgroundSchedule, embedding?: TaskCenterOverview['embedding'],
+  group: TaskGroup,
+  schedule: BackgroundSchedule,
+  embedding?: TaskCenterOverview['embedding'],
 ): TaskPresentation {
   return group.presentation ?? taskGroupPresentation(group, schedule, embedding);
 }
 
-export function taskNeedsModel(family: TaskFamily, step: string): boolean {
+export function taskNeedsModel(family: TaskFamily, step?: string): boolean {
   return family === 'EMBEDDING' || (family === 'SMART_FOLDERS' && step === 'SMART_FOLDER_QUERY');
 }
 
@@ -156,4 +162,3 @@ export function taskBucketDecision(input: {
 export function taskWorkerOwned(family: TaskFamily) {
   return !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
 }
-

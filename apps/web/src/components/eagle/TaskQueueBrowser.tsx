@@ -85,7 +85,7 @@ export function TaskQueueBrowser({
             <tbody>
               {visible.map((item) => {
                 const { group, schedule, embedding, mode } = item;
-                const {reason} = resolveTaskPresentation(group, schedule, embedding);
+                const { reason } = resolveTaskPresentation(group, schedule, embedding);
                 const running = group.steps.filter((step) => step.running > 0);
                 return (
                   <tr

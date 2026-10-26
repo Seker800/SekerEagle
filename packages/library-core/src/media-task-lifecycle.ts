@@ -76,7 +76,8 @@ export function mediaFailure(
 ) {
   const now = input.now ?? new Date();
   const terminal =
-    input.permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
+    input.permanent ||
+    job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
   const data = terminal
     ? {
         status: 'FAILED' as const,
@@ -104,4 +105,3 @@ export function mediaWaitData(attempts: number, delayMs: number, code: string, n
     lastError: code,
   };
 }
-

@@ -155,8 +155,10 @@ export function EagleTaskCenter({
   const modelStates = entries.flatMap(({ summary: entry }) => {
     const affected = entry.groups.some(
       (group) =>
-        (taskNeedsModel(group.id, '') && group.queued + group.running > 0) ||
-        group.steps.some((step) => taskNeedsModel(group.id, step.id) && step.queued + step.running > 0),
+        (taskNeedsModel(group.id) && group.queued + group.running > 0) ||
+        group.steps.some(
+          (step) => taskNeedsModel(group.id, step.id) && step.queued + step.running > 0,
+        ),
     );
     if (!affected) return [];
     return [

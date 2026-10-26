@@ -677,9 +677,17 @@ test('repeated lease interruption stops recovering, and explicit owner retry res
     canClaimBackground: async () => true,
     onLeaseExhausted: async (candidate, expiredBefore) => {
       exhausted++;
-      const {mediaFailure} = await import('../../packages/library-core/dist/index.js');
-      const transition = mediaFailure(candidate, {message: 'MEDIA_LEASE_RECOVERY_EXHAUSTED', permanent: true, now: new Date(), expiredBefore: expiredBefore});
-      await prisma.eagleAssetProcessingJob.updateMany({where: transition.where, data: transition.data});
+      const { mediaFailure } = await import('../../packages/library-core/dist/index.js');
+      const transition = mediaFailure(candidate, {
+        message: 'MEDIA_LEASE_RECOVERY_EXHAUSTED',
+        permanent: true,
+        now: new Date(),
+        expiredBefore: expiredBefore,
+      });
+      await prisma.eagleAssetProcessingJob.updateMany({
+        where: transition.where,
+        data: transition.data,
+      });
     },
   });
   assert.equal(result, null);
@@ -732,27 +740,54 @@ test('retrying edited-copy rendering preserves the original source readiness', a
   });
 });
 
-
 test('an exhausted stale snapshot cannot fail an execution which renewed its heartbeat', async () => {
-  const {claimNextMediaJob} = await import('../../apps/worker/dist/job-claim.js');
-  const {mediaFailure, MEDIA_LEASE_MS} = await import('../../packages/library-core/dist/index.js');
+  const { claimNextMediaJob } = await import('../../apps/worker/dist/job-claim.js');
+  const { mediaFailure, MEDIA_LEASE_MS } =
+    await import('../../packages/library-core/dist/index.js');
   const f = await fixture();
   const now = new Date();
-  const job = await f.job(await f.asset(), {status: 'PROCESSING', leaseVersion: 9,
-    recoveryCount: 3, lockedAt: new Date(now.getTime()-MEDIA_LEASE_MS-1)});
+  const job = await f.job(await f.asset(), {
+    status: 'PROCESSING',
+    leaseVersion: 9,
+    recoveryCount: 3,
+    lockedAt: new Date(now.getTime() - MEDIA_LEASE_MS - 1),
+  });
   let failed = -1;
-  const result = await claimNextMediaJob(prisma, {now, laneOrder: ['BACKGROUND'],
-    selectCandidates: async () => [job], canClaimBackground: async () => true,
+  const result = await claimNextMediaJob(prisma, {
+    now,
+    laneOrder: ['BACKGROUND'],
+    selectCandidates: async () => [job],
+    canClaimBackground: async () => true,
     onLeaseExhausted: async (candidate, expiredBefore) => {
-      await prisma.eagleAssetProcessingJob.update({where: {id: job.id}, data: {lockedAt: now}});
-      const transition = mediaFailure(candidate, {message: 'MEDIA_LEASE_RECOVERY_EXHAUSTED', permanent: true, now: now, expiredBefore: expiredBefore});
-      failed = (await prisma.eagleAssetProcessingJob.updateMany({where: transition.where, data: transition.data})).count;
-    }});
+      await prisma.eagleAssetProcessingJob.update({
+        where: { id: job.id },
+        data: { lockedAt: now },
+      });
+      const transition = mediaFailure(candidate, {
+        message: 'MEDIA_LEASE_RECOVERY_EXHAUSTED',
+        permanent: true,
+        now: now,
+        expiredBefore: expiredBefore,
+      });
+      failed = (
+        await prisma.eagleAssetProcessingJob.updateMany({
+          where: transition.where,
+          data: transition.data,
+        })
+      ).count;
+    },
+  });
   assert.equal(result, null);
   assert.equal(failed, 0);
-  const live = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where: {id: job.id}});
+  const live = await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } });
   assert.equal(live.status, 'PROCESSING');
   assert.equal(live.leaseVersion, 9);
-  assert.equal(await prisma.eagleMediaJobEvent.count({where: {jobId: job.id, toStatus: 'FAILED'}}), 0);
-  await prisma.eagleAssetProcessingJob.update({where: {id: job.id}, data: {status: 'COMPLETED'}});
+  assert.equal(
+    await prisma.eagleMediaJobEvent.count({ where: { jobId: job.id, toStatus: 'FAILED' } }),
+    0,
+  );
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: job.id },
+    data: { status: 'COMPLETED' },
+  });
 });

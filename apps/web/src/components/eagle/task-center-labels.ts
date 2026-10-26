@@ -171,7 +171,7 @@ export function taskStatusLabel(
   const presentation = resolveTaskPresentation(group, schedule, embedding);
   switch (presentation.status) {
     case 'WAITING': {
-      const {reason} = presentation;
+      const { reason } = presentation;
       return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED'
         ? t('等待模型')
         : reason === 'WORKER_OFFLINE'
