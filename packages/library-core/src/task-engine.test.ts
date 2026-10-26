@@ -8,6 +8,9 @@ import {
   mediaCompletion,
   mediaFailure,
   mediaWaitData,
+  taskBucketDecision,
+  taskModelReadiness,
+  workerSupportsTask,
 } from './task-engine';
 import type { TaskGroup } from './task-scheduling';
 const now = new Date('2026-10-26T04:00:00Z');
@@ -132,14 +135,194 @@ test('expired executions have a finite recovery budget separate from model wait 
   assert.equal(mediaClaimTransition(state, now)?.exhausted, true);
 });
 
-
 test('completion and failure use one fenced execution identity and one retry budget', () => {
-  const job = {id: 'job', ownerId: 'owner', libraryMode: 'PHOTO' as const, assetId: 'asset', assetRevision: 4, leaseVersion: 7, attempts: 2, kind: 'GENERATE_EMBEDDING'};
-  assert.deepEqual(mediaCompletion(job, now).where, {id: 'job', ownerId: 'owner', libraryMode: 'PHOTO', assetId: 'asset', assetRevision: 4, leaseVersion: 7, status: 'PROCESSING'});
+  const job = {
+    id: 'job',
+    ownerId: 'owner',
+    libraryMode: 'PHOTO' as const,
+    assetId: 'asset',
+    assetRevision: 4,
+    leaseVersion: 7,
+    attempts: 2,
+    kind: 'GENERATE_EMBEDDING',
+  };
+  assert.deepEqual(mediaCompletion(job, now).where, {
+    id: 'job',
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    assetId: 'asset',
+    assetRevision: 4,
+    leaseVersion: 7,
+    status: 'PROCESSING',
+  });
   const retry = mediaFailure(job, 'transient', false, now);
   assert.equal(retry.terminal, false);
   assert.equal(retry.data.status, 'PENDING');
-  assert.equal(mediaFailure({...job, attempts: 12}, 'timeout', false, now).terminal, true);
+  assert.equal(mediaFailure({ ...job, attempts: 12 }, 'timeout', false, now).terminal, true);
   assert.equal(mediaFailure(job, 'invalid bytes', true, now).terminal, true);
   assert.equal(mediaWaitData(2, 30000, 'WAITING_MODEL', now).attempts, 1);
+});
+
+const worker = {
+  background: true,
+  jobKinds: null,
+  video: true,
+  tagBuilds: true,
+  smartFolders: true,
+  photoMap: true,
+  embedding: 'READY' as const,
+};
+test('capabilities distinguish disabled resources from unknown rolling-upgrade workers', () => {
+  assert.equal(workerSupportsTask(null, 'EMBEDDING', 'GENERATE_EMBEDDING'), true);
+  assert.equal(workerSupportsTask({}, 'EMBEDDING', 'GENERATE_EMBEDDING'), true);
+  assert.equal(
+    workerSupportsTask({ ...worker, background: false }, 'EMBEDDING', 'GENERATE_EMBEDDING'),
+    false,
+  );
+  assert.equal(workerSupportsTask({ ...worker, video: false }, 'VIDEO', 'GENERATE_PREVIEW'), false);
+  assert.equal(workerSupportsTask(worker, 'SMART_FOLDERS', 'SMART_FOLDER_QUERY'), true);
+  assert.equal(
+    workerSupportsTask({ ...worker, tagBuilds: false }, 'TAG_INDEX', 'TAG_INDEX'),
+    false,
+  );
+  assert.equal(workerSupportsTask(worker, 'PHOTO_MAP', 'PHOTO_MAP'), true);
+  assert.equal(workerSupportsTask({ ...worker, jobKinds: [] }, 'CLEANUP', 'OBJECT_DELETION'), true);
+  assert.equal(
+    workerSupportsTask({ ...worker, jobKinds: [] }, 'EMBEDDING', 'GENERATE_EMBEDDING'),
+    false,
+  );
+  assert.equal(
+    taskModelReadiness(
+      [worker, { ...worker, embedding: 'OFFLINE' }],
+      'EMBEDDING',
+      'GENERATE_EMBEDDING',
+    ),
+    'READY',
+  );
+  assert.equal(
+    taskModelReadiness(
+      [null, { ...worker, embedding: 'OFFLINE' }],
+      'EMBEDDING',
+      'GENERATE_EMBEDDING',
+    ),
+    'UNKNOWN',
+  );
+  assert.equal(
+    taskModelReadiness([{ ...worker, embedding: 'DRIFTED' }], 'EMBEDDING', 'GENERATE_EMBEDDING'),
+    'DRIFTED',
+  );
+  assert.equal(
+    taskModelReadiness([{ ...worker, embedding: 'OFFLINE' }], 'EMBEDDING', 'GENERATE_EMBEDDING'),
+    'OFFLINE',
+  );
+  assert.equal(taskModelReadiness([], 'EMBEDDING', 'GENERATE_EMBEDDING'), 'UNKNOWN');
+});
+test('source adapters supply facts and reuse the same model, policy and schedule decisions', () => {
+  const input = {
+    family: 'EMBEDDING' as const,
+    step: 'GENERATE_EMBEDDING',
+    reason: 'QUEUED' as const,
+    nextAt: null,
+    approval: false,
+    paused: false,
+    workers: [worker],
+    schedule,
+    now,
+  };
+  assert.equal(taskBucketDecision(input).runnable, true);
+  assert.equal(taskBucketDecision({ ...input, workers: [] }).reason, 'WORKER_OFFLINE');
+  assert.equal(taskBucketDecision({ ...input, paused: true }).reason, 'PAUSED');
+  assert.equal(
+    taskBucketDecision({ ...input, schedule: { ...schedule, mode: 'MANUAL' } }).reason,
+    'PAUSED',
+  );
+  assert.equal(
+    taskBucketDecision({ ...input, workers: [{ ...worker, embedding: 'DRIFTED' }] }).reason,
+    'MODEL_DRIFTED',
+  );
+  assert.equal(
+    taskBucketDecision({ ...input, workers: [{ ...worker, embedding: 'OFFLINE' }] }).reason,
+    'MODEL_OFFLINE',
+  );
+  assert.equal(
+    taskBucketDecision({ ...input, workers: [{ ...worker, jobKinds: [] }] }).reason,
+    'DISABLED',
+  );
+  assert.equal(
+    taskBucketDecision({ ...input, reason: 'DEPENDENCY_FAILED' }).reason,
+    'DEPENDENCY_FAILED',
+  );
+  assert.equal(taskBucketDecision({ ...input, reason: 'DEPENDENCY' }).reason, 'DEPENDENCY');
+  assert.equal(
+    taskBucketDecision({ ...input, reason: 'RETRY', nextAt: now.toISOString() }).nextAt,
+    now.toISOString(),
+  );
+  const scheduled = taskBucketDecision({ ...input, schedule: { ...schedule, mode: 'NIGHT' } });
+  assert.equal(scheduled.reason, 'SCHEDULE');
+  assert.equal(scheduled.nextAt, '2026-10-26T15:00:00.000Z');
+  assert.equal(
+    taskBucketDecision({
+      ...input,
+      family: 'SMART_FOLDERS',
+      step: 'SMART_FOLDERS',
+      workers: [{ ...worker, embedding: 'OFFLINE' }],
+    }).runnable,
+    true,
+  );
+  assert.equal(
+    taskBucketDecision({
+      ...input,
+      family: 'SMART_FOLDERS',
+      step: 'SMART_FOLDER_QUERY',
+      workers: [{ ...worker, embedding: 'OFFLINE' }],
+    }).reason,
+    'MODEL_OFFLINE',
+  );
+  assert.equal(
+    taskBucketDecision({ ...input, family: 'APPROVALS', approval: true, workers: [] }).reason,
+    'APPROVAL',
+  );
+});
+test('presentation reflects paused draining and model recovery without trusting browser recomputation', () => {
+  assert.equal(
+    taskGroupPresentation({ ...group, policy: { paused: true, priority: 0 } }, schedule).status,
+    'STOPPED',
+  );
+  assert.equal(
+    taskGroupPresentation({ ...group, running: 1, policy: { paused: true, priority: 0 } }, schedule)
+      .status,
+    'RUNNING',
+  );
+  assert.equal(
+    taskGroupPresentation({ ...group, running: 1 }, schedule, 'OFFLINE').reason,
+    'MODEL_OFFLINE',
+  );
+  assert.equal(taskGroupPresentation(group, schedule, 'DRIFTED').reason, 'MODEL_DRIFTED');
+  assert.equal(
+    taskGroupPresentation(
+      { ...group, presentation: { status: 'STOPPED', section: 'PAUSED', reason: 'PAUSED' } },
+      schedule,
+    ).section,
+    'PAUSED',
+  );
+  const job = {
+    id: 'job',
+    ownerId: 'owner',
+    libraryMode: 'PHOTO' as const,
+    assetId: 'asset',
+    assetRevision: 1,
+    leaseVersion: 2,
+    kind: 'RENDER_EDITED_COPY',
+    attempts: 3,
+  };
+  assert.equal(mediaFailure(job, 'failure', false).terminal, true);
+  assert.equal(mediaCompletion(job).data.status, 'COMPLETED');
+  assert.equal(mediaWaitData(0, 1000, 'WAIT').attempts, 0);
+});
+
+
+test('primary blocking reason follows the shared precedence rather than bucket arrival order', () => {
+  const waiting = [{reason: 'DEPENDENCY' as const, count: 2, nextAt: null}, {reason: 'MODEL_OFFLINE' as const, count: 1, nextAt: null}];
+  assert.equal(taskGroupPresentation({...group, waiting}, schedule).reason, 'MODEL_OFFLINE');
+  assert.equal(taskGroupPresentation({...group, waiting: [...waiting].reverse()}, schedule).reason, 'MODEL_OFFLINE');
 });
