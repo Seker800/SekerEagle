@@ -231,7 +231,32 @@ test('the request deadline also covers a response body that stalls after success
   }
 });
 
-test('verified coordinator reports live capacity without pretending to be Metal',async()=>{
- const client=new EmbeddingClient({baseUrl:'http://127.0.0.1:11436',token:'test',modelId:'expected',modelRevision:'revision',dimensions:2,timeoutMs:1000,maxPayloadBytes:1024,fetch:async()=>Response.json({status:'ready',model:'expected',revision:'revision',dimensions:2,accelerator:'pool',protocol:'sekereagle-compute-v1',capacity:{backgroundLimit:4},fleet:{revision:1,nodes:[]}})});
- assert.equal(await client.readiness(),'READY');assert.equal(client.computeRuntime?.backgroundLimit,4);
+test('verified coordinator reports live capacity without pretending to be Metal', async () => {
+  const client = new EmbeddingClient({
+    baseUrl: 'http://127.0.0.1:11436',
+    token: 'test',
+    modelId: 'expected',
+    modelRevision: 'revision',
+    dimensions: 2,
+    timeoutMs: 1000,
+    maxPayloadBytes: 1024,
+    fetch: async () =>
+      Response.json({
+        status: 'ready',
+        model: 'expected',
+        revision: 'revision',
+        dimensions: 2,
+        accelerator: 'pool',
+        protocol: 'sekereagle-compute-v1',
+        capacity: { backgroundLimit: 4 },
+        fleet: { revision: 1, nodes: [] },
+      }),
+  });
+  assert.equal(await client.readiness(), 'READY');
+  assert.equal(client.computeRuntime?.backgroundLimit, 4);
+});
+
+test('an enrolled pool without an available embedding host is offline, not contract drift',async()=>{
+ const client=new EmbeddingClient({baseUrl:'http://127.0.0.1:11436',token:'test',modelId:'expected',modelRevision:'revision',dimensions:2,timeoutMs:1000,maxPayloadBytes:1024,fetch:async()=>Response.json({status:'offline',model:'expected',revision:'revision',dimensions:2,accelerator:'pool',protocol:'sekereagle-compute-v1',capacity:{backgroundLimit:0},fleet:{revision:1,nodes:[]}})});
+ assert.equal(await client.readiness(),'OFFLINE');assert.equal(client.computeRuntime?.backgroundLimit,0);
 });
