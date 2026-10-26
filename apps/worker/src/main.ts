@@ -1027,7 +1027,6 @@ async function recomputeSuggestionGeneration(
 async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
   const retry = embeddingRetry(error, build.attempts);
   if (retry) {
-    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
       data: retry.data,
@@ -1195,7 +1194,6 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
   const retry = embeddingRetry(error, job.attempts);
   if (retry) {
-    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleAssetProcessingJob.updateMany({
       where: mediaExecutionGuard(job),
       data: retry.data,

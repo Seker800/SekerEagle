@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { EmbeddingClientError } from './embedding-client';
+import { embeddingRetry } from './embedding-retry';
 import { Prisma, type PrismaClient, type EagleSmartFolderSemanticSnapshot } from '@prisma/client';
 import {
   scheduleSmartFolderSnapshot,
@@ -171,19 +171,19 @@ export async function runSmartFolderBuildStep(
       { timeout: 30_000, maxWait: 5_000 },
     );
   } catch (error) {
-    const waitingForHost =
-      error instanceof EmbeddingClientError && error.code === 'HOST_UNAVAILABLE';
-    const attempts = build.attempts + (waitingForHost ? 0 : 1);
+    // Folder attempts increment on failure, whereas media/tag attempts increment at claim.
+    const retry = embeddingRetry(error, build.attempts + 1);
+    const attempts = retry ? retry.data.attempts : build.attempts + 1;
     await client.eagleSmartFolderSemanticSnapshot.updateMany({
       where: { id: build.id, leaseToken: token },
       data: {
-        ...(waitingForHost
-          ? { status: 'PENDING', availableAt: new Date(Date.now() + 30000) }
+        ...(retry
+          ? { status: 'PENDING', availableAt: retry.data.availableAt }
           : smartFolderRetry(attempts)),
         attempts,
         lockedUntil: null,
         leaseToken: null,
-        errorCode: waitingForHost ? 'WAITING_EMBEDDING_HOST' : 'BUILD_UNAVAILABLE',
+        errorCode: retry ? retry.data.lastError : 'BUILD_UNAVAILABLE',
       },
     });
   }

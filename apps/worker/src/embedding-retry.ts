@@ -8,7 +8,6 @@ export function embeddingRetry(error: unknown, attempts: number, now = new Date(
   if (!offline && error.code !== 'HOST_BUSY' && error.code !== 'UPLOAD_TIMEOUT') return null;
   const delay = offline ? 30000 : Math.min(30000, Math.max(1000, error.retryAfterMs ?? 1000));
   return {
-    offline,
     data: mediaWaitData(
       attempts,
       delay,
