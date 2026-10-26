@@ -493,6 +493,7 @@ it.each(['DISABLED', 'ENABLED'] as const)(
     if (availability === 'DISABLED')
       expect(card.getByRole('button', { name: '扫描未分析照片' })).toBeDisabled();
     else expect(card.getByText('暂无可扫描照片')).toBeVisible();
+    if (availability === 'DISABLED') expect(card.getByText('服务器未启用')).toBeVisible();
     expect(card.queryByText('已完成')).not.toBeInTheDocument();
   },
 );

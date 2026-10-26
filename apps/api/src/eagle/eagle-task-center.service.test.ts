@@ -426,6 +426,15 @@ test('scan start derives owner and private visibility from principal and require
     } as never,
     {} as never,
   );
+  const { StartTaskFamilyDto: StartDto } = await import('./eagle-task-center.controller');
+  assert.ok(
+    (
+      await validate(Object.assign(new StartDto(), { family: 'FACES', ownerId: 'other' }), {
+        whitelist: true,
+        forbidNonWhitelisted: true,
+      })
+    ).length,
+  );
   const handler = Object.getOwnPropertyDescriptor(EagleTaskCenterController.prototype, 'start')!
     .value as object;
   assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [BrowserOriginGuard]);

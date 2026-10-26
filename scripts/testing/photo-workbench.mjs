@@ -611,7 +611,27 @@ try {
   let people, groups;
   if (!basic) {
     const faceScan = await api('/photos/photography/people/scan', {});
-    assert.ok(faceScan.queued >= 4);
+    // Starting a scan accepts missing work without promoting existing jobs or bypassing pause.
+    assert.ok(faceScan.queued >= 0);
+    assert.equal(
+      await db.eagleAssetProcessingJob.count({
+        where: { ownerId: owner.id, kind: 'ANALYZE_PHOTO_FACES', lane: 'BACKGROUND' },
+      }),
+      4,
+    );
+    assert.equal(
+      (
+        await db.eagleProcessingSetting.findUnique({
+          where: { ownerId_libraryMode: { ownerId: owner.id, libraryMode: 'PHOTO' } },
+        })
+      ).mode,
+      'MANUAL',
+    );
+    assert.equal(await db.eaglePhotoFace.count({ where: { ownerId: owner.id } }), 0);
+    await db.eagleProcessingSetting.update({
+      where: { ownerId_libraryMode: { ownerId: owner.id, libraryMode: 'PHOTO' } },
+      data: { mode: 'ALWAYS' },
+    });
     await waitFor(
       async () =>
         (await db.eagleAssetProcessingJob.count({
@@ -620,6 +640,10 @@ try {
       'local face inference',
       240,
     );
+    await db.eagleProcessingSetting.update({
+      where: { ownerId_libraryMode: { ownerId: owner.id, libraryMode: 'PHOTO' } },
+      data: { mode: 'MANUAL' },
+    });
     people = await api('/photos/photography/people');
     assert.ok(people.people.length >= 1);
     const automaticGroups = await api('/photos/photography/groups');

@@ -32,8 +32,8 @@ test('empty scans return an honest zero receipt in a bounded transaction', async
     $transaction: async (fn: (tx: unknown) => unknown, options: unknown) => {
       assert.deepEqual(options, { maxWait: 5000, timeout: 30000 });
       return fn({
-        $executeRaw: async (sql: { sql: string }) => {
-          seen.push(sql.sql);
+        $executeRaw: async (sql: TemplateStringsArray) => {
+          seen.push(sql.join(''));
           return 0;
         },
         $queryRaw: async (sql: { sql: string }) => {

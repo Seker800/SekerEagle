@@ -439,7 +439,7 @@ function TaskCard({
   const activeSteps = group.steps.filter((step) => step.running > 0);
   const wait = group.waiting.find((item) => !['QUEUED', 'APPROVAL'].includes(item.reason));
   const execution = taskExecutionLabel(group, schedule);
-  const isWaiting = remaining > 0 && group.running === 0;
+  const isWaiting = (remaining > 0 || (group.unscanned ?? 0) > 0) && group.running === 0;
   const executionAsReason =
     isWaiting &&
     (disabled || group.policy?.paused || (group.background && schedule.mode === 'MANUAL'));
