@@ -138,3 +138,5 @@ it('shows a bounded model capacity wait without claiming the host is offline', a
     '等待模型空闲',
   );
 });
+
+it('multi-host model metadata does not claim that Mac is the only executor',()=>{expect(taskFamilyLabels('EMBEDDING').join(' ')).not.toContain('Mac');});
