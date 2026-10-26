@@ -25,9 +25,11 @@ const keyFor = (item: TaskQueueItem) => `${item.mode}:${item.group.id}`;
 /** Navigation and formatting only. Execution decisions arrive in each group's server presentation. */
 export function TaskQueueBrowser({
   items,
+  history = false,
   renderDetails,
 }: {
   items: TaskQueueItem[];
+  history?: boolean;
   renderDetails: (item: TaskQueueItem) => ReactNode;
 }) {
   const [search, setSearch] = useState('');
@@ -76,9 +78,15 @@ export function TaskQueueBrowser({
               <tr>
                 <th>{t('类别')}</th>
                 <th>{t('状态')}</th>
-                <th>{t('排队')}</th>
-                <th>{t('执行')}</th>
-                <th>{t('失败')}</th>
+                {history ? (
+                  <th>{t('已完成')}</th>
+                ) : (
+                  <>
+                    <th>{t('排队')}</th>
+                    <th>{t('执行')}</th>
+                    <th>{t('失败')}</th>
+                  </>
+                )}
                 <th>{t('等待原因')}</th>
               </tr>
             </thead>
@@ -116,11 +124,17 @@ export function TaskQueueBrowser({
                         ? `${t('待审批')} ${group.approval}`
                         : taskStatusLabel(group, schedule, embedding)}
                     </td>
-                    <td className={styles.number}>{group.queued}</td>
-                    <td className={styles.number}>{group.running}</td>
-                    <td className={styles.number} data-error={group.failed > 0}>
-                      {group.failed}
-                    </td>
+                    {history ? (
+                      <td className={styles.number}>{group.completed}</td>
+                    ) : (
+                      <>
+                        <td className={styles.number}>{group.queued}</td>
+                        <td className={styles.number}>{group.running}</td>
+                        <td className={styles.number} data-error={group.failed > 0}>
+                          {group.failed}
+                        </td>
+                      </>
+                    )}
                     <td className={styles.reason}>{reason ? taskWaitLabel(reason) : '—'}</td>
                   </tr>
                 );

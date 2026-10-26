@@ -1,6 +1,7 @@
 import { t } from '../../i18n';
 import {
   TASK_FAMILIES,
+  resolveTaskManagement,
   resolveTaskPresentation,
   type TaskFamily,
   type TaskWaitReason,
@@ -134,17 +135,11 @@ export const taskStepLabel = (step: string) =>
 const familyKeys = Object.fromEntries(TASK_FAMILIES.map((id) => [id, true]));
 
 export function taskExecutionLabel(group: TaskGroup, schedule: BackgroundSchedule): string {
-  if (
-    group.availability === 'DISABLED' ||
-    group.waiting.some(
-      (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
-    )
-  )
-    return t('服务器未启用');
-  if (group.background) {
-    if (group.policy?.paused || schedule.mode === 'MANUAL') return t('已暂停');
-    return schedule.mode === 'ALWAYS' ? t('随时') : `${schedule.nightStart}–${schedule.nightEnd}`;
-  }
+  const { execution } = resolveTaskManagement(group, schedule);
+  if (execution === 'DISABLED') return t('服务器未启用');
+  if (execution === 'PAUSED') return t('已暂停');
+  if (execution === 'ALWAYS') return t('随时');
+  if (execution === 'WINDOW') return `${schedule.nightStart}–${schedule.nightEnd}`;
   const triggers: Partial<Record<TaskFamily, string>> = {
     BROWSE: t('上传后排队'),
     PHOTO_MAP: t('位置变化后分批更新'),

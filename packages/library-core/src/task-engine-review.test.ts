@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { taskBucketDecision, taskGroupPresentation, resolveTaskManagement, taskOverviewModelIssue } from './task-engine';
+import {
+  taskBucketDecision,
+  taskGroupPresentation,
+  resolveTaskManagement,
+  taskOverviewModelIssue,
+} from './task-engine';
 import type { TaskGroup } from './task-scheduling';
 
 const schedule = { mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00' };
@@ -97,7 +102,6 @@ test('capacity wait has an expiry and never implies the host is offline', () => 
   );
 });
 
-
 test('task management uses one policy decision and honors authoritative server controls', () => {
   const control = resolveTaskManagement({ ...group, failed: 2 }, schedule);
   assert.equal(control.canRetry, true);
@@ -107,13 +111,25 @@ test('task management uses one policy decision and honors authoritative server c
   assert.equal(disabled.canPause, false);
   assert.equal(disabled.execution, 'DISABLED');
   assert.equal(resolveTaskManagement(group, { ...schedule, mode: 'MANUAL' }).canPause, false);
-  assert.equal(resolveTaskManagement({ ...group, id: 'UPLOADS', failed: 1 }, schedule).canRetry, false);
-  assert.equal(resolveTaskManagement({ ...group, management: { ...control, canRetry: false } }, schedule).canRetry, false);
+  assert.equal(
+    resolveTaskManagement({ ...group, id: 'UPLOADS', failed: 1 }, schedule).canRetry,
+    false,
+  );
+  assert.equal(
+    resolveTaskManagement({ ...group, management: { ...control, canRetry: false } }, schedule)
+      .canRetry,
+    false,
+  );
 });
 
 test('model issue classification is shared by overview and old API consumers', () => {
   assert.equal(taskOverviewModelIssue([group], 'OFFLINE'), 'OFFLINE');
   assert.equal(taskOverviewModelIssue([{ ...group, queued: 0 }], 'OFFLINE'), null);
   assert.equal(taskOverviewModelIssue([{ ...group, id: 'COLOR' }], 'OFFLINE'), null);
-  assert.equal(taskOverviewModelIssue([{ ...group, waiting: [{ reason: 'MODEL_DRIFTED', count: 3, nextAt: null }] }]), 'DRIFTED');
+  assert.equal(
+    taskOverviewModelIssue([
+      { ...group, waiting: [{ reason: 'MODEL_DRIFTED', count: 3, nextAt: null }] },
+    ]),
+    'DRIFTED',
+  );
 });

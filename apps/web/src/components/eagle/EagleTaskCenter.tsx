@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   resolveTaskPresentation,
-  taskNeedsModel,
+  resolveTaskManagement,
+  taskOverviewModelIssue,
   taskExecutionPriority,
   type BackgroundSchedule,
   type TaskFamily,
@@ -152,26 +153,11 @@ export function EagleTaskCenter({
         }
       : null);
   const error = save.error ?? retry.error ?? policy.error ?? query.error;
-  const modelStates = entries.flatMap(({ summary: entry }) => {
-    const affected = entry.groups.some(
-      (group) =>
-        (taskNeedsModel(group.id) && group.queued + group.running > 0) ||
-        group.steps.some(
-          (step) => taskNeedsModel(group.id, step.id) && step.queued + step.running > 0,
-        ),
-    );
-    if (!affected) return [];
-    return [
-      entry.embedding ??
-        (entry.groups.some((group) => group.waiting.some((wait) => wait.reason === 'MODEL_DRIFTED'))
-          ? 'DRIFTED'
-          : entry.groups.some((group) =>
-                group.waiting.some((wait) => wait.reason === 'MODEL_OFFLINE'),
-              )
-            ? 'OFFLINE'
-            : 'UNKNOWN'),
-    ];
-  });
+  const modelStates = entries.map(({ summary: entry }) =>
+    entry.modelIssue !== undefined
+      ? entry.modelIssue
+      : taskOverviewModelIssue(entry.groups, entry.embedding),
+  );
   const modelIssue = modelStates.includes('DRIFTED')
     ? 'DRIFTED'
     : modelStates.includes('OFFLINE')
@@ -335,6 +321,7 @@ export function EagleTaskCenter({
           )}
           {!cards.length && <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>}
           <TaskQueueBrowser
+            history={showHistory}
             key={`${ownerId}:${includePrivate}:${scope}:${showHistory}`}
             items={cards}
             renderDetails={(card) => (
@@ -406,12 +393,7 @@ function TaskCard({
 }) {
   const [title, , dependency, compute] = taskFamilyLabels(group.id);
   const remaining = group.queued + group.running + group.failed;
-  const retryable = !['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(group.id);
-  const disabled =
-    group.availability === 'DISABLED' ||
-    group.waiting.some(
-      (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
-    );
+  const management = resolveTaskManagement(group, schedule);
   const state = taskStatus(group, schedule, embedding);
   const activeSteps = group.steps.filter((step) => step.running > 0);
   const decision = resolveTaskPresentation(group, schedule, embedding);
@@ -419,8 +401,7 @@ function TaskCard({
   const execution = taskExecutionLabel(group, schedule);
   const isWaiting = remaining > 0 && group.running === 0;
   const executionAsReason =
-    isWaiting &&
-    (disabled || group.policy?.paused || (group.background && schedule.mode === 'MANUAL'));
+    isWaiting && (management.execution === 'DISABLED' || management.execution === 'PAUSED');
   const scheduledWait = isWaiting && wait?.reason === 'SCHEDULE' && schedule.mode === 'NIGHT';
   let reason: string | null = null;
   if (executionAsReason) {
@@ -471,7 +452,7 @@ function TaskCard({
           )}
         </div>
         <div className={styles.actions}>
-          {group.failed > 0 && retryable && (
+          {management.canRetry && (
             <button type="button" disabled={busy} onClick={onRetry}>
               {t('重试失败任务')}
             </button>
@@ -481,9 +462,9 @@ function TaskCard({
               {t('去审批')}
             </button>
           )}
-          {group.background && !disabled && schedule.mode !== 'MANUAL' && (
-            <button type="button" disabled={busy} onClick={() => onPolicy(!group.policy?.paused)}>
-              {group.policy?.paused ? t('继续这项工作') : t('暂停这项工作')}
+          {management.canPause && (
+            <button type="button" disabled={busy} onClick={() => onPolicy(!management.paused)}>
+              {management.paused ? t('继续这项工作') : t('暂停这项工作')}
             </button>
           )}
         </div>

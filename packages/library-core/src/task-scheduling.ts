@@ -84,7 +84,14 @@ export interface TaskPresentation {
   section: TaskSection;
   reason: TaskWaitReason | null;
 }
+export interface TaskManagement {
+  canRetry: boolean;
+  canPause: boolean;
+  paused: boolean;
+  execution: 'DISABLED' | 'PAUSED' | 'ALWAYS' | 'WINDOW' | 'TRIGGER';
+}
 export interface TaskGroup extends TaskCounts {
+  management?: TaskManagement;
   id: TaskFamily;
   background: boolean;
   presentation?: TaskPresentation;
@@ -115,6 +122,7 @@ export interface WorkerTaskCapabilities {
 export interface TaskCenterOverview {
   worker: 'ONLINE' | 'OFFLINE';
   embedding?: 'READY' | 'OFFLINE' | 'DRIFTED' | 'UNKNOWN';
+  modelIssue?: 'OFFLINE' | 'DRIFTED' | null;
   settings: BackgroundSchedule & { timeZone: 'Asia/Shanghai' };
   groups: TaskGroup[];
   refreshedAt: string;

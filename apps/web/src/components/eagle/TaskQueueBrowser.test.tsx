@@ -59,9 +59,14 @@ it('honors an explicit server reason of null for a partly blocked group and filt
   expect(screen.getByRole('article')).toBeVisible();
 });
 
-
 it('shows completed quantities directly in history without empty live columns', () => {
-  render(<TaskQueueBrowser history items={[{ mode: 'PHOTO', group: { ...group, queued: 0, completed: 4321 }, schedule }]} renderDetails={() => <article>details</article>} />);
+  render(
+    <TaskQueueBrowser
+      history
+      items={[{ mode: 'PHOTO', group: { ...group, queued: 0, completed: 4321 }, schedule }]}
+      renderDetails={() => <article>details</article>}
+    />,
+  );
   const table = within(screen.getByRole('table'));
   expect(table.getByRole('columnheader', { name: '已完成' })).toBeVisible();
   expect(table.getByRole('cell', { name: '4321' })).toBeVisible();

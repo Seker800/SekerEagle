@@ -11,6 +11,9 @@ import {
   taskBucketDecision,
   taskWorkerOwned,
   taskGroupPresentation,
+  taskGroupManagement,
+  taskFamilyRetryable,
+  taskOverviewModelIssue,
   taskModelReadiness,
   workerSupportsTask,
   isBackgroundFamily,
@@ -94,7 +97,7 @@ export class EagleTaskCenterService {
           })
         ).count;
       }
-      if (['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(family)) return 0;
+      if (!taskFamilyRetryable(family)) return 0;
       const condition = Prisma.sql`j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}`;
       const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
         WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"recoveryCount"=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
@@ -237,16 +240,19 @@ export class EagleTaskCenterService {
       'EMBEDDING',
       'GENERATE_EMBEDDING',
     );
-    for (const group of groups.values())
+    for (const group of groups.values()) {
+      group.management = taskGroupManagement(group, settings);
       group.presentation = taskGroupPresentation(
         group,
         settings,
         embedding,
         workers.length ? 'ONLINE' : 'OFFLINE',
       );
+    }
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
       embedding,
+      modelIssue: taskOverviewModelIssue([...groups.values()], embedding),
       settings,
       groups: TASK_FAMILIES.flatMap((id) => groups.get(id) ?? []),
       refreshedAt: now.toISOString(),

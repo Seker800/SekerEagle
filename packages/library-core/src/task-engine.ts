@@ -1,5 +1,7 @@
 import {
   taskSection,
+  CONTROLLABLE_TASK_FAMILIES,
+  type TaskManagement,
   type TaskGroup,
   type BackgroundSchedule,
   type TaskWaitReason,
@@ -163,4 +165,67 @@ export function taskBucketDecision(input: {
 
 export function taskWorkerOwned(family: TaskFamily) {
   return !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
+}
+
+export function taskFamilyRetryable(family: TaskFamily): boolean {
+  return !['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(family);
+}
+
+/** Management affects future claims; it never changes an in-flight execution's state. */
+export function taskGroupManagement(
+  group: TaskGroup,
+  schedule: BackgroundSchedule,
+): TaskManagement {
+  const disabled =
+    group.availability === 'DISABLED' ||
+    group.waiting.some(
+      (wait) => wait.reason === 'DISABLED' && group.queued > 0 && wait.count === group.queued,
+    );
+  const paused = group.policy?.paused ?? false;
+  return {
+    canRetry: group.failed > 0 && taskFamilyRetryable(group.id),
+    canPause:
+      CONTROLLABLE_TASK_FAMILIES.some((family) => family === group.id) &&
+      !disabled &&
+      schedule.mode !== 'MANUAL',
+    paused,
+    execution: disabled
+      ? 'DISABLED'
+      : group.background
+        ? paused || schedule.mode === 'MANUAL'
+          ? 'PAUSED'
+          : schedule.mode === 'ALWAYS'
+            ? 'ALWAYS'
+            : 'WINDOW'
+        : 'TRIGGER',
+  };
+}
+
+export function resolveTaskManagement(
+  group: TaskGroup,
+  schedule: BackgroundSchedule,
+): TaskManagement {
+  return group.management ?? taskGroupManagement(group, schedule);
+}
+
+/** Model warnings use the same relevance rule on the server and during rolling upgrades. */
+export function taskOverviewModelIssue(
+  groups: readonly TaskGroup[],
+  embedding?: TaskCenterOverview['embedding'],
+): 'OFFLINE' | 'DRIFTED' | null {
+  const affected = groups.some(
+    (group) =>
+      (taskNeedsModel(group.id) && group.queued + group.running > 0) ||
+      group.steps.some(
+        (step) => taskNeedsModel(group.id, step.id) && step.queued + step.running > 0,
+      ),
+  );
+  if (!affected) return null;
+  if (embedding !== undefined)
+    return embedding === 'DRIFTED' || embedding === 'OFFLINE' ? embedding : null;
+  return groups.some((group) => group.waiting.some((wait) => wait.reason === 'MODEL_DRIFTED'))
+    ? 'DRIFTED'
+    : groups.some((group) => group.waiting.some((wait) => wait.reason === 'MODEL_OFFLINE'))
+      ? 'OFFLINE'
+      : null;
 }
