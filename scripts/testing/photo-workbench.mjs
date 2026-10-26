@@ -1295,6 +1295,8 @@ try {
       (await (await call('/photos/tasks/start', 'POST', { family: 'FACES' })).json()).queued,
       0,
     );
+    const pausedAfterStart = await (await call('/photos/tasks')).json();
+    assert.equal(pausedAfterStart.groups.find((group) => group.id === 'FACES').policy.paused, true);
     assert.equal(
       await db.eagleAssetProcessingJob.count({ where: { assetId: scanAssets[1].id } }),
       0,
