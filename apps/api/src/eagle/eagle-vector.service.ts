@@ -1,3 +1,4 @@
+import { mediaRequeueData } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
@@ -205,15 +206,7 @@ export class EagleVectorService {
         status: 'FAILED',
         libraryMode: this.libraryMode,
       },
-      data: {
-        status: 'PENDING',
-        attempts: 0,
-        availableAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-        lockedAt: null,
-        lastError: null,
-      },
+      data: mediaRequeueData(),
     });
     return { retried: result.count };
   }

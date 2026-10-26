@@ -1,3 +1,4 @@
+import { mediaRequeueData } from '@sekereagle/library-core';
 import { createEditRender, readEditRender, CreateEditRenderDto } from './eagle-edit-render';
 import { readSmartFolderPage } from './eagle-smart-folder-page';
 import { encodeImageSearchCursor, decodeImageSearchCursor } from './eagle-search-cursor';
@@ -1106,15 +1107,7 @@ export class EagleService {
           kind: 'PURGE_ASSET',
           status: { in: ['PENDING', 'FAILED', 'COMPLETED'] },
         },
-        data: {
-          status: 'PENDING',
-          attempts: 0,
-          availableAt: purgeAfter,
-          completedAt: null,
-          lockedAt: null,
-          lastError: null,
-          leaseVersion: { increment: 1 },
-        },
+        data: mediaRequeueData(purgeAfter),
       });
       return assets.length;
     });

@@ -105,3 +105,18 @@ export function mediaWaitData(attempts: number, delayMs: number, code: string, n
     lastError: code,
   };
 }
+
+/** Explicit user retry starts a fresh recovery budget and fences every earlier executor. */
+export function mediaRequeueData(availableAt = new Date()) {
+  return {
+    status: 'PENDING' as const,
+    attempts: 0,
+    recoveryCount: 0,
+    leaseVersion: { increment: 1 },
+    availableAt,
+    lockedAt: null,
+    startedAt: null,
+    completedAt: null,
+    lastError: null,
+  };
+}

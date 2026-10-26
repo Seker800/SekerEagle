@@ -158,6 +158,9 @@ try {
     [
       '--experimental-test-coverage',
       '--test-coverage-include=apps/api/dist/eagle/eagle-asset-operations.service.js',
+      '--test-coverage-lines=80',
+      '--test-coverage-branches=80',
+      '--test-coverage-functions=80',
       '--test',
       'scripts/testing/asset-operations.test.mjs',
     ],

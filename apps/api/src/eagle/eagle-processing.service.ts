@@ -1,7 +1,8 @@
+import { mediaRequeueData } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
-import { EagleMediaJobStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   ListEagleProcessingJobsDto,
@@ -189,7 +190,7 @@ export class EagleProcessingService {
           kind: { not: 'GENERATE_AI_TAGS' },
           libraryMode: this.libraryMode,
         },
-        data: retryJobData(),
+        data: mediaRequeueData(),
       });
       if (result.count && job.kind !== 'EXTRACT_COLOR_PALETTE' && job.kind !== 'PURGE_ASSET') {
         await transaction.eagleAsset.updateMany({
@@ -216,6 +217,8 @@ export class EagleProcessingService {
           SET
             "status" = 'PENDING'::"EagleMediaJobStatus",
             "attempts" = 0,
+            "recoveryCount" = 0,
+            "leaseVersion" = job."leaseVersion" + 1,
             "availableAt" = NOW(),
             "lockedAt" = NULL,
             "startedAt" = NULL,
@@ -421,16 +424,4 @@ function groupCount(
   status: string,
 ) {
   return rows.find((row) => row.lane === lane && row.status === status)?._count ?? 0;
-}
-
-function retryJobData() {
-  return {
-    status: EagleMediaJobStatus.PENDING,
-    attempts: 0,
-    availableAt: new Date(),
-    lockedAt: null,
-    startedAt: null,
-    completedAt: null,
-    lastError: null,
-  };
 }

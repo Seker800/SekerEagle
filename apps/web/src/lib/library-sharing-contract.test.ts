@@ -1,3 +1,4 @@
+import { createAssetOperationsApi } from './asset-operations-api';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createEagleApi } from './eagle-api';
 import { createEagleVectorApi } from './eagle-vector-api';
@@ -9,6 +10,7 @@ import type { LibraryMode } from './library-api-scope';
 
 afterEach(() => vi.restoreAllMocks());
 const factories = [
+  createAssetOperationsApi,
   createEagleApi,
   createEagleVectorApi,
   createEagleProcessingAdminApi,
@@ -22,6 +24,16 @@ for (const factory of factories) {
   });
 }
 const operations = {
+  operationListPublic: (mode: LibraryMode) => createAssetOperationsApi(mode).list(false),
+  operationListPrivate: (mode: LibraryMode) => createAssetOperationsApi(mode).list(true),
+  operationEnqueue: (mode: LibraryMode) =>
+    createAssetOperationsApi(mode).enqueue({
+      operationId: 'operation',
+      kind: 'TRASH',
+      assetIds: ['asset'],
+    }),
+  operationRetry: (mode: LibraryMode) => createAssetOperationsApi(mode).retry('operation'),
+  operationCancel: (mode: LibraryMode) => createAssetOperationsApi(mode).cancel('operation'),
   tasks: (mode: LibraryMode) => createEagleTaskCenterApi(mode).fetchEagleTaskCenter(),
   taskEvents: (mode: LibraryMode) =>
     createEagleTaskCenterApi(mode).fetchEagleTaskEvents('EMBEDDING'),

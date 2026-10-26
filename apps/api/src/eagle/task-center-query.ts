@@ -61,7 +61,7 @@ export function taskCenterQuery(
       WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode" AND s."assetRevision"=a."mediaRevision"
         AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
         AND (t."expiresAt" IS NULL OR t."expiresAt">now()) AND t.status='OPEN'
-        ${scope === 'HISTORY' ? Prisma.sql`AND s.status IN ('APPLIED','REJECTED')` : Prisma.sql`AND s.status IN ('PENDING','APPLYING','FAILED')`}
+        ${scope === 'HISTORY' ? Prisma.sql`AND s.status IN ('ACCEPTED','REJECTED')` : Prisma.sql`AND s.status IN ('PENDING','APPLYING','FAILED')`}
       UNION ALL
       SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
         WHEN j.status='FAILED' THEN 'FAILED' WHEN j.status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,

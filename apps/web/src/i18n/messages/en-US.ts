@@ -1854,4 +1854,6 @@ export const enUS = {
   '小点表示拍摄足迹；当前视野拍摄量最多的 9 个地点显示照片。':
     'Dots show your photo footprint. The nine busiest places in view show photo previews.',
   '地图更新于 {{value1}}': 'Map updated {{value1}}',
+  '成片仍在后台处理，可关闭编辑器，稍后重试保存。':
+    'Your photo is still processing in the background. You can close the editor and retry saving later.',
 } as const;
