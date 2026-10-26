@@ -326,3 +326,10 @@ test('primary blocking reason follows the shared precedence rather than bucket a
   assert.equal(taskGroupPresentation({...group, waiting}, schedule).reason, 'MODEL_OFFLINE');
   assert.equal(taskGroupPresentation({...group, waiting: [...waiting].reverse()}, schedule).reason, 'MODEL_OFFLINE');
 });
+
+
+test('an idle paused group keeps its pause reason even while its model is offline', () => {
+  assert.equal(taskGroupPresentation({...group, policy: {paused: true, priority: 0}}, schedule, 'OFFLINE').status, 'STOPPED');
+  assert.equal(taskGroupPresentation({...group, running: 1, policy: {paused: true, priority: 0}}, schedule, 'OFFLINE').status, 'WAITING');
+  assert.equal(taskGroupPresentation({...group, running: 1}, schedule, 'READY', 'OFFLINE').reason, 'WORKER_OFFLINE');
+});
