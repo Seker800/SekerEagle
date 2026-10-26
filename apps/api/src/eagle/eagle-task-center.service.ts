@@ -5,6 +5,7 @@ import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,
   taskBucketDecision,
+  taskWorkerOwned,
   taskGroupPresentation,
   taskModelReadiness,
   workerSupportsTask,
@@ -115,8 +116,14 @@ export class EagleTaskCenterService {
     return { retried };
   }
 
-  async events(ownerId: string, family: TaskFamily, includePrivate = false): Promise<TaskTransitionEvent[]> {
-    const rows = await this.prisma.$queryRaw<Array<Omit<TaskTransitionEvent, 'id' | 'occurredAt'> & {id: bigint; occurredAt: Date}>>(Prisma.sql`
+  async events(
+    ownerId: string,
+    family: TaskFamily,
+    includePrivate = false,
+  ): Promise<TaskTransitionEvent[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<Omit<TaskTransitionEvent, 'id' | 'occurredAt'> & { id: bigint; occurredAt: Date }>
+    >(Prisma.sql`
       SELECT e.id, e."jobId", j.kind::text AS step, e."fromStatus", e."toStatus", e."leaseVersion", e.attempts, e."recoveryCount", e."occurredAt"
       FROM "EagleMediaJobEvent" e
       JOIN "EagleMediaJob" j ON j.id=e."jobId" AND j."ownerId"=e."ownerId" AND j."libraryMode"=e."libraryMode"
@@ -126,7 +133,11 @@ export class EagleTaskCenterService {
         AND j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}
       ORDER BY e.id DESC LIMIT 30
     `);
-    return rows.map((row) => ({...row, id: row.id.toString(), occurredAt: row.occurredAt.toISOString()}));
+    return rows.map((row) => ({
+      ...row,
+      id: row.id.toString(),
+      occurredAt: row.occurredAt.toISOString(),
+    }));
   }
 
   async overview(
@@ -212,7 +223,7 @@ export class EagleTaskCenterService {
       else group.waiting.push({ reason, count, nextAt });
     }
     for (const group of groups.values()) {
-      const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(group.id);
+      const workerOwned = taskWorkerOwned(group.id);
       group.availability = !workerOwned
         ? 'ENABLED'
         : !workers.length
@@ -231,7 +242,7 @@ export class EagleTaskCenterService {
       'GENERATE_EMBEDDING',
     );
     for (const group of groups.values())
-      group.presentation = taskGroupPresentation(group, settings, embedding);
+      group.presentation = taskGroupPresentation(group, settings, embedding, workers.length ? 'ONLINE' : 'OFFLINE');
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
       embedding,

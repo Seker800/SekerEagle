@@ -51,6 +51,7 @@ export function taskGroupPresentation(
   group: TaskGroup,
   schedule: BackgroundSchedule,
   embedding?: string,
+  worker?: 'ONLINE' | 'OFFLINE',
 ): TaskPresentation {
   const section = taskSection(group, schedule);
   const blocked = group.waiting.filter((wait) => wait.reason !== 'QUEUED' && wait.count > 0);
@@ -61,6 +62,9 @@ export function taskGroupPresentation(
     : group.approval > 0
       ? 'APPROVAL'
       : null;
+  if (worker === 'OFFLINE' && taskWorkerOwned(group.id) && group.running + group.queued > 0 &&
+      (group.running > 0 || section !== 'PAUSED'))
+    return {section, status: 'WAITING', reason: 'WORKER_OFFLINE'};
   if (
     group.id === 'EMBEDDING' &&
     group.running + group.queued > 0 &&
@@ -165,7 +169,7 @@ export function taskBucketDecision(input: {
 }): TaskDecision {
   const { family, step, workers, schedule, now } = input;
   const background = isBackgroundFamily(family);
-  const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
+  const workerOwned = taskWorkerOwned(family);
   const model = taskModelReadiness(workers, family, step);
   const needsModel =
     family === 'EMBEDDING' || (family === 'SMART_FOLDERS' && step === 'SMART_FOLDER_QUERY');
@@ -259,4 +263,8 @@ export function mediaWaitData(attempts: number, delayMs: number, code: string, n
     lockedAt: null,
     lastError: code,
   };
+}
+
+export function taskWorkerOwned(family: TaskFamily) {
+  return !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
 }
