@@ -312,8 +312,45 @@ test('remote media has separate capacity and cannot increase NAS execution', asy
   end();
 });
 
-test('backpressure pauses the entire resource briefly, not just the rejected job',async t=>{
- t.mock.timers.enable({apis:['Date','setTimeout']});let wakes=0,claims=0;const pool=new MediaResourcePool(1,()=>{wakes++;},()=>{},2);
- pool.defer('EMBEDDING',1000);await pool.fill('EMBEDDING',async()=>{claims++;return null;},async()=>{});assert.equal(claims,0);
- t.mock.timers.tick(1000);await pool.fill('EMBEDDING',async()=>{claims++;return null;},async()=>{});assert.equal(claims,1);assert.ok(wakes>0);
+test('backpressure pauses the entire resource briefly, not just the rejected job', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  let wakes = 0,
+    claims = 0;
+  const pool = new MediaResourcePool(
+    1,
+    () => {
+      wakes++;
+    },
+    () => {},
+    2,
+  );
+  pool.defer('EMBEDDING', 1000);
+  await pool.fill(
+    'EMBEDDING',
+    async () => {
+      claims++;
+      return null;
+    },
+    async () => {},
+  );
+  assert.equal(claims, 0);
+  t.mock.timers.tick(1000);
+  await pool.fill(
+    'EMBEDDING',
+    async () => {
+      claims++;
+      return null;
+    },
+    async () => {},
+  );
+  assert.equal(claims, 1);
+  assert.ok(wakes > 0);
+});
+
+test('shared memory reservations allow light overlap and defer a second heavy task without running it',async()=>{
+ const pool=new MediaResourcePool(1,()=>{},()=>{},4,1536);pool.setRemoteMediaLimit(1);let release!:()=>void,remote=0,deferred=0;
+ await pool.fill('NAS',async()=>1,async()=>{await new Promise<void>(resolve=>{release=resolve;});},{memoryMiB:()=>1400,onMemoryWait:async()=>{}});
+ await pool.fill('REMOTE_MEDIA',async()=>2,async()=>{remote++;},{memoryMiB:()=>640,onMemoryWait:async()=>{deferred++;}});assert.equal(remote,0);assert.equal(deferred,1);
+ release();await new Promise(resolve=>setImmediate(resolve));
+ await pool.fill('REMOTE_MEDIA',async()=>2,async()=>{remote++;},{memoryMiB:()=>640,onMemoryWait:async()=>{deferred++;}});await new Promise(resolve=>setImmediate(resolve));assert.equal(remote,1);
 });
