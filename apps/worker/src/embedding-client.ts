@@ -109,70 +109,76 @@ export class EmbeddingClient {
   ): Promise<{ embedding: number[] }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
-    let response: Response;
     try {
-      response = await this.request(url, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.options.token}`,
-          ...headers,
-          'x-embedding-dimensions': String(this.options.dimensions),
-        },
-        body,
-        signal: controller.signal,
-      });
-    } catch (error) {
-      throw new EmbeddingClientError('HOST_UNAVAILABLE', 'Embedding host is unavailable.', {
-        cause: error,
-      });
+      let response: Response;
+      try {
+        response = await this.request(url, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${this.options.token}`,
+            ...headers,
+            'x-embedding-dimensions': String(this.options.dimensions),
+          },
+          body,
+          signal: controller.signal,
+        });
+      } catch (error) {
+        throw new EmbeddingClientError('HOST_UNAVAILABLE', 'Embedding host is unavailable.', {
+          cause: error,
+        });
+      }
+      if (response.status === 503 || response.status === 429) {
+        throw new EmbeddingClientError('HOST_BUSY', 'Embedding capacity is busy.', {
+          retryAfterMs: boundedRetryAfter(response.headers.get('retry-after')),
+        });
+      }
+      if (response.status === 408) {
+        throw new EmbeddingClientError('UPLOAD_TIMEOUT', 'Embedding upload timed out.', {
+          retryAfterMs: 1000,
+        });
+      }
+      if (!response.ok) {
+        throw new EmbeddingClientError(
+          response.status >= 500 ? 'HOST_UNAVAILABLE' : 'INVALID_RESPONSE',
+          `Embedding host returned HTTP ${response.status}.`,
+        );
+      }
+      let payload: EmbeddingResponse;
+      try {
+        payload = (await response.json()) as EmbeddingResponse;
+      } catch (error) {
+        throw new EmbeddingClientError(
+          controller.signal.aborted ? 'HOST_UNAVAILABLE' : 'INVALID_RESPONSE',
+          controller.signal.aborted
+            ? 'Embedding response timed out.'
+            : 'Embedding host returned invalid JSON.',
+          { cause: error },
+        );
+      }
+      if (
+        payload.model !== this.options.modelId ||
+        payload.revision !== this.options.modelRevision ||
+        payload.dimensions !== this.options.dimensions ||
+        payload.normalized !== true
+      ) {
+        throw new EmbeddingClientError('MODEL_DRIFT', 'Embedding model contract drifted.');
+      }
+      if (
+        !Array.isArray(payload.embedding) ||
+        payload.embedding.length !== this.options.dimensions ||
+        payload.embedding.some((value) => typeof value !== 'number' || !Number.isFinite(value))
+      ) {
+        throw new EmbeddingClientError('INVALID_RESPONSE', 'Embedding vector is invalid.');
+      }
+      const embedding = payload.embedding as number[];
+      const norm = Math.sqrt(embedding.reduce((sum, value) => sum + value * value, 0));
+      if (Math.abs(norm - 1) > 1e-3) {
+        throw new EmbeddingClientError('INVALID_RESPONSE', 'Embedding vector is not normalized.');
+      }
+      return { embedding };
     } finally {
       clearTimeout(timer);
     }
-    if (response.status === 503 || response.status === 429) {
-      throw new EmbeddingClientError('HOST_BUSY', 'Embedding capacity is busy.', {
-        retryAfterMs: boundedRetryAfter(response.headers.get('retry-after')),
-      });
-    }
-    if (response.status === 408) {
-      throw new EmbeddingClientError('UPLOAD_TIMEOUT', 'Embedding upload timed out.', {
-        retryAfterMs: 1000,
-      });
-    }
-    if (!response.ok) {
-      throw new EmbeddingClientError(
-        response.status >= 500 ? 'HOST_UNAVAILABLE' : 'INVALID_RESPONSE',
-        `Embedding host returned HTTP ${response.status}.`,
-      );
-    }
-    let payload: EmbeddingResponse;
-    try {
-      payload = (await response.json()) as EmbeddingResponse;
-    } catch (error) {
-      throw new EmbeddingClientError('INVALID_RESPONSE', 'Embedding host returned invalid JSON.', {
-        cause: error,
-      });
-    }
-    if (
-      payload.model !== this.options.modelId ||
-      payload.revision !== this.options.modelRevision ||
-      payload.dimensions !== this.options.dimensions ||
-      payload.normalized !== true
-    ) {
-      throw new EmbeddingClientError('MODEL_DRIFT', 'Embedding model contract drifted.');
-    }
-    if (
-      !Array.isArray(payload.embedding) ||
-      payload.embedding.length !== this.options.dimensions ||
-      payload.embedding.some((value) => typeof value !== 'number' || !Number.isFinite(value))
-    ) {
-      throw new EmbeddingClientError('INVALID_RESPONSE', 'Embedding vector is invalid.');
-    }
-    const embedding = payload.embedding as number[];
-    const norm = Math.sqrt(embedding.reduce((sum, value) => sum + value * value, 0));
-    if (Math.abs(norm - 1) > 1e-3) {
-      throw new EmbeddingClientError('INVALID_RESPONSE', 'Embedding vector is not normalized.');
-    }
-    return { embedding };
   }
 }
 
