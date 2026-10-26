@@ -246,3 +246,18 @@ test('disabled processor versions are excluded before the limited claim scan', a
     ),
   );
 });
+
+
+test('stale windows cannot resurrect terminal jobs or steal live leases', async () => {
+  const now = new Date('2026-08-17T00:05:00Z');
+  let writes = 0;
+  const client = { eagleAssetProcessingJob: {
+    findMany: async () => [job('done', 'INTERACTIVE', {status: 'COMPLETED'}),
+      job('live', 'INTERACTIVE', {status: 'PROCESSING', lockedAt: now}),
+      job('future', 'INTERACTIVE', {availableAt: new Date(now.getTime()+1)})],
+    updateMany: async () => { writes++; return {count: 1}; },
+    findUniqueOrThrow: async () => job('done', 'INTERACTIVE'),
+  }};
+  assert.equal(await claimNextMediaJob(client, { now, canClaimBackground: async () => true }), null);
+  assert.equal(writes, 0);
+});
