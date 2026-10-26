@@ -353,3 +353,48 @@ def test_admission_detects_over_release():
     with pytest.raises(ValueError):
         capacity.release()
     assert capacity.snapshot() == {'limit': 1, 'inFlight': 0, 'available': 1}
+
+
+def test_real_tcp_interrupted_upload_is_closed_and_does_not_poison_next_request(monkeypatch):
+    import socket
+    import threading
+    import time
+    import httpx2
+    import uvicorn
+    monkeypatch.setattr(service, 'TOKEN', 'test-secret')
+    monkeypatch.setattr(service, 'BODY_READ_TIMEOUT_SECONDS', .1)
+    monkeypatch.setattr(service, 'schedule_idle_unload', lambda: None)
+    service.runtime.model = FakeModel()
+    service.runtime.processor = object()
+    listener = socket.socket()
+    listener.bind(('127.0.0.1', 0))
+    listener.listen()
+    port = listener.getsockname()[1]
+    server = uvicorn.Server(uvicorn.Config(service.app, log_level='error', lifespan='off'))
+    thread = threading.Thread(target=server.run, kwargs={'sockets': [listener]}, daemon=True)
+    thread.start()
+    try:
+        for _ in range(200):
+            if server.started:
+                break
+            time.sleep(.005)
+        assert server.started
+        with socket.create_connection(('127.0.0.1', port), timeout=2) as stream:
+            stream.sendall(b'POST /v1/embeddings/image HTTP/1.1\r\nHost: test\r\nAuthorization: Bearer test-secret\r\nContent-Type: image/jpeg\r\nX-Embedding-Dimensions: 1024\r\nContent-Length: 10000\r\n\r\npartial')
+            response = b''
+            while True:
+                chunk = stream.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+            assert b' 408 ' in response
+            assert b'connection: close' in response.lower()
+        with httpx2.Client(base_url=f'http://127.0.0.1:{port}') as client:
+            headers = {'authorization':'Bearer test-secret','content-type':'image/jpeg','x-embedding-dimensions':'1024'}
+            assert client.get('/healthz', headers=headers).json()['capacity']['available'] == 3
+            assert client.post('/v1/embeddings/image', headers=headers, content=image_bytes()).status_code == 200
+    finally:
+        server.should_exit = True
+        thread.join(5)
+        listener.close()
+    assert not thread.is_alive()
