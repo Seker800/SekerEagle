@@ -1,4 +1,4 @@
-import { mediaStaleBeforeSql } from '@sekereagle/library-persistence';
+import { mediaStaleBeforeSql, mediaTaskFactsSql, taskBackoffFactsSql, taskWaitReasonSql } from '@sekereagle/library-persistence';
 import { Prisma, type LibraryMode } from '@prisma/client';
 
 /** Aggregate live sources only. External import history has no heartbeat protocol and is not activity evidence. */
@@ -14,9 +14,7 @@ export function taskCenterQuery(
         CASE WHEN j.status='COMPLETED' THEN 'COMPLETED' WHEN j.status='FAILED' THEN 'FAILED'
           WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
           ELSE 'QUEUED' END AS status,
-        CASE WHEN d.status='FAILED' THEN 'DEPENDENCY_FAILED'
-          WHEN j."dependsOnJobId" IS NOT NULL AND d.status IS DISTINCT FROM 'COMPLETED' THEN 'DEPENDENCY'
-          WHEN j."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END AS reason,
+        ${taskWaitReasonSql(mediaTaskFactsSql(Prisma.sql`j`, Prisma.sql`d`))} AS reason,
         j."availableAt" AS "nextAt"
       FROM "EagleMediaJob" j JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode"
       LEFT JOIN "EagleMediaJob" d ON j.status<>'COMPLETED' AND d.id=j."dependsOnJobId" AND d."ownerId"=j."ownerId" AND d."libraryMode"=j."libraryMode"
@@ -28,7 +26,7 @@ export function taskCenterQuery(
       SELECT 'SMART_FOLDERS',CASE WHEN s."queryVector" IS NULL THEN 'SMART_FOLDER_QUERY' ELSE 'SMART_FOLDERS' END,'',
         CASE WHEN s.status='READY' THEN 'COMPLETED' WHEN s.status='FAILED' THEN 'FAILED'
           WHEN s."lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
-        CASE WHEN s."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,s."availableAt"
+        ${taskWaitReasonSql(taskBackoffFactsSql(Prisma.sql`s."availableAt"`, Prisma.sql`s."errorCode"`))},s."availableAt"
       FROM "EagleSmartFolderSemanticSnapshot" s
       WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"
         ${scope === 'HISTORY' ? Prisma.sql`AND s.status='READY'` : Prisma.sql`AND s.status IN ('PENDING','BUILDING','FAILED')`}
@@ -36,19 +34,19 @@ export function taskCenterQuery(
       SELECT 'TAG_INDEX','TAG_INDEX','',
         CASE WHEN b.status='COMPLETED' THEN 'COMPLETED' WHEN b.status='FAILED' THEN 'FAILED'
           WHEN b.status='PROCESSING' AND b."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING' ELSE 'QUEUED' END,
-        CASE WHEN b."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,b."availableAt"
+        ${taskWaitReasonSql(taskBackoffFactsSql(Prisma.sql`b."availableAt"`, Prisma.sql`b."lastError"`))},b."availableAt"
       FROM "EagleTagSemanticBuild" b JOIN "EagleManualTag" t ON t.id=b."tagId" AND t."ownerId"=b."ownerId" AND t."libraryMode"=b."libraryMode"
       WHERE b."ownerId"=${ownerId} AND b."libraryMode"=${libraryMode}::"LibraryMode" AND (${includePrivate} OR NOT t."marksAssetsPrivate")
         ${scope === 'HISTORY' ? Prisma.sql`AND b.status='COMPLETED'` : Prisma.sql`AND b.status<>'COMPLETED'`}
       UNION ALL
       SELECT 'PHOTO_MAP','PHOTO_MAP','',
         CASE WHEN "dirtyAt" IS NULL THEN 'COMPLETED' WHEN "lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
-        CASE WHEN "availableAt">now() AND "lastError" IS NOT NULL THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
+        ${taskWaitReasonSql({ retryPending: Prisma.sql`"availableAt">now() AND "lastError" IS NOT NULL` })},"availableAt"
       FROM "EaglePhotoMapState" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode"
         ${scope === 'HISTORY' ? Prisma.sql`AND "dirtyAt" IS NULL` : Prisma.sql`AND "dirtyAt" IS NOT NULL`}
       UNION ALL
       SELECT 'CLEANUP','OBJECT_DELETION','',CASE WHEN status='PROCESSING' AND "lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING' ELSE 'QUEUED' END,
-        CASE WHEN "availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
+        ${taskWaitReasonSql(taskBackoffFactsSql(Prisma.sql`"availableAt"`))},"availableAt"
       FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate} AND ${scope === 'ACTIVE'}
       UNION ALL
       SELECT 'APPROVALS','APPROVALS','',CASE WHEN s.status='PENDING' THEN 'APPROVAL' WHEN s.status='FAILED' THEN 'FAILED'
@@ -62,7 +60,7 @@ export function taskCenterQuery(
       UNION ALL
       SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
         WHEN j.status='FAILED' THEN 'FAILED' WHEN j.status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,
-        CASE WHEN j."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,j."availableAt"
+        ${taskWaitReasonSql(taskBackoffFactsSql(Prisma.sql`j."availableAt"`))},j."availableAt"
       FROM "UploadFinalizationJob" j JOIN "UploadSession" s ON s.id=j."uploadSessionId"
       LEFT JOIN "EagleAsset" a ON a.id=s."eagleAssetId" AND a."ownerId"=s."uploaderId" AND a."libraryMode"=s."libraryMode"
       WHERE s."uploaderId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode"

@@ -23,6 +23,7 @@ export const TASK_GATES = [
   ['dependencyFailed', 'DEPENDENCY_FAILED'],
   ['dependencyPending', 'DEPENDENCY'],
   ['outsideSchedule', 'SCHEDULE'],
+  ['modelBusy', 'MODEL_BUSY'],
   ['retryPending', 'RETRY'],
 ] as const satisfies ReadonlyArray<readonly [string, TaskWaitReason]>;
 export type TaskGate = (typeof TASK_GATES)[number][0];
@@ -37,7 +38,7 @@ export function decideTask(facts: TaskGateFacts, nextAt: string | null = null): 
   return {
     runnable: reason === 'QUEUED',
     reason,
-    nextAt: reason === 'RETRY' || reason === 'SCHEDULE' ? nextAt : null,
+    nextAt: reason === 'RETRY' || reason === 'MODEL_BUSY' || reason === 'SCHEDULE' ? nextAt : null,
   };
 }
 
@@ -153,6 +154,7 @@ export function taskBucketDecision(input: {
       dependencyFailed: input.reason === 'DEPENDENCY_FAILED',
       dependencyPending: input.reason === 'DEPENDENCY',
       outsideSchedule,
+      modelBusy: input.reason === 'MODEL_BUSY',
       retryPending: input.reason === 'RETRY',
     },
     outsideSchedule ? (nextBackgroundTime(schedule, now)?.toISOString() ?? null) : input.nextAt,

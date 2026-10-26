@@ -100,6 +100,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
 }
 
 const waits: Record<TaskWaitReason, () => string> = {
+  MODEL_BUSY: () => t('等待模型空闲'),
   MODEL_OFFLINE: () => t('等待 Mac 2B 模型上线'),
   MODEL_DRIFTED: () => t('模型配置不匹配，等待修复'),
   DEPENDENCY: () => t('等待前置步骤'),

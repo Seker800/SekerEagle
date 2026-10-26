@@ -64,6 +64,7 @@ export type TaskWaitReason =
   | 'WORKER_OFFLINE'
   | 'MODEL_OFFLINE'
   | 'MODEL_DRIFTED'
+  | 'MODEL_BUSY'
   | 'RETRY'
   | 'QUEUED'
   | 'APPROVAL';

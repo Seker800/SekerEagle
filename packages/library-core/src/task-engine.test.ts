@@ -26,6 +26,7 @@ const ready = {
   dependencyFailed: false,
   dependencyPending: false,
   outsideSchedule: false,
+  modelBusy: false,
   retryPending: false,
   approval: false,
 };
@@ -40,6 +41,7 @@ test('one decision distinguishes deployment, model, dependency and time waits', 
     dependencyFailed: 'DEPENDENCY_FAILED',
     dependencyPending: 'DEPENDENCY',
     outsideSchedule: 'SCHEDULE',
+    modelBusy: 'MODEL_BUSY',
     retryPending: 'RETRY',
     approval: 'APPROVAL',
   })) {
