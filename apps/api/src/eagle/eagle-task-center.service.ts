@@ -4,16 +4,17 @@ import { mediaTaskFamilySql, lockOwnerPrivacyProjection } from '@sekereagle/libr
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,
-  backgroundScheduleAllows,
+  taskBucketDecision,
+  taskGroupPresentation,
+  taskModelReadiness,
+  workerSupportsTask,
   isBackgroundFamily,
   mediaTaskFamily,
-  nextBackgroundTime,
   type TaskCounts,
   type TaskCenterOverview,
   type TaskFamily,
   type TaskGroup,
   type TaskWaitReason,
-  type WorkerTaskCapabilities,
 } from '@sekereagle/library-core';
 import { PrismaService } from '../prisma/prisma.service';
 import { LIBRARY_MODE } from './library-mode';
@@ -174,38 +175,12 @@ export class EagleTaskCenterService {
       group[field] += count;
       step[field] += count;
       if (field !== 'queued' && field !== 'approval') continue;
-      let reason = bucket.reason,
-        nextAt = reason === 'RETRY' ? (bucket.nextAt?.toISOString() ?? null) : null;
-      const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
-      const capable = workers.some((worker) => supports(worker.capabilities, family, bucket.step));
-      const needsEmbedding =
-        family === 'EMBEDDING' ||
-        (family === 'SMART_FOLDERS' && bucket.step === 'SMART_FOLDER_QUERY');
-      const modelStates = workers
-        .filter((worker) => supports(worker.capabilities, family, bucket.step))
-        .map(
-          (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
-        );
-      if (field === 'approval') reason = 'APPROVAL';
-      else if (group.policy?.paused) reason = 'PAUSED';
-      else if (workerOwned && !workers.length) reason = 'WORKER_OFFLINE';
-      else if (workerOwned && !capable) reason = 'DISABLED';
-      else if (group.background && settings.mode === 'MANUAL') reason = 'PAUSED';
-      else if (
-        needsEmbedding &&
-        modelStates.length &&
-        modelStates.every((state) => state === 'OFFLINE' || state === 'DRIFTED')
-      )
-        reason = modelStates.some((state) => state === 'DRIFTED')
-          ? 'MODEL_DRIFTED'
-          : 'MODEL_OFFLINE';
-      else if (['DEPENDENCY', 'DEPENDENCY_FAILED'].includes(reason)) {
-        /* Keep dependency explanation. */
-      } else if (group.background && !backgroundScheduleAllows(settings, now)) {
-        reason = 'SCHEDULE';
-        nextAt = nextBackgroundTime(settings, now)?.toISOString() ?? null;
-      }
-      if (reason !== 'RETRY' && reason !== 'SCHEDULE') nextAt = null;
+      const {reason, nextAt} = taskBucketDecision({
+        family, step: bucket.step, reason: bucket.reason,
+        nextAt: bucket.nextAt?.toISOString() ?? null,
+        approval: field === 'approval', paused: group.policy?.paused ?? false,
+        workers: workers.map((worker) => worker.capabilities), schedule: settings, now,
+      });
       const wait = group.waiting.find(
         (entry) => entry.reason === reason && entry.nextAt === nextAt,
       );
@@ -219,40 +194,19 @@ export class EagleTaskCenterService {
         : !workers.length
           ? 'UNKNOWN'
           : group.steps.some((step) =>
-                workers.some((worker) => supports(worker.capabilities, group.id, step.id)),
+                workers.some((worker) => workerSupportsTask(worker.capabilities, group.id, step.id)),
               )
             ? 'ENABLED'
             : 'DISABLED';
     }
-    const embeddingStates = workers
-      .filter((worker) => supports(worker.capabilities, 'EMBEDDING', 'GENERATE_EMBEDDING'))
-      .map(
-        (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
-      );
+    const embedding = taskModelReadiness(workers.map((worker) => worker.capabilities), 'EMBEDDING', 'GENERATE_EMBEDDING');
+    for (const group of groups.values()) group.presentation = taskGroupPresentation(group, settings, embedding);
     return {
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
-      embedding: embeddingStates.includes('READY')
-        ? 'READY'
-        : embeddingStates.includes('DRIFTED')
-          ? 'DRIFTED'
-          : embeddingStates.includes('OFFLINE')
-            ? 'OFFLINE'
-            : 'UNKNOWN',
+      embedding,
       settings,
       groups: TASK_FAMILIES.flatMap((id) => groups.get(id) ?? []),
       refreshedAt: now.toISOString(),
     };
   }
-}
-
-function supports(value: unknown, family: TaskFamily, step: string) {
-  // Mixed-version fleets have unknown capabilities, never falsely claim an old worker is disabled.
-  if (!value || typeof value !== 'object' || !('background' in value)) return true;
-  const capability = value as WorkerTaskCapabilities;
-  if (isBackgroundFamily(family) && !capability.background) return false;
-  if (family === 'VIDEO' && !capability.video) return false;
-  if (family === 'SMART_FOLDERS') return capability.smartFolders;
-  if (family === 'TAG_INDEX') return capability.tagBuilds;
-  if (family === 'PHOTO_MAP') return capability.photoMap;
-  return !capability.jobKinds || capability.jobKinds.includes(step) || step === 'OBJECT_DELETION';
 }

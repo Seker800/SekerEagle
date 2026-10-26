@@ -1,3 +1,4 @@
+import { mediaStaleBeforeSql } from '@sekereagle/library-persistence';
 import { Prisma, type LibraryMode } from '@prisma/client';
 
 /** Aggregate live sources only. External import history has no heartbeat protocol and is not activity evidence. */
@@ -10,7 +11,7 @@ export function taskCenterQuery(
     WITH facts AS (
       SELECT 'MEDIA' AS family, j.kind::text AS step, j."processorVersion" AS version,
         CASE WHEN j.status='COMPLETED' THEN 'COMPLETED' WHEN j.status='FAILED' THEN 'FAILED'
-          WHEN j.status='PROCESSING' AND j."lockedAt">now()-interval '10 minutes' THEN 'RUNNING'
+          WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
           ELSE 'QUEUED' END AS status,
         CASE WHEN d.status='FAILED' THEN 'DEPENDENCY_FAILED'
           WHEN j."dependsOnJobId" IS NOT NULL AND d.status IS DISTINCT FROM 'COMPLETED' THEN 'DEPENDENCY'
@@ -32,7 +33,7 @@ export function taskCenterQuery(
       UNION ALL
       SELECT 'TAG_INDEX','TAG_INDEX','',
         CASE WHEN b.status='COMPLETED' THEN 'COMPLETED' WHEN b.status='FAILED' THEN 'FAILED'
-          WHEN b.status='PROCESSING' AND b."lockedAt">now()-interval '10 minutes' THEN 'RUNNING' ELSE 'QUEUED' END,
+          WHEN b.status='PROCESSING' AND b."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING' ELSE 'QUEUED' END,
         CASE WHEN b."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,b."availableAt"
       FROM "EagleTagSemanticBuild" b JOIN "EagleManualTag" t ON t.id=b."tagId" AND t."ownerId"=b."ownerId" AND t."libraryMode"=b."libraryMode"
       WHERE b."ownerId"=${ownerId} AND b."libraryMode"=${libraryMode}::"LibraryMode" AND (${includePrivate} OR NOT t."marksAssetsPrivate")
@@ -42,7 +43,7 @@ export function taskCenterQuery(
         CASE WHEN "availableAt">now() AND "lastError" IS NOT NULL THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
       FROM "EaglePhotoMapState" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode"
       UNION ALL
-      SELECT 'CLEANUP','OBJECT_DELETION','',CASE WHEN status='PROCESSING' AND "lockedAt">now()-interval '10 minutes' THEN 'RUNNING' ELSE 'QUEUED' END,
+      SELECT 'CLEANUP','OBJECT_DELETION','',CASE WHEN status='PROCESSING' AND "lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING' ELSE 'QUEUED' END,
         CASE WHEN "availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,"availableAt"
       FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate}
       UNION ALL
@@ -54,7 +55,7 @@ export function taskCenterQuery(
         AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
         AND (t."expiresAt" IS NULL OR t."expiresAt">now()) AND t.status='OPEN'
       UNION ALL
-      SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">now()-interval '10 minutes' THEN 'RUNNING'
+      SELECT 'UPLOADS','UPLOADS','',CASE WHEN j.status='PROCESSING' AND j."lockedAt">${mediaStaleBeforeSql()} THEN 'RUNNING'
         WHEN j.status='FAILED' THEN 'FAILED' WHEN j.status='COMPLETED' THEN 'COMPLETED' ELSE 'QUEUED' END,
         CASE WHEN j."availableAt">now() THEN 'RETRY' ELSE 'QUEUED' END,j."availableAt"
       FROM "UploadFinalizationJob" j JOIN "UploadSession" s ON s.id=j."uploadSessionId"

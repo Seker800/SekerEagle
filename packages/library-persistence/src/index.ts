@@ -136,3 +136,5 @@ export {
   matchSmartFoldersForEmbedding,
   smartFolderMatchWhere,
 } from './smart-folder-semantics';
+
+export * from './task-decision';

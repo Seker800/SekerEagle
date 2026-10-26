@@ -1,7 +1,7 @@
 import { t } from '../../i18n';
 import {
   TASK_FAMILIES,
-  taskSection,
+  taskGroupPresentation,
   type TaskFamily,
   type TaskWaitReason,
   type BackgroundSchedule,
@@ -160,16 +160,7 @@ export function taskStatus(
   schedule: BackgroundSchedule,
   embedding?: TaskCenterOverview['embedding'],
 ) {
-  if (
-    group.id === 'EMBEDDING' &&
-    group.queued + group.running > 0 &&
-    (embedding === 'OFFLINE' || embedding === 'DRIFTED')
-  )
-    return 'WAITING';
-  if (group.running > 0) return 'RUNNING';
-  if (group.queued > 0 && taskSection(group, schedule) !== 'PAUSED') return 'QUEUED';
-  if (group.failed > 0 || group.queued > 0) return 'STOPPED';
-  return 'COMPLETED';
+  return (group.presentation ?? taskGroupPresentation(group, schedule, embedding)).status;
 }
 
 export function taskStatusLabel(
@@ -178,8 +169,12 @@ export function taskStatusLabel(
   embedding?: TaskCenterOverview['embedding'],
 ): string {
   switch (taskStatus(group, schedule, embedding)) {
-    case 'WAITING':
-      return t('等待模型');
+    case 'WAITING': {
+      const reason = (group.presentation ?? taskGroupPresentation(group, schedule, embedding)).reason;
+      return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED' ? t('等待模型')
+        : reason === 'WORKER_OFFLINE' ? t('等待处理服务')
+        : reason ? taskWaitLabel(reason) : t('等待执行');
+    }
     case 'RUNNING':
       return t('计算ing');
     case 'QUEUED':

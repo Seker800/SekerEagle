@@ -1,4 +1,4 @@
-import { taskSection, type TaskGroup, type BackgroundSchedule, type TaskWaitReason, type TaskSection } from './task-scheduling';
+import { taskSection, type TaskGroup, type BackgroundSchedule, type TaskWaitReason, type TaskSection, isBackgroundFamily, backgroundScheduleAllows, nextBackgroundTime, type TaskFamily, type WorkerTaskCapabilities } from './task-scheduling';
 
 /** Adapters provide facts. Rule order and reasons belong here, including SQL compilation. */
 export const TASK_GATES = [
@@ -18,11 +18,13 @@ export function decideTask(facts: TaskGateFacts, nextAt: string | null = null): 
 export type TaskDisplayStatus = 'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING';
 export interface TaskPresentation { status: TaskDisplayStatus; section: TaskSection; reason: TaskWaitReason | null }
 /** Running work drains after pause; a partly blocked group must not hide its runnable siblings. */
-export function taskGroupPresentation(group: TaskGroup, schedule: BackgroundSchedule): TaskPresentation {
+export function taskGroupPresentation(group: TaskGroup, schedule: BackgroundSchedule, embedding?: string): TaskPresentation {
   const section = taskSection(group, schedule);
   const blocked = group.waiting.filter((wait) => wait.reason !== 'QUEUED');
   const allBlocked = group.queued > 0 && blocked.reduce((sum, wait) => sum + wait.count, 0) >= group.queued;
   const reason = allBlocked ? blocked[0]?.reason ?? null : group.approval > 0 ? 'APPROVAL' : null;
+  if (group.id === 'EMBEDDING' && group.running + group.queued > 0 && (embedding === 'OFFLINE' || embedding === 'DRIFTED'))
+    return { section, status: 'WAITING', reason: embedding === 'DRIFTED' ? 'MODEL_DRIFTED' : 'MODEL_OFFLINE' };
   const status: TaskDisplayStatus = group.running > 0 ? 'RUNNING'
     : group.queued > 0 && section === 'PAUSED' ? 'STOPPED'
     : allBlocked || group.approval > 0 ? 'WAITING'
@@ -49,4 +51,44 @@ export function mediaClaimTransition(job: MediaClaimState, now: Date) {
     data: { status: 'PROCESSING' as const, lockedAt: now, startedAt: now,
       attempts: { increment: 1 as const }, leaseVersion: { increment: 1 as const } },
   };
+}
+
+/** Unknown capabilities during a rolling upgrade are not evidence that work is disabled. */
+export function workerSupportsTask(value: unknown, family: TaskFamily, step: string): boolean {
+  if (!value || typeof value !== 'object' || !('background' in value)) return true;
+  const capability = value as WorkerTaskCapabilities;
+  if (isBackgroundFamily(family) && !capability.background) return false;
+  if (family === 'VIDEO' && !capability.video) return false;
+  if (family === 'SMART_FOLDERS') return capability.smartFolders;
+  if (family === 'TAG_INDEX') return capability.tagBuilds;
+  if (family === 'PHOTO_MAP') return capability.photoMap;
+  return !capability.jobKinds || capability.jobKinds.includes(step) || step === 'OBJECT_DELETION';
+}
+export function taskModelReadiness(workers: readonly unknown[], family: TaskFamily, step: string) {
+  const states = workers.filter((worker) => workerSupportsTask(worker, family, step))
+    .map((worker) => (worker as WorkerTaskCapabilities | null)?.embedding);
+  if (states.includes('READY')) return 'READY';
+  // A worker without a model report may still serve work during a rolling upgrade.
+  if (states.some((state) => state === undefined)) return 'UNKNOWN';
+  return states.includes('DRIFTED') ? 'DRIFTED' : states.includes('OFFLINE') ? 'OFFLINE' : 'UNKNOWN';
+}
+export function taskBucketDecision(input: {
+  family: TaskFamily; step: string; reason: TaskWaitReason; nextAt: string | null;
+  approval: boolean; paused: boolean; workers: readonly unknown[]; schedule: BackgroundSchedule; now: Date;
+}): TaskDecision {
+  const {family, step, workers, schedule, now} = input;
+  const background = isBackgroundFamily(family);
+  const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
+  const model = taskModelReadiness(workers, family, step);
+  const needsModel = family === 'EMBEDDING' || (family === 'SMART_FOLDERS' && step === 'SMART_FOLDER_QUERY');
+  const outsideSchedule = background && !backgroundScheduleAllows(schedule, now);
+  return decideTask({
+    approval: input.approval,
+    paused: input.paused || (background && schedule.mode === 'MANUAL'),
+    workerOffline: workerOwned && workers.length === 0,
+    disabled: workerOwned && !workers.some((worker) => workerSupportsTask(worker, family, step)),
+    modelDrifted: needsModel && model === 'DRIFTED', modelOffline: needsModel && model === 'OFFLINE',
+    dependencyFailed: input.reason === 'DEPENDENCY_FAILED', dependencyPending: input.reason === 'DEPENDENCY',
+    outsideSchedule, retryPending: input.reason === 'RETRY',
+  }, outsideSchedule ? nextBackgroundTime(schedule, now)?.toISOString() ?? null : input.nextAt);
 }

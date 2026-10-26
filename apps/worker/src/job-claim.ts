@@ -1,4 +1,4 @@
-import { MEDIA_LEASE_MS, mediaClaimTransition } from '@sekereagle/library-core';
+import { MEDIA_LEASE_MS, mediaClaimTransition, isBackgroundFamily, mediaTaskFamily } from '@sekereagle/library-core';
 import type {
   EagleAssetProcessingJob,
   EagleMediaJobStatus,
@@ -108,8 +108,7 @@ export async function claimNextMediaJob(
     for (const candidate of candidates) {
       if (candidate.kind === 'GENERATE_AI_TAGS') continue;
       if (
-        (candidate.lane === 'BACKGROUND' ||
-          candidate.processorVersion === 'photo-source-details-v1') &&
+        isBackgroundFamily(mediaTaskFamily(candidate.kind, candidate.processorVersion)) &&
         !(await options.canClaimBackground(
           candidate.ownerId,
           candidate.kind,
