@@ -432,10 +432,17 @@ test('live polling excludes completed history before aggregating media jobs', as
   assert.match(taskCenterQuery('owner-a', 'PHOTO', false).sql, /AND j\.status<>'COMPLETED'/);
 });
 
-
 test('transition history is bounded, current-version and private/owner/mode scoped', async () => {
-  let captured: {sql: string; values: unknown[]} | undefined;
-  const service = new EagleTaskCenterService({$queryRaw: async (query: {sql: string; values: unknown[]}) => {captured = query; return [];}} as never, 'PHOTO');
+  let captured: { sql: string; values: unknown[] } | undefined;
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+        captured = query;
+        return [];
+      },
+    } as never,
+    'PHOTO',
+  );
   assert.deepEqual(await service.events('owner-a', 'EMBEDDING', false), []);
   assert.ok(captured?.values.includes('owner-a'));
   assert.ok(captured?.values.includes('PHOTO'));
@@ -443,4 +450,18 @@ test('transition history is bounded, current-version and private/owner/mode scop
   assert.match(captured!.sql, /mediaRevision/);
   assert.match(captured!.sql, /LIMIT 30/);
   assert.doesNotMatch(captured!.sql, /lastError/);
+});
+
+
+test('lost worker heartbeat is visible before long execution leases expire', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [{family: 'MEDIA', step: 'GENERATE_RENDITIONS', version: 'v1', status: 'RUNNING', reason: 'QUEUED', count: 1n, nextAt: null}],
+    eagleProcessingWorkerHeartbeat: {findMany: async () => []},
+    eagleProcessingSetting: {findUnique: async () => ({mode: 'ALWAYS'})},
+    eagleTaskPolicy: {findMany: async () => []},
+  } as never);
+  const result = await service.overview('owner-a');
+  assert.equal(result.groups[0]?.running, 1); // A lease is not silently erased.
+  assert.equal(result.groups[0]?.presentation?.status, 'WAITING');
+  assert.equal(result.groups[0]?.presentation?.reason, 'WORKER_OFFLINE');
 });
