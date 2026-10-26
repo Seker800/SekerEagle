@@ -67,6 +67,7 @@ export function taskGroupPresentation(
     return {section, status: 'WAITING', reason: 'WORKER_OFFLINE'};
   if (
     group.id === 'EMBEDDING' &&
+    (group.running > 0 || section !== 'PAUSED') &&
     group.running + group.queued > 0 &&
     (embedding === 'OFFLINE' || embedding === 'DRIFTED')
   )
