@@ -1209,10 +1209,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
     error instanceof MediaLeaseRecoveryExhaustedError ||
     isPermanentMediaValidationError(error) ||
     (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
-  const transition = mediaFailure(
-    job, message, permanent, new Date(),
-    error instanceof MediaLeaseRecoveryExhaustedError ? error.expiredBefore : undefined,
-  );
+  const transition = mediaFailure(job, {message: message, permanent: permanent, now: new Date(), expiredBefore: error instanceof MediaLeaseRecoveryExhaustedError ? error.expiredBefore : undefined});
   const { terminal } = transition;
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({

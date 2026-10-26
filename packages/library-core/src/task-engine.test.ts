@@ -155,11 +155,11 @@ test('completion and failure use one fenced execution identity and one retry bud
     leaseVersion: 7,
     status: 'PROCESSING',
   });
-  const retry = mediaFailure(job, 'transient', false, now);
+  const retry = mediaFailure(job, {message: 'transient', permanent: false, now: now});
   assert.equal(retry.terminal, false);
   assert.equal(retry.data.status, 'PENDING');
-  assert.equal(mediaFailure({ ...job, attempts: 12 }, 'timeout', false, now).terminal, true);
-  assert.equal(mediaFailure(job, 'invalid bytes', true, now).terminal, true);
+  assert.equal(mediaFailure({ ...job, attempts: 12 }, {message: 'timeout', permanent: false, now: now}).terminal, true);
+  assert.equal(mediaFailure(job, {message: 'invalid bytes', permanent: true, now: now}).terminal, true);
   assert.equal(mediaWaitData(2, 30000, 'WAITING_MODEL', now).attempts, 1);
 });
 
@@ -315,7 +315,7 @@ test('presentation reflects paused draining and model recovery without trusting 
     kind: 'RENDER_EDITED_COPY',
     attempts: 3,
   };
-  assert.equal(mediaFailure(job, 'failure', false).terminal, true);
+  assert.equal(mediaFailure(job, {message: 'failure', permanent: false}).terminal, true);
   assert.equal(mediaCompletion(job).data.status, 'COMPLETED');
   assert.equal(mediaWaitData(0, 1000, 'WAIT').attempts, 0);
 });

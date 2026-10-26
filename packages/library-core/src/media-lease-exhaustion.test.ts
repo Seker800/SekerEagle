@@ -15,7 +15,7 @@ test('an exhausted recovery produces a distinct action with no claim mutation', 
 });
 
 test('expiry failure preserves the same deadline guard as reclaiming a lease', () => {
-  const transition = mediaFailure(job, 'MEDIA_LEASE_RECOVERY_EXHAUSTED', true, now, expiredBefore);
+  const transition = mediaFailure(job, {message: 'MEDIA_LEASE_RECOVERY_EXHAUSTED', permanent: true, now: now, expiredBefore: expiredBefore});
   assert.equal(transition.data.status, 'FAILED');
   assert.deepEqual(transition.where.lockedAt, {lt: expiredBefore});
   assert.equal(transition.where.leaseVersion, job.leaseVersion);

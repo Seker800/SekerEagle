@@ -72,19 +72,17 @@ export function mediaCompletion(job: MediaExecution, now = new Date()) {
 /** Adapters classify permanent media errors. The core owns budget, backoff and guarded state changes. */
 export function mediaFailure(
   job: MediaExecution & { attempts: number; kind: string },
-  error: string,
-  permanent: boolean,
-  now = new Date(),
-  expiredBefore?: Date,
+  input: { message: string; permanent: boolean; now?: Date; expiredBefore?: Date },
 ) {
+  const now = input.now ?? new Date();
   const terminal =
-    permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
+    input.permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
   const data = terminal
     ? {
         status: 'FAILED' as const,
         completedAt: now,
         lockedAt: null,
-        lastError: error.slice(0, 1000),
+        lastError: input.message.slice(0, 1000),
       }
     : {
         status: 'PENDING' as const,
@@ -92,9 +90,9 @@ export function mediaFailure(
           now.getTime() + Math.min(3600, 2 ** Math.min(job.attempts, MEDIA_FAILURE_LIMIT)) * 1000,
         ),
         lockedAt: null,
-        lastError: error.slice(0, 1000),
+        lastError: input.message.slice(0, 1000),
       };
-  return { terminal, where: mediaExecutionGuard(job, expiredBefore), data };
+  return { terminal, where: mediaExecutionGuard(job, input.expiredBefore), data };
 }
 /** External service backpressure or outage is a wait, not a bad-image failure. */
 export function mediaWaitData(attempts: number, delayMs: number, code: string, now = new Date()) {

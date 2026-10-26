@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
   resolveTaskPresentation,
+  taskNeedsModel,
   taskExecutionPriority,
   type BackgroundSchedule,
   type TaskFamily,
@@ -154,11 +155,8 @@ export function EagleTaskCenter({
   const modelStates = entries.flatMap(({ summary: entry }) => {
     const affected = entry.groups.some(
       (group) =>
-        (group.id === 'EMBEDDING' && group.queued + group.running > 0) ||
-        (group.id === 'SMART_FOLDERS' &&
-          group.steps.some(
-            (step) => step.id === 'SMART_FOLDER_QUERY' && step.queued + step.running > 0,
-          )),
+        (taskNeedsModel(group.id, '') && group.queued + group.running > 0) ||
+        group.steps.some((step) => taskNeedsModel(group.id, step.id) && step.queued + step.running > 0),
     );
     if (!affected) return [];
     return [
