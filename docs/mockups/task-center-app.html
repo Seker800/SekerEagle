@@ -1,0 +1,1298 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>任务中心 · 应用窗口稿</title>
+    <style>
+      :root {
+        --desk: #dfe1e6;
+        --win: #ffffff;
+        --title: #f1f2f4;
+        --toolbar: #fafafb;
+        --side: #f6f7f8;
+        --insp: #fbfbfc;
+        --line: #e3e4e8;
+        --line-2: #d5d7dc;
+        --ink: #1b1d21;
+        --ink-2: #4a4f57;
+        --muted: #767d87;
+        --muted-2: #9aa1aa;
+        --blue: #2f5bd7;
+        --green: #0f7a55;
+        --amber: #96560a;
+        --red: #b62a2a;
+        --sel: #eef2fe;
+        --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Mono', monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        margin: 0;
+        padding: 26px;
+        background: radial-gradient(120% 120% at 50% 0%, #e9ebef 0%, #dfe1e6 55%, #d7d9de 100%);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', sans-serif;
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--ink);
+        display: flex;
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono,
+      .num {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.94em;
+      }
+
+      /* 窗口 */
+      .window {
+        width: min(1360px, 100%);
+        height: min(860px, calc(100vh - 52px));
+        margin: auto;
+        background: var(--win);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.06),
+          0 18px 50px rgba(20, 24, 32, 0.16);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 560px;
+      }
+
+      /* 标题栏 */
+      .titlebar {
+        height: 38px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 13px;
+        background: linear-gradient(#f5f5f7, #efeff1);
+        border-bottom: 1px solid var(--line-2);
+        position: relative;
+        user-select: none;
+      }
+      .lights {
+        display: flex;
+        gap: 8px;
+      }
+      .lights i {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.12);
+      }
+      .lights i:nth-child(1) {
+        background: #ff5f57;
+      }
+      .lights i:nth-child(2) {
+        background: #febc2e;
+      }
+      .lights i:nth-child(3) {
+        background: #28c840;
+      }
+      .title {
+        position: absolute;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 12.5px;
+        font-weight: 600;
+        color: #3d4148;
+        pointer-events: none;
+      }
+      .title span {
+        font-weight: 400;
+        color: var(--muted-2);
+      }
+
+      /* 工具栏 */
+      .toolbar {
+        height: 46px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        background: var(--toolbar);
+        border-bottom: 1px solid var(--line);
+      }
+      .seg {
+        display: inline-flex;
+        padding: 2px;
+        background: #e9eaee;
+        border-radius: 6px;
+      }
+      .seg button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        height: 22px;
+        padding: 0 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        color: var(--ink-2);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .seg button[aria-pressed='true'] {
+        background: #fff;
+        color: var(--ink);
+        font-weight: 500;
+        box-shadow: 0 1px 1px rgba(20, 24, 32, 0.1);
+      }
+      .tb {
+        appearance: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--line-2);
+        border-radius: 6px;
+        background: #fff;
+        font-size: 12px;
+        color: var(--ink-2);
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .tb:hover {
+        background: #f5f5f7;
+      }
+      .tb-sep {
+        width: 1px;
+        height: 18px;
+        background: var(--line-2);
+        margin: 0 2px;
+        flex: none;
+      }
+      .tb svg {
+        width: 11px;
+        height: 11px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        color: var(--muted-2);
+      }
+      .search {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 210px;
+        height: 26px;
+        padding: 0 8px;
+        border: 1px solid var(--line-2);
+        border-radius: 6px;
+        background: #fff;
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+      .search svg {
+        width: 12px;
+        height: 12px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+      }
+      .search kbd {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 0 3px;
+        color: var(--muted-2);
+        background: #fafafb;
+      }
+      .icon-btn {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 5px;
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .icon-btn:hover {
+        background: #eceef1;
+        border-color: var(--line);
+      }
+      .icon-btn svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.7;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* 主体 */
+      .body {
+        flex: 1;
+        display: flex;
+        min-height: 0;
+      }
+
+      /* 侧栏 */
+      .sidebar {
+        width: 200px;
+        flex: none;
+        background: var(--side);
+        border-right: 1px solid var(--line);
+        padding: 6px 0 10px;
+        overflow: auto;
+      }
+      .side-title {
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        color: var(--muted-2);
+        padding: 10px 14px 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .side-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 27px;
+        padding: 0 12px;
+        font-size: 12.5px;
+        color: var(--ink-2);
+        border-left: 2px solid transparent;
+        cursor: default;
+      }
+      .side-item:hover {
+        background: #eef0f3;
+      }
+      .side-item.on {
+        background: #e6e9ee;
+        border-left-color: var(--blue);
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .side-item .c {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .side-item.on .c {
+        color: var(--ink-2);
+      }
+      .dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--muted-2);
+      }
+      .dot.r {
+        background: var(--blue);
+      }
+      .dot.w {
+        background: #d08a1d;
+      }
+      .dot.f {
+        background: var(--red);
+      }
+      .dot.d {
+        background: var(--green);
+      }
+      .dot.ok {
+        background: #16a06a;
+      }
+
+      /* 主区 */
+      .main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+      }
+      .table-wrap {
+        flex: 0 0 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .thead,
+      .tr {
+        display: grid;
+        grid-template-columns: 78px minmax(140px, 1fr) 58px 50px 50px 74px 92px;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+      }
+      .thead {
+        height: 29px;
+        flex: none;
+        font-size: 10.5px;
+        letter-spacing: 0.03em;
+        color: var(--muted-2);
+        background: #fbfbfc;
+        border-bottom: 1px solid var(--line);
+      }
+      .thead span:nth-child(n + 3) {
+        text-align: right;
+      }
+      .thead span:last-child {
+        text-align: right;
+      }
+      .rows {
+        overflow: auto;
+        flex: 1;
+      }
+      .tr {
+        height: 38px;
+        border-bottom: 1px solid #f0f1f3;
+        font-size: 12.5px;
+        cursor: default;
+      }
+      .tr:hover {
+        background: #fafbfc;
+      }
+      .tr.sel {
+        background: var(--sel);
+        box-shadow: inset 2px 0 0 var(--blue);
+      }
+      .tr .num {
+        text-align: right;
+        color: var(--ink-2);
+      }
+      .tr .zero {
+        color: var(--muted-2);
+      }
+      .fam {
+        display: flex;
+        align-items: baseline;
+        gap: 7px;
+        min-width: 0;
+      }
+      .fam b {
+        font-size: 12.5px;
+        font-weight: 600;
+      }
+      .fam .sub {
+        font-size: 11.5px;
+        color: var(--muted-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .fam .badge {
+        font-size: 10px;
+        color: var(--muted-2);
+        border: 1px solid var(--line-2);
+        border-radius: 4px;
+        padding: 0 4px;
+        line-height: 14px;
+        flex: none;
+      }
+      .st {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11.5px;
+        white-space: nowrap;
+      }
+      .st i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .st.r {
+        color: var(--blue);
+      }
+      .st.w {
+        color: var(--amber);
+      }
+      .st.q {
+        color: var(--muted);
+      }
+      .st.f {
+        color: var(--red);
+      }
+      .st.d {
+        color: var(--green);
+      }
+      .st.r i {
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      .guard-cell {
+        text-align: right;
+        font-size: 11.5px;
+        color: var(--muted-2);
+        white-space: nowrap;
+      }
+      .guard-cell.block {
+        color: var(--amber);
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        height: 20px;
+        padding: 0 7px;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+      }
+      .chip::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        flex: none;
+      }
+      .chip.r {
+        color: var(--blue);
+        background: #eef2fe;
+      }
+      .chip.q {
+        color: #5d6570;
+        background: #f1f2f4;
+      }
+      .chip.w {
+        color: var(--amber);
+        background: #fdf3e3;
+      }
+      .chip.f {
+        color: var(--red);
+        background: #fdeeee;
+      }
+      .chip.d {
+        color: var(--green);
+        background: #edf7f2;
+      }
+      .chip.r::before {
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.4;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* 分隔与日志面板 */
+      .split {
+        height: 7px;
+        flex: none;
+        background: #f7f7f8;
+        border-top: 1px solid var(--line);
+        border-bottom: 1px solid var(--line);
+        display: grid;
+        place-items: center;
+        cursor: row-resize;
+      }
+      .split::before {
+        content: '';
+        width: 28px;
+        height: 1px;
+        background: var(--line-2);
+        box-shadow:
+          0 -3px 0 var(--line-2),
+          0 3px 0 var(--line-2);
+      }
+      .log-wrap {
+        position: relative;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+      }
+      .log-wrap::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 22px;
+        background: linear-gradient(rgba(255, 255, 255, 0), #fff 78%);
+        pointer-events: none;
+      }
+      .log-head {
+        height: 27px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 14px;
+        font-size: 11px;
+        color: var(--muted-2);
+        background: #fbfbfc;
+        border-bottom: 1px solid var(--line);
+      }
+      .log-head b {
+        font-size: 11px;
+        color: var(--ink-2);
+        font-weight: 600;
+        letter-spacing: 0.01em;
+      }
+      .log-head .right {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 10px;
+      }
+      .log-rows {
+        overflow: auto;
+        flex: 1;
+        font-size: 12px;
+      }
+      .ev {
+        display: grid;
+        grid-template-columns: 70px 112px 198px minmax(0, 1fr);
+        gap: 10px;
+        align-items: baseline;
+        padding: 5px 14px;
+        border-bottom: 1px solid #f4f5f6;
+        white-space: nowrap;
+      }
+      .ev:hover {
+        background: #fafbfc;
+      }
+      .ev .t {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--muted-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .ev .fam-name {
+        color: var(--ink-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ev .tr2 {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .ev .tr2 .to-r {
+        color: var(--blue);
+      }
+      .ev .tr2 .to-q {
+        color: #5d6570;
+      }
+      .ev .tr2 .to-f {
+        color: var(--red);
+      }
+      .ev .tr2 .to-d {
+        color: var(--green);
+      }
+      .ev .why {
+        font-size: 11.5px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* 检查器 */
+      .inspector {
+        width: 300px;
+        flex: none;
+        background: var(--insp);
+        border-left: 1px solid var(--line);
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+      }
+      .insp-head {
+        padding: 13px 14px 11px;
+        border-bottom: 1px solid var(--line);
+        flex: none;
+      }
+      .insp-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13.5px;
+        font-weight: 600;
+      }
+      .insp-title .chip {
+        margin-left: auto;
+      }
+      .insp-meta {
+        margin-top: 3px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .insp-body {
+        flex: 1;
+        overflow: auto;
+        min-height: 0;
+      }
+      .insp-sec {
+        padding: 11px 14px 13px;
+        border-bottom: 1px solid var(--line);
+      }
+      .sec-label {
+        font-size: 10.5px;
+        letter-spacing: 0.06em;
+        color: var(--muted-2);
+        margin-bottom: 7px;
+      }
+
+      .rail {
+        position: relative;
+        padding-left: 17px;
+      }
+      .rail::before {
+        content: '';
+        position: absolute;
+        left: 4px;
+        top: 9px;
+        bottom: 9px;
+        width: 1px;
+        background: var(--line-2);
+      }
+      .rail-item {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        height: 25px;
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .rail-item .n {
+        margin-left: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-2);
+      }
+      .rail-item::before {
+        content: '';
+        position: absolute;
+        left: -17px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: #fff;
+        border: 1.5px solid var(--line-2);
+        z-index: 1;
+      }
+      .rail-item.d::before {
+        background: var(--green);
+        border-color: var(--green);
+      }
+      .rail-item.r {
+        color: var(--ink);
+        font-weight: 500;
+      }
+      .rail-item.r::before {
+        background: var(--blue);
+        border-color: var(--blue);
+        box-shadow: 0 0 0 3px rgba(47, 91, 215, 0.16);
+      }
+      .rail-item.f::before {
+        background: var(--red);
+        border-color: var(--red);
+      }
+      .rail-item .code {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        color: var(--muted-2);
+      }
+
+      .guard-list {
+        display: grid;
+        gap: 5px;
+      }
+      .guard-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 11.5px;
+        color: var(--ink-2);
+      }
+      .guard-row .tick {
+        width: 13px;
+        height: 13px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        background: #e8f4ee;
+        color: var(--green);
+        font-size: 9px;
+        flex: none;
+      }
+      .guard-row.off .tick {
+        background: #fdf3e3;
+        color: var(--amber);
+      }
+      .guard-row .val {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted-2);
+        font-family: var(--mono);
+      }
+
+      .mini-ev {
+        display: grid;
+        grid-template-columns: 54px minmax(0, 1fr);
+        gap: 8px;
+        padding: 3px 0;
+        font-size: 11px;
+      }
+      .mini-ev .t {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--muted-2);
+      }
+      .mini-ev .x {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mini-ev .x code {
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--ink-2);
+      }
+
+      .insp-foot {
+        flex: none;
+        display: flex;
+        gap: 6px;
+        padding: 10px 14px;
+        border-top: 1px solid var(--line);
+        background: #fbfbfc;
+      }
+      .btn {
+        appearance: none;
+        flex: 1;
+        height: 27px;
+        border: 1px solid var(--line-2);
+        border-radius: 6px;
+        background: #fff;
+        color: var(--ink-2);
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .btn:hover {
+        background: #f5f5f7;
+      }
+      .btn.primary {
+        background: #1f2227;
+        border-color: #1f2227;
+        color: #fff;
+        font-weight: 500;
+      }
+      .btn.primary:hover {
+        background: #2b2f35;
+      }
+
+      /* 状态栏 */
+      .statusbar {
+        height: 26px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 12px;
+        background: linear-gradient(#f7f7f8, #f2f2f4);
+        border-top: 1px solid var(--line-2);
+        font-size: 11px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .statusbar .grp {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        white-space: nowrap;
+      }
+      .statusbar .sep {
+        width: 1px;
+        height: 12px;
+        background: var(--line-2);
+      }
+      .statusbar .right {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--muted-2);
+      }
+      .statusbar .mono {
+        font-size: 10.5px;
+      }
+
+      /* 窄屏：保留结构，依次收起检查器与侧栏 */
+      @media (max-width: 1180px) {
+        .inspector {
+          display: none;
+        }
+        .thead,
+        .tr {
+          grid-template-columns: 78px minmax(120px, 1fr) 56px 48px 48px 70px 84px;
+        }
+      }
+      @media (max-width: 900px) {
+        body {
+          padding: 0;
+        }
+        .window {
+          height: 100vh;
+          border-radius: 0;
+          border: 0;
+          box-shadow: none;
+        }
+        .sidebar {
+          display: none;
+        }
+        .search {
+          display: none;
+        }
+        .thead,
+        .tr {
+          grid-template-columns: 72px minmax(110px, 1fr) 54px 44px 44px 66px;
+        }
+        .thead span:last-child,
+        .tr > .guard-cell {
+          display: none;
+        }
+        .ev {
+          grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
+        }
+        .ev .fam-name {
+          display: none;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="window" role="application" aria-label="任务中心">
+      <div class="titlebar">
+        <span class="lights" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="title">任务中心 <span>— SekerEagle</span></span>
+      </div>
+
+      <div class="toolbar">
+        <button class="icon-btn" aria-label="显示或隐藏侧栏">
+          <svg viewBox="0 0 24 24">
+            <rect x="3.5" y="4.5" width="17" height="15" rx="2.5" />
+            <path d="M9.5 4.5v15" />
+          </svg>
+        </button>
+        <span class="tb-sep"></span>
+        <div class="seg" role="group" aria-label="图库范围">
+          <button aria-pressed="true">全部</button>
+          <button aria-pressed="false">素材</button>
+          <button aria-pressed="false">照片</button>
+        </div>
+        <button class="tb">
+          状态：全部
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        <button class="tb">
+          类别：全部
+          <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+        <span class="tb-sep"></span>
+        <label class="search">
+          <svg viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+          搜索类别或步骤
+          <kbd>⌘K</kbd>
+        </label>
+        <button class="icon-btn" aria-label="刷新">
+          <svg viewBox="0 0 24 24">
+            <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+            <path d="M20 5v6h-6" />
+          </svg>
+        </button>
+        <button class="icon-btn" aria-label="设置">
+          <svg viewBox="0 0 24 24">
+            <path d="M4 7h9M17 7h3M4 17h3M11 17h9" />
+            <circle cx="15" cy="7" r="2" />
+            <circle cx="9" cy="17" r="2" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="body">
+        <aside class="sidebar">
+          <div class="side-title">状态</div>
+          <div class="side-item on">
+            <span class="dot"></span>全部任务<span class="c">13,939</span>
+          </div>
+          <div class="side-item"><span class="dot r"></span>执行中<span class="c">3</span></div>
+          <div class="side-item"><span class="dot w"></span>受阻<span class="c">1,842</span></div>
+          <div class="side-item"><span class="dot f"></span>失败<span class="c">3</span></div>
+          <div class="side-item"><span class="dot d"></span>最近完成<span class="c">339</span></div>
+
+          <div class="side-title">守卫</div>
+          <div class="side-item">
+            <span class="dot w"></span>后台时段<span class="c">1,842</span>
+          </div>
+          <div class="side-item"><span class="dot w"></span>前置依赖<span class="c">128</span></div>
+          <div class="side-item"><span class="dot w"></span>人工确认<span class="c">12</span></div>
+          <div class="side-item">
+            <span class="dot w"></span>单类暂停<span class="c">3,512</span>
+          </div>
+
+          <div class="side-title">类别</div>
+          <div class="side-item">图片向量<span class="c">8,213</span></div>
+          <div class="side-item">缩略图与预览<span class="c">144</span></div>
+          <div class="side-item">视频转码<span class="c">8</span></div>
+          <div class="side-item">照片位置索引<span class="c">97</span></div>
+          <div class="side-item">人脸检测<span class="c">1,842</span></div>
+          <div class="side-item">语义文件夹<span class="c">128</span></div>
+          <div class="side-item">高清与动态组件<span class="c">2,304</span></div>
+          <div class="side-item">标签推荐索引<span class="c">1,208</span></div>
+          <div class="side-item">整理审批<span class="c">12</span></div>
+        </aside>
+
+        <main class="main">
+          <div class="table-wrap">
+            <div class="thead">
+              <span>状态</span>
+              <span>类别 / 当前步骤</span>
+              <span>排队</span>
+              <span>执行</span>
+              <span>失败</span>
+              <span>速率</span>
+              <span>守卫</span>
+            </div>
+            <div class="rows">
+              <div class="tr sel">
+                <span
+                  ><span class="st r"><i></i>执行中</span></span
+                >
+                <span class="fam"
+                  ><b>图片向量</b><span class="badge">照片</span
+                  ><span class="sub">生成图片向量</span></span
+                >
+                <span class="num">8,211</span>
+                <span class="num">2</span>
+                <span class="num">3</span>
+                <span class="num">1,822/h</span>
+                <span class="guard-cell">—</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st r"><i></i>执行中</span></span
+                >
+                <span class="fam"
+                  ><b>缩略图与预览</b><span class="badge">素材</span
+                  ><span class="sub">生成预览图</span></span
+                >
+                <span class="num">143</span>
+                <span class="num">1</span>
+                <span class="num zero">0</span>
+                <span class="num">61/min</span>
+                <span class="guard-cell">—</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st r"><i></i>执行中</span></span
+                >
+                <span class="fam"
+                  ><b>视频转码</b><span class="badge">照片</span
+                  ><span class="sub">H.264 1080p</span></span
+                >
+                <span class="num">7</span>
+                <span class="num">1</span>
+                <span class="num zero">0</span>
+                <span class="num">38s/项</span>
+                <span class="guard-cell">—</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st r"><i></i>执行中</span></span
+                >
+                <span class="fam"
+                  ><b>照片位置索引</b><span class="badge">照片</span
+                  ><span class="sub">分批构建</span></span
+                >
+                <span class="num">96</span>
+                <span class="num">1</span>
+                <span class="num zero">0</span>
+                <span class="num">15s/步</span>
+                <span class="guard-cell">—</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st w"><i></i>受阻</span></span
+                >
+                <span class="fam"
+                  ><b>人脸检测</b><span class="badge">照片</span
+                  ><span class="sub">检测人脸</span></span
+                >
+                <span class="num">1,842</span>
+                <span class="num zero">0</span>
+                <span class="num zero">0</span>
+                <span class="num">—</span>
+                <span class="guard-cell block">时段 23:00</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st w"><i></i>受阻</span></span
+                >
+                <span class="fam"
+                  ><b>语义文件夹匹配</b><span class="badge">素材</span
+                  ><span class="sub">查询匹配</span></span
+                >
+                <span class="num">128</span>
+                <span class="num zero">0</span>
+                <span class="num zero">0</span>
+                <span class="num">—</span>
+                <span class="guard-cell block">依赖 图片向量</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st w"><i></i>受阻</span></span
+                >
+                <span class="fam"
+                  ><b>高清与动态组件</b><span class="badge">照片</span
+                  ><span class="sub">RAW 编辑图</span></span
+                >
+                <span class="num">2,304</span>
+                <span class="num zero">0</span>
+                <span class="num zero">0</span>
+                <span class="num">—</span>
+                <span class="guard-cell block">手动暂停</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st w"><i></i>受阻</span></span
+                >
+                <span class="fam"
+                  ><b>标签推荐索引</b><span class="badge">素材</span
+                  ><span class="sub">构建索引</span></span
+                >
+                <span class="num">1,208</span>
+                <span class="num zero">0</span>
+                <span class="num zero">0</span>
+                <span class="num">—</span>
+                <span class="guard-cell block">安排暂停</span>
+              </div>
+              <div class="tr">
+                <span
+                  ><span class="st w"><i></i>受阻</span></span
+                >
+                <span class="fam"
+                  ><b>整理审批</b><span class="badge">照片</span
+                  ><span class="sub">等待确认</span></span
+                >
+                <span class="num">12</span>
+                <span class="num zero">0</span>
+                <span class="num zero">0</span>
+                <span class="num">—</span>
+                <span class="guard-cell block">人工确认</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="split" role="separator" aria-label="调整面板高度"></div>
+
+          <div class="log-wrap">
+            <div class="log-head">
+              <b>迁移记录</b>
+              <span>只追加，不覆盖</span>
+              <span class="right">最近 11 条 · 08:31–08:47</span>
+            </div>
+            <div class="log-rows">
+              <div class="ev">
+                <span class="t">08:47:09</span>
+                <span class="fam-name">图片向量</span>
+                <span class="tr2">QUEUED → <span class="to-r">RUNNING</span></span>
+                <span class="why">领取 · 租约 10 分钟</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:47:02</span>
+                <span class="fam-name">缩略图与预览</span>
+                <span class="tr2">QUEUED → <span class="to-r">RUNNING</span></span>
+                <span class="why">领取 · 交互通道</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:41:02</span>
+                <span class="fam-name">图片向量</span>
+                <span class="tr2">RUNNING → <span class="to-q">QUEUED</span></span>
+                <span class="why">模型繁忙 503 · 退避 2 秒，不计失败</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:36:44</span>
+                <span class="fam-name">图片向量</span>
+                <span class="tr2">RUNNING → <span class="to-f">FAILED</span></span>
+                <span class="why">源预览缺失 · 保留待重试</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:36:40</span>
+                <span class="fam-name">图片向量</span>
+                <span class="tr2">RUNNING → <span class="to-d">DONE</span></span>
+                <span class="why">发布完成 · 2.8 秒</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:35:12</span>
+                <span class="fam-name">人脸检测</span>
+                <span class="tr2">QUEUED → <span class="to-q">QUEUED</span></span>
+                <span class="why">守卫未过 · SCHEDULE</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:34:58</span>
+                <span class="fam-name">视频转码</span>
+                <span class="tr2">QUEUED → <span class="to-r">RUNNING</span></span>
+                <span class="why">领取 · 后台通道</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:34:31</span>
+                <span class="fam-name">照片位置索引</span>
+                <span class="tr2">RUNNING → <span class="to-d">DONE</span></span>
+                <span class="why">本批 40 张</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:33:20</span>
+                <span class="fam-name">语义文件夹匹配</span>
+                <span class="tr2">QUEUED → <span class="to-q">QUEUED</span></span>
+                <span class="why">守卫未过 · DEPENDENCY</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:32:58</span>
+                <span class="fam-name">颜色提取</span>
+                <span class="tr2">RUNNING → <span class="to-d">DONE</span></span>
+                <span class="why">发布调色板 · 0.6 秒</span>
+              </div>
+              <div class="ev">
+                <span class="t">08:31:20</span>
+                <span class="fam-name">标签推荐索引</span>
+                <span class="tr2">QUEUED → <span class="to-q">QUEUED</span></span>
+                <span class="why">守卫未过 · PAUSED</span>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <aside class="inspector">
+          <div class="insp-head">
+            <div class="insp-title">图片向量 <span class="chip r">执行中</span></div>
+            <div class="insp-meta">照片 · Mac 2B 模型 · 2 项并行 · 租约至 08:57</div>
+          </div>
+          <div class="insp-body">
+            <div class="insp-sec">
+              <div class="sec-label">状态轨</div>
+              <div class="rail">
+                <div class="rail-item">
+                  <span class="code">QUEUED</span> 排队 <span class="n">8,211</span>
+                </div>
+                <div class="rail-item r">
+                  <span class="code">RUNNING</span> 执行中 <span class="n">2</span>
+                </div>
+                <div class="rail-item d">
+                  <span class="code">DONE</span> 已完成 <span class="n">41,208</span>
+                </div>
+                <div class="rail-item f">
+                  <span class="code">FAILED</span> 失败 <span class="n">3</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="insp-sec">
+              <div class="sec-label">守卫</div>
+              <div class="guard-list">
+                <div class="guard-row">
+                  <span class="tick">✓</span>后台时段<span class="val">随时</span>
+                </div>
+                <div class="guard-row">
+                  <span class="tick">✓</span>单类暂停<span class="val">否</span>
+                </div>
+                <div class="guard-row">
+                  <span class="tick">✓</span>模型容量<span class="val">READY</span>
+                </div>
+                <div class="guard-row">
+                  <span class="tick">✓</span>前置依赖<span class="val">无</span>
+                </div>
+                <div class="guard-row">
+                  <span class="tick">✓</span>执行能力<span class="val">Mac 2/2</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="insp-sec">
+              <div class="sec-label">最近迁移</div>
+              <div class="mini-ev">
+                <span class="t">08:47:09</span>
+                <span class="x">QUEUED → <code>RUNNING</code> · 领取</span>
+              </div>
+              <div class="mini-ev">
+                <span class="t">08:41:02</span>
+                <span class="x">RUNNING → <code>QUEUED</code> · 503 退避</span>
+              </div>
+              <div class="mini-ev">
+                <span class="t">08:36:44</span>
+                <span class="x">RUNNING → <code>FAILED</code> · 预览缺失</span>
+              </div>
+              <div class="mini-ev">
+                <span class="t">08:36:40</span>
+                <span class="x">RUNNING → <code>DONE</code> · 2.8 秒</span>
+              </div>
+            </div>
+          </div>
+          <div class="insp-foot">
+            <button class="btn">暂停此类</button>
+            <button class="btn primary">重试 3 项失败</button>
+          </div>
+        </aside>
+      </div>
+
+      <div class="statusbar">
+        <span class="grp"><i class="dot ok"></i>NAS 1/1</span>
+        <span class="grp"><i class="dot ok"></i>Mac 2/2 READY</span>
+        <span class="sep"></span>
+        <span class="grp">队列 <b class="mono">13,939</b></span>
+        <span class="grp">1,822 项/小时</span>
+        <span class="sep"></span>
+        <span class="grp">执行中 <b class="mono">3</b></span>
+        <span class="grp">失败 <b class="mono">3</b></span>
+        <span class="right">
+          <span>快照 <b class="mono">08:47:12</b></span>
+          <span>自动刷新 10s</span>
+        </span>
+      </div>
+    </div>
+  </body>
+</html>
