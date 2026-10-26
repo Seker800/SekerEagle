@@ -46,3 +46,10 @@ test('claim rejects terminal, future, live and corrupt leases at the shared expi
   assert.equal(recovered?.recovery, true);
   assert.equal(recovered?.data.startedAt, now);
 });
+
+
+test('expired executions have a finite recovery budget separate from model wait attempts', () => {
+  const state = {status: 'PROCESSING', availableAt: now, lockedAt: new Date(now.getTime()-MEDIA_LEASE_MS-1),
+    startedAt: now, attempts: 1, leaseVersion: 5, recoveryCount: 3};
+  assert.equal(mediaClaimTransition(state, now)?.exhausted, true);
+});
