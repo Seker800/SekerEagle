@@ -1,0 +1,1303 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>任务中心 · 设计稿</title>
+    <style>
+      :root {
+        --bg: #f6f6f7;
+        --surface: #ffffff;
+        --surface-2: #fafafa;
+        --line: #e8e8ec;
+        --line-2: #dcdce1;
+        --ink: #191b1f;
+        --ink-2: #484d55;
+        --muted: #747b85;
+        --muted-2: #9aa1aa;
+        --accent: #3b5bdb;
+        --accent-soft: #eef1fe;
+        --ok: #0f7a55;
+        --warn: #96560a;
+        --warn-soft: #fdf3e3;
+        --danger: #b62a2a;
+        --danger-soft: #fdeeee;
+        --r-lg: 12px;
+        --r-md: 10px;
+        --r-sm: 8px;
+        --shadow: 0 1px 2px rgba(20, 24, 32, 0.04);
+        --shadow-hover: 0 2px 10px rgba(20, 24, 32, 0.06);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', sans-serif;
+        font-size: 15px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button {
+        font: inherit;
+        color: inherit;
+      }
+
+      ::selection {
+        background: #dbe2ff;
+      }
+
+      .num {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+
+      /* ---------- 顶栏 ---------- */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid var(--line);
+        background: rgba(246, 246, 247, 0.86);
+        backdrop-filter: saturate(180%) blur(12px);
+      }
+      .topbar-inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px;
+        height: 58px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+      }
+      .brand-mark {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background:
+          radial-gradient(circle at 30% 30%, #fff 1.6px, transparent 1.8px),
+          radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.75) 1.6px, transparent 1.8px),
+          radial-gradient(circle at 30% 70%, rgba(255, 255, 255, 0.75) 1.6px, transparent 1.8px),
+          radial-gradient(circle at 70% 70%, #fff 1.6px, transparent 1.8px), #3b5bdb;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+      }
+
+      .scope {
+        margin-left: 6px;
+        display: inline-flex;
+        padding: 3px;
+        gap: 2px;
+        border-radius: 9px;
+        background: #ececef;
+      }
+      .scope button {
+        appearance: none;
+        white-space: nowrap;
+        flex: none;
+        border: 0;
+        background: transparent;
+        padding: 4px 12px;
+        border-radius: 7px;
+        font-size: 13px;
+        color: var(--ink-2);
+        cursor: pointer;
+        transition:
+          background 0.16s ease,
+          color 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .scope button:hover {
+        color: var(--ink);
+      }
+      .scope button[aria-pressed='true'] {
+        background: var(--surface);
+        color: var(--ink);
+        font-weight: 500;
+        box-shadow: 0 1px 2px rgba(20, 24, 32, 0.08);
+      }
+
+      .topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .updated {
+        font-size: 12px;
+        color: var(--muted);
+        margin-right: 6px;
+        white-space: nowrap;
+      }
+      .icon-btn {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        background: transparent;
+        border-radius: var(--r-sm);
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .icon-btn:hover {
+        background: #ebebef;
+        color: var(--ink);
+      }
+      .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      /* ---------- 版心 ---------- */
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 34px 24px 72px;
+      }
+      .page-head h1 {
+        margin: 0;
+        font-size: 27px;
+        line-height: 1.25;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+      .page-head p {
+        margin: 7px 0 0;
+        font-size: 13.5px;
+        color: var(--muted);
+        max-width: 62ch;
+      }
+
+      /* ---------- 状态条 ---------- */
+      .status {
+        margin-top: 22px;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .stat {
+        padding: 13px 18px;
+        border-left: 1px solid var(--line);
+        min-width: 0;
+      }
+      .stat:first-child {
+        border-left: 0;
+      }
+      .stat-label {
+        display: block;
+        font-size: 11.5px;
+        color: var(--muted);
+        letter-spacing: 0.02em;
+        margin-bottom: 2px;
+      }
+      .stat-value {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        font-size: 15px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .stat-value em {
+        font-style: normal;
+        font-size: 12px;
+        font-weight: 400;
+        color: var(--muted);
+      }
+      .dot {
+        align-self: center;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        flex: none;
+      }
+      .dot.ok {
+        background: #16a06a;
+        box-shadow: 0 0 0 3px rgba(22, 160, 106, 0.12);
+      }
+      .dot.warn {
+        background: #d08a1d;
+        box-shadow: 0 0 0 3px rgba(208, 138, 29, 0.14);
+      }
+
+      /* ---------- 全局提示 ---------- */
+      .notice {
+        margin-top: 12px;
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 12px 16px;
+        border: 1px solid #f0e0bd;
+        background: #fffaef;
+        border-radius: var(--r-md);
+        font-size: 13px;
+        line-height: 1.6;
+        color: #6f5520;
+      }
+      .notice::before {
+        content: '';
+        width: 6px;
+        height: 6px;
+        margin-top: 7px;
+        border-radius: 50%;
+        background: #d08a1d;
+        flex: none;
+      }
+      .notice strong {
+        color: #5a4310;
+        font-weight: 600;
+      }
+      .notice[hidden] {
+        display: none;
+      }
+
+      /* ---------- 区块 ---------- */
+      .section {
+        margin-top: 34px;
+      }
+      .section-head {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 11px;
+      }
+      .section-head h2 {
+        margin: 0;
+        font-size: 14.5px;
+        font-weight: 600;
+        letter-spacing: 0.005em;
+      }
+      .count {
+        min-width: 19px;
+        height: 19px;
+        padding: 0 6px;
+        border-radius: 6px;
+        background: #ececef;
+        color: var(--ink-2);
+        font-size: 11.5px;
+        font-weight: 600;
+        display: inline-grid;
+        place-items: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .section-note {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+
+      /* ---------- 列表 ---------- */
+      .list {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+      .row-group {
+        border-top: 1px solid var(--line);
+      }
+      .row-group:first-child {
+        border-top: 0;
+      }
+      .row {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        align-items: center;
+        gap: 8px 26px;
+        padding: 15px 18px;
+        transition: background 0.15s ease;
+      }
+      .row:hover {
+        background: #fcfcfd;
+      }
+      .row-main {
+        min-width: 0;
+      }
+      .row-title {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 7px;
+        font-size: 14.5px;
+        font-weight: 600;
+        letter-spacing: 0.005em;
+      }
+      .row-sub {
+        margin: 3px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row-sub .sep {
+        color: var(--muted-2);
+        margin: 0 2px;
+      }
+
+      .metrics {
+        display: flex;
+        align-items: flex-end;
+        gap: 20px;
+      }
+      .metric {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        min-width: 42px;
+      }
+      .metric b {
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.3;
+        font-variant-numeric: tabular-nums;
+      }
+      .metric i {
+        font-style: normal;
+        font-size: 11px;
+        color: var(--muted-2);
+        letter-spacing: 0.02em;
+      }
+      .metric.danger b {
+        color: var(--danger);
+      }
+      .metric.muted b {
+        color: var(--muted-2);
+        font-weight: 500;
+      }
+
+      .row-side {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+      .rate {
+        text-align: right;
+        font-size: 11.5px;
+        line-height: 1.4;
+        color: var(--muted-2);
+        white-space: nowrap;
+      }
+      .rate b {
+        display: block;
+        font-size: 12.5px;
+        font-weight: 500;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chev {
+        width: 26px;
+        height: 26px;
+        border: 1px solid transparent;
+        background: transparent;
+        border-radius: 7px;
+        display: grid;
+        place-items: center;
+        color: var(--muted-2);
+        cursor: pointer;
+      }
+      .chev:hover {
+        background: #efeff2;
+        color: var(--ink-2);
+      }
+      .chev svg {
+        width: 14px;
+        height: 14px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 0.18s ease;
+      }
+      .chev[aria-expanded='true'] svg {
+        transform: rotate(180deg);
+      }
+
+      /* ---------- 徽标 / 状态 ---------- */
+      .badge {
+        font-size: 11px;
+        font-weight: 400;
+        color: var(--muted);
+        border: 1px solid var(--line-2);
+        border-radius: 5px;
+        padding: 0 5px;
+        line-height: 16px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 21px;
+        padding: 0 8px;
+        border-radius: 999px;
+        font-size: 11.5px;
+        font-weight: 500;
+        letter-spacing: 0.015em;
+        white-space: nowrap;
+      }
+      .chip::before {
+        content: '';
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: currentColor;
+        opacity: 0.75;
+        flex: none;
+      }
+      .chip.live {
+        color: #2c47b8;
+        background: var(--accent-soft);
+      }
+      .chip.live::before {
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+      .chip.wait {
+        color: var(--warn);
+        background: var(--warn-soft);
+      }
+      .chip.paused {
+        color: #5b626c;
+        background: #f0f0f3;
+      }
+      .chip.off {
+        color: var(--danger);
+        background: var(--danger-soft);
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.45;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* ---------- 待处理条 ---------- */
+      .review {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        padding: 16px 18px;
+        background: #fffdf6;
+        border: 1px solid #f0e3c4;
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+        text-decoration: none;
+        color: inherit;
+        transition:
+          border-color 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .review:hover {
+        border-color: #e6d3a8;
+        box-shadow: var(--shadow-hover);
+      }
+      .review-main {
+        min-width: 0;
+        flex: 1;
+      }
+      .review .row-sub {
+        white-space: normal;
+        color: #7c6a45;
+      }
+      .review-cta {
+        font-size: 13px;
+        font-weight: 500;
+        color: #7a5300;
+        white-space: nowrap;
+      }
+
+      /* ---------- 等待 / 暂停卡片 ---------- */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+        padding: 15px 17px 13px;
+        display: flex;
+        flex-direction: column;
+        transition:
+          border-color 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .card:hover {
+        border-color: var(--line-2);
+        box-shadow: var(--shadow-hover);
+      }
+      .card-top {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .card-top .chip {
+        margin-left: auto;
+      }
+      .card-title {
+        font-size: 14.5px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        min-width: 0;
+      }
+      .card-reason {
+        margin: 9px 0 0;
+        font-size: 13px;
+        line-height: 1.6;
+        color: var(--ink-2);
+      }
+      .card-reason strong {
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .card-foot {
+        margin-top: auto;
+        padding-top: 13px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .mini {
+        font-size: 12px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .card-foot .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid var(--line-2);
+        background: var(--surface);
+        color: var(--ink-2);
+        height: 27px;
+        padding: 0 10px;
+        border-radius: 7px;
+        font-size: 12.5px;
+        cursor: pointer;
+        white-space: nowrap;
+        transition:
+          background 0.15s ease,
+          border-color 0.15s ease,
+          color 0.15s ease;
+      }
+      .btn:hover {
+        background: #f6f6f8;
+        border-color: #cfcfd6;
+        color: var(--ink);
+      }
+      .btn.primary {
+        background: #1c1f24;
+        border-color: #1c1f24;
+        color: #fff;
+      }
+      .btn.primary:hover {
+        background: #2a2e35;
+        border-color: #2a2e35;
+      }
+
+      /* ---------- 展开明细 ---------- */
+      .row-body {
+        padding: 2px 18px 16px;
+        background: var(--surface-2);
+        border-top: 1px dashed var(--line);
+      }
+      .row-body[hidden] {
+        display: none;
+      }
+      .steps {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12.5px;
+        margin-top: 10px;
+      }
+      .steps th {
+        text-align: left;
+        font-weight: 500;
+        font-size: 11px;
+        color: var(--muted-2);
+        letter-spacing: 0.03em;
+        padding: 0 0 6px;
+      }
+      .steps th:first-child,
+      .steps td:first-child {
+        padding-right: 34px;
+      }
+      .steps td {
+        padding: 7px 0;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        padding-right: 34px;
+        color: var(--ink-2);
+        font-variant-numeric: tabular-nums;
+      }
+      .steps td:first-child {
+        color: var(--ink);
+      }
+      .steps tr:first-child td {
+        border-top: 0;
+      }
+      .failures {
+        margin-top: 14px;
+        border: 1px solid #f1dada;
+        background: #fffafa;
+        border-radius: var(--r-sm);
+        padding: 10px 12px;
+      }
+      .failure {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        font-size: 12.5px;
+        padding: 4px 0;
+      }
+      .failure .err {
+        color: var(--danger);
+      }
+      .failure .when {
+        color: var(--muted-2);
+        font-size: 11.5px;
+        white-space: nowrap;
+        min-width: 34px;
+      }
+      .body-foot {
+        margin-top: 12px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .body-note {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .body-foot .actions {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+
+      /* ---------- 最近完成 ---------- */
+      .done {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+      }
+      .done summary {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 18px;
+        cursor: pointer;
+        list-style: none;
+      }
+      .done summary::-webkit-details-marker {
+        display: none;
+      }
+      .done-title {
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .done-meta {
+        font-size: 12.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .done summary .chev {
+        margin-left: auto;
+      }
+      .done[open] summary .chev svg {
+        transform: rotate(180deg);
+      }
+      .done-body {
+        border-top: 1px solid var(--line);
+        padding: 4px 18px 10px;
+      }
+
+      .foot {
+        margin-top: 40px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted-2);
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .notes summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .notes ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        line-height: 1.75;
+        color: var(--muted);
+      }
+      .notes li {
+        margin-bottom: 2px;
+      }
+
+      /* ---------- 窄屏 ---------- */
+      @media (max-width: 760px) {
+        .scope {
+          margin-left: 0;
+        }
+        .scope button {
+          padding: 4px 10px;
+        }
+        .topbar-inner {
+          padding: 0 16px;
+          gap: 10px;
+          height: 54px;
+        }
+        .updated {
+          display: none;
+        }
+        .wrap {
+          padding: 24px 16px 56px;
+        }
+        .page-head h1 {
+          font-size: 23px;
+        }
+        .status {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .stat {
+          padding: 11px 15px;
+        }
+        .stat:nth-child(3) {
+          border-left: 0;
+        }
+        .stat:nth-child(n + 3) {
+          border-top: 1px solid var(--line);
+        }
+        .grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .row {
+          display: block;
+          padding: 15px 16px 14px;
+          padding-right: 52px;
+        }
+        .row-title {
+          font-size: 14px;
+        }
+        .row-sub {
+          white-space: normal;
+        }
+        .metrics {
+          margin-top: 12px;
+          gap: 22px;
+          justify-content: flex-start;
+        }
+        .metric {
+          align-items: flex-start;
+        }
+        .row-side {
+          position: absolute;
+          top: 12px;
+          right: 12px;
+        }
+        .rate {
+          display: none;
+        }
+        .section-note {
+          display: none;
+        }
+        .review {
+          padding: 14px 16px;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+        .review-main {
+          flex: 1 1 100%;
+        }
+        .review-cta {
+          margin-left: auto;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>SekerEagle</div>
+        <nav class="scope" aria-label="图库范围">
+          <button aria-pressed="true" data-scope="ALL">全部</button>
+          <button aria-pressed="false" data-scope="MATERIAL">素材</button>
+          <button aria-pressed="false" data-scope="PHOTO">照片</button>
+        </nav>
+        <div class="topbar-right">
+          <span class="updated num">08:47:12 更新</span>
+          <button class="icon-btn" aria-label="刷新">
+            <svg viewBox="0 0 24 24">
+              <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+              <path d="M20 5v6h-6" />
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="设置">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="10" cy="17" r="2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="page-head">
+        <h1>任务中心</h1>
+        <p>素材与照片共用一套队列。执行分别发生在图库服务器和 Mac 上，两条通道互不阻塞。</p>
+      </div>
+
+      <section class="status" aria-label="运行状态">
+        <div class="stat">
+          <span class="stat-label">处理服务</span>
+          <span class="stat-value"><i class="dot ok"></i>在线 <em>NAS 1/1</em></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">模型</span>
+          <span class="stat-value"
+            ><i class="dot ok" id="model-dot"></i><span id="model-text">正常</span>
+            <em>Mac 2/2</em></span
+          >
+        </div>
+        <div class="stat">
+          <span class="stat-label">队列</span>
+          <span class="stat-value num">13,942 <em>项剩余</em></span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">完成</span>
+          <span class="stat-value num">339 <em>项 · 近 11 分钟</em></span>
+        </div>
+      </section>
+
+      <div class="notice" id="busy-notice" hidden>
+        <span
+          ><strong>向量通道繁忙。</strong> 模型正在处理其他请求，已按 2
+          秒退避重试。这是容量限制，不是离线；NAS 上的缩略图、转码和清理不受影响，无需操作。</span
+        >
+      </div>
+
+      <section class="section" data-section>
+        <div class="section-head">
+          <h2>需要你处理</h2>
+          <span class="count" data-count>1</span>
+        </div>
+        <a class="review" href="#" data-mode="PHOTO">
+          <div class="review-main">
+            <div class="row-title">整理审批 <span class="badge">照片</span></div>
+            <p class="row-sub">12 项整理建议等待确认，通过后才会写入图库。</p>
+          </div>
+          <span class="review-cta">去审批 →</span>
+        </a>
+      </section>
+
+      <section class="section" data-section>
+        <div class="section-head">
+          <h2>正在处理</h2>
+          <span class="count" data-count>3</span>
+          <span class="section-note">按开始时间排序</span>
+        </div>
+        <div class="list">
+          <div class="row-group" data-mode="PHOTO">
+            <article class="row running">
+              <div class="row-main">
+                <div class="row-title">
+                  图片向量 <span class="badge">照片</span> <span class="chip live">运行中</span>
+                </div>
+                <p class="row-sub">
+                  当前步骤：生成图片向量<span class="sep">·</span>Mac 2B 模型<span class="sep"
+                    >·</span
+                  >2 项并行
+                </p>
+              </div>
+              <div class="metrics">
+                <span class="metric"><b class="num">8,214</b><i>剩余</i></span>
+                <span class="metric"><b class="num">2</b><i>运行</i></span>
+                <span class="metric danger"><b class="num">3</b><i>失败</i></span>
+              </div>
+              <div class="row-side">
+                <span class="rate"><b>1,822 项/小时</b>约 4.5 小时</span>
+                <button
+                  class="chev"
+                  aria-expanded="false"
+                  aria-controls="d-embedding"
+                  aria-label="展开详情"
+                >
+                  <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+                </button>
+              </div>
+            </article>
+            <div class="row-body" id="d-embedding" hidden>
+              <table class="steps">
+                <thead>
+                  <tr>
+                    <th>步骤</th>
+                    <th>运行</th>
+                    <th>等待</th>
+                    <th>失败</th>
+                    <th>已完成</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>生成图片向量</td>
+                    <td>2</td>
+                    <td>8,211</td>
+                    <td>3</td>
+                    <td>41,208</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="failures">
+                <div class="failure">
+                  <span class="when num">08:41</span>
+                  <span>模型繁忙（503），已自动退避重试</span>
+                </div>
+                <div class="failure">
+                  <span class="when num">08:36</span>
+                  <span class="err">源预览缺失，需要重新生成预览后重试</span>
+                </div>
+                <div class="failure">
+                  <span class="when num">08:29</span>
+                  <span>模型繁忙（503），已自动退避重试</span>
+                </div>
+              </div>
+              <div class="body-foot">
+                <span class="body-note">繁忙只影响本类任务，不会停止 NAS 上的其他处理。</span>
+                <span class="actions">
+                  <button class="btn">暂停此类</button>
+                  <button class="btn primary">重试 3 项失败</button>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="row-group" data-mode="MATERIAL">
+            <article class="row running">
+              <div class="row-main">
+                <div class="row-title">
+                  缩略图与预览 <span class="badge">素材</span> <span class="chip live">运行中</span>
+                </div>
+                <p class="row-sub">
+                  当前步骤：生成预览图<span class="sep">·</span>图库服务器<span class="sep">·</span
+                  >1 项并行
+                </p>
+              </div>
+              <div class="metrics">
+                <span class="metric"><b class="num">143</b><i>剩余</i></span>
+                <span class="metric"><b class="num">1</b><i>运行</i></span>
+                <span class="metric muted"><b class="num">0</b><i>失败</i></span>
+              </div>
+              <div class="row-side">
+                <span class="rate"><b>约 61 项/分钟</b>约 2 分钟</span>
+                <button class="chev" aria-expanded="false" aria-label="展开详情">
+                  <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div class="row-group" data-mode="PHOTO">
+            <article class="row running">
+              <div class="row-main">
+                <div class="row-title">
+                  视频转码 <span class="badge">照片</span> <span class="chip live">运行中</span>
+                </div>
+                <p class="row-sub">
+                  当前步骤：转码 H.264<span class="sep">·</span>图库服务器<span class="sep">·</span
+                  >约 38 秒/项
+                </p>
+              </div>
+              <div class="metrics">
+                <span class="metric"><b class="num">7</b><i>剩余</i></span>
+                <span class="metric"><b class="num">1</b><i>运行</i></span>
+                <span class="metric muted"><b class="num">0</b><i>失败</i></span>
+              </div>
+              <div class="row-side">
+                <span class="rate"><b>1 项/台</b>约 4 分钟</span>
+                <button class="chev" aria-expanded="false" aria-label="展开详情">
+                  <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+                </button>
+              </div>
+            </article>
+          </div>
+
+          <div class="row-group" data-mode="PHOTO">
+            <article class="row">
+              <div class="row-main">
+                <div class="row-title">
+                  照片位置索引 <span class="badge">照片</span> <span class="chip live">运行中</span>
+                </div>
+                <p class="row-sub">
+                  自动维护<span class="sep">·</span>分批更新分组与封面<span class="sep">·</span>每
+                  15 秒一步
+                </p>
+              </div>
+              <div class="metrics">
+                <span class="metric"><b class="num">96</b><i>剩余</i></span>
+                <span class="metric"><b class="num">1</b><i>运行</i></span>
+                <span class="metric muted"><b class="num">0</b><i>失败</i></span>
+              </div>
+              <div class="row-side">
+                <span class="rate"><b>自动</b>约 24 分钟</span>
+                <button class="chev" aria-expanded="false" aria-label="展开详情">
+                  <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+                </button>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" data-section>
+        <div class="section-head">
+          <h2>等待条件</h2>
+          <span class="count" data-count>2</span>
+          <span class="section-note">条件满足后自动开始</span>
+        </div>
+        <div class="grid">
+          <article class="card" data-mode="PHOTO">
+            <div class="card-top">
+              <div class="card-title">人脸检测 <span class="badge">照片</span></div>
+              <span class="chip wait">等待时段</span>
+            </div>
+            <p class="card-reason">
+              后台安排在 <strong>23:00</strong> 开始，还有 14 小时。队列不会消失，时段外不占用算力。
+            </p>
+            <div class="card-foot">
+              <span class="mini num">剩余 1,842</span>
+              <span class="actions">
+                <button class="btn">改为随时</button>
+                <button class="btn">详情</button>
+              </span>
+            </div>
+          </article>
+
+          <article class="card" data-mode="MATERIAL">
+            <div class="card-top">
+              <div class="card-title">语义文件夹匹配 <span class="badge">素材</span></div>
+              <span class="chip wait">等待前置</span>
+            </div>
+            <p class="card-reason">
+              需要先完成 <strong>图片向量</strong>，当前还剩 8,214
+              项。前置完成后自动开始，无需操作。
+            </p>
+            <div class="card-foot">
+              <span class="mini num">剩余 128</span>
+              <span class="actions"><button class="btn">查看依赖</button></span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" data-section>
+        <div class="section-head">
+          <h2>已暂停</h2>
+          <span class="count" data-count>2</span>
+          <span class="section-note">不会自动开始</span>
+        </div>
+        <div class="grid">
+          <article class="card" data-mode="PHOTO">
+            <div class="card-top">
+              <div class="card-title">高清与动态组件 <span class="badge">照片</span></div>
+              <span class="chip paused">手动暂停</span>
+            </div>
+            <p class="card-reason">
+              10-25 由你暂停。已完成的浏览结果不受影响，暂停期间不领取新步骤。
+            </p>
+            <div class="card-foot">
+              <span class="mini num">剩余 2,304</span>
+              <span class="actions"><button class="btn">继续</button></span>
+            </div>
+          </article>
+
+          <article class="card" data-mode="MATERIAL">
+            <div class="card-top">
+              <div class="card-title">标签推荐索引 <span class="badge">素材</span></div>
+              <span class="chip paused">安排暂停</span>
+            </div>
+            <p class="card-reason">
+              后台安排当前为暂停。已有标签仍可读取和筛选，只有新索引需要重新开始。
+            </p>
+            <div class="card-foot">
+              <span class="mini num">剩余 1,208</span>
+              <span class="actions"><button class="btn">继续</button></span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section" data-section>
+        <details class="done">
+          <summary>
+            <span class="done-title">最近完成</span>
+            <span class="done-meta">过去 1 小时 339 项</span>
+            <button class="chev" tabindex="-1" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+          </summary>
+          <div class="done-body">
+            <table class="steps">
+              <thead>
+                <tr>
+                  <th>类别</th>
+                  <th>完成</th>
+                  <th>平均用时</th>
+                  <th>失败</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>图片向量</td>
+                  <td class="num">328</td>
+                  <td class="num">4.1 秒</td>
+                  <td class="num">0</td>
+                </tr>
+                <tr>
+                  <td>代表色提取</td>
+                  <td class="num">8</td>
+                  <td class="num">0.6 秒</td>
+                  <td class="num">0</td>
+                </tr>
+                <tr>
+                  <td>缩略图与预览</td>
+                  <td class="num">3</td>
+                  <td class="num">2.4 秒</td>
+                  <td class="num">0</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
+
+      <footer class="foot">
+        <span>静态设计稿 · 数据为示例 · 不含账号与文件信息</span>
+        <details class="notes">
+          <summary>设计说明</summary>
+          <ul>
+            <li>一个任务只显示一个当前状态，原因紧跟其下，不再用聚合数反推状态。</li>
+            <li>每行只留一个主数字“剩余”；运行与失败是次要指标，完成量单独成段。</li>
+            <li>按可操作性分区：需要你 → 正在处理 → 等待条件 → 已暂停 → 最近完成。</li>
+            <li>状态用日常词（运行中 / 等待时段 / 已暂停），不用“计算ing”这类拼接词。</li>
+            <li>运算位置、速率、预计时间放在次级层，不占标题。</li>
+            <li>容量繁忙与离线在文案上分开：繁忙只说“自动重试”，不冒充离线。</li>
+            <li>行内只保留展开按钮，暂停与重试放进展开区，减少误触和视觉噪音。</li>
+            <li>窄屏下数字换到第二行，不横向滚动；展开区与卡片单列排布。</li>
+            <li>
+              <a href="#busy">查看“模型繁忙”版式</a>：繁忙与离线用不同措辞和颜色，不互相冒充。
+            </li>
+          </ul>
+        </details>
+      </footer>
+    </main>
+
+    <script>
+      // 范围切换：隐藏不属于当前图库的条目，并同步区块计数
+      const scopeButtons = [...document.querySelectorAll('.scope button')];
+      const items = [...document.querySelectorAll('[data-mode]')];
+      const sections = [...document.querySelectorAll('[data-section]')];
+
+      function applyScope(scope) {
+        for (const button of scopeButtons) {
+          button.setAttribute('aria-pressed', String(button.dataset.scope === scope));
+        }
+        for (const item of items) {
+          item.hidden = scope !== 'ALL' && item.dataset.mode !== scope;
+        }
+        for (const section of sections) {
+          const visible = [...section.querySelectorAll('[data-mode]')].filter((n) => !n.hidden);
+          const badge = section.querySelector('[data-count]');
+          if (badge) badge.textContent = String(visible.length);
+          const empty = visible.length === 0;
+          section.hidden = empty;
+        }
+      }
+
+      for (const button of scopeButtons) {
+        button.addEventListener('click', () => applyScope(button.dataset.scope));
+      }
+
+      // 展开 / 收起明细
+      for (const trigger of document.querySelectorAll('.chev[aria-controls]')) {
+        trigger.addEventListener('click', () => {
+          const body = document.getElementById(trigger.getAttribute('aria-controls'));
+          const open = trigger.getAttribute('aria-expanded') === 'true';
+          trigger.setAttribute('aria-expanded', String(!open));
+          body.hidden = open;
+        });
+      }
+
+      // 繁忙版式：只改变措辞与颜色，不改变信息结构
+      if (location.hash === '#busy') {
+        document.getElementById('busy-notice').hidden = false;
+        const dot = document.getElementById('model-dot');
+        dot.classList.remove('ok');
+        dot.classList.add('warn');
+        document.getElementById('model-text').textContent = '繁忙';
+      }
+
+      // 便于截图核对展开后的排版
+      if (location.hash === '#detail') {
+        const trigger = document.querySelector('.chev[aria-controls="d-embedding"]');
+        trigger.setAttribute('aria-expanded', 'true');
+        document.getElementById('d-embedding').hidden = false;
+      }
+    </script>
+  </body>
+</html>
