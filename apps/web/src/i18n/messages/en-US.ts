@@ -1,8 +1,7 @@
 export const enUS = {
-  '最近状态变化': 'Recent transitions',
-  '暂无转换记录': 'No recorded transitions',
-  '中断后恢复': 'Recovered after interruption',
-  '开始处理': 'Started processing',
+  最近状态变化: 'Recent transitions',
+  暂无转换记录: 'No recorded transitions',
+  中断后恢复: 'Recovered after interruption',
   后台工作: 'Background work',
   后台安排: 'Background schedule',
   类别: 'Category',

@@ -115,7 +115,12 @@ export interface TaskCenterOverview {
 }
 
 /** First match wins. SQL generation consumes this registry rather than copying classifiers. */
-export const MEDIA_FAMILY_RULES: ReadonlyArray<{ family: TaskFamily; version?: string; prefix?: string; kind?: string }> = [
+export const MEDIA_FAMILY_RULES: ReadonlyArray<{
+  family: TaskFamily;
+  version?: string;
+  prefix?: string;
+  kind?: string;
+}> = [
   { version: 'photo-source-details-v1', family: 'DETAILS' },
   { prefix: 'video-playback-', family: 'VIDEO' },
   { prefix: 'camera-video-playback-', family: 'VIDEO' },
@@ -126,8 +131,15 @@ export const MEDIA_FAMILY_RULES: ReadonlyArray<{ family: TaskFamily; version?: s
   { kind: 'PURGE_ASSET', family: 'CLEANUP' },
 ];
 export function mediaTaskFamily(kind: string, version: string): TaskFamily {
-  return MEDIA_FAMILY_RULES.find((rule) => rule.version ? version === rule.version
-    : rule.prefix ? version.startsWith(rule.prefix) : rule.kind === kind)?.family ?? 'BROWSE';
+  return (
+    MEDIA_FAMILY_RULES.find((rule) =>
+      rule.version
+        ? version === rule.version
+        : rule.prefix
+          ? version.startsWith(rule.prefix)
+          : rule.kind === kind,
+    )?.family ?? 'BROWSE'
+  );
 }
 
 export function isBackgroundFamily(family: TaskFamily): boolean {

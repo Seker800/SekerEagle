@@ -3463,6 +3463,55 @@
         "tags": ["EagleTaskCenter"]
       }
     },
+    "/api/eagle/tasks/history": {
+      "get": {
+        "operationId": "EagleTaskCenterController_history",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
+    "/api/eagle/tasks/events": {
+      "get": {
+        "operationId": "EagleTaskCenterController_events",
+        "parameters": [
+          {
+            "name": "family",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BROWSE",
+                "DETAILS",
+                "VIDEO",
+                "EMBEDDING",
+                "FACES",
+                "COLOR",
+                "PYRAMID",
+                "SMART_FOLDERS",
+                "TAG_INDEX",
+                "PHOTO_MAP",
+                "CLEANUP",
+                "APPROVALS",
+                "UPLOADS",
+                "IMPORTS"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["EagleTaskCenter"]
+      }
+    },
     "/api/eagle/tasks/policy": {
       "patch": {
         "operationId": "EagleTaskCenterController_policy",
@@ -7493,6 +7542,55 @@
       "get": {
         "operationId": "PhotoTaskCenterController_overview",
         "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
+    "/api/photos/tasks/history": {
+      "get": {
+        "operationId": "PhotoTaskCenterController_history",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["PhotoTaskCenter"]
+      }
+    },
+    "/api/photos/tasks/events": {
+      "get": {
+        "operationId": "PhotoTaskCenterController_events",
+        "parameters": [
+          {
+            "name": "family",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "BROWSE",
+                "DETAILS",
+                "VIDEO",
+                "EMBEDDING",
+                "FACES",
+                "COLOR",
+                "PYRAMID",
+                "SMART_FOLDERS",
+                "TAG_INDEX",
+                "PHOTO_MAP",
+                "CLEANUP",
+                "APPROVALS",
+                "UPLOADS",
+                "IMPORTS"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": ""

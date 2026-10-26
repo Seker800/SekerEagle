@@ -715,13 +715,25 @@ test('transition read API excludes other owners, libraries, private and supersed
   );
 });
 
-
 test('retrying edited-copy rendering preserves the original source readiness', async () => {
   const f = await fixture();
-  const source = await f.asset({lifecycleStatus: 'READY'});
-  const job = await f.job(source, {kind: 'RENDER_EDITED_COPY', lane: 'INTERACTIVE', status: 'FAILED'});
-  assert.deepEqual(await f.service.retry(f.owner, 'BROWSE'), {retried: 1});
-  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({where: {id: source.id}})).lifecycleStatus, 'READY');
-  assert.equal((await prisma.eagleAssetProcessingJob.findUniqueOrThrow({where: {id: job.id}})).status, 'PENDING');
-  await prisma.eagleAssetProcessingJob.update({where: {id: job.id}, data: {status: 'COMPLETED'}});
+  const source = await f.asset({ lifecycleStatus: 'READY' });
+  const job = await f.job(source, {
+    kind: 'RENDER_EDITED_COPY',
+    lane: 'INTERACTIVE',
+    status: 'FAILED',
+  });
+  assert.deepEqual(await f.service.retry(f.owner, 'BROWSE'), { retried: 1 });
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: source.id } })).lifecycleStatus,
+    'READY',
+  );
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } })).status,
+    'PENDING',
+  );
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: job.id },
+    data: { status: 'COMPLETED' },
+  });
 });

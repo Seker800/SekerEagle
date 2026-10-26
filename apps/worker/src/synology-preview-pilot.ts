@@ -141,7 +141,7 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
             },
           },
           {
-            onLeaseExhausted: async () => { throw new Error('MEDIA_LEASE_RECOVERY_EXHAUSTED'); },
+            onLeaseExhausted: () => Promise.reject(new Error('MEDIA_LEASE_RECOVERY_EXHAUSTED')),
             allowedJobKinds: ['GENERATE_RENDITIONS'],
             canClaimBackground: () => Promise.resolve(true),
           },

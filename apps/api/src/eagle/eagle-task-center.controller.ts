@@ -21,7 +21,7 @@ export class RetryTaskFamilyDto {
   family!: TaskFamily;
 }
 export class TaskEventsQueryDto {
-  @ApiProperty({enum: [...TASK_FAMILIES]})
+  @ApiProperty({ enum: [...TASK_FAMILIES] })
   @IsIn(TASK_FAMILIES)
   family!: TaskFamily;
 }

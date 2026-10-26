@@ -1,4 +1,9 @@
-import type { BackgroundSchedule, TaskCenterOverview, TaskFamily, TaskTransitionEvent } from '@sekereagle/library-core';
+import type {
+  BackgroundSchedule,
+  TaskCenterOverview,
+  TaskFamily,
+  TaskTransitionEvent,
+} from '@sekereagle/library-core';
 import { fetchWithBrowserSession } from './api-client';
 import { errorFromResponse } from './api-error';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
@@ -22,7 +27,8 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
     fetchEagleTaskCenter: (signal?: AbortSignal) => request<TaskCenterOverview>('', { signal }),
     fetchEagleTaskHistory: (signal?: AbortSignal) =>
       request<TaskCenterOverview>('/history', { signal }),
-    fetchEagleTaskEvents: (family: TaskFamily, signal?: AbortSignal) => request<TaskTransitionEvent[]>(`/events?family=${encodeURIComponent(family)}`, {signal}),
+    fetchEagleTaskEvents: (family: TaskFamily, signal?: AbortSignal) =>
+      request<TaskTransitionEvent[]>(`/events?family=${encodeURIComponent(family)}`, { signal }),
     updateEagleTaskSchedule: (settings: BackgroundSchedule) =>
       request<TaskCenterOverview['settings']>('/settings', {
         method: 'PATCH',

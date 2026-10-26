@@ -61,7 +61,8 @@ export function parseProcessingJobKinds(
   return Object.freeze([...new Set(kinds as EagleMediaJobKind[])]);
 }
 
-export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] = MEDIA_BROWSE_BLOCKING_KINDS;
+export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] =
+  MEDIA_BROWSE_BLOCKING_KINDS;
 
 export function processingLaneForKind(
   kind: EagleMediaJobKind,

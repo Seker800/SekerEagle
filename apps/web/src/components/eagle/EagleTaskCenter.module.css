@@ -44,7 +44,7 @@
 }
 .center h1 {
   font-size: 22px;
-  margin: 0 0 8px;
+  margin: 0;
 }
 .center h2 {
   font-size: 15px;
@@ -191,8 +191,8 @@
 }
 .settings,
 .external {
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 12px;
+  padding: 8px 0;
   border-top: 1px solid var(--ui-line);
 }
 .settings > h2 {
@@ -205,7 +205,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   font-size: 13px;
 }
 .section {
@@ -275,4 +275,19 @@
 .operationHistory > summary {
   cursor: pointer;
   margin-bottom: 10px;
+}
+
+.header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header > button:last-child {
+  margin-left: auto;
+}
+.settings summary,
+.external summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ui-muted);
 }

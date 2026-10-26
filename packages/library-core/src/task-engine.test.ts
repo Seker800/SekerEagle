@@ -353,7 +353,6 @@ test('an idle paused group keeps its pause reason even while its model is offlin
   );
 });
 
-
 test('retrying an edited copy never turns its ready source back into processing', () => {
   assert.equal(mediaTaskBlocksAssetReady('RENDER_EDITED_COPY', 'v1'), false);
   assert.equal(mediaTaskBlocksAssetReady('GENERATE_THUMBNAIL', 'v1'), true);

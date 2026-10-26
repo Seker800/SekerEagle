@@ -37,7 +37,13 @@ test('the database query excludes paused job kinds before the bounded candidate 
     },
   };
   const allowedJobKinds = ['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING'] as const;
-  await claimNextMediaJob(client, { allowedJobKinds, onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true });
+  await claimNextMediaJob(client, {
+    allowedJobKinds,
+    onLeaseExhausted: async () => {
+      throw new Error('Unexpected exhausted lease');
+    },
+    canClaimBackground: async () => true,
+  });
   assert.equal(queries.length, 3);
   assert.deepEqual(
     queries.map((q) => q.where.kind),
@@ -64,7 +70,13 @@ test('legacy AI tag selection is excluded even when an old caller explicitly all
         },
       },
     },
-    { allowedJobKinds: ['GENERATE_AI_TAGS'], onLeaseExhausted: async () => { throw new Error('Unexpected exhausted lease'); }, canClaimBackground: async () => true },
+    {
+      allowedJobKinds: ['GENERATE_AI_TAGS'],
+      onLeaseExhausted: async () => {
+        throw new Error('Unexpected exhausted lease');
+      },
+      canClaimBackground: async () => true,
+    },
   );
   assert.deepEqual(kinds, Array(3).fill({ not: 'GENERATE_AI_TAGS', in: ['GENERATE_AI_TAGS'] }));
 });
@@ -73,7 +85,7 @@ test('wake-up queries use the same selection and group every selected job versio
   const { buildMediaWakeQuery } = await import('./job-wakeup-query');
   const query = buildMediaWakeQuery(['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING']);
   assert.match(query.sql, /AND candidate.kind IN/);
-  assert.deepEqual(query.values, ['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING']);
+  assert.deepEqual(query.values.slice(-2), ['GENERATE_RENDITIONS', 'GENERATE_EMBEDDING']);
   assert.match(query.sql, /GROUP BY[^;]*candidate\."processorVersion"/);
   assert.doesNotMatch(buildMediaWakeQuery().sql, /AND candidate.kind IN/);
   assert.match(buildMediaWakeQuery([]).sql, /AND false/);

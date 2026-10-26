@@ -1,4 +1,4 @@
-import {mediaTaskFamilySql} from './task-policy';
+import { mediaTaskFamilySql } from './task-policy';
 import { Prisma } from '@prisma/client';
 import {
   TASK_GATES,

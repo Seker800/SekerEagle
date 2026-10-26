@@ -275,7 +275,15 @@ export function taskWorkerOwned(family: TaskFamily) {
   return !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
 }
 
-export const MEDIA_BROWSE_BLOCKING_KINDS = ['GENERATE_RENDITIONS', 'GENERATE_THUMBNAIL', 'GENERATE_PREVIEW', 'PROBE_MEDIA'] as const;
+export const MEDIA_BROWSE_BLOCKING_KINDS = [
+  'GENERATE_RENDITIONS',
+  'GENERATE_THUMBNAIL',
+  'GENERATE_PREVIEW',
+  'PROBE_MEDIA',
+] as const;
 export function mediaTaskBlocksAssetReady(kind: string, version = '') {
-  return mediaTaskFamily(kind, version) === 'BROWSE' && (MEDIA_BROWSE_BLOCKING_KINDS as readonly string[]).includes(kind);
+  return (
+    mediaTaskFamily(kind, version) === 'BROWSE' &&
+    (MEDIA_BROWSE_BLOCKING_KINDS as readonly string[]).includes(kind)
+  );
 }

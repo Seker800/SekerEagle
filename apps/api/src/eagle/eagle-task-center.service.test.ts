@@ -452,13 +452,22 @@ test('transition history is bounded, current-version and private/owner/mode scop
   assert.doesNotMatch(captured!.sql, /lastError/);
 });
 
-
 test('lost worker heartbeat is visible before long execution leases expire', async () => {
   const service = new EagleTaskCenterService({
-    $queryRaw: async () => [{family: 'MEDIA', step: 'GENERATE_RENDITIONS', version: 'v1', status: 'RUNNING', reason: 'QUEUED', count: 1n, nextAt: null}],
-    eagleProcessingWorkerHeartbeat: {findMany: async () => []},
-    eagleProcessingSetting: {findUnique: async () => ({mode: 'ALWAYS'})},
-    eagleTaskPolicy: {findMany: async () => []},
+    $queryRaw: async () => [
+      {
+        family: 'MEDIA',
+        step: 'GENERATE_RENDITIONS',
+        version: 'v1',
+        status: 'RUNNING',
+        reason: 'QUEUED',
+        count: 1n,
+        nextAt: null,
+      },
+    ],
+    eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
+    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+    eagleTaskPolicy: { findMany: async () => [] },
   } as never);
   const result = await service.overview('owner-a');
   assert.equal(result.groups[0]?.running, 1); // A lease is not silently erased.

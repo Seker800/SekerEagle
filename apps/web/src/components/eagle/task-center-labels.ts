@@ -170,10 +170,15 @@ export function taskStatusLabel(
 ): string {
   switch (taskStatus(group, schedule, embedding)) {
     case 'WAITING': {
-      const reason = (group.presentation ?? taskGroupPresentation(group, schedule, embedding)).reason;
-      return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED' ? t('等待模型')
-        : reason === 'WORKER_OFFLINE' ? t('等待处理服务')
-        : reason ? taskWaitLabel(reason) : t('等待执行');
+      const reason = (group.presentation ?? taskGroupPresentation(group, schedule, embedding))
+        .reason;
+      return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED'
+        ? t('等待模型')
+        : reason === 'WORKER_OFFLINE'
+          ? t('等待处理服务')
+          : reason
+            ? taskWaitLabel(reason)
+            : t('等待执行');
     }
     case 'RUNNING':
       return t('计算ing');

@@ -1,6 +1,10 @@
 import { Inject, Injectable, Optional, NotFoundException } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
-import { mediaTaskFamilySql, mediaBlocksAssetReadySql, lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
+import {
+  mediaTaskFamilySql,
+  mediaBlocksAssetReadySql,
+  lockOwnerPrivacyProjection,
+} from '@sekereagle/library-persistence';
 import {
   DEFAULT_BACKGROUND_SCHEDULE,
   TASK_FAMILIES,

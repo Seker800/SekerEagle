@@ -31,3 +31,6 @@ END;
 $$;
 CREATE TRIGGER eagle_media_transition AFTER INSERT OR UPDATE OF status,"leaseVersion" ON "EagleMediaJob"
   FOR EACH ROW EXECUTE FUNCTION record_eagle_media_transition();
+
+CREATE TRIGGER library_mode_immutable BEFORE UPDATE OF "libraryMode" ON "EagleMediaJobEvent"
+  FOR EACH ROW EXECUTE FUNCTION enforce_library_mode_immutable();

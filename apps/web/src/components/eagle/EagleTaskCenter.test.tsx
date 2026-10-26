@@ -149,11 +149,13 @@ describe('unified task center', () => {
     expect(screen.getByText('生成图片向量')).not.toBeVisible();
     fireEvent.click(screen.getByText('查看处理步骤'));
     expect(screen.getByText('生成图片向量')).toBeVisible();
+    fireEvent.click(screen.getByText('其他设备与维护'));
     expect(screen.getByText(/独立封面维护/)).toBeVisible();
   });
   it('lets an ordinary owner pause background work while explaining essential work continues', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
+    fireEvent.click(screen.getByText('后台安排'));
     fireEvent.change(screen.getByRole('combobox', { name: '全部图库的后台运行方式' }), {
       target: { value: 'MANUAL' },
     });
@@ -425,4 +427,15 @@ it('distinguishes model configuration faults from connection loss without exposi
   mount();
   expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型配置不匹配');
   expect(screen.getByRole('alert')).not.toHaveTextContent('192.168');
+});
+
+it('loads completed history only on request and keeps live polling separate', async () => {
+  mount();
+  await screen.findByRole('table');
+  expect(api.fetchEagleTaskHistory).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '已完成记录' }));
+  await waitFor(() => expect(api.fetchEagleTaskHistory).toHaveBeenCalled());
+  expect(screen.getByRole('button', { name: '返回当前任务' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '返回当前任务' }));
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
 });

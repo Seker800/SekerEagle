@@ -23,7 +23,8 @@ for (const factory of factories) {
 }
 const operations = {
   tasks: (mode: LibraryMode) => createEagleTaskCenterApi(mode).fetchEagleTaskCenter(),
-  taskEvents: (mode: LibraryMode) => createEagleTaskCenterApi(mode).fetchEagleTaskEvents('EMBEDDING'),
+  taskEvents: (mode: LibraryMode) =>
+    createEagleTaskCenterApi(mode).fetchEagleTaskEvents('EMBEDDING'),
   taskHistory: (mode: LibraryMode) => createEagleTaskCenterApi(mode).fetchEagleTaskHistory(),
   taskSchedule: (mode: LibraryMode) =>
     createEagleTaskCenterApi(mode).updateEagleTaskSchedule({

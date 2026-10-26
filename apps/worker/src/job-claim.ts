@@ -1,4 +1,9 @@
-import { MEDIA_LEASE_MS, mediaClaimTransition, isBackgroundFamily, mediaTaskFamily } from '@sekereagle/library-core';
+import {
+  MEDIA_LEASE_MS,
+  mediaClaimTransition,
+  isBackgroundFamily,
+  mediaTaskFamily,
+} from '@sekereagle/library-core';
 import type {
   EagleAssetProcessingJob,
   EagleMediaJobStatus,

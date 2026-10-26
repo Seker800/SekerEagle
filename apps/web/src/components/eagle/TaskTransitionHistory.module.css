@@ -1,5 +1,28 @@
-.history { margin-top: 10px; font-size: 12px; border-top: 1px solid var(--ui-line); padding-top: 8px; }
-.history summary { cursor: pointer; color: var(--ui-muted); }
-.history ol { list-style: none; padding: 0; margin: 8px 0; max-height: 220px; overflow: auto; }
-.history li { display: flex; gap: 8px; padding: 4px 0; font-size: 11px; }
-.history time { color: var(--ui-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.history {
+  margin-top: 10px;
+  font-size: 12px;
+  border-top: 1px solid var(--ui-line);
+  padding-top: 8px;
+}
+.history summary {
+  cursor: pointer;
+  color: var(--ui-muted);
+}
+.history ol {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.history li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+}
+.history time {
+  color: var(--ui-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

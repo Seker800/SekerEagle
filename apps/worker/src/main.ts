@@ -1,4 +1,9 @@
-import { mediaFailure, mediaCompletion, mediaExecutionGuard, MediaLeaseRecoveryExhaustedError } from '@sekereagle/library-core';
+import {
+  mediaFailure,
+  mediaCompletion,
+  mediaExecutionGuard,
+  MediaLeaseRecoveryExhaustedError,
+} from '@sekereagle/library-core';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
@@ -1199,12 +1204,17 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
 
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const permanent = error instanceof MediaLeaseRecoveryExhaustedError || isPermanentMediaValidationError(error) ||
+  const permanent =
+    error instanceof MediaLeaseRecoveryExhaustedError ||
+    isPermanentMediaValidationError(error) ||
     (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
   const transition = mediaFailure(job, message, permanent);
-  const {terminal} = transition;
+  const { terminal } = transition;
   await prisma.$transaction(async (transaction) => {
-    const failed = await transaction.eagleAssetProcessingJob.updateMany({where: transition.where, data: transition.data});
+    const failed = await transaction.eagleAssetProcessingJob.updateMany({
+      where: transition.where,
+      data: transition.data,
+    });
     if (failed.count !== 1) return;
     if (terminal) await propagateFailedDependencies(transaction);
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {

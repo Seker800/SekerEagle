@@ -1,3 +1,4 @@
+import { MEDIA_LEASE_MS } from '@sekereagle/library-core';
 import { Prisma, type EagleMediaJobKind } from '@prisma/client';
 import { taskPolicyAllowsSql, mediaTaskFamilySql } from '@sekereagle/library-persistence';
 
@@ -17,7 +18,7 @@ export function buildMediaWakeQuery(allowedJobKinds?: readonly EagleMediaJobKind
           AND (job."dependsOnJobId" IS NULL OR dependency.status = 'COMPLETED')
         UNION ALL
         SELECT job."ownerId", job."libraryMode", job.lane::text AS lane, job.kind::text AS kind, job."processorVersion",
-               job."lockedAt" + INTERVAL '10 minutes' AS "availableAt"
+               job."lockedAt" + ${MEDIA_LEASE_MS} * interval '1 millisecond' AS "availableAt"
         FROM "EagleMediaJob" AS job
         JOIN "EagleAsset" AS asset ON asset.id=job."assetId" AND asset."ownerId"=job."ownerId" AND asset."libraryMode"=job."libraryMode"
         WHERE job.status = 'PROCESSING' AND job."lockedAt" IS NOT NULL

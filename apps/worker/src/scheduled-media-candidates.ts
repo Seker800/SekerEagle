@@ -56,7 +56,9 @@ export function selectScheduledMediaCandidates(
       AND job."assetRevision"=a."mediaRevision" AND (a."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
       AND ${taskRunnableSql({
         paused: Prisma.sql`NOT (${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)})`,
-        modelOffline: embeddingUnavailable ? Prisma.sql`job.kind='GENERATE_EMBEDDING'` : Prisma.sql`false`,
+        modelOffline: embeddingUnavailable
+          ? Prisma.sql`job.kind='GENERATE_EMBEDDING'`
+          : Prisma.sql`false`,
         dependencyPending: Prisma.sql`job."dependsOnJobId" IS NOT NULL AND dependency.status IS DISTINCT FROM 'COMPLETED'`,
         outsideSchedule: Prisma.sql`${backgroundFamilySql(family)} AND NOT (${backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`)})`,
       })}
