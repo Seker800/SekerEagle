@@ -219,7 +219,8 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
   const sequence = claimSequence[resource]++;
   for (const age of mediaQueueAgeOrder(sequence)) {
     const job = await claimNextMediaJob(prisma, {
-      onLeaseExhausted: (job) => failJob(job, new MediaLeaseRecoveryExhaustedError()),
+      onLeaseExhausted: (job, expiredBefore) =>
+        failJob(job, new MediaLeaseRecoveryExhaustedError(expiredBefore)),
       selectCandidates: (input) => selectors[resource](input, age),
       canClaimBackground: canClaimBackgroundForOwner,
       allowedJobKinds,
@@ -1208,7 +1209,10 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
     error instanceof MediaLeaseRecoveryExhaustedError ||
     isPermanentMediaValidationError(error) ||
     (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
-  const transition = mediaFailure(job, message, permanent);
+  const transition = mediaFailure(
+    job, message, permanent, new Date(),
+    error instanceof MediaLeaseRecoveryExhaustedError ? error.expiredBefore : undefined,
+  );
   const { terminal } = transition;
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({

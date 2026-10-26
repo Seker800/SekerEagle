@@ -100,7 +100,7 @@ export const MEDIA_LEASE_MS = 10 * 60 * 1000;
 export const MEDIA_FAILURE_LIMIT = 12;
 export const MEDIA_RECOVERY_LIMIT = 3;
 export class MediaLeaseRecoveryExhaustedError extends Error {
-  constructor() {
+  constructor(readonly expiredBefore: Date) {
     super('MEDIA_LEASE_RECOVERY_EXHAUSTED');
   }
 }
@@ -119,9 +119,11 @@ export function mediaClaimTransition(job: MediaClaimState, now: Date) {
   const recovery =
     job.status === 'PROCESSING' && job.lockedAt !== null && job.lockedAt < staleBefore;
   if (!(job.status === 'PENDING' && job.availableAt <= now) && !recovery) return null;
+  if (recovery && job.recoveryCount >= MEDIA_RECOVERY_LIMIT)
+    return { kind: 'EXHAUSTED' as const, expiredBefore: staleBefore };
   return {
+    kind: 'CLAIM' as const,
     recovery,
-    exhausted: recovery && job.recoveryCount >= MEDIA_RECOVERY_LIMIT,
     where: {
       leaseVersion: job.leaseVersion,
       status: recovery ? ('PROCESSING' as const) : ('PENDING' as const),
@@ -216,7 +218,7 @@ interface MediaExecution {
   assetRevision: number;
   leaseVersion: number;
 }
-export function mediaExecutionGuard(job: MediaExecution) {
+export function mediaExecutionGuard(job: MediaExecution, expiredBefore?: Date) {
   return {
     id: job.id,
     ownerId: job.ownerId,
@@ -225,6 +227,7 @@ export function mediaExecutionGuard(job: MediaExecution) {
     assetRevision: job.assetRevision,
     status: 'PROCESSING' as const,
     leaseVersion: job.leaseVersion,
+    ...(expiredBefore ? { lockedAt: { lt: expiredBefore } } : {}),
   };
 }
 export function mediaCompletion(job: MediaExecution, now = new Date()) {
@@ -239,6 +242,7 @@ export function mediaFailure(
   error: string,
   permanent: boolean,
   now = new Date(),
+  expiredBefore?: Date,
 ) {
   const terminal =
     permanent || job.attempts >= (job.kind === 'RENDER_EDITED_COPY' ? 3 : MEDIA_FAILURE_LIMIT);
@@ -257,7 +261,7 @@ export function mediaFailure(
         lockedAt: null,
         lastError: error.slice(0, 1000),
       };
-  return { terminal, where: mediaExecutionGuard(job), data };
+  return { terminal, where: mediaExecutionGuard(job, expiredBefore), data };
 }
 /** External service backpressure or outage is a wait, not a bad-image failure. */
 export function mediaWaitData(attempts: number, delayMs: number, code: string, now = new Date()) {

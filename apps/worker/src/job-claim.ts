@@ -63,7 +63,7 @@ export interface MediaJobClaimClient {
 }
 
 interface ClaimMediaJobOptions {
-  onLeaseExhausted(job: EagleAssetProcessingJob): Promise<void>;
+  onLeaseExhausted(job: EagleAssetProcessingJob, expiredBefore: Date): Promise<void>;
   selectCandidates?: (input: ClaimFindManyInput) => Promise<EagleAssetProcessingJob[]>;
   now?: Date;
   excludedProcessorVersions?: string[];
@@ -97,7 +97,7 @@ export async function claimNextMediaJob(
         ...(options.excludedProcessorVersions?.length
           ? { processorVersion: { notIn: options.excludedProcessorVersions } }
           : {}),
-        ...(kindFilter ? { kind: kindFilter } : {}),
+        kind: kindFilter,
         AND: [
           { OR: [{ dependsOnJobId: null }, { dependsOnJob: { status: 'COMPLETED' } }] },
           {
@@ -127,8 +127,8 @@ export async function claimNextMediaJob(
       }
       const transition = mediaClaimTransition(candidate, now);
       if (!transition) continue;
-      if (transition.exhausted) {
-        await options.onLeaseExhausted(candidate);
+      if (transition.kind === 'EXHAUSTED') {
+        await options.onLeaseExhausted(candidate, transition.expiredBefore);
         continue;
       }
       const claimed = await client.eagleAssetProcessingJob.updateMany({

@@ -103,7 +103,9 @@ test('claim rejects terminal, future, live and corrupt leases at the shared expi
     leaseVersion: 2,
     recoveryCount: 0,
   };
-  assert.equal(mediaClaimTransition(pending, now)?.data.leaseVersion.increment, 1);
+  const claim = mediaClaimTransition(pending, now);
+  assert.equal(claim?.kind, 'CLAIM');
+  assert.equal(claim.kind === 'CLAIM' && claim.data.leaseVersion.increment, 1);
   assert.equal(
     mediaClaimTransition({ ...pending, availableAt: new Date(now.getTime() + 1) }, now),
     null,
@@ -120,8 +122,9 @@ test('claim rejects terminal, future, live and corrupt leases at the shared expi
     { ...pending, status: 'PROCESSING', lockedAt: new Date(edge.getTime() - 1) },
     now,
   );
-  assert.equal(recovered?.recovery, true);
-  assert.equal(recovered?.data.startedAt, now);
+  assert.equal(recovered?.kind, 'CLAIM');
+  assert.equal(recovered.kind === 'CLAIM' && recovered.recovery, true);
+  assert.equal(recovered.kind === 'CLAIM' && recovered.data.startedAt, now);
 });
 
 test('expired executions have a finite recovery budget separate from model wait attempts', () => {
@@ -134,7 +137,7 @@ test('expired executions have a finite recovery budget separate from model wait 
     leaseVersion: 5,
     recoveryCount: 3,
   };
-  assert.equal(mediaClaimTransition(state, now)?.exhausted, true);
+  assert.equal(mediaClaimTransition(state, now)?.kind, 'EXHAUSTED');
 });
 
 test('completion and failure use one fenced execution identity and one retry budget', () => {
