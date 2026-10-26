@@ -1,3 +1,4 @@
+import { mediaCompletion } from '@sekereagle/library-core';
 import { videoProcessingStage, VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
 import { CAMERA_MAX_VIDEO_BYTES } from '@sekereagle/library-core';
 import {
@@ -142,8 +143,7 @@ export async function processVideo(
     await prisma.$transaction(async (transaction) => {
       await lockPrivacy(transaction, asset.ownerId, asset.libraryMode);
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        ...mediaCompletion(job),
       });
       if (completed.count !== 1) return;
       if (playbackMetadata) {

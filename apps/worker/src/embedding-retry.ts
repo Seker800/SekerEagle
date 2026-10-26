@@ -1,3 +1,4 @@
+import { mediaWaitData } from '@sekereagle/library-core';
 import { EmbeddingClientError } from './embedding-client';
 
 /** Request backpressure is not host liveness, and neither consumes media failure attempts. */
@@ -8,16 +9,7 @@ export function embeddingRetry(error: unknown, attempts: number, now = new Date(
   const delay = offline ? 30000 : Math.min(30000, Math.max(1000, error.retryAfterMs ?? 1000));
   return {
     offline,
-    data: {
-      status: 'PENDING' as const,
-      attempts: Math.max(0, attempts - 1),
-      availableAt: new Date(now.getTime() + delay),
-      lockedAt: null,
-      lastError: offline
-        ? 'WAITING_EMBEDDING_HOST'
-        : error.code === 'HOST_BUSY'
-          ? 'WAITING_EMBEDDING_CAPACITY'
-          : 'WAITING_EMBEDDING_UPLOAD',
-    },
+    data: mediaWaitData(attempts, delay, offline ? 'WAITING_EMBEDDING_HOST'
+      : error.code === 'HOST_BUSY' ? 'WAITING_EMBEDDING_CAPACITY' : 'WAITING_EMBEDDING_UPLOAD', now),
   };
 }

@@ -1,4 +1,4 @@
-import { MEDIA_FAILURE_LIMIT, MediaLeaseRecoveryExhaustedError } from '@sekereagle/library-core';
+import { mediaFailure, mediaCompletion, mediaExecutionGuard, MediaLeaseRecoveryExhaustedError } from '@sekereagle/library-core';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
@@ -284,7 +284,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
   });
   if (!asset) {
     await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      where: mediaExecutionGuard(job),
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
@@ -461,7 +461,7 @@ async function processJob(job: EagleAssetProcessingJob): Promise<void> {
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
       await prisma.$transaction(async (transaction) => {
         const completed = await transaction.eagleAssetProcessingJob.updateMany({
-          where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+          where: mediaExecutionGuard(job),
           data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
         });
         if (completed.count !== 1) return;
@@ -1146,8 +1146,7 @@ async function generateImagePyramid(
 
     await prisma.$transaction(async (transaction) => {
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        ...mediaCompletion(job),
       });
       if (completed.count !== 1) return;
       await transaction.eagleImagePyramid.update({
@@ -1192,7 +1191,7 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
   if (retry) {
     if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      where: mediaExecutionGuard(job),
       data: retry.data,
     });
     return;
@@ -1200,25 +1199,12 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
 
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const terminal =
-    error instanceof MediaLeaseRecoveryExhaustedError ||
-    isPermanentMediaValidationError(error) ||
-    (job.kind === 'RENDER_EDITED_COPY' &&
-      (message.startsWith('EDIT_SOURCE_') || job.attempts >= 3)) ||
-    job.attempts >= MEDIA_FAILURE_LIMIT;
-  const delaySeconds = Math.min(3_600, 2 ** Math.min(job.attempts, 12));
+  const permanent = error instanceof MediaLeaseRecoveryExhaustedError || isPermanentMediaValidationError(error) ||
+    (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
+  const transition = mediaFailure(job, message, permanent);
+  const {terminal} = transition;
   await prisma.$transaction(async (transaction) => {
-    const failed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: terminal
-        ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
-        : {
-            status: 'PENDING',
-            availableAt: new Date(Date.now() + delaySeconds * 1_000),
-            lockedAt: null,
-            lastError: message,
-          },
-    });
+    const failed = await transaction.eagleAssetProcessingJob.updateMany({where: transition.where, data: transition.data});
     if (failed.count !== 1) return;
     if (terminal) await propagateFailedDependencies(transaction);
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
@@ -1495,7 +1481,7 @@ async function processClaimedJob(job: EagleAssetProcessingJob): Promise<void> {
     renewing = true;
     void prisma.eagleAssetProcessingJob
       .updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        where: mediaExecutionGuard(job),
         data: { lockedAt: new Date() },
       })
       .then(({ count }) => {
