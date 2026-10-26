@@ -72,3 +72,10 @@ it('shows completed quantities directly in history without empty live columns', 
   expect(table.getByRole('cell', { name: '4321' })).toBeVisible();
   expect(table.queryByRole('columnheader', { name: '排队' })).not.toBeInTheDocument();
 });
+
+
+it('shows source activity only when provided, without inventing a heartbeat', () => {
+  render(<TaskQueueBrowser items={[{ mode: 'PHOTO', group: { ...group, lastActivityAt: '2026-10-26T01:00:00.000Z' }, schedule }]} renderDetails={() => <article>details</article>} />);
+  expect(screen.getByText('最近活动')).toBeVisible();
+  expect(document.querySelector('time')?.dateTime).toBe('2026-10-26T01:00:00.000Z');
+});

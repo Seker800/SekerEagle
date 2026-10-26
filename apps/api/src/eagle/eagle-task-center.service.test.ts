@@ -474,3 +474,16 @@ test('lost worker heartbeat is visible before long execution leases expire', asy
   assert.equal(result.groups[0]?.presentation?.status, 'WAITING');
   assert.equal(result.groups[0]?.presentation?.reason, 'WORKER_OFFLINE');
 });
+
+
+test('overview carries the latest visible source activity and authoritative management decisions', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [{ family: 'MEDIA', step: 'GENERATE_EMBEDDING', version: 'v1', status: 'QUEUED', reason: 'QUEUED', count: 1n, nextAt: null, lastActivityAt: new Date('2026-10-26T01:00:00Z') }],
+    eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
+    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+    eagleTaskPolicy: { findMany: async () => [] },
+  } as never, 'PHOTO');
+  const result = await service.overview('owner');
+  assert.equal(result.groups[0]?.lastActivityAt, '2026-10-26T01:00:00.000Z');
+  assert.equal(result.groups[0]?.management?.execution, 'ALWAYS');
+});
