@@ -1,4 +1,4 @@
-import { mediaRequeueData } from '@sekereagle/library-core';
+import { mediaRequeueData, sanitizeComputeRuntime } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
@@ -319,16 +319,32 @@ export class EagleVectorService {
         revision?: unknown;
         dimensions?: unknown;
         metal?: unknown;
+        accelerator?: unknown;
+        protocol?: unknown;
+        capacity?: { backgroundLimit?: unknown };
+        fleet?: { revision?: unknown; nodes?: unknown };
       };
+      const pool =
+        payload.accelerator === 'pool' &&
+        payload.protocol === 'sekereagle-compute-v1' &&
+        sanitizeComputeRuntime({
+          revision: payload.fleet?.revision,
+          nodes: payload.fleet?.nodes,
+          backgroundLimit: payload.capacity?.backgroundLimit,
+        }) !== null;
       const matchesContract =
-        payload.status === 'ready' &&
         payload.model === EAGLE_EMBEDDING_MODEL &&
         payload.revision ===
           (process.env.MLX_EMBEDDING_REVISION ?? '9f2f7e710d6d81056aa5c0a4f04764fec6bb7bda') &&
         payload.dimensions === EAGLE_EMBEDDING_DIMENSIONS &&
-        payload.metal === true;
+        (payload.metal === true || pool);
       return {
-        status: matchesContract ? ('ONLINE' as const) : ('DRIFTED' as const),
+        status:
+          matchesContract && payload.status === 'ready'
+            ? ('ONLINE' as const)
+            : matchesContract && pool && payload.status === 'offline'
+              ? ('OFFLINE' as const)
+              : ('DRIFTED' as const),
         model: typeof payload.model === 'string' ? payload.model : null,
         revision: typeof payload.revision === 'string' ? payload.revision : null,
         dimensions: typeof payload.dimensions === 'number' ? payload.dimensions : null,

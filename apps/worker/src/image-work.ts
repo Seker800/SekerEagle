@@ -10,6 +10,7 @@ import { taskBlocksAssetReady } from './processing-policy';
 export interface ImageWork {
   assetMimeType: string;
   sourceMimeType: string;
+  sourceExtension?: string;
   kind: EagleMediaJobKind;
   processorVersion?: string;
   mode: 'PHOTO' | 'MATERIAL';
@@ -20,6 +21,7 @@ export function validateImageWork(work: ImageWork) {
   if (
     !work ||
     !['PHOTO', 'MATERIAL'].includes(work.mode) ||
+    (work.sourceExtension !== undefined && !['.heic', '.heif'].includes(work.sourceExtension)) ||
     typeof work.detailsOnly !== 'boolean' ||
     typeof work.verifiesOriginalHash !== 'boolean' ||
     typeof work.assetMimeType !== 'string' ||
@@ -46,7 +48,7 @@ export async function processImageWork(source: AsyncIterable<Uint8Array>, work: 
   return withProcessableImage(
     source,
     work.sourceMimeType,
-    'input',
+    'input' + (work.sourceExtension ?? ''),
     async (source, originalPath, originalDimensions) => {
       const metadataPromise = source.clone().metadata();
       if (work.kind === 'EXTRACT_COLOR_PALETTE') {
@@ -178,6 +180,7 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
     throw new Error('INVALID_IMAGE_RESULT');
   for (const dimensions of [
     value.result.metadata,
+    value.result.metadata.autoOrient,
     'originalDimensions' in value.result ? value.result.originalDimensions : undefined,
   ]) {
     if (
@@ -190,6 +193,13 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
     )
       throw new Error('INVALID_IMAGE_RESULT');
   }
+  if (
+    'livePhoto' in value.result &&
+    value.result.livePhoto?.identifier != null &&
+    (typeof value.result.livePhoto.identifier !== 'string' ||
+      value.result.livePhoto.identifier.length > 1024)
+  )
+    throw new Error('INVALID_IMAGE_RESULT');
   if ('livePhoto' in value.result && value.result.livePhoto?.motion) {
     const motion = value.result.livePhoto.motion;
     if (
@@ -266,6 +276,35 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
       'brightnessScore',
       'contrastScore',
     ];
+    const strings = [
+      'processorVersion',
+      'capturedLocal',
+      'cameraMake',
+      'cameraModel',
+      'lensModel',
+      'perceptualHash',
+    ];
+    for (const [key, item] of Object.entries(value.result.photoAnalysis)) {
+      if (!keys.includes(key) || item == null) continue;
+      const valid = strings.includes(key)
+        ? typeof item === 'string' && item.length <= 240
+        : key === 'capturedAt'
+          ? item instanceof Date && Number.isFinite(item.getTime())
+          : key === 'captureTimeZoneKnown'
+            ? typeof item === 'boolean'
+            : typeof item === 'number' &&
+              Number.isFinite(item) &&
+              Math.abs(item) <= 1e9 &&
+              (key !== 'iso' || Number.isInteger(item)) &&
+              (key === 'latitude'
+                ? Math.abs(item) <= 90
+                : key === 'longitude'
+                  ? Math.abs(item) <= 180
+                  : key === 'altitude'
+                    ? item >= -12000 && item <= 100000
+                    : item >= 0);
+      if (!valid) throw new Error('INVALID_IMAGE_RESULT');
+    }
     value.result.photoAnalysis = Object.fromEntries(
       Object.entries(value.result.photoAnalysis).filter(([k]) => keys.includes(k)),
     );

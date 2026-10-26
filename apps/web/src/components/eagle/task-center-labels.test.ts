@@ -142,3 +142,7 @@ it('shows a bounded model capacity wait without claiming the host is offline', a
 it('multi-host model metadata does not claim that Mac is the only executor', () => {
   expect(taskFamilyLabels('EMBEDDING').join(' ')).not.toContain('Mac');
 });
+
+it('keeps server-only pyramid computation labelled at the library server', () => {
+  expect(taskFamilyLabels('PYRAMID')[3]).toBe('图库服务器 · 较重');
+});

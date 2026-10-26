@@ -649,3 +649,26 @@ test('only admin task overview exposes sanitized machine capacity', async () => 
   assert.ok(!JSON.stringify(admin).includes('do-not-leak'));
   assert.ok(!JSON.stringify(admin).includes('private-address'));
 });
+
+test('controller includes fleet summary only for an administrator active overview', () => {
+  const calls: unknown[][] = [];
+  const controller = new EagleTaskCenterController(
+    {
+      overview: (...args: unknown[]) => calls.push(args),
+    } as never,
+    {} as never,
+  );
+  for (const role of ['ADMIN', 'USER'] as const) {
+    const principal = { sub: 'owner', canViewPrivate: false, role } as Parameters<
+      typeof controller.overview
+    >[0];
+    controller.overview(principal);
+    controller.history(principal);
+  }
+  assert.deepEqual(calls, [
+    ['owner', false, 'ACTIVE', true],
+    ['owner', false, 'HISTORY'],
+    ['owner', false, 'ACTIVE', false],
+    ['owner', false, 'HISTORY'],
+  ]);
+});

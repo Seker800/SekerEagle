@@ -52,7 +52,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('大图切片'),
       t('生成分级切片，用于放大浏览。'),
       t('原图 + 解码工具'),
-      t('处理节点 · 较重'),
+      t('图库服务器 · 较重'),
     ],
     SMART_FOLDERS: [
       t('语义文件夹匹配'),

@@ -57,3 +57,36 @@ test('binary image result avoids base64 expansion for real noisy image outputs',
   const encoded = encodeImageWork(result);
   assert.ok(encoded.length < binary + 65536);
 });
+
+test('remote metadata rejects invalid dimensions, exposure values and live-photo identifiers', async () => {
+  const work = {
+    assetMimeType: 'image/jpeg',
+    sourceMimeType: 'image/jpeg',
+    kind: 'GENERATE_RENDITIONS',
+    mode: 'MATERIAL',
+    detailsOnly: false,
+    verifiesOriginalHash: true,
+  } as const;
+  const bytes = await sharp({
+    create: { width: 16, height: 16, channels: 3, background: '#123456' },
+  })
+    .jpeg()
+    .toBuffer();
+  const result = await processImageWork(
+    (async function* () {
+      yield bytes;
+    })(),
+    work,
+  );
+  const orientation = result.result.metadata.autoOrient;
+  result.result.metadata.autoOrient = { width: 1e9, height: 1e9 };
+  await assert.rejects(decodeImageWork(encodeImageWork(result), work), /INVALID_IMAGE_RESULT/);
+  result.result.metadata.autoOrient = orientation;
+  if ('photoAnalysis' in result.result) {
+    result.result.photoAnalysis = { iso: 'x' } as never;
+    await assert.rejects(decodeImageWork(encodeImageWork(result), work), /INVALID_IMAGE_RESULT/);
+    result.result.photoAnalysis = null;
+    result.result.livePhoto = { identifier: 42, motion: null } as never;
+    await assert.rejects(decodeImageWork(encodeImageWork(result), work), /INVALID_IMAGE_RESULT/);
+  }
+});

@@ -50,13 +50,15 @@ export class EmbeddingClient {
   }
 
   async readiness(): Promise<'READY' | 'OFFLINE' | 'DRIFTED'> {
-    this.computeRuntime = null;
     try {
       const response = await this.request(`${stripTrailingSlash(this.options.baseUrl)}/healthz`, {
         headers: { authorization: `Bearer ${this.options.token}` },
         signal: AbortSignal.timeout(2000),
       });
-      if (!response.ok) return 'OFFLINE';
+      if (!response.ok) {
+        this.computeRuntime = null;
+        return 'OFFLINE';
+      }
       const data = (await response.json()) as {
         status?: unknown;
         model?: unknown;
@@ -84,6 +86,7 @@ export class EmbeddingClient {
         ? 'READY'
         : 'DRIFTED';
     } catch {
+      this.computeRuntime = null;
       return 'OFFLINE';
     }
   }

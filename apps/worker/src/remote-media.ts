@@ -37,7 +37,7 @@ function authorized(header: string | undefined, token: string) {
     b = Buffer.from(`Bearer ${token}`);
   return a.length === b.length && timingSafeEqual(a, b);
 }
-export function createRemoteMediaServer(token: string, limit = 1) {
+export function createRemoteMediaServer(token: string, limit = 1, facesReady = false) {
   if (!token || token.length < 8 || !Number.isInteger(limit) || limit < 1 || limit > 4)
     throw new Error('INVALID_MEDIA_AGENT_CONFIGURATION');
   let active = 0;
@@ -52,7 +52,7 @@ export function createRemoteMediaServer(token: string, limit = 1) {
       }
     };
     if (!authorized(req.headers.authorization, token)) return send(401, { error: 'UNAUTHORIZED' });
-    const faces = Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR);
+    const faces = facesReady;
     if (req.url === '/healthz' && req.method === 'GET')
       return send(200, {
         status: 'ready',
@@ -105,18 +105,19 @@ export function createRemoteMediaServer(token: string, limit = 1) {
           res.end(output);
         }
       } else {
-        if (!faces) return send(503, { error: 'FACES_UNAVAILABLE' });
+        if (!faces) return send(422, { error: 'FACES_UNAVAILABLE' });
         send(200, { version: FACE_MODEL_VERSION, faces: await inferPhotoFaces(bytes) });
       }
     } catch (e) {
       send(
-        e instanceof Error && e.message === 'MEDIA_PAYLOAD_TOO_LARGE'
+        e instanceof Error &&
+          ['MEDIA_PAYLOAD_TOO_LARGE', 'IMAGE_RESULT_TOO_LARGE'].includes(e.message)
           ? 413
           : isPermanentMediaValidationError(e)
             ? 422
             : e instanceof SyntaxError || (e instanceof Error && e.message === 'INVALID_IMAGE_WORK')
               ? 400
-              : 503,
+              : 500,
         {
           error: 'MEDIA_COMPUTATION_FAILED',
         },
@@ -143,13 +144,19 @@ export class RemoteMediaClient {
   ) {
     const hash = createHash('sha256');
     let size = 0;
+    let sourceError: Error | undefined;
     const stream = Readable.from(
       (async function* () {
-        for await (const chunk of input) {
-          size += chunk.length;
-          if (size > CAMERA_MAX_IMAGE_BYTES) throw new Error('MEDIA_PAYLOAD_TOO_LARGE');
-          hash.update(chunk);
-          yield chunk;
+        try {
+          for await (const chunk of input) {
+            size += chunk.length;
+            if (size > CAMERA_MAX_IMAGE_BYTES) throw new Error('MEDIA_PAYLOAD_TOO_LARGE');
+            hash.update(chunk);
+            yield chunk;
+          }
+        } catch (error) {
+          sourceError = error instanceof Error ? error : new Error('MEDIA_SOURCE_READ_FAILED');
+          throw error;
         }
       })(),
     );
@@ -165,6 +172,7 @@ export class RemoteMediaClient {
           signal: AbortSignal.timeout(600000),
         });
       } catch {
+        if (sourceError) throw sourceError;
         throw new RemoteMediaUnavailableError();
       }
       if (!response.ok) {

@@ -40,7 +40,7 @@ import {
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, extname } from 'node:path';
 import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
@@ -264,7 +264,7 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
     resource === 'REMOTE_MEDIA'
       ? remoteKinds.filter((k) => !allowedJobKinds || allowedJobKinds.includes(k))
       : resource === 'NAS' && !facesConfigured
-        ? allowedJobKinds?.filter((k) => k !== 'ANALYZE_PHOTO_FACES')
+        ? availableProcessingJobKinds(allowedJobKinds, false)
         : allowedJobKinds;
   if (resource === 'REMOTE_MEDIA' && !remoteKinds.length) return null;
   const sequence = claimSequence[resource]++;
@@ -457,6 +457,9 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     const imageWork = {
       assetMimeType: asset.mimeType,
       sourceMimeType: sourceDetails.mimeType,
+      sourceExtension: ['.heic', '.heif'].includes(extname(sourceDetails.storageKey).toLowerCase())
+        ? extname(sourceDetails.storageKey).toLowerCase()
+        : undefined,
       kind: job.kind,
       processorVersion: job.processorVersion,
       mode: asset.libraryMode,
@@ -1648,7 +1651,7 @@ async function main(): Promise<void> {
     runBackgroundProcessing &&
     (!allowedJobKinds || allowedJobKinds.includes('GENERATE_EMBEDDING'))
   ) {
-    const tick = async () => {
+    const tick = async (allowModelRequest: boolean) => {
       if (stopping || buildingSmartFolder || buildingPhotoMap) return;
       buildingSmartFolder = true;
       try {
@@ -1670,20 +1673,20 @@ async function main(): Promise<void> {
             );
             return embeddingClient.embedText(text);
           },
-          embeddingReadiness === 'READY',
+          allowModelRequest &&
+            embeddingReadiness === 'READY' &&
+            (embeddingClient.computeRuntime?.backgroundLimit ?? legacyEmbeddingLimit) > 0,
         );
       } finally {
         buildingSmartFolder = false;
       }
     };
     const queueFolderStep = () => {
-      if (stopping || resourcePool.active('EMBEDDING')) return;
+      if (stopping) return;
       void resourcePool
-        .fill(
-          'EMBEDDING',
-          () => Promise.resolve(stopping ? null : true),
-          async () => tick(),
-        )
+        .maintenance(async (allowModelRequest) => {
+          if (!stopping) await tick(allowModelRequest);
+        })
         .catch(reportLoopError);
     };
     smartFolderTimer = setInterval(queueFolderStep, 5_000);

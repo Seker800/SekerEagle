@@ -160,7 +160,7 @@ export function createCoordinator({
         res.setHeader('Retry-After', '1');
         return json(
           res,
-          [400, 408, 409, 413, 415, 422, 429, 503].includes(upstream.status)
+          [400, 408, 409, 413, 415, 422, 429, 500, 503].includes(upstream.status)
             ? upstream.status
             : 502,
           { error: 'COMPUTE_REQUEST_FAILED' },
@@ -213,7 +213,7 @@ export function createCoordinator({
         json(
           res,
           e.status ??
-            (e.message === 'REVISION_CONFLICT'
+            (e.message === 'REVISION_CONFLICT' || e.message.startsWith('DUPLICATE_')
               ? 409
               : e.message === 'NODE_NOT_FOUND'
                 ? 404
@@ -224,7 +224,7 @@ export function createCoordinator({
             error:
               e.status === 413
                 ? 'PAYLOAD_TOO_LARGE'
-                : e.message === 'REVISION_CONFLICT'
+                : e.message === 'REVISION_CONFLICT' || e.message.startsWith('DUPLICATE_')
                   ? 'REVISION_CONFLICT'
                   : 'COMPUTE_REQUEST_FAILED',
           },

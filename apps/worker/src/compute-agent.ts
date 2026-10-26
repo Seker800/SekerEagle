@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { open, constants } from 'node:fs/promises';
+import sharp from 'sharp';
+import { inferPhotoFaces } from './photo-faces';
 import { createRemoteMediaServer } from './remote-media';
 async function main() {
   // Do not advertise a broad image capability from a half-installed runtime.
@@ -31,9 +33,19 @@ async function main() {
   }
   const port = Number(process.env.EAGLE_COMPUTE_NODE_PORT ?? 11437);
   if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('INVALID_PORT');
+  const facesReady = Boolean(process.env.PHOTO_FACE_PYTHON || process.env.PHOTO_FACE_MODEL_DIR);
+  if (facesReady) {
+    const probe = await sharp({
+      create: { width: 32, height: 32, channels: 3, background: '#808080' },
+    })
+      .jpeg()
+      .toBuffer();
+    await inferPhotoFaces(probe);
+  }
   const server = createRemoteMediaServer(
     token,
     Number(process.env.EAGLE_COMPUTE_NODE_CONCURRENCY ?? 1),
+    facesReady,
   );
   server.listen(port, process.env.EAGLE_COMPUTE_NODE_BIND ?? '127.0.0.1');
   process.once('SIGTERM', () => server.close());

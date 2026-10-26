@@ -18,6 +18,8 @@ export class MediaResourcePool {
     REMOTE_MEDIA: false,
   };
   private remoteMediaConcurrency = 0;
+  private maintaining = false;
+  private maintenanceUsesEmbedding = false;
   private memoryUsedMiB = 0;
   private readonly memoryWaits = new Map<MediaResource, { cost: number; readyAt: number }>();
   private readonly deferredUntil: Record<MediaResource, number> = {
@@ -59,10 +61,42 @@ export class MediaResourcePool {
     if (grew) this.wake();
   }
   get activeCount() {
-    return this.occupied.NAS + this.occupied.EMBEDDING + this.occupied.REMOTE_MEDIA;
+    return (
+      this.occupied.NAS +
+      this.occupied.EMBEDDING +
+      this.occupied.REMOTE_MEDIA +
+      Number(this.maintaining && !this.maintenanceUsesEmbedding)
+    );
   }
   active(resource: MediaResource) {
     return this.occupied[resource];
+  }
+
+  /** Cached-vector maintenance remains available when every model is drained. */
+  async maintenance(run: (allowModelRequest: boolean) => Promise<void>) {
+    const cost = 128;
+    if (
+      this.maintaining ||
+      this.memoryWaits.size ||
+      this.memoryUsedMiB + cost > this.memoryLimitMiB
+    )
+      return;
+    const modelSlot =
+      Date.now() >= this.deferredUntil.EMBEDDING &&
+      this.occupied.EMBEDDING < this.embeddingConcurrency;
+    this.maintaining = true;
+    this.maintenanceUsesEmbedding = modelSlot;
+    if (modelSlot) this.occupied.EMBEDDING++;
+    this.memoryUsedMiB += cost;
+    try {
+      await run(modelSlot);
+    } finally {
+      if (modelSlot) this.occupied.EMBEDDING--;
+      this.maintenanceUsesEmbedding = false;
+      this.maintaining = false;
+      this.memoryUsedMiB -= cost;
+      this.wake();
+    }
   }
 
   async fill<T>(

@@ -344,7 +344,7 @@ export class Fleet {
       r.external = Math.max(0, payload.capacity.inFlight - r.inFlight);
     if (
       (r.quarantined && payload?.capacity?.inFlight !== 0) ||
-      (r.starting && payload?.capacity?.inFlight > 0)
+      (r.starting && payload?.capacity?.inFlight !== 0)
     ) {
       r.health = 'OFFLINE';
       return;
@@ -495,9 +495,9 @@ export class Fleet {
         p.enabled &&
         node.verified &&
         p.operations.includes(operation) &&
-        r.inFlight < p.concurrency &&
+        r.inFlight + r.external < p.concurrency &&
         (interactive ||
-          r.background <
+          r.background + r.external <
             Math.max(
               0,
               p.concurrency - (p.operations.includes('embedding') ? node.reserveInteractive : 0),

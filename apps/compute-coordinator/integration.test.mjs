@@ -8,7 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Fleet } from './fleet.mjs';
 import { createCoordinator, probeFleet } from './server.mjs';
-const contract = { model: 'synthetic', revision: 'fixed', dimensions: 1024 };
+const contract = {
+  capacity: { inFlight: 0 },
+  model: 'synthetic',
+  revision: 'fixed',
+  dimensions: 1024,
+};
 async function listen(t, server) {
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');

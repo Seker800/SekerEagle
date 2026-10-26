@@ -404,3 +404,57 @@ test('shared memory reservations allow light overlap and defer a second heavy ta
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(remote, 1);
 });
+
+test('cached maintenance remains bounded and drains with embedding disabled', async () => {
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    0,
+    1536,
+  );
+  let finish!: () => void;
+  let ran = 0;
+  const pending = pool.maintenance(async () => {
+    ran++;
+    await new Promise<void>((resolve) => (finish = resolve));
+  });
+  assert.equal(pool.activeCount, 1);
+  await pool.maintenance(async () => {
+    ran++;
+  });
+  assert.equal(ran, 1);
+  finish();
+  await pending;
+  assert.equal(pool.activeCount, 0);
+});
+
+test('maintenance reserves model capacity atomically and respects model backpressure', async () => {
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+    1536,
+  );
+  let finish!: () => void;
+  const running = pool.maintenance(async (allowed) => {
+    assert.equal(allowed, true);
+    await new Promise<void>((r) => (finish = r));
+  });
+  let claims = 0;
+  await pool.fill(
+    'EMBEDDING',
+    async () => {
+      claims++;
+      return null;
+    },
+    async () => {},
+  );
+  assert.equal(claims, 0);
+  assert.equal(pool.activeCount, 1);
+  finish();
+  await running;
+  pool.defer('EMBEDDING', 1000);
+  await pool.maintenance(async (allowed) => assert.equal(allowed, false));
+});

@@ -468,3 +468,55 @@ test('unclassified suggestion scan reuses ready embeddings without enqueueing em
   assert.match(sql, /manualTag/);
   assert.doesNotMatch(sql, /EagleMediaJob/);
 });
+
+test('vector summary recognizes a compatible coordinator and its offline state', async (t) => {
+  const previous = [
+    process.env.MLX_EMBEDDING_URL,
+    process.env.MLX_EMBEDDING_TOKEN,
+    process.env.MLX_EMBEDDING_REVISION,
+  ];
+  process.env.MLX_EMBEDDING_URL = 'http://127.0.0.1:11436';
+  process.env.MLX_EMBEDDING_TOKEN = 'synthetic';
+  process.env.MLX_EMBEDDING_REVISION = 'fixed';
+  t.after(() => {
+    for (const [i, key] of [
+      'MLX_EMBEDDING_URL',
+      'MLX_EMBEDDING_TOKEN',
+      'MLX_EMBEDDING_REVISION',
+    ].entries()) {
+      if (previous[i] === undefined) delete process.env[key];
+      else process.env[key] = previous[i];
+    }
+  });
+  const { EAGLE_EMBEDDING_MODEL, EAGLE_EMBEDDING_DIMENSIONS } =
+    await import('./eagle-vector-semantics');
+  let status = 'ready';
+  let protocol = 'sekereagle-compute-v1';
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({
+      status,
+      protocol,
+      accelerator: 'pool',
+      model: EAGLE_EMBEDDING_MODEL,
+      revision: 'fixed',
+      dimensions: EAGLE_EMBEDDING_DIMENSIONS,
+      capacity: { backgroundLimit: 2 },
+      fleet: { revision: 1, nodes: [] },
+    }),
+  );
+  const service = new EagleVectorService({
+    eagleAsset: { count: async () => 0 },
+    eagleAssetEmbedding: { count: async () => 0 },
+    eagleManualTagSemanticConfig: { count: async () => 0 },
+    eagleVectorTagSuggestion: { count: async () => 0 },
+    eagleAssetProcessingJob: { groupBy: async () => [] },
+    eagleProcessingSetting: { findUnique: async () => null },
+    $queryRaw: async () => [{ count: 0 }],
+  } as never);
+  assert.equal((await service.summary('owner', false)).host.status, 'ONLINE');
+  status = 'offline';
+  assert.equal((await service.summary('owner', false)).host.status, 'OFFLINE');
+  protocol = 'forged';
+  status = 'ready';
+  assert.equal((await service.summary('owner', false)).host.status, 'DRIFTED');
+});

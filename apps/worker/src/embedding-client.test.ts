@@ -280,3 +280,36 @@ test('an enrolled pool without an available embedding host is offline, not contr
   assert.equal(await client.readiness(), 'OFFLINE');
   assert.equal(client.computeRuntime?.backgroundLimit, 0);
 });
+
+test('an in-progress health probe retains the last complete capacity snapshot', async () => {
+  let finish!: (response: Response) => void;
+  let requests = 0;
+  const ready = () =>
+    Response.json({
+      status: 'ready',
+      model: 'expected',
+      revision: 'revision',
+      dimensions: 2,
+      accelerator: 'pool',
+      protocol: 'sekereagle-compute-v1',
+      capacity: { backgroundLimit: 2 },
+      fleet: { revision: 1, nodes: [] },
+    });
+  const client = new EmbeddingClient({
+    baseUrl: 'http://127.0.0.1:11436',
+    token: 'test',
+    modelId: 'expected',
+    modelRevision: 'revision',
+    dimensions: 2,
+    timeoutMs: 1000,
+    maxPayloadBytes: 1024,
+    fetch: async () =>
+      ++requests === 1 ? ready() : new Promise<Response>((resolve) => (finish = resolve)),
+  });
+  await client.readiness();
+  const pending = client.readiness();
+  assert.equal(client.computeRuntime?.backgroundLimit, 2);
+  finish(new Response(null, { status: 503 }));
+  assert.equal(await pending, 'OFFLINE');
+  assert.equal(client.computeRuntime, null);
+});

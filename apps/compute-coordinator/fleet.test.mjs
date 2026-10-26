@@ -4,7 +4,12 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Fleet, validateEnrollment } from './fleet.mjs';
-const contract = { model: 'Qwen/Qwen3-VL-Embedding-2B', revision: 'fixed', dimensions: 1024 };
+const contract = {
+  capacity: { inFlight: 0 },
+  model: 'Qwen/Qwen3-VL-Embedding-2B',
+  revision: 'fixed',
+  dimensions: 1024,
+};
 const node = (id, extra = {}) => ({
   id,
   name: id,
@@ -165,6 +170,7 @@ test('media capabilities are explicit and share the host hard limit', async (t) 
   ]);
   fleet.markHealth('cpu', {
     status: 'ready',
+    capacity: { inFlight: 0 },
     protocol: 'sekereagle-media-v1',
     imageEncoding: 'SEI1',
     operations: ['image', 'faces'],
@@ -356,5 +362,30 @@ test('an unverified backend cannot be enabled by an agent policy', async (t) => 
     }),
     /UNVERIFIED/,
   );
+  assert.equal(fleet.acquire('embedding', true), null);
+});
+
+test('failed probes never release the startup idle barrier and external work consumes node slots', async (t) => {
+  const { fleet } = await fixture(t, [node('mac', { maxConcurrent: 1, reserveInteractive: 0 })]);
+  fleet.markHealth('mac', null);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 1, limit: 1 },
+  });
+  assert.equal(fleet.acquire('embedding', true), null);
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 0, limit: 1 },
+  });
+  fleet.markHealth('mac', {
+    ...contract,
+    status: 'ready',
+    metal: true,
+    capacity: { inFlight: 1, limit: 1 },
+  });
   assert.equal(fleet.acquire('embedding', true), null);
 });

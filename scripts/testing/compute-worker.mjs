@@ -11,7 +11,11 @@ import sharp from 'sharp';
 import { PrismaClient } from '@prisma/client';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { selectScheduledMediaCandidates } from '../../apps/worker/dist/scheduled-media-candidates.js';
-import { createRemoteMediaServer } from '../../apps/worker/dist/remote-media.js';
+import {
+  createRemoteMediaServer,
+  RemoteMediaClient,
+  RemoteMediaUnavailableError,
+} from '../../apps/worker/dist/remote-media.js';
 import { Fleet } from '../../apps/compute-coordinator/fleet.mjs';
 import { createCoordinator, probeFleet } from '../../apps/compute-coordinator/server.mjs';
 assertSafeRuntimeTarget({
@@ -140,6 +144,58 @@ try {
   const coordinatorUrl = await listen(
     createCoordinator({ fleet, executionToken: 'synthetic-only', adminToken: 'management-token' }),
   );
+  const failedUrl = await listen(
+    createServer((req, res) => {
+      req.resume();
+      res.writeHead(500);
+      res.end('{}');
+    }),
+  );
+  const failedFleet = new Fleet({ directory: join(directory, 'error-fleet'), contract });
+  await failedFleet.initialize([
+    {
+      id: 'failed',
+      name: 'Failure fixture',
+      url: failedUrl,
+      token: 'test-failed-token',
+      accelerator: 'cpu',
+      operations: ['image'],
+      maxConcurrent: 1,
+      reserveInteractive: 0,
+      verified: true,
+      enabled: true,
+    },
+  ]);
+  failedFleet.markHealth('failed', {
+    status: 'ready',
+    capacity: { inFlight: 0 },
+    protocol: 'sekereagle-media-v1',
+    imageEncoding: 'SEI1',
+    operations: ['image'],
+  });
+  const failedCoordinator = await listen(
+    createCoordinator({
+      fleet: failedFleet,
+      executionToken: 'synthetic-only',
+      adminToken: 'management-token',
+    }),
+  );
+  await assert.rejects(
+    new RemoteMediaClient(failedCoordinator, 'synthetic-only').image(
+      (async function* () {
+        yield pixels;
+      })(),
+      {
+        assetMimeType: 'image/jpeg',
+        sourceMimeType: 'image/jpeg',
+        kind: 'GENERATE_RENDITIONS',
+        mode: 'MATERIAL',
+        detailsOnly: false,
+        verifiesOriginalHash: true,
+      },
+    ),
+    (error) => error instanceof Error && !(error instanceof RemoteMediaUnavailableError),
+  );
   const asset = async (name, mimeType = 'image/jpeg') =>
     db.eagleAsset.create({
       data: {
@@ -263,6 +319,38 @@ try {
     where: { assetId: remote.id, status: 'READY' },
   });
   assert.equal(published.length, 3);
+  const policy = async (nodeId, enabled) => {
+    const response = await fetch(coordinatorUrl + '/admin/policy', {
+      method: 'POST',
+      headers: { authorization: 'Bearer management-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        expectedRevision: fleet.snapshot().revision,
+        nodeId,
+        enabled,
+        concurrency: nodeId === 'mac-vector' ? 2 : 1,
+        operations: [nodeId === 'mac-vector' ? 'embedding' : 'image'],
+        durationSeconds: 60,
+        reason: 'Synthetic live policy regression',
+      }),
+    });
+    assert.equal(response.status, 200);
+    await response.body?.cancel();
+  };
+  const waitRevision = async (revision) =>
+    waitFor(async () =>
+      (await db.eagleProcessingWorkerHeartbeat.findMany({ select: { capabilities: true } })).some(
+        (row) => row.capabilities?.compute?.revision === revision,
+      ),
+    );
+  await policy('mac-vector', false);
+  await policy('mac-media', false);
+  await waitRevision(2);
+  assert.equal(fleet.acquire('embedding', false), null);
+  assert.equal(fleet.acquire('image', false), null);
+  await policy('mac-vector', true);
+  await policy('mac-media', true);
+  await waitRevision(4);
+  assert.equal(worker.exitCode, null, 'Hot policy changes must not restart the worker');
   const exit = once(worker, 'exit');
   worker.kill('SIGTERM');
   releaseNas();
@@ -274,7 +362,7 @@ try {
   );
   assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId, status: 'FAILED' } }), 0);
   process.stdout.write(
-    'Compute fleet real DB/HTTP acceptance passed: remote image and vector finish while NAS is blocked; video stays local; graceful drain publishes the remaining job.\n',
+    'Compute fleet real DB/HTTP acceptance passed: remote image and vector finish while NAS is blocked; video stays local; live policies drain/restore without restart; node errors remain bounded; graceful drain publishes the remaining job.\n',
   );
 } finally {
   releaseNas();

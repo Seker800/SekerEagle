@@ -8,7 +8,12 @@ import { join } from 'node:path';
 import { once } from 'node:events';
 import { Fleet } from './fleet.mjs';
 import { createCoordinator } from './server.mjs';
-const contract = { model: 'Qwen/Qwen3-VL-Embedding-2B', revision: 'fixed', dimensions: 1024 };
+const contract = {
+  capacity: { inFlight: 0 },
+  model: 'Qwen/Qwen3-VL-Embedding-2B',
+  revision: 'fixed',
+  dimensions: 1024,
+};
 async function setup(
   t,
   fetcher = async () =>
@@ -198,6 +203,7 @@ test('a downstream that never reads cannot hold a compute slot forever', async (
   ]);
   fleet.markHealth('media', {
     status: 'ready',
+    capacity: { inFlight: 0 },
     protocol: 'sekereagle-media-v1',
     imageEncoding: 'SEI1',
     operations: ['image'],
