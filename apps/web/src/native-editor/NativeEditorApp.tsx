@@ -86,7 +86,7 @@ export function NativeEditorApp({ request }: { request: Request }) {
           if (result.status === 'FAILED')
             throw new Error(result.message || t('照片保存失败，请重试。'));
           if (Date.now() >= waitUntil)
-            throw new Error(t('成片仍在后台处理，可关闭编辑器，稍后重试保存。'));
+            throw new Error(t('成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。'));
           await new Promise((resolve) => window.setTimeout(resolve, 1500));
         }
         throw new Error(t('编辑会话已失效，请重新打开。'));

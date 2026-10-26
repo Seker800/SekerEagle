@@ -224,7 +224,8 @@ export class EagleVectorService {
       async (transaction) => {
         const repairedCount = await transaction.$executeRaw(Prisma.sql`
         UPDATE "EagleMediaJob" AS job
-        SET status = 'PENDING', attempts = 0, "availableAt" = CURRENT_TIMESTAMP,
+        SET status = 'PENDING', attempts = 0, "recoveryCount" = 0,
+            "leaseVersion" = job."leaseVersion" + 1, "availableAt" = CURRENT_TIMESTAMP,
             "lockedAt" = NULL, "startedAt" = NULL, "completedAt" = NULL,
             "lastError" = NULL, "updatedAt" = CURRENT_TIMESTAMP
         FROM "EagleAsset" AS asset
