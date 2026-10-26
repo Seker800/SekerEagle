@@ -231,3 +231,21 @@ test('an offline model leaves vector work unclaimed while NAS keeps progressing,
   assert.equal(vectors, 2);
   assert.equal(pool.activeCount, 0);
 });
+
+ test('live capacity can grow and drain without cancelling active jobs', async () => {
+ let release!: () => void;
+ const pool = new MediaResourcePool(1, () => {}, () => {}, 1);
+ let runs=0;
+ const run = () => {runs++; return new Promise<void>(resolve => {release=resolve;});};
+ await pool.fill('EMBEDDING', async()=>1, run);
+ pool.setEmbeddingLimit(0);
+ await pool.fill('EMBEDDING', async()=>1, run);
+ assert.equal(runs,1);
+ release(); await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(pool.activeCount,0);
+ pool.setEmbeddingLimit(4);
+ await pool.fill('EMBEDDING', async()=>1, async()=>{runs++;});
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(runs,5);
+ assert.throws(()=>pool.setEmbeddingLimit(100));
+ });
