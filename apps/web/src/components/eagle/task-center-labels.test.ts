@@ -99,3 +99,11 @@ it('separates computing, queued, stopped failures and completed without hiding a
     ),
   ).toBe('计算ing');
 });
+
+
+it('uses the server decision instead of reinterpreting its status from browser flags', async () => {
+  const {taskStatusLabel} = await import('./task-center-labels');
+  const group = {id: 'EMBEDDING', background: true, queued: 1, running: 0, failed: 0, completed: 0, approval: 0, waiting: [], steps: [],
+    presentation: {status: 'WAITING', section: 'IMMEDIATE', reason: 'WORKER_OFFLINE'}} as TaskGroup;
+  expect(taskStatusLabel(group, {mode: 'ALWAYS', nightStart: '23:00', nightEnd: '06:00'})).toBe('等待处理服务');
+});

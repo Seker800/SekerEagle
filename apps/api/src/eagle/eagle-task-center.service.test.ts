@@ -384,3 +384,16 @@ test('reports embedding health even when every vector task is already processing
     assert.equal(result.groups[0]?.running, 2);
   }
 });
+
+
+test('API publishes authoritative state without confusing partially blocked groups with stalled groups', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [{family: 'MEDIA', step: 'GENERATE_EMBEDDING', version: 'v1', status: 'QUEUED', reason: 'QUEUED', count: 3n, nextAt: null}],
+    eagleProcessingWorkerHeartbeat: {findMany: async () => [{capabilities: {background: true, jobKinds: ['GENERATE_EMBEDDING'], video: false, tagBuilds: false, smartFolders: false, photoMap: false, embedding: 'OFFLINE'}}]},
+    eagleProcessingSetting: {findUnique: async () => ({mode: 'ALWAYS'})},
+    eagleTaskPolicy: {findMany: async () => []},
+  } as never, 'PHOTO');
+  const result = await service.overview('owner-a');
+  assert.deepEqual((result.groups[0] as unknown as {presentation: unknown}).presentation,
+    {status: 'WAITING', section: 'IMMEDIATE', reason: 'MODEL_OFFLINE'});
+});
