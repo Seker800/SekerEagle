@@ -1,3 +1,4 @@
+import { TaskQueueBrowser } from './TaskQueueBrowser';
 import { AssetOperationsPanel } from './AssetOperationsPanel';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
@@ -7,7 +8,6 @@ import {
   type BackgroundSchedule,
   type TaskFamily,
   type TaskGroup,
-  type TaskSection,
   type TaskCenterOverview,
 } from '@sekereagle/library-core';
 import { createEagleTaskCenterApi } from '../../lib/eagle-task-center-api';
@@ -131,11 +131,6 @@ export function EagleTaskCenter({
         taskExecutionPriority(b.group.id) - taskExecutionPriority(a.group.id) ||
         a.mode.localeCompare(b.mode),
     );
-  const sections: Array<{ id: TaskSection; title: string }> = [
-    { id: 'IMMEDIATE', title: t('立即处理') },
-    { id: 'SCHEDULED', title: t('按时段处理') },
-    { id: 'PAUSED', title: t('已暂停') },
-  ];
   const differentSchedules =
     entries.length > 1 &&
     entries.some(
@@ -265,7 +260,7 @@ export function EagleTaskCenter({
           <small>{t('这里统计处理步骤，同一张图片可能包含多个步骤。')}</small>
           {query.error && <p>{t('部分图库读取失败，当前合计仅包含已加载的图库。')}</p>}
           {settings && (
-            <form
+            <details className={styles.settings}><summary>{t('后台安排')}</summary><form
               className={styles.schedule}
               onSubmit={(event) => {
                 event.preventDefault();
@@ -322,56 +317,15 @@ export function EagleTaskCenter({
                   '暂停后不再领取新的分析任务，当前步骤完成后停下；基础浏览、地图索引和必要清理继续运行。',
                 )}
               </p>
-            </form>
+            </form></details>
           )}
           {!cards.length && <p>{t('暂时没有后台工作。新任务会自动出现在这里。')}</p>}
-          {sections.map((section) => (
-            <section key={section.id} className={styles.section} aria-label={section.title}>
-              <header className={styles.sectionHeader}>
-                <h2>{section.title}</h2>
-              </header>
-              <div className={styles.groups}>
-                {cards
-                  .filter((card) => taskSection(card.group, card.schedule) === section.id)
-                  .map((card) => (
-                    <TaskCard
-                      key={`${card.mode}:${card.group.id}`}
-                      group={card.group}
-                      embedding={card.embedding}
-                      schedule={card.schedule}
-                      mode={card.mode}
-                      busy={retry.isPending || policy.isPending}
-                      onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
-                      onPolicy={(paused) =>
-                        policy.mutate({ mode: card.mode, family: card.group.id, paused })
-                      }
-                    />
-                  ))}
-              </div>
-              {!cards.some((card) => taskSection(card.group, card.schedule) === section.id) && (
-                <p className={styles.empty}>{t('暂无此类工作')}</p>
-              )}
-            </section>
-          ))}
-          {cards.some((card) => card.group.id === 'APPROVALS') && (
-            <section className={styles.section} aria-label={t('等待你审批')}>
-              <h2>{t('等待你审批')}</h2>
-              {cards
-                .filter((card) => card.group.id === 'APPROVALS')
-                .map((card) => (
-                  <TaskCard
-                    key={`${card.mode}:APPROVALS`}
-                    group={card.group}
-                    schedule={card.schedule}
-                    mode={card.mode}
-                    busy={false}
-                    onRetry={() => {}}
-                    onPolicy={() => {}}
-                    onReview={card.mode === libraryMode ? onReview : undefined}
-                  />
-                ))}
-            </section>
-          )}
+          <TaskQueueBrowser key={`${ownerId}:${includePrivate}:${scope}:${showHistory}`} items={cards}
+            renderDetails={(card) => <TaskCard group={card.group} embedding={card.embedding}
+              schedule={card.schedule} mode={card.mode} busy={retry.isPending || policy.isPending}
+              onRetry={() => retry.mutate({mode: card.mode, family: card.group.id})}
+              onPolicy={(paused) => policy.mutate({mode: card.mode, family: card.group.id, paused})}
+              onReview={card.mode === libraryMode ? onReview : undefined} />} />
           {canManageProcessing && (
             <section className={styles.settings}>
               <h2>{t('处理记录')}</h2>

@@ -3,8 +3,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 24px;
-  max-width: 1280px;
+  padding: 14px 18px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -40,7 +40,7 @@
 }
 .header {
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 .center h1 {
   font-size: 22px;
@@ -79,13 +79,13 @@
   outline-offset: 3px;
 }
 .overview {
-  padding: 16px 0;
+  padding: 8px 0;
   border-block: 1px solid var(--ui-line);
   font-size: 13px;
 }
 .overview strong {
   margin-left: 7px;
-  font-size: 20px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
 .worker {

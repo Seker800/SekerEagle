@@ -1,4 +1,14 @@
 export const enUS = {
+  '等待处理服务': 'Waiting for worker',
+  '返回当前任务': 'Current tasks',
+  '已完成记录': 'Completed records',
+  '筛选任务': 'Filter tasks',
+  '搜索类别或步骤': 'Search categories or steps',
+  '所有状态': 'All statuses',
+  '排队': 'Queued',
+  '等待原因': 'Waiting reason',
+  '任务详情': 'Task details',
+  '未找到匹配任务': 'No matching tasks',
   等待模型: 'Waiting for model',
   'Mac 模型配置不匹配，向量任务等待修复；其他处理继续。':
     'Mac model configuration mismatch. Vector tasks await repair; other processing continues.',
