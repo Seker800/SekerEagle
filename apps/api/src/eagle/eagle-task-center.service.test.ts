@@ -384,3 +384,17 @@ test('reports embedding health even when every vector task is already processing
     assert.equal(result.groups[0]?.running, 2);
   }
 });
+
+test('photo task center exposes unscanned faces before any face job exists', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [{ family: 'FACES', step: 'ANALYZE_PHOTO_FACES', version: 'v1', status: 'UNSCANNED', reason: 'QUEUED', count: 1201n, nextAt: null }],
+    eagleProcessingWorkerHeartbeat: { findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces: true } }] },
+    eagleProcessingSetting: { findUnique: async () => null },
+    eagleTaskPolicy: { findMany: async () => [] },
+  } as never, 'PHOTO');
+  const result = await service.overview('owner', false);
+  const face = result.groups.find((group) => group.id === 'FACES');
+  assert.equal((face as unknown as { unscanned: number }).unscanned, 1201);
+  assert.equal(face?.queued, 0);
+  assert.equal(face?.completed, 0);
+});
