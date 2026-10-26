@@ -46,7 +46,7 @@ export function taskCenterQuery(
       UNION ALL
       SELECT 'PHOTO_MAP','PHOTO_MAP','',
         CASE WHEN "dirtyAt" IS NULL THEN 'COMPLETED' WHEN "lockedUntil">now() THEN 'RUNNING' ELSE 'QUEUED' END,
-        ${taskWaitReasonSql({ retryPending: Prisma.sql`"availableAt">now() AND "lastError" IS NOT NULL` })},"availableAt","updatedAt"
+        ${taskWaitReasonSql({ retryPending: Prisma.sql`"availableAt">now() AND "lastError" IS NOT NULL` })},"availableAt","dirtyAt"
       FROM "EaglePhotoMapState" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode"
         ${scope === 'HISTORY' ? Prisma.sql`AND "dirtyAt" IS NULL` : Prisma.sql`AND "dirtyAt" IS NOT NULL`}
       UNION ALL
@@ -55,7 +55,7 @@ export function taskCenterQuery(
       FROM "EagleObjectDeletion" WHERE "ownerId"=${ownerId} AND "libraryMode"=${libraryMode}::"LibraryMode" AND ${includePrivate} AND ${scope === 'ACTIVE'}
       UNION ALL
       SELECT 'APPROVALS','APPROVALS','',CASE WHEN s.status='PENDING' THEN 'APPROVAL' WHEN s.status='FAILED' THEN 'FAILED'
-        WHEN s.status='APPLYING' THEN 'RUNNING' ELSE 'COMPLETED' END,'APPROVAL',NULL::timestamptz,s."updatedAt"
+        WHEN s.status='APPLYING' THEN 'RUNNING' ELSE 'COMPLETED' END,'APPROVAL',NULL::timestamptz,COALESCE(s."reviewedAt",s."createdAt")
       FROM "EaglePhotoAgentSuggestion" s JOIN "EagleAsset" a ON a.id=s."assetId" AND a."ownerId"=s."ownerId" AND a."libraryMode"=s."libraryMode"
       JOIN "EaglePhotoAgentTask" t ON t.id=s."taskId" AND t."ownerId"=s."ownerId" AND t."libraryMode"=s."libraryMode"
       WHERE s."ownerId"=${ownerId} AND s."libraryMode"=${libraryMode}::"LibraryMode" AND s."assetRevision"=a."mediaRevision"

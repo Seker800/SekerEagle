@@ -439,3 +439,26 @@ it('loads completed history only on request and keeps live polling separate', as
   fireEvent.click(screen.getByRole('button', { name: '返回当前任务' }));
   await screen.findByRole('heading', { name: '2B 向量搜图' });
 });
+
+it('honors server management and model warnings without rebuilding them in the page', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    embedding: 'OFFLINE',
+    modelIssue: null,
+    groups: [
+      {
+        ...summary.groups[0]!,
+        failed: 1,
+        management: { canRetry: false, canPause: false, paused: false, execution: 'ALWAYS' },
+      },
+    ],
+  });
+  mount();
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
+  const card = within(screen.getByRole('article'));
+  expect(card.queryByRole('button', { name: '暂停这项工作' })).not.toBeInTheDocument();
+  expect(card.queryByRole('button', { name: '重试失败任务' })).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('Mac 模型连接中断，向量任务等待恢复；其他处理继续。'),
+  ).not.toBeInTheDocument();
+});

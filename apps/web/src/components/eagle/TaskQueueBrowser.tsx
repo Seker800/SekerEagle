@@ -120,7 +120,7 @@ export function TaskQueueBrowser({
                       </button>
                     </th>
                     <td className={styles.state}>
-                      {group.id === 'APPROVALS'
+                      {group.id === 'APPROVALS' && group.approval > 0
                         ? `${t('待审批')} ${group.approval}`
                         : taskStatusLabel(group, schedule, embedding)}
                     </td>

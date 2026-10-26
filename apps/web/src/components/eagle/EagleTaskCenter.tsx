@@ -417,7 +417,7 @@ function TaskCard({
           <h3>{title}</h3>
           <span className={styles.badge}>{mode === 'PHOTO' ? t('照片') : t('素材')}</span>
         </div>
-        {group.id === 'APPROVALS' ? (
+        {group.id === 'APPROVALS' && group.approval > 0 ? (
           <strong className={styles.state}>
             {t('待审批')} {group.approval}
           </strong>
@@ -447,7 +447,7 @@ function TaskCard({
           ) : reason ? (
             <span className={styles.wait}>{reason}</span>
           ) : null}
-          {group.id === 'APPROVALS' && !onReview && (
+          {group.id === 'APPROVALS' && group.approval > 0 && !onReview && (
             <span className={styles.wait}>{t('请进入对应图库审批。')}</span>
           )}
         </div>
@@ -457,7 +457,7 @@ function TaskCard({
               {t('重试失败任务')}
             </button>
           )}
-          {group.id === 'APPROVALS' && onReview && (
+          {group.id === 'APPROVALS' && group.approval > 0 && onReview && (
             <button type="button" onClick={onReview}>
               {t('去审批')}
             </button>

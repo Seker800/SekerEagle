@@ -90,9 +90,20 @@ it('shows source activity only when provided, without inventing a heartbeat', ()
   expect(document.querySelector('time')?.dateTime).toBe('2026-10-26T01:00:00.000Z');
 });
 
-
 it('completed approvals in history do not masquerade as zero pending approvals', () => {
-  render(<TaskQueueBrowser history items={[{ mode: 'PHOTO', group: { ...group, id: 'APPROVALS', background: false, queued: 0, completed: 3 }, schedule }]} renderDetails={() => <article>details</article>} />);
+  render(
+    <TaskQueueBrowser
+      history
+      items={[
+        {
+          mode: 'PHOTO',
+          group: { ...group, id: 'APPROVALS', background: false, queued: 0, completed: 3 },
+          schedule,
+        },
+      ]}
+      renderDetails={() => <article>details</article>}
+    />,
+  );
   const table = within(screen.getByRole('table'));
   expect(table.getByRole('cell', { name: '已完成' })).toBeVisible();
   expect(table.queryByText('待审批 0')).not.toBeInTheDocument();

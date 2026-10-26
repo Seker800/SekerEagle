@@ -866,3 +866,24 @@ test('overview and claim share expiring capacity, dependency and retry facts', a
     await prisma.eagleProcessingWorkerHeartbeat.delete({ where: { workerId } });
   }
 });
+
+test('recent source activity follows owner, mode, current version and private visibility', async () => {
+  const f = await fixture();
+  const own = await f.job(await f.asset(), { updatedAt: new Date('2024-01-01Z') });
+  await f.job(await f.asset({ isPrivate: true }), { updatedAt: new Date('2025-01-01Z') });
+  await f.job(await f.asset({ ownerId: f.other }), { updatedAt: new Date('2026-01-01Z') });
+  await f.job(await f.asset({ libraryMode: 'MATERIAL' }), { updatedAt: new Date('2027-01-01Z') });
+  await f.job(await f.asset(), { assetRevision: 1, updatedAt: new Date('2028-01-01Z') });
+  const current = (includePrivate = false) =>
+    f.service
+      .overview(f.owner, includePrivate)
+      .then((r) => r.groups.find((g) => g.id === 'EMBEDDING'));
+  assert.equal((await current()).lastActivityAt, '2024-01-01T00:00:00.000Z');
+  assert.equal((await current(true)).lastActivityAt, '2025-01-01T00:00:00.000Z');
+  await prisma.eagleAssetProcessingJob.update({
+    where: { id: own.id },
+    data: { lockedAt: new Date(), updatedAt: new Date('2029-01-01Z') },
+  });
+  assert.equal((await current()).lastActivityAt, '2029-01-01T00:00:00.000Z');
+  assert.ok((await current()).management);
+});

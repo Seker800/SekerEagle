@@ -133,3 +133,53 @@ test('model issue classification is shared by overview and old API consumers', (
     'DRIFTED',
   );
 });
+
+test('management distinguishes manual pauses, nightly windows and source triggers', () => {
+  assert.equal(
+    resolveTaskManagement({ ...group, policy: { paused: true, priority: 0 } }, schedule).execution,
+    'PAUSED',
+  );
+  assert.equal(resolveTaskManagement(group, { ...schedule, mode: 'NIGHT' }).execution, 'WINDOW');
+  assert.equal(
+    resolveTaskManagement({ ...group, id: 'BROWSE', background: false }, schedule).execution,
+    'TRIGGER',
+  );
+  assert.equal(
+    resolveTaskManagement(
+      { ...group, waiting: [{ reason: 'DISABLED', count: 3, nextAt: null }] },
+      schedule,
+    ).canPause,
+    false,
+  );
+  assert.equal(taskOverviewModelIssue([group], 'READY'), null);
+  assert.equal(taskOverviewModelIssue([group], 'DRIFTED'), 'DRIFTED');
+  assert.equal(
+    taskOverviewModelIssue([
+      { ...group, waiting: [{ reason: 'MODEL_OFFLINE', count: 3, nextAt: null }] },
+    ]),
+    'OFFLINE',
+  );
+  assert.equal(taskOverviewModelIssue([group]), null);
+  assert.equal(
+    taskOverviewModelIssue(
+      [
+        {
+          ...group,
+          id: 'SMART_FOLDERS',
+          steps: [
+            {
+              id: 'SMART_FOLDER_QUERY',
+              queued: 1,
+              running: 0,
+              completed: 0,
+              failed: 0,
+              approval: 0,
+            },
+          ],
+        },
+      ],
+      'OFFLINE',
+    ),
+    'OFFLINE',
+  );
+});
