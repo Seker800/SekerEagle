@@ -1,7 +1,7 @@
 import { t } from '../../i18n';
 import {
   TASK_FAMILIES,
-  taskGroupPresentation,
+  resolveTaskPresentation,
   type TaskFamily,
   type TaskWaitReason,
   type BackgroundSchedule,
@@ -160,7 +160,7 @@ export function taskStatus(
   schedule: BackgroundSchedule,
   embedding?: TaskCenterOverview['embedding'],
 ) {
-  return (group.presentation ?? taskGroupPresentation(group, schedule, embedding)).status;
+  return resolveTaskPresentation(group, schedule, embedding).status;
 }
 
 export function taskStatusLabel(
@@ -168,10 +168,10 @@ export function taskStatusLabel(
   schedule: BackgroundSchedule,
   embedding?: TaskCenterOverview['embedding'],
 ): string {
-  switch (taskStatus(group, schedule, embedding)) {
+  const presentation = resolveTaskPresentation(group, schedule, embedding);
+  switch (presentation.status) {
     case 'WAITING': {
-      const reason = (group.presentation ?? taskGroupPresentation(group, schedule, embedding))
-        .reason;
+      const {reason} = presentation;
       return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED'
         ? t('等待模型')
         : reason === 'WORKER_OFFLINE'

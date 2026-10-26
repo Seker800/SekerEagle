@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  taskGroupPresentation,
+  resolveTaskPresentation,
   type BackgroundSchedule,
   type TaskGroup,
   type TaskCenterOverview,
@@ -85,9 +85,7 @@ export function TaskQueueBrowser({
             <tbody>
               {visible.map((item) => {
                 const { group, schedule, embedding, mode } = item;
-                const reason = (
-                  group.presentation ?? taskGroupPresentation(group, schedule, embedding)
-                ).reason;
+                const {reason} = resolveTaskPresentation(group, schedule, embedding);
                 const running = group.steps.filter((step) => step.running > 0);
                 return (
                   <tr

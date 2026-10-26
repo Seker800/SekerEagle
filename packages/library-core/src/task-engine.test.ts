@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   decideTask,
   taskGroupPresentation,
+  resolveTaskPresentation,
   mediaClaimTransition,
   MEDIA_LEASE_MS,
   mediaCompletion,
@@ -300,7 +301,7 @@ test('presentation reflects paused draining and model recovery without trusting 
   );
   assert.equal(taskGroupPresentation(group, schedule, 'DRIFTED').reason, 'MODEL_DRIFTED');
   assert.equal(
-    taskGroupPresentation(
+    resolveTaskPresentation(
       { ...group, presentation: { status: 'STOPPED', section: 'PAUSED', reason: 'PAUSED' } },
       schedule,
     ).section,

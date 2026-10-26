@@ -4,7 +4,8 @@ import {
   type TaskGroup,
   type BackgroundSchedule,
   type TaskWaitReason,
-  type TaskSection,
+  type TaskPresentation,
+  type TaskCenterOverview,
   isBackgroundFamily,
   backgroundScheduleAllows,
   nextBackgroundTime,
@@ -41,17 +42,11 @@ export function decideTask(facts: TaskGateFacts, nextAt: string | null = null): 
   };
 }
 
-export type TaskDisplayStatus = 'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING';
-export interface TaskPresentation {
-  status: TaskDisplayStatus;
-  section: TaskSection;
-  reason: TaskWaitReason | null;
-}
 /** Running work drains after pause; a partly blocked group must not hide its runnable siblings. */
 export function taskGroupPresentation(
   group: TaskGroup,
   schedule: BackgroundSchedule,
-  embedding?: string,
+  embedding?: TaskCenterOverview['embedding'],
   worker?: 'ONLINE' | 'OFFLINE',
 ): TaskPresentation {
   const section = taskSection(group, schedule);
@@ -70,8 +65,10 @@ export function taskGroupPresentation(
     (group.running > 0 || section !== 'PAUSED')
   )
     return { section, status: 'WAITING', reason: 'WORKER_OFFLINE' };
+  const activeSteps = group.steps.filter((step) => group.running > 0 ? step.running > 0 : step.queued > 0);
+  const needsModel = group.id === 'EMBEDDING' || (activeSteps.length > 0 && activeSteps.every((step) => taskNeedsModel(group.id, step.id)));
   if (
-    group.id === 'EMBEDDING' &&
+    needsModel &&
     (group.running > 0 || section !== 'PAUSED') &&
     group.running + group.queued > 0 &&
     (embedding === 'OFFLINE' || embedding === 'DRIFTED')
@@ -81,19 +78,22 @@ export function taskGroupPresentation(
       status: 'WAITING',
       reason: embedding === 'DRIFTED' ? 'MODEL_DRIFTED' : 'MODEL_OFFLINE',
     };
-  const status: TaskDisplayStatus =
-    group.running > 0
-      ? 'RUNNING'
-      : group.queued > 0 && section === 'PAUSED'
-        ? 'STOPPED'
-        : allBlocked || group.approval > 0
-          ? 'WAITING'
-          : group.queued > 0
-            ? 'QUEUED'
-            : group.failed > 0
-              ? 'STOPPED'
-              : 'COMPLETED';
-  return { status, section, reason };
+  if (group.running > 0) return {status: 'RUNNING', section, reason};
+  if (group.queued > 0 && section === 'PAUSED') return {status: 'STOPPED', section, reason};
+  if (allBlocked || group.approval > 0) return {status: 'WAITING', section, reason};
+  if (group.queued > 0) return {status: 'QUEUED', section, reason};
+  return {status: group.failed > 0 ? 'STOPPED' : 'COMPLETED', section, reason};
+}
+
+/** Compatibility boundary: consumers honor server presentation; computation itself never reads it. */
+export function resolveTaskPresentation(
+  group: TaskGroup, schedule: BackgroundSchedule, embedding?: TaskCenterOverview['embedding'],
+): TaskPresentation {
+  return group.presentation ?? taskGroupPresentation(group, schedule, embedding);
+}
+
+export function taskNeedsModel(family: TaskFamily, step: string): boolean {
+  return family === 'EMBEDDING' || (family === 'SMART_FOLDERS' && step === 'SMART_FOLDER_QUERY');
 }
 
 export const MEDIA_LEASE_MS = 10 * 60 * 1000;
@@ -177,8 +177,7 @@ export function taskBucketDecision(input: {
   const background = isBackgroundFamily(family);
   const workerOwned = taskWorkerOwned(family);
   const model = taskModelReadiness(workers, family, step);
-  const needsModel =
-    family === 'EMBEDDING' || (family === 'SMART_FOLDERS' && step === 'SMART_FOLDER_QUERY');
+  const needsModel = taskNeedsModel(family, step);
   const outsideSchedule = background && !backgroundScheduleAllows(schedule, now);
   return decideTask(
     {

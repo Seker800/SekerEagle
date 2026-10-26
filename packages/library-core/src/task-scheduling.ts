@@ -1,4 +1,3 @@
-import type { TaskPresentation } from './task-engine';
 export interface BackgroundSchedule {
   mode: string;
   nightStart: string;
@@ -77,6 +76,12 @@ export interface TaskCounts {
 }
 export interface TaskStep extends TaskCounts {
   id: string;
+}
+export type TaskDisplayStatus = 'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING';
+export interface TaskPresentation {
+  status: TaskDisplayStatus;
+  section: TaskSection;
+  reason: TaskWaitReason | null;
 }
 export interface TaskGroup extends TaskCounts {
   id: TaskFamily;
@@ -171,7 +176,6 @@ export const taskExecutionPriority = (family: TaskFamily): number =>
 
 export type TaskSection = 'IMMEDIATE' | 'SCHEDULED' | 'PAUSED' | 'REVIEW';
 export function taskSection(group: TaskGroup, schedule: BackgroundSchedule): TaskSection {
-  if (group.presentation) return group.presentation.section;
   if (group.id === 'APPROVALS') return 'REVIEW';
   if (
     group.availability === 'DISABLED' ||

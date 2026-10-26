@@ -4,8 +4,7 @@ import { AssetOperationsPanel } from './AssetOperationsPanel';
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
-  taskSection,
-  taskGroupPresentation,
+  resolveTaskPresentation,
   taskExecutionPriority,
   type BackgroundSchedule,
   type TaskFamily,
@@ -180,7 +179,7 @@ export function EagleTaskCenter({
       : null;
   const total = cards.reduce(
     (sum, { group, schedule }) => {
-      const paused = taskSection(group, schedule) === 'PAUSED';
+      const paused = resolveTaskPresentation(group, schedule).section === 'PAUSED';
       return {
         running: sum.running + group.running,
         queued: sum.queued + (paused ? 0 : group.queued),
@@ -415,7 +414,7 @@ function TaskCard({
     );
   const state = taskStatus(group, schedule, embedding);
   const activeSteps = group.steps.filter((step) => step.running > 0);
-  const decision = group.presentation ?? taskGroupPresentation(group, schedule, embedding);
+  const decision = resolveTaskPresentation(group, schedule, embedding);
   const wait = group.waiting.find((item) => item.reason === decision.reason);
   const execution = taskExecutionLabel(group, schedule);
   const isWaiting = remaining > 0 && group.running === 0;
