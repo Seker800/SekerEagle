@@ -501,34 +501,38 @@ test('overview carries the latest visible source activity and authoritative mana
   assert.equal(result.groups[0]?.management?.execution, 'ALWAYS');
 });
 
-test('photo task center exposes unscanned faces before any face job exists', async () => {
-  const service = new EagleTaskCenterService(
-    {
-      $queryRaw: async () => [
-        {
-          family: 'FACES',
-          step: 'ANALYZE_PHOTO_FACES',
-          version: 'v1',
-          status: 'UNSCANNED',
-          reason: 'QUEUED',
-          count: 1201n,
-          nextAt: null,
+for (const faces of [true, false])
+  test(`photo task center computes scan availability before any face job exists: ${faces}`, async () => {
+    const service = new EagleTaskCenterService(
+      {
+        $queryRaw: async () => [
+          {
+            family: 'FACES',
+            step: 'ANALYZE_PHOTO_FACES',
+            version: 'v1',
+            status: 'UNSCANNED',
+            reason: 'QUEUED',
+            count: 1201n,
+            nextAt: null,
+          },
+        ],
+        eagleProcessingWorkerHeartbeat: {
+          findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces } }],
         },
-      ],
-      eagleProcessingWorkerHeartbeat: {
-        findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces: true } }],
-      },
-      eagleProcessingSetting: { findUnique: async () => null },
-      eagleTaskPolicy: { findMany: async () => [] },
-    } as never,
-    'PHOTO',
-  );
-  const result = await service.overview('owner', false);
-  const face = result.groups.find((group) => group.id === 'FACES');
-  assert.equal((face as unknown as { unscanned: number }).unscanned, 1201);
-  assert.equal(face?.queued, 0);
-  assert.equal(face?.completed, 0);
-});
+        eagleProcessingSetting: { findUnique: async () => null },
+        eagleTaskPolicy: { findMany: async () => [] },
+      } as never,
+      'PHOTO',
+    );
+    const result = await service.overview('owner', false);
+    const face = result.groups.find((group) => group.id === 'FACES');
+    assert.equal(face?.unscanned, 1201);
+    assert.equal(face?.availability, faces ? 'ENABLED' : 'DISABLED');
+    assert.equal(face?.management?.canStart, faces);
+    assert.equal(face?.presentation?.status, 'UNSCANNED');
+    assert.equal(face?.queued, 0);
+    assert.equal(face?.completed, 0);
+  });
 
 test('scan start derives owner and private visibility from principal and requires browser Origin', async () => {
   const { StartTaskFamilyDto } = await import('./eagle-task-center.controller');

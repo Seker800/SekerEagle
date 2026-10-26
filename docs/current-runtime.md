@@ -306,18 +306,18 @@ DSM 已启用 root 开机任务 `SekerEagle Startup`，内嵌仓库 [nas-startup
 
 ## 每个运行模块负责什么
 
-| 模块         | 位置／标识                                      | 职责与依赖                                                                       |
-| ------------ | ----------------------------------------------- | -------------------------------------------------------------------------------- |
-| HTTPS 入口   | DSM 反向代理、现有域名及证书                    | 终止 TLS，转发到群晖网关；不是数据库或图片处理服务                               |
-| gateway      | `sekereagle-nas-staging-gateway-1`              | 同源网页、API 和签名对象请求入口；NAS 局域网回源端口 8181                        |
-| web          | `sekereagle-nas-staging-web-1`                  | 静态 React/Vite 网页；浏览器负责呈现、缩略图缓存和现有编辑器交互                 |
-| API          | `sekereagle-nas-staging-api-1`                  | 认证、owner／模式隔离、图库查询、上传发布、任务管理；文字搜索向 Mac 请求向量     |
-| PostgreSQL   | `sekereagle-nas-staging-postgres-1`             | 业务记录、摄影索引、任务、向量及查询索引，是业务事实源                           |
-| MinIO        | `sekereagle-nas-staging-minio-1`                | 托管原片和派生图；写入必须走 S3 接口，不能直接向底层数据目录塞文件               |
-| worker       | `sekereagle-nas-staging-worker-1`               | 领取可重试媒体任务；生成普通封面／预览、补读信息、调度图片向量并写回群晖         |
-| 2B 模型      | Mac，`com.sekereagle.mlx-embedding`，端口 11435 | Qwen3-VL-Embedding-2B，固定模型修订及 1024 维空间；提供带认证的文字／图片推理    |
-| 独立封面复制 | NAS，`sekereagle-cover-copy-20261023`           | 从共享相册既有 JPEG 派生缓存复制到本应用 MinIO，发布当前版本封面，保留逐批检查点 |
-| 人脸识别     | 图库服务器的可选 YuNet／SFace 模型              | 当前白名单未启用；旧版 8B 标签生成已退役                                         |
+| 模块         | 位置／标识                                      | 职责与依赖                                                                               |
+| ------------ | ----------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| HTTPS 入口   | DSM 反向代理、现有域名及证书                    | 终止 TLS，转发到群晖网关；不是数据库或图片处理服务                                       |
+| gateway      | `sekereagle-nas-staging-gateway-1`              | 同源网页、API 和签名对象请求入口；NAS 局域网回源端口 8181                                |
+| web          | `sekereagle-nas-staging-web-1`                  | 静态 React/Vite 网页；浏览器负责呈现、缩略图缓存和现有编辑器交互                         |
+| API          | `sekereagle-nas-staging-api-1`                  | 认证、owner／模式隔离、图库查询、上传发布、任务管理；文字搜索向 Mac 请求向量             |
+| PostgreSQL   | `sekereagle-nas-staging-postgres-1`             | 业务记录、摄影索引、任务、向量及查询索引，是业务事实源                                   |
+| MinIO        | `sekereagle-nas-staging-minio-1`                | 托管原片和派生图；写入必须走 S3 接口，不能直接向底层数据目录塞文件                       |
+| worker       | `sekereagle-nas-staging-worker-1`               | 领取可重试媒体任务；生成普通封面／预览、补读信息、调度图片向量并写回群晖                 |
+| 2B 模型      | Mac，`com.sekereagle.mlx-embedding`，端口 11435 | Qwen3-VL-Embedding-2B，固定模型修订及 1024 维空间；提供带认证的文字／图片推理            |
+| 独立封面复制 | NAS，`sekereagle-cover-copy-20261023`           | 从共享相册既有 JPEG 派生缓存复制到本应用 MinIO，发布当前版本封面，保留逐批检查点         |
+| 人脸识别     | 图库服务器的可选 YuNet／SFace 模型              | 已配置本地模型且媒体白名单已撤销；实际扫描任务与覆盖数见最新核验，旧版 8B 标签生成已退役 |
 
 Docker 项目仍叫 `sekereagle-nas-staging`，数据库仍叫 `sekereagle_test`，桶为 `sekereagle-assets`。这是初次恢复沿用的名称，**里面是现用用户数据，不是可随意重置的测试实例**。数据库及 S3 地址在应用配置中使用 Compose 服务名；不得为方便诊断改成 NAS IP 或连接受保护的外部系统。
 
@@ -339,14 +339,15 @@ Docker 项目仍叫 `sekereagle-nas-staging`，数据库仍叫 `sekereagle_test`
 本次直接检查了 worker 容器的以下非秘密配置：
 
 ```dotenv
-EAGLE_PROCESSING_JOB_KINDS=GENERATE_RENDITIONS,GENERATE_THUMBNAIL,GENERATE_PREVIEW,PROBE_MEDIA,GENERATE_EMBEDDING
+# EAGLE_PROCESSING_JOB_KINDS 未设置，全部现用媒体种类可领取
 EAGLE_BACKGROUND_PROCESSING_ENABLED=true
-EAGLE_VIDEO_TRANSCODING_ENABLED=false
+EAGLE_VIDEO_TRANSCODING_ENABLED=true
 EAGLE_INTERACTIVE_CONCURRENCY=1
+EAGLE_EMBEDDING_CONCURRENCY=2
 NODE_OPTIONS=--max-old-space-size=512
 ```
 
-普通 worker 的容器内存上限为 2 GiB。当前优先封面和 2B 向量；完整视频转码暂停，任务保留；人脸、调色板和深层金字塔不在当前领取白名单中；旧版 8B 标签生成已退役，不再属于暂停队列。标签中心构建也受此处理配置限制。任务存在不等于已执行，队列暂停不等于删除。
+2026-10-26 发布前实时核验：普通 worker 内存上限为 2 GiB，NAS 一路、向量两张在途；视频、人脸、代表色与深层金字塔不受媒体种类白名单限制。API 与 worker 均已配置人物环境，实际 YuNet／SFace 权重已校验。旧版 8B 标签生成已退役；MATERIAL 标签索引仍保留原手动暂停。时段与任务暂停继续控制执行，能力启用不代表已经补排旧照片，队列暂停不等于删除。该配置在本轮部署中保留，动态状态从最新检查点读取。
 
 图片向量使用已托管的适用派生图作为输入，NAS 向 Mac 发送图片数据，Mac 返回向量，NAS 负责业务发布；不是把整套原片图库搬回 Mac。文字语义搜索同样调用 Mac。Mac 关机／模型断连时，已有封面浏览不依赖它，内容搜索会降级；新向量任务等待服务恢复，不消耗业务重试预算。已保存查询向量的智能文件夹可继续使用已有数据，仍须满足原部署开关与时段。
 
