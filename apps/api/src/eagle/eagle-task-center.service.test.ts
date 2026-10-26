@@ -385,34 +385,154 @@ test('reports embedding health even when every vector task is already processing
   }
 });
 
-test('photo task center exposes unscanned faces before any face job exists', async () => {
+test('API publishes authoritative state without confusing partially blocked groups with stalled groups', async () => {
   const service = new EagleTaskCenterService(
     {
       $queryRaw: async () => [
         {
-          family: 'FACES',
-          step: 'ANALYZE_PHOTO_FACES',
+          family: 'MEDIA',
+          step: 'GENERATE_EMBEDDING',
           version: 'v1',
-          status: 'UNSCANNED',
+          status: 'QUEUED',
           reason: 'QUEUED',
-          count: 1201n,
+          count: 3n,
           nextAt: null,
         },
       ],
       eagleProcessingWorkerHeartbeat: {
-        findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces: true } }],
+        findMany: async () => [
+          {
+            capabilities: {
+              background: true,
+              jobKinds: ['GENERATE_EMBEDDING'],
+              video: false,
+              tagBuilds: false,
+              smartFolders: false,
+              photoMap: false,
+              embedding: 'OFFLINE',
+            },
+          },
+        ],
       },
-      eagleProcessingSetting: { findUnique: async () => null },
+      eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
       eagleTaskPolicy: { findMany: async () => [] },
     } as never,
     'PHOTO',
   );
-  const result = await service.overview('owner', false);
-  const face = result.groups.find((group) => group.id === 'FACES');
-  assert.equal((face as unknown as { unscanned: number }).unscanned, 1201);
-  assert.equal(face?.queued, 0);
-  assert.equal(face?.completed, 0);
+  const result = await service.overview('owner-a');
+  assert.deepEqual((result.groups[0] as unknown as { presentation: unknown }).presentation, {
+    status: 'WAITING',
+    section: 'IMMEDIATE',
+    reason: 'MODEL_OFFLINE',
+  });
 });
+
+test('live polling excludes completed history before aggregating media jobs', async () => {
+  const { taskCenterQuery } = await import('./task-center-query');
+  assert.match(taskCenterQuery('owner-a', 'PHOTO', false).sql, /AND j\.status<>'COMPLETED'/);
+});
+
+test('transition history is bounded, current-version and private/owner/mode scoped', async () => {
+  let captured: { sql: string; values: unknown[] } | undefined;
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+        captured = query;
+        return [];
+      },
+    } as never,
+    'PHOTO',
+  );
+  assert.deepEqual(await service.events('owner-a', 'EMBEDDING', false), []);
+  assert.ok(captured?.values.includes('owner-a'));
+  assert.ok(captured?.values.includes('PHOTO'));
+  assert.ok(captured?.values.includes(false));
+  assert.match(captured!.sql, /mediaRevision/);
+  assert.match(captured!.sql, /LIMIT 30/);
+  assert.doesNotMatch(captured!.sql, /lastError/);
+});
+
+test('lost worker heartbeat is visible before long execution leases expire', async () => {
+  const service = new EagleTaskCenterService({
+    $queryRaw: async () => [
+      {
+        family: 'MEDIA',
+        step: 'GENERATE_RENDITIONS',
+        version: 'v1',
+        status: 'RUNNING',
+        reason: 'QUEUED',
+        count: 1n,
+        nextAt: null,
+      },
+    ],
+    eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
+    eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+    eagleTaskPolicy: { findMany: async () => [] },
+  } as never);
+  const result = await service.overview('owner-a');
+  assert.equal(result.groups[0]?.running, 1); // A lease is not silently erased.
+  assert.equal(result.groups[0]?.presentation?.status, 'WAITING');
+  assert.equal(result.groups[0]?.presentation?.reason, 'WORKER_OFFLINE');
+});
+
+test('overview carries the latest visible source activity and authoritative management decisions', async () => {
+  const service = new EagleTaskCenterService(
+    {
+      $queryRaw: async () => [
+        {
+          family: 'MEDIA',
+          step: 'GENERATE_EMBEDDING',
+          version: 'v1',
+          status: 'QUEUED',
+          reason: 'QUEUED',
+          count: 1n,
+          nextAt: null,
+          lastActivityAt: new Date('2026-10-26T01:00:00Z'),
+        },
+      ],
+      eagleProcessingWorkerHeartbeat: { findMany: async () => [] },
+      eagleProcessingSetting: { findUnique: async () => ({ mode: 'ALWAYS' }) },
+      eagleTaskPolicy: { findMany: async () => [] },
+    } as never,
+    'PHOTO',
+  );
+  const result = await service.overview('owner');
+  assert.equal(result.groups[0]?.lastActivityAt, '2026-10-26T01:00:00.000Z');
+  assert.equal(result.groups[0]?.management?.execution, 'ALWAYS');
+});
+
+for (const faces of [true, false])
+  test(`photo task center computes scan availability before any face job exists: ${faces}`, async () => {
+    const service = new EagleTaskCenterService(
+      {
+        $queryRaw: async () => [
+          {
+            family: 'FACES',
+            step: 'ANALYZE_PHOTO_FACES',
+            version: 'v1',
+            status: 'UNSCANNED',
+            reason: 'QUEUED',
+            count: 1201n,
+            nextAt: null,
+          },
+        ],
+        eagleProcessingWorkerHeartbeat: {
+          findMany: async () => [{ capabilities: { background: true, jobKinds: null, faces } }],
+        },
+        eagleProcessingSetting: { findUnique: async () => null },
+        eagleTaskPolicy: { findMany: async () => [] },
+      } as never,
+      'PHOTO',
+    );
+    const result = await service.overview('owner', false);
+    const face = result.groups.find((group) => group.id === 'FACES');
+    assert.equal(face?.unscanned, 1201);
+    assert.equal(face?.availability, faces ? 'ENABLED' : 'DISABLED');
+    assert.equal(face?.management?.canStart, faces);
+    assert.equal(face?.presentation?.status, 'UNSCANNED');
+    assert.equal(face?.queued, 0);
+    assert.equal(face?.completed, 0);
+  });
 
 test('scan start derives owner and private visibility from principal and requires browser Origin', async () => {
   const { StartTaskFamilyDto } = await import('./eagle-task-center.controller');
@@ -524,7 +644,7 @@ test('only admin task overview exposes sanitized machine capacity', async () => 
     eagleTaskPolicy: { findMany: async () => [] },
   } as never);
   assert.equal((await service.overview('owner', false)).compute, undefined);
-  const admin = await service.overview('owner', false, true);
+  const admin = await service.overview('owner', false, 'ACTIVE', true);
   assert.equal(admin.compute?.nodes[0]?.name, 'Mac');
   assert.ok(!JSON.stringify(admin).includes('do-not-leak'));
   assert.ok(!JSON.stringify(admin).includes('private-address'));

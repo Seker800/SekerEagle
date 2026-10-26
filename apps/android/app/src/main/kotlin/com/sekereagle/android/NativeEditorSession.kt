@@ -53,11 +53,11 @@ internal class NativeEditorSession(
         return when (action) {
             "open" -> {
                 serverEditing = read("$base/media-capabilities").optInt("serverPhotoEditing") == 1
-                val entry = read("$path/edit-recipe").optJSONObject("entry")
+                val entry = read("$base/assets/${NativeGalleryPolicy.identifier(initial.id)}/edit-recipe").optJSONObject("entry")
                 if (entry != null) {
                     val id =
                         entry.optString("baseAssetId").takeUnless { it.isEmpty() || it == "null" }
-                            ?: asset.id
+                            ?: initial.id
                     val original = read("$base/assets/${NativeGalleryPolicy.identifier(id)}")
                     if (original.getInt("mediaRevision") != entry.getInt("baseMediaRevision"))
                         throw IOException("原照片已变化，无法恢复编辑参数")
@@ -135,7 +135,17 @@ internal class NativeEditorSession(
             "saveStatus" -> {
                 val id = jobId ?: throw IOException("尚未开始保存")
                 val status = read("$path/edit-renders/$id")
-                if (status.optString("status") == "COMPLETED") saved = status.getJSONObject("asset")
+                when (status.optString("status")) {
+                    "COMPLETED" -> saved = status.getJSONObject("asset")
+                    // Only a definitive terminal failure permits another durable render intent.
+                    // Transport uncertainty and pending/completed retries retain their identity.
+                    "FAILED" -> {
+                        saveIntent = ""
+                        requestId = ""
+                        jobId = null
+                        saved = null
+                    }
+                }
                 status
             }
             else -> throw IOException("不支持的编辑操作")

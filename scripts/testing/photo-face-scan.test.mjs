@@ -125,7 +125,11 @@ test('full scan is durable, idempotent, scoped, versioned and governed by existi
       data: { status: 'FAILED', attempts: 5 },
     });
     assert.equal((await queuePhotoFaceScan(db, owner, false)).queued, 0);
-    assert.equal((await coverage()).completed, 1);
+    assert.equal(
+      (await service.overview(owner, false, 'HISTORY')).groups.find((g) => g.id === 'FACES')
+        .completed,
+      1,
+    );
     assert.equal((await coverage()).failed, 1);
     assert.deepEqual(await service.retry(owner, 'FACES'), { retried: 1 });
     assert.equal((await queuePhotoFaceScan(db, owner, true)).queued, 1);
@@ -164,7 +168,11 @@ test('full scan is durable, idempotent, scoped, versioned and governed by existi
       concurrent.reduce((sum, result) => sum + result.queued, 0),
       1,
     );
-    assert.equal((await coverage()).completed, 0);
+    assert.equal(
+      (await service.overview(owner, false, 'HISTORY')).groups.find((g) => g.id === 'FACES')
+        ?.completed ?? 0,
+      0,
+    );
   } finally {
     await db.eagleAsset.deleteMany({ where: { ownerId: { in: [owner, other] } } });
     await db.eagleTaskPolicy.deleteMany({ where: { ownerId: owner } });

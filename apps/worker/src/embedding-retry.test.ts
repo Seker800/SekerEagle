@@ -11,18 +11,18 @@ test('busy capacity and interrupted uploads preserve attempts and do not close t
     });
     const retry = embeddingRetry(error, 1, now);
     assert(retry);
-    assert.equal(retry.offline, false);
+    assert.equal('offline' in retry, false);
     assert.equal(retry.data.status, 'PENDING');
     assert.equal(retry.data.attempts, 0);
     assert.equal(retry.data.lockedAt, null);
     assert.equal(retry.data.availableAt.getTime() - now.getTime(), 1000);
   }
 });
-test('a genuinely unreachable model retains the offline gate and does not spend a business attempt', () => {
+test('a single unreachable request only defers itself without declaring the host offline', () => {
   const now = new Date('2026-10-26T01:00:00Z');
   const retry = embeddingRetry(new EmbeddingClientError('HOST_UNAVAILABLE', 'offline'), 0, now);
   assert(retry);
-  assert.equal(retry.offline, true);
+  assert.equal('offline' in retry, false);
   assert.equal(retry.data.attempts, 0);
   assert.equal(retry.data.availableAt.getTime() - now.getTime(), 30000);
   assert.equal(embeddingRetry(new Error('bad media'), 1, now), null);

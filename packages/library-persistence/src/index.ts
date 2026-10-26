@@ -127,6 +127,8 @@ export {
   smartFolderMatchWhere,
 } from './smart-folder-semantics';
 
+export * from './task-decision';
+
 export {
   PHOTO_FACE_MODEL_VERSION,
   unscannedPhotoFacesSql,

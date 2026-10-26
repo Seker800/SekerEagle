@@ -489,12 +489,7 @@ export function EagleVectorWorkspace({
   const trashItems = async (itemIds: string[]) => {
     if (!onTrashAssets) return;
     const { assetIds } = getTagPickerTarget(itemIds);
-    const trashed = await act(
-      () => onTrashAssets(assetIds),
-      t('已将 {{value1}} 项素材移到回收站', {
-        value1: assetIds.length,
-      }),
-    );
+    const trashed = await act(() => onTrashAssets(assetIds), t('已加入任务中心，可继续浏览。'));
     if (trashed) {
       setContextMenu(null);
       clearSelection();

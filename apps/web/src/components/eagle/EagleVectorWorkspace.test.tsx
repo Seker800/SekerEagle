@@ -259,7 +259,7 @@ describe('EagleVectorWorkspace', () => {
     );
   });
 
-  it('moves review assets to trash from their context menu', async () => {
+  it('acknowledges queued trash without claiming that processing already completed', async () => {
     const trashAssets = vi.fn().mockResolvedValue(undefined);
     render(<EagleVectorWorkspace view="REVIEW" onTrashAssets={trashAssets} />);
 
@@ -268,6 +268,8 @@ describe('EagleVectorWorkspace', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '删除（移到回收站）' }));
 
     await waitFor(() => expect(trashAssets).toHaveBeenCalledWith(['asset-1']));
+    expect(await screen.findByText('已加入任务中心，可继续浏览。')).toBeInTheDocument();
+    expect(screen.queryByText('已将 1 项素材移到回收站')).not.toBeInTheDocument();
   });
 
   it('matches the library single, command-toggle, shift-range, and background-clear selection gestures', async () => {

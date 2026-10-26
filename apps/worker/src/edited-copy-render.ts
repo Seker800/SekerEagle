@@ -1,3 +1,4 @@
+import { mediaCompletion } from '@sekereagle/library-core';
 import { createHash, randomUUID } from 'node:crypto';
 import type { EagleAssetProcessingJob, PrismaClient, Prisma } from '@prisma/client';
 import { GetObjectCommand, PutObjectCommand, type S3Client } from '@aws-sdk/client-s3';
@@ -94,14 +95,7 @@ export async function renderEditedCopy(
         });
         if (!current) throw new Error('EDIT_SOURCE_CHANGED');
         const lease = await tx.eagleAssetProcessingJob.updateMany({
-          where: {
-            id: job.id,
-            ownerId: job.ownerId,
-            libraryMode: job.libraryMode,
-            status: 'PROCESSING',
-            leaseVersion: job.leaseVersion,
-          },
-          data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+          ...mediaCompletion(job),
         });
         if (lease.count !== 1) return false;
         const retained = await tx.eagleObjectDeletion.deleteMany({

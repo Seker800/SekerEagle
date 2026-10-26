@@ -3,8 +3,8 @@
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior-y: contain;
-  padding: 24px;
-  max-width: 1280px;
+  padding: 14px 18px;
+  max-width: 1600px;
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
@@ -40,11 +40,11 @@
 }
 .header {
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 12px;
 }
 .center h1 {
   font-size: 22px;
-  margin: 0 0 8px;
+  margin: 0;
 }
 .center h2 {
   font-size: 15px;
@@ -79,13 +79,13 @@
   outline-offset: 3px;
 }
 .overview {
-  padding: 16px 0;
+  padding: 8px 0;
   border-block: 1px solid var(--ui-line);
   font-size: 13px;
 }
 .overview strong {
   margin-left: 7px;
-  font-size: 20px;
+  font-size: 15px;
   font-variant-numeric: tabular-nums;
 }
 .worker {
@@ -191,8 +191,8 @@
 }
 .settings,
 .external {
-  margin-top: 24px;
-  padding-top: 20px;
+  margin-top: 12px;
+  padding: 8px 0;
   border-top: 1px solid var(--ui-line);
 }
 .settings > h2 {
@@ -205,7 +205,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
   font-size: 13px;
 }
 .section {
@@ -219,15 +219,8 @@
 .sectionHeader h2 {
   font-size: 17px;
 }
-.sectionHeader p {
-  margin: 6px 0 0;
-}
 .center h3 {
   font-size: 14px;
-  margin: 0;
-}
-.center .empty {
-  padding: 12px 0;
   margin: 0;
 }
 .badge {
@@ -290,4 +283,17 @@
 }
 .compute > div > span:first-child {
   font-weight: 600;
+.header > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header > button:last-child {
+  margin-left: auto;
+}
+.settings summary,
+.external summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--ui-muted);
 }

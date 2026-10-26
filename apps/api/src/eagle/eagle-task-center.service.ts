@@ -5,9 +5,10 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { Prisma, EagleMediaJobKind, type LibraryMode } from '@prisma/client';
+import { Prisma, type LibraryMode } from '@prisma/client';
 import {
   mediaTaskFamilySql,
+  mediaBlocksAssetReadySql,
   lockOwnerPrivacyProjection,
   queuePhotoFaceScan,
 } from '@sekereagle/library-persistence';
@@ -15,16 +16,22 @@ import {
   DEFAULT_BACKGROUND_SCHEDULE,
   sanitizeComputeRuntime,
   TASK_FAMILIES,
-  backgroundScheduleAllows,
+  taskBucketDecision,
+  taskWorkerOwned,
+  taskGroupPresentation,
+  taskGroupManagement,
+  taskFamilyRetryable,
+  taskOverviewModelIssue,
+  taskModelReadiness,
+  workerSupportsTask,
   isBackgroundFamily,
   mediaTaskFamily,
-  nextBackgroundTime,
   type TaskCounts,
+  type TaskTransitionEvent,
   type TaskCenterOverview,
   type TaskFamily,
   type TaskGroup,
   type TaskWaitReason,
-  type WorkerTaskCapabilities,
 } from '@sekereagle/library-core';
 import { PrismaService } from '../prisma/prisma.service';
 import { LIBRARY_MODE } from './library-mode';
@@ -38,6 +45,7 @@ interface TaskBucket {
   reason: TaskWaitReason;
   count: bigint;
   nextAt: Date | null;
+  lastActivityAt: Date | null;
 }
 const counts = () => ({ queued: 0, running: 0, failed: 0, completed: 0, approval: 0 });
 
@@ -106,23 +114,15 @@ export class EagleTaskCenterService {
           })
         ).count;
       }
-      if (['CLEANUP', 'APPROVALS', 'UPLOADS', 'IMPORTS', 'PHOTO_MAP'].includes(family)) return 0;
-      const kinds = Object.values(EagleMediaJobKind).filter(
-        (kind) => kind !== 'GENERATE_AI_TAGS' && mediaTaskFamily(kind, 'v1') === family,
-      );
-      const condition =
-        family === 'DETAILS'
-          ? Prisma.sql`j."processorVersion"='photo-source-details-v1'`
-          : family === 'VIDEO'
-            ? Prisma.sql`${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}='VIDEO'`
-            : Prisma.sql`j.kind::text IN (${Prisma.join(kinds)}) AND j."processorVersion"<>'photo-source-details-v1' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}<>'VIDEO'`;
+      if (!taskFamilyRetryable(family)) return 0;
+      const condition = Prisma.sql`j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}`;
       const rows = await tx.$queryRaw<Array<{ count: bigint }>>(Prisma.sql`
-        WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
+        WITH retried AS (UPDATE "EagleMediaJob" j SET status='PENDING',attempts=0,"recoveryCount"=0,"availableAt"=now(),"lockedAt"=NULL,"startedAt"=NULL,"completedAt"=NULL,"lastError"=NULL,"leaseVersion"="leaseVersion"+1,"updatedAt"=now()
           FROM "EagleAsset" a WHERE j."ownerId"=${ownerId} AND j."libraryMode"=${this.libraryMode}::"LibraryMode" AND j.status='FAILED'
             AND a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode" AND a."mediaRevision"=j."assetRevision"
-            AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate") AND ${condition} RETURNING j."assetId",j."assetRevision"
+            AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate") AND ${condition} RETURNING j."assetId",j."assetRevision",j.kind,j."processorVersion"
         ), restored AS (UPDATE "EagleAsset" a SET "lifecycleStatus"='PROCESSING',"mediaErrorCode"=NULL,"updatedAt"=now()
-          FROM retried r WHERE ${family === 'BROWSE'} AND a.id=r."assetId" AND a."mediaRevision"=r."assetRevision"
+          FROM retried r WHERE ${mediaBlocksAssetReadySql(Prisma.sql`r.kind`, Prisma.sql`r."processorVersion"`)} AND a.id=r."assetId" AND a."mediaRevision"=r."assetRevision"
           RETURNING a.id)
         SELECT count(*) AS count FROM retried
       `);
@@ -132,15 +132,40 @@ export class EagleTaskCenterService {
     return { retried };
   }
 
+  async events(
+    ownerId: string,
+    family: TaskFamily,
+    includePrivate = false,
+  ): Promise<TaskTransitionEvent[]> {
+    const rows = await this.prisma.$queryRaw<
+      Array<Omit<TaskTransitionEvent, 'id' | 'occurredAt'> & { id: bigint; occurredAt: Date }>
+    >(Prisma.sql`
+      SELECT e.id, e."jobId", j.kind::text AS step, e."fromStatus", e."toStatus", e."leaseVersion", e.attempts, e."recoveryCount", e."occurredAt"
+      FROM "EagleMediaJobEvent" e
+      JOIN "EagleMediaJob" j ON j.id=e."jobId" AND j."ownerId"=e."ownerId" AND j."libraryMode"=e."libraryMode"
+      JOIN "EagleAsset" a ON a.id=j."assetId" AND a."ownerId"=j."ownerId" AND a."libraryMode"=j."libraryMode" AND a."mediaRevision"=j."assetRevision"
+      WHERE e."ownerId"=${ownerId} AND e."libraryMode"=${this.libraryMode}::"LibraryMode"
+        AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
+        AND j.kind<>'GENERATE_AI_TAGS' AND ${mediaTaskFamilySql(Prisma.sql`j.kind`, Prisma.sql`j."processorVersion"`)}=${family}
+      ORDER BY e.id DESC LIMIT 30
+    `);
+    return rows.map((row) => ({
+      ...row,
+      id: row.id.toString(),
+      occurredAt: row.occurredAt.toISOString(),
+    }));
+  }
+
   async overview(
     ownerId: string,
     includePrivate = false,
+    scope: 'ACTIVE' | 'HISTORY' = 'ACTIVE',
     includeCompute = false,
   ): Promise<TaskCenterOverview> {
     const now = new Date();
     const [buckets, workers, setting, policies] = await Promise.all([
       this.prisma.$queryRaw<TaskBucket[]>(
-        taskCenterQuery(ownerId, this.libraryMode, includePrivate),
+        taskCenterQuery(ownerId, this.libraryMode, includePrivate, scope),
       ),
       this.prisma.eagleProcessingWorkerHeartbeat.findMany({
         where: { heartbeatAt: { gte: new Date(now.getTime() - 45000), lte: now } },
@@ -179,6 +204,9 @@ export class EagleTaskCenterService {
         };
         groups.set(family, group);
       }
+      const activity = bucket.lastActivityAt?.toISOString();
+      if (activity && (!group.lastActivityAt || activity > group.lastActivityAt))
+        group.lastActivityAt = activity;
       let step = group.steps.find((entry) => entry.id === bucket.step);
       if (!step) {
         step = { id: bucket.step, ...counts() };
@@ -201,38 +229,17 @@ export class EagleTaskCenterService {
       group[field] += count;
       step[field] += count;
       if (field !== 'queued' && field !== 'approval') continue;
-      let reason = bucket.reason,
-        nextAt = reason === 'RETRY' ? (bucket.nextAt?.toISOString() ?? null) : null;
-      const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(family);
-      const capable = workers.some((worker) => supports(worker.capabilities, family, bucket.step));
-      const needsEmbedding =
-        family === 'EMBEDDING' ||
-        (family === 'SMART_FOLDERS' && bucket.step === 'SMART_FOLDER_QUERY');
-      const modelStates = workers
-        .filter((worker) => supports(worker.capabilities, family, bucket.step))
-        .map(
-          (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
-        );
-      if (field === 'approval') reason = 'APPROVAL';
-      else if (group.policy?.paused) reason = 'PAUSED';
-      else if (workerOwned && !workers.length) reason = 'WORKER_OFFLINE';
-      else if (workerOwned && !capable) reason = 'DISABLED';
-      else if (group.background && settings.mode === 'MANUAL') reason = 'PAUSED';
-      else if (
-        needsEmbedding &&
-        modelStates.length &&
-        modelStates.every((state) => state === 'OFFLINE' || state === 'DRIFTED')
-      )
-        reason = modelStates.some((state) => state === 'DRIFTED')
-          ? 'MODEL_DRIFTED'
-          : 'MODEL_OFFLINE';
-      else if (['DEPENDENCY', 'DEPENDENCY_FAILED'].includes(reason)) {
-        /* Keep dependency explanation. */
-      } else if (group.background && !backgroundScheduleAllows(settings, now)) {
-        reason = 'SCHEDULE';
-        nextAt = nextBackgroundTime(settings, now)?.toISOString() ?? null;
-      }
-      if (reason !== 'RETRY' && reason !== 'SCHEDULE') nextAt = null;
+      const { reason, nextAt } = taskBucketDecision({
+        family,
+        step: bucket.step,
+        reason: bucket.reason,
+        nextAt: bucket.nextAt?.toISOString() ?? null,
+        approval: field === 'approval',
+        paused: group.policy?.paused ?? false,
+        workers: workers.map((worker) => worker.capabilities),
+        schedule: settings,
+        now,
+      });
       const wait = group.waiting.find(
         (entry) => entry.reason === reason && entry.nextAt === nextAt,
       );
@@ -240,22 +247,33 @@ export class EagleTaskCenterService {
       else group.waiting.push({ reason, count, nextAt });
     }
     for (const group of groups.values()) {
-      const workerOwned = !['UPLOADS', 'IMPORTS', 'APPROVALS'].includes(group.id);
+      const workerOwned = taskWorkerOwned(group.id);
       group.availability = !workerOwned
         ? 'ENABLED'
         : !workers.length
           ? 'UNKNOWN'
           : group.steps.some((step) =>
-                workers.some((worker) => supports(worker.capabilities, group.id, step.id)),
+                workers.some((worker) =>
+                  workerSupportsTask(worker.capabilities, group.id, step.id),
+                ),
               )
             ? 'ENABLED'
             : 'DISABLED';
     }
-    const embeddingStates = workers
-      .filter((worker) => supports(worker.capabilities, 'EMBEDDING', 'GENERATE_EMBEDDING'))
-      .map(
-        (worker) => (worker.capabilities as unknown as WorkerTaskCapabilities | null)?.embedding,
+    const embedding = taskModelReadiness(
+      workers.map((worker) => worker.capabilities),
+      'EMBEDDING',
+      'GENERATE_EMBEDDING',
+    );
+    for (const group of groups.values()) {
+      group.management = taskGroupManagement(group, settings);
+      group.presentation = taskGroupPresentation(
+        group,
+        settings,
+        embedding,
+        workers.length ? 'ONLINE' : 'OFFLINE',
       );
+    }
     return {
       ...(includeCompute
         ? {
@@ -268,29 +286,11 @@ export class EagleTaskCenterService {
           }
         : {}),
       worker: workers.length ? 'ONLINE' : 'OFFLINE',
-      embedding: embeddingStates.includes('READY')
-        ? 'READY'
-        : embeddingStates.includes('DRIFTED')
-          ? 'DRIFTED'
-          : embeddingStates.includes('OFFLINE')
-            ? 'OFFLINE'
-            : 'UNKNOWN',
+      embedding,
+      modelIssue: taskOverviewModelIssue([...groups.values()], embedding),
       settings,
       groups: TASK_FAMILIES.flatMap((id) => groups.get(id) ?? []),
       refreshedAt: now.toISOString(),
     };
   }
-}
-
-function supports(value: unknown, family: TaskFamily, step: string) {
-  // Mixed-version fleets have unknown capabilities, never falsely claim an old worker is disabled.
-  if (!value || typeof value !== 'object' || !('background' in value)) return true;
-  const capability = value as WorkerTaskCapabilities;
-  if (isBackgroundFamily(family) && !capability.background) return false;
-  if (family === 'FACES' && capability.faces === false) return false;
-  if (family === 'VIDEO' && !capability.video) return false;
-  if (family === 'SMART_FOLDERS') return capability.smartFolders;
-  if (family === 'TAG_INDEX') return capability.tagBuilds;
-  if (family === 'PHOTO_MAP') return capability.photoMap;
-  return !capability.jobKinds || capability.jobKinds.includes(step) || step === 'OBJECT_DELETION';
 }

@@ -1,3 +1,4 @@
+import { mediaRequeueData } from '@sekereagle/library-core';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { LibraryIdentity } from './library-mode';
@@ -48,15 +49,7 @@ export async function setEagleTrash(
         lastError: 'ASSET_TRASHED',
         kind: { not: 'PURGE_ASSET' },
       },
-      data: {
-        status: 'PENDING',
-        attempts: 0,
-        availableAt: new Date(),
-        lockedAt: null,
-        completedAt: null,
-        lastError: null,
-        leaseVersion: { increment: 1 },
-      },
+      data: mediaRequeueData(),
     });
   }
   return result.count;

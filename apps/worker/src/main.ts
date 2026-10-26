@@ -2,6 +2,13 @@ import { computePolicySignature } from './compute-runtime';
 import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
 import { remoteMediaKinds } from './compute-runtime';
 import { processImageWork } from './image-work';
+import {
+  mediaWaitData,
+  mediaFailure,
+  mediaCompletion,
+  mediaExecutionGuard,
+  MediaLeaseRecoveryExhaustedError,
+} from '@sekereagle/library-core';
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
@@ -261,6 +268,8 @@ async function claimJob(resource: MediaResource): Promise<EagleAssetProcessingJo
   const sequence = claimSequence[resource]++;
   for (const age of mediaQueueAgeOrder(sequence)) {
     const job = await claimNextMediaJob(prisma, {
+      onLeaseExhausted: (job, expiredBefore) =>
+        failJob(job, new MediaLeaseRecoveryExhaustedError(expiredBefore)),
       selectCandidates: (input) => selectors[resource](input, age),
       canClaimBackground: canClaimBackgroundForOwner,
       allowedJobKinds: claimKinds,
@@ -330,7 +339,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
   });
   if (!asset) {
     await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      where: mediaExecutionGuard(job),
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
@@ -472,7 +481,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     if (job.kind === 'EXTRACT_COLOR_PALETTE') {
       await prisma.$transaction(async (transaction) => {
         const completed = await transaction.eagleAssetProcessingJob.updateMany({
-          where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+          where: mediaExecutionGuard(job),
           data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
         });
         if (completed.count !== 1) return;
@@ -1034,7 +1043,6 @@ async function recomputeSuggestionGeneration(
 async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
   const retry = embeddingRetry(error, build.attempts);
   if (retry) {
-    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
       data: retry.data,
@@ -1159,8 +1167,7 @@ async function generateImagePyramid(
 
     await prisma.$transaction(async (transaction) => {
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        ...mediaCompletion(job),
       });
       if (completed.count !== 1) return;
       await transaction.eagleImagePyramid.update({
@@ -1203,22 +1210,15 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
   if (error instanceof RemoteMediaUnavailableError) {
     await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: {
-        status: 'PENDING',
-        attempts: Math.max(0, job.attempts - 1),
-        availableAt: new Date(Date.now() + 1000),
-        lockedAt: null,
-        lastError: 'WAITING_REMOTE_MEDIA_CAPACITY',
-      },
+      where: mediaExecutionGuard(job),
+      data: mediaWaitData(job.attempts, 1000, 'WAITING_REMOTE_MEDIA_CAPACITY'),
     });
     return;
   }
   const retry = embeddingRetry(error, job.attempts);
   if (retry) {
-    if (retry.offline) embeddingReadiness = 'OFFLINE';
     await prisma.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+      where: mediaExecutionGuard(job),
       data: retry.data,
     });
     return;
@@ -1226,23 +1226,22 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
 
   const message =
     error instanceof Error ? error.message.slice(0, 1000) : 'UNKNOWN_PROCESSING_ERROR';
-  const terminal =
+  const permanent =
+    error instanceof MediaLeaseRecoveryExhaustedError ||
     isPermanentMediaValidationError(error) ||
-    (job.kind === 'RENDER_EDITED_COPY' &&
-      (message.startsWith('EDIT_SOURCE_') || job.attempts >= 3)) ||
-    job.attempts >= 12;
-  const delaySeconds = Math.min(3_600, 2 ** Math.min(job.attempts, 12));
+    (job.kind === 'RENDER_EDITED_COPY' && message.startsWith('EDIT_SOURCE_'));
+  const transition = mediaFailure(job, {
+    message: message,
+    permanent: permanent,
+    now: new Date(),
+    expiredBefore:
+      error instanceof MediaLeaseRecoveryExhaustedError ? error.expiredBefore : undefined,
+  });
+  const { terminal } = transition;
   await prisma.$transaction(async (transaction) => {
     const failed = await transaction.eagleAssetProcessingJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-      data: terminal
-        ? { status: 'FAILED', completedAt: new Date(), lockedAt: null, lastError: message }
-        : {
-            status: 'PENDING',
-            availableAt: new Date(Date.now() + delaySeconds * 1_000),
-            lockedAt: null,
-            lastError: message,
-          },
+      where: transition.where,
+      data: transition.data,
     });
     if (failed.count !== 1) return;
     if (terminal) await propagateFailedDependencies(transaction);
@@ -1530,7 +1529,7 @@ async function processClaimedJob(
     renewing = true;
     void prisma.eagleAssetProcessingJob
       .updateMany({
-        where: { id: job.id, status: 'PROCESSING', leaseVersion: job.leaseVersion },
+        where: mediaExecutionGuard(job),
         data: { lockedAt: new Date() },
       })
       .then(({ count }) => {

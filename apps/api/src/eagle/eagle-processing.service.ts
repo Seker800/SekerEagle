@@ -1,7 +1,9 @@
+import { mediaBlocksAssetReadySql } from '@sekereagle/library-persistence';
+import { mediaRequeueData, mediaTaskBlocksAssetReady } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import { Injectable, NotFoundException, Optional, Inject } from '@nestjs/common';
-import { EagleMediaJobStatus, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   ListEagleProcessingJobsDto,
@@ -177,7 +179,13 @@ export class EagleProcessingService {
           asset: includePrivate ? {} : { isPrivate: false },
           libraryMode: this.libraryMode,
         },
-        select: { id: true, assetId: true, assetRevision: true, kind: true },
+        select: {
+          id: true,
+          assetId: true,
+          assetRevision: true,
+          kind: true,
+          processorVersion: true,
+        },
       });
       if (!job || job.kind === 'GENERATE_AI_TAGS') return 0;
       const result = await transaction.eagleAssetProcessingJob.updateMany({
@@ -189,9 +197,9 @@ export class EagleProcessingService {
           kind: { not: 'GENERATE_AI_TAGS' },
           libraryMode: this.libraryMode,
         },
-        data: retryJobData(),
+        data: mediaRequeueData(),
       });
-      if (result.count && job.kind !== 'EXTRACT_COLOR_PALETTE' && job.kind !== 'PURGE_ASSET') {
+      if (result.count && mediaTaskBlocksAssetReady(job.kind, job.processorVersion)) {
         await transaction.eagleAsset.updateMany({
           where: {
             ownerId,
@@ -216,6 +224,8 @@ export class EagleProcessingService {
           SET
             "status" = 'PENDING'::"EagleMediaJobStatus",
             "attempts" = 0,
+            "recoveryCount" = 0,
+            "leaseVersion" = job."leaseVersion" + 1,
             "availableAt" = NOW(),
             "lockedAt" = NULL,
             "startedAt" = NULL,
@@ -228,7 +238,7 @@ export class EagleProcessingService {
             AND visible_asset."ownerId" = job."ownerId"
             AND visible_asset."id" = job."assetId"
             AND (${includePrivate} OR visible_asset."isPrivate" = false)
-          RETURNING job."assetId", job."assetRevision", job."kind"
+          RETURNING job."assetId", job."assetRevision", job."kind", job."processorVersion"
         ), restored_assets AS (
           UPDATE "EagleAsset" AS asset
           SET
@@ -238,10 +248,7 @@ export class EagleProcessingService {
           FROM (
             SELECT DISTINCT "assetId", "assetRevision"
             FROM retried
-            WHERE "kind" NOT IN (
-              'EXTRACT_COLOR_PALETTE'::"EagleMediaJobKind",
-              'PURGE_ASSET'::"EagleMediaJobKind"
-            )
+            WHERE ${mediaBlocksAssetReadySql(Prisma.sql`"kind"`, Prisma.sql`"processorVersion"`)}
           ) AS current_job
           WHERE asset."ownerId" = ${ownerId} AND asset."libraryMode" = ${this.libraryMode}::"LibraryMode"
             AND asset."id" = current_job."assetId"
@@ -353,15 +360,7 @@ export class EagleProcessingService {
             status: 'COMPLETED',
             asset: { deletedAt: null },
           },
-          data: {
-            status: 'PENDING',
-            attempts: 0,
-            availableAt: new Date(),
-            lockedAt: null,
-            completedAt: null,
-            lastError: null,
-            leaseVersion: { increment: 1 },
-          },
+          data: mediaRequeueData(),
         });
         created += repaired.count;
       }
@@ -421,16 +420,4 @@ function groupCount(
   status: string,
 ) {
   return rows.find((row) => row.lane === lane && row.status === status)?._count ?? 0;
-}
-
-function retryJobData() {
-  return {
-    status: EagleMediaJobStatus.PENDING,
-    attempts: 0,
-    availableAt: new Date(),
-    lockedAt: null,
-    startedAt: null,
-    completedAt: null,
-    lastError: null,
-  };
 }

@@ -1,7 +1,8 @@
 import { t } from '../../i18n';
 import {
   TASK_FAMILIES,
-  taskSection,
+  resolveTaskManagement,
+  resolveTaskPresentation,
   type TaskFamily,
   type TaskWaitReason,
   type BackgroundSchedule,
@@ -100,6 +101,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
 }
 
 const waits: Record<TaskWaitReason, () => string> = {
+  MODEL_BUSY: () => t('等待模型空闲'),
   MODEL_OFFLINE: () => t('等待 Mac 2B 模型上线'),
   MODEL_DRIFTED: () => t('模型配置不匹配，等待修复'),
   DEPENDENCY: () => t('等待前置步骤'),
@@ -133,17 +135,11 @@ export const taskStepLabel = (step: string) =>
 const familyKeys = Object.fromEntries(TASK_FAMILIES.map((id) => [id, true]));
 
 export function taskExecutionLabel(group: TaskGroup, schedule: BackgroundSchedule): string {
-  if (
-    group.availability === 'DISABLED' ||
-    group.waiting.some(
-      (wait) => wait.reason === 'DISABLED' && wait.count === group.queued && group.queued > 0,
-    )
-  )
-    return t('服务器未启用');
-  if (group.background) {
-    if (group.policy?.paused || schedule.mode === 'MANUAL') return t('已暂停');
-    return schedule.mode === 'ALWAYS' ? t('随时') : `${schedule.nightStart}–${schedule.nightEnd}`;
-  }
+  const { execution } = resolveTaskManagement(group, schedule);
+  if (execution === 'DISABLED') return t('服务器未启用');
+  if (execution === 'PAUSED') return t('已暂停');
+  if (execution === 'ALWAYS') return t('随时');
+  if (execution === 'WINDOW') return `${schedule.nightStart}–${schedule.nightEnd}`;
   const triggers: Partial<Record<TaskFamily, string>> = {
     BROWSE: t('上传后排队'),
     PHOTO_MAP: t('位置变化后分批更新'),
@@ -160,20 +156,7 @@ export function taskStatus(
   schedule: BackgroundSchedule,
   embedding?: TaskCenterOverview['embedding'],
 ) {
-  if (
-    group.id === 'EMBEDDING' &&
-    group.queued + group.running > 0 &&
-    (embedding === 'OFFLINE' || embedding === 'DRIFTED')
-  )
-    return 'WAITING';
-  if (group.queued + group.running + group.failed === 0 && (group.unscanned ?? 0) > 0)
-    return 'UNSCANNED';
-  if (group.unscanned === 0 && group.queued + group.running + group.failed + group.completed === 0)
-    return 'EMPTY';
-  if (group.running > 0) return 'RUNNING';
-  if (group.queued > 0 && taskSection(group, schedule) !== 'PAUSED') return 'QUEUED';
-  if (group.failed > 0 || group.queued > 0) return 'STOPPED';
-  return 'COMPLETED';
+  return resolveTaskPresentation(group, schedule, embedding).status;
 }
 
 export function taskStatusLabel(
@@ -181,13 +164,22 @@ export function taskStatusLabel(
   schedule: BackgroundSchedule,
   embedding?: TaskCenterOverview['embedding'],
 ): string {
-  switch (taskStatus(group, schedule, embedding)) {
-    case 'EMPTY':
-      return t('暂无可扫描照片');
+  const presentation = resolveTaskPresentation(group, schedule, embedding);
+  switch (presentation.status) {
     case 'UNSCANNED':
       return t('尚未扫描');
-    case 'WAITING':
-      return t('等待模型');
+    case 'EMPTY':
+      return t('暂无可扫描照片');
+    case 'WAITING': {
+      const { reason } = presentation;
+      return reason === 'MODEL_OFFLINE' || reason === 'MODEL_DRIFTED'
+        ? t('等待模型')
+        : reason === 'WORKER_OFFLINE'
+          ? t('等待处理服务')
+          : reason
+            ? taskWaitLabel(reason)
+            : t('等待执行');
+    }
     case 'RUNNING':
       return t('计算ing');
     case 'QUEUED':

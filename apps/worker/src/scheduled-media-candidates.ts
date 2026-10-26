@@ -6,6 +6,10 @@ import {
 } from '@prisma/client';
 import {
   backgroundScheduleSql,
+  backgroundFamilySql,
+  taskRunnableSql,
+  mediaTaskFactsSql,
+  mediaStaleBeforeSql,
   taskPolicyAllowsSql,
   taskPrioritySql,
   mediaTaskFamilySql,
@@ -51,17 +55,22 @@ export function selectScheduledMediaCandidates(
       ${options.resource === 'NAS' && options.delegatedImageKinds?.length ? Prisma.sql`NOT (a."mimeType" LIKE 'image/%' AND job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
       ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
       ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
-      job.kind<>'GENERATE_AI_TAGS'  AND ${embeddingUnavailable ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
+      job.kind<>'GENERATE_AI_TAGS' AND
       ${
         input.where.lane === 'BACKGROUND'
           ? Prisma.sql`(job.lane='BACKGROUND' OR job."processorVersion"='photo-source-details-v1')`
           : Prisma.sql`(job.lane=${input.where.lane}::"EagleProcessingLane" AND job."processorVersion"<>'photo-source-details-v1')`
       }
-      AND ((job.status='PENDING' AND job."availableAt"<=now()) OR (job.status='PROCESSING' AND job."lockedAt"<now()-interval '10 minutes'))
-      AND (job."dependsOnJobId" IS NULL OR dependency.status='COMPLETED')
+      AND (job.status='PENDING' OR (job.status='PROCESSING' AND job."lockedAt"<${mediaStaleBeforeSql()}))
       AND job."assetRevision"=a."mediaRevision" AND (a."deletedAt" IS NULL OR job.kind='PURGE_ASSET')
-      AND ${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)}
-      AND (job.lane<>'BACKGROUND' AND job."processorVersion"<>'photo-source-details-v1' OR ${backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`)})
+      AND ${taskRunnableSql({
+        paused: Prisma.sql`NOT (${taskPolicyAllowsSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`, family)})`,
+        modelOffline: embeddingUnavailable
+          ? Prisma.sql`job.kind='GENERATE_EMBEDDING'`
+          : Prisma.sql`false`,
+        ...mediaTaskFactsSql(Prisma.sql`job`, Prisma.sql`dependency`),
+        outsideSchedule: Prisma.sql`${backgroundFamilySql(family)} AND NOT (${backgroundScheduleSql(Prisma.sql`job."ownerId"`, Prisma.sql`job."libraryMode"`)})`,
+      })}
       ${typeof kind === 'string' ? Prisma.sql`AND job.kind=${kind}::"EagleMediaJobKind"` : Prisma.empty}
       ${typeof kind === 'object' && kind.not ? Prisma.sql`AND job.kind<>${kind.not}::"EagleMediaJobKind"` : Prisma.empty}
       ${typeof kind === 'object' && kind.in ? Prisma.sql`AND job.kind IN (${Prisma.join(kind.in.map((value) => Prisma.sql`${value}::"EagleMediaJobKind"`))})` : Prisma.empty}

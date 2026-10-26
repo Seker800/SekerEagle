@@ -1412,6 +1412,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/eagle/tasks/history': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleTaskCenterController_history'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/eagle/tasks/events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['EagleTaskCenterController_events'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/eagle/tasks/policy': {
     parameters: {
       query?: never;
@@ -3308,6 +3340,38 @@ export interface paths {
       cookie?: never;
     };
     get: operations['PhotoTaskCenterController_overview'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/tasks/history': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoTaskCenterController_history'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/tasks/events': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoTaskCenterController_events'];
     put?: never;
     post?: never;
     delete?: never;
@@ -6110,6 +6174,56 @@ export interface operations {
   EagleTaskCenterController_overview: {
     parameters: {
       query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_history: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  EagleTaskCenterController_events: {
+    parameters: {
+      query: {
+        family:
+          | 'BROWSE'
+          | 'DETAILS'
+          | 'VIDEO'
+          | 'EMBEDDING'
+          | 'FACES'
+          | 'COLOR'
+          | 'PYRAMID'
+          | 'SMART_FOLDERS'
+          | 'TAG_INDEX'
+          | 'PHOTO_MAP'
+          | 'CLEANUP'
+          | 'APPROVALS'
+          | 'UPLOADS'
+          | 'IMPORTS';
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -8991,6 +9105,56 @@ export interface operations {
   PhotoTaskCenterController_overview: {
     parameters: {
       query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_history: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoTaskCenterController_events: {
+    parameters: {
+      query: {
+        family:
+          | 'BROWSE'
+          | 'DETAILS'
+          | 'VIDEO'
+          | 'EMBEDDING'
+          | 'FACES'
+          | 'COLOR'
+          | 'PYRAMID'
+          | 'SMART_FOLDERS'
+          | 'TAG_INDEX'
+          | 'PHOTO_MAP'
+          | 'CLEANUP'
+          | 'APPROVALS'
+          | 'UPLOADS'
+          | 'IMPORTS';
+      };
       header?: never;
       path?: never;
       cookie?: never;

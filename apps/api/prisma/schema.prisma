@@ -1194,6 +1194,8 @@ model EagleSmartFolderAiTagDependency {
 }
 
 model EagleAssetProcessingJob {
+  recoveryCount    Int                       @default(0)
+  events           EagleMediaJobEvent[]
   libraryMode      LibraryMode               @default(MATERIAL)
   id               String                    @id @default(uuid())
   ownerId          String
@@ -1226,6 +1228,23 @@ model EagleAssetProcessingJob {
   @@index([ownerId, libraryMode, status, kind, processorVersion])
   @@index([dependsOnJobId, status])
   @@map("EagleMediaJob")
+}
+
+/// Transition evidence only; the media job remains the sole execution authority.
+model EagleMediaJobEvent {
+  id            BigInt               @id @default(autoincrement())
+  ownerId       String
+  libraryMode   LibraryMode
+  jobId         String
+  fromStatus    EagleMediaJobStatus?
+  toStatus      EagleMediaJobStatus
+  leaseVersion  Int
+  attempts      Int
+  recoveryCount Int
+  occurredAt    DateTime             @default(now())
+  job           EagleAssetProcessingJob @relation(fields: [ownerId, libraryMode, jobId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+
+  @@index([ownerId, libraryMode, jobId, id])
 }
 
 model EagleAssetColorAnalysis {

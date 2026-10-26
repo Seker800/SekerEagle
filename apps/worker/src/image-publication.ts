@@ -1,3 +1,4 @@
+import { mediaCompletion } from '@sekereagle/library-core';
 import type { EagleAsset, EagleAssetProcessingJob, Prisma, PrismaClient } from '@prisma/client';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { persistPhotoAnalysis } from './photo-analysis-persistence';
@@ -79,16 +80,7 @@ export async function publishImage(
       });
       if (!current) return false;
       const completed = await tx.eagleAssetProcessingJob.updateMany({
-        where: {
-          id: job.id,
-          ownerId: job.ownerId,
-          libraryMode: job.libraryMode,
-          assetId: job.assetId,
-          assetRevision: job.assetRevision,
-          status: 'PROCESSING',
-          leaseVersion: job.leaseVersion,
-        },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        ...mediaCompletion(job),
       });
       if (completed.count !== 1) return false;
       for (const rendition of renditions)

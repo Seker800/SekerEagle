@@ -1,6 +1,8 @@
 import { VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
 import {
   backgroundScheduleAllows,
+  MEDIA_BROWSE_BLOCKING_KINDS,
+  mediaTaskBlocksAssetReady,
   DEFAULT_BACKGROUND_SCHEDULE,
   type BackgroundSchedule,
 } from '@sekereagle/library-core';
@@ -69,14 +71,8 @@ export function availableProcessingJobKinds(
   return kinds.filter((kind) => kind !== 'ANALYZE_PHOTO_FACES' && kind !== 'GENERATE_AI_TAGS');
 }
 
-export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] = [
-  'GENERATE_RENDITIONS',
-  'GENERATE_THUMBNAIL',
-  'GENERATE_PREVIEW',
-  'PROBE_MEDIA',
-] as const;
-
-const ASSET_READY_BLOCKING_KINDS = new Set<EagleMediaJobKind>(ASSET_READY_BLOCKING_JOB_KINDS);
+export const ASSET_READY_BLOCKING_JOB_KINDS: readonly EagleMediaJobKind[] =
+  MEDIA_BROWSE_BLOCKING_KINDS;
 
 export function processingLaneForKind(
   kind: EagleMediaJobKind,
@@ -88,11 +84,7 @@ export function processingLaneForKind(
 }
 
 export function taskBlocksAssetReady(kind: EagleMediaJobKind, processorVersion?: string): boolean {
-  return (
-    processorVersion !== 'photo-source-details-v1' &&
-    processorVersion !== VIDEO_PLAYBACK_PROCESSOR_VERSION &&
-    ASSET_READY_BLOCKING_KINDS.has(kind)
-  );
+  return mediaTaskBlocksAssetReady(kind, processorVersion);
 }
 
 export function canClaimBackgroundJobs(

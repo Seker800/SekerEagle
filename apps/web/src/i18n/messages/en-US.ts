@@ -9,6 +9,23 @@ export const enUS = {
   暂无可扫描照片: 'No photos ready to scan',
   扫描未分析照片: 'Scan unanalyzed photos',
   '未扫描 {{count}} 张': '{{count}} photos not scanned',
+
+  最近状态变化: 'Recent transitions',
+  暂无转换记录: 'No recorded transitions',
+  中断后恢复: 'Recovered after interruption',
+  后台工作: 'Background work',
+  后台安排: 'Background schedule',
+  类别: 'Category',
+  等待处理服务: 'Waiting for worker',
+  返回当前任务: 'Current tasks',
+  已完成记录: 'Completed records',
+  筛选任务: 'Filter tasks',
+  搜索类别或步骤: 'Search categories or steps',
+  所有状态: 'All statuses',
+  排队: 'Queued',
+  等待原因: 'Waiting reason',
+  任务详情: 'Task details',
+  未找到匹配任务: 'No matching tasks',
   等待模型: 'Waiting for model',
   'Mac 模型配置不匹配，向量任务等待修复；其他处理继续。':
     'Mac model configuration mismatch. Vector tasks await repair; other processing continues.',
@@ -254,6 +271,8 @@ export const enUS = {
   等待运行时段: 'Waiting for scheduled hours',
   当前部署未启用: 'Disabled in this deployment',
   等待处理服务上线: 'Waiting for the processing service',
+  最近活动: 'Last activity',
+  等待模型空闲: 'Waiting for model capacity',
   等待自动重试: 'Waiting for automatic retry',
   清理回收站资源: 'Purge trashed resources',
   删除存储对象: 'Delete storage objects',
@@ -1846,4 +1865,6 @@ export const enUS = {
   '小点表示拍摄足迹；当前视野拍摄量最多的 9 个地点显示照片。':
     'Dots show your photo footprint. The nine busiest places in view show photo previews.',
   '地图更新于 {{value1}}': 'Map updated {{value1}}',
+  '成片仍在后台处理，请稍后查看图库；也可留在当前编辑器重试保存。':
+    'Your photo is still processing. Check the gallery later, or retry saving within this editor session.',
 } as const;

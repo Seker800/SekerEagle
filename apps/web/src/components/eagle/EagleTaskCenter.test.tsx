@@ -11,6 +11,8 @@ vi.mock('../../lib/asset-operations-api', () => ({
 }));
 vi.mock('../../lib/eagle-task-center-api', () => ({
   fetchEagleTaskCenter: vi.fn(),
+  fetchEagleTaskHistory: vi.fn(),
+  fetchEagleTaskEvents: vi.fn(),
   updateEagleTaskSchedule: vi.fn(),
   retryEagleTaskFamily: vi.fn(),
   startEagleTaskFamily: vi.fn(),
@@ -58,9 +60,12 @@ function mount(props = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(summary);
+  vi.mocked(api.fetchEagleTaskHistory).mockResolvedValue({ ...summary, groups: [] });
   vi.mocked(api.updateEagleTaskSchedule).mockResolvedValue(summary.settings);
   vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
     fetchEagleTaskCenter: vi.fn().mockResolvedValue({ ...summary, groups: [] }),
+    fetchEagleTaskHistory: vi.fn().mockResolvedValue({ ...summary, groups: [] }),
+    fetchEagleTaskEvents: vi.fn().mockResolvedValue([]),
     updateEagleTaskSchedule: vi.fn().mockResolvedValue(summary.settings),
     updateEagleTaskPolicy: vi.fn(),
     retryEagleTaskFamily: vi.fn(),
@@ -74,7 +79,7 @@ describe('unified task center', () => {
     const card = within(screen.getByRole('article'));
     expect(card.getByText('预览图 + Mac 2B 模型')).not.toBeVisible();
     expect(card.getByText('Mac · 较重')).not.toBeVisible();
-    expect(card.getByText('排队ing')).toBeVisible();
+    expect(card.getByText('等待运行时段')).toBeVisible();
     expect(card.getByText('剩余 12 项')).toBeVisible();
     expect(card.queryByText('计算图片向量，用于文字和相似图搜索。')).not.toBeInTheDocument();
     fireEvent.click(card.getByText('查看处理步骤'));
@@ -146,11 +151,13 @@ describe('unified task center', () => {
     expect(screen.getByText('生成图片向量')).not.toBeVisible();
     fireEvent.click(screen.getByText('查看处理步骤'));
     expect(screen.getByText('生成图片向量')).toBeVisible();
+    fireEvent.click(screen.getByText('其他设备与维护'));
     expect(screen.getByText(/独立封面维护/)).toBeVisible();
   });
   it('lets an ordinary owner pause background work while explaining essential work continues', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
+    fireEvent.click(screen.getByText('后台安排'));
     fireEvent.change(screen.getByRole('combobox', { name: '全部图库的后台运行方式' }), {
       target: { value: 'MANUAL' },
     });
@@ -252,21 +259,17 @@ describe('execution sections', () => {
       ],
     });
     mount();
-    const immediate = await screen.findByRole('region', { name: '立即处理' });
-    const scheduled = screen.getByRole('region', { name: '按时段处理' });
-    const paused = screen.getByRole('region', { name: '已暂停' });
-    expect(within(immediate).getByRole('heading', { name: '缩略图与预览' })).toBeVisible();
-    expect(within(scheduled).getByRole('heading', { name: '2B 向量搜图' })).toBeVisible();
-    expect(within(paused).getByRole('heading', { name: '代表色提取' })).toBeVisible();
-    expect(within(paused).getByText('服务器未启用')).toBeVisible();
-    expect(within(paused).queryByRole('button', { name: '继续这项工作' })).not.toBeInTheDocument();
+    const table = await screen.findByRole('table', { name: '后台工作' });
+    const rows = within(table).getAllByRole('row');
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toHaveTextContent('缩略图与预览');
+    expect(rows[2]).toHaveTextContent('代表色提取');
+    expect(rows[3]).toHaveTextContent('2B 向量搜图');
+    fireEvent.click(within(table).getByRole('button', { name: /代表色提取/ }));
+    const details = within(screen.getByRole('article'));
+    expect(details.getByText('服务器未启用')).toBeVisible();
+    expect(details.queryByRole('button', { name: '继续这项工作' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('处理顺序')).not.toBeInTheDocument();
-    expect(
-      immediate.compareDocumentPosition(scheduled) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      scheduled.compareDocumentPosition(paused) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
   });
 });
 
@@ -408,7 +411,7 @@ it('warns about a disconnected model while in-flight work is draining and clears
   mount();
   expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型连接中断');
   expect(screen.getByRole('alert')).toHaveTextContent('其他处理继续');
-  expect(screen.getByText('等待模型')).toBeVisible();
+  expect(within(screen.getByRole('article')).getByText('等待模型')).toBeVisible();
   expect(screen.queryByText('计算ing')).not.toBeInTheDocument();
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
     ...offline,
@@ -428,7 +431,42 @@ it('distinguishes model configuration faults from connection loss without exposi
   expect(screen.getByRole('alert')).not.toHaveTextContent('192.168');
 });
 
+it('loads completed history only on request and keeps live polling separate', async () => {
+  mount();
+  await screen.findByRole('table');
+  expect(api.fetchEagleTaskHistory).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: '已完成记录' }));
+  await waitFor(() => expect(api.fetchEagleTaskHistory).toHaveBeenCalled());
+  expect(screen.getByRole('button', { name: '返回当前任务' })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: '返回当前任务' }));
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
+});
+
+it('honors server management and model warnings without rebuilding them in the page', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({
+    ...summary,
+    embedding: 'OFFLINE',
+    modelIssue: null,
+    groups: [
+      {
+        ...summary.groups[0]!,
+        failed: 1,
+        management: { canRetry: false, canPause: false, paused: false, execution: 'ALWAYS' },
+      },
+    ],
+  });
+  mount();
+  await screen.findByRole('heading', { name: '2B 向量搜图' });
+  const card = within(screen.getByRole('article'));
+  expect(card.queryByRole('button', { name: '暂停这项工作' })).not.toBeInTheDocument();
+  expect(card.queryByRole('button', { name: '重试失败任务' })).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('Mac 模型连接中断，向量任务等待恢复；其他处理继续。'),
+  ).not.toBeInTheDocument();
+});
+
 it('shows unscanned photo coverage and starts a durable scan in the photo scope', async () => {
+  vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
   const start = vi.fn().mockResolvedValue({ queued: 1201 });
   vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
     ...api.createEagleTaskCenterApi('PHOTO'),
@@ -466,6 +504,7 @@ it('shows unscanned photo coverage and starts a durable scan in the photo scope'
 it.each(['DISABLED', 'ENABLED'] as const)(
   'keeps disabled models and empty coverage honest: %s',
   async (availability) => {
+    vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue({ ...summary, groups: [] });
     vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
       ...api.createEagleTaskCenterApi('PHOTO'),
       fetchEagleTaskCenter: vi.fn().mockResolvedValue({
@@ -491,7 +530,7 @@ it.each(['DISABLED', 'ENABLED'] as const)(
     const heading = await screen.findByRole('heading', { name: '人物识别' });
     const card = within(heading.closest('article')!);
     if (availability === 'DISABLED')
-      expect(card.getByRole('button', { name: '扫描未分析照片' })).toBeDisabled();
+      expect(card.queryByRole('button', { name: '扫描未分析照片' })).not.toBeInTheDocument();
     else expect(card.getByText('暂无可扫描照片')).toBeVisible();
     if (availability === 'DISABLED') expect(card.getByText('服务器未启用')).toBeVisible();
     expect(card.queryByText('已完成')).not.toBeInTheDocument();

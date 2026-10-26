@@ -65,6 +65,7 @@ export type TaskWaitReason =
   | 'WORKER_OFFLINE'
   | 'MODEL_OFFLINE'
   | 'MODEL_DRIFTED'
+  | 'MODEL_BUSY'
   | 'RETRY'
   | 'QUEUED'
   | 'APPROVAL';
@@ -78,10 +79,27 @@ export interface TaskCounts {
 export interface TaskStep extends TaskCounts {
   id: string;
 }
+export type TaskDisplayStatus =
+  'RUNNING' | 'QUEUED' | 'STOPPED' | 'COMPLETED' | 'WAITING' | 'UNSCANNED' | 'EMPTY';
+export interface TaskPresentation {
+  status: TaskDisplayStatus;
+  section: TaskSection;
+  reason: TaskWaitReason | null;
+}
+export interface TaskManagement {
+  canStart?: boolean;
+  canRetry: boolean;
+  canPause: boolean;
+  paused: boolean;
+  execution: 'DISABLED' | 'PAUSED' | 'ALWAYS' | 'WINDOW' | 'TRIGGER';
+}
 export interface TaskGroup extends TaskCounts {
+  management?: TaskManagement;
+  lastActivityAt?: string | null;
   id: TaskFamily;
   background: boolean;
   unscanned?: number;
+  presentation?: TaskPresentation;
   availability?: 'ENABLED' | 'DISABLED' | 'UNKNOWN';
   policy?: { paused: boolean; priority: number };
   waiting: Array<{ reason: TaskWaitReason; count: number; nextAt: string | null }>;
@@ -111,23 +129,38 @@ export interface TaskCenterOverview {
   compute?: ComputeRuntime;
   worker: 'ONLINE' | 'OFFLINE';
   embedding?: 'READY' | 'OFFLINE' | 'DRIFTED' | 'UNKNOWN';
+  modelIssue?: 'OFFLINE' | 'DRIFTED' | null;
   settings: BackgroundSchedule & { timeZone: 'Asia/Shanghai' };
   groups: TaskGroup[];
   refreshedAt: string;
 }
 
+/** First match wins. SQL generation consumes this registry rather than copying classifiers. */
+export const MEDIA_FAMILY_RULES: ReadonlyArray<{
+  family: TaskFamily;
+  version?: string;
+  prefix?: string;
+  kind?: string;
+}> = [
+  { version: 'photo-source-details-v1', family: 'DETAILS' },
+  { prefix: 'video-playback-', family: 'VIDEO' },
+  { prefix: 'camera-video-playback-', family: 'VIDEO' },
+  { kind: 'GENERATE_EMBEDDING', family: 'EMBEDDING' },
+  { kind: 'ANALYZE_PHOTO_FACES', family: 'FACES' },
+  { kind: 'EXTRACT_COLOR_PALETTE', family: 'COLOR' },
+  { kind: 'GENERATE_IMAGE_PYRAMID', family: 'PYRAMID' },
+  { kind: 'PURGE_ASSET', family: 'CLEANUP' },
+];
 export function mediaTaskFamily(kind: string, version: string): TaskFamily {
-  if (version === 'photo-source-details-v1') return 'DETAILS';
-  if (version.startsWith('video-playback-') || version.startsWith('camera-video-playback-'))
-    return 'VIDEO';
-  const families: Record<string, TaskFamily> = {
-    GENERATE_EMBEDDING: 'EMBEDDING',
-    ANALYZE_PHOTO_FACES: 'FACES',
-    EXTRACT_COLOR_PALETTE: 'COLOR',
-    GENERATE_IMAGE_PYRAMID: 'PYRAMID',
-    PURGE_ASSET: 'CLEANUP',
-  };
-  return families[kind] ?? 'BROWSE';
+  return (
+    MEDIA_FAMILY_RULES.find((rule) =>
+      rule.version
+        ? version === rule.version
+        : rule.prefix
+          ? version.startsWith(rule.prefix)
+          : rule.kind === kind,
+    )?.family ?? 'BROWSE'
+  );
 }
 
 export function isBackgroundFamily(family: TaskFamily): boolean {
@@ -169,4 +202,29 @@ export function taskSection(group: TaskGroup, schedule: BackgroundSchedule): Tas
   )
     return 'PAUSED';
   return group.background && schedule.mode !== 'ALWAYS' ? 'SCHEDULED' : 'IMMEDIATE';
+}
+
+export const MEDIA_BROWSE_BLOCKING_KINDS = [
+  'GENERATE_RENDITIONS',
+  'GENERATE_THUMBNAIL',
+  'GENERATE_PREVIEW',
+  'PROBE_MEDIA',
+] as const;
+export function mediaTaskBlocksAssetReady(kind: string, version = '') {
+  return (
+    mediaTaskFamily(kind, version) === 'BROWSE' &&
+    (MEDIA_BROWSE_BLOCKING_KINDS as readonly string[]).includes(kind)
+  );
+}
+
+export interface TaskTransitionEvent {
+  id: string;
+  jobId: string;
+  step: string;
+  fromStatus: string | null;
+  toStatus: string;
+  leaseVersion: number;
+  attempts: number;
+  recoveryCount: number;
+  occurredAt: string;
 }

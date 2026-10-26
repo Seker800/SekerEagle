@@ -4,35 +4,44 @@ import type { ComponentProps } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { NativeEditorApp } from './NativeEditorApp';
 import type { PhotoEditor } from '../components/media/photo-editor/PhotoEditor';
-vi.mock('../components/media/photo-editor/PhotoEditor', () => ({
-  PhotoEditor: (props: ComponentProps<typeof PhotoEditor>) => (
-    <div>
-      <span>{props.saveUnavailable}</span>
-      <span>
-        editor:{props.initialTab}:{props.presentation}:{props.name}
-      </span>
-      <button
-        disabled={Boolean(props.saveUnavailable)}
-        onClick={() =>
-          void props.onSaveRecipe?.({
-            version: 1,
-            edits: DEFAULT_PHOTO_EDITS,
-          })
-        }
-      >
-        Save
-      </button>
-      <button
-        onClick={() => void props.onDraftChange?.({ version: 1, edits: DEFAULT_PHOTO_EDITS })}
-      >
-        Draft
-      </button>
-      <button onClick={() => void props.onOpenSaved?.('copy')}>View</button>
-      <button onClick={props.onClose}>Close</button>
-    </div>
-  ),
+const captured = vi.hoisted(() => ({
+  save: undefined as ComponentProps<typeof PhotoEditor>['onSaveRecipe'],
 }));
-afterEach(() => vi.unstubAllGlobals());
+vi.mock('../components/media/photo-editor/PhotoEditor', () => ({
+  PhotoEditor: (props: ComponentProps<typeof PhotoEditor>) => {
+    captured.save = props.onSaveRecipe;
+    return (
+      <div>
+        <span>{props.saveUnavailable}</span>
+        <span>
+          editor:{props.initialTab}:{props.presentation}:{props.name}
+        </span>
+        <button
+          disabled={Boolean(props.saveUnavailable)}
+          onClick={() =>
+            void props.onSaveRecipe?.({
+              version: 1,
+              edits: DEFAULT_PHOTO_EDITS,
+            })
+          }
+        >
+          Save
+        </button>
+        <button
+          onClick={() => void props.onDraftChange?.({ version: 1, edits: DEFAULT_PHOTO_EDITS })}
+        >
+          Draft
+        </button>
+        <button onClick={() => void props.onOpenSaved?.('copy')}>View</button>
+        <button onClick={props.onClose}>Close</button>
+      </div>
+    );
+  },
+}));
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 const source = { asset: { displayName: 'photo', originalName: 'photo.jpg' } };
 it('offers retry after an interrupted open and starts the shared native editor at watermark', async () => {
   const request = vi.fn().mockRejectedValueOnce(new Error('读取中断')).mockResolvedValue(source);
@@ -101,4 +110,40 @@ it('blocks saving with an actionable explanation when an older server has no ren
   expect(screen.getByText('服务器编辑服务尚未更新，暂时无法保存成片。')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   expect(request).toHaveBeenCalledTimes(1);
+});
+
+it('returns control after bounded background saving and lets a later save resume the same native intent', async () => {
+  const request = vi
+    .fn()
+    .mockImplementation(async (action: string) =>
+      action === 'open'
+        ? { ...source, serverEditing: true }
+        : action === 'saveStatus'
+          ? { status: 'PENDING' }
+          : {},
+    );
+  render(<NativeEditorApp request={request} />);
+  await screen.findByText('editor:watermark:native:photo');
+  vi.useFakeTimers();
+  const recipe = { version: 1 as const, edits: DEFAULT_PHOTO_EDITS };
+  const pending = captured.save!(recipe);
+  let outcome: unknown;
+  void pending.then(
+    (value) => {
+      outcome = value;
+    },
+    (reason) => {
+      outcome = reason;
+    },
+  );
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(6 * 60 * 1000 + 1500);
+  });
+  expect(outcome).toBeInstanceOf(Error);
+  expect((outcome as Error).message).toContain('后台');
+  request.mockImplementation(async (action: string) =>
+    action === 'saveStatus' ? { status: 'COMPLETED', asset: { id: 'copy', name: 'copy.png' } } : {},
+  );
+  await expect(captured.save!(recipe)).resolves.toEqual({ id: 'copy', name: 'copy.png' });
+  expect(request.mock.calls.filter(([action]) => action === 'saveRecipe')).toHaveLength(2);
 });

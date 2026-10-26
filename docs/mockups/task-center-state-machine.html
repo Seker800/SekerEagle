@@ -1,0 +1,1286 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>任务中心 · 状态机视图</title>
+    <style>
+      :root {
+        --bg: #f6f6f7;
+        --surface: #ffffff;
+        --surface-2: #fafafb;
+        --line: #e7e7ea;
+        --line-2: #d8d9de;
+        --ink: #191b1f;
+        --ink-2: #474c54;
+        --muted: #747b85;
+        --muted-2: #9aa1aa;
+        --accent: #3b5bdb;
+        --q: #6b7482;
+        --r: #2f5bd7;
+        --d: #0f7a55;
+        --f: #b62a2a;
+        --w: #a86100;
+        --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Mono', monospace;
+        --r-lg: 12px;
+        --r-md: 10px;
+        --r-sm: 8px;
+        --shadow: 0 1px 2px rgba(20, 24, 32, 0.04);
+        --shadow-hover: 0 2px 10px rgba(20, 24, 32, 0.06);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
+          'Microsoft YaHei', sans-serif;
+        font-size: 15px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      button {
+        font: inherit;
+        color: inherit;
+      }
+      .mono {
+        font-family: var(--mono);
+        font-variant-ligatures: none;
+      }
+      .num {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.01em;
+      }
+
+      /* 顶栏 */
+      .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid var(--line);
+        background: rgba(246, 246, 247, 0.86);
+        backdrop-filter: saturate(180%) blur(12px);
+      }
+      .topbar-inner {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 0 24px;
+        height: 58px;
+        display: flex;
+        align-items: center;
+        gap: 18px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 15px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .brand-mark {
+        width: 20px;
+        height: 20px;
+        border-radius: 6px;
+        background:
+          radial-gradient(circle at 30% 30%, #fff 1.6px, transparent 1.8px),
+          radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.75) 1.6px, transparent 1.8px),
+          radial-gradient(circle at 30% 70%, rgba(255, 255, 255, 0.75) 1.6px, transparent 1.8px),
+          radial-gradient(circle at 70% 70%, #fff 1.6px, transparent 1.8px), #3b5bdb;
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+      }
+      .scope {
+        margin-left: 6px;
+        display: inline-flex;
+        padding: 3px;
+        gap: 2px;
+        border-radius: 9px;
+        background: #ececef;
+      }
+      .scope button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        padding: 4px 12px;
+        border-radius: 7px;
+        font-size: 13px;
+        color: var(--ink-2);
+        cursor: pointer;
+        white-space: nowrap;
+        flex: none;
+      }
+      .scope button[aria-pressed='true'] {
+        background: var(--surface);
+        color: var(--ink);
+        font-weight: 500;
+        box-shadow: 0 1px 2px rgba(20, 24, 32, 0.08);
+      }
+      .topbar-right {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .updated {
+        font-size: 12px;
+        color: var(--muted);
+        margin-right: 6px;
+        white-space: nowrap;
+      }
+      .icon-btn {
+        width: 30px;
+        height: 30px;
+        display: grid;
+        place-items: center;
+        border: 0;
+        background: transparent;
+        border-radius: var(--r-sm);
+        color: var(--ink-2);
+        cursor: pointer;
+      }
+      .icon-btn:hover {
+        background: #ebebef;
+        color: var(--ink);
+      }
+      .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.6;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .wrap {
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: 34px 24px 72px;
+      }
+      .page-head h1 {
+        margin: 0;
+        font-size: 27px;
+        line-height: 1.25;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+      .page-head p {
+        margin: 7px 0 0;
+        font-size: 13.5px;
+        color: var(--muted);
+        max-width: 64ch;
+      }
+      .page-head .mono {
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+
+      /* 通用面板 */
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: var(--r-lg);
+        box-shadow: var(--shadow);
+      }
+      .panel-head {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 16px 18px 0;
+      }
+      .panel-head h2 {
+        margin: 0;
+        font-size: 14.5px;
+        font-weight: 600;
+      }
+      .panel-head .hint {
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+      .panel-head .right {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--muted-2);
+      }
+      .section {
+        margin-top: 30px;
+      }
+
+      /* 状态图 */
+      .machine {
+        position: relative;
+        padding: 20px 22px 18px;
+        background-image: radial-gradient(circle, #e4e5ea 1px, transparent 1px);
+        background-size: 14px 14px;
+        background-position: 6px 6px;
+        overflow: hidden;
+      }
+      .machine-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 104px minmax(0, 1fr) 104px minmax(0, 1fr);
+        grid-template-rows: auto 26px auto auto;
+        align-items: stretch;
+      }
+      .node {
+        position: relative;
+        background: #fff;
+        border: 1px solid var(--line-2);
+        border-radius: var(--r-md);
+        padding: 13px 15px 12px;
+        box-shadow: 0 1px 2px rgba(20, 24, 32, 0.05);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+          'code dot'
+          'name dot'
+          'count meta';
+        align-content: start;
+        gap: 0 8px;
+      }
+      .node::before {
+        content: '';
+        position: absolute;
+        left: -1px;
+        top: 12px;
+        bottom: 12px;
+        width: 3px;
+        border-radius: 3px;
+        background: var(--q);
+      }
+      .node-code {
+        grid-area: code;
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.06em;
+        color: var(--muted-2);
+      }
+      .node-name {
+        grid-area: name;
+        font-size: 12.5px;
+        color: var(--ink-2);
+      }
+      .node-count {
+        grid-area: count;
+        margin-top: 2px;
+        font-size: 27px;
+        line-height: 1.15;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      .node-meta {
+        grid-area: meta;
+        align-self: end;
+        padding-bottom: 3px;
+        font-size: 11px;
+        color: var(--muted-2);
+        text-align: right;
+      }
+      .node.queued::before {
+        background: var(--q);
+      }
+      .node.running {
+        border-color: #c7d2f7;
+        background: #fbfcff;
+      }
+      .node.running::before {
+        background: var(--r);
+      }
+      .node.running .node-count {
+        color: var(--r);
+      }
+      .node.done {
+        background: #fcfdfc;
+      }
+      .node.done::before {
+        background: var(--d);
+      }
+      .node.done .node-count {
+        color: var(--ink-2);
+      }
+      .node.failed {
+        border-color: #efcfcf;
+        background: #fffafa;
+      }
+      .node.failed::before {
+        background: var(--f);
+      }
+      .node.failed .node-count {
+        color: var(--f);
+      }
+      .node-dot {
+        grid-area: dot;
+        align-self: start;
+        justify-self: end;
+        width: 7px;
+        height: 7px;
+        margin-top: 4px;
+        border-radius: 50%;
+        background: var(--r);
+        box-shadow: 0 0 0 3px rgba(47, 91, 215, 0.12);
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.45;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+
+      /* 连线 */
+      .edge {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 96px;
+      }
+      .edge-line {
+        position: absolute;
+        left: 0;
+        right: 12px;
+        top: 50%;
+        height: 1px;
+        background: var(--line-2);
+      }
+      .edge-line::after {
+        content: '';
+        position: absolute;
+        right: -1px;
+        top: -3.5px;
+        border-left: 6px solid var(--muted-2);
+        border-top: 4px solid transparent;
+        border-bottom: 4px solid transparent;
+      }
+      .edge-label {
+        position: relative;
+        margin-top: -34px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 2px 7px;
+        font-size: 11px;
+        color: var(--ink-2);
+        white-space: nowrap;
+      }
+      .edge-sub {
+        position: absolute;
+        top: calc(50% + 10px);
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-size: 10.5px;
+        color: var(--muted-2);
+        white-space: nowrap;
+      }
+      .edge.warn .edge-label {
+        color: var(--w);
+        border-color: #f0e0bd;
+        background: #fffaef;
+      }
+
+      /* 失败支路 */
+      .branch-line {
+        grid-column: 3;
+        grid-row: 2;
+        justify-self: center;
+        position: relative;
+        width: 1px;
+        background: var(--line-2);
+      }
+      .branch-line::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: -3.5px;
+        border-top: 6px solid var(--muted-2);
+        border-left: 4px solid transparent;
+        border-right: 4px solid transparent;
+      }
+      .branch-tag {
+        position: absolute;
+        left: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 10.5px;
+        color: var(--f);
+        white-space: nowrap;
+      }
+      .node-wrap-failed {
+        grid-column: 3;
+        grid-row: 3;
+      }
+      .retry-note {
+        grid-column: 3;
+        grid-row: 4;
+        margin-top: 7px;
+        text-align: center;
+        font-size: 11px;
+        color: var(--muted-2);
+      }
+      .retry-note .mono {
+        font-size: 10.5px;
+        color: var(--muted);
+      }
+
+      .machine-foot {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-top: 16px;
+        padding-top: 12px;
+        border-top: 1px dashed var(--line-2);
+        font-size: 11.5px;
+        color: var(--muted);
+      }
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+      }
+      .legend i {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .legend .lq {
+        color: var(--q);
+      }
+      .legend .lr {
+        color: var(--r);
+      }
+      .legend .ld {
+        color: var(--d);
+      }
+      .legend .lf {
+        color: var(--f);
+      }
+      .machine-foot .tail {
+        margin-left: auto;
+        color: var(--muted-2);
+      }
+
+      /* 守卫 */
+      .guards {
+        list-style: none;
+        margin: 0;
+        padding: 6px 0 4px;
+      }
+      .guard {
+        display: grid;
+        grid-template-columns: 16px minmax(150px, 1.1fr) minmax(0, 1.5fr) 118px auto;
+        align-items: center;
+        gap: 12px;
+        padding: 11px 18px;
+        border-top: 1px solid var(--line);
+      }
+      .guard:first-child {
+        border-top: 0;
+      }
+      .guard-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--d);
+      }
+      .guard.block .guard-dot {
+        background: var(--w);
+        box-shadow: 0 0 0 3px rgba(168, 97, 0, 0.12);
+      }
+      .guard.human .guard-dot {
+        background: var(--r);
+      }
+      .guard-name {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+      }
+      .guard-name b {
+        font-size: 13.5px;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .guard-name code {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--muted-2);
+        white-space: nowrap;
+      }
+      .guard-why {
+        font-size: 12.5px;
+        color: var(--ink-2);
+        min-width: 0;
+      }
+      .guard-why em {
+        font-style: normal;
+        color: var(--muted);
+      }
+      .guard-why b {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+      }
+      .guard-when {
+        font-size: 12px;
+        color: var(--muted-2);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .guard.block .guard-when {
+        color: var(--w);
+      }
+      .guard .btn {
+        justify-self: end;
+      }
+      .guard.pass {
+        opacity: 0.72;
+      }
+      .guard.pass .guard-name b {
+        font-weight: 500;
+      }
+
+      /* 类别状态 */
+      .families {
+        padding: 4px 0 2px;
+      }
+      .fam {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto 96px;
+        align-items: center;
+        gap: 6px 18px;
+        padding: 13px 18px;
+        border-top: 1px solid var(--line);
+        position: relative;
+      }
+      .fam:first-child {
+        border-top: 0;
+      }
+      .fam:hover {
+        background: #fcfcfd;
+      }
+      .fam::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 14px;
+        bottom: 14px;
+        width: 2px;
+        border-radius: 0 2px 2px 0;
+        background: transparent;
+      }
+      .fam.active::before {
+        background: var(--r);
+      }
+      .fam-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 14px;
+        font-weight: 600;
+        min-width: 0;
+      }
+      .badge {
+        font-size: 10.5px;
+        font-weight: 400;
+        color: var(--muted);
+        border: 1px solid var(--line-2);
+        border-radius: 5px;
+        padding: 0 5px;
+        line-height: 15px;
+      }
+      .fam-sub {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .states {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+      }
+      .st {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 5px;
+        padding: 2px 7px;
+        border-radius: 6px;
+        border: 1px solid var(--line);
+        background: var(--surface-2);
+        font-size: 11px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .st b {
+        font-family: var(--mono);
+        font-size: 12px;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: var(--ink-2);
+      }
+      .st.q {
+        border-color: #e2e3e8;
+      }
+      .st.r {
+        border-color: #ccd6f6;
+        background: #f6f8ff;
+        color: #3d5bb8;
+      }
+      .st.r b {
+        color: var(--r);
+      }
+      .st.f {
+        border-color: #f0d2d2;
+        background: #fff7f7;
+        color: #a33a3a;
+      }
+      .st.f b {
+        color: var(--f);
+      }
+      .st.w {
+        border-color: #f0e0bd;
+        background: #fffaef;
+        color: var(--w);
+      }
+      .st.w b {
+        color: var(--w);
+      }
+      .fam-rate {
+        font-size: 11.5px;
+        color: var(--muted-2);
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+
+      /* 迁移记录 */
+      .log {
+        padding: 4px 0 6px;
+      }
+      .ev {
+        display: grid;
+        grid-template-columns: 74px 104px minmax(0, 1.05fr) minmax(0, 1fr);
+        align-items: baseline;
+        gap: 14px;
+        padding: 8px 18px;
+        border-top: 1px solid var(--line);
+        font-size: 12.5px;
+      }
+      .ev.head {
+        border-top: 0;
+        padding-top: 4px;
+        font-size: 10.5px;
+        color: var(--muted-2);
+        letter-spacing: 0.02em;
+      }
+      .ev-t {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .ev-fam {
+        color: var(--ink-2);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ev-tr {
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+      .ev-tr .to-q {
+        color: var(--q);
+        font-weight: 600;
+      }
+      .ev-tr .to-r {
+        color: var(--r);
+        font-weight: 600;
+      }
+      .ev-tr .to-f {
+        color: var(--f);
+        font-weight: 600;
+      }
+      .ev-tr .to-d {
+        color: var(--d);
+        font-weight: 600;
+      }
+      .ev-tr .arrow {
+        color: var(--muted-2);
+        padding: 0 3px;
+      }
+      .ev-why {
+        color: var(--muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .ev-why code {
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+
+      /* 按钮 */
+      .btn {
+        appearance: none;
+        border: 1px solid var(--line-2);
+        background: var(--surface);
+        color: var(--ink-2);
+        height: 27px;
+        padding: 0 10px;
+        border-radius: 7px;
+        font-size: 12.5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .btn:hover {
+        background: #f6f6f8;
+        border-color: #cfcfd6;
+        color: var(--ink);
+      }
+
+      .foot {
+        margin-top: 40px;
+        padding-top: 18px;
+        border-top: 1px solid var(--line);
+        font-size: 12px;
+        color: var(--muted-2);
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .foot a {
+        color: var(--muted);
+      }
+      .notes summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+      .notes ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+        line-height: 1.75;
+        color: var(--muted);
+      }
+
+      /* 窄屏 */
+      @media (max-width: 820px) {
+        .machine-grid {
+          display: flex;
+          flex-direction: column;
+        }
+        .edge {
+          min-height: 44px;
+        }
+        .edge-line {
+          left: 50%;
+          right: auto;
+          top: 0;
+          bottom: 6px;
+          width: 1px;
+          height: auto;
+        }
+        .edge-line::after {
+          top: auto;
+          bottom: -1px;
+          right: -3.5px;
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 6px solid var(--muted-2);
+          border-bottom: 0;
+        }
+        .edge-label {
+          margin-top: 0;
+          margin-left: 44px;
+        }
+        .edge-sub {
+          display: none;
+        }
+        .branch-line {
+          display: none;
+        }
+        .node-wrap-failed {
+          margin-top: 0;
+        }
+        .retry-note {
+          margin-top: 4px;
+        }
+        .guard {
+          grid-template-columns: 16px minmax(0, 1fr) auto;
+          gap: 4px 10px;
+          padding: 12px 16px;
+        }
+        .guard-why {
+          grid-column: 2 / -1;
+        }
+        .guard-when {
+          grid-column: 2 / -1;
+          text-align: left;
+        }
+        .guard .btn {
+          grid-column: 3;
+          grid-row: 1;
+        }
+        .fam {
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 8px;
+          padding: 13px 16px;
+        }
+        .fam .states {
+          grid-column: 1 / -1;
+        }
+        .fam-rate {
+          grid-column: 2;
+          text-align: right;
+        }
+        .ev {
+          grid-template-columns: 66px minmax(0, 1fr);
+          gap: 2px 12px;
+          padding: 10px 16px;
+        }
+        .ev.head {
+          display: none;
+        }
+        .ev-fam {
+          text-align: right;
+        }
+        .ev-tr {
+          grid-column: 1 / -1;
+          margin-top: 2px;
+        }
+        .ev-why {
+          grid-column: 1 / -1;
+        }
+      }
+      @media (max-width: 760px) {
+        .topbar-inner {
+          padding: 0 16px;
+          gap: 10px;
+          height: 54px;
+        }
+        .updated {
+          display: none;
+        }
+        .scope {
+          margin-left: 0;
+        }
+        .scope button {
+          padding: 4px 10px;
+        }
+        .wrap {
+          padding: 24px 16px 56px;
+        }
+        .page-head h1 {
+          font-size: 23px;
+        }
+        .machine {
+          padding: 16px;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand"><span class="brand-mark" aria-hidden="true"></span>SekerEagle</div>
+        <nav class="scope" aria-label="图库范围">
+          <button aria-pressed="true">全部</button>
+          <button aria-pressed="false">素材</button>
+          <button aria-pressed="false">照片</button>
+        </nav>
+        <div class="topbar-right">
+          <span class="updated num">08:47:12 快照</span>
+          <button class="icon-btn" aria-label="刷新">
+            <svg viewBox="0 0 24 24">
+              <path d="M20 11a8 8 0 1 0-2.3 5.7" />
+              <path d="M20 5v6h-6" />
+            </svg>
+          </button>
+          <button class="icon-btn" aria-label="设置">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+              <circle cx="16" cy="7" r="2" />
+              <circle cx="10" cy="17" r="2" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <div class="page-head">
+        <h1>任务中心</h1>
+        <p>
+          每个任务只有一条状态轨道。能前进或不能，由守卫决定；界面只展示当前状态和拦住它的那一条条件。
+        </p>
+      </div>
+
+      <!-- 状态图 -->
+      <section class="panel section machine" aria-label="状态流转">
+        <div class="machine-grid">
+          <div class="node queued">
+            <span class="node-code">QUEUED</span>
+            <span class="node-name">排队</span>
+            <b class="node-count">13,939</b>
+            <span class="node-meta">尚未通过守卫</span>
+          </div>
+
+          <div class="edge warn">
+            <span class="edge-line"></span>
+            <span class="edge-label">守卫校验</span>
+            <span class="edge-sub">6 项 · 2 项正在拦截</span>
+          </div>
+
+          <div class="node running">
+            <span class="node-dot" aria-hidden="true"></span>
+            <span class="node-code">RUNNING</span>
+            <span class="node-name">执行中</span>
+            <b class="node-count">3</b>
+            <span class="node-meta">NAS 1 · Mac 2</span>
+          </div>
+
+          <div class="edge">
+            <span class="edge-line"></span>
+            <span class="edge-label">发布结果</span>
+            <span class="edge-sub">写入后才算完成</span>
+          </div>
+
+          <div class="node done">
+            <span class="node-code">DONE</span>
+            <span class="node-name">已完成</span>
+            <b class="node-count">339</b>
+            <span class="node-meta">近 1 小时</span>
+          </div>
+
+          <div class="branch-line"><span class="branch-tag">失败</span></div>
+
+          <div class="node-wrap-failed">
+            <div class="node failed">
+              <span class="node-code">FAILED</span>
+              <span class="node-name">失败</span>
+              <b class="node-count">3</b>
+              <span class="node-meta">可重试</span>
+            </div>
+            <div class="retry-note">
+              <span class="mono">↺ RETRY → QUEUED</span> · 重试不消耗完成记录
+            </div>
+          </div>
+        </div>
+
+        <div class="machine-foot">
+          <span class="legend">
+            <span class="lq"><i></i>排队</span>
+            <span class="lr"><i></i>执行中</span>
+            <span class="ld"><i></i>已完成</span>
+            <span class="lf"><i></i>失败</span>
+          </span>
+          <span class="tail">只显示事实状态，不用“计算ing”这类拼接词</span>
+        </div>
+      </section>
+
+      <!-- 守卫 -->
+      <section class="panel section" aria-label="守卫条件">
+        <div class="panel-head">
+          <h2>守卫</h2>
+          <span class="hint">按当前拦截量排序</span>
+          <span class="right">6 项 · 2 项正在拦截</span>
+        </div>
+        <ul class="guards">
+          <li class="guard block">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>后台时段</b><code>SCHEDULE</code></span>
+            <span class="guard-why"><em>人脸检测</em> <b>1,842</b> 项在等 · 23:00–06:00</span>
+            <span class="guard-when">下次 23:00</span>
+            <button class="btn">改为随时</button>
+          </li>
+          <li class="guard block">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>前置依赖</b><code>DEPENDENCY</code></span>
+            <span class="guard-why"><em>语义文件夹匹配</em> <b>128</b> 项在等 · 前置剩 8,214</span>
+            <span class="guard-when">随前置完成</span>
+            <button class="btn">查看依赖</button>
+          </li>
+          <li class="guard human">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>人工确认</b><code>APPROVAL</code></span>
+            <span class="guard-why"><em>整理审批</em> <b>12</b> 项在等 · 通过后才写入图库</span>
+            <span class="guard-when">需要你 · 不会自动过</span>
+            <button class="btn">去审批</button>
+          </li>
+          <li class="guard pass">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>单类暂停</b><code>PAUSED</code></span>
+            <span class="guard-why"
+              ><em>你手动暂停</em> <b>3,512</b> 项 · 高清组件 2,304 / 标签索引 1,208</span
+            >
+            <span class="guard-when">已暂停</span>
+            <button class="btn">继续</button>
+          </li>
+          <li class="guard pass">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>执行能力</b><code>CAPABILITY</code></span>
+            <span class="guard-why"><em>部署已启用</em> <b>0</b> 项被拦 · NAS 1/1 · Mac 2/2</span>
+            <span class="guard-when">通过</span>
+          </li>
+          <li class="guard pass">
+            <span class="guard-dot" aria-hidden="true"></span>
+            <span class="guard-name"><b>模型容量</b><code>CAPACITY</code></span>
+            <span class="guard-why"
+              ><em>当前正常</em> <b>0</b> 项被拦 · 繁忙时只拦向量，不影响 NAS</span
+            >
+            <span class="guard-when">通过</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 类别状态 -->
+      <section class="panel section" aria-label="类别状态">
+        <div class="panel-head">
+          <h2>类别状态</h2>
+          <span class="hint">同一类别的任务分布在各状态上的数量</span>
+          <span class="right">按执行顺序</span>
+        </div>
+        <div class="families">
+          <div class="fam active">
+            <div>
+              <div class="fam-title">图片向量 <span class="badge">照片</span></div>
+              <div class="fam-sub">当前步骤 生成图片向量 · 2 项并行 · 租约至 08:57</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>8,211</b></span>
+              <span class="st r">执行中 <b>2</b></span>
+              <span class="st f">失败 <b>3</b></span>
+            </div>
+            <div class="fam-rate">+328 / 小时</div>
+          </div>
+
+          <div class="fam active">
+            <div>
+              <div class="fam-title">缩略图与预览 <span class="badge">素材</span></div>
+              <div class="fam-sub">当前步骤 生成预览图 · 1 项并行 · 约 61 项/分钟</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>143</b></span>
+              <span class="st r">执行中 <b>1</b></span>
+            </div>
+            <div class="fam-rate">约 2 分钟</div>
+          </div>
+
+          <div class="fam active">
+            <div>
+              <div class="fam-title">视频转码 <span class="badge">照片</span></div>
+              <div class="fam-sub">当前步骤 转码 H.264 · 1 项并行 · 约 38 秒/项</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>7</b></span>
+              <span class="st r">执行中 <b>1</b></span>
+            </div>
+            <div class="fam-rate">约 4 分钟</div>
+          </div>
+
+          <div class="fam active">
+            <div>
+              <div class="fam-title">照片位置索引 <span class="badge">照片</span></div>
+              <div class="fam-sub">自动维护 · 分批更新分组与封面 · 每 15 秒一步</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>96</b></span>
+              <span class="st r">执行中 <b>1</b></span>
+            </div>
+            <div class="fam-rate">约 24 分钟</div>
+          </div>
+
+          <div class="fam">
+            <div>
+              <div class="fam-title">人脸检测 <span class="badge">照片</span></div>
+              <div class="fam-sub">被后台时段拦住 · 23:00 自动恢复</div>
+            </div>
+            <div class="states">
+              <span class="st w">受阻 <b>1,842</b></span>
+            </div>
+            <div class="fam-rate">+0 / 小时</div>
+          </div>
+
+          <div class="fam">
+            <div>
+              <div class="fam-title">语义文件夹匹配 <span class="badge">素材</span></div>
+              <div class="fam-sub">被前置依赖拦住 · 等待图片向量</div>
+            </div>
+            <div class="states">
+              <span class="st w">受阻 <b>128</b></span>
+            </div>
+            <div class="fam-rate">随前置</div>
+          </div>
+
+          <div class="fam">
+            <div>
+              <div class="fam-title">高清与动态组件 <span class="badge">照片</span></div>
+              <div class="fam-sub">你手动暂停 · 已完成的浏览结果不受影响</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>2,304</b></span>
+            </div>
+            <div class="fam-rate">已暂停</div>
+          </div>
+
+          <div class="fam">
+            <div>
+              <div class="fam-title">标签推荐索引 <span class="badge">素材</span></div>
+              <div class="fam-sub">后台安排当前为暂停</div>
+            </div>
+            <div class="states">
+              <span class="st q">排队 <b>1,208</b></span>
+            </div>
+            <div class="fam-rate">已暂停</div>
+          </div>
+
+          <div class="fam">
+            <div>
+              <div class="fam-title">整理审批 <span class="badge">照片</span></div>
+              <div class="fam-sub">等待你确认 · 通过后才写入图库</div>
+            </div>
+            <div class="states">
+              <span class="st w">待确认 <b>12</b></span>
+            </div>
+            <div class="fam-rate">需要你</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 迁移记录 -->
+      <section class="panel section" aria-label="迁移记录">
+        <div class="panel-head">
+          <h2>迁移记录</h2>
+          <span class="hint">只追加，不覆盖</span>
+          <span class="right">最近 9 条</span>
+        </div>
+        <div class="log">
+          <div class="ev head">
+            <span>时间</span><span>类别</span><span>迁移</span><span>触发</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:47:09</span>
+            <span class="ev-fam">图片向量</span>
+            <span class="ev-tr"
+              >QUEUED <span class="arrow">→</span> <span class="to-r">RUNNING</span></span
+            >
+            <span class="ev-why">领取 · 租约 10 分钟</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:47:02</span>
+            <span class="ev-fam">缩略图与预览</span>
+            <span class="ev-tr"
+              >QUEUED <span class="arrow">→</span> <span class="to-r">RUNNING</span></span
+            >
+            <span class="ev-why">领取 · 交互通道</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:41:02</span>
+            <span class="ev-fam">图片向量</span>
+            <span class="ev-tr"
+              >RUNNING <span class="arrow">→</span> <span class="to-q">QUEUED</span></span
+            >
+            <span class="ev-why">模型繁忙 <code>503</code> · 退避 2 秒，不计失败</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:36:44</span>
+            <span class="ev-fam">图片向量</span>
+            <span class="ev-tr"
+              >RUNNING <span class="arrow">→</span> <span class="to-f">FAILED</span></span
+            >
+            <span class="ev-why">源预览缺失 · 保留待重试</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:36:40</span>
+            <span class="ev-fam">图片向量</span>
+            <span class="ev-tr"
+              >RUNNING <span class="arrow">→</span> <span class="to-d">DONE</span></span
+            >
+            <span class="ev-why">发布完成 · 2.8 秒</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:35:12</span>
+            <span class="ev-fam">人脸检测</span>
+            <span class="ev-tr"
+              >QUEUED <span class="arrow">→</span> <span class="to-q">QUEUED</span></span
+            >
+            <span class="ev-why">守卫未过：后台时段 <code>SCHEDULE</code></span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:34:58</span>
+            <span class="ev-fam">视频转码</span>
+            <span class="ev-tr"
+              >QUEUED <span class="arrow">→</span> <span class="to-r">RUNNING</span></span
+            >
+            <span class="ev-why">领取 · 后台通道</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:34:31</span>
+            <span class="ev-fam">照片位置索引</span>
+            <span class="ev-tr"
+              >RUNNING <span class="arrow">→</span> <span class="to-d">DONE</span></span
+            >
+            <span class="ev-why">本批 40 张 · 15 秒/步</span>
+          </div>
+          <div class="ev">
+            <span class="ev-t">08:33:20</span>
+            <span class="ev-fam">语义文件夹匹配</span>
+            <span class="ev-tr"
+              >QUEUED <span class="arrow">→</span> <span class="to-q">QUEUED</span></span
+            >
+            <span class="ev-why">守卫未过：前置依赖 <code>DEPENDENCY</code></span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="foot">
+        <span
+          >静态设计稿 · 数据为示例 ·
+          <a href="./task-center-redesign.html">对照上一版列表视图</a></span
+        >
+        <details class="notes">
+          <summary>设计说明</summary>
+          <ul>
+            <li>状态只有五个：排队、执行中、已完成、失败，外加“受阻”作为排队的一个展示态。</li>
+            <li>阻塞不是状态，是守卫没通过。所以“为什么不动”放在守卫里，不塞进任务状态词。</li>
+            <li>状态图上的数量就是各类别当前之和，和下面的类别表能对上，不做二次推断。</li>
+            <li>
+              迁移记录只追加：每次状态变化留一条，能看到 QUEUED → RUNNING 是谁在什么时候触发的。
+            </li>
+            <li>繁忙退避记成 RUNNING → QUEUED，不计失败；失败才是终止态，只能重试回到排队。</li>
+            <li>状态码用等宽字，数量用等宽数字，扫描时对齐；中文名仍然优先。</li>
+            <li>窄屏下状态图改为纵向流转，守卫与类别行折行，不横向滚动。</li>
+          </ul>
+        </details>
+      </footer>
+    </main>
+  </body>
+</html>

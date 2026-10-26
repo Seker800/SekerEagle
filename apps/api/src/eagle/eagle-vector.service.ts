@@ -1,3 +1,4 @@
+import { mediaRequeueData } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
 import { LIBRARY_MODE, inLibrary } from './library-mode';
 import {
@@ -205,15 +206,7 @@ export class EagleVectorService {
         status: 'FAILED',
         libraryMode: this.libraryMode,
       },
-      data: {
-        status: 'PENDING',
-        attempts: 0,
-        availableAt: new Date(),
-        startedAt: null,
-        completedAt: null,
-        lockedAt: null,
-        lastError: null,
-      },
+      data: mediaRequeueData(),
     });
     return { retried: result.count };
   }
@@ -231,7 +224,8 @@ export class EagleVectorService {
       async (transaction) => {
         const repairedCount = await transaction.$executeRaw(Prisma.sql`
         UPDATE "EagleMediaJob" AS job
-        SET status = 'PENDING', attempts = 0, "availableAt" = CURRENT_TIMESTAMP,
+        SET status = 'PENDING', attempts = 0, "recoveryCount" = 0,
+            "leaseVersion" = job."leaseVersion" + 1, "availableAt" = CURRENT_TIMESTAMP,
             "lockedAt" = NULL, "startedAt" = NULL, "completedAt" = NULL,
             "lastError" = NULL, "updatedAt" = CURRENT_TIMESTAMP
         FROM "EagleAsset" AS asset

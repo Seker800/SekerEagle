@@ -1,3 +1,4 @@
+import { mediaCompletion } from '@sekereagle/library-core';
 import { matchSmartFoldersForEmbedding } from '@sekereagle/library-persistence';
 import {
   Prisma,
@@ -41,8 +42,7 @@ export async function publishEmbedding(
         assetRevision: job.assetRevision,
       };
       const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        where: { id: job.id, ...scope, status: 'PROCESSING', leaseVersion: job.leaseVersion },
-        data: { status: 'COMPLETED', completedAt: new Date(), lockedAt: null, lastError: null },
+        ...mediaCompletion(job),
       });
       if (completed.count !== 1) return;
       await transaction.eagleAssetEmbedding.updateMany({
