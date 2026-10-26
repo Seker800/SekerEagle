@@ -17,6 +17,7 @@ const node = (id, extra = {}) => ({
   maxConcurrent: 3,
   reserveInteractive: 1,
   enabled: true,
+  verified: true,
   ...extra,
 });
 async function fixture(t, nodes = [node('mac')]) {
@@ -58,6 +59,7 @@ test('policy persists, uses CAS, expires and never reveals credentials', async (
       expectedRevision: 0,
       nodeId: 'mac',
       enabled: true,
+      verified: true,
       concurrency: 2,
       operations: ['embedding'],
       durationSeconds: 60,
@@ -77,6 +79,7 @@ test('policy persists, uses CAS, expires and never reveals credentials', async (
       expectedRevision: 1,
       nodeId: 'other',
       enabled: true,
+      verified: true,
       concurrency: 1,
       operations: ['embedding'],
       durationSeconds: 60,
@@ -89,6 +92,7 @@ test('policy persists, uses CAS, expires and never reveals credentials', async (
       expectedRevision: 1,
       nodeId: 'mac',
       enabled: true,
+      verified: true,
       concurrency: 4,
       operations: ['embedding'],
       durationSeconds: 60,
@@ -103,6 +107,7 @@ test('concurrent policy updates cannot both win', async (t) => {
     expectedRevision: 0,
     nodeId: 'mac',
     enabled: true,
+    verified: true,
     concurrency: 2,
     operations: ['embedding'],
     durationSeconds: 60,
@@ -207,6 +212,7 @@ test('invalid and oversized policies do not mutate persisted state', async (t) =
     expectedRevision: 0,
     nodeId: 'mac',
     enabled: true,
+    verified: true,
     concurrency: 1,
     operations: ['embedding'],
     durationSeconds: 60,
@@ -230,6 +236,7 @@ test('invalid persisted policies cannot bypass enrolled capacity after restart',
   const state = JSON.parse(await readFile(join(directory, 'state.json'), 'utf8'));
   state.policies.mac = {
     enabled: true,
+    verified: true,
     concurrency: 999,
     operations: ['embedding'],
     expiresAt: 200000,
@@ -324,7 +331,30 @@ test('host metrics are numeric diagnostics and unknown fields never escape', asy
   assert.ok(!JSON.stringify(state).includes('not-returned'));
 });
 
-test('advertised background capacity is capped by the physical host, not endpoint sum',async t=>{
- const {fleet}=await fixture(t,[node('mac',{hostMaxConcurrent:3}),node('cuda',{hostMaxConcurrent:3,accelerator:'cuda'})]);
- fleet.markHealth('mac',{...contract,status:'ready',metal:true});fleet.markHealth('cuda',{...contract,status:'ready',accelerator:'cuda'});assert.equal(fleet.snapshot().backgroundLimit,2);
+test('advertised background capacity is capped by the physical host, not endpoint sum', async (t) => {
+  const { fleet } = await fixture(t, [
+    node('mac', { hostMaxConcurrent: 3 }),
+    node('cuda', { hostMaxConcurrent: 3, accelerator: 'cuda' }),
+  ]);
+  fleet.markHealth('mac', { ...contract, status: 'ready', metal: true });
+  fleet.markHealth('cuda', { ...contract, status: 'ready', accelerator: 'cuda' });
+  assert.equal(fleet.snapshot().backgroundLimit, 2);
+});
+
+test('an unverified backend cannot be enabled by an agent policy', async (t) => {
+  const { fleet } = await fixture(t, [node('mac', { verified: false, enabled: false })]);
+  fleet.markHealth('mac', { ...contract, status: 'ready', metal: true });
+  await assert.rejects(
+    fleet.update({
+      expectedRevision: 0,
+      nodeId: 'mac',
+      enabled: true,
+      concurrency: 1,
+      operations: ['embedding'],
+      durationSeconds: 60,
+      reason: 'enable',
+    }),
+    /UNVERIFIED/,
+  );
+  assert.equal(fleet.acquire('embedding', true), null);
 });

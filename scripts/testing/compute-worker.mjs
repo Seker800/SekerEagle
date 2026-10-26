@@ -109,6 +109,8 @@ try {
   await fleet.initialize([
     {
       id: 'mac-vector',
+      hostId: 'test-host',
+      hostMaxConcurrent: 3,
       name: 'Synthetic Metal',
       url: sourceUrl,
       token: 'backend-token',
@@ -117,9 +119,12 @@ try {
       maxConcurrent: 2,
       reserveInteractive: 0,
       enabled: true,
+      verified: true,
     },
     {
       id: 'mac-media',
+      hostId: 'test-host',
+      hostMaxConcurrent: 3,
       name: 'Synthetic Media',
       url: mediaUrl,
       token: 'media-test-token',
@@ -128,6 +133,7 @@ try {
       maxConcurrent: 1,
       reserveInteractive: 0,
       enabled: true,
+      verified: true,
     },
   ]);
   await probeFleet(fleet);

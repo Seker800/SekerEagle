@@ -1,3 +1,4 @@
+import { setTimeout, clearTimeout } from 'node:timers';
 import { Buffer } from 'node:buffer';
 import { Readable } from 'node:stream';
 import { createServer } from 'node:http';
@@ -31,6 +32,7 @@ export function createCoordinator({
   adminToken,
   fetcher = fetch,
   timeoutMs = 120000,
+  responseWriteTimeoutMs = 10000,
 }) {
   if (!executionToken || !adminToken || executionToken === adminToken)
     throw new Error('DISTINCT_CREDENTIALS_REQUIRED');
@@ -117,6 +119,7 @@ export function createCoordinator({
       slot = fleet.acquire(route.operation, route.interactive);
       if (!slot) {
         res.setHeader('Retry-After', '1');
+        res.setHeader('x-compute-backpressure', 'pool');
         return json(res, 503, { error: 'COMPUTE_BUSY' });
       }
       const started = Date.now();
@@ -148,9 +151,10 @@ export function createCoordinator({
         body,
         duplex: 'half',
         redirect: 'error',
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(route.operation === 'embedding' ? timeoutMs : 600000),
       });
       if (!upstream.ok) {
+        res.setHeader('x-compute-backpressure', 'node');
         if (upstream.status >= 500 || upstream.status === 429) fleet.quarantine(slot.node.id);
         if (upstream.body) await upstream.body.cancel();
         res.setHeader('Retry-After', '1');
@@ -163,16 +167,34 @@ export function createCoordinator({
         );
       }
       if (!upstream.body) throw new Error('EMPTY_COMPUTE_RESPONSE');
-      const maximum = route.operation === 'image' ? 96 * 1024 * 1024 : 128 * 1024;
+      const maximum =
+        route.operation === 'image'
+          ? 256 * 1024 * 1024
+          : route.operation === 'faces'
+            ? 1024 * 1024
+            : 128 * 1024;
       let size = 0;
       if (!res.destroyed)
-        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+        res.writeHead(200, {
+          'content-type':
+            route.operation === 'image'
+              ? 'application/vnd.sekereagle.image-work'
+              : 'application/json',
+          'cache-control': 'no-store',
+        });
       for await (const chunk of upstream.body) {
         size += chunk.length;
         if (size > maximum) throw new Error('COMPUTE_RESPONSE_TOO_LARGE');
         if (!res.destroyed && !res.write(chunk))
-          await new Promise((resolve) => {
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => {
+              res.off('drain', done);
+              res.off('close', done);
+              reject(new Error('COMPUTE_RESPONSE_WRITE_TIMEOUT'));
+            }, responseWriteTimeoutMs);
+            timer.unref();
             const done = () => {
+              clearTimeout(timer);
               res.off('drain', done);
               res.off('close', done);
               resolve();
@@ -211,7 +233,7 @@ export function createCoordinator({
       if (slot) slot.release(1, false);
     }
   });
-  server.requestTimeout = 30000;
+  server.requestTimeout = 120000;
   server.headersTimeout = 10000;
   server.maxHeadersCount = 32;
   return server;

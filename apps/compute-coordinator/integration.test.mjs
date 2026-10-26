@@ -54,6 +54,7 @@ test('two real HTTP nodes share work and live enrollment needs no restart', asyn
     maxConcurrent: 2,
     reserveInteractive: 0,
     enabled: true,
+    verified: true,
     operations: ['embedding'],
   };
   const enrolled = await fetch(base + '/admin/enroll', {
@@ -135,6 +136,7 @@ test('caller disconnect cannot release a still-computing upstream reservation', 
       maxConcurrent: 1,
       reserveInteractive: 0,
       enabled: true,
+      verified: true,
       operations: ['embedding'],
     },
   ]);

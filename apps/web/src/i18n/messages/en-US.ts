@@ -1,4 +1,15 @@
 export const enUS = {
+  '模型节点连接中断，向量任务等待恢复；其他处理继续。':
+    'Model nodes disconnected. Embeddings wait for recovery; other tasks continue.',
+  '模型节点配置不匹配，向量任务等待修复；其他处理继续。':
+    'Model node configuration mismatch. Embeddings wait for repair; other tasks continue.',
+  '等待可用的 2B 模型节点': 'Waiting for an available 2B model node',
+  '图库服务器；新描述用模型节点': 'Library server; new descriptions use a model node',
+  '图片向量；新描述需 2B 模型': 'Image embeddings; new descriptions require the 2B model',
+  '处理节点 · 较重': 'Processing node · heavy',
+  '处理节点 · 读写与解码': 'Processing node · I/O and decoding',
+  '计算节点 · 较重': 'Compute node · heavy',
+  '预览图 + 2B 模型': 'Preview image + 2B model',
   '设备分工可由 Agent 调整；图库的暂停与时段安排仍然生效。':
     'Agent can adjust device allocation; library pauses and schedules still apply.',
   图片处理: 'Image processing',

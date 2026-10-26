@@ -1,3 +1,4 @@
+import { freemem, totalmem, loadavg } from 'node:os';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
@@ -6,6 +7,8 @@ import {
   validateImageWork,
   encodeImageWork,
   decodeImageWork,
+  IMAGE_WORK_MAX_RESPONSE_BYTES,
+  IMAGE_WORK_CONTENT_TYPE,
   type ImageWork,
 } from './image-work';
 import { inferPhotoFaces, validateFaceResult, FACE_MODEL_VERSION } from './photo-faces';
@@ -15,7 +18,7 @@ import {
   isPermanentMediaValidationError,
 } from './media-validation-error';
 export class RemoteMediaUnavailableError extends Error {
-  constructor() {
+  constructor(readonly deferResource = true) {
     super('WAITING_REMOTE_MEDIA_CAPACITY');
   }
 }
@@ -54,8 +57,15 @@ export function createRemoteMediaServer(token: string, limit = 1) {
       return send(200, {
         status: 'ready',
         protocol: 'sekereagle-media-v1',
+        imageEncoding: 'SEI1',
         operations: ['image', ...(faces ? ['faces'] : [])],
         faceVersion: faces ? FACE_MODEL_VERSION : null,
+        system: {
+          freeMemoryBytes: freemem(),
+          totalMemoryBytes: totalmem(),
+          processRssBytes: process.memoryUsage().rss,
+          loadAverage: loadavg()[0] ?? 0,
+        },
         capacity: { limit, inFlight: active, available: Math.max(0, limit - active) },
       });
     if (req.method !== 'POST' || !['/v1/media/image', '/v1/media/faces'].includes(req.url ?? ''))
@@ -65,7 +75,7 @@ export function createRemoteMediaServer(token: string, limit = 1) {
       return send(503, { error: 'MEDIA_BUSY' });
     }
     active++;
-    const timeout = setTimeout(() => req.destroy(new Error('MEDIA_BODY_TIMEOUT')), 30000);
+    const timeout = setTimeout(() => req.destroy(new Error('MEDIA_BODY_TIMEOUT')), 120000);
     timeout.unref();
     try {
       const isImage = req.url === '/v1/media/image';
@@ -85,9 +95,13 @@ export function createRemoteMediaServer(token: string, limit = 1) {
         const work = JSON.parse(Buffer.from(header, 'base64url').toString('utf8')) as ImageWork;
         const result = await processImageWork(Readable.from([bytes]), validateImageWork(work));
         const output = encodeImageWork(result);
-        if (output.length > 96 * 1024 * 1024) throw new Error('MEDIA_PAYLOAD_TOO_LARGE');
+        if (output.length > IMAGE_WORK_MAX_RESPONSE_BYTES)
+          throw new Error('MEDIA_PAYLOAD_TOO_LARGE');
         if (!res.destroyed) {
-          res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+          res.writeHead(200, {
+            'content-type': IMAGE_WORK_CONTENT_TYPE,
+            'cache-control': 'no-store',
+          });
           res.end(output);
         }
       } else {
@@ -112,7 +126,7 @@ export function createRemoteMediaServer(token: string, limit = 1) {
       active--;
     }
   }
-  server.requestTimeout = 30000;
+  server.requestTimeout = 120000;
   server.headersTimeout = 10000;
   server.maxHeadersCount = 32;
   return server;
@@ -148,7 +162,7 @@ export class RemoteMediaClient {
           body: stream,
           duplex: 'half',
           redirect: 'error',
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(600000),
         });
       } catch {
         throw new RemoteMediaUnavailableError();
@@ -156,7 +170,9 @@ export class RemoteMediaClient {
       if (!response.ok) {
         await response.body?.cancel();
         if ([408, 429, 502, 503, 504].includes(response.status))
-          throw new RemoteMediaUnavailableError();
+          throw new RemoteMediaUnavailableError(
+            response.headers.get('x-compute-backpressure') !== 'node',
+          );
         if ([413, 415, 422].includes(response.status))
           throw new PermanentMediaValidationError(
             'IMAGE_CONTENT_MISMATCH',
@@ -165,7 +181,10 @@ export class RemoteMediaClient {
         throw new Error('REMOTE_MEDIA_REQUEST_REJECTED');
       }
       if (!response.body) throw new Error('MEDIA_RESPONSE_EMPTY');
-      const bytes = await body(response.body, 96 * 1024 * 1024);
+      const bytes = await body(
+        response.body,
+        path.endsWith('/faces') ? 1024 * 1024 : IMAGE_WORK_MAX_RESPONSE_BYTES,
+      );
       return { bytes, sha256: hash.digest('hex') };
     } finally {
       stream.destroy();

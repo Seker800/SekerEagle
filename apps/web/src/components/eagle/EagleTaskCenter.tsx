@@ -227,8 +227,8 @@ export function EagleTaskCenter({
       {modelIssue && (
         <p role="alert" className={styles.error}>
           {modelIssue === 'DRIFTED'
-            ? t('Mac 模型配置不匹配，向量任务等待修复；其他处理继续。')
-            : t('Mac 模型连接中断，向量任务等待恢复；其他处理继续。')}
+            ? t('模型节点配置不匹配，向量任务等待修复；其他处理继续。')
+            : t('模型节点连接中断，向量任务等待恢复；其他处理继续。')}
         </p>
       )}
       <AssetOperationsPanel includePrivate={includePrivate} scope={scope} />

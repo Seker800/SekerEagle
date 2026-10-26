@@ -13,7 +13,7 @@
 3. 节点只接收图片字节及受限处理配方，不接收 URL、数据库信息或任意文件路径／命令。
 4. worker 验证响应规格、源字节哈希、向量契约或人脸模型版本，继续原发布事务。
 
-NAS、向量、远端媒体是独立有界通道。远端任务失联不会退回本机并突破 NAS 上限。登记节点的 maxConcurrent 是实测后批准的硬上限，reserveInteractive 保留搜索名额；Agent 不能提高硬上限或开启未经登记的能力。两类计算在同一节点共享总名额，不能分别算出无限容量。
+NAS、向量、远端媒体是独立有界通道。远端任务失联不会退回本机并突破 NAS 上限。登记节点的 maxConcurrent 是实测后批准的硬上限，reserveInteractive 保留搜索名额；Agent 不能提高硬上限或开启未经登记的能力。同一物理主机的不同端点必须登记相同 hostId、hostMaxConcurrent；主机总名额与搜索保留名额同时约束所有端点。拒绝重复 URL、同一 IP 伪分组和不一致主机上限。不能分别算出无限容量。
 
 ## 运行与管理
 
@@ -25,9 +25,9 @@ NAS、向量、远端媒体是独立有界通道。远端任务失联不会退�
 - `EAGLE_COMPUTE_BIND` 默认 127.0.0.1；容器内使用 0.0.0.0，宿主映射仍为 loopback。
 - `EAGLE_COMPUTE_PORT` 默认 11436。
 
-首次通过 `main.mjs init <私有登记文件>` 创建状态。登记文件为 `{ "nodes": [...] }`；节点字段为 id、name、url、token、accelerator、operations、maxConcurrent、reserveInteractive、enabled。URL 仅允许有显式端口的私网／loopback IPv4 字面地址，禁止受保护的旧 NAS 地址、凭据、路径及重定向。仅连接本项目计算服务，不能把其他服务登记为计算端点。
+首次通过 `main.mjs init <私有登记文件>` 创建状态。登记文件为 `{ "nodes": [...] }`；节点字段为 id、name、url、token、accelerator、operations、maxConcurrent、reserveInteractive、verified、enabled，以及同机多端点必填的 hostId、hostMaxConcurrent。URL 仅允许有显式端口的私网／loopback IPv4 字面地址，禁止受保护的旧 NAS 地址、凭据、路径及重定向。仅连接本项目计算服务，不能把其他服务登记为计算端点。
 
-运行中通过 `main.mjs enroll <私有登记文件>` 登记节点，文件为 `{ "expectedRevision": 版本, "node": 节点 }`。本机管理 URL 来自 EAGLE_COMPUTE_ADMIN_URL，默认 http://127.0.0.1:11436；远程 NAS 应先使用已核对主机指纹的 SSH loopback 隧道。已有节点必须先停止接单且 inFlight 为零才能重新登记。登记容量和模型兼容验证属于显式运维，MCP 不暴露登记或凭据接口。
+运行中通过 `main.mjs enroll <私有登记文件>` 登记节点，文件为 `{ "expectedRevision": 版本, "node": 节点 }`。本机管理 URL 来自 EAGLE_COMPUTE_ADMIN_URL，默认 http://127.0.0.1:11436；远程 NAS 应先使用已核对主机指纹的 SSH loopback 隧道。已有节点必须先停止接单且 inFlight 为零才能重新登记。verified=true 是完成独立验证后的运维登记声明，不由健康响应自动授予。登记容量和模型兼容验证属于显式运维，MCP 不暴露登记或凭据接口。
 
 当前会话未加载新 MCP 时，可使用 `node apps/compute-coordinator/control.mjs status` 或 `policy <私有策略文件>`；客户端配置默认为 `.runtime/compute-control-client.json`，仅含 loopback baseUrl 和私有 adminTokenFile 路径，权限要求同私有状态。
 
@@ -37,13 +37,17 @@ Agent 使用独立 `node apps/compute-coordinator/mcp.mjs`，只提供 compute_s
 
 1. SSH 密钥登录后运行 `scripts/compute/windows-preflight.ps1`，检查真实 CPU／内存／驱动／WSL。
 2. 在 WSL2 的独立 Linux 文件系统内准备 CUDA 与模型服务。固定模型修订、预处理、1024 维 MRL 和归一化。CUDA 健康声明 accelerator=cuda，不能伪造 metal=true。
-3. 使用独立合成／公开样本验证文字与图片向量、最差样本差异及检索排名；不能仅凭平均余弦阈值批准混用。尚未完成验证时保持 enabled=false。
+3. 使用独立合成／公开样本验证文字与图片向量、最差样本差异及检索排名；不能仅凭平均余弦阈值批准混用。尚未完成验证时保持 verified=false、enabled=false；未验证节点拒绝任何启用策略，MCP 不能修改验证标记。
 4. 测定单张吞吐、峰值显存和小批量表现，批准保守 maxConcurrent。当前协调协议仍单张请求，不把批量试验当成已发布能力。
 5. 经私有运维文件登记节点，再由 Agent 逐步启用、观察和回退。无需更改图库代码或把业务数据库开放给 Windows。
-6. 如启用媒体执行器，先准备 ExifTool、FFmpeg、libheif、RAW Python 依赖和可选人脸固定模型，再运行 setup-linux-media.sh。进程不需要数据库或 S3 配置；不得直接运行 worker main.js。
+6. 如启用媒体执行器，先准备 ExifTool、FFmpeg、libheif、RAW Python 依赖和可选人脸固定模型，先设置 EAGLE_COMPUTE_NODE_TOKEN_FILE（私有 token 文件）和 EAGLE_COMPUTE_NODE_BIND（经核对的私网 IPv4），再运行 setup-linux-media.sh；脚本检查 heif-info 与解码器等实际依赖。WSL 网络转发与 Windows 防火墙仅允许本 NAS 访问节点端口，接通 SSH 后实测 NAS 到 WSL 的认证健康链路，未验证不能启用。进程不需要数据库或 S3 配置；不得直接运行 worker main.js。
 
 ## 验证与发布
 
-测试使用 loopback 合成服务及独立数据库，禁止拿固定安卓图库或现用照片做回归。新代码的测试、构建、架构检查和 DeepSeek 审查证据保存在本机 .omx/artifacts/compute-fleet-20261026。当前源码并不自动代表生产已启用；生产切换必须核对 worker 的协调协议兼容版本，并单独追加 compute-routing.yml，原地址覆盖文件作为回退。不能夹带此前明确暂缓的人物扫描发布。
+测试使用 loopback 合成服务及独立数据库，禁止拿固定安卓图库或现用照片做回归。新代码的测试、构建、架构检查和 DeepSeek 审查证据保存在本机 .omx/artifacts/compute-fleet-20261026。当前源码并不自动代表生产已启用；生产切换必须核对 worker 的协调协议兼容版本，并单独追加 compute-routing.yml，原地址覆盖文件作为回退。本轮已合并现用人物扫描版本及其任务守卫，不回退最新生产逻辑。
 
 Mac MLX 默认缓存预算 4 GiB，上限配置 8 GiB，健康接口报告 active／cache／peak；这是 allocator 缓存预算，不是整个模型进程内存上限，也不承诺立即释放系统历史 swap。正在运行的服务必须正常重启后才加载该设置。
+
+管理 loopback 通道假定本机用户可信，跨机只通过已有主机指纹校验的 SSH 隧道，不将管理 HTTP 暴露公网或多用户不可信环境。对同一账号内已可读取私有文件的恶意程序，不将 bearer 接口当作额外隔离边界；需要多用户本地隔离时，应改用受权限保护的 Unix socket 或带服务身份验证的 TLS。
+
+远端图片响应使用 SEI1 二进制信封：最多 1 MiB 的 JSON 元数据，加经偏移／长度校验的二进制片段，总体不超过 256 MiB，单片不超过 128 MiB；不把高分辨率 WebP／动态视频变成 base64 JSON，也不改变像素或编码规格。worker 为 NAS、远端媒体和向量共享 1536 MiB 的在途预留预算，重图片与大回传按保守成本预留，只有轻任务可继续重叠；不足时通过原租约守卫回到短暂等待并退还本次尝试，按资源 FIFO 让出后续接单以免大任务被持续的小任务饿死，不转成坏图失败。预算是吞吐准入估计，不冒充解码器 RSS 硬上限；既有容器 2 GiB 限额继续生效。

@@ -3,11 +3,15 @@
 set -eu
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$repo_root"
+: "${EAGLE_COMPUTE_NODE_TOKEN_FILE:?Set the owner-only node token file}"
+: "${EAGLE_COMPUTE_NODE_BIND:?Set the verified private IPv4 listen address}"
+test -r "$EAGLE_COMPUTE_NODE_TOKEN_FILE"
 node -e 'if (process.versions.node.split(".")[0] !== "22") process.exit(1)'
-command -v exiftool >/dev/null
-command -v ffmpeg >/dev/null
-command -v ffprobe >/dev/null
-command -v heif-dec >/dev/null
+command -v "${EXIFTOOL_PATH:-exiftool}" >/dev/null
+command -v "${FFMPEG_PATH:-ffmpeg}" >/dev/null
+command -v "${FFPROBE_PATH:-ffprobe}" >/dev/null
+command -v "${HEIF_CONVERT_PATH:-heif-dec}"
+command -v "${HEIF_INFO_PATH:-heif-info}" >/dev/null
 : "${CAMERA_RAW_PYTHON:?Configure a dedicated Python environment with packages/media-core/python/requirements.txt}"
 "$CAMERA_RAW_PYTHON" -c 'import rawpy, PIL'
 npm ci

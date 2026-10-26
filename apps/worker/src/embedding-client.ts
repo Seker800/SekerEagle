@@ -9,14 +9,16 @@ export type EmbeddingClientErrorCode =
 
 export class EmbeddingClientError extends Error {
   readonly retryAfterMs?: number;
+  readonly deferResource: boolean;
   constructor(
     readonly code: EmbeddingClientErrorCode,
     message: string,
-    options?: ErrorOptions & { retryAfterMs?: number },
+    options?: ErrorOptions & { retryAfterMs?: number; deferResource?: boolean },
   ) {
     super(message, options);
     this.name = 'EmbeddingClientError';
     this.retryAfterMs = options?.retryAfterMs;
+    this.deferResource = options?.deferResource ?? true;
   }
 }
 
@@ -145,6 +147,7 @@ export class EmbeddingClient {
       if (response.status === 503 || response.status === 429) {
         throw new EmbeddingClientError('HOST_BUSY', 'Embedding capacity is busy.', {
           retryAfterMs: boundedRetryAfter(response.headers.get('retry-after')),
+          deferResource: response.headers.get('x-compute-backpressure') !== 'node',
         });
       }
       if (response.status === 408) {

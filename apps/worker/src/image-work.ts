@@ -100,40 +100,74 @@ export async function processImageWork(source: AsyncIterable<Uint8Array>, work: 
   );
 }
 export type ImageWorkResult = Awaited<ReturnType<typeof processImageWork>>;
-function pack(value: unknown): unknown {
-  if (Buffer.isBuffer(value)) return { $bytes: value.toString('base64') };
-  if (value instanceof Date) return { $date: value.toISOString() };
-  if (Array.isArray(value)) return value.map(pack);
-  if (value && typeof value === 'object')
-    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, pack(v)]));
-  return value;
-}
+export const IMAGE_WORK_MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
+export const IMAGE_WORK_CONTENT_TYPE = 'application/vnd.sekereagle.image-work';
 export function encodeImageWork(value: ImageWorkResult) {
-  return Buffer.from(JSON.stringify(pack(value)));
+  const buffers: Buffer[] = [];
+  let offset = 0;
+  function pack(input: unknown): unknown {
+    if (Buffer.isBuffer(input)) {
+      const ref = { $binary: [offset, input.length] };
+      offset += input.length;
+      if (offset > IMAGE_WORK_MAX_RESPONSE_BYTES) throw new Error('IMAGE_RESULT_TOO_LARGE');
+      buffers.push(input);
+      return ref;
+    }
+    if (input instanceof Date) return { $date: input.toISOString() };
+    if (Array.isArray(input)) return input.map(pack);
+    if (input && typeof input === 'object')
+      return Object.fromEntries(Object.entries(input).map(([k, v]) => [k, pack(v)]));
+    return input;
+  }
+  const metadata = Buffer.from(JSON.stringify(pack(value)));
+  if (metadata.length > 1024 * 1024 || 8 + metadata.length + offset > IMAGE_WORK_MAX_RESPONSE_BYTES)
+    throw new Error('IMAGE_RESULT_TOO_LARGE');
+  const header = Buffer.alloc(8);
+  header.write('SEI1');
+  header.writeUInt32BE(metadata.length, 4);
+  return Buffer.concat([header, metadata, ...buffers]);
 }
 export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<ImageWorkResult> {
-  if (bytes.length > 96 * 1024 * 1024) throw new Error('IMAGE_RESULT_TOO_LARGE');
-  const value = JSON.parse(bytes.toString('utf8'), (key: string, v: unknown): unknown => {
-    if (['__proto__', 'constructor', 'prototype'].includes(key))
-      throw new Error('INVALID_IMAGE_RESULT');
-    if (v && typeof v === 'object' && '$bytes' in v) {
-      if (
-        Object.keys(v).length !== 1 ||
-        typeof v.$bytes !== 'string' ||
-        !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(v.$bytes)
-      )
+  if (
+    bytes.length < 8 ||
+    bytes.length > IMAGE_WORK_MAX_RESPONSE_BYTES ||
+    bytes.toString('ascii', 0, 4) !== 'SEI1'
+  )
+    throw new Error('INVALID_IMAGE_RESULT');
+  const metadataLength = bytes.readUInt32BE(4);
+  if (metadataLength > 1024 * 1024 || 8 + metadataLength > bytes.length)
+    throw new Error('INVALID_IMAGE_RESULT');
+  const data = bytes.subarray(8 + metadataLength);
+  const value = JSON.parse(
+    bytes.toString('utf8', 8, 8 + metadataLength),
+    (key: string, v: unknown): unknown => {
+      if (['__proto__', 'constructor', 'prototype'].includes(key))
         throw new Error('INVALID_IMAGE_RESULT');
-      return Buffer.from(v.$bytes, 'base64');
-    }
-    if (v && typeof v === 'object' && '$date' in v) {
-      if (typeof v.$date !== 'string') throw new Error('INVALID_IMAGE_RESULT');
-      const d = new Date(v.$date);
-      if (Object.keys(v).length !== 1 || !Number.isFinite(d.getTime()))
-        throw new Error('INVALID_IMAGE_RESULT');
-      return d;
-    }
-    return v;
-  }) as ImageWorkResult;
+      if (v && typeof v === 'object' && '$binary' in v) {
+        const ref = v.$binary;
+        if (
+          Object.keys(v).length !== 1 ||
+          !Array.isArray(ref) ||
+          ref.length !== 2 ||
+          !ref.every(Number.isSafeInteger) ||
+          ref[0] < 0 ||
+          ref[1] < 0 ||
+          ref[1] > 128 * 1024 * 1024 ||
+          ref[0] + ref[1] > data.length
+        )
+          throw new Error('INVALID_IMAGE_RESULT');
+        return data.subarray(Number(ref[0]), Number(ref[0]) + Number(ref[1]));
+      }
+      if (v && typeof v === 'object' && '$date' in v) {
+        if (Object.keys(v).length !== 1 || typeof v.$date !== 'string')
+          throw new Error('INVALID_IMAGE_RESULT');
+        const d = new Date(v.$date);
+        if (!Number.isFinite(d.getTime())) throw new Error('INVALID_IMAGE_RESULT');
+        return d;
+      }
+      return v;
+    },
+  ) as ImageWorkResult;
   if (
     !value ||
     !/^[a-f0-9]{64}$/.test(value.sha256) ||
@@ -183,7 +217,7 @@ export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<I
       entry.spec.kind !== spec.kind ||
       entry.spec.variant !== spec.variant ||
       !Buffer.isBuffer(entry.output.data) ||
-      entry.output.data.length > 64 * 1024 * 1024
+      entry.output.data.length > 128 * 1024 * 1024
     )
       throw new Error('INVALID_IMAGE_RESULT');
     const metadata = await sharp(entry.output.data, { limitInputPixels: 120000000 }).metadata();

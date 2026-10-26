@@ -16,13 +16,13 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('缩略图与预览'),
       t('生成缩略图、预览图，读取文件信息。'),
       t('原文件'),
-      t('图库服务器 · 读写与解码'),
+      t('处理节点 · 读写与解码'),
     ],
     DETAILS: [
       t('高清与动态组件'),
       t('补齐 RAW 编辑图、动态视频、清晰度和相似特征。'),
       t('原文件 + 解码工具'),
-      t('图库服务器 · 较重'),
+      t('处理节点 · 较重'),
     ],
     VIDEO: [
       t('视频转码'),
@@ -33,14 +33,14 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
     EMBEDDING: [
       t('2B 向量搜图'),
       t('计算图片向量，用于文字和相似图搜索。'),
-      t('预览图 + Mac 2B 模型'),
-      t('Mac · 较重'),
+      t('预览图 + 2B 模型'),
+      t('计算节点 · 较重'),
     ],
     FACES: [
       t('人物识别'),
       t('检测人脸并计算特征，用于人物分组。'),
       t('预览图 + YuNet / SFace 模型'),
-      t('图库服务器 · 较重'),
+      t('处理节点 · 较重'),
     ],
     COLOR: [
       t('代表色提取'),
@@ -52,13 +52,13 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
       t('大图切片'),
       t('生成分级切片，用于放大浏览。'),
       t('原图 + 解码工具'),
-      t('图库服务器 · 较重'),
+      t('处理节点 · 较重'),
     ],
     SMART_FOLDERS: [
       t('语义文件夹匹配'),
       t('按描述与图片向量匹配，更新文件夹结果。'),
-      t('图片向量；新描述需 Mac 2B 模型'),
-      t('图库服务器；新描述用 Mac'),
+      t('图片向量；新描述需 2B 模型'),
+      t('图库服务器；新描述用模型节点'),
     ],
     TAG_INDEX: [
       t('标签向量索引'),
@@ -102,7 +102,7 @@ export function taskFamilyLabels(family: TaskFamily): [string, string, string, s
 
 const waits: Record<TaskWaitReason, () => string> = {
   MODEL_BUSY: () => t('等待模型空闲'),
-  MODEL_OFFLINE: () => t('等待 Mac 2B 模型上线'),
+  MODEL_OFFLINE: () => t('等待可用的 2B 模型节点'),
   MODEL_DRIFTED: () => t('模型配置不匹配，等待修复'),
   DEPENDENCY: () => t('等待前置步骤'),
   DEPENDENCY_FAILED: () => t('前置步骤失败，请先重试'),

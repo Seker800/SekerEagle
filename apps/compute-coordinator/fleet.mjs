@@ -14,7 +14,12 @@ export function validateEnrollment(value) {
     value.name.length > 80
   )
     throw new Error('INVALID_NODE');
-  const url = new URL(value.url);
+  let url;
+  try {
+    url = new URL(value.url);
+  } catch (cause) {
+    throw new Error('INVALID_NODE_TARGET', { cause });
+  }
   const ip = url.hostname;
   const privateIp =
     isIP(ip) === 4 &&
@@ -59,7 +64,23 @@ export function validateEnrollment(value) {
     typeof value.enabled !== 'boolean'
   )
     throw new Error('INVALID_CAPABILITY');
+  const verified = value.verified === true;
+  if (value.verified !== undefined && typeof value.verified !== 'boolean')
+    throw new Error('INVALID_NODE_VERIFICATION');
+  if (value.enabled && !verified) throw new Error('INVALID_NODE_UNVERIFIED');
+  const hostId = value.hostId ?? value.id,
+    hostMaxConcurrent = value.hostMaxConcurrent ?? value.maxConcurrent;
+  if (
+    !idPattern.test(hostId) ||
+    !Number.isInteger(hostMaxConcurrent) ||
+    hostMaxConcurrent < value.maxConcurrent ||
+    hostMaxConcurrent > 16
+  )
+    throw new Error('INVALID_HOST_CAPACITY');
   return {
+    hostId,
+    hostMaxConcurrent,
+    verified,
     id: value.id,
     name: value.name,
     url: url.origin,
@@ -71,10 +92,26 @@ export function validateEnrollment(value) {
     enabled: value.enabled,
   };
 }
+function validateGroups(nodes) {
+  if (new Set(nodes.map((n) => n.id)).size !== nodes.length) throw new Error('DUPLICATE_NODE');
+  if (new Set(nodes.map((n) => n.url)).size !== nodes.length) throw new Error('DUPLICATE_ENDPOINT');
+  for (const node of nodes)
+    for (const other of nodes) {
+      if (node.id === other.id) continue;
+      if (node.hostId === other.hostId && node.hostMaxConcurrent !== other.hostMaxConcurrent)
+        throw new Error('INVALID_HOST_CAPACITY');
+      if (
+        new URL(node.url).hostname === new URL(other.url).hostname &&
+        node.hostId !== other.hostId
+      )
+        throw new Error('INVALID_HOST_GROUP');
+    }
+}
 function validPolicy(node, p) {
   return (
     p &&
     typeof p.enabled === 'boolean' &&
+    (!p.enabled || node.verified) &&
     Number.isInteger(p.concurrency) &&
     p.concurrency >= 1 &&
     p.concurrency <= node.maxConcurrent &&
@@ -133,6 +170,7 @@ export class Fleet {
       if (!Array.isArray(nodes) || nodes.length > 16)
         throw new Error('INVALID_STATE', { cause: e });
       this.state.nodes = nodes.map(validateEnrollment);
+      validateGroups(this.state.nodes);
       await this.persist(this.state);
     }
     if (
@@ -145,6 +183,7 @@ export class Fleet {
     )
       throw new Error('INVALID_STATE');
     this.state.nodes = this.state.nodes.map(validateEnrollment);
+    validateGroups(this.state.nodes);
     if (
       Array.isArray(this.state.policies) ||
       !Object.entries(this.state.policies).every(([id, p]) => {
@@ -168,6 +207,7 @@ export class Fleet {
     for (const node of this.state.nodes)
       this.runtime.set(node.id, {
         health: 'OFFLINE',
+        starting: true,
         seenAt: 0,
         inFlight: 0,
         background: 0,
@@ -205,6 +245,8 @@ export class Fleet {
         };
   }
   enroll(input) {
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      return Promise.reject(new Error('INVALID_ENROLLMENT'));
     const operation = this.writing.then(async () => {
       if (input.expectedRevision !== this.state.revision) throw new Error('REVISION_CONFLICT');
       const node = validateEnrollment(input.node),
@@ -216,6 +258,7 @@ export class Fleet {
       next.revision++;
       next.nodes = next.nodes.filter((n) => n.id !== node.id);
       next.nodes.push(node);
+      validateGroups(next.nodes);
       delete next.policies[node.id];
       next.audit = [
         ...next.audit,
@@ -225,6 +268,7 @@ export class Fleet {
       this.state = next;
       this.runtime.set(node.id, {
         health: 'OFFLINE',
+        starting: true,
         seenAt: 0,
         inFlight: 0,
         background: 0,
@@ -241,6 +285,7 @@ export class Fleet {
       if (input.expectedRevision !== this.state.revision) throw new Error('REVISION_CONFLICT');
       const node = this.state.nodes.find((n) => n.id === input.nodeId);
       if (!node) throw new Error('NODE_NOT_FOUND');
+      if (input.enabled && !node.verified) throw new Error('INVALID_NODE_UNVERIFIED');
       if (
         typeof input.enabled !== 'boolean' ||
         !Number.isInteger(input.concurrency) ||
@@ -295,11 +340,25 @@ export class Fleet {
     const node = this.state.nodes.find((n) => n.id === id),
       r = this.runtime.get(id);
     if (!node || !r) return;
-    if (r.quarantined && payload?.capacity?.inFlight !== 0) {
+    if (Number.isInteger(payload?.capacity?.inFlight) && payload.capacity.inFlight >= 0)
+      r.external = Math.max(0, payload.capacity.inFlight - r.inFlight);
+    if (
+      (r.quarantined && payload?.capacity?.inFlight !== 0) ||
+      (r.starting && payload?.capacity?.inFlight > 0)
+    ) {
       r.health = 'OFFLINE';
       return;
     }
     if (r.quarantined) r.quarantined = false;
+    r.starting = false;
+    if (
+      Number.isFinite(payload?.capacity?.limit) &&
+      payload.capacity.limit < this.policy(node).concurrency
+    ) {
+      r.health = 'DRIFTED';
+      r.seenAt = this.now();
+      return;
+    }
     const embedding =
       !node.operations.includes('embedding') ||
       (payload?.model === this.contract.model &&
@@ -308,18 +367,87 @@ export class Fleet {
         (node.accelerator === 'metal'
           ? payload.metal === true
           : payload.accelerator === node.accelerator));
+    const faceCompatible =
+      !node.operations.includes('faces') ||
+      payload?.faceVersion === 'yunet-2023mar-sface-2021dec-v1';
     const media = node.operations.every(
       (op) =>
         op === 'embedding' ||
-        (payload?.protocol === 'sekereagle-media-v1' && payload.operations?.includes(op)),
+        (payload?.protocol === 'sekereagle-media-v1' &&
+          Array.isArray(payload.operations) &&
+          payload.operations.includes(op) &&
+          (op !== 'image' || payload.imageEncoding === 'SEI1')),
     );
     r.health =
-      payload?.status === 'ready' && embedding && media ? 'READY' : payload ? 'DRIFTED' : 'OFFLINE';
+      payload?.status === 'ready' && embedding && media && faceCompatible
+        ? 'READY'
+        : payload
+          ? 'DRIFTED'
+          : 'OFFLINE';
     r.seenAt = this.now();
+    r.memory = Object.fromEntries(
+      ['activeBytes', 'cacheBytes', 'peakBytes', 'cacheLimitBytes']
+        .filter(
+          (k) =>
+            Number.isFinite(payload?.memory?.[k]) &&
+            payload.memory[k] >= 0 &&
+            payload.memory[k] <= 1024 ** 5,
+        )
+        .map((k) => [k, payload.memory[k]]),
+    );
+    r.system = Object.fromEntries(
+      ['freeMemoryBytes', 'totalMemoryBytes', 'processRssBytes', 'loadAverage']
+        .filter(
+          (k) =>
+            Number.isFinite(payload?.system?.[k]) &&
+            payload.system[k] >= 0 &&
+            payload.system[k] <= 1024 ** 5,
+        )
+        .map((k) => [k, payload.system[k]]),
+    );
+  }
+  hostState(node) {
+    const peers = this.state.nodes.filter((n) => n.hostId === node.hostId);
+    return {
+      inFlight: peers.reduce(
+        (sum, n) =>
+          sum + (this.runtime.get(n.id)?.inFlight ?? 0) + (this.runtime.get(n.id)?.external ?? 0),
+        0,
+      ),
+      background: peers.reduce(
+        (sum, n) =>
+          sum + (this.runtime.get(n.id)?.background ?? 0) + (this.runtime.get(n.id)?.external ?? 0),
+        0,
+      ),
+      reserve: Math.max(
+        ...peers.map((n) =>
+          this.policy(n).enabled && this.policy(n).operations.includes('embedding')
+            ? n.reserveInteractive
+            : 0,
+        ),
+      ),
+    };
   }
   available(node) {
     const r = this.runtime.get(node.id);
     return r && r.health === 'READY' && this.now() - r.seenAt <= 15000;
+  }
+  backgroundCapacity(nodes) {
+    const hosts = new Map();
+    for (const n of nodes.filter(
+      (n) => n.enabled && n.health === 'READY' && n.operations.includes('embedding'),
+    )) {
+      const h = hosts.get(n.hostId) ?? {
+        sum: 0,
+        limit: Math.max(0, n.hostMaxConcurrent - this.hostState(n).reserve),
+      };
+      h.sum += Math.max(0, n.concurrency - n.reserveInteractive);
+      hosts.set(n.hostId, h);
+    }
+    return Math.min(
+      32,
+      [...hosts.values()].reduce((sum, h) => sum + Math.min(h.sum, h.limit), 0),
+    );
   }
   snapshot() {
     const nodes = this.state.nodes.map((node) => {
@@ -327,9 +455,13 @@ export class Fleet {
         r = this.runtime.get(node.id);
       return {
         id: node.id,
+        hostId: node.hostId,
+        hostMaxConcurrent: node.hostMaxConcurrent,
+        hostInFlight: this.hostState(node).inFlight,
         name: node.name,
         accelerator: node.accelerator,
         enabled: p.enabled,
+        verified: node.verified,
         concurrency: p.concurrency,
         maxConcurrent: node.maxConcurrent,
         reserveInteractive: node.reserveInteractive,
@@ -339,6 +471,8 @@ export class Fleet {
         health: this.available(node) ? 'READY' : r?.health === 'DRIFTED' ? 'DRIFTED' : 'OFFLINE',
         inFlight: r?.inFlight ?? 0,
         completed: r?.completed ?? 0,
+        memory: r?.memory ?? {},
+        system: r?.system ?? {},
         averageMs: Math.round(r?.ewma ?? 0),
       };
     });
@@ -346,24 +480,28 @@ export class Fleet {
       revision: this.state.revision,
       nodes,
       audit: this.state.audit,
-      backgroundLimit: Math.min(
-        32,
-        nodes
-          .filter((n) => n.enabled && n.health === 'READY' && n.operations.includes('embedding'))
-          .reduce((s, n) => s + Math.max(0, n.concurrency - n.reserveInteractive), 0),
-      ),
+      backgroundLimit: this.backgroundCapacity(nodes),
     };
   }
   acquire(operation, interactive) {
     const candidates = this.state.nodes.filter((node) => {
       const p = this.policy(node),
         r = this.runtime.get(node.id);
+      const host = this.hostState(node);
       return (
+        host.inFlight < node.hostMaxConcurrent &&
+        (interactive || host.background < Math.max(0, node.hostMaxConcurrent - host.reserve)) &&
         this.available(node) &&
         p.enabled &&
+        node.verified &&
         p.operations.includes(operation) &&
         r.inFlight < p.concurrency &&
-        (interactive || r.background < Math.max(0, p.concurrency - node.reserveInteractive))
+        (interactive ||
+          r.background <
+            Math.max(
+              0,
+              p.concurrency - (p.operations.includes('embedding') ? node.reserveInteractive : 0),
+            ))
       );
     });
     candidates.sort((a, b) => {

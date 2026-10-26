@@ -347,10 +347,60 @@ test('backpressure pauses the entire resource briefly, not just the rejected job
   assert.ok(wakes > 0);
 });
 
-test('shared memory reservations allow light overlap and defer a second heavy task without running it',async()=>{
- const pool=new MediaResourcePool(1,()=>{},()=>{},4,1536);pool.setRemoteMediaLimit(1);let release!:()=>void,remote=0,deferred=0;
- await pool.fill('NAS',async()=>1,async()=>{await new Promise<void>(resolve=>{release=resolve;});},{memoryMiB:()=>1400,onMemoryWait:async()=>{}});
- await pool.fill('REMOTE_MEDIA',async()=>2,async()=>{remote++;},{memoryMiB:()=>640,onMemoryWait:async()=>{deferred++;}});assert.equal(remote,0);assert.equal(deferred,1);
- release();await new Promise(resolve=>setImmediate(resolve));
- await pool.fill('REMOTE_MEDIA',async()=>2,async()=>{remote++;},{memoryMiB:()=>640,onMemoryWait:async()=>{deferred++;}});await new Promise(resolve=>setImmediate(resolve));assert.equal(remote,1);
+test('shared memory reservations allow light overlap and defer a second heavy task without running it', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    4,
+    1536,
+  );
+  pool.setRemoteMediaLimit(1);
+  let release!: () => void,
+    remote = 0,
+    deferred = 0;
+  await pool.fill(
+    'NAS',
+    async () => 1,
+    async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    },
+    { memoryMiB: () => 1400, onMemoryWait: async () => {} },
+  );
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => 2,
+    async () => {
+      remote++;
+    },
+    {
+      memoryMiB: () => 640,
+      onMemoryWait: async () => {
+        deferred++;
+      },
+    },
+  );
+  assert.equal(remote, 0);
+  assert.equal(deferred, 1);
+  release();
+  await new Promise((resolve) => setImmediate(resolve));
+  t.mock.timers.tick(1000);
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => 2,
+    async () => {
+      remote++;
+    },
+    {
+      memoryMiB: () => 640,
+      onMemoryWait: async () => {
+        deferred++;
+      },
+    },
+  );
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(remote, 1);
 });

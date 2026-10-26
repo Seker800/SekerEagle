@@ -77,13 +77,13 @@ describe('unified task center', () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });
     const card = within(screen.getByRole('article'));
-    expect(card.getByText('预览图 + Mac 2B 模型')).not.toBeVisible();
-    expect(card.getByText('Mac · 较重')).not.toBeVisible();
+    expect(card.getByText('预览图 + 2B 模型')).not.toBeVisible();
+    expect(card.getByText('计算节点 · 较重')).not.toBeVisible();
     expect(card.getByText('等待运行时段')).toBeVisible();
     expect(card.getByText('剩余 12 项')).toBeVisible();
     expect(card.queryByText('计算图片向量，用于文字和相似图搜索。')).not.toBeInTheDocument();
     fireEvent.click(card.getByText('查看处理步骤'));
-    expect(card.getByText('预览图 + Mac 2B 模型')).toBeVisible();
+    expect(card.getByText('预览图 + 2B 模型')).toBeVisible();
     expect(screen.queryByText('按后台安排执行')).not.toBeInTheDocument();
     expect(screen.queryByText('自动维护')).not.toBeInTheDocument();
   });
@@ -409,7 +409,7 @@ it('warns about a disconnected model while in-flight work is draining and clears
   };
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(offline as never);
   mount();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型连接中断');
+  expect(await screen.findByRole('alert')).toHaveTextContent('模型节点连接中断');
   expect(screen.getByRole('alert')).toHaveTextContent('其他处理继续');
   expect(within(screen.getByRole('article')).getByText('等待模型')).toBeVisible();
   expect(screen.queryByText('计算ing')).not.toBeInTheDocument();
@@ -427,7 +427,7 @@ it('distinguishes model configuration faults from connection loss without exposi
     embedding: 'DRIFTED',
   } as never);
   mount();
-  expect(await screen.findByRole('alert')).toHaveTextContent('Mac 模型配置不匹配');
+  expect(await screen.findByRole('alert')).toHaveTextContent('模型节点配置不匹配');
   expect(screen.getByRole('alert')).not.toHaveTextContent('192.168');
 });
 
@@ -461,7 +461,7 @@ it('honors server management and model warnings without rebuilding them in the p
   expect(card.queryByRole('button', { name: '暂停这项工作' })).not.toBeInTheDocument();
   expect(card.queryByRole('button', { name: '重试失败任务' })).not.toBeInTheDocument();
   expect(
-    screen.queryByText('Mac 模型连接中断，向量任务等待恢复；其他处理继续。'),
+    screen.queryByText('模型节点连接中断，向量任务等待恢复；其他处理继续。'),
   ).not.toBeInTheDocument();
 });
 

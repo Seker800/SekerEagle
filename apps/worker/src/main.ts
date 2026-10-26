@@ -1,3 +1,4 @@
+import { mediaMemoryMiB, WORKER_INFLIGHT_MEMORY_MIB } from './media-resource-budget';
 import { computePolicySignature } from './compute-runtime';
 import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
 import { remoteMediaKinds } from './compute-runtime';
@@ -77,8 +78,8 @@ import {
   isPermanentMediaValidationError,
   PermanentMediaValidationError,
 } from './media-validation-error';
-import { EmbeddingClient } from './embedding-client';
-import { embeddingRetry } from './embedding-retry';
+import { EmbeddingClient, type EmbeddingClientError } from './embedding-client';
+import { embeddingRetry, embeddingBackoff } from './embedding-retry';
 import { buildPrototypePlan, parsePgVector } from './tag-semantic-build';
 import {
   JobWakeScheduler,
@@ -137,6 +138,7 @@ const resourcePool = new MediaResourcePool(
   () => wakeScheduler?.wakeNow(),
   reportLoopError,
   boundedInteger(process.env.EAGLE_EMBEDDING_CONCURRENCY, 1, 1, 2),
+  WORKER_INFLIGHT_MEMORY_MIB,
 );
 const legacyEmbeddingLimit = boundedInteger(process.env.EAGLE_EMBEDDING_CONCURRENCY, 1, 1, 2);
 const remoteMediaClient = new RemoteMediaClient(
@@ -1043,6 +1045,12 @@ async function recomputeSuggestionGeneration(
 async function failTagSemanticBuild(build: EagleTagSemanticBuild, error: unknown): Promise<void> {
   const retry = embeddingRetry(error, build.attempts);
   if (retry) {
+    const backoff = embeddingBackoff(error);
+    if (
+      backoff?.reason === 'WAITING_EMBEDDING_CAPACITY' &&
+      (error as EmbeddingClientError).deferResource
+    )
+      resourcePool.defer('EMBEDDING', backoff.delayMs);
     await prisma.eagleTagSemanticBuild.updateMany({
       where: { id: build.id, status: 'PROCESSING', leaseVersion: build.leaseVersion },
       data: retry.data,
@@ -1209,6 +1217,7 @@ async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {
 
 async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<void> {
   if (error instanceof RemoteMediaUnavailableError) {
+    if (error.deferResource) resourcePool.defer('REMOTE_MEDIA', 1000);
     await prisma.eagleAssetProcessingJob.updateMany({
       where: mediaExecutionGuard(job),
       data: mediaWaitData(job.attempts, 1000, 'WAITING_REMOTE_MEDIA_CAPACITY'),
@@ -1217,6 +1226,12 @@ async function failJob(job: EagleAssetProcessingJob, error: unknown): Promise<vo
   }
   const retry = embeddingRetry(error, job.attempts);
   if (retry) {
+    const backoff = embeddingBackoff(error);
+    if (
+      backoff?.reason === 'WAITING_EMBEDDING_CAPACITY' &&
+      (error as EmbeddingClientError).deferResource
+    )
+      resourcePool.defer('EMBEDDING', backoff.delayMs);
     await prisma.eagleAssetProcessingJob.updateMany({
       where: mediaExecutionGuard(job),
       data: retry.data,
@@ -1347,6 +1362,17 @@ async function deleteOwnedPrefix(ownerId: string, prefix: string): Promise<void>
   } while (continuationToken);
 }
 
+function resourceBudget(resource: MediaResource) {
+  return {
+    memoryMiB: (job: EagleAssetProcessingJob) => mediaMemoryMiB(resource, job),
+    onMemoryWait: async (job: EagleAssetProcessingJob) => {
+      await prisma.eagleAssetProcessingJob.updateMany({
+        where: mediaExecutionGuard(job),
+        data: mediaWaitData(job.attempts, 1000, 'WAITING_COMPUTE_MEMORY'),
+      });
+    },
+  };
+}
 async function poll(): Promise<void> {
   if (!stopping && !deletingObjects) {
     deletingObjects = true;
@@ -1370,13 +1396,14 @@ async function poll(): Promise<void> {
   }
   if (stopping) return;
   void resourcePool
-    .fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob)
+    .fill('EMBEDDING', () => claimJob('EMBEDDING'), processClaimedJob, resourceBudget('EMBEDDING'))
     .catch(reportLoopError);
   void resourcePool
     .fill(
       'REMOTE_MEDIA',
       () => claimJob('REMOTE_MEDIA'),
       (job) => processClaimedJob(job, true),
+      resourceBudget('REMOTE_MEDIA'),
     )
     .catch(reportLoopError);
   if (resourcePool.active('NAS') >= workerConcurrency || buildingPhotoMap) return;
@@ -1399,7 +1426,9 @@ async function poll(): Promise<void> {
     }
   }
 
-  void resourcePool.fill('NAS', () => claimJob('NAS'), processClaimedJob).catch(reportLoopError);
+  void resourcePool
+    .fill('NAS', () => claimJob('NAS'), processClaimedJob, resourceBudget('NAS'))
+    .catch(reportLoopError);
 }
 
 interface PendingMediaWakeRow {

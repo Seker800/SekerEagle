@@ -54,7 +54,12 @@ export class EagleTaskCenterController {
   ) {}
   @Get()
   overview(@CurrentPrincipal() principal: AuthPrincipal) {
-    return this.tasks.overview(principal.sub, principal.canViewPrivate, principal.role === 'ADMIN');
+    return this.tasks.overview(
+      principal.sub,
+      principal.canViewPrivate,
+      'ACTIVE',
+      principal.role === 'ADMIN',
+    );
   }
   @Get('history')
   history(@CurrentPrincipal() principal: AuthPrincipal) {

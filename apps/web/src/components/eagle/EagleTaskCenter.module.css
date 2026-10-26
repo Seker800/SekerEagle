@@ -283,6 +283,7 @@
 }
 .compute > div > span:first-child {
   font-weight: 600;
+}
 .header > div {
   display: flex;
   align-items: center;

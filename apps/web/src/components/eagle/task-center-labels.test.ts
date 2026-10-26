@@ -49,7 +49,7 @@ describe('task explanations', () => {
     ];
     expect(new Set(reasons.map(taskWaitLabel)).size).toBe(reasons.length);
     expect(taskWaitLabel('DEPENDENCY_FAILED')).toContain('重试');
-    expect(taskWaitLabel('MODEL_OFFLINE')).toContain('Mac');
+    expect(taskWaitLabel('MODEL_OFFLINE')).toContain('模型节点');
     for (const step of [
       'SMART_FOLDER_QUERY',
       'GENERATE_RENDITIONS',
@@ -139,4 +139,6 @@ it('shows a bounded model capacity wait without claiming the host is offline', a
   );
 });
 
-it('multi-host model metadata does not claim that Mac is the only executor',()=>{expect(taskFamilyLabels('EMBEDDING').join(' ')).not.toContain('Mac');});
+it('multi-host model metadata does not claim that Mac is the only executor', () => {
+  expect(taskFamilyLabels('EMBEDDING').join(' ')).not.toContain('Mac');
+});

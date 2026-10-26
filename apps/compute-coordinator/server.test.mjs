@@ -1,3 +1,5 @@
+import { request as httpRequest } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -28,6 +30,7 @@ async function setup(
       maxConcurrent: 2,
       reserveInteractive: 1,
       enabled: true,
+      verified: true,
     },
   ]);
   fleet.markHealth('mac', { ...contract, status: 'ready', metal: true });
@@ -132,6 +135,7 @@ test('oversized management input and unexpected fields are rejected', async (t) 
         expectedRevision: 0,
         nodeId: 'mac',
         enabled: true,
+        verified: true,
         concurrency: 1,
         operations: ['embedding'],
         durationSeconds: 60,
@@ -159,7 +163,79 @@ test('busy upstream quarantines node without consuming another node', async (t) 
   assert.equal(fleet.snapshot().nodes[0].health, 'OFFLINE');
 });
 
-test('invalid enrollment inputs return 400 without mutating the fleet',async t=>{
- const {call,fleet}=await setup(t);assert.equal((await call('/admin/enroll','management-token','null')).status,400);
- assert.equal((await call('/admin/enroll','management-token',{expectedRevision:0,node:{id:'new',name:'New',url:'not-a-url'}})).status,400);assert.equal(fleet.snapshot().revision,0);
+test('invalid enrollment inputs return 400 without mutating the fleet', async (t) => {
+  const { call, fleet } = await setup(t);
+  assert.equal((await call('/admin/enroll', 'management-token', 'null')).status, 400);
+  assert.equal(
+    (
+      await call('/admin/enroll', 'management-token', {
+        expectedRevision: 0,
+        node: { id: 'new', name: 'New', url: 'not-a-url' },
+      })
+    ).status,
+    400,
+  );
+  assert.equal(fleet.snapshot().revision, 0);
+});
+
+test('a downstream that never reads cannot hold a compute slot forever', async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), 'eagle-slow-client-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const fleet = new Fleet({ directory, contract });
+  await fleet.initialize([
+    {
+      id: 'media',
+      name: 'Media',
+      url: 'http://127.0.0.1:11437',
+      token: 'backend-token',
+      accelerator: 'cpu',
+      operations: ['image'],
+      maxConcurrent: 1,
+      reserveInteractive: 0,
+      enabled: true,
+      verified: true,
+    },
+  ]);
+  fleet.markHealth('media', {
+    status: 'ready',
+    protocol: 'sekereagle-media-v1',
+    imageEncoding: 'SEI1',
+    operations: ['image'],
+  });
+  const server = createCoordinator({
+    fleet,
+    executionToken: 'execution-token',
+    adminToken: 'management-token',
+    responseWriteTimeoutMs: 30,
+    fetcher: async () => new globalThis.Response('x'.repeat(16 * 1024 * 1024)),
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const req = httpRequest(
+    {
+      hostname: '127.0.0.1',
+      port: server.address().port,
+      path: '/v1/media/image',
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer execution-token',
+        'content-type': 'application/octet-stream',
+        'x-image-work': 'e30',
+      },
+    },
+    (response) => {
+      response.pause();
+      t.after(() => response.destroy());
+    },
+  );
+  req.on('error', () => {});
+  t.after(() => req.destroy());
+  req.end('input');
+  await delay(100);
+  for (let i = 0; i < 100 && fleet.snapshot().nodes[0].inFlight; i++) await delay(10);
+  assert.equal(fleet.snapshot().nodes[0].inFlight, 0);
 });
