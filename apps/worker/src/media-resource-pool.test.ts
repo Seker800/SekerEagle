@@ -249,3 +249,13 @@ test('an offline model leaves vector work unclaimed while NAS keeps progressing,
  assert.equal(runs,5);
  assert.throws(()=>pool.setEmbeddingLimit(100));
  });
+
+test('remote media has separate capacity and cannot increase NAS execution',async()=>{
+ const pool=new MediaResourcePool(1,()=>{},()=>{},1);
+ pool.setRemoteMediaLimit(2);let remote=0,nas=0;let end!:()=>void;
+ const waiting=new Promise<void>(resolve=>{end=resolve;});
+ await pool.fill('REMOTE_MEDIA',async()=>1,async()=>{remote++;await waiting;});
+ await pool.fill('NAS',async()=>1,async()=>{nas++;await waiting;});
+ assert.equal(remote,2);assert.equal(nas,1);assert.equal(pool.activeCount,3);
+ pool.setRemoteMediaLimit(0);await pool.fill('REMOTE_MEDIA',async()=>1,async()=>{remote++;});assert.equal(remote,2);end();
+});
