@@ -124,5 +124,5 @@ test('unprobed face configuration is never advertised as ready', async (t) => {
       headers: { authorization: 'Bearer test-media-token' },
     })
   ).json()) as { operations: string[] };
-  assert.deepEqual(health.operations, ['image']);
+  assert.deepEqual(health.operations, ['image', 'pyramid']);
 });
