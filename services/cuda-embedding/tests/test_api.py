@@ -94,3 +94,58 @@ def test_busy_model_does_not_block_health_and_releases_only_when_done():
 def test_capacity_configuration_is_bounded(limit):
     with pytest.raises(ValueError):
         create_app(Engine(), "isolated-test-token", limit)
+
+
+def test_text_body_is_authenticated_before_parsing_and_bounded():
+    with TestClient(create_app(Engine(), "isolated-test-token", 1)) as client:
+        assert client.post("/v1/embeddings/text", content=b"bad json").status_code == 401
+        assert client.post("/v1/embeddings/text", content=b"x"*16385, headers=HEADERS).status_code == 413
+        assert client.post("/v1/embeddings/text", json={"text": ""}, headers=HEADERS).status_code == 422
+        assert client.get("/healthz", headers=HEADERS).json()["capacity"]["inFlight"] == 0
+
+
+def test_concurrent_requests_form_a_bounded_internal_batch():
+    class BatchEngine(Engine):
+        batches = []
+        def infer_batch(self, items):
+            self.batches.append(len(items))
+            return [[3.0, 4.0]+[0.0]*2046 for _ in items]
+        def infer(self, item):
+            raise AssertionError("single-item path must not replace batching")
+    engine = BatchEngine()
+    barrier = threading.Barrier(3)
+    with TestClient(create_app(engine, "isolated-test-token", 3, batch_size=3)) as client, ThreadPoolExecutor(3) as pool:
+        def request():
+            barrier.wait()
+            return client.post("/v1/embeddings/text", json={"text": "car"}, headers=HEADERS)
+        futures = [pool.submit(request) for _ in range(3)]
+        assert all(f.result().status_code == 200 for f in futures)
+    assert engine.batches == [3]
+
+
+def test_cancelled_caller_keeps_admission_until_model_finishes():
+    import asyncio
+    import httpx
+    started, finish = threading.Event(), threading.Event()
+    engine = Engine()
+    def infer(_):
+        started.set()
+        assert finish.wait(5)
+        return [1.0]*2048
+    engine.infer = infer
+    async def run():
+        app = create_app(engine, "isolated-test-token", 1)
+        async with app.router.lifespan_context(app), httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://isolated") as client:
+            task = asyncio.create_task(client.post("/v1/embeddings/text", json={"text": "car"}, headers=HEADERS))
+            assert await asyncio.to_thread(started.wait, 2)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            try:
+                assert (await client.get("/healthz", headers=HEADERS)).json()["capacity"]["inFlight"] == 1
+                assert (await client.post("/v1/embeddings/text", json={"text": "car"}, headers=HEADERS)).status_code == 503
+            finally:
+                finish.set()
+    asyncio.run(run())
