@@ -4,7 +4,7 @@
 
 ## 2026-10-27 当前热分工与待审补丁
 
-现用 NAS API／worker／web／协调器仍统一为 `6c10813b4c7ab9e1fc3b2e8d372eb742f00a4f84`，两台正式媒体服务和 Mac Metal 都在运行。北京时间 19:53 巡检回退共享图片观察后的节点策略修订 **31**：Windows 4 路共享 `image,video`，主处理图片／RAW／颜色和 NVENC 视频；Mac 媒体 4 路共享 `pyramid,faces,video`，以已验证 VideoToolbox 同时分担视频；Mac Metal 背景 2 路、保留 1 路交互。两机登记基线仍各有四媒体能力，临时分工 1 小时后恢复基线，原半小时巡检继续按积压热调。没有更改用户类别暂停／时段，未重算全库或重试历史 FAILED。
+现用 NAS API／worker／web／协调器仍统一为 `6c10813b4c7ab9e1fc3b2e8d372eb742f00a4f84`，两台正式媒体服务和 Mac Metal 都在运行。北京时间 20:54 巡检续期后的节点策略修订 **33**：Windows 4 路共享 `image,video`，主处理图片／RAW／颜色和 NVENC 视频；Mac 媒体 4 路共享 `pyramid,faces,video`，以已验证 VideoToolbox 同时分担视频；Mac Metal 背景 2 路、保留 1 路交互。两机登记基线仍各有四媒体能力，临时分工 1 小时后恢复基线，原半小时巡检继续按积压热调。没有更改用户类别暂停／时段，未重算全库或重试历史 FAILED。
 
 发现全局 EWMA 把 Windows 的长视频耗时混入图片调度，造成已空闲节点仍少接快任务。修正候选 `4642828db5a6a6fe3208e0d8a5d27a45ee585271` 在后台采用空闲优先、空闲轮换及同操作记时，并保留交互检索延迟优先；本地协调器 39 项、真实 NAS 只读／隔离网络镜像 22 项测试通过。**DeepSeek Harness 独立审查因 `QUOTA: Insufficient Balance` 中断，未取得最终报告，候选未上线。** 待恢复额度后完成外审，不把部分 reasoning、已构建镜像或自测冒充审查通过／已发布。候选与回退计划在本机 `.omx/artifacts/compute-offload-20261027/coordinator-refresh-plan.md`，NAS `maintenance/compute-dispatch-20261027-final/`；切换计划要求先自然排空 worker，单换协调器，保留原 state／凭据，再恢复同 ID worker。较早 `compute-dispatch-20261027/` 为未发布候选，不是现用部署。
 
