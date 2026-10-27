@@ -470,3 +470,25 @@ test('quickly completed requests do not starve another verified idle host', asyn
   }
   assert.deepEqual(counts, { mac: 6, windows: 6 });
 });
+
+test('interactive retrieval keeps latency preference rather than idle background rotation', async (t) => {
+  const { fleet } = await fixture(t, [node('mac'), node('cuda', { accelerator: 'cuda' })]);
+  fleet.markHealth('mac', { ...contract, status: 'ready', metal: true });
+  fleet.markHealth('cuda', { ...contract, status: 'ready', accelerator: 'cuda' });
+  const policy = {
+    nodeId: 'cuda',
+    concurrency: 3,
+    operations: ['embedding'],
+    durationSeconds: 60,
+    reason: 'Synthetic latency warmup',
+  };
+  await fleet.update({ ...policy, expectedRevision: 0, enabled: false });
+  for (let i = 0; i < 10; i++) fleet.acquire('embedding', true).release(10);
+  await fleet.update({ ...policy, expectedRevision: 1, enabled: true });
+  const first = fleet.acquire('embedding', true);
+  assert.equal(first.node.id, 'mac');
+  const second = fleet.acquire('embedding', true);
+  assert.equal(second.node.id, 'mac');
+  first.release(10);
+  second.release(10);
+});

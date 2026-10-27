@@ -523,9 +523,11 @@ export class Fleet {
         yLoad = y.inFlight + (y.external ?? 0);
       // Use idle capacity before queueing more work on a busy host. Rotate idle
       // peers so one long video never prevents its host receiving quick image work.
-      const idle = Number(xLoad > 0) - Number(yLoad > 0);
-      if (idle) return idle;
-      if (!xLoad && !yLoad) return x.lastAssigned - y.lastAssigned || a.id.localeCompare(b.id);
+      if (!interactive) {
+        const idle = Number(xLoad > 0) - Number(yLoad > 0);
+        if (idle) return idle;
+        if (!xLoad && !yLoad) return x.lastAssigned - y.lastAssigned || a.id.localeCompare(b.id);
+      }
       return (
         (xLoad + 1) * (x.operationEwma.get(operation) ?? 1000) -
           (yLoad + 1) * (y.operationEwma.get(operation) ?? 1000) ||
