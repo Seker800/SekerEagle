@@ -118,10 +118,18 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
     ...(livePhotoIdentifier ? { livePhotoIdentifier } : {}),
   };
 }
+export type CameraVideoEncoder = 'libx264' | 'h264_videotoolbox' | 'h264_nvenc';
+export function cameraVideoEncodingArguments(encoder: CameraVideoEncoder = 'libx264'): string[] {
+  if (encoder === 'libx264') return ['-c:v','libx264','-preset','fast','-crf','22'];
+  if (encoder === 'h264_videotoolbox') return ['-c:v','h264_videotoolbox','-allow_sw','0','-q:v','65'];
+  if (encoder === 'h264_nvenc') return ['-c:v','h264_nvenc','-preset','p5','-cq','22','-b:v','0'];
+  throw new Error('UNSUPPORTED_VIDEO_ENCODER');
+}
 export async function transcodeCameraVideo(
   inputPath: string,
   outputPath: string,
   durationMs: number,
+  encoder: CameraVideoEncoder = 'libx264',
 ) {
   await run(
     process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
@@ -141,12 +149,7 @@ export async function transcodeCameraVideo(
       '-dn',
       '-vf',
       "scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
-      '-c:v',
-      'libx264',
-      '-preset',
-      'fast',
-      '-crf',
-      '22',
+      ...cameraVideoEncodingArguments(encoder),
       '-pix_fmt',
       'yuv420p',
       '-threads',
