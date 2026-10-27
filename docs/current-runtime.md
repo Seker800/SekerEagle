@@ -2,7 +2,33 @@
 
 安卓人工／模拟器交互验收固定入口：<http://localhost:49813>。恢复预览运行 `npm run android:lab:preview`，启动与故障处理见[安卓固定测试图库](android-test-lab.md)。持续复用原账号和数据，不能用临时回归工作台替代此入口。
 
-## 2026-10-27 Mac 与 Windows CPU 图片执行器已接单
+## 2026-10-27 当前热分工与待审补丁
+
+现用 NAS API／worker／web／协调器仍统一为 `6c10813b4c7ab9e1fc3b2e8d372eb742f00a4f84`，两台正式媒体服务和 Mac Metal 都在运行。当前节点策略修订 **20**：Windows 4 路共享 `image,video`，主处理图片／RAW／颜色和 NVENC 视频；Mac CPU 4 路共享 `pyramid,faces`；Mac Metal 背景 2 路、保留 1 路交互。两机登记基线仍各有四媒体能力，临时分工 1 小时后恢复基线，原半小时巡检继续按积压热调。没有更改用户类别暂停／时段，未重算全库或重试历史 FAILED。
+
+发现全局 EWMA 把 Windows 的长视频耗时混入图片调度，造成已空闲节点仍少接快任务。修正候选 `4642828db5a6a6fe3208e0d8a5d27a45ee585271` 在后台采用空闲优先、空闲轮换及同操作记时，并保留交互检索延迟优先；本地协调器 39 项、真实 NAS 只读／隔离网络镜像 22 项测试通过。**DeepSeek Harness 独立审查因 `QUOTA: Insufficient Balance` 中断，未取得最终报告，候选未上线。** 待恢复额度后完成外审，不把部分 reasoning、已构建镜像或自测冒充审查通过／已发布。候选与回退计划在本机 `.omx/artifacts/compute-offload-20261027/coordinator-refresh-plan.md`，NAS `maintenance/compute-dispatch-20261027-final/`；切换计划要求先自然排空 worker，单换协调器，保留原 state／凭据，再恢复同 ID worker。较早 `compute-dispatch-20261027/` 为未发布候选，不是现用部署。
+
+当前实际生产代码 6c10813 的独立审查与产物验证已完成；待审调度补丁另行记录。PostgreSQL 仍为原实例、热增额 3 GiB，memory+swap 合计 4 GiB，完整 Compose 链末尾为 postgres-cache 覆盖。原资格服务已清理，CUDA 资格任务停用、权重保留，3090 向量仍未登记。后台继续处理；以下为分阶段实机证据，动态完成量以后读检查点与数据库。
+
+## 2026-10-27 双机完整媒体执行与供料内存调整已上线
+
+NAS API、worker、web、compute-coordinator 当前镜像统一为 `sekereagle/{服务}:nas-6c10813b4c7ab9e1fc3b2e8d372eb742f00a4f84`。这是应用源码提交；后续文档／私有运维核验不代表重发镜像。北京时间约 13:27 完成应用切换，旧 worker 和协调器均正常排空，无 OOM；数据库、MinIO、gateway、封面任务容器身份保留。原 state、节点与管理／执行凭据 SHA、环境、挂载及服务限制均按发布前核对，57 项迁移文件及 schema 与现用逐文件 SHA 一致，没有新迁移或恢复生产数据库。
+
+约 13:31 起 Windows 正式启用 `image,pyramid,video,faces`，Mac 完整媒体执行器随后推广成功；修订 18 为两台各 4 名额、Mac Metal 实际 3／保留 1、Mac 宿主总上限 7、Windows 上限 4，三节点基线均启用。向量保持原模型／修订／1024 维／归一化，仅 Mac 生产。Windows 已完成生产视频、颜色和切片等任务；并非只装好软件或拿合成图充当生产完成。业务队列、租约和最终发布仍唯一留 NAS，不覆盖用户类别暂停／时段或新建全库任务。
+
+两台正式服务 11437 的独立 bundle SHA256 为 `ddc917bd7d24a0d4bc08ce09b0a20bdaf3ee0301520f1d4122141a3b6ac3aa11`，完整 Python 资源和固定 face 模型保留。Mac 用 `com.sekereagle.compute-media`，Windows 原 `SekerEagle-Media` S4U／Limited 开机任务改用四能力启动器，Sharp／原生线程为 6／6，视频 NVENC；Mac Sharp 4、RAW 原生默认 1，视频 VideoToolbox。Windows 11437 防火墙仍只允许 NAS 和 Mac，不改 Wi-Fi／路由器。MAC 首次 bootstrap 返回 EIO 时已自动恢复旧文件和服务，确认无接单后补充等待 launchd 注销完成及有限 bootstrap 重试，第二次成功；两次私有备份保留，不清除失败证据。
+
+最终产物在两台各 24 组格式／模式／详情组合、四视频并发和四混合操作中通过；普通图像像素一致、RAW 最低 PSNR 约 75.9 dB、74 个大图切片全部像素一致、视频 SSIM Mac 0.997391／Windows 0.998712、公开脸向量／框一致。修复 SEA1 提前开流的中断清理；中断证明限定响应传输阶段。金字塔只在最终原租约 CAS 成功的同一事务内发布 READY，真实隔离库证明旧执行者晚到不会覆盖新结果。全仓 lint／typecheck／unit／build、架构门禁、完整隔离库历史升级／完整恢复／真实 worker 多通道回归通过。DeepSeek 独立只读审查按模块留档，stale／timeout 不当通过，实质修复均有最终对应版本；原有非本轮 RUNNING 写入竞态、坏视频异常类型和当前拓扑不触发的防御性边界单独取舍记录，不冒充全仓无遗留问题。
+
+实际供料瓶颈已转到 NAS 账本／磁盘：一次观测 PostgreSQL CPU 约 164%、向量 UPDATE 的 DataFileRead 等待约 7 秒，向量表／索引约 654／973 MiB，而原容器仅 1.5 GiB；主机约 4.5 GiB 可用。已对同一个健康 PostgreSQL 容器执行热增额到 3 GiB、memory+swap 合计 4 GiB，并向完整 Compose 链追加私有 `maintenance/compute-offload-20261027/postgres-cache.yml`。容器 ID／镜像／重启计数／环境／挂载原样，未重启数据库、未动表或索引、未降低同步提交。不要为了回退自动缩小已经升温的数据库缓存；先核对实际内存及宿主余量。
+
+13:55 只读接续样本：自 13:27:20 起，视频预览完成 14、颜色完成 295、切片完成 44、向量完成 318，新增 FAILED 零。该窗口包含服务推广与内存调整，只说明实际接续，不作为相同负载的吞吐倍数；实时进度以后读 MCP／数据库检查点。两台设备尚未承诺持续百分之百，发现供料／回写等待后继续优化有效产出，不制造无用计算。
+
+本次备份／镜像／回退／实际部署证据在 NAS 私有 `maintenance/compute-offload-20261027/`；完整命令仍从 `maintenance/processing-upgrade-20261023/release-compose.json` 读，末尾含 runtime 和 postgres-cache 两个覆盖。当前 state 已包含新操作，旧三操作协调器直接回退会拒绝加载：须先停止新接单、真实排空、用兼容新协调器把媒体登记恢复 legacy 操作后再回退旧镜像，不覆盖新策略／凭据。独立资格服务不是生产节点，验收后停止；3090 CUDA 未通过跨后端向量门禁，保持未登记，模型文件保留，不伪造 Metal、不改变输入规格。具体分工见 [compute-fleet](compute-fleet.md)，私有核验材料在本机 `.omx/artifacts/compute-offload-20261027/`。核验日期：2026-10-27，北京时间。
+
+以下保留各阶段历史证据；同日较早阶段的镜像、操作白名单与进度由上节当前事实覆盖。
+
+## 2026-10-27 09:57 图片阶段：Mac 与 Windows CPU 执行器已接单
 
 北京时间约 09:57 起 Windows CPU 正式分担图片任务，约 10:02 起 Mac CPU 加入同一图片池。两台无状态执行器均只登记 `image`，每台已验证上限 4，Sharp 每项 4 线程。Mac GPU 继续原模型向量，实际接收 3、保留 1 交互；Mac 两个端点同属 `hostId=mac`、宿主总上限 7，Windows 为 `hostId=windows`、上限 4。协调修订到 10。重登记前 Mac GPU 已停止接单且真实 inFlight=0；未重启模型、未换网络或碰路由器。策略与最新累计量以后读实时 MCP，不把本文当实时进度。
 
