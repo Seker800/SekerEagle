@@ -150,6 +150,7 @@ export class Fleet {
     this.now = now;
     this.state = { revision: 0, nodes: [], policies: {}, audit: [] };
     this.runtime = new Map();
+    this.dispatchSequence = 0;
     this.writing = Promise.resolve();
   }
   async initialize(nodes) {
@@ -212,6 +213,8 @@ export class Fleet {
         inFlight: 0,
         background: 0,
         ewma: 1000,
+        operationEwma: new Map(),
+        lastAssigned: 0,
         completed: 0,
       });
   }
@@ -273,6 +276,8 @@ export class Fleet {
         inFlight: 0,
         background: 0,
         ewma: 1000,
+        operationEwma: new Map(),
+        lastAssigned: 0,
         completed: 0,
       });
       return this.snapshot();
@@ -475,6 +480,12 @@ export class Fleet {
         memory: r?.memory ?? {},
         system: r?.system ?? {},
         averageMs: Math.round(r?.ewma ?? 0),
+        operationAverageMs: Object.fromEntries(
+          [...(r?.operationEwma ?? [])].map(([operation, milliseconds]) => [
+            operation,
+            Math.round(milliseconds),
+          ]),
+        ),
       };
     });
     return {
@@ -508,12 +519,25 @@ export class Fleet {
     candidates.sort((a, b) => {
       const x = this.runtime.get(a.id),
         y = this.runtime.get(b.id);
-      return (x.inFlight + 1) * x.ewma - (y.inFlight + 1) * y.ewma || a.id.localeCompare(b.id);
+      const xLoad = x.inFlight + (x.external ?? 0),
+        yLoad = y.inFlight + (y.external ?? 0);
+      // Use idle capacity before queueing more work on a busy host. Rotate idle
+      // peers so one long video never prevents its host receiving quick image work.
+      const idle = Number(xLoad > 0) - Number(yLoad > 0);
+      if (idle) return idle;
+      if (!xLoad && !yLoad) return x.lastAssigned - y.lastAssigned || a.id.localeCompare(b.id);
+      return (
+        (xLoad + 1) * (x.operationEwma.get(operation) ?? 1000) -
+          (yLoad + 1) * (y.operationEwma.get(operation) ?? 1000) ||
+        x.lastAssigned - y.lastAssigned ||
+        a.id.localeCompare(b.id)
+      );
     });
     const node = candidates[0];
     if (!node) return null;
     const r = this.runtime.get(node.id);
     r.inFlight++;
+    r.lastAssigned = ++this.dispatchSequence;
     if (!interactive) r.background++;
     let released = false;
     return {
@@ -525,7 +549,13 @@ export class Fleet {
         if (!interactive) r.background--;
         if (!successful) return;
         r.completed++;
-        r.ewma = r.ewma * 0.8 + Math.max(1, elapsed) * 0.2;
+        const duration = Math.max(1, elapsed);
+        r.ewma = r.ewma * 0.8 + duration * 0.2;
+        const previous = r.operationEwma.get(operation);
+        r.operationEwma.set(
+          operation,
+          previous === undefined ? duration : previous * 0.8 + duration * 0.2,
+        );
       },
     };
   }

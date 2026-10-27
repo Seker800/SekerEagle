@@ -409,3 +409,64 @@ test('failed probes never release the startup idle barrier and external work con
   });
   assert.equal(fleet.acquire('embedding', true), null);
 });
+
+const mediaNode = (id, operations = ['image', 'video']) =>
+  node(id, {
+    accelerator: 'cpu',
+    operations,
+    maxConcurrent: 4,
+    reserveInteractive: 0,
+  });
+const mediaHealth = (inFlight = 0) => ({
+  status: 'ready',
+  protocol: 'sekereagle-media-v1',
+  imageEncoding: 'SEI1',
+  artifactEncoding: 'SEA1',
+  operations: ['image', 'video'],
+  capacity: { limit: 4, inFlight },
+});
+
+test('an idle media host takes work instead of queueing behind a busy host with a cheaper unrelated history', async (t) => {
+  const { fleet } = await fixture(t, [mediaNode('mac', ['image']), mediaNode('windows')]);
+  for (const id of ['mac', 'windows']) fleet.markHealth(id, mediaHealth());
+  const longVideo = fleet.acquire('video', false);
+  assert.equal(longVideo.node.id, 'windows');
+  longVideo.release(300000);
+  const image = fleet.acquire('image', false);
+  assert.equal(image.node.id, 'mac');
+  const next = fleet.acquire('image', false);
+  assert.equal(next.node.id, 'windows');
+  image.release(20);
+  next.release(20);
+});
+
+test('busy hosts compare the same operation rather than video time against image time', async (t) => {
+  const { fleet } = await fixture(t, [mediaNode('windows')]);
+  fleet.markHealth('windows', mediaHealth());
+  fleet.acquire('video', false).release(300000);
+  fleet.acquire('image', false).release(20);
+  await fleet.enroll({ expectedRevision: 0, node: mediaNode('mac', ['image']) });
+  fleet.markHealth('mac', mediaHealth());
+  const warm = fleet.acquire('image', false);
+  assert.equal(warm.node.id, 'mac');
+  warm.release(200);
+  for (const id of ['mac', 'windows']) fleet.markHealth(id, mediaHealth(1));
+  const next = fleet.acquire('image', false);
+  assert.equal(next.node.id, 'windows');
+  next.release(20);
+  const windows = fleet.snapshot().nodes.find((n) => n.id === 'windows');
+  assert.equal(windows.operationAverageMs.image, 20);
+  assert.equal(windows.operationAverageMs.video, 300000);
+});
+
+test('quickly completed requests do not starve another verified idle host', async (t) => {
+  const { fleet } = await fixture(t, [mediaNode('mac'), mediaNode('windows')]);
+  for (const id of ['mac', 'windows']) fleet.markHealth(id, mediaHealth());
+  const counts = { mac: 0, windows: 0 };
+  for (let i = 0; i < 12; i++) {
+    const slot = fleet.acquire('image', false);
+    counts[slot.node.id]++;
+    slot.release(slot.node.id === 'mac' ? 1 : 50);
+  }
+  assert.deepEqual(counts, { mac: 6, windows: 6 });
+});
