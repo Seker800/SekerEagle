@@ -1,0 +1,8 @@
+# CUDA wheels are obtained from the official cu128 index and verified separately.
+torch==2.11.0
+torchvision==0.26.0
+transformers==5.15.0
+fastapi==0.141.1
+uvicorn==0.52.4
+pillow==13.0.0
+safetensors==0.7.0

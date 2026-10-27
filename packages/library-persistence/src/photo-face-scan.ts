@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { lockOwnerPrivacyProjection } from './privacy-lock';
 
-export const PHOTO_FACE_MODEL_VERSION = 'yunet-2023mar-sface-2021dec-v1';
+import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
+export { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
 
 /** One scope for coverage and enqueue. Failed/current jobs remain owned by retry, not scan. */
 export function unscannedPhotoFacesSql(ownerId: string, includePrivate: boolean) {

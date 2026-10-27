@@ -28,14 +28,14 @@ jobs:
       - run: npm run contracts:check
       - name: Verify restricted storage credentials and private bucket
         run: SEKEREAGLE_TEST_STORAGE_POLICY=1 node --test scripts/testing/storage-policy.test.mjs
-      - name: Verify real database isolation, migrations and full restore
-        run: npm run test:library-integration
       - name: Install camera media test runtime
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg python3-venv
           python3 -m venv .omx/camera-media/venv
           .omx/camera-media/venv/bin/pip install -r scripts/testing/camera-requirements.txt
+      - name: Verify real database isolation, migrations and full restore
+        run: npm run test:library-integration
       - name: Verify RAW decoding and camera video playback
         run: CAMERA_RAW_PYTHON="$PWD/.omx/camera-media/venv/bin/python" npm run smoke:camera-media
       - name: Verify extended HTTP uploads, edited copies, camera formats, live photos and sends

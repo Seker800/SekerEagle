@@ -8,7 +8,7 @@ const MAX_FILES = 4096;
 export interface ComputeArtifact {
   name: string;
   size: number;
-  source: AsyncIterable<Uint8Array>;
+  source: () => AsyncIterable<Uint8Array>;
 }
 
 function header(value: unknown) {
@@ -26,13 +26,18 @@ export async function* encodeArtifacts(manifest: unknown, entries: Iterable<Comp
   let total = 0;
   let count = 0;
   for (const entry of entries) {
-    if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > 1024 ** 3 || ++count > MAX_FILES)
+    if (
+      !Number.isSafeInteger(entry.size) ||
+      entry.size < 0 ||
+      entry.size > 1024 ** 3 ||
+      ++count > MAX_FILES
+    )
       throw new Error('ARTIFACT_LIMIT');
     total += entry.size;
     if (total > ARTIFACT_MAX_BYTES) throw new Error('ARTIFACT_LIMIT');
     yield header({ name: entry.name, size: entry.size });
     let written = 0;
-    for await (const chunk of entry.source) {
+    for await (const chunk of entry.source()) {
       written += chunk.length;
       if (written > entry.size) throw new Error('ARTIFACT_SIZE_MISMATCH');
       yield chunk;
@@ -47,7 +52,9 @@ class Reader {
   private chunk = Buffer.alloc(0);
   private offset = 0;
   private total = 0;
-  constructor(source: AsyncIterable<Uint8Array>) { this.iterator = source[Symbol.asyncIterator](); }
+  constructor(source: AsyncIterable<Uint8Array>) {
+    this.iterator = source[Symbol.asyncIterator]();
+  }
   async read(size: number) {
     const output = Buffer.allocUnsafe(size);
     let position = 0;
@@ -58,12 +65,15 @@ class Reader {
         this.chunk = Buffer.from(next.value);
         this.offset = 0;
         this.total += this.chunk.length;
-        if (this.chunk.length > 16 * 1024 ** 2 || this.total > ARTIFACT_MAX_BYTES + MAX_FILES * MAX_HEADER + MAX_HEADER + 8)
+        if (
+          this.chunk.length > 16 * 1024 ** 2 ||
+          this.total > ARTIFACT_MAX_BYTES + MAX_FILES * MAX_HEADER + MAX_HEADER + 8
+        )
           throw new Error('ARTIFACT_LIMIT');
         if (!this.chunk.length) continue;
       }
-      const length = Math.min(size-position, this.chunk.length-this.offset);
-      this.chunk.copy(output, position, this.offset, this.offset+length);
+      const length = Math.min(size - position, this.chunk.length - this.offset);
+      this.chunk.copy(output, position, this.offset, this.offset + length);
       position += length;
       this.offset += length;
     }
@@ -83,12 +93,15 @@ class Reader {
       if (next.value.length) throw new Error('ARTIFACT_TRAILING_BYTES');
     }
   }
-  async close() { await this.iterator.return?.(); }
+  async close() {
+    await this.iterator.return?.();
+  }
 }
 
 /** Spool to a caller-owned fresh directory. No whole video/pyramid allocation on the NAS. */
 export async function receiveArtifacts(
-  source: AsyncIterable<Uint8Array>, directory: string,
+  source: AsyncIterable<Uint8Array>,
+  directory: string,
   validateManifest: (value: unknown) => void,
   validateFile: (name: string, size: number) => void,
 ) {
@@ -103,10 +116,18 @@ export async function receiveArtifacts(
       const value = await reader.json(true);
       if (value === null) break;
       const entry = value as { name?: unknown; size?: unknown };
-      if (!entry || typeof entry.name !== 'string' || entry.name.length > 128 ||
-          !/^[a-zA-Z0-9_./-]+$/.test(entry.name) || entry.name.split('/').some((p) => !p || p === '.' || p === '..') ||
-          files.includes(entry.name) || files.length >= MAX_FILES ||
-          !Number.isSafeInteger(entry.size) || Number(entry.size) < 0 || Number(entry.size) > 1024 ** 3)
+      if (
+        !entry ||
+        typeof entry.name !== 'string' ||
+        entry.name.length > 128 ||
+        !/^[a-zA-Z0-9_./-]+$/.test(entry.name) ||
+        entry.name.split('/').some((p) => !p || p === '.' || p === '..') ||
+        files.includes(entry.name) ||
+        files.length >= MAX_FILES ||
+        !Number.isSafeInteger(entry.size) ||
+        Number(entry.size) < 0 ||
+        Number(entry.size) > 1024 ** 3
+      )
         throw new Error('ARTIFACT_ENTRY_INVALID');
       const size = Number(entry.size);
       bytes += size;
@@ -121,10 +142,14 @@ export async function receiveArtifacts(
           await file.writeFile(await reader.read(count));
           remaining -= count;
         }
-      } finally { await file.close(); }
+      } finally {
+        await file.close();
+      }
       files.push(entry.name);
     }
     await reader.end();
     return { manifest, files, bytes };
-  } finally { await reader.close(); }
+  } finally {
+    await reader.close();
+  }
 }

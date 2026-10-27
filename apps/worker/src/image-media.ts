@@ -13,9 +13,10 @@ import { classifyImageInputError, PermanentMediaValidationError } from './media-
 
 export const MAX_EAGLE_IMAGE_INPUT_PIXELS = CAMERA_MAX_IMAGE_PIXELS;
 
-// libvips otherwise retains a large process-global cache and may create one worker per CPU.
+// Temporary inputs must close before cleanup (Windows cannot unlink cached open files).
+// Bound decoded memory separately from queue concurrency.
 // Media jobs are already concurrency-controlled at the queue boundary.
-sharp.cache({ memory: 64, files: 20, items: 100 });
+sharp.cache({ memory: 64, files: 0, items: 100 });
 sharp.concurrency(1);
 
 export function assertSafeHeifInfo(output: string): void {

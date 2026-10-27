@@ -328,3 +328,39 @@ test('remote image selection excludes video before the window and leaves NAS vid
   await local({ where: { lane: 'INTERACTIVE' }, take: 50 } as ClaimFindManyInput);
   assert.match(queries.at(-1)!, /NOT \(a\."mimeType" LIKE 'image\/%' AND job\.kind IN/);
 });
+
+test('video delegation is explicit, mode guarded and invalidates the cached claim plan', async () => {
+  const queries: string[] = [];
+  const client = {
+    $queryRaw: async (q: { text: string }) => {
+      queries.push(q.text);
+      return [];
+    },
+  } as never;
+  let videos: 'GENERATE_PREVIEW'[] = [];
+  const selector = createScheduledMediaSelector(
+    client,
+    () => false,
+    'REMOTE_MEDIA',
+    () => [],
+    () => videos,
+  );
+  await selector({ where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput);
+  assert.doesNotMatch(queries.at(-1)!, /LIKE 'video\/%'/);
+  videos = ['GENERATE_PREVIEW'];
+  await selector({ where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput);
+  const query = queries.at(-1)!;
+  assert.match(query, /LIKE 'video\/%'/);
+  assert.match(query, /job\."libraryMode"/);
+  assert.match(query, /job\."assetRevision"=a\."mediaRevision"/);
+  assert.match(query, /image\/%' AND false/);
+  const local = createScheduledMediaSelector(
+    client,
+    () => false,
+    'NAS',
+    () => [],
+    () => videos,
+  );
+  await local({ where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput);
+  assert.match(queries.at(-1)!, /NOT \(\(a\."mimeType" LIKE 'video\/%'/);
+});

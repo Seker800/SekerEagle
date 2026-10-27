@@ -1,3 +1,7 @@
+import {
+  streamFetch,
+  MEDIA_VIDEO_REQUEST_TIMEOUT_MS,
+} from '../../packages/media-core/stream-fetch.cjs';
 import { setTimeout, clearTimeout } from 'node:timers';
 import { Buffer } from 'node:buffer';
 import { Readable } from 'node:stream';
@@ -30,7 +34,7 @@ export function createCoordinator({
   fleet,
   executionToken,
   adminToken,
-  fetcher = fetch,
+  fetcher = streamFetch,
   timeoutMs = 120000,
   responseWriteTimeoutMs = 10000,
 }) {
@@ -98,6 +102,18 @@ export function createCoordinator({
           types: ['application/octet-stream'],
           maximum: 500_000_000,
         },
+        '/v1/media/pyramid': {
+          operation: 'pyramid',
+          interactive: false,
+          types: ['application/octet-stream'],
+          maximum: 500_000_000,
+        },
+        '/v1/media/video': {
+          operation: 'video',
+          interactive: false,
+          types: ['application/octet-stream'],
+          maximum: 5_000_000_000,
+        },
         '/v1/media/faces': {
           operation: 'faces',
           interactive: false,
@@ -145,13 +161,25 @@ export function createCoordinator({
           return json(res, 400, { error: 'INVALID_IMAGE_WORK' });
         headers['x-image-work'] = work;
       }
+      if (['pyramid', 'video'].includes(route.operation)) {
+        const work = req.headers['x-artifact-work'];
+        if (typeof work !== 'string' || work.length > 2048)
+          return json(res, 400, { error: 'INVALID_ARTIFACT_WORK' });
+        headers['x-artifact-work'] = work;
+      }
       const upstream = await fetcher(slot.node.url + path, {
         method: 'POST',
         headers,
         body,
         duplex: 'half',
         redirect: 'error',
-        signal: AbortSignal.timeout(route.operation === 'embedding' ? timeoutMs : 600000),
+        signal: AbortSignal.timeout(
+          route.operation === 'video'
+            ? MEDIA_VIDEO_REQUEST_TIMEOUT_MS
+            : route.operation === 'embedding'
+              ? timeoutMs
+              : 600000,
+        ),
       });
       if (!upstream.ok) {
         res.setHeader('x-compute-backpressure', 'node');
@@ -167,8 +195,9 @@ export function createCoordinator({
         );
       }
       if (!upstream.body) throw new Error('EMPTY_COMPUTE_RESPONSE');
-      const maximum =
-        route.operation === 'image'
+      const maximum = ['pyramid', 'video'].includes(route.operation)
+        ? 2 * 1024 ** 3 + 4096 * 4096 + 8192
+        : route.operation === 'image'
           ? 256 * 1024 * 1024
           : route.operation === 'faces'
             ? 1024 * 1024
@@ -176,8 +205,9 @@ export function createCoordinator({
       let size = 0;
       if (!res.destroyed)
         res.writeHead(200, {
-          'content-type':
-            route.operation === 'image'
+          'content-type': ['pyramid', 'video'].includes(route.operation)
+            ? 'application/vnd.sekereagle.artifacts'
+            : route.operation === 'image'
               ? 'application/vnd.sekereagle.image-work'
               : 'application/json',
           'cache-control': 'no-store',
@@ -233,7 +263,7 @@ export function createCoordinator({
       if (slot) slot.release(1, false);
     }
   });
-  server.requestTimeout = 120000;
+  server.requestTimeout = 900000;
   server.headersTimeout = 10000;
   server.maxHeadersCount = 32;
   return server;

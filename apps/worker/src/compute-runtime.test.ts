@@ -30,6 +30,8 @@ test('coordinator state is bounded and strips credentials', () => {
     'GENERATE_RENDITIONS',
     'GENERATE_THUMBNAIL',
     'GENERATE_PREVIEW',
+    'PROBE_MEDIA',
+    'EXTRACT_COLOR_PALETTE',
   ]);
   assert.equal(parseComputeRuntime({ ...input, capacity: { backgroundLimit: 99 } }), null);
   assert.equal(parseComputeRuntime({ ...input, protocol: 'other' }), null);

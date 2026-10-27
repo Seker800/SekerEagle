@@ -183,7 +183,7 @@ try {
     stdio: 'inherit',
   });
   run(process.execPath, ['scripts/testing/two-resource-worker.mjs'], { env, stdio: 'inherit' });
-  run(process.execPath, ['scripts/testing/compute-worker.mjs'], { env, stdio: 'inherit' });
+  run(process.execPath, ['scripts/testing/compute-worker-isolated.mjs'], { env, stdio: 'inherit' });
   const preserved = run('docker', [
     'exec',
     name,

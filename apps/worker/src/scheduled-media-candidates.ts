@@ -29,6 +29,7 @@ export function selectScheduledMediaCandidates(
     historyOnly?: boolean;
     candidateIds?: readonly string[];
     delegatedImageKinds?: readonly EagleMediaJobKind[];
+    delegatedVideoKinds?: readonly EagleMediaJobKind[];
   } = {},
 ) {
   const kind = input.where.kind;
@@ -51,8 +52,9 @@ export function selectScheduledMediaCandidates(
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
     WHERE ${options.candidateIds ? Prisma.sql`job.id IN (${Prisma.join(options.candidateIds)}) AND` : Prisma.empty}
       ${options.resource === 'EMBEDDING' ? Prisma.sql`job.kind='GENERATE_EMBEDDING' AND` : options.resource === 'NAS' ? Prisma.sql`job.kind<>'GENERATE_EMBEDDING' AND` : Prisma.empty}
-      ${options.resource === 'REMOTE_MEDIA' ? Prisma.sql`a."mimeType" LIKE 'image/%' AND` : Prisma.empty}
+      ${options.resource === 'REMOTE_MEDIA' ? (options.delegatedVideoKinds?.length ? Prisma.sql`((a."mimeType" LIKE 'image/%' AND ${options.delegatedImageKinds?.length ? Prisma.sql`job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})` : Prisma.sql`false`}) OR ((a."mimeType" LIKE 'video/%' OR a."mimeType"='application/mxf') AND job.kind IN (${Prisma.join(options.delegatedVideoKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))}))) AND` : Prisma.sql`a."mimeType" LIKE 'image/%' AND`) : Prisma.empty}
       ${options.resource === 'NAS' && options.delegatedImageKinds?.length ? Prisma.sql`NOT (a."mimeType" LIKE 'image/%' AND job.kind IN (${Prisma.join(options.delegatedImageKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
+      ${options.resource === 'NAS' && options.delegatedVideoKinds?.length ? Prisma.sql`NOT ((a."mimeType" LIKE 'video/%' OR a."mimeType"='application/mxf') AND job.kind IN (${Prisma.join(options.delegatedVideoKinds.map((k) => Prisma.sql`${k}::"EagleMediaJobKind"`))})) AND` : Prisma.empty}
       ${options.freshOnly ? Prisma.sql`${freshness}>=now()-interval '24 hours' AND` : Prisma.empty}
       ${options.historyOnly ? Prisma.sql`${freshness}<now()-interval '24 hours' AND` : Prisma.empty}
       job.kind<>'GENERATE_AI_TAGS' AND
@@ -88,6 +90,7 @@ export function createScheduledMediaSelector(
   embeddingUnavailable: () => boolean,
   resource?: 'NAS' | 'EMBEDDING' | 'REMOTE_MEDIA',
   delegatedImages: () => readonly EagleMediaJobKind[] = () => [],
+  delegatedVideos: () => readonly EagleMediaJobKind[] = () => [],
 ) {
   const turns = new Map<string, number>();
   const windows = new Map<string, { ids: string[]; expiresAt: number }>();
@@ -100,8 +103,10 @@ export function createScheduledMediaSelector(
     const preferPriority = turn % 4 !== 3;
     const unavailable = embeddingUnavailable();
     const delegatedImageKinds = delegatedImages();
+    const delegatedVideoKinds = delegatedVideos();
     const key = JSON.stringify([
       delegatedImageKinds,
+      delegatedVideoKinds,
       input.where.lane,
       input.where.kind,
       input.where.processorVersion,
@@ -112,6 +117,7 @@ export function createScheduledMediaSelector(
     const options = {
       resource,
       delegatedImageKinds,
+      delegatedVideoKinds,
       freshOnly: age === 'RECENT',
       historyOnly: age === 'HISTORY',
     };

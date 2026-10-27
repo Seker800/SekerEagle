@@ -44,7 +44,7 @@ export function sanitizeComputeRuntime(value: unknown): ComputeRuntime | null {
       n.inFlight < 0 ||
       n.inFlight > 8 ||
       !Array.isArray(n.operations) ||
-      !n.operations.every((op) => ['embedding', 'image', 'faces'].includes(op))
+      !n.operations.every((op) => ['embedding', 'image', 'faces', 'pyramid', 'video'].includes(op))
     )
       return null;
     nodes.push({

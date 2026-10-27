@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { request as httpRequest } from 'node:http';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
@@ -191,7 +192,7 @@ test('a downstream that never reads cannot hold a compute slot forever', async (
     {
       id: 'media',
       name: 'Media',
-      url: 'http://127.0.0.1:11437',
+      url: 'http://127.0.0.2:11437',
       token: 'backend-token',
       accelerator: 'cpu',
       operations: ['image'],
@@ -244,4 +245,56 @@ test('a downstream that never reads cannot hold a compute slot forever', async (
   await delay(100);
   for (let i = 0; i < 100 && fleet.snapshot().nodes[0].inFlight; i++) await delay(10);
   assert.equal(fleet.snapshot().nodes[0].inFlight, 0);
+});
+
+test('artifact routes require recipes and forward bounded media work with artifact content type', async (t) => {
+  let forwarded;
+  const { fleet, call } = await setup(t, async (url, options) => {
+    forwarded = { url, headers: options.headers };
+    for await (const chunk of options.body) assert.ok(chunk.length > 0);
+    return new globalThis.Response('SEA1');
+  });
+  await fleet.enroll({
+    expectedRevision: 0,
+    node: {
+      id: 'media',
+      name: 'Media',
+      url: 'http://127.0.0.2:11437',
+      token: 'media-token',
+      accelerator: 'cpu',
+      operations: ['pyramid', 'video'],
+      maxConcurrent: 4,
+      reserveInteractive: 0,
+      enabled: true,
+      verified: true,
+    },
+  });
+  fleet.markHealth('media', {
+    status: 'ready',
+    protocol: 'sekereagle-media-v1',
+    artifactEncoding: 'SEA1',
+    operations: ['pyramid', 'video'],
+    capacity: { limit: 4, inFlight: 0 },
+  });
+  for (const operation of ['pyramid', 'video']) {
+    const path = `/v1/media/${operation}`;
+    assert.equal(
+      (await call(path, 'execution-token', 'input', { 'content-type': 'application/octet-stream' }))
+        .status,
+      400,
+    );
+    const recipe = Buffer.from(
+      JSON.stringify({ mimeType: operation === 'video' ? 'video/mp4' : 'image/jpeg' }),
+    ).toString('base64url');
+    const response = await call(path, 'execution-token', 'input', {
+      'content-type': 'application/octet-stream',
+      'x-artifact-work': recipe,
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'application/vnd.sekereagle.artifacts');
+    assert.equal(await response.text(), 'SEA1');
+    assert.equal(forwarded.headers['x-artifact-work'], recipe);
+    assert.equal(forwarded.headers.authorization, 'Bearer media-token');
+    assert.ok(forwarded.url.endsWith(path));
+  }
 });

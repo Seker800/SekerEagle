@@ -3,7 +3,7 @@ import { open, mkdir, rename, lstat, constants } from 'node:fs/promises';
 import { join } from 'node:path';
 import { isIP } from 'node:net';
 import { randomUUID } from 'node:crypto';
-export const OPERATIONS = ['embedding', 'image', 'faces'];
+export const OPERATIONS = ['embedding', 'image', 'faces', 'pyramid', 'video'];
 const idPattern = /^[a-z][a-z0-9-]{0,47}$/;
 export function validateEnrollment(value) {
   if (
@@ -376,7 +376,8 @@ export class Fleet {
         (payload?.protocol === 'sekereagle-media-v1' &&
           Array.isArray(payload.operations) &&
           payload.operations.includes(op) &&
-          (op !== 'image' || payload.imageEncoding === 'SEI1')),
+          (op !== 'image' || payload.imageEncoding === 'SEI1') &&
+          (!['pyramid', 'video'].includes(op) || payload.artifactEncoding === 'SEA1')),
     );
     r.health =
       payload?.status === 'ready' && embedding && media && faceCompatible

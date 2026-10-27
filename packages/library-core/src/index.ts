@@ -41,3 +41,5 @@ export * from './asset-operations';
 export * from './compute-runtime';
 export * from './task-engine';
 export * from './media-task-lifecycle';
+
+export * from './photo-face-contract';

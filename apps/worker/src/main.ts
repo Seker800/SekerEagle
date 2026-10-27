@@ -1,7 +1,8 @@
 import { mediaMemoryMiB, WORKER_INFLIGHT_MEMORY_MIB } from './media-resource-budget';
 import { computePolicySignature } from './compute-runtime';
 import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
-import { remoteMediaKinds } from './compute-runtime';
+import { remoteMediaKinds, remoteImageKinds, remoteVideoKinds } from './compute-runtime';
+import { renderPyramidWork } from './pyramid-work';
 import { processImageWork } from './image-work';
 import {
   mediaWaitData,
@@ -38,7 +39,7 @@ import {
   isCameraRawMime,
 } from '@sekereagle/library-core';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
 import {
@@ -66,8 +67,7 @@ import { inferPhotoFaces, persistPhotoFaces } from './photo-faces';
 import { inspectJpegLivePhoto, inspectLivePhotoStream } from './live-photo';
 import { readOwnedImageRange } from './image-range';
 import { selectImageJobSource } from './image-job-source';
-import { withProcessableImage } from './image-media';
-import { buildPyramidDescriptor, parseDeepZoomTilePath } from './image-pyramid';
+import { parseDeepZoomTilePath } from './image-pyramid';
 import {
   createScheduledMediaSelector,
   invalidateMediaCandidates,
@@ -187,7 +187,7 @@ async function heartbeat(): Promise<void> {
             (n) =>
               n.enabled &&
               n.health === 'READY' &&
-              n.operations.some((op) => op === 'image' || op === 'faces'),
+              n.operations.some((op) => ['image', 'faces', 'pyramid', 'video'].includes(op)),
           )
           .reduce((sum, n) => sum + n.concurrency, 0) ?? 0,
       ),
@@ -239,12 +239,15 @@ const selectors = {
     prisma,
     () => embeddingReadiness !== 'READY',
     'REMOTE_MEDIA',
+    () => remoteImageKinds(embeddingClient.computeRuntime),
+    () => remoteVideoKinds(embeddingClient.computeRuntime),
   ),
   NAS: createScheduledMediaSelector(
     prisma,
     () => embeddingReadiness !== 'READY',
     'NAS',
-    () => remoteMediaKinds(embeddingClient.computeRuntime),
+    () => remoteImageKinds(embeddingClient.computeRuntime),
+    () => remoteVideoKinds(embeddingClient.computeRuntime),
   ),
   EMBEDDING: createScheduledMediaSelector(
     prisma,
@@ -351,7 +354,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     });
     return;
   }
-  if (remoteRequired && !asset.mimeType.startsWith('image/'))
+  if (remoteRequired && !asset.mimeType.startsWith('image/') && !isCameraVideoMime(asset.mimeType))
     throw new RemoteMediaUnavailableError();
   if (job.kind === 'ANALYZE_PHOTO_FACES') {
     if (asset.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
@@ -451,7 +454,12 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
     const deferDetails =
       !sourceDetailsOnly && (isCameraRawMime(asset.mimeType) || asset.libraryMode === 'PHOTO');
     if (job.kind === 'GENERATE_IMAGE_PYRAMID') {
-      await generateImagePyramid(job, asset, object.Body as AsyncIterable<Uint8Array>);
+      await generateImagePyramid(
+        job,
+        asset,
+        object.Body as AsyncIterable<Uint8Array>,
+        remoteRequired,
+      );
       return;
     }
     const imageWork = {
@@ -649,6 +657,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
   if (!isCameraVideoMime(asset.mimeType))
     throw new PermanentMediaValidationError('UNSUPPORTED_MEDIA_TYPE');
   await processVideo(job, asset, {
+    remote: remoteRequired ? remoteMediaClient : undefined,
     prisma,
     storage,
     s3Bucket,
@@ -1108,58 +1117,19 @@ async function generateImagePyramid(
     uploadSessions: Array<{ eagleState: { expectedContentSha256: string | null } | null }>;
   },
   sourceBody: AsyncIterable<Uint8Array>,
+  remoteRequired = false,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-pyramid-'));
-  const outputBase = join(directory, 'pyramid');
-  const tileDirectory = `${outputBase}_files`;
   const storagePrefix = `users/${asset.ownerId}/assets/${asset.id}/pyramids/${job.assetRevision}/${job.processorVersion}`;
   assertOwnedKey(asset.ownerId, `${storagePrefix}/0/0_0.webp`);
   try {
-    const { result, sha256 } = await withProcessableImage(
-      sourceBody,
-      asset.mimeType,
-      asset.originalObjectKey,
-      async (image) => {
-        const metadata = await image.clone().metadata();
-        const width = metadata.autoOrient.width ?? metadata.width;
-        const height = metadata.autoOrient.height ?? metadata.height;
-        if (!width || !height) throw new Error('INVALID_PYRAMID_DIMENSIONS');
-        const descriptor = buildPyramidDescriptor(width, height);
-        await prisma.eagleImagePyramid.upsert({
-          where: {
-            assetId_revision_processorVersion: {
-              assetId: asset.id,
-              revision: job.assetRevision,
-              processorVersion: job.processorVersion,
-            },
-          },
-          create: {
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            assetId: asset.id,
-            revision: job.assetRevision,
-            processorVersion: job.processorVersion,
-            status: 'RUNNING',
-            storagePrefix,
-            ...descriptor,
-          },
-          update: { status: 'RUNNING', storagePrefix, lastError: null, ...descriptor },
-        });
-        await image
-          .rotate()
-          .webp({ quality: 82 })
-          .tile({
-            layout: 'dz',
-            size: descriptor.tileSize,
-            overlap: descriptor.overlap,
-          })
-          .toFile(`${outputBase}.dz`);
-        return descriptor;
-      },
-    );
+    const output = remoteRequired
+      ? await remoteMediaClient.pyramid(sourceBody, asset.mimeType, directory)
+      : await renderPyramidWork(sourceBody, asset.mimeType, asset.originalObjectKey, directory);
+    const { descriptor: result, sha256, tileDirectory } = output;
     assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
 
-    const tilePaths = await listFiles(tileDirectory);
+    const tilePaths = output.files.map((name) => join(tileDirectory, name));
     let byteSize = 0n;
     for (const filePath of tilePaths) {
       const relativePath = filePath.slice(tileDirectory.length + 1);
@@ -1181,7 +1151,7 @@ async function generateImagePyramid(
         ...mediaCompletion(job),
       });
       if (completed.count !== 1) return;
-      await transaction.eagleImagePyramid.update({
+      await transaction.eagleImagePyramid.upsert({
         where: {
           assetId_revision_processorVersion: {
             assetId: asset.id,
@@ -1189,8 +1159,22 @@ async function generateImagePyramid(
             processorVersion: job.processorVersion,
           },
         },
-        data: {
+        create: {
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetId: asset.id,
+          revision: job.assetRevision,
+          processorVersion: job.processorVersion,
+          storagePrefix,
           status: 'READY',
+          tileCount: tilePaths.length,
+          byteSize,
+          completedAt: new Date(),
+          ...result,
+        },
+        update: {
+          status: 'READY',
+          storagePrefix,
           tileCount: tilePaths.length,
           byteSize,
           completedAt: new Date(),
@@ -1202,16 +1186,6 @@ async function generateImagePyramid(
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
-}
-
-async function listFiles(directory: string): Promise<string[]> {
-  const files: string[] = [];
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...(await listFiles(path)));
-    else if (entry.isFile() && entry.name.endsWith('.webp')) files.push(path);
-  }
-  return files.sort();
 }
 
 async function purgeAsset(job: EagleAssetProcessingJob): Promise<void> {

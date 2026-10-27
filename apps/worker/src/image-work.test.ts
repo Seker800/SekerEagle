@@ -90,3 +90,27 @@ test('remote metadata rejects invalid dimensions, exposure values and live-photo
     await assert.rejects(decodeImageWork(encodeImageWork(result), work), /INVALID_IMAGE_RESULT/);
   }
 });
+
+test('the photo browse producer enforces its compact envelope without changing material or detail limits', async () => {
+  const image = await sharp({ create: { width: 8, height: 8, channels: 3, background: '#123456' } })
+    .jpeg()
+    .toBuffer();
+  const work = {
+    assetMimeType: 'image/jpeg',
+    sourceMimeType: 'image/jpeg',
+    kind: 'GENERATE_RENDITIONS',
+    mode: 'PHOTO',
+    detailsOnly: false,
+    verifiesOriginalHash: true,
+  } as const;
+  const result = await processImageWork(
+    (async function* () {
+      yield image;
+    })(),
+    { ...work, mode: 'MATERIAL' },
+  );
+  result.result.rendered![0]!.output.data = Buffer.alloc(33 * 1024 ** 2);
+  assert.throws(() => encodeImageWork(result, work), /IMAGE_RESULT_TOO_LARGE/);
+  assert.doesNotThrow(() => encodeImageWork(result, { ...work, detailsOnly: true }));
+  assert.doesNotThrow(() => encodeImageWork(result, { ...work, mode: 'MATERIAL' }));
+});

@@ -60,3 +60,18 @@ test('environment allowlist preserves explicit runtime paths and fixes native th
     OPENBLAS_NUM_THREADS: '1',
   });
 });
+
+test('dedicated compute hosts may opt into a bounded native budget without passing other environment values', () => {
+  const environment = mediaSubprocessEnvironment({
+    EAGLE_COMPUTE_NATIVE_THREADS: '4',
+    DATABASE_URL: 'synthetic-private',
+  });
+  assert.equal(environment.OMP_NUM_THREADS, '4');
+  assert.equal(environment.OPENBLAS_NUM_THREADS, '4');
+  assert.equal(environment.DATABASE_URL, undefined);
+  for (const value of ['0', '9', 'NaN', '1.5', '-1'])
+    assert.throws(
+      () => mediaSubprocessEnvironment({ EAGLE_COMPUTE_NATIVE_THREADS: value }),
+      /INVALID_NATIVE_THREAD_BUDGET/,
+    );
+});

@@ -1,3 +1,4 @@
+export { streamFetch, MEDIA_VIDEO_REQUEST_TIMEOUT_MS } from '../stream-fetch.cjs';
 import { mediaSubprocessEnvironment } from './subprocess-environment';
 export { mediaSubprocessEnvironment } from './subprocess-environment';
 import { normalizeLivePhotoIdentifier } from './live-photo';
@@ -120,9 +121,11 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
 }
 export type CameraVideoEncoder = 'libx264' | 'h264_videotoolbox' | 'h264_nvenc';
 export function cameraVideoEncodingArguments(encoder: CameraVideoEncoder = 'libx264'): string[] {
-  if (encoder === 'libx264') return ['-c:v','libx264','-preset','fast','-crf','22'];
-  if (encoder === 'h264_videotoolbox') return ['-c:v','h264_videotoolbox','-allow_sw','0','-q:v','65'];
-  if (encoder === 'h264_nvenc') return ['-c:v','h264_nvenc','-preset','p5','-cq','22','-b:v','0'];
+  if (encoder === 'libx264') return ['-c:v', 'libx264', '-preset', 'fast', '-crf', '22'];
+  if (encoder === 'h264_videotoolbox')
+    return ['-c:v', 'h264_videotoolbox', '-allow_sw', '0', '-q:v', '65'];
+  if (encoder === 'h264_nvenc')
+    return ['-c:v', 'h264_nvenc', '-preset', 'p5', '-cq', '22', '-b:v', '0'];
   throw new Error('UNSUPPORTED_VIDEO_ENCODER');
 }
 export async function transcodeCameraVideo(
@@ -177,6 +180,18 @@ export async function transcodeCameraVideo(
   )
     throw new Error('视频播放副本超出处理预算，未保存不完整预览。');
   return preview;
+}
+/** Load the exact deployed RAW helper and its local resources before accepting work. */
+export async function assertCameraRawRuntime(): Promise<void> {
+  await run(
+    process.env.CAMERA_RAW_PYTHON?.trim() || 'python3',
+    [
+      '-c',
+      'import runpy,sys,pathlib,json; root=pathlib.Path(sys.argv[1]).parent; sys.path.insert(0,str(root)); runpy.run_path(sys.argv[1], run_name="sekereagle_preflight"); import raw_thumbnail; profiles=json.loads((root/"camera-profiles.json").read_text()); assert isinstance(profiles["profiles"],dict)',
+      join(__dirname, '../python/raw_image.py'),
+    ],
+    { env: mediaSubprocessEnvironment(), timeout: 10000, maxBuffer: 256 * 1024 },
+  );
 }
 export async function readCameraRaw(
   inputPath: string,

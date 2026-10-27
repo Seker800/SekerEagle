@@ -7,6 +7,8 @@ import { analyzePhotoPixels, readPhotoExif } from './photo-analysis';
 import { extractRepresentativeColors } from './color-palette';
 import { inspectLivePhotoImage } from './live-photo';
 import { taskBlocksAssetReady } from './processing-policy';
+import { IMAGE_WORK_MAX_RESPONSE_BYTES, imageWorkResponseLimit } from './image-work-budget';
+export { IMAGE_WORK_MAX_RESPONSE_BYTES } from './image-work-budget';
 export interface ImageWork {
   assetMimeType: string;
   sourceMimeType: string;
@@ -102,16 +104,19 @@ export async function processImageWork(source: AsyncIterable<Uint8Array>, work: 
   );
 }
 export type ImageWorkResult = Awaited<ReturnType<typeof processImageWork>>;
-export const IMAGE_WORK_MAX_RESPONSE_BYTES = 256 * 1024 * 1024;
 export const IMAGE_WORK_CONTENT_TYPE = 'application/vnd.sekereagle.image-work';
-export function encodeImageWork(value: ImageWorkResult) {
+export function encodeImageWork(
+  value: ImageWorkResult,
+  work?: Pick<ImageWork, 'kind' | 'mode' | 'detailsOnly'>,
+) {
+  const limit = work ? imageWorkResponseLimit(work) : IMAGE_WORK_MAX_RESPONSE_BYTES;
   const buffers: Buffer[] = [];
   let offset = 0;
   function pack(input: unknown): unknown {
     if (Buffer.isBuffer(input)) {
       const ref = { $binary: [offset, input.length] };
       offset += input.length;
-      if (offset > IMAGE_WORK_MAX_RESPONSE_BYTES) throw new Error('IMAGE_RESULT_TOO_LARGE');
+      if (offset > limit) throw new Error('IMAGE_RESULT_TOO_LARGE');
       buffers.push(input);
       return ref;
     }
@@ -122,7 +127,7 @@ export function encodeImageWork(value: ImageWorkResult) {
     return input;
   }
   const metadata = Buffer.from(JSON.stringify(pack(value)));
-  if (metadata.length > 1024 * 1024 || 8 + metadata.length + offset > IMAGE_WORK_MAX_RESPONSE_BYTES)
+  if (metadata.length > 1024 * 1024 || 8 + metadata.length + offset > limit)
     throw new Error('IMAGE_RESULT_TOO_LARGE');
   const header = Buffer.alloc(8);
   header.write('SEI1');
@@ -132,7 +137,7 @@ export function encodeImageWork(value: ImageWorkResult) {
 export async function decodeImageWork(bytes: Buffer, work: ImageWork): Promise<ImageWorkResult> {
   if (
     bytes.length < 8 ||
-    bytes.length > IMAGE_WORK_MAX_RESPONSE_BYTES ||
+    bytes.length > imageWorkResponseLimit(work) ||
     bytes.toString('ascii', 0, 4) !== 'SEI1'
   )
     throw new Error('INVALID_IMAGE_RESULT');

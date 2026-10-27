@@ -285,7 +285,11 @@ export function EagleTaskCenter({
                           ? t('图片向量')
                           : op === 'image'
                             ? t('图片处理')
-                            : t('人物'),
+                            : op === 'pyramid'
+                              ? t('大图切片')
+                              : op === 'video'
+                                ? t('视频转码')
+                                : t('人物'),
                       )
                       .join(' · ')}
                   </span>

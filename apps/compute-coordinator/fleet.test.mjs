@@ -44,6 +44,26 @@ test('enrollment rejects untrusted targets and invalid capacity', () => {
   assert.throws(() => validateEnrollment(node('bad', { maxConcurrent: 0 })));
   assert.throws(() => validateEnrollment(node('bad', { operations: ['shell'] })));
 });
+
+test('artifact capabilities require the actual streaming contract before becoming ready', async (t) => {
+  const { fleet } = await fixture(t, [
+    node('mac', { accelerator: 'cpu', operations: ['pyramid', 'video'] }),
+  ]);
+  const health = {
+    status: 'ready',
+    protocol: 'sekereagle-media-v1',
+    operations: ['pyramid', 'video'],
+    capacity: { limit: 3, inFlight: 0 },
+  };
+  fleet.markHealth('mac', health);
+  assert.equal(fleet.snapshot().nodes[0].health, 'DRIFTED');
+  assert.equal(fleet.acquire('pyramid', false), null);
+  fleet.markHealth('mac', { ...health, artifactEncoding: 'SEA1' });
+  assert.equal(fleet.snapshot().nodes[0].health, 'READY');
+  const slot = fleet.acquire('pyramid', false);
+  assert.ok(slot);
+  slot.release(10);
+});
 test('policy persists, uses CAS, expires and never reveals credentials', async (t) => {
   const { fleet, directory } = await fixture(t);
   let s = fleet.snapshot();

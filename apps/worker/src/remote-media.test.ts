@@ -4,11 +4,68 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import sharp from 'sharp';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
 import {
   createRemoteMediaServer,
   RemoteMediaClient,
   RemoteMediaUnavailableError,
 } from './remote-media';
+test('real HTTP pyramid work streams all validated tiles and rejects command-bearing recipes', async (t) => {
+  const server = createRemoteMediaServer('test-media-token', 1, false, undefined, [
+    'image',
+    'pyramid',
+  ]);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  const base = `http://127.0.0.1:${address.port}`;
+  const directory = await mkdtemp(join(tmpdir(), 'remote-pyramid-test-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const source = await sharp({
+    create: { width: 640, height: 480, channels: 3, background: '#345678' },
+  })
+    .jpeg()
+    .toBuffer();
+  const result = await new RemoteMediaClient(base, 'test-media-token').pyramid(
+    Readable.from([source]),
+    'image/jpeg',
+    directory,
+  );
+  assert.equal(result.files.length, 12);
+  assert.equal(result.descriptor.width, 640);
+  const bad = await fetch(base + '/v1/media/pyramid', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-media-token',
+      'content-type': 'application/octet-stream',
+      'x-artifact-work': Buffer.from(
+        JSON.stringify({ mimeType: 'image/jpeg', path: '/private' }),
+      ).toString('base64url'),
+    },
+    body: source,
+  });
+  assert.equal(bad.status, 400);
+  const forbidden = await fetch(base + '/v1/media/video', {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer test-media-token',
+      'content-type': 'application/octet-stream',
+      'x-artifact-work': Buffer.from(
+        JSON.stringify({ mimeType: 'video/mp4', stage: 'PLAYBACK' }),
+      ).toString('base64url'),
+    },
+    body: source,
+  });
+  assert.equal(forbidden.status, 503);
+});
 test('real HTTP media execution validates auth and returns identical bounded renditions', async (t) => {
   const server = createRemoteMediaServer('test-media-token', 1);
   server.listen(0, '127.0.0.1');
@@ -124,5 +181,82 @@ test('unprobed face configuration is never advertised as ready', async (t) => {
       headers: { authorization: 'Bearer test-media-token' },
     })
   ).json()) as { operations: string[] };
-  assert.deepEqual(health.operations, ['image', 'pyramid']);
+  assert.deepEqual(health.operations, ['image']);
+});
+
+test('photo browsing rejects an oversized remote envelope before decoding or publication', async (t) => {
+  const server = createServer((request, response) => {
+    request.resume();
+    response.end(Buffer.alloc(33 * 1024 ** 2));
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  await assert.rejects(
+    new RemoteMediaClient(`http://127.0.0.1:${address.port}`, 'test-token').image(
+      Readable.from([Buffer.from('fixture')]),
+      {
+        assetMimeType: 'image/jpeg',
+        sourceMimeType: 'image/jpeg',
+        kind: 'GENERATE_RENDITIONS',
+        mode: 'PHOTO',
+        detailsOnly: false,
+        verifiesOriginalHash: true,
+      },
+    ),
+    /MEDIA_PAYLOAD_TOO_LARGE/,
+  );
+});
+
+test('a video artifact at the forbidden 1 GiB boundary is rejected before any file is created', async (t) => {
+  const { createHash } = await import('node:crypto');
+  const { readdir } = await import('node:fs/promises');
+  const input = Buffer.from('synthetic-source');
+  const work = { mimeType: 'video/mp4', stage: 'PLAYBACK' } as const;
+  const frame = (value: unknown) => {
+    const bytes = Buffer.from(JSON.stringify(value)),
+      length = Buffer.alloc(4);
+    length.writeUInt32BE(bytes.length);
+    return Buffer.concat([length, bytes]);
+  };
+  const data = Buffer.concat([
+    Buffer.from('SEA1'),
+    frame({
+      sha256: createHash('sha256').update(input).digest('hex'),
+      work,
+      metadata: { width: 96, height: 64, durationMs: 1000 },
+      playbackMetadata: { width: 96, height: 64, durationMs: 1000 },
+    }),
+    frame({ name: 'preview.mp4', size: 1024 ** 3 }),
+    Buffer.alloc(4),
+  ]);
+  const server = createServer((req, res) => {
+    req.resume();
+    res.writeHead(200, { 'content-type': 'application/vnd.sekereagle.artifacts' });
+    res.end(data);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  const directory = await mkdtemp(join(tmpdir(), 'video-artifact-limit-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await assert.rejects(
+    new RemoteMediaClient(`http://127.0.0.1:${address.port}`, 'test-token').video(
+      Readable.from([input]),
+      work,
+      directory,
+    ),
+    /INVALID_VIDEO_RESULT/,
+  );
+  assert.deepEqual(await readdir(directory), []);
 });

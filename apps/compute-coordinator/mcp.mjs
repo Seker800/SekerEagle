@@ -61,9 +61,9 @@ export function createComputeMcp({ baseUrl, token, fetcher = fetch }) {
         enabled: z.boolean(),
         concurrency: z.number().int().min(1).max(8),
         operations: z
-          .array(z.enum(['embedding', 'image', 'faces']))
+          .array(z.enum(['embedding', 'image', 'faces', 'pyramid', 'video']))
           .min(1)
-          .max(3),
+          .max(5),
         durationSeconds: z.number().int().min(60).max(604800),
         reason: z.string().min(1).max(200),
       },

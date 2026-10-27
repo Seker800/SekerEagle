@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import console from 'node:console';
+import { setInterval, clearInterval } from 'node:timers';
 import { once } from 'node:events';
-import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -28,10 +31,17 @@ const db = new PrismaClient(),
   ownerId = randomUUID(),
   directory = await mkdtemp(join(tmpdir(), 'eagle-compute-worker-'));
 const servers = [];
-let worker,
+let probeTimer,
+  worker,
   stderr = '',
+  events = '',
   releaseNas,
-  blocked = false;
+  blocked = false,
+  staleBlocked = false,
+  releaseStale;
+const staleGate = new Promise((resolve) => {
+  releaseStale = resolve;
+});
 const gate = new Promise((resolve) => {
   releaseNas = resolve;
 });
@@ -52,10 +62,31 @@ async function waitFor(check) {
     if (await check()) return;
     await delay(250);
   }
+  console.error(
+    'Isolated synthetic queue at timeout',
+    await db.eagleAssetProcessingJob.findMany({
+      where: { ownerId },
+      select: { kind: true, status: true, attempts: true, lastError: true },
+    }),
+  );
+  console.error('Isolated worker events', events.slice(-6000));
   throw new Error('Compute worker timeout: ' + stderr.slice(-2000));
 }
 try {
-  const space = await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } });
+  const space =
+    (await db.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } })) ??
+    (await db.eagleEmbeddingSpace.create({
+      data: {
+        id: 'synthetic-compute-space',
+        model: 'Synthetic/Compute-2B',
+        revision: 'fixed-test-revision',
+        dimensions: 1024,
+        instructionVersion: 'synthetic-v1',
+        preprocessingVersion: 'synthetic-v1',
+        normalized: true,
+        isCurrent: true,
+      },
+    }));
   assert.ok(space);
   await db.user.create({
     data: { id: ownerId, email: `${ownerId}@example.invalid`, passwordHash: 'synthetic-only' },
@@ -66,6 +97,7 @@ try {
   const contract = { model: space.model, revision: space.revision, dimensions: 1024 };
   let embeddingCalls = 0,
     puts = 0;
+  let syntheticVideo;
   const sourceServer = createServer((req, res) => {
     void (async () => {
       if (req.url === '/healthz') {
@@ -85,13 +117,22 @@ try {
         return;
       }
       if (req.method === 'GET') {
+        if (req.url.includes('stale-pyramid')) {
+          staleBlocked = true;
+          await staleGate;
+        }
         if (req.url.includes('blocked-color')) {
           blocked = true;
           await gate;
         }
-        res.setHeader('content-type', 'image/jpeg');
-        res.setHeader('content-length', pixels.length);
-        res.end(pixels);
+        const body = req.url.includes('remote-video') ? syntheticVideo : pixels;
+        if (!body) throw new Error('SYNTHETIC_SOURCE_NOT_READY');
+        res.setHeader(
+          'content-type',
+          req.url.includes('remote-video') ? 'video/mp4' : 'image/jpeg',
+        );
+        res.setHeader('content-length', body.length);
+        res.end(body);
         return;
       }
       if (req.method === 'PUT') {
@@ -108,7 +149,13 @@ try {
     });
   });
   const sourceUrl = await listen(sourceServer),
-    mediaUrl = await listen(createRemoteMediaServer('media-test-token', 1));
+    mediaUrl = await listen(
+      createRemoteMediaServer('media-test-token', 1, false, 'libx264', [
+        'image',
+        'pyramid',
+        'video',
+      ]),
+    );
   const fleet = new Fleet({ directory, contract });
   await fleet.initialize([
     {
@@ -133,14 +180,25 @@ try {
       url: mediaUrl,
       token: 'media-test-token',
       accelerator: 'cpu',
-      operations: ['image'],
+      operations: ['image', 'pyramid', 'video'],
       maxConcurrent: 1,
       reserveInteractive: 0,
-      enabled: true,
+      enabled: false,
       verified: true,
     },
   ]);
   await probeFleet(fleet);
+  // Match the real coordinator's periodic probes: health leases expire during live-policy tests.
+  let probing = false;
+  probeTimer = setInterval(async () => {
+    if (probing) return;
+    probing = true;
+    try {
+      await probeFleet(fleet);
+    } finally {
+      probing = false;
+    }
+  }, 5000);
   const coordinatorUrl = await listen(
     createCoordinator({ fleet, executionToken: 'synthetic-only', adminToken: 'management-token' }),
   );
@@ -269,13 +327,19 @@ try {
     where: { id: videoJob.id },
     data: { status: 'COMPLETED', completedAt: new Date() },
   });
+  await db.eagleAssetProcessingJob.update({
+    where: { id: remoteJob.id },
+    data: { availableAt: new Date(Date.now() + 86400000) },
+  });
   const env = {
     ...process.env,
     S3_ENDPOINT: sourceUrl,
     S3_BUCKET: 'sekereagle-test',
     S3_ACCESS_KEY_ID: 'synthetic-only',
     S3_SECRET_ACCESS_KEY: 'synthetic-only',
-    EAGLE_PROCESSING_JOB_KINDS: 'GENERATE_RENDITIONS,GENERATE_EMBEDDING,EXTRACT_COLOR_PALETTE',
+    EAGLE_PROCESSING_JOB_KINDS:
+      'GENERATE_RENDITIONS,GENERATE_EMBEDDING,EXTRACT_COLOR_PALETTE,GENERATE_IMAGE_PYRAMID',
+    EAGLE_VIDEO_TRANSCODING_ENABLED: 'true',
     EAGLE_BACKGROUND_PROCESSING_ENABLED: 'true',
     EAGLE_INTERACTIVE_CONCURRENCY: '1',
     MLX_EMBEDDING_URL: coordinatorUrl,
@@ -289,17 +353,40 @@ try {
     s3Endpoint: env.S3_ENDPOINT,
     s3Bucket: env.S3_BUCKET,
   });
+  const policy = async (nodeId, enabled, operations) => {
+    const response = await fetch(coordinatorUrl + '/admin/policy', {
+      method: 'POST',
+      headers: { authorization: 'Bearer management-token', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        expectedRevision: fleet.snapshot().revision,
+        nodeId,
+        enabled,
+        concurrency: nodeId === 'mac-vector' ? 2 : 1,
+        operations: operations ?? [nodeId === 'mac-vector' ? 'embedding' : 'image'],
+        durationSeconds: 60,
+        reason: 'Synthetic live policy regression',
+      }),
+    });
+    assert.equal(response.status, 200);
+    await response.body?.cancel();
+  };
   worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
     env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  let events = '';
   worker.stdout.on('data', (b) => {
     events += b.toString();
   });
   worker.stderr.on('data', (b) => {
     stderr += b.toString();
   });
+  await waitFor(async () => blocked);
+  // Delegate only future claims: the already held NAS color job keeps its lease and slot.
+  await db.eagleAssetProcessingJob.update({
+    where: { id: remoteJob.id },
+    data: { availableAt: new Date(0) },
+  });
+  await policy('mac-media', true);
   await waitFor(
     async () =>
       blocked &&
@@ -319,23 +406,6 @@ try {
     where: { assetId: remote.id, status: 'READY' },
   });
   assert.equal(published.length, 3);
-  const policy = async (nodeId, enabled) => {
-    const response = await fetch(coordinatorUrl + '/admin/policy', {
-      method: 'POST',
-      headers: { authorization: 'Bearer management-token', 'content-type': 'application/json' },
-      body: JSON.stringify({
-        expectedRevision: fleet.snapshot().revision,
-        nodeId,
-        enabled,
-        concurrency: nodeId === 'mac-vector' ? 2 : 1,
-        operations: [nodeId === 'mac-vector' ? 'embedding' : 'image'],
-        durationSeconds: 60,
-        reason: 'Synthetic live policy regression',
-      }),
-    });
-    assert.equal(response.status, 200);
-    await response.body?.cancel();
-  };
   const waitRevision = async (revision) =>
     waitFor(async () =>
       (await db.eagleProcessingWorkerHeartbeat.findMany({ select: { capabilities: true } })).some(
@@ -344,13 +414,118 @@ try {
     );
   await policy('mac-vector', false);
   await policy('mac-media', false);
-  await waitRevision(2);
+  await waitRevision(3);
   assert.equal(fleet.acquire('embedding', false), null);
   assert.equal(fleet.acquire('image', false), null);
   await policy('mac-vector', true);
   await policy('mac-media', true);
-  await waitRevision(4);
+  await waitRevision(5);
   assert.equal(worker.exitCode, null, 'Hot policy changes must not restart the worker');
+  // Exercise real streamed artifact publication through the original owner/version/lease worker.
+  const moviePath = join(directory, 'synthetic-video.mp4');
+  await promisify(execFile)(
+    process.env.FFMPEG_PATH || 'ffmpeg',
+    [
+      '-nostdin',
+      '-v',
+      'error',
+      '-y',
+      '-f',
+      'lavfi',
+      '-i',
+      'testsrc2=size=96x64:rate=10',
+      '-t',
+      '0.6',
+      '-c:v',
+      'libx264',
+      '-threads',
+      '1',
+      '-pix_fmt',
+      'yuv420p',
+      moviePath,
+    ],
+    { timeout: 30000 },
+  );
+  syntheticVideo = await readFile(moviePath);
+  const remoteVideo = await asset('remote-video', 'video/mp4');
+  await db.eagleAsset.update({
+    where: { id: remoteVideo.id },
+    data: {
+      format: 'mp4',
+      sha256: createHash('sha256').update(syntheticVideo).digest('hex'),
+      byteSize: syntheticVideo.length,
+    },
+  });
+  const remoteVideoJob = await job(remoteVideo, 'GENERATE_RENDITIONS', 'INTERACTIVE');
+  const remotePyramid = await asset('remote-pyramid');
+  const remotePyramidJob = await job(remotePyramid, 'GENERATE_IMAGE_PYRAMID', 'BACKGROUND');
+  await policy('mac-media', true, ['image', 'pyramid', 'video']);
+  await waitFor(
+    async () =>
+      (await db.eagleAssetProcessingJob.count({
+        where: { id: { in: [remoteVideoJob.id, remotePyramidJob.id] }, status: 'COMPLETED' },
+      })) === 2,
+  );
+  assert.equal(
+    (await db.eagleAssetProcessingJob.findUnique({ where: { id: localJob.id } })).status,
+    'PROCESSING',
+    'Artifacts must complete while the original NAS job remains blocked',
+  );
+  assert.ok(
+    await db.eagleAssetRendition.findFirst({
+      where: {
+        assetId: remoteVideo.id,
+        kind: 'PREVIEW',
+        status: 'READY',
+        mimeType: 'video/mp4',
+        ownerId,
+        libraryMode: 'MATERIAL',
+      },
+    }),
+  );
+  assert.ok(
+    await db.eagleImagePyramid.findFirst({
+      where: { assetId: remotePyramid.id, status: 'READY', ownerId, libraryMode: 'MATERIAL' },
+    }),
+  );
+  // A superseded renderer must never replace the newer executor's READY publication.
+  const stale = await asset('stale-pyramid');
+  const staleJob = await job(stale, 'GENERATE_IMAGE_PYRAMID', 'BACKGROUND');
+  await waitFor(async () => staleBlocked);
+  await db.$transaction(async (transaction) => {
+    await transaction.eagleAssetProcessingJob.update({
+      where: { id: staleJob.id },
+      data: { status: 'COMPLETED', completedAt: new Date(), leaseVersion: { increment: 1 } },
+    });
+    await transaction.eagleImagePyramid.create({
+      data: {
+        ownerId,
+        libraryMode: 'MATERIAL',
+        assetId: stale.id,
+        revision: 1,
+        processorVersion: 'v1',
+        status: 'READY',
+        storagePrefix: `synthetic-newer-${stale.id}`,
+        width: 96,
+        height: 64,
+        maxLevel: 7,
+        tileCount: 123,
+        completedAt: new Date(),
+      },
+    });
+  });
+  releaseStale();
+  await waitFor(
+    async () =>
+      events.includes(`"jobId":"${staleJob.id}"`) &&
+      events
+        .split('\n')
+        .some((line) => line.includes('eagle_media_job_completed') && line.includes(staleJob.id)),
+  );
+  const retained = await db.eagleImagePyramid.findFirst({ where: { assetId: stale.id } });
+  assert.equal(retained.status, 'READY');
+  assert.equal(retained.tileCount, 123);
+  assert.equal(retained.storagePrefix, `synthetic-newer-${stale.id}`);
   const exit = once(worker, 'exit');
   worker.kill('SIGTERM');
   releaseNas();
@@ -362,10 +537,12 @@ try {
   );
   assert.equal(await db.eagleAssetProcessingJob.count({ where: { ownerId, status: 'FAILED' } }), 0);
   process.stdout.write(
-    'Compute fleet real DB/HTTP acceptance passed: remote image and vector finish while NAS is blocked; video stays local; live policies drain/restore without restart; node errors remain bounded; graceful drain publishes the remaining job.\n',
+    'Compute fleet real DB/HTTP acceptance passed: remote image and vector finish while NAS is blocked; image-only excludes video; verified video and pyramid publish remotely under the original lease; live policies drain/restore without restart; node errors remain bounded; graceful drain publishes the remaining job.\n',
   );
 } finally {
+  clearInterval(probeTimer);
   releaseNas();
+  releaseStale();
   if (worker && worker.exitCode === null) {
     worker.kill('SIGTERM');
     await once(worker, 'exit');

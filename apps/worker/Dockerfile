@@ -16,6 +16,7 @@ COPY packages/vector-core/package.json packages/vector-core/package.json
 RUN npm install --global npm@10.9.4 && npm ci
 COPY apps/api/prisma apps/api/prisma
 COPY apps/worker apps/worker
+COPY scripts/compute scripts/compute
 COPY packages/library-core packages/library-core
 COPY packages/photo-render-core packages/photo-render-core
 COPY packages/library-persistence packages/library-persistence

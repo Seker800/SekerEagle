@@ -1,26 +1,16 @@
+import { renderVideoWork } from './video-work';
+import type { RemoteMediaClient } from './remote-media';
 import { mediaCompletion } from '@sekereagle/library-core';
 import { videoProcessingStage, VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
-import { CAMERA_MAX_VIDEO_BYTES } from '@sekereagle/library-core';
-import {
-  probeCameraVideo,
-  transcodeCameraVideo,
-  CAMERA_VIDEO_INPUT_OPTIONS,
-  mediaSubprocessEnvironment,
-} from '@sekereagle/media-core';
 import type { Prisma, PrismaClient, EagleAssetProcessingJob, LibraryMode } from '@prisma/client';
 import { type S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
-import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream } from 'node:fs';
+import { createReadStream } from 'node:fs';
 import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { promisify } from 'node:util';
-import { execFile } from 'node:child_process';
 import sharp from 'sharp';
-const execFileAsync = promisify(execFile);
 interface VideoProcessingDependencies {
+  remote?: RemoteMediaClient;
   prisma: PrismaClient;
   storage: S3Client;
   s3Bucket: string;
@@ -62,7 +52,6 @@ export async function processVideo(
   } = dependencies;
   const stage = videoProcessingStage(job.kind, transcodingEnabled);
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
-  const inputPath = join(directory, 'input.mp4');
   const posterPath = join(directory, 'poster.jpg');
   const previewPath = join(directory, 'preview.mp4');
   try {
@@ -70,52 +59,13 @@ export async function processVideo(
       new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
     );
     if (!object.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-    const hash = createHash('sha256');
-    let inputBytes = 0;
-    const hashTap = new Transform({
-      transform(chunk: Buffer, _encoding, callback) {
-        inputBytes += chunk.byteLength;
-        if (inputBytes > CAMERA_MAX_VIDEO_BYTES)
-          return callback(new Error('VIDEO_SIZE_LIMIT_EXCEEDED'));
-        hash.update(chunk);
-        callback(null, chunk);
-      },
-    });
-    await pipeline(
-      Readable.from(object.Body as AsyncIterable<Uint8Array>),
-      hashTap,
-      createWriteStream(inputPath, { flags: 'wx' }),
-    );
-    const sha256 = hash.digest('hex');
+    const work = { mimeType: asset.mimeType, stage };
+    const source = object.Body as AsyncIterable<Uint8Array>;
+    const manifest = dependencies.remote
+      ? await dependencies.remote.video(source, work, directory)
+      : (await renderVideoWork(source, work, directory)).manifest;
+    const { sha256, metadata, playbackMetadata } = manifest;
     assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
-    const metadata = await probeCameraVideo(inputPath, asset.mimeType);
-    const playbackMetadata =
-      stage === 'POSTER'
-        ? null
-        : await transcodeCameraVideo(inputPath, previewPath, metadata.durationMs);
-    if (stage !== 'PLAYBACK') {
-      await execFileAsync(
-        process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
-        [
-          '-v',
-          'error',
-          '-y',
-          '-ss',
-          '0',
-          ...CAMERA_VIDEO_INPUT_OPTIONS,
-          '-i',
-          inputPath,
-          '-frames:v',
-          '1',
-          '-vf',
-          "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
-          '-q:v',
-          '3',
-          posterPath,
-        ],
-        { env: mediaSubprocessEnvironment(), timeout: 120_000 },
-      );
-    }
     const poster = stage === 'PLAYBACK' ? null : await readFile(posterPath);
     const posterMetadata = poster ? await sharp(poster).metadata() : null;
     const playbackKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/preview.mp4`;
