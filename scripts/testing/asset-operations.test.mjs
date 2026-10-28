@@ -496,3 +496,23 @@ test('128 synthetic resources complete with bounded database work', async () => 
   assert.equal((await f.state(receipt.id)).completed,128);
   assert.equal(writes,4);
 });
+
+test('batching cannot conceal live components reassigned between selected resources', async () => {
+  const f = await fixture();
+  const firstIdentifier = randomUUID(), secondIdentifier = randomUUID();
+  const first = await f.add({livePhotoIdentifier:firstIdentifier,livePhotoRole:'STILL'});
+  const second = await f.add({livePhotoIdentifier:secondIdentifier,livePhotoRole:'STILL'});
+  const motion = await f.add({livePhotoIdentifier:firstIdentifier,livePhotoRole:'MOTION',mimeType:'video/quicktime'});
+  await prisma.eagleAssetRendition.create({data:{
+    assetId:motion.id,ownerId:f.ownerId,libraryMode:'PHOTO',kind:'PREVIEW',variant:'default',revision:1,
+    storageKey:`users/${f.ownerId}/assets/${motion.id}/preview.mp4`,mimeType:'video/mp4',byteSize:1,status:'READY',
+  }});
+  const receipt = await f.enqueue('TRASH',[first,second]);
+  // Pairing is derived from current metadata, not covered by the frozen row versions.
+  await prisma.eagleAsset.update({where:{id:motion.id},data:{livePhotoIdentifier:secondIdentifier}});
+  await f.service.tick();
+  const result=await f.state(receipt.id);
+  assert.equal(result.completed,0);
+  assert.equal(result.failed,2);
+  assert.equal(await prisma.eagleAsset.count({where:{ownerId:f.ownerId,deletedAt:{not:null}}}),0);
+});
