@@ -1,3 +1,5 @@
+import { performance } from 'node:perf_hooks';
+import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { after, afterEach, test } from 'node:test';
@@ -6,6 +8,7 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { EagleAssetOperationService } from '../../apps/api/dist/eagle/eagle-asset-operations.service.js';
 import { EagleLibraryTransferService } from '../../apps/api/dist/eagle/eagle-library-transfer.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
+import { drainObjectDeletion } from '../../apps/worker/dist/asset-purge.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL ?? '',
   s3Endpoint: process.env.S3_ENDPOINT ?? '',
@@ -15,7 +18,9 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient();
 const owners = [];
 afterEach(async () => {
-  await prisma.eagleAssetOperation.deleteMany({ where: { ownerId: { in: owners.splice(0) } } });
+  const ownerIds = owners.splice(0);
+  await prisma.eagleAssetOperation.deleteMany({ where: { ownerId: { in: ownerIds } } });
+  await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: { in: ownerIds } } });
 });
 after(() => prisma.$disconnect());
 function deferred() {
@@ -576,4 +581,90 @@ test('batching cannot conceal live components reassigned between selected resour
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
     0,
   );
+});
+
+test('cancelling a metadata command preserves the committed batch and cancels its waiting tail', async () => {
+  const f = await fixture();
+  const rows = [];
+  for (let i = 0; i < 40; i++) rows.push(await f.add());
+  const command = await f.enqueue('TRASH', rows);
+  await f.service.tick();
+  const result = await f.service.cancel(f.principal, command.id);
+  assert.equal(result.completed, 32);
+  assert.equal(result.cancelled, 8);
+  await f.createService().tick();
+  assert.equal((await f.state(command.id)).completed, 32);
+});
+
+test('an expired metadata batch cannot publish or overwrite its replacement generation', async () => {
+  const f = await fixture();
+  const rows = [await f.add(), await f.add()];
+  const command = await f.enqueue('TRASH', rows);
+  const entered = deferred(),
+    resume = deferred();
+  let intercepted = false;
+  const delayed = {
+    eagleAssetOperationItem: prisma.eagleAssetOperationItem,
+    async $transaction(...args) {
+      const result = await prisma.$transaction(...args);
+      // Pause after the claim commits and before the write transaction begins;
+      // a real paused process holds no transaction locks during takeover.
+      if (!intercepted && Array.isArray(result) && result[0]?.operation?.kind === 'TRASH') {
+        intercepted = true;
+        entered.resolve();
+        await resume.promise;
+      }
+      return result;
+    },
+  };
+  const stale = f.createService(delayed).tick();
+  await entered.promise;
+  try {
+    await prisma.eagleAssetOperationItem.updateMany({
+      where: { operationId: command.id },
+      data: { leaseUntil: new Date(0) },
+    });
+    await f.createService().tick();
+    assert.equal((await f.state(command.id)).completed, 2);
+  } finally {
+    resume.resolve();
+    await stale;
+  }
+  assert.equal((await f.state(command.id)).completed, 2);
+  const resources = await prisma.eagleAsset.findMany({
+    where: { id: { in: rows.map((row) => row.id) } },
+  });
+  assert.ok(resources.every((row) => row.deletedAt && row.rowVersion === rows[0].rowVersion + 1));
+});
+
+test('object cleanup claims a bounded batch and deletes keys in bulk without waiting for another poll', async () => {
+  const f=await fixture();
+  await prisma.eagleObjectDeletion.createMany({data:Array.from({length:8},(_,i)=>({
+    ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/${i}-original`,`users/${f.ownerId}/${i}-preview`],prefixes:[],
+  }))});
+  let individual=0,bulk=0;
+  const count=await drainObjectDeletion(prisma,{
+    deleteObject:async()=>{individual++;},deleteObjects:async keys=>{bulk++;assert.equal(keys.length,2);},deletePrefix:async()=>{},
+  });
+  assert.equal(await prisma.eagleObjectDeletion.count({where:{ownerId:f.ownerId}}),4);
+  assert.equal(count,4);
+  assert.equal(bulk,4);
+  assert.equal(individual,0);
+});
+
+test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its retry state',async()=>{
+  const f=await fixture();
+  const rows=await Promise.all([
+    prisma.eagleObjectDeletion.create({data:{ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/valid`,'users/foreign/private'],prefixes:[]}}),
+    prisma.eagleObjectDeletion.create({data:{ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/retry`],prefixes:[]}}),
+  ]);
+  const deleted=[];
+  await drainObjectDeletion(prisma,{
+    deleteObject:async key=>{deleted.push(key);throw Error('synthetic failure');},
+    deleteObjects:async keys=>{deleted.push(...keys);throw Error('synthetic failure');},deletePrefix:async()=>{},
+  });
+  assert.deepEqual(deleted,[`users/${f.ownerId}/retry`]);
+  const remaining=await prisma.eagleObjectDeletion.findMany({where:{id:{in:rows.map(row=>row.id)}}});
+  assert.equal(remaining.length,2);
+  assert.ok(remaining.every(row=>row.status==='PENDING'&&row.availableAt>new Date()&&row.leaseVersion===1));
 });
