@@ -3,6 +3,38 @@ import test from 'node:test';
 import { createScheduledMediaSelector } from './scheduled-media-candidates';
 import type { ClaimFindManyInput } from './job-claim';
 
+test('interactive and recent positive hints retain the 30s discovery bound', async (context) => {
+  let now = 0;
+  context.mock.method(Date, 'now', () => now);
+  for (const [lane, age] of [['INTERACTIVE', 'HISTORY'], ['BACKGROUND', 'RECENT']] as const) {
+    let discoveries = 0;
+    const select = createScheduledMediaSelector({
+      $queryRaw: async (sql: { text: string }) => {
+        if (!sql.text.includes('job.id IN')) discoveries++;
+        return [{ id: 'pending' }];
+      },
+    } as never, () => false);
+    const input = { where: { lane }, take: 50 } as ClaimFindManyInput;
+    await select(input, age);
+    now += 31000;
+    await select(input, age);
+    assert.equal(discoveries, 2, `${lane}/${age} must discover newly due work within 30s`);
+  }
+});
+
+test('known candidate IDs use bounded upload lookups instead of materializing all recent uploads', async () => {
+  let query = '';
+  const { selectScheduledMediaCandidates } = await import('./scheduled-media-candidates');
+  await selectScheduledMediaCandidates({ $queryRaw: async (sql: { text: string }) => {
+    query = sql.text;
+    return [];
+  } } as never, { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput,
+  true, false, { candidateIds: ['known-id'] });
+  assert.doesNotMatch(query, /WITH recent_uploads/);
+  assert.match(query, /LEFT JOIN "UploadSession" current_upload/);
+  assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
+});
+
 test('unused positive windows survive 30s wakes while every claim revalidates and hints expire', async (context) => {
   let now = 0;
   let discoveries = 0;
