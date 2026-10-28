@@ -579,8 +579,9 @@ try {
   });
   const ruleFolder = await service.createSmartFolder(ruleOwner, {
     name: '画面组合',
-    query: rulesQuery('ANY', 'MATCH'),
+    query: rulesQuery('ALL', 'NOT_MATCH'),
   });
+  assert.deepEqual((await service.listAssets(ruleOwner, { smartFolderId: ruleFolder.id, limit: 30 })).items, [], 'pending semantic snapshots are unknown, not a negative match for every asset');
   await reconcileSmartFolderSpaces(client, spaceId);
   while (await runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer))) {
     /* bounded fixture queue */
