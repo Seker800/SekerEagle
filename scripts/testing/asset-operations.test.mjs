@@ -15,7 +15,11 @@ assertSafeRuntimeTarget({
   s3Bucket: process.env.S3_BUCKET ?? '',
 });
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+let queryCount = 0;
+prisma.$on('query', () => {
+  queryCount++;
+});
 const owners = [];
 afterEach(async () => {
   const ownerIds = owners.splice(0);
@@ -527,6 +531,7 @@ for (const size of [128, 477, 1000])
     });
     const executor = f.createService(db);
     const start = performance.now();
+    const startQueries = queryCount;
     while ((await f.state(receipt.id)).completed < rows.length && ticks < rows.length) {
       await executor.tick();
       ticks++;
@@ -537,6 +542,7 @@ for (const size of [128, 477, 1000])
         milliseconds: performance.now() - start,
         ticks,
         resourceWrites: writes,
+        sqlStatements: queryCount - startQueries,
       }),
     );
     assert.equal((await f.state(receipt.id)).completed, size);
