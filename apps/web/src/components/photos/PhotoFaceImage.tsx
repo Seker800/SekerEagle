@@ -1,14 +1,13 @@
 import type { PhotoFace, PhotoPerson } from '../../lib/photo-management-api';
-import type { EagleAssetListItem } from '../../lib/eagle-api';
+import { selectEagleBrowseRendition } from '../../lib/eagle-browse-rendition';
+import type { EagleAssetListItem, EagleRendition } from '../../lib/eagle-api';
 
-/** Face crops magnify their source, so use the largest available browsing preview. */
-export function facePreview(asset: EagleAssetListItem) {
-  return [...asset.renditions]
-    .filter((row) => row.kind === 'PREVIEW' || row.kind === 'THUMBNAIL')
-    .sort((a, b) => (b.width ?? 0) * (b.height ?? 0) - (a.width ?? 0) * (a.height ?? 0))[0];
+/** Face crops use the current browsing image, never RAW editing or motion media. */
+export function facePreview(asset: EagleAssetListItem): EagleRendition | undefined {
+  return selectEagleBrowseRendition(asset);
 }
 
-export function representativeFace(person: PhotoPerson) {
+export function representativeFace(person: PhotoPerson): PhotoFace | undefined {
   return person.faces
     .filter((face) => facePreview(face.asset))
     .sort((a, b) => facePixels(b) - facePixels(a))[0];

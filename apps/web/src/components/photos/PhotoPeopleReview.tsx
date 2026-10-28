@@ -20,6 +20,7 @@ export function PhotoPeopleReview({
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [merged, setMerged] = useState<Set<string>>(new Set());
   const submitting = useRef(false);
+  const [completed, setCompleted] = useState(false);
   const candidates = people.filter(
     (person) => !merged.has(person.id) && representativeFace(person),
   );
@@ -32,6 +33,17 @@ export function PhotoPeopleReview({
       }
     }
   }
+  if (completed)
+    return (
+      <div className="photo-people-review">
+        <p>{t('人物已合并')}</p>
+        {candidates.length >= 2 && (
+          <button type="button" disabled={pending} onClick={() => setCompleted(false)}>
+            {t('换一批')}
+          </button>
+        )}
+      </div>
+    );
   if (candidates.length < 2) return null;
   if (!pair)
     return (
@@ -43,12 +55,15 @@ export function PhotoPeopleReview({
       </div>
     );
   const current = pair;
+  const [first, second] = current;
+  const [source, target] = !first.name && second.name ? [first, second] : [second, first];
   return (
     <section className="photo-people-review" aria-label={t('这两张照片是同一个人吗？')}>
       <h3>{t('这两张照片是同一个人吗？')}</h3>
       <div className="photo-people-review-pair">
         {current.map((person) => {
           const face = representativeFace(person);
+          if (!face) return null;
           return (
             <button type="button" key={person.id} onClick={() => onOpen(face.asset)}>
               <PhotoFaceImage face={face} url={preview} alt={face.asset.displayName} />
@@ -57,6 +72,7 @@ export function PhotoPeopleReview({
           );
         })}
       </div>
+      {target.name && <p>{t('合并后保留名称：{{value1}}', { value1: target.name })}</p>}
       <div className="photo-people-review-actions">
         <button
           type="button"
@@ -64,11 +80,12 @@ export function PhotoPeopleReview({
           onClick={() => {
             if (submitting.current) return;
             submitting.current = true;
-            const [first, second] = current;
-            const [source, target] = !first.name && second.name ? [first, second] : [second, first];
             void onConfirm(source, target)
               .then((success) => {
-                if (success) setMerged((old) => new Set([...old, source.id]));
+                if (success) {
+                  setMerged((old) => new Set([...old, source.id]));
+                  setCompleted(true);
+                }
               })
               .finally(() => {
                 submitting.current = false;

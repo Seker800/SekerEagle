@@ -36,11 +36,27 @@ const person = (id: string, name: string | null = null) =>
         asset: {
           id,
           displayName: `照片-${id}`,
+          mimeType: 'image/jpeg',
+          mediaRevision: 1,
           width: 4000,
           height: 3000,
           renditions: [
-            { id: 'small', kind: 'THUMBNAIL', width: 256, height: 192 },
-            { id: 'large', kind: 'PREVIEW', width: 1600, height: 1200 },
+            {
+              id: 'small',
+              kind: 'THUMBNAIL',
+              mimeType: 'image/jpeg',
+              revision: 1,
+              width: 256,
+              height: 192,
+            },
+            {
+              id: 'large',
+              kind: 'PREVIEW',
+              mimeType: 'image/jpeg',
+              revision: 1,
+              width: 1600,
+              height: 1200,
+            },
           ],
         },
       },
@@ -163,7 +179,9 @@ it('合并后必须换一批才显示下一对，快速再点不会误合并其�
   show();
   fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
   await waitFor(() => expect(mocks.privacy).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument());
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument(),
+  );
   expect(mocks.merge).toHaveBeenCalledTimes(1);
   fireEvent.click(screen.getByRole('button', { name: '换一批' }));
   await waitFor(() => {
@@ -176,4 +194,15 @@ it('合并后必须换一批才显示下一对，快速再点不会误合并其�
   });
   fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
   await waitFor(() => expect(mocks.merge).toHaveBeenLastCalledWith('c', 'b'));
+});
+it('两个人均已命名时，确认前明确告知保留哪个名字', async () => {
+  mocks.list.mockResolvedValue({
+    runtimeConfigured: true,
+    people: [person('a', '小王'), person('b', '王先生')],
+    nextCursor: null,
+  });
+  show();
+  expect(await screen.findByText('合并后保留名称：小王')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
+  await waitFor(() => expect(mocks.merge).toHaveBeenCalledWith('b', 'a'));
 });

@@ -1,3 +1,4 @@
+import { selectEagleBrowseRendition } from '../../lib/eagle-browse-rendition';
 import { isCameraRawMime } from '@sekereagle/library-core';
 import { libraryApiPath } from '../../lib/library-api-scope';
 import { getEagleAssetContentUrl, getEagleRenditionContentUrl } from '../../lib/eagle-api';
@@ -8,16 +9,7 @@ const IMAGE_PYRAMID_DIMENSION_THRESHOLD = 4_096;
 const IMAGE_PYRAMID_PIXEL_THRESHOLD = 16_000_000;
 
 export function getEaglePreviewContentUrl(asset: EagleAssetListItem): string | null {
-  const currentRenditions = asset.renditions.filter(
-    (rendition) => rendition.revision === asset.mediaRevision,
-  );
-  const selected =
-    currentRenditions.find(
-      ({ kind, mimeType, variant }) =>
-        variant !== 'edit' &&
-        kind === 'PREVIEW' &&
-        (isVideoAsset(asset) || !mimeType || mimeType.startsWith('image/')),
-    ) ?? currentRenditions.find(({ kind }) => kind === 'THUMBNAIL');
+  const selected = selectEagleBrowseRendition(asset);
   return selected
     ? getEagleRenditionContentUrl(asset.id, selected.id, selected.kind, asset.libraryMode)
     : null;
@@ -102,9 +94,6 @@ export function getEagleVideoContentUrl(asset: EagleAssetListItem): string | nul
     : null;
 }
 
-function isVideoAsset(asset: EagleAssetListItem) {
-  return !asset.mimeType.startsWith('image/');
-}
 export function getEagleLivePhotoContentUrl(asset: EagleAssetListItem): string | null {
   if (!asset.mimeType.startsWith('image/')) return null;
   const embedded = asset.renditions.find(

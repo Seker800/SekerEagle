@@ -25,6 +25,7 @@ export const previewSelect = {
     select: {
       id: true,
       kind: true,
+      variant: true,
       revision: true,
       mimeType: true,
       byteSize: true,

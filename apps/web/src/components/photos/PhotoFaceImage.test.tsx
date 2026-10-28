@@ -11,16 +11,32 @@ function face(box = [0.2, 0.2, 0.1, 0.2]): PhotoFace {
     assetId: 'photo',
     asset: {
       id: 'photo',
+      mimeType: 'image/jpeg',
+      mediaRevision: 1,
       width: 4000,
       height: 3000,
       renditions: [
-        { id: 'thumb', kind: 'THUMBNAIL', width: 256, height: 192 },
-        { id: 'preview', kind: 'PREVIEW', width: 1600, height: 1200 },
+        {
+          id: 'thumb',
+          kind: 'THUMBNAIL',
+          mimeType: 'image/jpeg',
+          revision: 1,
+          width: 256,
+          height: 192,
+        },
+        {
+          id: 'preview',
+          kind: 'PREVIEW',
+          mimeType: 'image/jpeg',
+          revision: 1,
+          width: 1600,
+          height: 1200,
+        },
       ],
     },
   } as PhotoFace;
 }
-it('选可用像素最多的浏览图，不修改 API 原始顺序', () => {
+it('优先当前浏览预览并回退缩略图，不修改 API 原始顺序', () => {
   const sample = face();
   expect(facePreview(sample.asset)?.id).toBe('preview');
   expect(sample.asset.renditions[0]?.id).toBe('thumb');
@@ -58,10 +74,46 @@ it('只用当前图片浏览预览，排除实况视频、RAW 编辑大图与旧
   sample.asset.mediaRevision = 2;
   sample.asset.mimeType = 'image/jpeg';
   sample.asset.renditions = [
-    { id: 'motion', kind: 'PREVIEW', variant: 'motion', mimeType: 'video/mp4', revision: 2, width: 4000, height: 3000, byteSize: 100 },
-    { id: 'edit', kind: 'PREVIEW', variant: 'edit', mimeType: 'image/webp', revision: 2, width: 6000, height: 4000, byteSize: 100 },
-    { id: 'old', kind: 'PREVIEW', variant: 'default', mimeType: 'image/jpeg', revision: 1, width: 4000, height: 3000, byteSize: 100 },
-    { id: 'browse', kind: 'PREVIEW', variant: 'default', mimeType: 'image/jpeg', revision: 2, width: 1600, height: 1200, byteSize: 100 },
+    {
+      id: 'motion',
+      kind: 'PREVIEW',
+      variant: 'motion',
+      mimeType: 'video/mp4',
+      revision: 2,
+      width: 4000,
+      height: 3000,
+      byteSize: 100,
+    },
+    {
+      id: 'edit',
+      kind: 'PREVIEW',
+      variant: 'edit',
+      mimeType: 'image/webp',
+      revision: 2,
+      width: 6000,
+      height: 4000,
+      byteSize: 100,
+    },
+    {
+      id: 'old',
+      kind: 'PREVIEW',
+      variant: 'default',
+      mimeType: 'image/jpeg',
+      revision: 1,
+      width: 4000,
+      height: 3000,
+      byteSize: 100,
+    },
+    {
+      id: 'browse',
+      kind: 'PREVIEW',
+      variant: 'default',
+      mimeType: 'image/jpeg',
+      revision: 2,
+      width: 1600,
+      height: 1200,
+      byteSize: 100,
+    },
   ];
   expect(facePreview(sample.asset)?.id).toBe('browse');
   sample.asset.renditions.pop();
