@@ -17,7 +17,7 @@ function fixture(view = 'ALL') {
   );
   const key = ['eagle', 'owner', 'PHOTO', 'assets', view, {}];
   const queryFn = vi.fn(async (_context: { signal: AbortSignal; pageParam: unknown }) => ({
-    ids: ['current'],
+    ids: [`current-${String(_context.pageParam)}`],
     nextCursor: 'next',
   }));
   const observer = new InfiniteQueryObserver(client, {
@@ -46,6 +46,11 @@ it('progress fetches only the first cached page and leaves other modes and refer
     pages: [{ ids: ['material'] }],
     pageParams: [''],
   });
+  const filtered = ['eagle', 'owner', 'PHOTO', 'assets', 'FILTER', { search: 'test' }];
+  client.setQueryData(filtered, {
+    pages: [{ ids: ['filtered-first'] }, { ids: ['filtered-tail'] }],
+    pageParams: ['filter-first', 'filter-tail'],
+  });
   queue.schedule('PHOTO', false);
   await vi.waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
   await vi.waitFor(() =>
@@ -53,6 +58,13 @@ it('progress fetches only the first cached page and leaves other modes and refer
   );
   expect(tagFn).not.toHaveBeenCalled();
   expect(queryFn.mock.calls[0]![0].pageParam).toBe('0');
+  expect(client.getQueryData<{ pages: Array<{ ids: string[] }> }>(key)?.pages[0]?.ids).toEqual([
+    'current-0',
+  ]);
+  expect(client.getQueryData(filtered)).toEqual({
+    pages: [{ ids: ['filtered-first'] }],
+    pageParams: ['filter-first'],
+  });
   expect(
     client.getQueryState(['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}])?.isInvalidated,
   ).toBe(false);
