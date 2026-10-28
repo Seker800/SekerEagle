@@ -1,5 +1,5 @@
 # CUDA wheels are obtained from the official cu128 index and verified separately.
-torch==2.11.0
+torch==2.13.0
 torchvision==0.26.0
 transformers==5.15.0
 fastapi==0.141.1
