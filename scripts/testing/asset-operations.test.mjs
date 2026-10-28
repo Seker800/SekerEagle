@@ -19,8 +19,10 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
 let queryCount = 0;
-prisma.$on('query', () => {
+let deletionClaimQuery = '';
+prisma.$on('query', ({ query }) => {
   queryCount++;
+  if (query.includes('UPDATE "EagleObjectDeletion" d')) deletionClaimQuery = query;
 });
 const owners = [];
 afterEach(async () => {
@@ -811,4 +813,53 @@ test('conflicting send and trash cannot both publish the same frozen source', as
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
     0,
   );
+});
+
+test('cleanup discovery reads a bounded window from a 50k due backlog', async () => {
+  const f = await fixture();
+  try {
+    for (let offset = 0; offset < 50000; offset += 1000)
+      await prisma.eagleObjectDeletion.createMany({
+        data: Array.from({ length: 1000 }, (_, i) => ({
+          ownerId: f.ownerId,
+          libraryMode: 'PHOTO',
+          objectKeys: [`users/${f.ownerId}/scale-${offset + i}`],
+          prefixes: [],
+          createdAt: new Date(0),
+          availableAt: new Date(0),
+        })),
+      });
+    await prisma.$executeRawUnsafe('ANALYZE "EagleObjectDeletion"');
+    deletionClaimQuery = '';
+    await drainObjectDeletion(prisma, {
+      deleteObjects: async () => {},
+      deletePrefix: async () => {},
+    });
+    assert.ok(deletionClaimQuery);
+    const result = await prisma.$queryRawUnsafe(
+      'EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ' + deletionClaimQuery,
+    );
+    const plan = result[0]['QUERY PLAN'][0];
+    function scanned(node) {
+      const own =
+        ['Seq Scan', 'Index Scan', 'Index Only Scan', 'Bitmap Heap Scan'].includes(
+          node['Node Type'],
+        ) && node['Relation Name'] === 'EagleObjectDeletion'
+          ? node['Actual Rows'] * node['Actual Loops']
+          : 0;
+      return own + (node.Plans ?? []).reduce((sum, child) => sum + scanned(child), 0);
+    }
+    const visited = scanned(plan.Plan);
+    console.log(
+      JSON.stringify({
+        benchmark: 'cleanup-discovery-50k',
+        scannedRows: visited,
+        milliseconds: plan['Execution Time'],
+      }),
+    );
+    assert.ok(visited < 1000, `four-receipt discovery visited ${visited} rows`);
+  } finally {
+    await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: f.ownerId } });
+    await prisma.$executeRawUnsafe('ANALYZE "EagleObjectDeletion"');
+  }
 });
