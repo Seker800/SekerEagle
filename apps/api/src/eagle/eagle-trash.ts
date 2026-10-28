@@ -1,5 +1,5 @@
 import { mediaRequeueData } from '@sekereagle/library-core';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { LibraryIdentity } from './library-mode';
 import { resolveLivePhotoMotions } from './live-photo-projection';
@@ -62,6 +62,7 @@ export async function resolveEagleTrashTargets(
   assetIds: string[],
   restore: boolean,
   includePrivate = false,
+  expectedGroups?: readonly { assetIds: readonly string[]; resourceIds: readonly string[] }[],
 ) {
   const { ownerId, libraryMode } = identity;
   const ids = [...new Set(assetIds)];
@@ -93,6 +94,17 @@ export async function resolveEagleTrashTargets(
     includePrivate,
     restore,
   );
+  // A union check alone can hide a motion moving from one selected still to
+  // another. Validate each frozen logical group using the same bulk projection.
+  for (const group of expectedGroups ?? []) {
+    const actual = new Set(group.assetIds);
+    for (const id of group.assetIds) {
+      const motion = motions.get(id);
+      if (motion) actual.add(motion.assetId);
+    }
+    if (actual.size !== group.resourceIds.length || group.resourceIds.some((id) => !actual.has(id)))
+      throw new ConflictException('实况照片组件已变化。');
+  }
   const resourceIds = [...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)])];
   return transaction.eagleAsset.findMany({
     where: { ownerId, libraryMode, id: { in: resourceIds } },

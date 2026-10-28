@@ -360,9 +360,15 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       const operation = { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } };
       if (
         await tx.eagleAssetOperationItem.count({
-          where: { libraryMode: this.libraryMode, operation, status: 'RUNNING', leaseUntil: { gt: now } },
+          where: {
+            libraryMode: this.libraryMode,
+            operation,
+            status: 'RUNNING',
+            leaseUntil: { gt: now },
+          },
         })
-      ) return [];
+      )
+        return [];
       const available = {
         libraryMode: this.libraryMode,
         OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: now } }],
@@ -375,13 +381,14 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       if (!first) return [];
       // Only one command is batched: owner, authorization, kind and frozen selection
       // stay together. Persisted per-resource receipts and retry identities are unchanged.
-      const candidates = lane === 'SEND' || first.operation.kind === 'EMPTY_TRASH'
-        ? [first]
-        : await tx.eagleAssetOperationItem.findMany({
-            where: { ...available, operationId: first.operationId, ownerId: first.ownerId },
-            orderBy: { ordinal: 'asc' },
-            take: METADATA_BATCH_SIZE,
-          });
+      const candidates =
+        lane === 'SEND' || first.operation.kind === 'EMPTY_TRASH'
+          ? [first]
+          : await tx.eagleAssetOperationItem.findMany({
+              where: { ...available, operationId: first.operationId, ownerId: first.ownerId },
+              orderBy: { ordinal: 'asc' },
+              take: METADATA_BATCH_SIZE,
+            });
       if (!candidates.length) return [];
       const claimed = await tx.eagleAssetOperationItem.updateMany({
         where: {
@@ -391,7 +398,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           AND: { OR: candidates.map(({ id, leaseVersion }) => ({ id, leaseVersion })) },
         },
         data: {
-          status: 'RUNNING', errorCode: null,
+          status: 'RUNNING',
+          errorCode: null,
           leaseUntil: new Date(Date.now() + LEASE_MS),
           leaseVersion: { increment: 1 },
         },
@@ -399,9 +407,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       if (!claimed.count) return [];
       return tx.eagleAssetOperationItem.findMany({
         where: {
-          ownerId: first.ownerId, libraryMode: this.libraryMode,
-          operationId: first.operationId, status: 'RUNNING',
-          OR: candidates.map(({id, leaseVersion}) => ({ id, leaseVersion: leaseVersion + 1 })),
+          ownerId: first.ownerId,
+          libraryMode: this.libraryMode,
+          operationId: first.operationId,
+          status: 'RUNNING',
+          OR: candidates.map(({ id, leaseVersion }) => ({ id, leaseVersion: leaseVersion + 1 })),
         },
         orderBy: { ordinal: 'asc' },
         include: { operation: true },
@@ -482,10 +492,12 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       if (!items.length) return;
       processed = true;
       heartbeat = setInterval(() => {
-        void this.prisma.eagleAssetOperationItem.updateMany({
-          where: { ...this.leaseWhere(items), leaseUntil: { gt: new Date() } },
-          data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
-        }).catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
+        void this.prisma.eagleAssetOperationItem
+          .updateMany({
+            where: { ...this.leaseWhere(items), leaseUntil: { gt: new Date() } },
+            data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
+          })
+          .catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
       }, 5000);
       heartbeat.unref();
       await this.execute(items);
@@ -494,7 +506,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       this.running.delete(lane);
       if (processed && !this.stopping && this.timer) {
         const next = setTimeout(
-          () => void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
+          () =>
+            void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
           0,
         );
         next.unref();
@@ -505,106 +518,113 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     const item = items[0]!;
     const { operation } = item;
     const libraryModeIdentity = this.leaseWhere(items);
-      try {
-        // Publication is authoritative even if a crash delayed the queue receipt.
-        // Recording an already committed result performs no resource write and
-        // must not misreport success as failure after a later credential change.
-        const previous =
-          operation.kind === 'SEND'
-            ? await this.prisma.eagleLibraryTransfer.findUnique({
-                where: { id: item.id, ownerId: operation.ownerId, sourceMode: this.libraryMode },
-              })
-            : null;
-        if (previous?.status === 'COMPLETED') {
-          await this.prisma.eagleAssetOperationItem.updateMany({
-            where: { ...libraryModeIdentity },
-            data: { status: 'COMPLETED', leaseUntil: null },
-          });
-          return;
-        }
-        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
-        const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
-        const assetIds = items.flatMap((entry) => entry.assetIds);
-        const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
-        if (operation.kind === 'SEND') {
-          await this.prisma.$transaction((tx) => this.checkSnapshots(tx, operation, snapshots));
-          await this.transfers.send(
-            operation.ownerId,
-            { assetIds: assetIds, operationId: item.id },
-            operation.isPrivate,
-            new Map(snapshots.map((row) => [row.id, row])),
-            { beforePublish: beforeWrite, componentIds: snapshots.map((row) => row.id) },
-          );
-        } else if (operation.kind === 'EMPTY_TRASH') {
-          await this.eagle.emptyTrash(
-            operation.ownerId,
-            operation.isPrivate,
-            operation.createdAt,
-            beforeWrite,
-          );
-        } else {
-          await this.prisma.$transaction(async (tx) => {
-            await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
-            await beforeWrite(tx);
-            const ids = snapshots.map((row) => row.id).sort();
-            await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-            await this.checkSnapshots(tx, operation, snapshots);
-            const current = await resolveEagleTrashTargets(
-              tx,
-              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              assetIds,
-              operation.kind === 'RESTORE',
-              operation.isPrivate,
-            );
-            if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
-              throw new ConflictException('实况照片组件已变化。');
-            await setEagleTrash(
-              tx,
-              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              assetIds,
-              operation.kind === 'RESTORE',
-              operation.isPrivate,
-            );
-            await tx.eagleAssetOperationItem.updateMany({
-              where: { ...libraryModeIdentity },
-              data: { status: 'COMPLETED', leaseUntil: null },
-            });
-          });
-        }
+    try {
+      // Publication is authoritative even if a crash delayed the queue receipt.
+      // Recording an already committed result performs no resource write and
+      // must not misreport success as failure after a later credential change.
+      const previous =
+        operation.kind === 'SEND'
+          ? await this.prisma.eagleLibraryTransfer.findUnique({
+              where: { id: item.id, ownerId: operation.ownerId, sourceMode: this.libraryMode },
+            })
+          : null;
+      if (previous?.status === 'COMPLETED') {
         await this.prisma.eagleAssetOperationItem.updateMany({
           where: { ...libraryModeIdentity },
           data: { status: 'COMPLETED', leaseUntil: null },
         });
-      } catch (error) {
-        if (items.length > 1 && (error instanceof NotFoundException || error instanceof ConflictException)) {
-          // The fast path was rolled back. Keep unaffected resources actionable,
-          // while preserving the exact per-item conflict and retry semantics.
-          for (const entry of items) await this.execute([entry]);
-          return;
-        }
-        const code =
-          error instanceof OperationAccessError
-            ? error.code
-            : error instanceof NotFoundException
-              ? 'ASSET_UNAVAILABLE'
-              : error instanceof ConflictException
-                ? 'ASSET_CHANGED'
-                : 'OPERATION_FAILED';
-        await this.prisma.eagleAssetOperationItem.updateMany({
-          where: { ...libraryModeIdentity },
-          data: { status: 'FAILED', errorCode: code, leaseUntil: null },
-        });
-        if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
-          await this.prisma.eagleAssetOperationItem.updateMany({
-            where: {
-              operationId: operation.id,
-              ownerId: operation.ownerId,
-              libraryMode: this.libraryMode,
-              status: 'PENDING',
-            },
-            data: { status: 'FAILED', errorCode: code },
-          });
-        }
+        return;
       }
+      await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+      const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
+      const assetIds = items.flatMap((entry) => entry.assetIds);
+      const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
+      if (operation.kind === 'SEND') {
+        await this.prisma.$transaction((tx) => this.checkSnapshots(tx, operation, snapshots));
+        await this.transfers.send(
+          operation.ownerId,
+          { assetIds: assetIds, operationId: item.id },
+          operation.isPrivate,
+          new Map(snapshots.map((row) => [row.id, row])),
+          { beforePublish: beforeWrite, componentIds: snapshots.map((row) => row.id) },
+        );
+      } else if (operation.kind === 'EMPTY_TRASH') {
+        await this.eagle.emptyTrash(
+          operation.ownerId,
+          operation.isPrivate,
+          operation.createdAt,
+          beforeWrite,
+        );
+      } else {
+        await this.prisma.$transaction(async (tx) => {
+          await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
+          await beforeWrite(tx);
+          const ids = snapshots.map((row) => row.id).sort();
+          await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+          await this.checkSnapshots(tx, operation, snapshots);
+          const current = await resolveEagleTrashTargets(
+            tx,
+            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+            assetIds,
+            operation.kind === 'RESTORE',
+            operation.isPrivate,
+            items.map((entry) => ({
+              assetIds: entry.assetIds,
+              resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
+            })),
+          );
+          if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
+            throw new ConflictException('实况照片组件已变化。');
+          await setEagleTrash(
+            tx,
+            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+            assetIds,
+            operation.kind === 'RESTORE',
+            operation.isPrivate,
+          );
+          await tx.eagleAssetOperationItem.updateMany({
+            where: { ...libraryModeIdentity },
+            data: { status: 'COMPLETED', leaseUntil: null },
+          });
+        });
+      }
+      await this.prisma.eagleAssetOperationItem.updateMany({
+        where: { ...libraryModeIdentity },
+        data: { status: 'COMPLETED', leaseUntil: null },
+      });
+    } catch (error) {
+      if (
+        items.length > 1 &&
+        (error instanceof NotFoundException || error instanceof ConflictException)
+      ) {
+        // The fast path was rolled back. Keep unaffected resources actionable,
+        // while preserving the exact per-item conflict and retry semantics.
+        for (const entry of items) await this.execute([entry]);
+        return;
+      }
+      const code =
+        error instanceof OperationAccessError
+          ? error.code
+          : error instanceof NotFoundException
+            ? 'ASSET_UNAVAILABLE'
+            : error instanceof ConflictException
+              ? 'ASSET_CHANGED'
+              : 'OPERATION_FAILED';
+      await this.prisma.eagleAssetOperationItem.updateMany({
+        where: { ...libraryModeIdentity },
+        data: { status: 'FAILED', errorCode: code, leaseUntil: null },
+      });
+      if (code === 'AUTH_REQUIRED' || code === 'PRIVATE_LOCKED') {
+        await this.prisma.eagleAssetOperationItem.updateMany({
+          where: {
+            operationId: operation.id,
+            ownerId: operation.ownerId,
+            libraryMode: this.libraryMode,
+            status: 'PENDING',
+          },
+          data: { status: 'FAILED', errorCode: code },
+        });
+      }
+    }
   }
 }

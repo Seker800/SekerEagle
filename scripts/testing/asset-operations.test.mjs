@@ -432,8 +432,12 @@ test('cancelling during claim discovery cannot resurrect a cancelled item', asyn
 });
 
 test('a blocked SEND does not block trash; a second executor cannot steal either live lane', async () => {
-  const entered = deferred(), finish = deferred();
-  const f = await fixture('PHOTO', async () => { entered.resolve(); await finish.promise; });
+  const entered = deferred(),
+    finish = deferred();
+  const f = await fixture('PHOTO', async () => {
+    entered.resolve();
+    await finish.promise;
+  });
   const send = await f.enqueue('SEND', [await f.add()]);
   const processing = f.service.tick();
   await entered.promise;
@@ -443,7 +447,10 @@ test('a blocked SEND does not block trash; a second executor cannot steal either
     assert.equal((await f.state(trash.id)).completed, 2);
     assert.equal((await f.state(send.id)).running, 1);
     assert.equal(f.copies(), 1);
-  } finally { finish.resolve(); await processing; }
+  } finally {
+    finish.resolve();
+    await processing;
+  }
 });
 
 test('metadata batches are bounded and commit one bulk resource write per batch', async () => {
@@ -452,9 +459,16 @@ test('metadata batches are bounded and commit one bulk resource write per batch'
   for (let i = 0; i < 65; i++) rows.push(await f.add());
   const receipt = await f.enqueue('TRASH', rows);
   let writes = 0;
-  const db = prisma.$extends({ query: { eagleAsset: {
-    async updateMany({ args, query }) { writes++; return query(args); },
-  } } });
+  const db = prisma.$extends({
+    query: {
+      eagleAsset: {
+        async updateMany({ args, query }) {
+          writes++;
+          return query(args);
+        },
+      },
+    },
+  });
   const executor = f.createService(db);
   const start = performance.now();
   await executor.tick();
@@ -464,20 +478,28 @@ test('metadata batches are bounded and commit one bulk resource write per batch'
   await executor.tick();
   assert.equal((await f.state(receipt.id)).completed, 65);
   assert.equal(writes, 3);
-  console.log(`Synthetic 65-item trash: ${(performance.now() - start).toFixed(1)} ms, ${writes} bulk writes`);
+  console.log(
+    `Synthetic 65-item trash: ${(performance.now() - start).toFixed(1)} ms, ${writes} bulk writes`,
+  );
 });
 
 test('a changed item rolls back the bulk attempt and preserves individual results', async () => {
   const f = await fixture();
   const rows = [await f.add(), await f.add(), await f.add()];
   const receipt = await f.enqueue('TRASH', rows);
-  await prisma.eagleAsset.update({ where: { id: rows[1].id }, data: { rowVersion: { increment: 1 } } });
+  await prisma.eagleAsset.update({
+    where: { id: rows[1].id },
+    data: { rowVersion: { increment: 1 } },
+  });
   await f.service.tick();
   const result = await f.state(receipt.id);
   assert.equal(result.completed, 2);
   assert.equal(result.failed, 1);
-  assert.deepEqual(result.errors, [{code: 'ASSET_CHANGED', count: 1}]);
-  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({where:{id:rows[1].id}})).deletedAt, null);
+  assert.deepEqual(result.errors, [{ code: 'ASSET_CHANGED', count: 1 }]);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: rows[1].id } })).deletedAt,
+    null,
+  );
 });
 
 test('128 synthetic resources complete with bounded database work', async () => {
@@ -485,34 +507,73 @@ test('128 synthetic resources complete with bounded database work', async () => 
   const rows = [];
   for (let i = 0; i < 128; i++) rows.push(await f.add());
   const receipt = await f.enqueue('TRASH', rows);
-  let writes = 0, ticks = 0;
-  const db = prisma.$extends({query:{eagleAsset:{async updateMany({args,query}){writes++;return query(args);}}}});
+  let writes = 0,
+    ticks = 0;
+  const db = prisma.$extends({
+    query: {
+      eagleAsset: {
+        async updateMany({ args, query }) {
+          writes++;
+          return query(args);
+        },
+      },
+    },
+  });
   const executor = f.createService(db);
   const start = performance.now();
   while ((await f.state(receipt.id)).completed < rows.length && ticks < rows.length) {
-    await executor.tick(); ticks++;
+    await executor.tick();
+    ticks++;
   }
-  console.log(JSON.stringify({benchmark:'trash-128',milliseconds:performance.now()-start,ticks,resourceWrites:writes}));
-  assert.equal((await f.state(receipt.id)).completed,128);
-  assert.equal(writes,4);
+  console.log(
+    JSON.stringify({
+      benchmark: 'trash-128',
+      milliseconds: performance.now() - start,
+      ticks,
+      resourceWrites: writes,
+    }),
+  );
+  assert.equal((await f.state(receipt.id)).completed, 128);
+  assert.equal(writes, 4);
 });
 
 test('batching cannot conceal live components reassigned between selected resources', async () => {
   const f = await fixture();
-  const firstIdentifier = randomUUID(), secondIdentifier = randomUUID();
-  const first = await f.add({livePhotoIdentifier:firstIdentifier,livePhotoRole:'STILL'});
-  const second = await f.add({livePhotoIdentifier:secondIdentifier,livePhotoRole:'STILL'});
-  const motion = await f.add({livePhotoIdentifier:firstIdentifier,livePhotoRole:'MOTION',mimeType:'video/quicktime'});
-  await prisma.eagleAssetRendition.create({data:{
-    assetId:motion.id,ownerId:f.ownerId,libraryMode:'PHOTO',kind:'PREVIEW',variant:'default',revision:1,
-    storageKey:`users/${f.ownerId}/assets/${motion.id}/preview.mp4`,mimeType:'video/mp4',byteSize:1,status:'READY',
-  }});
-  const receipt = await f.enqueue('TRASH',[first,second]);
+  const firstIdentifier = randomUUID(),
+    secondIdentifier = randomUUID();
+  const first = await f.add({ livePhotoIdentifier: firstIdentifier, livePhotoRole: 'STILL' });
+  const second = await f.add({ livePhotoIdentifier: secondIdentifier, livePhotoRole: 'STILL' });
+  const motion = await f.add({
+    livePhotoIdentifier: firstIdentifier,
+    livePhotoRole: 'MOTION',
+    mimeType: 'video/quicktime',
+  });
+  await prisma.eagleAssetRendition.create({
+    data: {
+      assetId: motion.id,
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      kind: 'PREVIEW',
+      variant: 'default',
+      revision: 1,
+      storageKey: `users/${f.ownerId}/assets/${motion.id}/preview.mp4`,
+      mimeType: 'video/mp4',
+      byteSize: 1,
+      status: 'READY',
+    },
+  });
+  const receipt = await f.enqueue('TRASH', [first, second]);
   // Pairing is derived from current metadata, not covered by the frozen row versions.
-  await prisma.eagleAsset.update({where:{id:motion.id},data:{livePhotoIdentifier:secondIdentifier}});
+  await prisma.eagleAsset.update({
+    where: { id: motion.id },
+    data: { livePhotoIdentifier: secondIdentifier },
+  });
   await f.service.tick();
-  const result=await f.state(receipt.id);
-  assert.equal(result.completed,0);
-  assert.equal(result.failed,2);
-  assert.equal(await prisma.eagleAsset.count({where:{ownerId:f.ownerId,deletedAt:{not:null}}}),0);
+  const result = await f.state(receipt.id);
+  assert.equal(result.completed, 0);
+  assert.equal(result.failed, 2);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+    0,
+  );
 });
