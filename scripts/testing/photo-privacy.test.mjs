@@ -908,3 +908,33 @@ test('一张照片提交异常仅回滚该项，其他同批人脸仍按原事�
   );
   assert.equal(await prisma.eaglePhotoFace.count({ where: { assetId: assets[1].id } }), 0);
 });
+
+test('无人脸结果跳过向量读取仍保留人工人物纠错及其私密保护', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  await prisma.eaglePhotoFace.update({
+    where: { id: f.face.id },
+    data: { userAssigned: true, modelVersion: 'previous-model' },
+  });
+  const job = await prisma.eagleAssetProcessingJob.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.a.id,
+      assetRevision: f.a.mediaRevision,
+      kind: 'ANALYZE_PHOTO_FACES',
+      processorVersion: FACE_MODEL_VERSION,
+      status: 'PROCESSING',
+    },
+  });
+  await persistPhotoFaces(prisma, job, []);
+  const face = await prisma.eaglePhotoFace.findUniqueOrThrow({ where: { id: f.face.id } });
+  assert.equal(face.isCurrent, true);
+  assert.equal(face.personId, f.person.id);
+  assert.equal(face.userAssigned, true);
+  assert.equal((await f.marked()).isPrivate, true);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } })).status,
+    'COMPLETED',
+  );
+});
