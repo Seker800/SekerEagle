@@ -83,20 +83,24 @@ async function persistPhotoFacesInTransaction(
     },
     data: { isCurrent: false },
   });
-  const people = await tx.eaglePhotoPerson.findMany({
-    where: { ownerId: job.ownerId, libraryMode: 'PHOTO', modelVersion: FACE_MODEL_VERSION },
-    take: 10000,
-  });
-  const corrected = await tx.eaglePhotoFace.findMany({
-    where: {
-      ownerId: job.ownerId,
-      libraryMode: 'PHOTO',
-      assetId: job.assetId,
-      assetRevision: job.assetRevision,
-      isCurrent: true,
-      userAssigned: true,
-    },
-  });
+  const people = detections.length
+    ? await tx.eaglePhotoPerson.findMany({
+        where: { ownerId: job.ownerId, libraryMode: 'PHOTO', modelVersion: FACE_MODEL_VERSION },
+        take: 10000,
+      })
+    : [];
+  const corrected = detections.length
+    ? await tx.eaglePhotoFace.findMany({
+        where: {
+          ownerId: job.ownerId,
+          libraryMode: 'PHOTO',
+          assetId: job.assetId,
+          assetRevision: job.assetRevision,
+          isCurrent: true,
+          userAssigned: true,
+        },
+      })
+    : [];
   const assigned = new Set<string>(
     corrected.flatMap((face) => (face.personId ? [face.personId] : [])),
   );
