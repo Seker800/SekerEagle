@@ -370,11 +370,10 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       )
         return [];
       const available = {
-        libraryMode: this.libraryMode,
         OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: now } }],
       };
       const first = await tx.eagleAssetOperationItem.findFirst({
-        where: { ...available, operation },
+        where: { libraryMode: this.libraryMode, ...available, operation },
         orderBy: [{ operation: { createdAt: 'asc' } }, { ordinal: 'asc' }],
         include: { operation: true },
       });
@@ -385,13 +384,19 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         lane === 'SEND' || first.operation.kind === 'EMPTY_TRASH'
           ? [first]
           : await tx.eagleAssetOperationItem.findMany({
-              where: { ...available, operationId: first.operationId, ownerId: first.ownerId },
+              where: {
+                libraryMode: this.libraryMode,
+                ...available,
+                operationId: first.operationId,
+                ownerId: first.ownerId,
+              },
               orderBy: { ordinal: 'asc' },
               take: METADATA_BATCH_SIZE,
             });
       if (!candidates.length) return [];
       const claimed = await tx.eagleAssetOperationItem.updateMany({
         where: {
+          libraryMode: this.libraryMode,
           ...available,
           ownerId: first.ownerId,
           operationId: first.operationId,
@@ -434,6 +439,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       throw new OperationAccessError('PRIVATE_LOCKED');
     const leased = await tx.eagleAssetOperationItem.updateMany({
       where: {
+        libraryMode: this.libraryMode,
         ...this.leaseWhere(items),
         leaseUntil: { gt: new Date() },
       },
@@ -472,7 +478,6 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   private leaseWhere(items: ClaimedItem[]): Prisma.EagleAssetOperationItemWhereInput {
     return {
       ownerId: items[0]!.ownerId,
-      libraryMode: this.libraryMode,
       status: 'RUNNING',
       OR: items.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
     };
@@ -494,7 +499,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       heartbeat = setInterval(() => {
         void this.prisma.eagleAssetOperationItem
           .updateMany({
-            where: { ...this.leaseWhere(items), leaseUntil: { gt: new Date() } },
+            where: {
+              libraryMode: this.libraryMode,
+              ...this.leaseWhere(items),
+              leaseUntil: { gt: new Date() },
+            },
             data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
           })
           .catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
@@ -517,7 +526,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   private async execute(items: ClaimedItem[]) {
     const item = items[0]!;
     const { operation } = item;
-    const libraryModeIdentity = this.leaseWhere(items);
+    const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
     try {
       // Publication is authoritative even if a crash delayed the queue receipt.
       // Recording an already committed result performs no resource write and
@@ -535,7 +544,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         });
         return;
       }
-      await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+      if (operation.kind === 'SEND' || operation.kind === 'EMPTY_TRASH')
+        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
       const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
       const assetIds = items.flatMap((entry) => entry.assetIds);
       const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
@@ -587,6 +597,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             data: { status: 'COMPLETED', leaseUntil: null },
           });
         });
+        return;
       }
       await this.prisma.eagleAssetOperationItem.updateMany({
         where: { ...libraryModeIdentity },

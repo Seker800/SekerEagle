@@ -176,7 +176,7 @@ it('trash progress refreshes only its own lists and counts, with a final refresh
     expect(predicate({ queryKey: key } as never)).toBe(false);
   client.setQueryData(
     ['eagle', 'owner', 'PHOTO', 'operations', false],
-    [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'FAILED' })],
+    [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' })],
   );
   await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
 });

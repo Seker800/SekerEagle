@@ -507,40 +507,41 @@ test('a changed item rolls back the bulk attempt and preserves individual result
   );
 });
 
-test('128 synthetic resources complete with bounded database work', async () => {
-  const f = await fixture();
-  const rows = [];
-  for (let i = 0; i < 128; i++) rows.push(await f.add());
-  const receipt = await f.enqueue('TRASH', rows);
-  let writes = 0,
-    ticks = 0;
-  const db = prisma.$extends({
-    query: {
-      eagleAsset: {
-        async updateMany({ args, query }) {
-          writes++;
-          return query(args);
+for (const size of [128, 477, 1000])
+  test(`${size} synthetic resources complete with bounded database work`, async () => {
+    const f = await fixture();
+    const rows = [];
+    for (let i = 0; i < size; i++) rows.push(await f.add());
+    const receipt = await f.enqueue('TRASH', rows);
+    let writes = 0,
+      ticks = 0;
+    const db = prisma.$extends({
+      query: {
+        eagleAsset: {
+          async updateMany({ args, query }) {
+            writes++;
+            return query(args);
+          },
         },
       },
-    },
+    });
+    const executor = f.createService(db);
+    const start = performance.now();
+    while ((await f.state(receipt.id)).completed < rows.length && ticks < rows.length) {
+      await executor.tick();
+      ticks++;
+    }
+    console.log(
+      JSON.stringify({
+        benchmark: `trash-${size}`,
+        milliseconds: performance.now() - start,
+        ticks,
+        resourceWrites: writes,
+      }),
+    );
+    assert.equal((await f.state(receipt.id)).completed, size);
+    assert.equal(writes, Math.ceil(size / 32));
   });
-  const executor = f.createService(db);
-  const start = performance.now();
-  while ((await f.state(receipt.id)).completed < rows.length && ticks < rows.length) {
-    await executor.tick();
-    ticks++;
-  }
-  console.log(
-    JSON.stringify({
-      benchmark: 'trash-128',
-      milliseconds: performance.now() - start,
-      ticks,
-      resourceWrites: writes,
-    }),
-  );
-  assert.equal((await f.state(receipt.id)).completed, 128);
-  assert.equal(writes, 4);
-});
 
 test('batching cannot conceal live components reassigned between selected resources', async () => {
   const f = await fixture();
@@ -638,33 +639,73 @@ test('an expired metadata batch cannot publish or overwrite its replacement gene
 });
 
 test('object cleanup claims a bounded batch and deletes keys in bulk without waiting for another poll', async () => {
-  const f=await fixture();
-  await prisma.eagleObjectDeletion.createMany({data:Array.from({length:8},(_,i)=>({
-    ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/${i}-original`,`users/${f.ownerId}/${i}-preview`],prefixes:[],
-  }))});
-  let individual=0,bulk=0;
-  const count=await drainObjectDeletion(prisma,{
-    deleteObject:async()=>{individual++;},deleteObjects:async keys=>{bulk++;assert.equal(keys.length,2);},deletePrefix:async()=>{},
+  const f = await fixture();
+  await prisma.eagleObjectDeletion.createMany({
+    data: Array.from({ length: 8 }, (_, i) => ({
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      objectKeys: [`users/${f.ownerId}/${i}-original`, `users/${f.ownerId}/${i}-preview`],
+      prefixes: [],
+    })),
   });
-  assert.equal(await prisma.eagleObjectDeletion.count({where:{ownerId:f.ownerId}}),4);
-  assert.equal(count,4);
-  assert.equal(bulk,4);
-  assert.equal(individual,0);
+  let individual = 0,
+    bulk = 0;
+  const count = await drainObjectDeletion(prisma, {
+    deleteObject: async () => {
+      individual++;
+    },
+    deleteObjects: async (keys) => {
+      bulk++;
+      assert.equal(keys.length, 2);
+    },
+    deletePrefix: async () => {},
+  });
+  assert.equal(await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }), 4);
+  assert.equal(count, 4);
+  assert.equal(bulk, 4);
+  assert.equal(individual, 0);
 });
 
-test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its retry state',async()=>{
-  const f=await fixture();
-  const rows=await Promise.all([
-    prisma.eagleObjectDeletion.create({data:{ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/valid`,'users/foreign/private'],prefixes:[]}}),
-    prisma.eagleObjectDeletion.create({data:{ownerId:f.ownerId,libraryMode:'PHOTO',objectKeys:[`users/${f.ownerId}/retry`],prefixes:[]}}),
+test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its retry state', async () => {
+  const f = await fixture();
+  const rows = await Promise.all([
+    prisma.eagleObjectDeletion.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        objectKeys: [`users/${f.ownerId}/valid`, 'users/foreign/private'],
+        prefixes: [],
+      },
+    }),
+    prisma.eagleObjectDeletion.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        objectKeys: [`users/${f.ownerId}/retry`],
+        prefixes: [],
+      },
+    }),
   ]);
-  const deleted=[];
-  await drainObjectDeletion(prisma,{
-    deleteObject:async key=>{deleted.push(key);throw Error('synthetic failure');},
-    deleteObjects:async keys=>{deleted.push(...keys);throw Error('synthetic failure');},deletePrefix:async()=>{},
+  const deleted = [];
+  await drainObjectDeletion(prisma, {
+    deleteObject: async (key) => {
+      deleted.push(key);
+      throw Error('synthetic failure');
+    },
+    deleteObjects: async (keys) => {
+      deleted.push(...keys);
+      throw Error('synthetic failure');
+    },
+    deletePrefix: async () => {},
   });
-  assert.deepEqual(deleted,[`users/${f.ownerId}/retry`]);
-  const remaining=await prisma.eagleObjectDeletion.findMany({where:{id:{in:rows.map(row=>row.id)}}});
-  assert.equal(remaining.length,2);
-  assert.ok(remaining.every(row=>row.status==='PENDING'&&row.availableAt>new Date()&&row.leaseVersion===1));
+  assert.deepEqual(deleted, [`users/${f.ownerId}/retry`]);
+  const remaining = await prisma.eagleObjectDeletion.findMany({
+    where: { id: { in: rows.map((row) => row.id) } },
+  });
+  assert.equal(remaining.length, 2);
+  assert.ok(
+    remaining.every(
+      (row) => row.status === 'PENDING' && row.availableAt > new Date() && row.leaseVersion === 1,
+    ),
+  );
 });

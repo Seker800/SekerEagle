@@ -1629,7 +1629,7 @@ test('purge commits asset deletion and detached upload/capture pointers before r
   const deletion = await prisma.eagleObjectDeletion.findFirst({ where: { ownerId: f.ownerId } });
   assert.ok(deletion.objectKeys.includes(f.material.originalObjectKey));
   await drainObjectDeletion(prisma, {
-    deleteObject: async () => {
+    deleteObjects: async () => {
       throw new Error('test storage offline');
     },
     deletePrefix: async () => {},
@@ -1644,8 +1644,8 @@ test('purge commits asset deletion and detached upload/capture pointers before r
   });
   const removed = [];
   await drainObjectDeletion(prisma, {
-    deleteObject: async (key) => {
-      removed.push(key);
+    deleteObjects: async (keys) => {
+      removed.push(...keys);
     },
     deletePrefix: async () => {},
   });

@@ -31,7 +31,7 @@ import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
-import { prepareAssetPurge, drainObjectDeletion } from './asset-purge';
+import { prepareAssetPurge, drainObjectDeletion, nextObjectDeletionWakeAt } from './asset-purge';
 import {
   nextBackgroundTime,
   CAMERA_MAX_IMAGE_BYTES,
@@ -43,7 +43,6 @@ import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, extname } from 'node:path';
 import {
-  DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   ListObjectsV2Command,
@@ -1353,15 +1352,28 @@ function resourceBudget(resource: MediaResource) {
 async function poll(): Promise<void> {
   if (!stopping && !deletingObjects) {
     deletingObjects = true;
+    let claimed = false;
     void drainObjectDeletion(prisma, {
-      deleteObject: async (key) => {
-        await storage.send(new DeleteObjectCommand({ Bucket: s3Bucket, Key: key }));
+      deleteObjects: async (keys) => {
+        const result = await storage.send(
+          new DeleteObjectsCommand({
+            Bucket: s3Bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        if (result.Errors?.length) throw new Error('OBJECT_DELETION_INCOMPLETE');
       },
       deletePrefix: deleteOwnedPrefix,
     })
+      .then((count) => {
+        claimed = count > 0;
+      })
       .catch(reportLoopError)
       .finally(() => {
         deletingObjects = false;
+        // Re-evaluate pending receipts and retry deadlines immediately after a
+        // completed batch, rather than waiting for the global fallback timer.
+        if (!stopping && claimed) wakeScheduler?.wakeNow();
       });
   }
   if (!stopping && runTagBuilds && activeTagBuildCount === 0) {
@@ -1418,7 +1430,7 @@ interface PendingMediaWakeRow {
 }
 
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
-  const [mediaCandidates, tagBuilds, settings] = await Promise.all([
+  const [mediaCandidates, tagBuilds, settings, objectDeletionWakeAt] = await Promise.all([
     prisma.$queryRaw<PendingMediaWakeRow[]>(buildMediaWakeQuery(allowedJobKinds)),
     runTagBuilds
       ? prisma.$queryRaw<Array<{ ownerId: string; libraryMode: LibraryMode; availableAt: Date }>>(
@@ -1426,6 +1438,7 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         )
       : Promise.resolve([]),
     prisma.eagleProcessingSetting.findMany(),
+    nextObjectDeletionWakeAt(prisma),
   ]);
   const settingsByOwner = new Map(
     settings.map(
@@ -1433,7 +1446,12 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
     ),
   );
-  let earliest: Date | null = null;
+  // Ready receipts are already being drained; future retry deadlines still
+  // participate so a failed batch never falls back to the 30-second poll.
+  let earliest: Date | null =
+    deletingObjects && objectDeletionWakeAt && objectDeletionWakeAt <= now
+      ? null
+      : objectDeletionWakeAt;
   for (const build of tagBuilds) {
     const due = new Date(Math.max(now.getTime(), build.availableAt?.getTime() ?? now.getTime()));
     const next = nextBackgroundTime(
