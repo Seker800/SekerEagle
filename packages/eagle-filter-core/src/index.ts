@@ -3,6 +3,7 @@ export const EAGLE_FILTER_MAX_CONDITIONS = 30;
 export const EAGLE_FILTER_MAX_RULES_PER_CONDITION = 30;
 
 export type EagleFilterField =
+  | 'SEMANTIC'
   | 'CITY'
   | 'CAMERA_MODEL'
   | 'LENS_MODEL'
@@ -53,6 +54,7 @@ export interface EagleFilterRule {
   field: EagleFilterField;
   operator: EagleFilterOperator;
   value?: EagleFilterValue;
+  breadth?: EagleSemanticIntent['breadth'];
   unit?: 'KB' | 'MB' | 'GB' | 'SECONDS' | 'MINUTES' | 'HOURS';
 }
 
@@ -101,6 +103,7 @@ export type StoredEagleFilterQuery = EagleFilterQuery | LegacyEagleFilterQuery;
 
 export interface EagleFilterFieldDefinition {
   field: EagleFilterField;
+  smartFolderOnly?: boolean;
   libraryModes?: readonly ('MATERIAL' | 'PHOTO')[];
   kind: 'TEXT' | 'SELECT' | 'TAGS' | 'NUMBER' | 'DATE' | 'COLOR';
   operators: readonly EagleFilterOperator[];
@@ -125,6 +128,7 @@ const SET_OPERATORS = ['ANY_OF', 'ALL_OF', 'NONE_OF', 'EMPTY', 'NOT_EMPTY'] as c
 const DATE_OPERATORS = ['BEFORE', 'AFTER', 'BETWEEN', 'WITHIN_DAYS'] as const;
 
 export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
+  { field: 'SEMANTIC', smartFolderOnly: true, kind: 'TEXT', operators: ['SIMILAR'], defaultOperator: 'SIMILAR', defaultValue: '' },
   ...(['CITY', 'CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
     field,
     libraryModes: ['PHOTO'] as const,
@@ -381,13 +385,16 @@ export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
     throw new Error('筛选规则版本无效。');
   if (!Array.isArray(value.conditions) || value.conditions.length > EAGLE_FILTER_MAX_CONDITIONS)
     throw new Error('筛选条件组无效。');
-  return {
+  const query: EagleFilterQuery = {
     version: EAGLE_FILTER_QUERY_VERSION,
     ...(value.semantic === undefined ? {} : { semantic: parseEagleSemanticIntent(value.semantic) }),
     conditions: value.conditions.map((condition, conditionIndex) =>
       parseCondition(condition, conditionIndex),
     ),
   };
+  const sceneRules = query.conditions.flatMap((condition) => condition.rules).filter((rule) => rule.field === 'SEMANTIC');
+  if (sceneRules.length + (query.semantic ? 1 : 0) > 1) throw new Error('每个智能文件夹支持一条画面内容条件。');
+  return query;
 }
 
 function parseCondition(value: unknown, conditionIndex: number): EagleFilterCondition {
@@ -421,6 +428,11 @@ function parseRule(value: unknown, conditionIndex: number, ruleIndex: number): E
     operator: value.operator as EagleFilterOperator,
   };
   if (value.value !== undefined) rule.value = parseValue(value.value);
+  if (definition.field === 'SEMANTIC') {
+    const intent = parseEagleSemanticIntent({ text: value.value === '' ? '_' : value.value, breadth: value.breadth ?? 'BALANCED' });
+    rule.value = value.value === '' ? '' : intent.text;
+    rule.breadth = intent.breadth;
+  }
   if (value.unit !== undefined) {
     if (!definition.units?.some((unit) => unit.value === value.unit))
       throw new Error(`字段“${definition.field}”的单位无效。`);
@@ -537,4 +549,18 @@ export function assertEagleFilterQueryMode(
   const allowed = new Set(getEagleFilterFields(libraryMode).map(({ field }) => field));
   if (query.conditions.some(({ rules }) => rules.some(({ field }) => !allowed.has(field))))
     throw new Error('摄影筛选只适用于照片图库。');
+}
+
+/** One bounded vector intent per folder; its placement obeys the ordinary Boolean groups. */
+export function readEagleSemanticIntent(query: EagleFilterQuery): EagleSemanticIntent | undefined {
+  if (query.semantic) return query.semantic;
+  const rule = query.conditions.flatMap((condition) => condition.rules).find((rule) => rule.field === 'SEMANTIC' && isActiveEagleFilterRule(rule));
+  return rule ? parseEagleSemanticIntent({ text: rule.value, breadth: rule.breadth ?? 'BALANCED' }) : undefined;
+}
+
+/** Compatibility adapter: old top-level intent was always an extra AND condition. */
+export function editableEagleFilterQuery(query: EagleFilterQuery): EagleFilterQuery {
+  if (!query.semantic) return query;
+  const { semantic, ...ordinary } = query;
+  return { ...ordinary, conditions: [...query.conditions, { id: 'legacy-semantic-group', match: 'ALL', result: 'MATCH', rules: [{ id: 'legacy-semantic-rule', field: 'SEMANTIC', operator: 'SIMILAR', value: semantic.text, breadth: semantic.breadth }] }] };
 }
