@@ -35,6 +35,9 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
   items: Array<Pick<EagleAssetOperationItem, 'status' | 'weight' | 'errorCode'>>;
 };
 const LEASE_MS = 120_000;
+const METADATA_BATCH_SIZE = 32;
+type OperationLane = 'SEND' | 'METADATA';
+type ClaimedItem = EagleAssetOperationItem & { operation: EagleAssetOperation };
 class OperationAccessError extends Error {
   constructor(readonly code: string) {
     super(code);
@@ -45,7 +48,7 @@ class OperationAccessError extends Error {
 @Injectable()
 export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
-  private running = false;
+  private readonly running = new Set<OperationLane>();
   private stopping = false;
   private readonly logger = new Logger(EagleAssetOperationService.name);
   constructor(
@@ -350,44 +353,57 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
   }
-  private async claim() {
+  private async claim(lane: OperationLane): Promise<ClaimedItem[]> {
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`asset-operations:${this.libraryMode}`}))`;
       const now = new Date();
+      const operation = { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } };
       if (
         await tx.eagleAssetOperationItem.count({
-          where: { libraryMode: this.libraryMode, status: 'RUNNING', leaseUntil: { gt: now } },
+          where: { libraryMode: this.libraryMode, operation, status: 'RUNNING', leaseUntil: { gt: now } },
         })
-      )
-        return null;
-      const item = await tx.eagleAssetOperationItem.findFirst({
-        where: {
-          libraryMode: this.libraryMode,
-          OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: now } }],
-        },
+      ) return [];
+      const available = {
+        libraryMode: this.libraryMode,
+        OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: now } }],
+      };
+      const first = await tx.eagleAssetOperationItem.findFirst({
+        where: { ...available, operation },
         orderBy: [{ operation: { createdAt: 'asc' } }, { ordinal: 'asc' }],
+        include: { operation: true },
       });
-      if (!item) return null;
-      // Cancellation or a recovering executor may have changed the row while
-      // discovery was waiting. Claim only the exact pending/expired generation.
+      if (!first) return [];
+      // Only one command is batched: owner, authorization, kind and frozen selection
+      // stay together. Persisted per-resource receipts and retry identities are unchanged.
+      const candidates = lane === 'SEND' || first.operation.kind === 'EMPTY_TRASH'
+        ? [first]
+        : await tx.eagleAssetOperationItem.findMany({
+            where: { ...available, operationId: first.operationId, ownerId: first.ownerId },
+            orderBy: { ordinal: 'asc' },
+            take: METADATA_BATCH_SIZE,
+          });
+      if (!candidates.length) return [];
       const claimed = await tx.eagleAssetOperationItem.updateMany({
         where: {
-          id: item.id,
-          ownerId: item.ownerId,
-          libraryMode: this.libraryMode,
-          leaseVersion: item.leaseVersion,
-          OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: now } }],
+          ...available,
+          ownerId: first.ownerId,
+          operationId: first.operationId,
+          AND: { OR: candidates.map(({ id, leaseVersion }) => ({ id, leaseVersion })) },
         },
         data: {
-          status: 'RUNNING',
-          errorCode: null,
+          status: 'RUNNING', errorCode: null,
           leaseUntil: new Date(Date.now() + LEASE_MS),
           leaseVersion: { increment: 1 },
         },
       });
-      if (claimed.count !== 1) return null;
-      return tx.eagleAssetOperationItem.findUniqueOrThrow({
-        where: { id: item.id, ownerId: item.ownerId, libraryMode: this.libraryMode },
+      if (!claimed.count) return [];
+      return tx.eagleAssetOperationItem.findMany({
+        where: {
+          ownerId: first.ownerId, libraryMode: this.libraryMode,
+          operationId: first.operationId, status: 'RUNNING',
+          OR: candidates.map(({id, leaseVersion}) => ({ id, leaseVersion: leaseVersion + 1 })),
+        },
+        orderBy: { ordinal: 'asc' },
         include: { operation: true },
       });
     });
@@ -395,7 +411,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   private async assertActor(
     tx: Prisma.TransactionClient,
     operation: EagleAssetOperation,
-    item: EagleAssetOperationItem,
+    items: ClaimedItem[],
   ) {
     await tx.$queryRaw`SELECT id FROM "User" WHERE id=${operation.ownerId} FOR SHARE`;
     const user = await tx.user.findUnique({
@@ -408,16 +424,12 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       throw new OperationAccessError('PRIVATE_LOCKED');
     const leased = await tx.eagleAssetOperationItem.updateMany({
       where: {
-        id: item.id,
-        ownerId: operation.ownerId,
-        libraryMode: this.libraryMode,
-        status: 'RUNNING',
-        leaseVersion: item.leaseVersion,
+        ...this.leaseWhere(items),
         leaseUntil: { gt: new Date() },
       },
       data: { updatedAt: new Date() },
     });
-    if (leased.count !== 1) throw new OperationAccessError('LEASE_LOST');
+    if (leased.count !== items.length) throw new OperationAccessError('LEASE_LOST');
   }
   private async checkSnapshots(
     tx: Prisma.TransactionClient,
@@ -447,32 +459,52 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     )
       throw new ConflictException('资源已变化。');
   }
+  private leaseWhere(items: ClaimedItem[]): Prisma.EagleAssetOperationItemWhereInput {
+    return {
+      ownerId: items[0]!.ownerId,
+      libraryMode: this.libraryMode,
+      status: 'RUNNING',
+      OR: items.map(({ id, leaseVersion }) => ({ id, leaseVersion })),
+    };
+  }
   async tick() {
-    if (this.running || this.stopping) return;
-    this.running = true;
+    const results = await Promise.allSettled([this.tickLane('SEND'), this.tickLane('METADATA')]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+  }
+  private async tickLane(lane: OperationLane) {
+    if (this.running.has(lane) || this.stopping) return;
+    this.running.add(lane);
     let heartbeat: NodeJS.Timeout | undefined;
     let processed = false;
     try {
-      const item = await this.claim();
-      if (!item) return;
+      const items = await this.claim(lane);
+      if (!items.length) return;
       processed = true;
-      const { operation } = item;
-      const libraryModeIdentity = {
-        id: item.id,
-        ownerId: item.ownerId,
-        libraryMode: this.libraryMode,
-        status: 'RUNNING',
-        leaseVersion: item.leaseVersion,
-      };
       heartbeat = setInterval(() => {
-        void this.prisma.eagleAssetOperationItem
-          .updateMany({
-            where: { ...libraryModeIdentity },
-            data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
-          })
-          .catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
+        void this.prisma.eagleAssetOperationItem.updateMany({
+          where: { ...this.leaseWhere(items), leaseUntil: { gt: new Date() } },
+          data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
+        }).catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
       }, 5000);
       heartbeat.unref();
+      await this.execute(items);
+    } finally {
+      if (heartbeat) clearInterval(heartbeat);
+      this.running.delete(lane);
+      if (processed && !this.stopping && this.timer) {
+        const next = setTimeout(
+          () => void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
+          0,
+        );
+        next.unref();
+      }
+    }
+  }
+  private async execute(items: ClaimedItem[]) {
+    const item = items[0]!;
+    const { operation } = item;
+    const libraryModeIdentity = this.leaseWhere(items);
       try {
         // Publication is authoritative even if a crash delayed the queue receipt.
         // Recording an already committed result performs no resource write and
@@ -490,14 +522,15 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           });
           return;
         }
-        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, item));
-        const snapshots = item.snapshots as unknown as Snapshot[];
-        const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, item);
+        await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+        const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
+        const assetIds = items.flatMap((entry) => entry.assetIds);
+        const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
         if (operation.kind === 'SEND') {
           await this.prisma.$transaction((tx) => this.checkSnapshots(tx, operation, snapshots));
           await this.transfers.send(
             operation.ownerId,
-            { assetIds: item.assetIds, operationId: item.id },
+            { assetIds: assetIds, operationId: item.id },
             operation.isPrivate,
             new Map(snapshots.map((row) => [row.id, row])),
             { beforePublish: beforeWrite, componentIds: snapshots.map((row) => row.id) },
@@ -519,7 +552,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             const current = await resolveEagleTrashTargets(
               tx,
               { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              item.assetIds,
+              assetIds,
               operation.kind === 'RESTORE',
               operation.isPrivate,
             );
@@ -528,7 +561,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             await setEagleTrash(
               tx,
               { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-              item.assetIds,
+              assetIds,
               operation.kind === 'RESTORE',
               operation.isPrivate,
             );
@@ -543,6 +576,12 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           data: { status: 'COMPLETED', leaseUntil: null },
         });
       } catch (error) {
+        if (items.length > 1 && (error instanceof NotFoundException || error instanceof ConflictException)) {
+          // The fast path was rolled back. Keep unaffected resources actionable,
+          // while preserving the exact per-item conflict and retry semantics.
+          for (const entry of items) await this.execute([entry]);
+          return;
+        }
         const code =
           error instanceof OperationAccessError
             ? error.code
@@ -567,16 +606,5 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           });
         }
       }
-    } finally {
-      if (heartbeat) clearInterval(heartbeat);
-      this.running = false;
-      if (processed && !this.stopping && this.timer) {
-        const next = setTimeout(
-          () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
-          0,
-        );
-        next.unref();
-      }
-    }
   }
 }
