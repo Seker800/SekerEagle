@@ -46,14 +46,20 @@ export function selectScheduledMediaCandidates(
   const freshness = Prisma.sql`CASE WHEN job.kind='RENDER_EDITED_COPY' THEN job."createdAt" ELSE GREATEST(a."libraryAddedAt",COALESCE(current_upload."completedAt",a."libraryAddedAt")) END`;
   // Evaluate the small time-indexed upload set once. Joining the full upload table
   // lets nested-loop plans probe an old object key for every queued asset before LIMIT.
+  // For an already bounded ID window, the original indexed point lookups are
+  // cheaper than rereading every recent upload on each claim.
+  const recentUploads = options.candidateIds
+    ? Prisma.empty
+    : Prisma.sql`WITH recent_uploads AS MATERIALIZED (
+        SELECT "objectKey", "uploaderId", "libraryMode", "completedAt", status
+        FROM "UploadSession"
+        WHERE "completedAt">=now()-interval '24 hours' AND status='COMPLETED'
+      )`;
+  const uploads = options.candidateIds ? Prisma.sql`"UploadSession"` : Prisma.sql`recent_uploads`;
   return client.$queryRaw<EagleAssetProcessingJob[]>(Prisma.sql`
-    WITH recent_uploads AS MATERIALIZED (
-      SELECT "objectKey", "uploaderId", "libraryMode", "completedAt", status
-      FROM "UploadSession"
-      WHERE "completedAt">=now()-interval '24 hours' AND status='COMPLETED'
-    )
+    ${recentUploads}
     SELECT job.* FROM "EagleMediaJob" job JOIN "EagleAsset" a ON a.id=job."assetId" AND a."ownerId"=job."ownerId" AND a."libraryMode"=job."libraryMode"
-    LEFT JOIN recent_uploads current_upload ON current_upload."objectKey"=a."originalObjectKey"
+    LEFT JOIN ${uploads} current_upload ON current_upload."objectKey"=a."originalObjectKey"
       AND current_upload."completedAt">=now()-interval '24 hours'
       AND current_upload."uploaderId"=a."ownerId" AND current_upload."libraryMode"=a."libraryMode" AND current_upload.status='COMPLETED'
     LEFT JOIN "EagleMediaJob" dependency ON dependency.id=job."dependsOnJobId" AND dependency."ownerId"=job."ownerId" AND dependency."libraryMode"=job."libraryMode"
@@ -157,7 +163,11 @@ export function createScheduledMediaSelector(
           // than rescanning a large backlog while most of its 50 hints remain.
           window = {
             ids: rows.map((row) => row.id),
-            expiresAt: Date.now() + (rows.length ? 120000 : 30000),
+            expiresAt:
+              Date.now() +
+              (rows.length && input.where.lane === 'BACKGROUND' && age === 'HISTORY'
+                ? 120000
+                : 30000),
           };
           if (windows.size >= 24) windows.delete(windows.keys().next().value!);
           windows.set(key, window);

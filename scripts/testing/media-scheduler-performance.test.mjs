@@ -152,6 +152,26 @@ test('historical backlog discovery reads recent upload facts once even under a n
   const actual = await db.$queryRaw(query);
   assert.equal(actual.length, 50);
   assert.ok(actual.every((row) => row.ownerId === f.owner));
+  // Nonempty recent facts must preserve replacement freshness and the exact
+  // candidate order; the CTE itself may still be rescanned by a nested loop.
+  const promoted = await db.eagleAsset.findFirstOrThrow({ where: { ownerId: f.owner } });
+  await db.uploadSession.update({
+    where: { objectKey: promoted.originalObjectKey },
+    data: { completedAt: new Date() },
+  });
+  const reference = query.text
+    .replace(/WITH recent_uploads AS MATERIALIZED \([\s\S]*?\)\s*SELECT job\.\*/, 'SELECT job.*')
+    .replace('LEFT JOIN recent_uploads current_upload', 'LEFT JOIN "UploadSession" current_upload');
+  const expected = await db.$queryRawUnsafe(reference, ...query.values);
+  const nonempty = await db.$queryRaw(query);
+  assert.deepEqual(
+    nonempty.map((row) => row.id),
+    expected.map((row) => row.id),
+  );
+  assert.ok(
+    !nonempty.some((row) => row.assetId === promoted.id),
+    'recent replacement is outside history',
+  );
   await db.eagleAssetProcessingJob.updateMany({
     where: { ownerId: f.owner },
     data: { status: 'COMPLETED' },

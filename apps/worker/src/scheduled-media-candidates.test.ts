@@ -6,14 +6,20 @@ import type { ClaimFindManyInput } from './job-claim';
 test('interactive and recent positive hints retain the 30s discovery bound', async (context) => {
   let now = 0;
   context.mock.method(Date, 'now', () => now);
-  for (const [lane, age] of [['INTERACTIVE', 'HISTORY'], ['BACKGROUND', 'RECENT']] as const) {
+  for (const [lane, age] of [
+    ['INTERACTIVE', 'HISTORY'],
+    ['BACKGROUND', 'RECENT'],
+  ] as const) {
     let discoveries = 0;
-    const select = createScheduledMediaSelector({
-      $queryRaw: async (sql: { text: string }) => {
-        if (!sql.text.includes('job.id IN')) discoveries++;
-        return [{ id: 'pending' }];
-      },
-    } as never, () => false);
+    const select = createScheduledMediaSelector(
+      {
+        $queryRaw: async (sql: { text: string }) => {
+          if (!sql.text.includes('job.id IN')) discoveries++;
+          return [{ id: 'pending' }];
+        },
+      } as never,
+      () => false,
+    );
     const input = { where: { lane }, take: 50 } as ClaimFindManyInput;
     await select(input, age);
     now += 31000;
@@ -25,11 +31,18 @@ test('interactive and recent positive hints retain the 30s discovery bound', asy
 test('known candidate IDs use bounded upload lookups instead of materializing all recent uploads', async () => {
   let query = '';
   const { selectScheduledMediaCandidates } = await import('./scheduled-media-candidates');
-  await selectScheduledMediaCandidates({ $queryRaw: async (sql: { text: string }) => {
-    query = sql.text;
-    return [];
-  } } as never, { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput,
-  true, false, { candidateIds: ['known-id'] });
+  await selectScheduledMediaCandidates(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        query = sql.text;
+        return [];
+      },
+    } as never,
+    { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput,
+    true,
+    false,
+    { candidateIds: ['known-id'] },
+  );
   assert.doesNotMatch(query, /WITH recent_uploads/);
   assert.match(query, /LEFT JOIN "UploadSession" current_upload/);
   assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
