@@ -12,11 +12,11 @@ const base = yaml.load(
 test('full-library face scan gets a bounded admission timeout without widening other routes', async () => {
   const gateway = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
   const scan = gateway.match(
-    /location ~ \^\/api\/photos\/\(tasks\/start\|people\/scan\)\$ \{([\s\S]*?)\n {2}\}/u,
+    /location ~ \^\/api\/photos\/\(tasks\/start\|photography\/people\/scan\)\$ \{([\s\S]*?)\n {2}\}/u,
   );
   assert.ok(scan, 'both authenticated face-scan entry points need their own bounded timeout');
   assert.match(scan[1], /proxy_pass http:\/\/api_backend;/u);
-  assert.match(scan[1], /proxy_read_timeout 180s;/u);
+  assert.match(scan[1], /proxy_read_timeout 660s;/u);
   assert.match(scan[1], /proxy_set_header Host \$http_host;/u);
   const ordinary = gateway.match(/location \/api\/ \{([\s\S]*?)\n {2}\}/u);
   assert.match(ordinary[1], /proxy_read_timeout 15s;/u);

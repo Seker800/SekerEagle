@@ -30,7 +30,7 @@ test('empty scans return an honest zero receipt in a bounded transaction', async
   const seen: string[] = [];
   const db = {
     $transaction: async (fn: (tx: unknown) => unknown, options: unknown) => {
-      assert.deepEqual(options, { maxWait: 5000, timeout: 150000 });
+      assert.deepEqual(options, { maxWait: 5000, timeout: 630000 });
       return fn({
         $executeRaw: async (sql: TemplateStringsArray) => {
           seen.push(sql.join(''));
@@ -48,7 +48,7 @@ test('empty scans return an honest zero receipt in a bounded transaction', async
     scanned: 0,
     limit: null,
   });
-  assert.match(seen[0]!, /statement_timeout = '120s'/);
+  assert.match(seen[0]!, /statement_timeout = '600s'/);
   assert.match(seen[1]!, /pg_advisory_xact_lock/);
   assert.match(seen[2]!, /INSERT INTO/);
 });

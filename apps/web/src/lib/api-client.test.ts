@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fetchEagleProcessingSummary } from './eagle-processing-admin-api';
 import { request } from './api-client';
 import { listEagleAssets } from './eagle-api';
+import { createEagleTaskCenterApi } from './eagle-task-center-api';
+import { scanPhotoPeople } from './photo-management-api';
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -14,6 +16,19 @@ describe('browser session recovery', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     delete (globalThis as { sekerDesktop?: unknown }).sekerDesktop;
+  });
+
+  it('keeps normal requests short while both full-library face admission entry points wait', async () => {
+    const deadlines = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ queued: 2 }));
+    await request('/api/auth/me');
+    await createEagleTaskCenterApi('PHOTO').startEagleTaskFamily('FACES');
+    await scanPhotoPeople();
+    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([30_000, 690_000, 690_000]);
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/auth/me', '/api/photos/tasks/start', '/api/photos/photography/people/scan',
+    ]);
+    for (const [, init] of fetchMock.mock.calls) expect(init?.credentials).toBe('include');
   });
 
   it('uses the desktop session coordinator when the access cookie expires', async () => {
