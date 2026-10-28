@@ -456,3 +456,78 @@ it('keeps committed partial map results visible and interactive while detail is 
     screen.queryByText('正在准备首批地图位置，无需等待照片分析完成。'),
   ).not.toBeInTheDocument();
 });
+
+it('does not report missing GPS while a readable generation is still updating', async () => {
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    partial: true,
+    snapshotId: 'partial',
+    total: 0,
+    level: 3,
+    clusters: [],
+  });
+  const view = mount();
+  expect(await screen.findByText('已显示可用位置，地图细节正在后台补齐。')).toBeVisible();
+  expect(screen.queryByText('当前照片没有 GPS 信息。')).not.toBeInTheDocument();
+  mocks.getMap.mockResolvedValue({
+    status: 'READY',
+    partial: false,
+    snapshotId: 'partial',
+    total: 0,
+    level: 7,
+    clusters: [],
+  });
+  await act(() => view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }));
+  expect(await screen.findByText('当前照片没有 GPS 信息。')).toBeVisible();
+});
+
+it('keeps an opened partial location usable when finer levels in the same generation appear', async () => {
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    partial: true,
+    snapshotId: 'partial',
+    total: 132,
+    level: 3,
+    clusters: [{ ...first, id: 'partial:3/6/3', cover: asset }],
+  });
+  const view = mount();
+  await screen.findByText('已显示可用位置，地图细节正在后台补齐。');
+  fireEvent.click(markerButtons()[0]);
+  expect(await screen.findByRole('region', { name: '此位置的照片' })).toBeVisible();
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    partial: true,
+    snapshotId: 'partial',
+    total: 132,
+    level: 7,
+    clusters: [{ ...first, id: 'partial:7/100/50', cover: asset }],
+  });
+  await act(() => view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }));
+  expect(screen.getByRole('region', { name: '此位置的照片' })).toBeVisible();
+  expect(mocks.getPhotos).toHaveBeenCalledTimes(1);
+});
+
+it('automatically replaces the preparing state with available locations without a manual reload', async () => {
+  mocks.getMap.mockResolvedValueOnce({
+    status: 'PENDING',
+    snapshotId: null,
+    total: 0,
+    level: 7,
+    clusters: [],
+  });
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    partial: true,
+    snapshotId: 'partial',
+    total: 132,
+    level: 3,
+    clusters: [{ ...first, id: 'partial:3/6/3', cover: asset }],
+  });
+  mount();
+  await screen.findByText('正在准备首批地图位置，无需等待照片分析完成。');
+  await waitFor(
+    () => expect(screen.getByText('已显示可用位置，地图细节正在后台补齐。')).toBeVisible(),
+    { timeout: 7500 },
+  );
+  expect(markerButtons()).toHaveLength(1);
+}, 9000);

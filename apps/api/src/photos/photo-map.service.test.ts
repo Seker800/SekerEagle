@@ -309,3 +309,12 @@ test('an unfinished generation with no committed level remains unavailable', asy
   assert.equal((await f.service.clusters('owner', false, world)).status, 'PENDING');
   assert.equal(f.queries.length, 0);
 });
+
+test('an owner without indexed photo data gets an empty ready map without source queries', async () => {
+  const f = indexedFixture();
+  f.tx.eaglePhotoMapState.findUnique = async () => null as never;
+  const result = await f.service.clusters('owner', false, world);
+  assert.equal(result.status, 'READY');
+  assert.equal(result.total, 0);
+  assert.equal(f.queries.length, 0);
+});

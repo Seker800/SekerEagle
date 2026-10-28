@@ -488,7 +488,15 @@ try {
   assert.equal(partialSnapshot.completedAt, null);
   const partialState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey });
   assert.ok(partialState.nextLevel > 0 && partialState.nextLevel < 22);
+  const livePartialCell = await prisma.eaglePhotoMapCell.findFirstOrThrow({
+    where: { snapshotId: interrupted, includePrivate: false, level: 3 },
+  });
+  const livePartialKey = `${interrupted}:${livePartialCell.level}/${livePartialCell.x}/${livePartialCell.y}`;
+  assert.ok((await rawService.photos(owner, false, livePartialKey)).items.length > 0);
+
   await prisma.eaglePhotoMetadata.update({ where: { assetId: added }, data: { latitude: 44 } });
+  await assert.rejects(rawService.photos(owner, false, livePartialKey), /更新/);
+
   await runPhotoMapBuildStep(prisma);
   assert.equal(await prisma.eaglePhotoMapSnapshot.count({ where: { id: interrupted } }), 0);
   assert.equal((await rawService.clusters(owner, false, world)).status, 'PENDING');
