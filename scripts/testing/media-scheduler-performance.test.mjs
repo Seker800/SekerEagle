@@ -337,6 +337,22 @@ test('database notifications distinguish progress, newly eligible dependencies, 
       where: { id: first.id },
       data: { status: 'PROCESSING', lockedAt: new Date() },
     });
+    await new Promise((done) => setTimeout(done, 100));
+    assert.deepEqual(
+      payloads,
+      [],
+      'claiming already queued work must not serialize commits through NOTIFY',
+    );
+    await db.eagleAssetProcessingJob.update({
+      where: { id: first.id },
+      data: { lockedAt: new Date(Date.now() + 1000) },
+    });
+    await new Promise((done) => setTimeout(done, 100));
+    assert.deepEqual(payloads, [], 'forward-only lease heartbeats do not make new work runnable');
+    await db.eagleAssetProcessingJob.update({
+      where: { id: first.id },
+      data: { lockedAt: new Date(0) },
+    });
     await waitFor('media-progress');
     assert.ok(!payloads.some((value) => value.startsWith('media-ready:')));
     await db.eagleAssetProcessingJob.update({
@@ -349,6 +365,29 @@ test('database notifications distinguish progress, newly eligible dependencies, 
       data: { ownerId: f.owner, libraryMode: 'PHOTO', family: 'EMBEDDING', paused: true },
     });
     await waitFor('EagleTaskPolicy');
+    await db.eagleProcessingSetting.update({
+      where: { ownerId_libraryMode: { ownerId: f.owner, libraryMode: 'PHOTO' } },
+      data: { mode: 'ALWAYS' },
+    });
+    await waitFor('EagleProcessingSetting');
+    const committedPayloads = [...payloads];
+    payloads.length = 0;
+    await assert.rejects(
+      db.$transaction(async (tx) => {
+        await tx.eagleAssetProcessingJob.update({
+          where: { id: first.id },
+          data: { status: 'PENDING' },
+        });
+        throw new Error('synthetic rollback');
+      }),
+      /synthetic rollback/,
+    );
+    await new Promise((done) => setTimeout(done, 100));
+    assert.deepEqual(payloads, [], 'rolled-back task changes must not deliver wake-ups');
+    assert.equal(
+      (await db.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: first.id } })).status,
+      'COMPLETED',
+    );
     const counts = { NAS: 0, EMBEDDING: 0 };
     const selectors = {
       NAS: {
@@ -362,7 +401,7 @@ test('database notifications distinguish progress, newly eligible dependencies, 
         },
       },
     };
-    for (const payload of payloads) invalidateMediaCandidates(selectors, payload);
+    for (const payload of committedPayloads) invalidateMediaCandidates(selectors, payload);
     assert.ok(counts.NAS > 0 && counts.EMBEDDING > 0);
   } finally {
     await listener.stop();
