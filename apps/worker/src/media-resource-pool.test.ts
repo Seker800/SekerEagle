@@ -508,3 +508,129 @@ test('remote media fills reserved slots concurrently and a slow claim cannot blo
   }
   assert.equal(pool.activeCount, 0);
 });
+
+test('parallel remote claims keep the shared memory ceiling and release failed and deferred siblings', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const errors: unknown[] = [];
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    (error) => errors.push(error),
+    1,
+    1536,
+  );
+  pool.setRemoteMediaLimit(8);
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  let claimed = 0,
+    running = 0,
+    deferred = 0;
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => ++claimed,
+    async () => {
+      running++;
+      await held;
+    },
+    {
+      memoryMiB: () => 600,
+      onMemoryWait: async () => {
+        deferred++;
+      },
+    },
+  );
+  assert.equal(claimed, 8);
+  assert.equal(running, 2);
+  assert.equal(deferred, 6);
+  assert.equal(pool.active('REMOTE_MEDIA'), 2);
+  release();
+  await new Promise((done) => setImmediate(done));
+  assert.equal(pool.activeCount, 0);
+  t.mock.timers.tick(1000);
+  let index = 0;
+  await assert.rejects(
+    pool.fill(
+      'REMOTE_MEDIA',
+      async () => {
+        if (index++ === 0) throw Error('claim failed');
+        return index;
+      },
+      async () => {},
+    ),
+    /claim failed/,
+  );
+  await new Promise((done) => setImmediate(done));
+  assert.equal(pool.activeCount, 0);
+  assert.deepEqual(errors, []);
+});
+
+for (const sibling of [null, 64]) {
+  test(
+    'parallel small or empty siblings cannot erase a larger remote memory wait (' + sibling + ')',
+    async (t) => {
+      t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+      const pool = new MediaResourcePool(
+        1,
+        () => {},
+        () => {},
+        1,
+        1536,
+      );
+      pool.setRemoteMediaLimit(2);
+      let releaseNas!: () => void, releaseSmall!: () => void;
+      const nasHeld = new Promise<void>((done) => {
+        releaseNas = done;
+      });
+      const smallHeld = new Promise<void>((done) => {
+        releaseSmall = done;
+      });
+      await pool.fill(
+        'NAS',
+        async () => 1,
+        async () => nasHeld,
+        { memoryMiB: () => 1400, onMemoryWait: async () => {} },
+      );
+      let index = 0;
+      await pool.fill(
+        'REMOTE_MEDIA',
+        async () => [768, sibling][index++] ?? null,
+        async () => smallHeld,
+        { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+      );
+      releaseNas();
+      await new Promise((done) => setImmediate(done));
+      let nasClaims = 0;
+      await pool.fill(
+        'NAS',
+        async () => {
+          nasClaims++;
+          return null;
+        },
+        async () => {},
+      );
+      assert.equal(
+        nasClaims,
+        0,
+        'a fresh remote wait must keep its place across sibling completion',
+      );
+      releaseSmall();
+      await new Promise((done) => setImmediate(done));
+      t.mock.timers.tick(1000);
+      let largeRuns = 0,
+        claims = 0;
+      await pool.fill(
+        'REMOTE_MEDIA',
+        async () => (claims++ === 0 ? 768 : null),
+        async () => {
+          largeRuns++;
+        },
+        { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+      );
+      await new Promise((done) => setImmediate(done));
+      assert.equal(largeRuns, 1);
+      assert.equal(pool.activeCount, 0);
+    },
+  );
+}
