@@ -1,4 +1,6 @@
 export const enUS = {
+  无参数: 'No value',
+  有参数: 'Has value',
   '模型节点连接中断，向量任务等待恢复；其他处理继续。':
     'Model nodes disconnected. Embeddings wait for recovery; other tasks continue.',
   '模型节点配置不匹配，向量任务等待修复；其他处理继续。':

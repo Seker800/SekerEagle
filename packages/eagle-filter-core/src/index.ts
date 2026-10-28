@@ -80,7 +80,7 @@ export interface EagleSemanticIntent {
 // Similarity thresholds are retrieval policy, not probabilities of correctness.
 export const EAGLE_SEMANTIC_THRESHOLDS = { STRICT: 0.35, BALANCED: 0.3, BROAD: 0.25 } as const;
 
-export function parseEagleSemanticIntent(value: unknown): EagleSemanticIntent {
+export function parseEagleSemanticIntent(value: unknown, allowEmpty = false): EagleSemanticIntent {
   if (
     !isRecord(value) ||
     Object.keys(value).some((key) => !['text', 'breadth'].includes(key)) ||
@@ -90,7 +90,8 @@ export function parseEagleSemanticIntent(value: unknown): EagleSemanticIntent {
   )
     throw new Error('画面内容条件无效。');
   const text = value.text.normalize('NFKC').trim();
-  if (!text || text.length > 500) throw new Error('画面描述需要 1 至 500 个字符。');
+  if ((!text && !allowEmpty) || text.length > 500)
+    throw new Error('画面描述需要 1 至 500 个字符。');
   return { text, breadth: value.breadth as EagleSemanticIntent['breadth'] };
 }
 
@@ -128,7 +129,14 @@ const SET_OPERATORS = ['ANY_OF', 'ALL_OF', 'NONE_OF', 'EMPTY', 'NOT_EMPTY'] as c
 const DATE_OPERATORS = ['BEFORE', 'AFTER', 'BETWEEN', 'WITHIN_DAYS'] as const;
 
 export const EAGLE_FILTER_FIELDS: readonly EagleFilterFieldDefinition[] = [
-  { field: 'SEMANTIC', smartFolderOnly: true, kind: 'TEXT', operators: ['SIMILAR'], defaultOperator: 'SIMILAR', defaultValue: '' },
+  {
+    field: 'SEMANTIC',
+    smartFolderOnly: true,
+    kind: 'TEXT',
+    operators: ['SIMILAR'],
+    defaultOperator: 'SIMILAR',
+    defaultValue: '',
+  },
   ...(['CITY', 'CAMERA_MODEL', 'LENS_MODEL'] as const).map((field) => ({
     field,
     libraryModes: ['PHOTO'] as const,
@@ -383,7 +391,16 @@ export function isActiveEagleFilterRule(rule: EagleFilterRule): boolean {
 export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
   if (!isRecord(value) || value.version !== EAGLE_FILTER_QUERY_VERSION)
     throw new Error('筛选规则版本无效。');
-  if (!Array.isArray(value.conditions) || value.conditions.length > EAGLE_FILTER_MAX_CONDITIONS)
+  if (!Array.isArray(value.conditions)) throw new Error('筛选条件组无效。');
+  // A legacy query can already contain 30 groups plus its top-level scene intent.
+  // Reserve one scene group so opening and saving it cannot make that valid query invalid.
+  const hasSceneRule = value.conditions.some(
+    (condition) =>
+      isRecord(condition) &&
+      Array.isArray(condition.rules) &&
+      condition.rules.some((rule: unknown) => isRecord(rule) && rule.field === 'SEMANTIC'),
+  );
+  if (value.conditions.length > EAGLE_FILTER_MAX_CONDITIONS + (hasSceneRule ? 1 : 0))
     throw new Error('筛选条件组无效。');
   const query: EagleFilterQuery = {
     version: EAGLE_FILTER_QUERY_VERSION,
@@ -392,8 +409,11 @@ export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
       parseCondition(condition, conditionIndex),
     ),
   };
-  const sceneRules = query.conditions.flatMap((condition) => condition.rules).filter((rule) => rule.field === 'SEMANTIC');
-  if (sceneRules.length + (query.semantic ? 1 : 0) > 1) throw new Error('每个智能文件夹支持一条画面内容条件。');
+  const sceneRules = query.conditions
+    .flatMap((condition) => condition.rules)
+    .filter((rule) => rule.field === 'SEMANTIC');
+  if (sceneRules.length + (query.semantic ? 1 : 0) > 1)
+    throw new Error('每个智能文件夹支持一条画面内容条件。');
   return query;
 }
 
@@ -429,8 +449,14 @@ function parseRule(value: unknown, conditionIndex: number, ruleIndex: number): E
   };
   if (value.value !== undefined) rule.value = parseValue(value.value);
   if (definition.field === 'SEMANTIC') {
-    const intent = parseEagleSemanticIntent({ text: value.value === '' ? '_' : value.value, breadth: value.breadth ?? 'BALANCED' });
-    rule.value = value.value === '' ? '' : intent.text;
+    const intent = parseEagleSemanticIntent(
+      {
+        text: value.value,
+        breadth: value.breadth ?? 'BALANCED',
+      },
+      true,
+    );
+    rule.value = intent.text;
     rule.breadth = intent.breadth;
   }
   if (value.unit !== undefined) {
@@ -554,13 +580,36 @@ export function assertEagleFilterQueryMode(
 /** One bounded vector intent per folder; its placement obeys the ordinary Boolean groups. */
 export function readEagleSemanticIntent(query: EagleFilterQuery): EagleSemanticIntent | undefined {
   if (query.semantic) return query.semantic;
-  const rule = query.conditions.flatMap((condition) => condition.rules).find((rule) => rule.field === 'SEMANTIC' && isActiveEagleFilterRule(rule));
-  return rule ? parseEagleSemanticIntent({ text: rule.value, breadth: rule.breadth ?? 'BALANCED' }) : undefined;
+  const rule = query.conditions
+    .flatMap((condition) => condition.rules)
+    .find((rule) => rule.field === 'SEMANTIC' && isActiveEagleFilterRule(rule));
+  return rule
+    ? parseEagleSemanticIntent({ text: rule.value, breadth: rule.breadth ?? 'BALANCED' })
+    : undefined;
 }
 
 /** Compatibility adapter: old top-level intent was always an extra AND condition. */
 export function editableEagleFilterQuery(query: EagleFilterQuery): EagleFilterQuery {
   if (!query.semantic) return query;
   const { semantic, ...ordinary } = query;
-  return { ...ordinary, conditions: [...query.conditions, { id: 'legacy-semantic-group', match: 'ALL', result: 'MATCH', rules: [{ id: 'legacy-semantic-rule', field: 'SEMANTIC', operator: 'SIMILAR', value: semantic.text, breadth: semantic.breadth }] }] };
+  return {
+    ...ordinary,
+    conditions: [
+      ...query.conditions,
+      {
+        id: createFilterId('condition'),
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [
+          {
+            id: createFilterId('rule'),
+            field: 'SEMANTIC',
+            operator: 'SIMILAR',
+            value: semantic.text,
+            breadth: semantic.breadth,
+          },
+        ],
+      },
+    ],
+  };
 }

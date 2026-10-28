@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   countActiveEagleFilterRules,
+  editableEagleFilterQuery,
+  readEagleSemanticIntent,
   createEmptyEagleFilterQuery,
   parseEagleFilterQuery,
 } from './index';
@@ -70,13 +72,96 @@ test('parser preserves group negation and set values', () => {
   assert.deepEqual(query.conditions[0]?.rules[0]?.value, ['tag-1']);
 });
 
-
 test('semantic content is a composable rule with a validated matching breadth', () => {
-  const query = parseEagleFilterQuery({ version: 2, conditions: [{ id: 'group', match: 'ANY', result: 'NOT_MATCH', rules: [
-    { id: 'scene', field: 'SEMANTIC', operator: 'SIMILAR', value: '海边', breadth: 'STRICT' },
-    { id: 'camera', field: 'CAMERA_MODEL', operator: 'EMPTY' },
-  ] }] });
+  const query = parseEagleFilterQuery({
+    version: 2,
+    conditions: [
+      {
+        id: 'group',
+        match: 'ANY',
+        result: 'NOT_MATCH',
+        rules: [
+          { id: 'scene', field: 'SEMANTIC', operator: 'SIMILAR', value: '海边', breadth: 'STRICT' },
+          { id: 'camera', field: 'CAMERA_MODEL', operator: 'EMPTY' },
+        ],
+      },
+    ],
+  });
   assert.equal(countActiveEagleFilterRules(query), 2);
   assert.equal(query.conditions[0]!.rules[0]!.field, 'SEMANTIC');
-  assert.throws(() => parseEagleFilterQuery({ ...query, conditions: [{ ...query.conditions[0], rules: [{ ...query.conditions[0]!.rules[0], breadth: 'INVALID' }] }] }));
+  assert.throws(() =>
+    parseEagleFilterQuery({
+      ...query,
+      conditions: [
+        {
+          ...query.conditions[0],
+          rules: [{ ...query.conditions[0]!.rules[0], breadth: 'INVALID' }],
+        },
+      ],
+    }),
+  );
+});
+
+test('legacy scenes become an extra AND group while ordinary group semantics survive', () => {
+  const old = parseEagleFilterQuery({
+    version: 2,
+    semantic: { text: '海边', breadth: 'STRICT' },
+    conditions: [
+      {
+        id: 'g',
+        match: 'ANY',
+        result: 'NOT_MATCH',
+        rules: [{ id: 'r', field: 'FORMAT', operator: 'EQUALS', value: 'png' }],
+      },
+    ],
+  });
+  const edited = editableEagleFilterQuery(old);
+  assert.equal(edited.semantic, undefined);
+  assert.deepEqual(edited.conditions[0], old.conditions[0]);
+  assert.deepEqual(readEagleSemanticIntent(edited), old.semantic);
+  assert.deepEqual(parseEagleFilterQuery(edited), edited);
+});
+
+test('scene contract rejects duplicate intents and accepts an inactive blank editor row', () => {
+  const blank = { id: 'r', field: 'SEMANTIC', operator: 'SIMILAR', value: '', breadth: 'BALANCED' };
+  const query = {
+    version: 2,
+    conditions: [{ id: 'g', match: 'ALL', result: 'MATCH', rules: [blank] }],
+  };
+  assert.equal(readEagleSemanticIntent(parseEagleFilterQuery(query)), undefined);
+  assert.throws(
+    () => parseEagleFilterQuery({ ...query, semantic: { text: '海边', breadth: 'STRICT' } }),
+    /一条/,
+  );
+  assert.throws(
+    () =>
+      parseEagleFilterQuery({
+        ...query,
+        conditions: [{ ...query.conditions[0], rules: [blank, { ...blank, id: 'r2' }] }],
+      }),
+    /一条/,
+  );
+});
+
+test('editing a legacy scene retains all thirty existing condition groups', () => {
+  const legacy = parseEagleFilterQuery({
+    version: 2,
+    semantic: { text: '海边', breadth: 'BALANCED' },
+    conditions: Array.from({ length: 30 }, (_, i) => ({
+      id: `g${i}`,
+      match: 'ANY',
+      result: 'MATCH',
+      rules: [{ id: `r${i}`, field: 'NAME', operator: 'CONTAINS', value: 'x' }],
+    })),
+  });
+  const edited = editableEagleFilterQuery(legacy);
+  assert.equal(parseEagleFilterQuery(edited).conditions.length, 31);
+  assert.throws(
+    () =>
+      parseEagleFilterQuery({
+        ...edited,
+        conditions: [...edited.conditions, edited.conditions[0]],
+      }),
+    /条件组/,
+  );
 });

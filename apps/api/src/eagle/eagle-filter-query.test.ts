@@ -113,8 +113,61 @@ test('ordinary rule compilation rejects semantic intent instead of silently broa
   );
 });
 
-
 test('camera NOT_EMPTY excludes empty strings just as EMPTY includes them', () => {
-  const query = readEagleFilterQuery({ version: 2, conditions: [{ id: 'g', match: 'ALL', result: 'MATCH', rules: [{ id: 'r', field: 'CAMERA_MODEL', operator: 'NOT_EMPTY' }] }] });
-  assert.deepEqual(buildEagleFilterWhere(query, 'PHOTO'), { AND: [{ AND: [{ photoMetadata: { is: { cameraModel: { not: null } } }, NOT: { photoMetadata: { is: { cameraModel: '' } } } }] }] });
+  const query = readEagleFilterQuery({
+    version: 2,
+    conditions: [
+      {
+        id: 'g',
+        match: 'ALL',
+        result: 'MATCH',
+        rules: [{ id: 'r', field: 'CAMERA_MODEL', operator: 'NOT_EMPTY' }],
+      },
+    ],
+  });
+  assert.deepEqual(buildEagleFilterWhere(query, 'PHOTO'), {
+    AND: [
+      {
+        AND: [
+          {
+            photoMetadata: { is: { cameraModel: { not: null } } },
+            NOT: { photoMetadata: { is: { cameraModel: '' } } },
+          },
+        ],
+      },
+    ],
+  });
+});
+
+test('semantic predicates participate in ALL, ANY and group negation without escaping context', () => {
+  for (const match of ['ALL', 'ANY'] as const)
+    for (const result of ['MATCH', 'NOT_MATCH'] as const) {
+      const query = readEagleFilterQuery({
+        version: 2,
+        conditions: [
+          {
+            id: 'g',
+            match,
+            result,
+            rules: [
+              {
+                id: 'scene',
+                field: 'SEMANTIC',
+                operator: 'SIMILAR',
+                value: '海边',
+                breadth: 'BROAD',
+              },
+              { id: 'camera', field: 'CAMERA_MODEL', operator: 'EMPTY' },
+            ],
+          },
+        ],
+      });
+      assert.throws(() => buildEagleFilterWhere(query, 'PHOTO'), /智能文件夹/);
+      const scene = { id: { in: ['match'] } };
+      const where = buildEagleFilterWhere(query, 'PHOTO', scene);
+      const group = (where.AND as Record<string, unknown>[])[0]!;
+      const expression = result === 'NOT_MATCH' ? (group.NOT as Record<string, unknown>) : group;
+      assert.deepEqual((expression[match === 'ALL' ? 'AND' : 'OR'] as unknown[])[0], scene);
+      assert.throws(() => buildEagleFilterWhere(query, 'MATERIAL', scene), /照片/);
+    }
 });

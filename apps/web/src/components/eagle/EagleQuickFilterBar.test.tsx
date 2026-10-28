@@ -276,3 +276,36 @@ it('keeps saved layouts including an intentionally empty photo toolbar and falls
   render(scopedBar('PHOTO'));
   expect(shownFields()).toEqual(['相机筛选', '镜头筛选', '标签筛选', '格式筛选']);
 });
+
+it('camera missing-parameter selection generates an EMPTY rule and can be cleared', () => {
+  const state = {
+    ...createEmptyEagleQuickFilterState(),
+    text: { CAMERA_MODEL: 'old camera' },
+    presence: { CAMERA_MODEL: 'EMPTY' as const },
+  };
+  const query = buildEagleQuickFilterQuery(state);
+  expect(query.conditions[0].rules[0]).toEqual(
+    expect.objectContaining({ field: 'CAMERA_MODEL', operator: 'EMPTY', value: undefined }),
+  );
+});
+
+it('offers missing camera parameters in the photo quick filter and clears the selection', () => {
+  function PhotoBar() {
+    const [value, onChange] = useState(createEmptyEagleQuickFilterState());
+    return (
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="PHOTO">
+        <EagleQuickFilterBar value={value} manualTags={[]} aiTags={[]} onChange={onChange} />
+      </LibraryWorkspaceProvider>
+    );
+  }
+  render(<PhotoBar />);
+  fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
+  fireEvent.change(screen.getByRole('combobox', { name: '相机条件' }), {
+    target: { value: 'EMPTY' },
+  });
+  expect(screen.queryByLabelText('相机包含')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: '关闭相机筛选' }));
+  expect(screen.getByRole('button', { name: /相机筛选，无参数/ })).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));
+  expect(screen.getByRole('button', { name: '相机筛选' })).toBeVisible();
+});

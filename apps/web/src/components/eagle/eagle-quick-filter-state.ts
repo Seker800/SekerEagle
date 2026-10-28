@@ -6,7 +6,7 @@ import {
   type EagleFilterQuery,
   type EagleFilterRule,
 } from '@sekereagle/eagle-filter-core';
-export type EagleQuickFilterField = EagleFilterField;
+export type EagleQuickFilterField = Exclude<EagleFilterField, 'SEMANTIC'>;
 export type EagleQuickTagMatch = 'ANY' | 'ALL';
 export type EagleQuickRangeField = 'WIDTH' | 'HEIGHT' | 'FILE_SIZE' | 'DURATION';
 export type EagleQuickDateField = 'ADDED_AT' | 'MODIFIED_AT';
@@ -23,6 +23,7 @@ export interface EagleQuickDateRange {
 }
 export interface EagleQuickFilterState {
   choices?: Partial<Record<'GPS' | 'PERSON', string>>;
+  presence?: Partial<Record<EagleQuickTextField, 'EMPTY' | 'NOT_EMPTY'>>;
   color?: string;
   manualTagIds: string[];
   manualTagMatch: EagleQuickTagMatch;
@@ -136,7 +137,7 @@ export function isEagleQuickFilterActive(
     case 'NAME':
     case 'DESCRIPTION':
     case 'SOURCE_URL':
-      return Boolean(state.text[field]?.trim());
+      return Boolean(state.presence?.[field] || state.text[field]?.trim());
   }
 }
 export function summarizeEagleQuickFilter(
@@ -193,7 +194,15 @@ export function summarizeEagleQuickFilter(
     case 'NAME':
     case 'DESCRIPTION':
     case 'SOURCE_URL':
-      return state.text[field]?.trim() || undefined;
+      return state.presence?.[field] === 'EMPTY'
+        ? field === 'CAMERA_MODEL' || field === 'LENS_MODEL'
+          ? t('无参数')
+          : t('为空')
+        : state.presence?.[field] === 'NOT_EMPTY'
+          ? field === 'CAMERA_MODEL' || field === 'LENS_MODEL'
+            ? t('有参数')
+            : t('不为空')
+          : state.text[field]?.trim() || undefined;
   }
 }
 export function clearEagleQuickFilter(
@@ -238,7 +247,7 @@ export function clearEagleQuickFilter(
     case 'SOURCE_URL': {
       const text = { ...state.text };
       delete text[field];
-      return { ...state, text };
+      return { ...state, text, presence: { ...state.presence, [field]: undefined } };
     }
   }
 }
@@ -298,7 +307,9 @@ export function buildEagleQuickFilterQuery(state: EagleQuickFilterState): EagleF
     'LENS_MODEL',
   ] as const) {
     const value = state.text[field]?.trim();
-    if (value) addRule(field, 'CONTAINS', value);
+    const presence = state.presence?.[field];
+    if (presence) addRule(field, presence, undefined);
+    else if (value) addRule(field, 'CONTAINS', value);
   }
   for (const field of ['GPS', 'PERSON'] as const) {
     const value = state.choices?.[field];

@@ -147,6 +147,11 @@ export function EagleRuleBuilder({
           <div className={styles.rules}>
             {condition.rules.map((rule, ruleIndex) => (
               <RuleRow
+                semanticTaken={value.conditions.some((group) =>
+                  group.rules.some(
+                    (candidate) => candidate.field === 'SEMANTIC' && candidate.id !== rule.id,
+                  ),
+                )}
                 fieldOptions={fieldOptions}
                 key={rule.id}
                 condition={condition}
@@ -182,6 +187,7 @@ export function EagleRuleBuilder({
   );
 }
 interface RuleRowProps {
+  semanticTaken: boolean;
   fieldOptions?: EagleFilterOptions;
   condition: EagleFilterCondition;
   rule: EagleFilterRule;
@@ -193,6 +199,7 @@ interface RuleRowProps {
   onRemove: () => void;
 }
 function RuleRow({
+  semanticTaken,
   fieldOptions,
   condition,
   rule,
@@ -223,7 +230,11 @@ function RuleRow({
         onChange={(event) => changeField(event.target.value as EagleFilterField)}
       >
         {getEagleFilterFields(libraryMode).map((field) => (
-          <option key={field.field} value={field.field}>
+          <option
+            key={field.field}
+            value={field.field}
+            disabled={field.field === 'SEMANTIC' && semanticTaken}
+          >
             {field.label}
           </option>
         ))}
@@ -240,7 +251,12 @@ function RuleRow({
       >
         {definition.operators.map((operator) => (
           <option key={operator} value={operator}>
-            {getOperatorLabel(operator)}
+            {['CAMERA_MODEL', 'LENS_MODEL'].includes(rule.field) &&
+            (operator === 'EMPTY' || operator === 'NOT_EMPTY')
+              ? operator === 'EMPTY'
+                ? t('无参数')
+                : t('有参数')
+              : getOperatorLabel(operator)}
           </option>
         ))}
       </select>
@@ -312,6 +328,29 @@ function RuleValue({
   onChange: (value: EagleFilterRule) => void;
 }) {
   const definition = getEagleFilterFieldDefinition(rule.field);
+  if (rule.field === 'SEMANTIC')
+    return (
+      <>
+        <input
+          aria-label={t('画面描述')}
+          maxLength={500}
+          value={String(rule.value ?? '')}
+          placeholder={t('例如：海边日落、雨天的城市、街头人像')}
+          onChange={(event) => onChange({ ...rule, value: event.target.value })}
+        />
+        <select
+          aria-label={t('匹配范围')}
+          value={rule.breadth ?? 'BALANCED'}
+          onChange={(event) =>
+            onChange({ ...rule, breadth: event.target.value as EagleFilterRule['breadth'] })
+          }
+        >
+          <option value="STRICT">{t('严格')}</option>
+          <option value="BALANCED">{t('适中')}</option>
+          <option value="BROAD">{t('宽泛')}</option>
+        </select>
+      </>
+    );
   if (definition.kind === 'TAGS') {
     return (
       <RuleTagPicker

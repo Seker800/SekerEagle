@@ -126,7 +126,9 @@ function ScopedQuickFilterBar({
   onChange,
 }: EagleQuickFilterBarProps) {
   const { libraryMode } = useLibraryWorkspace();
-  const availableFields = getEagleFilterFields(libraryMode).map(({ field }) => field);
+  const availableFields = getEagleFilterFields(libraryMode)
+    .filter(({ smartFolderOnly }) => !smartFolderOnly)
+    .map(({ field }) => field as EagleQuickFilterField);
   const rootRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLElement | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -369,7 +371,29 @@ function renderFieldControl(
     case 'LENS_MODEL':
       return (
         <>
-          <TextControl field={field} value={value} onChange={onChange} list={field} />
+          <select
+            aria-label={`${EAGLE_QUICK_FILTER_FIELD_LABELS[field]}${t('条件')}`}
+            value={value.presence?.[field] ?? 'CONTAINS'}
+            onChange={(event) =>
+              onChange({
+                ...value,
+                presence: {
+                  ...value.presence,
+                  [field]:
+                    event.target.value === 'CONTAINS'
+                      ? undefined
+                      : (event.target.value as 'EMPTY' | 'NOT_EMPTY'),
+                },
+              })
+            }
+          >
+            <option value="CONTAINS">{t('包含')}</option>
+            <option value="EMPTY">{t('无参数')}</option>
+            <option value="NOT_EMPTY">{t('有参数')}</option>
+          </select>
+          {!value.presence?.[field] && (
+            <TextControl field={field} value={value} onChange={onChange} list={field} />
+          )}
           <datalist id={field}>
             {options?.map((option) => (
               <option key={option.value} value={option.value} />

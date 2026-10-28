@@ -23,13 +23,23 @@ export function readEagleFilterQuery(value: unknown): EagleFilterQuery {
 export function buildEagleFilterWhere(
   query: EagleFilterQuery,
   libraryMode: 'MATERIAL' | 'PHOTO' = 'MATERIAL',
+  semanticWhere?: Prisma.EagleAssetWhereInput,
 ): Prisma.EagleAssetWhereInput {
   assertFilterMode(query, libraryMode);
-  if (query.semantic) throw new BadRequestException('画面内容需要通过智能文件夹或预览查询。');
+  if (
+    (query.semantic ||
+      query.conditions.some((condition) =>
+        condition.rules.some((rule) => rule.field === 'SEMANTIC' && isActiveEagleFilterRule(rule)),
+      )) &&
+    !semanticWhere
+  )
+    throw new BadRequestException('画面内容需要通过智能文件夹或预览查询。');
   const conditions = query.conditions
-    .map(buildConditionWhere)
+    .map((condition) => buildConditionWhere(condition, semanticWhere))
     .filter((where): where is Prisma.EagleAssetWhereInput => where !== null);
-  return conditions.length ? { AND: conditions } : {};
+  return conditions.length || query.semantic
+    ? { AND: [...conditions, ...(query.semantic ? [semanticWhere!] : [])] }
+    : {};
 }
 
 export function readEagleFilterTagDependencies(query: EagleFilterQuery): {
@@ -49,8 +59,13 @@ export function readEagleFilterTagDependencies(query: EagleFilterQuery): {
   return { manualTagIds: [...manualTagIds], aiTagIds: [...aiTagIds] };
 }
 
-function buildConditionWhere(condition: EagleFilterCondition): Prisma.EagleAssetWhereInput | null {
-  const rules = condition.rules.filter(isActiveEagleFilterRule).map(buildRuleWhere);
+function buildConditionWhere(
+  condition: EagleFilterCondition,
+  semanticWhere?: Prisma.EagleAssetWhereInput,
+): Prisma.EagleAssetWhereInput | null {
+  const rules = condition.rules
+    .filter(isActiveEagleFilterRule)
+    .map((rule) => (rule.field === 'SEMANTIC' ? semanticWhere! : buildRuleWhere(rule)));
   if (!rules.length) return null;
   const group: Prisma.EagleAssetWhereInput =
     condition.match === 'ALL' ? { AND: rules } : { OR: rules };
@@ -59,6 +74,8 @@ function buildConditionWhere(condition: EagleFilterCondition): Prisma.EagleAsset
 
 function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
   switch (rule.field) {
+    case 'SEMANTIC':
+      throw new BadRequestException('画面内容需要匹配上下文。');
     case 'CITY': {
       const named = {
         photoLocation: {
@@ -83,13 +100,15 @@ function buildRuleWhere(rule: EagleFilterRule): Prisma.EagleAssetWhereInput {
             { photoMetadata: { is: { [field]: '' } } },
           ],
         };
+      if (rule.operator === 'NOT_EMPTY')
+        return {
+          photoMetadata: { is: { [field]: { not: null } } },
+          NOT: { photoMetadata: { is: { [field]: '' } } },
+        };
       return {
         photoMetadata: {
           is: {
-            [field]:
-              rule.operator === 'NOT_EMPTY'
-                ? { not: null }
-                : textFilter(rule.operator, readString(rule)),
+            [field]: textFilter(rule.operator, readString(rule)),
           },
         },
       };

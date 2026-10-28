@@ -1,6 +1,7 @@
 import type { EagleFilterField, EagleFilterOperator } from '@sekereagle/eagle-filter-core';
 import type { MessageId } from '..';
 export const fields: Record<EagleFilterField, MessageId> = {
+  SEMANTIC: '画面内容',
   CITY: '城市（已确认补充）',
   CAMERA_MODEL: '相机',
   LENS_MODEL: '镜头',

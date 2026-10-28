@@ -59,6 +59,9 @@ function renderDialog(
 describe('EagleSmartFolderDialog', () => {
   it('saves semantic-only folders and preserves the intent while editing ordinary rules', () => {
     const { onSave } = renderDialog();
+    fireEvent.change(screen.getByRole('combobox', { name: '规则 1 字段' }), {
+      target: { value: 'SEMANTIC' },
+    });
     fireEvent.change(screen.getByRole('textbox', { name: '画面描述' }), {
       target: { value: '海边日落' },
     });
@@ -68,10 +71,72 @@ describe('EagleSmartFolderDialog', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({
-        query: expect.objectContaining({ semantic: { text: '海边日落', breadth: 'STRICT' } }),
+        query: expect.objectContaining({
+          conditions: [
+            expect.objectContaining({
+              rules: [
+                expect.objectContaining({
+                  field: 'SEMANTIC',
+                  value: '海边日落',
+                  breadth: 'STRICT',
+                }),
+              ],
+            }),
+          ],
+        }),
       }),
     );
     expect(screen.getByRole('status')).toHaveTextContent('保存后在后台生成');
+  });
+
+  it('edits scene content inside the same ANY/NOT_MATCH group as camera rules', () => {
+    const { onSave } = renderDialog(vi.fn(), {
+      initialQuery: {
+        version: 2,
+        conditions: [
+          {
+            id: 'g',
+            match: 'ANY',
+            result: 'NOT_MATCH',
+            rules: [
+              {
+                id: 'scene',
+                field: 'SEMANTIC',
+                operator: 'SIMILAR',
+                value: '海边',
+                breadth: 'BROAD',
+              },
+              { id: 'camera', field: 'CAMERA_MODEL', operator: 'EMPTY' },
+            ],
+          },
+        ],
+      },
+    });
+    const group = screen.getByRole('region', { name: '条件组 1' });
+    expect(within(group).getByRole('textbox', { name: '画面描述' })).toHaveValue('海边');
+    expect(within(group).getByRole('combobox', { name: '规则 2 运算符' })).toHaveDisplayValue(
+      '无参数',
+    );
+    fireEvent.change(within(group).getByRole('textbox', { name: '画面描述' }), {
+      target: { value: '城市' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          conditions: [
+            expect.objectContaining({
+              match: 'ANY',
+              result: 'NOT_MATCH',
+              rules: [
+                expect.objectContaining({ field: 'SEMANTIC', value: '城市' }),
+                expect.objectContaining({ field: 'CAMERA_MODEL', operator: 'EMPTY' }),
+              ],
+            }),
+          ],
+        }),
+      }),
+    );
   });
 
   it('restores semantic-only intent and can explicitly remove it', () => {
@@ -82,7 +147,17 @@ describe('EagleSmartFolderDialog', () => {
     expect(screen.getByRole('combobox', { name: '匹配范围' })).toHaveValue('BROAD');
     fireEvent.change(screen.getByRole('textbox', { name: '画面描述' }), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: '保存智能文件夹' }));
-    expect(onSave).toHaveBeenCalledWith({ name: 'KIT', query: { version: 2, conditions: [] } });
+    expect(onSave).toHaveBeenCalledWith({
+      name: 'KIT',
+      query: expect.objectContaining({
+        version: 2,
+        conditions: [
+          expect.objectContaining({
+            rules: [expect.objectContaining({ field: 'SEMANTIC', value: '' })],
+          }),
+        ],
+      }),
+    });
   });
 
   it('only requests a semantic preview after an explicit click and reports model unavailability', async () => {

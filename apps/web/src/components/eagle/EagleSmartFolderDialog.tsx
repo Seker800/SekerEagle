@@ -5,6 +5,8 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { IconFolderBolt, IconX } from '@tabler/icons-react';
 import {
   countActiveEagleFilterRules,
+  editableEagleFilterQuery,
+  readEagleSemanticIntent,
   createEmptyEagleFilterQuery,
   createEagleFilterRule,
   type EagleFilterQuery,
@@ -60,18 +62,14 @@ export function EagleSmartFolderDialog({
   } = useLibraryWorkspace();
 
   const [name, setName] = useState(initialName);
-  const [query, setQuery] = useState(() => createEditableQuery(initialQuery));
-  const [semanticText, setSemanticText] = useState(initialQuery.semantic?.text ?? '');
-  const [breadth, setBreadth] = useState(initialQuery.semantic?.breadth ?? 'BALANCED');
+  const [query, setQuery] = useState(() =>
+    editableEagleFilterQuery(createEditableQuery(initialQuery)),
+  );
   const scheduler = useMemo(() => new MediaLoadScheduler(), []);
   useEffect(() => () => scheduler.clear({ abortActive: true }), [scheduler]);
-  const { semantic: _semantic, ...ordinaryQuery } = query;
-  void _semantic;
-  const semantic = semanticText.trim()
-    ? { text: semanticText.normalize('NFKC').trim(), breadth }
-    : undefined;
-  const savedQuery = { ...ordinaryQuery, ...(semantic ? { semantic } : {}) };
-  const deferredQuery = useDebouncedValue(ordinaryQuery, 250);
+  const semantic = readEagleSemanticIntent(query);
+  const savedQuery = query;
+  const deferredQuery = useDebouncedValue(query, 250);
   // Preview media belongs only to this dialog/privacy session, never the shared query cache.
   const previewQuery = useMutation({
     mutationFn: (input: EagleFilterQuery) => countEagleAssets(accessToken, input),
@@ -145,64 +143,6 @@ export function EagleSmartFolderDialog({
           <p className={styles.explainer}>
             {' ' + t('智能文件夹会依据筛选条件，自动把符合条件的素材显示在一起。') + ' '}
           </p>
-          <section className={styles.semanticPanel} aria-label={t('画面内容')}>
-            <label className={styles.nameField}>
-              <span>{t('画面内容（可选）')}</span>
-              <input
-                aria-label={t('画面描述')}
-                maxLength={500}
-                value={semanticText}
-                placeholder={t('例如：海边日落、雨天的城市、街头人像')}
-                onChange={(event) => setSemanticText(event.target.value)}
-              />
-            </label>
-            <label className={styles.nameField}>
-              <span>{t('匹配范围')}</span>
-              <select
-                aria-label={t('匹配范围')}
-                value={breadth}
-                onChange={(event) => setBreadth(event.target.value as typeof breadth)}
-              >
-                <option value="STRICT">{t('严格')}</option>
-                <option value="BALANCED">{t('适中')}</option>
-                <option value="BROAD">{t('宽泛')}</option>
-              </select>
-            </label>
-            <p className={styles.explainer}>
-              {t('保存后自动整理匹配结果，新照片处理完成后自动加入。其他筛选条件同时生效。')}
-            </p>
-            <button
-              type="button"
-              disabled={!semantic || previewQuery.isPending}
-              onClick={() => previewQuery.mutate(savedQuery)}
-            >
-              {previewQuery.isPending ? t('正在预览…') : t('预览匹配照片')}
-            </button>
-            {previewQuery.isError || previewQuery.data?.semanticStatus === 'UNAVAILABLE' ? (
-              <p role="alert">{t('画面搜索暂时不可用，可以保存并等待后台重试。')}</p>
-            ) : null}
-            {previewQuery.data?.semanticStatus === 'READY' ? (
-              <>
-                <p>{t('匹配预览，最多显示 12 张，不代表全部结果。')}</p>
-                <div className={styles.semanticPreview}>
-                  {previewQuery.data.previewItems?.map((asset, order) => (
-                    <div key={asset.id}>
-                      <EagleAssetThumbnail
-                        asset={asset}
-                        scheduler={scheduler}
-                        order={order}
-                        displayWidth={120}
-                        alt={asset.displayName}
-                      />
-                    </div>
-                  ))}
-                </div>
-                {!previewQuery.data.previewItems?.length ? (
-                  <p>{t('暂未找到匹配照片，尚未生成向量的照片会在处理完成后补入。')}</p>
-                ) : null}
-              </>
-            ) : null}
-          </section>
           <EagleRuleBuilder
             fieldOptions={fieldOptions}
             value={query}
@@ -210,6 +150,44 @@ export function EagleSmartFolderDialog({
             aiTags={aiTags}
             onChange={setQuery}
           />
+          {semantic && (
+            <section className={styles.semanticPanel} aria-label={t('画面内容')}>
+              <p className={styles.explainer}>
+                {t('保存后自动整理匹配结果，新照片处理完成后自动加入。其他筛选条件同时生效。')}
+              </p>
+              <button
+                type="button"
+                disabled={!semantic || previewQuery.isPending}
+                onClick={() => previewQuery.mutate(savedQuery)}
+              >
+                {previewQuery.isPending ? t('正在预览…') : t('预览匹配照片')}
+              </button>
+              {previewQuery.isError || previewQuery.data?.semanticStatus === 'UNAVAILABLE' ? (
+                <p role="alert">{t('画面搜索暂时不可用，可以保存并等待后台重试。')}</p>
+              ) : null}
+              {previewQuery.data?.semanticStatus === 'READY' ? (
+                <>
+                  <p>{t('匹配预览，最多显示 12 张，不代表全部结果。')}</p>
+                  <div className={styles.semanticPreview}>
+                    {previewQuery.data.previewItems?.map((asset, order) => (
+                      <div key={asset.id}>
+                        <EagleAssetThumbnail
+                          asset={asset}
+                          scheduler={scheduler}
+                          order={order}
+                          displayWidth={120}
+                          alt={asset.displayName}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {!previewQuery.data.previewItems?.length ? (
+                    <p>{t('暂未找到匹配照片，尚未生成向量的照片会在处理完成后补入。')}</p>
+                  ) : null}
+                </>
+              ) : null}
+            </section>
+          )}
           {error && <p className={styles.error}>{error}</p>}
         </div>
         <footer>

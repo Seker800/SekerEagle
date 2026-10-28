@@ -7,7 +7,11 @@ import {
   taskPolicyAllowsSql,
   taskPrioritySql,
 } from '@sekereagle/library-persistence';
-import { parseEagleFilterQuery, EAGLE_SEMANTIC_THRESHOLDS } from '@sekereagle/eagle-filter-core';
+import {
+  parseEagleFilterQuery,
+  readEagleSemanticIntent,
+  EAGLE_SEMANTIC_THRESHOLDS,
+} from '@sekereagle/eagle-filter-core';
 
 export function validateQueryVector(vector: readonly number[]) {
   const norm = vector.reduce((sum, value) => sum + value * value, 0);
@@ -31,11 +35,15 @@ export async function reconcileSmartFolderSpaces(client: PrismaClient, spaceId: 
     Array<{ id: string; ownerId: string; libraryMode: 'PHOTO' | 'MATERIAL' }>
   >(Prisma.sql`
     SELECT f.id, f."ownerId", f."libraryMode" FROM "EagleSmartFolder" f
-    WHERE f."queryJson"->'semantic' IS NOT NULL AND NOT EXISTS (
+    CROSS JOIN LATERAL (SELECT COALESCE(f."queryJson"->'semantic',
+      (SELECT jsonb_build_object('text', r->>'value', 'breadth', COALESCE(r->>'breadth','BALANCED'))
+       FROM jsonb_array_elements(f."queryJson"->'conditions') c,
+            jsonb_array_elements(c->'rules') r WHERE r->>'field'='SEMANTIC' AND length(trim(r->>'value'))>0 LIMIT 1)) AS intent) q
+    WHERE q.intent IS NOT NULL AND NOT EXISTS (
       SELECT 1 FROM "EagleSmartFolderSemanticSnapshot" s WHERE s."folderId"=f.id
         AND s."ownerId"=f."ownerId" AND s."libraryMode"=f."libraryMode"
-        AND s."spaceId"=${spaceId} AND s.text=f."queryJson"->'semantic'->>'text'
-        AND s.breadth=f."queryJson"->'semantic'->>'breadth'
+        AND s."spaceId"=${spaceId} AND s.text=q.intent->>'text'
+        AND s.breadth=q.intent->>'breadth'
     ) ORDER BY f.id LIMIT 10
   `);
   for (const folder of folders)
@@ -46,7 +54,7 @@ export async function reconcileSmartFolderSpaces(client: PrismaClient, spaceId: 
         where: { id: folder.id, ownerId: folder.ownerId, libraryMode: folder.libraryMode },
       });
       if (!current) return;
-      const intent = parseEagleFilterQuery(current.queryJson).semantic;
+      const intent = readEagleSemanticIntent(parseEagleFilterQuery(current.queryJson));
       if (intent)
         await scheduleSmartFolderSnapshot(
           tx,

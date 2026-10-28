@@ -40,7 +40,7 @@ test('semantic preview rechecks media revision, privacy, owner and mode when hyd
   );
   const result = await service.countAssets('owner', query, false);
   assert.deepEqual(result, { count: null, semanticStatus: 'READY', previewItems: [] });
-  const where = calls[0]!.where as Record<string, unknown>;
+  const where = calls.at(-1)!.where as Record<string, unknown>;
   assert.equal(where.ownerId, 'owner');
   assert.equal(where.libraryMode, 'PHOTO');
   assert.equal(where.isPrivate, false);

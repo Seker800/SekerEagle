@@ -28,6 +28,7 @@ import { Prisma } from '@prisma/client';
 import {
   EAGLE_FILTER_QUERY_VERSION,
   EAGLE_SEMANTIC_THRESHOLDS,
+  readEagleSemanticIntent,
   type EagleFilterQuery,
 } from '@sekereagle/eagle-filter-core';
 import { PrismaService } from '../prisma/prisma.service';
@@ -727,7 +728,8 @@ export class EagleService {
   async countAssets(ownerId: string, input: Record<string, unknown>, includePrivate = false) {
     const query = readEagleFilterQuery(input);
     assertFilterMode(query, this.libraryMode);
-    if (query.semantic) return this.previewSemanticFolder(ownerId, query, includePrivate);
+    if (readEagleSemanticIntent(query))
+      return this.previewSemanticFolder(ownerId, query, includePrivate);
     return {
       count: await this.prisma.eagleAsset.count({
         where: {
@@ -746,10 +748,10 @@ export class EagleService {
     query: EagleFilterQuery,
     includePrivate: boolean,
   ) {
-    const context = await this.imageSearch?.prepare(ownerId, query.semantic!.text);
+    const context = await this.imageSearch?.prepare(ownerId, readEagleSemanticIntent(query)!.text);
     if (context?.status !== 'READY')
       return { count: null, semanticStatus: 'UNAVAILABLE', previewItems: [] };
-    const threshold = EAGLE_SEMANTIC_THRESHOLDS[query.semantic!.breadth];
+    const threshold = EAGLE_SEMANTIC_THRESHOLDS[readEagleSemanticIntent(query)!.breadth];
     // Preview is explicitly sampled, never a truncated membership list or an asserted total.
     const candidates = await this.prisma.$queryRaw<
       Array<{ id: string; mediaRevision: number }>
@@ -762,23 +764,55 @@ export class EagleService {
         AND e.embedding IS NOT NULL AND 1-(e.embedding <=> ${context.vector}::vector)>=${threshold}
       ORDER BY e.embedding <=> ${context.vector}::vector, a.id LIMIT 100
     `);
-    const rows = await this.prisma.eagleAsset.findMany({
+    const scope = {
+      ownerId,
+      libraryMode: this.libraryMode,
+      deletedAt: null,
+      ...privateVisibilityWhere(includePrivate),
+    };
+    const ordinaryCandidates = await this.prisma.eagleAsset.findMany({
       where: {
-        ownerId,
-        libraryMode: this.libraryMode,
-        deletedAt: null,
-        ...privateVisibilityWhere(includePrivate),
-        AND: [
-          { OR: candidates.map(({ id, mediaRevision }) => ({ id, mediaRevision })) },
-          buildEagleFilterWhere({ ...query, semantic: undefined }, this.libraryMode),
+        ...scope,
+        OR: [
+          buildEagleFilterWhere(query, this.libraryMode, { id: { notIn: [] } }),
+          buildEagleFilterWhere(query, this.libraryMode, { id: { in: [] } }),
         ],
       },
-      include: assetListInclude,
+      select: { id: true, mediaRevision: true },
+      orderBy: { id: 'asc' },
+      take: 100,
     });
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const preview = candidates
-      .flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : []))
-      .slice(0, 12);
+    const sample = [
+      ...new Map([...candidates, ...ordinaryCandidates].map((row) => [row.id, row])).values(),
+    ];
+    const matched = sample.length
+      ? await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT a.id FROM "EagleAsset" a JOIN "EagleAssetEmbedding" e ON e."assetId"=a.id
+        AND e."ownerId"=a."ownerId" AND e."libraryMode"=a."libraryMode" AND e."assetRevision"=a."mediaRevision"
+      WHERE a."ownerId"=${ownerId} AND a."libraryMode"=${this.libraryMode}::"LibraryMode"
+        AND a.id=ANY(${sample.map((row) => row.id)}::text[]) AND a."deletedAt" IS NULL
+        ${includePrivate ? Prisma.empty : Prisma.sql`AND NOT a."isPrivate"`}
+        AND e."spaceId"=${context.spaceId} AND e."isCurrent" AND e.status='READY' AND e.embedding IS NOT NULL
+        AND 1-(e.embedding <=> ${context.vector}::vector)>=${threshold}
+    `)
+      : [];
+    const rows = sample.length
+      ? await this.prisma.eagleAsset.findMany({
+          where: {
+            ...scope,
+            AND: [
+              { OR: sample.map(({ id, mediaRevision }) => ({ id, mediaRevision })) },
+              buildEagleFilterWhere(query, this.libraryMode, {
+                id: { in: matched.map((row) => row.id) },
+              }),
+            ],
+          },
+          include: assetListInclude,
+          take: 12,
+          orderBy: { id: 'asc' },
+        })
+      : [];
+    const preview = rows;
     return {
       count: null,
       semanticStatus: 'READY',
@@ -1543,7 +1577,7 @@ export class EagleService {
         });
         await this.replaceSmartFolderDependencies(transaction, ownerId, folder.id, dependencies);
         const semantic = isEagleFilterQuery(queryJson)
-          ? readEagleFilterQuery(queryJson).semantic
+          ? readEagleSemanticIntent(readEagleFilterQuery(queryJson))
           : undefined;
         if (semantic)
           await scheduleSmartFolderSnapshot(
@@ -1998,17 +2032,15 @@ function buildStoredSmartFolderWhere(
 ): Prisma.EagleAssetWhereInput | null {
   if (isEagleFilterQuery(query)) {
     const parsed = readEagleFilterQuery(query);
-    const ordinaryWhere = buildEagleFilterWhere({ ...parsed, semantic: undefined }, libraryMode);
-    const ruleWhere = parsed.semantic
-      ? {
-          AND: [
-            ordinaryWhere,
-            folderId
-              ? smartFolderMatchWhere({ ownerId, libraryMode }, folderId)
-              : buildNoAssetsWhere(ownerId),
-          ],
-        }
-      : ordinaryWhere;
+    const ruleWhere = buildEagleFilterWhere(
+      parsed,
+      libraryMode,
+      readEagleSemanticIntent(parsed)
+        ? folderId
+          ? smartFolderMatchWhere({ ownerId, libraryMode }, folderId)
+          : buildNoAssetsWhere(ownerId)
+        : undefined,
+    );
     if (Object.keys(ruleWhere).length === 0) return null;
     return {
       ownerId,
@@ -2029,7 +2061,9 @@ function buildStoredSmartFolderWhere(
 }
 
 function readSemanticIntent(query: Prisma.InputJsonValue | Prisma.JsonValue) {
-  return isEagleFilterQuery(query) ? readEagleFilterQuery(query).semantic : undefined;
+  return isEagleFilterQuery(query)
+    ? readEagleSemanticIntent(readEagleFilterQuery(query))
+    : undefined;
 }
 
 function buildNoAssetsWhere(ownerId: string): Prisma.EagleAssetWhereInput {

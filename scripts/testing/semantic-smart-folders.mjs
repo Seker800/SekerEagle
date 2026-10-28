@@ -530,6 +530,105 @@ try {
   await service.deleteSmartFolder(ownerId, folder.id);
   assert.equal(await client.eagleSmartFolderSemanticSnapshot.count(), 0);
   assert.equal(await client.eagleSmartFolderSemanticMatch.count(), 0);
+
+  // First-class scene rules must obey Boolean groups, including ordinary-only matches.
+  const ruleOwner = randomUUID();
+  await client.user.create({
+    data: { id: ruleOwner, email: `${ruleOwner}@example.invalid`, passwordHash: 'test-only' },
+  });
+  await client.eagleProcessingSetting.create({
+    data: { ownerId: ruleOwner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  for (const [id, axis] of [
+    ['scene-only', 0],
+    ['camera-only', 1],
+    ['both', 0],
+    ['neither', 1],
+    ['null-camera', 1],
+    ['empty-camera', 1],
+  ])
+    await asset(id, { owner: ruleOwner, axis });
+  for (const [assetId, cameraModel] of [
+    ['camera-only', 'Test Camera'],
+    ['both', 'Test Camera'],
+    ['null-camera', null],
+    ['empty-camera', ''],
+  ]) {
+    await client.eaglePhotoMetadata.create({
+      data: {
+        assetId,
+        ownerId: ruleOwner,
+        libraryMode: 'PHOTO',
+        assetRevision: 1,
+        processorVersion: 'test',
+        cameraModel,
+      },
+    });
+  }
+  const sceneRule = {
+    id: 'scene',
+    field: 'SEMANTIC',
+    operator: 'SIMILAR',
+    value: '海边',
+    breadth: 'BALANCED',
+  };
+  const cameraRule = { id: 'camera', field: 'CAMERA_MODEL', operator: 'NOT_EMPTY' };
+  const rulesQuery = (match, result, rules = [sceneRule, cameraRule]) => ({
+    version: 2,
+    conditions: [{ id: 'g', match, result, rules }],
+  });
+  const ruleFolder = await service.createSmartFolder(ruleOwner, {
+    name: '画面组合',
+    query: rulesQuery('ANY', 'MATCH'),
+  });
+  await reconcileSmartFolderSpaces(client, spaceId);
+  while (await runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer))) {
+    /* bounded fixture queue */
+  }
+  const expectedCases = [
+    ['ANY', 'MATCH', ['both', 'camera-only', 'scene-only']],
+    ['ALL', 'MATCH', ['both']],
+    ['ANY', 'NOT_MATCH', ['empty-camera', 'neither', 'null-camera']],
+    ['ALL', 'NOT_MATCH', ['camera-only', 'empty-camera', 'neither', 'null-camera', 'scene-only']],
+  ];
+  const previewService = new EagleService(
+    client,
+    { prepare: async () => ({ status: 'READY', spaceId, vector: `[${vector().join(',')}]` }) },
+    'PHOTO',
+  );
+  for (const [match, result, expected] of expectedCases) {
+    const query = rulesQuery(match, result);
+    await service.updateSmartFolder(ruleOwner, ruleFolder.id, { query });
+    const list = await service.listAssets(ruleOwner, { smartFolderId: ruleFolder.id, limit: 30 });
+    assert.deepEqual(list.items.map((row) => row.id).sort(), expected, `${match} ${result}`);
+    const preview = await previewService.countAssets(ruleOwner, query);
+    assert.deepEqual(
+      preview.previewItems.map((row) => row.id).sort(),
+      expected,
+      `preview ${match} ${result}`,
+    );
+  }
+  const emptyQuery = rulesQuery('ALL', 'MATCH', [{ ...cameraRule, operator: 'EMPTY' }]);
+  assert.equal(
+    (await service.countAssets(ruleOwner, emptyQuery)).count,
+    4,
+    'missing metadata row, null and empty model are all empty',
+  );
+  await service.updateSmartFolder(ruleOwner, ruleFolder.id, { query: emptyQuery });
+  assert.equal(
+    await client.eagleSmartFolderSemanticSnapshot.count({ where: { ownerId: ruleOwner } }),
+    0,
+    'removing scene rule removes its cache',
+  );
+  await service.updateSmartFolder(ruleOwner, ruleFolder.id, { query: rulesQuery('ALL', 'MATCH') });
+  await client.eagleSmartFolderSemanticSnapshot.deleteMany({ where: { ownerId: ruleOwner } });
+  await reconcileSmartFolderSpaces(client, spaceId);
+  assert.equal(
+    await client.eagleSmartFolderSemanticSnapshot.count({ where: { ownerId: ruleOwner } }),
+    1,
+    'reconciliation discovers nested scene rules',
+  );
+  await service.deleteSmartFolder(ruleOwner, ruleFolder.id);
   log(
     'Semantic smart folders: migration, full build, cached paging, increment, rules, privacy, owner/mode, replacement, retries, leases and cleanup passed.',
   );
