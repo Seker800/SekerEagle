@@ -1,3 +1,4 @@
+import { runTransferWork } from './eagle-transfer-work';
 import {
   planTransferPyramid,
   copyTransferPyramid,
@@ -246,21 +247,22 @@ export class EagleLibraryTransferService {
         where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
       });
       this.checkOperation(active, ownerId, ids);
-      assertOwnedObjectKey(ownerId, item.sourceKey);
-      assertOwnedObjectKey(ownerId, item.targetKey);
-      await this.storage.copyObject(item.sourceKey, item.targetKey);
-      for (const rendition of item.renditions ?? []) {
-        assertOwnedObjectKey(ownerId, rendition.sourceKey);
-        assertOwnedObjectKey(ownerId, rendition.targetKey);
-        await this.storage.copyObject(rendition.sourceKey, rendition.targetKey);
-        const copied = await this.storage.headObject(rendition.targetKey);
-        if (BigInt(copied.ContentLength ?? -1) !== BigInt(rendition.size))
-          throw new ConflictException('预览复制校验失败，请重试。');
+      const objects = [
+        { sourceKey: item.sourceKey, targetKey: item.targetKey, size: item.size },
+        ...(item.renditions ?? []),
+      ];
+      // Validate the whole bounded plan before starting any writes for this component.
+      for (const object of objects) {
+        assertOwnedObjectKey(ownerId, object.sourceKey);
+        assertOwnedObjectKey(ownerId, object.targetKey);
       }
+      await runTransferWork(objects, async (object) => {
+        await this.storage.copyObject(object.sourceKey, object.targetKey);
+        const copied = await this.storage.headObject(object.targetKey);
+        if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
+          throw new ConflictException('文件复制校验失败，请重试。');
+      });
       if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
-      const object = await this.storage.headObject(item.targetKey);
-      if (BigInt(object.ContentLength ?? -1) !== BigInt(item.size))
-        throw new ConflictException('原文件复制校验失败，请重试。');
     }
     return this.prisma.$transaction(
       async (tx) => {
