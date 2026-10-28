@@ -1,6 +1,8 @@
 import { usePhotoPeople } from './use-photo-people';
 import { getDesktopCacheBridge } from '../../lib/media-resolver';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { PhotoFaceImage, facePreview, representativeFace } from './PhotoFaceImage';
+import { PhotoPeopleReview } from './PhotoPeopleReview';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -32,7 +34,10 @@ export function PhotoCollections({
   const [pending, setPending] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const people = usePhotoPeople(ownerId, includePrivate, true, true);
+  const actionPending = useRef(false);
   async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
+    if (actionPending.current) return false;
+    actionPending.current = true;
     setError(null);
     setPending(true);
     try {
@@ -50,15 +55,17 @@ export function PhotoCollections({
           queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
         });
       await people.refetch();
+      return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
+      return false;
     } finally {
+      actionPending.current = false;
       setPending(false);
     }
   }
   const thumbnail = (asset: EagleAssetListItem) => {
-    const rendition =
-      asset.renditions.find((row) => row.kind === 'THUMBNAIL') ?? asset.renditions[0];
+    const rendition = facePreview(asset);
     return rendition
       ? api.getEagleRenditionContentUrl(asset.id, rendition.id, rendition.kind)
       : null;
@@ -93,9 +100,23 @@ export function PhotoCollections({
       {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
       {
         <>
+          <PhotoPeopleReview
+            key={`${ownerId}:${includePrivate}`}
+            people={people.data?.people ?? []}
+            pending={pending}
+            onConfirm={(source, target) =>
+              perform(async () => {
+                await mergePhotoPeople(source.id, target.id);
+                setSelectedPerson(null);
+                setFeedback(t('人物已合并'));
+              }, true)
+            }
+            onOpen={onOpen}
+            preview={thumbnail}
+          />
           <div className="photo-person-grid">
             {people.data?.people.map((person, index) => {
-              const face = person.faces[0],
+              const face = representativeFace(person),
                 src = face ? thumbnail(face.asset) : null;
               return (
                 <button
@@ -105,21 +126,7 @@ export function PhotoCollections({
                   onClick={() => setSelectedPerson(person.id)}
                   aria-pressed={selectedPerson === person.id}
                 >
-                  {src && face && (
-                    <span className="photo-face-crop">
-                      <img
-                        src={src}
-                        alt=""
-                        loading="lazy"
-                        style={{
-                          width: `${100 / Math.max(0.01, face.box[2])}%`,
-                          height: `${100 / Math.max(0.01, face.box[3])}%`,
-                          left: `${(-face.box[0] / Math.max(0.01, face.box[2])) * 100}%`,
-                          top: `${(-face.box[1] / Math.max(0.01, face.box[3])) * 100}%`,
-                        }}
-                      />
-                    </span>
-                  )}
+                  {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
                   <strong>
                     {person.name ?? t('未命名人物 {{value1}}', { value1: index + 1 })}
                   </strong>
@@ -140,7 +147,6 @@ export function PhotoCollections({
             <PersonEditor
               key={selectedPerson}
               person={people.data.people.find((person) => person.id === selectedPerson)!}
-              people={people.data.people}
               pending={pending}
               perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
               onPrivacyChange={(person, checked) =>
@@ -172,7 +178,6 @@ export function PhotoCollections({
 }
 function PersonEditor({
   person,
-  people,
   pending,
   perform,
   onPerson,
@@ -181,16 +186,14 @@ function PersonEditor({
   onPrivacyChange,
 }: {
   person: PhotoPerson;
-  people: PhotoPerson[];
   pending: boolean;
-  perform: (action: () => Promise<unknown>, changesPrivacy?: boolean) => Promise<void>;
-  onPrivacyChange: (person: PhotoPerson, checked: boolean) => Promise<void>;
+  perform: (action: () => Promise<unknown>, changesPrivacy?: boolean) => Promise<boolean>;
+  onPrivacyChange: (person: PhotoPerson, checked: boolean) => Promise<boolean>;
   onPerson: (id: string) => void;
   onOpen: (asset: EagleAssetListItem) => void;
   thumbnail: (asset: EagleAssetListItem) => string | null;
 }) {
   const [name, setName] = useState(person.name ?? '');
-  const [target, setTarget] = useState('');
   return (
     <div className="photo-person-editor">
       <form
@@ -218,26 +221,6 @@ function PersonEditor({
       <p>{t('识别可能漏检，敏感照片请同时手动添加私密标签。')}</p>
       <button type="button" onClick={() => onPerson(person.id)}>
         {t('查看此人物的照片')}
-      </button>
-      <label>
-        {t('合并到人物')}
-        <select value={target} onChange={(event) => setTarget(event.target.value)}>
-          <option value="">{t('选择人物')}</option>
-          {people
-            .filter((row) => row.id !== person.id)
-            .map((row, index) => (
-              <option key={row.id} value={row.id}>
-                {row.name ?? t('未命名人物 {{value1}}', { value1: index + 1 })}
-              </option>
-            ))}
-        </select>
-      </label>
-      <button
-        type="button"
-        disabled={!target || pending}
-        onClick={() => void perform(() => mergePhotoPeople(person.id, target), true)}
-      >
-        {t('合并人物')}
       </button>
       <div className="photo-group-grid">
         {person.faces.slice(0, 20).map((face) => {

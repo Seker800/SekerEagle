@@ -1362,3 +1362,44 @@ select:focus-visible {
     border-radius: var(--ui-radius-panel);
   }
 }
+
+.photo-people-review {
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-panel);
+}
+.photo-people-review h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+.photo-people-review-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 200px));
+  justify-content: center;
+  gap: 16px;
+}
+.photo-people-review-pair > button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.photo-people-review-pair .photo-face-crop {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  border-radius: var(--ui-radius-control);
+}
+.photo-people-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+.photo-people-review-actions > button:first-child {
+  border-color: rgb(var(--ui-accent-rgb) / 44%);
+  color: var(--ui-accent-text);
+}
