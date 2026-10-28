@@ -177,6 +177,8 @@ test('sending current browse outputs copies independent derivatives and publishe
   const created: Record<string, unknown>[] = [];
   let jobs: Array<{ kind: string; processorVersion: string }> = [];
   let published: unknown[] = [];
+  let sourceRemoval: Record<string, unknown> = {};
+  const allJobs: Array<{ kind: string; assetId?: string; libraryMode?: string }> = [];
   const tx = {
     $queryRaw: async () => [],
     eagleLibraryTransfer: {
@@ -190,7 +192,10 @@ test('sending current browse outputs copies independent derivatives and publishe
         created.push(data);
         return data;
       },
-      updateMany: async () => ({ count: 1 }),
+      updateMany: async ({ data }: { data: Record<string, unknown> }) => {
+        sourceRemoval = data;
+        return { count: 1 };
+      },
     },
     eagleAssetTransferFacts: { create: async () => ({}) },
     eagleAssetRendition: {
@@ -201,6 +206,7 @@ test('sending current browse outputs copies independent derivatives and publishe
     eagleAssetProcessingJob: {
       createMany: async ({ data }: { data: typeof jobs }) => {
         jobs = data;
+        allJobs.push(...data);
       },
     },
   };
@@ -217,6 +223,8 @@ test('sending current browse outputs copies independent derivatives and publishe
   );
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
   assert.equal(copies.length, 4);
+  assert.ok(sourceRemoval.purgeAfter instanceof Date, 'successful sends bypass the recycle bin');
+  assert.ok(allJobs.some((job) => job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO'));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
   assert.ok(
