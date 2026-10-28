@@ -521,6 +521,34 @@ try {
   await prisma.$executeRaw`DROP TRIGGER map_index_test_fault ON "EaglePhotoMapCell"`;
   await prisma.$executeRaw`DROP FUNCTION map_index_test_fault()`;
   await refresh(owner);
+
+  // New facts may invalidate visibility but must not erase a real retry deadline.
+  const retryOwner = randomUUID();
+  await prisma.user.create({ data: { id: retryOwner, email: `${retryOwner}@example.invalid`, passwordHash: 'test-only' } });
+  const retryPhoto = await make({ ownerId: retryOwner });
+  const retryKey = { ownerId_libraryMode: { ownerId: retryOwner, libraryMode: 'PHOTO' } };
+  const retryAt = new Date(Date.now() + 600000);
+  await prisma.eaglePhotoMapState.update({ where: retryKey, data: { attempts: 3, lastError: 'INDEX_BUILD_FAILED', availableAt: retryAt } });
+  await make({ ownerId: retryOwner });
+  let retryState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: retryKey });
+  assert.equal(retryState.lastError, 'INDEX_BUILD_FAILED', 'arriving photos must not erase failure backoff');
+  assert.equal(retryState.attempts, 3);
+  assert.equal(retryState.availableAt.getTime(), retryAt.getTime());
+  assert.equal(await runPhotoMapBuildStep(prisma), false, 'first-build bypass cannot skip an established retry deadline');
+  const visibilityBefore = retryState.visibilityVersion;
+  await prisma.eagleAsset.update({ where: { id: retryPhoto }, data: { isPrivate: true } });
+  await prisma.eaglePhotoMetadata.update({ where: { assetId: retryPhoto }, data: { longitude: 122 } });
+  retryState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: retryKey });
+  assert.ok(retryState.visibilityVersion > visibilityBefore, 'sensitive changes still revoke old generations');
+  assert.equal(retryState.attempts, 3);
+  assert.equal(retryState.lastError, 'INDEX_BUILD_FAILED');
+  assert.equal(retryState.availableAt.getTime(), retryAt.getTime());
+  await prisma.eaglePhotoMapState.update({ where: retryKey, data: { availableAt: new Date(0) } });
+  await runPhotoMapBuildStep(prisma);
+  retryState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: retryKey });
+  assert.equal(retryState.lastError, null);
+  assert.equal(retryState.attempts, 0, 'a successful point-freeze resets the failure budget');
+  await refresh(retryOwner);
   if (process.env.PHOTO_MAP_SCALE_TEST === '1') {
     const scaleOwner = randomUUID(),
       scaleIds = Array.from({ length: 50000 }, () => randomUUID());

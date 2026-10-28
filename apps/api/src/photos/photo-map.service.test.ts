@@ -91,6 +91,7 @@ test('map endpoints retain browser authentication and cannot take owner or priva
 const snapshotId = '00000000-0000-4000-8000-000000000001';
 function indexedFixture(cells: Array<Record<string, unknown>> = []) {
   const queries: unknown[] = [];
+  const transactions: unknown[] = [];
   const state = {
     activeSnapshotId: snapshotId as string | null,
     buildingSnapshotId: null as string | null,
@@ -132,9 +133,9 @@ function indexedFixture(cells: Array<Record<string, unknown>> = []) {
     },
   };
   const service = new PhotoMapService({
-    $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
+    $transaction: async (fn: (client: typeof tx) => unknown, options: unknown) => { transactions.push(options); return fn(tx); },
   } as never);
-  return { service, tx, queries, state, snapshot };
+  return { service, tx, queries, state, snapshot, transactions };
 }
 test('map reads persisted cells and bounded current covers without a gallery scan or build on GET', async () => {
   const f = indexedFixture([
@@ -317,4 +318,12 @@ test('an owner without indexed photo data gets an empty ready map without source
   assert.equal(result.status, 'READY');
   assert.equal(result.total, 0);
   assert.equal(f.queries.length, 0);
+});
+
+
+test('map cells and members share state, visibility and level boundaries under repeatable reads', async () => {
+  const f = indexedFixture();
+  await f.service.clusters('owner', false, world);
+  await f.service.photos('owner', false, `${snapshotId}:7/20/12`);
+  assert.deepEqual(f.transactions, [{ isolationLevel: 'RepeatableRead' }, { isolationLevel: 'RepeatableRead' }]);
 });
