@@ -1,4 +1,6 @@
 export const enUS = {
+  '预览样本中暂无匹配照片；保存后会在完整图库中计算结果。':
+    'No matches in this preview sample. Saving calculates results across the full library.',
   无参数: 'No value',
   有参数: 'Has value',
   '模型节点连接中断，向量任务等待恢复；其他处理继续。':

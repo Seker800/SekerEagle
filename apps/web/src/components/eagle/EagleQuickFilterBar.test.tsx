@@ -304,6 +304,19 @@ it('offers missing camera parameters in the photo quick filter and clears the se
     target: { value: 'EMPTY' },
   });
   expect(screen.queryByLabelText('相机包含')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '相机条件' }), {
+    target: { value: 'NOT_EMPTY' },
+  });
+  expect(screen.getByRole('combobox', { name: '相机条件' })).toHaveDisplayValue('有参数');
+  expect(screen.queryByLabelText('相机包含')).not.toBeInTheDocument();
+  fireEvent.change(screen.getByRole('combobox', { name: '相机条件' }), {
+    target: { value: 'CONTAINS' },
+  });
+  expect(screen.getByLabelText('相机包含')).toBeVisible();
+  fireEvent.change(screen.getByRole('combobox', { name: '相机条件' }), {
+    target: { value: 'EMPTY' },
+  });
+
   fireEvent.click(screen.getByRole('button', { name: '关闭相机筛选' }));
   expect(screen.getByRole('button', { name: /相机筛选，无参数/ })).toBeVisible();
   fireEvent.click(screen.getByRole('button', { name: /清除全部快捷筛选/ }));

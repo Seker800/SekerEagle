@@ -166,11 +166,24 @@ test('editing a legacy scene retains all thirty existing condition groups', () =
   );
 });
 
-
 test('changing a migrated scene to an ordinary field preserves a valid 31-group query', () => {
-  const legacy = parseEagleFilterQuery({ version: 2, semantic: { text: '海边', breadth: 'BALANCED' }, conditions: Array.from({ length: 30 }, (_, i) => ({ id: `g${i}`, match: 'ANY', result: 'MATCH', rules: [{ id: `r${i}`, field: 'NAME', operator: 'CONTAINS', value: 'x' }] })) });
+  const legacy = parseEagleFilterQuery({
+    version: 2,
+    semantic: { text: '海边', breadth: 'BALANCED' },
+    conditions: Array.from({ length: 30 }, (_, i) => ({
+      id: `g${i}`,
+      match: 'ANY',
+      result: 'MATCH',
+      rules: [{ id: `r${i}`, field: 'NAME', operator: 'CONTAINS', value: 'x' }],
+    })),
+  });
   const edited = editableEagleFilterQuery(legacy);
-  edited.conditions[30]!.rules = [{ id: 'changed', field: 'NAME', operator: 'CONTAINS', value: '海边' }];
+  edited.conditions[30]!.rules = [
+    { id: 'changed', field: 'NAME', operator: 'CONTAINS', value: '海边' },
+  ];
   assert.equal(parseEagleFilterQuery(edited).conditions.length, 31);
-  assert.throws(() => parseEagleFilterQuery({ ...edited, semantic: { text: '海边', breadth: 'BALANCED' } }), /条件组/);
+  assert.throws(
+    () => parseEagleFilterQuery({ ...edited, semantic: { text: '海边', breadth: 'BALANCED' } }),
+    /条件组/,
+  );
 });

@@ -1,5 +1,6 @@
 export const EAGLE_FILTER_QUERY_VERSION = 2 as const;
-export const EAGLE_FILTER_MAX_CONDITIONS = 30;
+// The previous format allowed thirty ordinary groups plus one top-level scene.
+export const EAGLE_FILTER_MAX_CONDITIONS = 31;
 export const EAGLE_FILTER_MAX_RULES_PER_CONDITION = 30;
 
 export type EagleFilterField =
@@ -392,15 +393,11 @@ export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
   if (!isRecord(value) || value.version !== EAGLE_FILTER_QUERY_VERSION)
     throw new Error('筛选规则版本无效。');
   if (!Array.isArray(value.conditions)) throw new Error('筛选条件组无效。');
-  // A legacy query can already contain 30 groups plus its top-level scene intent.
-  // Reserve one scene group so opening and saving it cannot make that valid query invalid.
-  const hasSceneRule = value.conditions.some(
-    (condition) =>
-      isRecord(condition) &&
-      Array.isArray(condition.rules) &&
-      condition.rules.some((rule: unknown) => isRecord(rule) && rule.field === 'SEMANTIC'),
-  );
-  if (value.conditions.length > EAGLE_FILTER_MAX_CONDITIONS + (hasSceneRule ? 1 : 0))
+  // A legacy top-level scene consumes the same one-group budget as its editable form.
+  if (
+    value.conditions.length + (value.semantic === undefined ? 0 : 1) >
+    EAGLE_FILTER_MAX_CONDITIONS
+  )
     throw new Error('筛选条件组无效。');
   const query: EagleFilterQuery = {
     version: EAGLE_FILTER_QUERY_VERSION,

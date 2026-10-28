@@ -182,7 +182,7 @@ export function EagleSmartFolderDialog({
                     ))}
                   </div>
                   {!previewQuery.data.previewItems?.length ? (
-                    <p>{t('暂未找到匹配照片，尚未生成向量的照片会在处理完成后补入。')}</p>
+                    <p>{t('预览样本中暂无匹配照片；保存后会在完整图库中计算结果。')}</p>
                   ) : null}
                 </>
               ) : null}

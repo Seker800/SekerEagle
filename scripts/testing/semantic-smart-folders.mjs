@@ -565,6 +565,9 @@ try {
       },
     });
   }
+  await asset('rules-private', { owner: ruleOwner, private: true });
+  await asset('rules-other-owner', { owner: otherOwner });
+  await asset('rules-material', { owner: ruleOwner, mode: 'MATERIAL' });
   const sceneRule = {
     id: 'scene',
     field: 'SEMANTIC',
@@ -581,7 +584,11 @@ try {
     name: '画面组合',
     query: rulesQuery('ALL', 'NOT_MATCH'),
   });
-  assert.deepEqual((await service.listAssets(ruleOwner, { smartFolderId: ruleFolder.id, limit: 30 })).items, [], 'pending semantic snapshots are unknown, not a negative match for every asset');
+  assert.deepEqual(
+    (await service.listAssets(ruleOwner, { smartFolderId: ruleFolder.id, limit: 30 })).items,
+    [],
+    'pending semantic snapshots are unknown, not a negative match for every asset',
+  );
   await reconcileSmartFolderSpaces(client, spaceId);
   while (await runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer))) {
     /* bounded fixture queue */

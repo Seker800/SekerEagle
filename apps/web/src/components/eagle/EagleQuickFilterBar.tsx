@@ -388,8 +388,8 @@ function renderFieldControl(
             }
           >
             <option value="CONTAINS">{t('包含')}</option>
-            <option value="EMPTY">{t('无参数')}</option>
-            <option value="NOT_EMPTY">{t('有参数')}</option>
+            <option value="EMPTY">{field === 'CITY' ? t('为空') : t('无参数')}</option>
+            <option value="NOT_EMPTY">{field === 'CITY' ? t('不为空') : t('有参数')}</option>
           </select>
           {!value.presence?.[field] && (
             <TextControl field={field} value={value} onChange={onChange} list={field} />

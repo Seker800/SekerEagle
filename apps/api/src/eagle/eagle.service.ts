@@ -2032,15 +2032,39 @@ function buildStoredSmartFolderWhere(
 ): Prisma.EagleAssetWhereInput | null {
   if (isEagleFilterQuery(query)) {
     const parsed = readEagleFilterQuery(query);
-    const ruleWhere = buildEagleFilterWhere(
+    const semantic = readEagleSemanticIntent(parsed);
+    const compiledWhere = buildEagleFilterWhere(
       parsed,
       libraryMode,
-      readEagleSemanticIntent(parsed)
+      semantic
         ? folderId
           ? smartFolderMatchWhere({ ownerId, libraryMode }, folderId)
           : buildNoAssetsWhere(ownerId)
         : undefined,
     );
+    // Unknown is not a negative match. Check readiness in the membership query so
+    // deleting/replacing a snapshot cannot broaden a negated folder.
+    const ruleWhere: Prisma.EagleAssetWhereInput = semantic
+      ? {
+          AND: [
+            compiledWhere,
+            folderId
+              ? {
+                  owner: {
+                    eagleSmartFolders: {
+                      some: {
+                        id: folderId,
+                        ownerId,
+                        libraryMode,
+                        semanticSnapshots: { some: { ownerId, libraryMode, isActive: true } },
+                      },
+                    },
+                  },
+                }
+              : buildNoAssetsWhere(ownerId),
+          ],
+        }
+      : compiledWhere;
     if (Object.keys(ruleWhere).length === 0) return null;
     return {
       ownerId,
