@@ -76,7 +76,7 @@ export function createRemoteMediaServer(
   videoEncoder?: CameraVideoEncoder,
   configuredOperations?: MediaOperation[],
 ) {
-  if (!token || token.length < 8 || !Number.isInteger(limit) || limit < 1 || limit > 4)
+  if (!token || token.length < 8 || !Number.isInteger(limit) || limit < 1 || limit > 16)
     throw new Error('INVALID_MEDIA_AGENT_CONFIGURATION');
   const operations: MediaOperation[] = configuredOperations ?? [
     'image',
