@@ -153,3 +153,49 @@ test('a blocked owner publication cannot stall another owner on the same worker'
     await Promise.all([first, second]);
   }
 });
+
+test('a photo without detected faces does not load all people or correction vectors', async () => {
+  const { persistPhotoFaces } = await import('./photo-faces');
+  let completed = false,
+    privacy = 0;
+  const db = {
+    $queryRaw: async () => [],
+    $executeRaw: async () => {
+      privacy++;
+      return 1;
+    },
+    eagleAsset: { findFirst: async () => ({ id: 'asset' }) },
+    eagleAssetProcessingJob: {
+      updateMany: async () => {
+        completed = true;
+        return { count: 1 };
+      },
+    },
+    eaglePhotoFace: {
+      updateMany: async () => ({ count: 0 }),
+      findMany: async () => {
+        throw Error('unused correction scan');
+      },
+    },
+    eaglePhotoPerson: {
+      findMany: async () => {
+        throw Error('unused full people scan');
+      },
+    },
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(db),
+  };
+  await persistPhotoFaces(
+    db as never,
+    {
+      id: 'empty',
+      ownerId: 'owner',
+      libraryMode: 'PHOTO',
+      assetId: 'asset',
+      assetRevision: 0,
+      leaseVersion: 0,
+    } as never,
+    [],
+  );
+  assert.ok(completed);
+  assert.equal(privacy, 2, 'person lock and privacy projection must still execute');
+});
