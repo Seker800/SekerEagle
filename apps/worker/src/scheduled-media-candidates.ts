@@ -152,7 +152,13 @@ export function createScheduledMediaSelector(
         if (version !== generation) return [];
         window = windows.get(key);
         if (!window || window.expiresAt <= Date.now()) {
-          window = { ids: rows.map((row) => row.id), expiresAt: Date.now() + 30000 };
+          // These are hints, not leases: every use below reruns all current guards.
+          // Keep useful windows until consumed (bounded at two minutes), rather
+          // than rescanning a large backlog while most of its 50 hints remain.
+          window = {
+            ids: rows.map((row) => row.id),
+            expiresAt: Date.now() + (rows.length ? 120000 : 30000),
+          };
           if (windows.size >= 24) windows.delete(windows.keys().next().value!);
           windows.set(key, window);
         }
