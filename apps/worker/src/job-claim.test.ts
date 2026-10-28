@@ -320,3 +320,70 @@ test('an empty effective allowlist is idle and never builds a candidate SQL quer
   );
   assert.equal(queries, 0);
 });
+
+test('concurrent local claims do not queue CAS writes for the same candidate version', async () => {
+  const rows = Array.from({ length: 8 }, (_, i) => job('parallel-' + i, 'INTERACTIVE'));
+  const attempts: string[] = [];
+  const claimed = new Set<string>();
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async () => rows,
+      updateMany: async ({ where }: { where: { id: string } }) => {
+        attempts.push(where.id);
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        if (claimed.has(where.id)) return { count: 0 };
+        claimed.add(where.id);
+        return { count: 1 };
+      },
+      findUniqueOrThrow: async ({ where }: { where: { id: string } }) =>
+        rows.find((row) => row.id === where.id)!,
+    },
+  };
+  const options = {
+    now: new Date('2026-08-17T00:05:00Z'),
+    onLeaseExhausted: async () => {},
+    canClaimBackground: async () => true,
+  };
+  const result = await Promise.all(rows.map(() => claimNextMediaJob(client, options)));
+  assert.equal(new Set(result.map((row) => row?.id)).size, 8);
+  assert.equal(
+    attempts.length,
+    8,
+    'each lease version should reach the database only once per concurrent cohort',
+  );
+});
+
+test('local candidate reservations recover after errors and never replace database CAS', async () => {
+  const row = job('retry-local', 'INTERACTIVE');
+  let fail = true;
+  let calls = 0;
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async () => [row],
+      updateMany: async () => {
+        calls++;
+        if (fail) throw new Error('transient database failure');
+        return { count: 0 };
+      },
+      findUniqueOrThrow: async () => {
+        throw new Error('must not bypass database CAS');
+      },
+    },
+  };
+  const options = {
+    now: new Date('2026-08-17T00:05:00Z'),
+    laneOrder: ['INTERACTIVE'] as const,
+    onLeaseExhausted: async () => {},
+    canClaimBackground: async () => true,
+  };
+  await assert.rejects(
+    claimNextMediaJob(client, { ...options, laneOrder: [...options.laneOrder] }),
+    /transient/,
+  );
+  fail = false;
+  assert.equal(
+    await claimNextMediaJob(client, { ...options, laneOrder: [...options.laneOrder] }),
+    null,
+  );
+  assert.equal(calls, 2);
+});

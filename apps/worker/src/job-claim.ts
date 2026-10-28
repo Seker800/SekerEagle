@@ -77,9 +77,32 @@ interface ClaimMediaJobOptions {
   ): Promise<boolean>;
 }
 
+// Ephemeral hints only: the durable status/lease CAS below remains authoritative.
+// Hold attempted versions until overlapping local claim calls have all returned,
+// so stale selector snapshots do not serialize duplicate writes on the same row.
+const localClaims = new WeakMap<MediaJobClaimClient, { active: number; attempted: Set<string> }>();
+
 export async function claimNextMediaJob(
   client: MediaJobClaimClient,
   options: ClaimMediaJobOptions,
+): Promise<EagleAssetProcessingJob | null> {
+  let cohort = localClaims.get(client);
+  if (!cohort) {
+    cohort = { active: 0, attempted: new Set() };
+    localClaims.set(client, cohort);
+  }
+  cohort.active++;
+  try {
+    return await claimNextUncontendedMediaJob(client, options, cohort.attempted);
+  } finally {
+    if (--cohort.active === 0) localClaims.delete(client);
+  }
+}
+
+async function claimNextUncontendedMediaJob(
+  client: MediaJobClaimClient,
+  options: ClaimMediaJobOptions,
+  attempted: Set<string>,
 ): Promise<EagleAssetProcessingJob | null> {
   if (options.allowedJobKinds?.length === 0) return null;
   const now = options.now ?? new Date();
@@ -128,6 +151,11 @@ export async function claimNextMediaJob(
       }
       const transition = mediaClaimTransition(candidate, now);
       if (!transition) continue;
+      const versionKey = JSON.stringify([candidate.id, candidate.leaseVersion]);
+      if (attempted.has(versionKey)) continue;
+      attempted.add(versionKey);
+      // A continuously overlapping cohort must not retain an unbounded history.
+      if (attempted.size > 1024) attempted.delete(attempted.values().next().value!);
       if (transition.kind === 'EXHAUSTED') {
         await options.onLeaseExhausted(candidate, transition.expiredBefore);
         continue;
