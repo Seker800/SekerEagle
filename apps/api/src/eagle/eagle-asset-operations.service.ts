@@ -36,6 +36,9 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
 };
 const LEASE_MS = 120_000;
 const METADATA_BATCH_SIZE = 32;
+// Transfer publication may hold the shared privacy lock for up to 30 seconds.
+// Leave a bounded write budget after that wait, inside the 120-second lease.
+const METADATA_TRANSACTION_TIMEOUT_MS = 45_000;
 type OperationLane = 'SEND' | 'METADATA';
 type ClaimedItem = EagleAssetOperationItem & { operation: EagleAssetOperation };
 class OperationAccessError extends Error {
@@ -435,8 +438,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     });
     if (!user || user.disabledAt || user.authVersion !== operation.authVersion)
       throw new OperationAccessError('AUTH_REQUIRED');
-    if (operation.isPrivate && (!operation.privateUntil || operation.privateUntil <= new Date()))
-      throw new OperationAccessError('PRIVATE_LOCKED');
+    this.assertPrivateGrant(operation);
     const leased = await tx.eagleAssetOperationItem.updateMany({
       where: {
         libraryMode: this.libraryMode,
@@ -446,6 +448,10 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       data: { updatedAt: new Date() },
     });
     if (leased.count !== items.length) throw new OperationAccessError('LEASE_LOST');
+  }
+  private assertPrivateGrant(operation: EagleAssetOperation) {
+    if (operation.isPrivate && (!operation.privateUntil || operation.privateUntil <= new Date()))
+      throw new OperationAccessError('PRIVATE_LOCKED');
   }
   private async checkSnapshots(
     tx: Prisma.TransactionClient,
@@ -566,37 +572,43 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           beforeWrite,
         );
       } else {
-        await this.prisma.$transaction(async (tx) => {
-          await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
-          await beforeWrite(tx);
-          const ids = snapshots.map((row) => row.id).sort();
-          await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
-          await this.checkSnapshots(tx, operation, snapshots);
-          const current = await resolveEagleTrashTargets(
-            tx,
-            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-            assetIds,
-            operation.kind === 'RESTORE',
-            operation.isPrivate,
-            items.map((entry) => ({
-              assetIds: entry.assetIds,
-              resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
-            })),
-          );
-          if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
-            throw new ConflictException('实况照片组件已变化。');
-          await setEagleTrash(
-            tx,
-            { ownerId: operation.ownerId, libraryMode: this.libraryMode },
-            assetIds,
-            operation.kind === 'RESTORE',
-            operation.isPrivate,
-          );
-          await tx.eagleAssetOperationItem.updateMany({
-            where: { ...libraryModeIdentity },
-            data: { status: 'COMPLETED', leaseUntil: null },
-          });
-        });
+        await this.prisma.$transaction(
+          async (tx) => {
+            await lockOwnerPrivacyProjection(tx, operation.ownerId, this.libraryMode);
+            await beforeWrite(tx);
+            const ids = snapshots.map((row) => row.id).sort();
+            await tx.$queryRaw`SELECT id FROM "EagleAsset" WHERE "ownerId"=${operation.ownerId} AND "libraryMode"=${this.libraryMode}::"LibraryMode" AND id=ANY(${ids}::text[]) ORDER BY id FOR UPDATE`;
+            await this.checkSnapshots(tx, operation, snapshots);
+            const current = await resolveEagleTrashTargets(
+              tx,
+              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+              assetIds,
+              operation.kind === 'RESTORE',
+              operation.isPrivate,
+              items.map((entry) => ({
+                assetIds: entry.assetIds,
+                resourceIds: (entry.snapshots as unknown as Snapshot[]).map((row) => row.id),
+              })),
+            );
+            if (JSON.stringify(current.map((row) => row.id).sort()) !== JSON.stringify(ids))
+              throw new ConflictException('实况照片组件已变化。');
+            await setEagleTrash(
+              tx,
+              { ownerId: operation.ownerId, libraryMode: this.libraryMode },
+              assetIds,
+              operation.kind === 'RESTORE',
+              operation.isPrivate,
+            );
+            // A lock wait or bulk write can outlive the grant checked on entry.
+            // Fail inside this transaction so resources and receipts roll back together.
+            this.assertPrivateGrant(operation);
+            await tx.eagleAssetOperationItem.updateMany({
+              where: { ...libraryModeIdentity },
+              data: { status: 'COMPLETED', leaseUntil: null },
+            });
+          },
+          { timeout: METADATA_TRANSACTION_TIMEOUT_MS },
+        );
         return;
       }
       await this.prisma.eagleAssetOperationItem.updateMany({

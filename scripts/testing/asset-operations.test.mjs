@@ -785,3 +785,30 @@ test('a private grant expiring during the bulk write rolls back resources and al
     0,
   );
 });
+
+test('conflicting send and trash cannot both publish the same frozen source', async () => {
+  const entered = deferred(),
+    finish = deferred();
+  const f = await fixture('PHOTO', async () => {
+    entered.resolve();
+    await finish.promise;
+  });
+  const row = await f.add();
+  const send = await f.enqueue('SEND', [row]);
+  const sending = f.service.tick();
+  await entered.promise;
+  try {
+    const trash = await f.enqueue('TRASH', [row]);
+    await f.service.tick();
+    assert.equal((await f.state(trash.id)).completed, 1);
+  } finally {
+    finish.resolve();
+    await sending;
+  }
+  assert.equal((await f.state(send.id)).completed, 0);
+  assert.equal((await f.state(send.id)).failed, 1);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    0,
+  );
+});

@@ -2,7 +2,7 @@
 
 2026-10-29 操作刷新与清理（本地候选）：网页两模式共用 AssetOperationRefresher，按当前主体和实际受影响模式合并刷新；处理中仅列表／计数，终态统一更新派生视图，失效列表仅保留当前首段并以不取消在途请求的方式刷新。worker 复用唯一对象删除 outbox，最多四条领取、逐 owner 批删及原租约结算；ObjectDeletionRunner 复用 JobWakeScheduler 独立计时和排空，完成自唤醒并纳入重试截止；不是新业务队列，不另建摄影清理器或 provider 例外。
 
-2026-10-29 主动操作效率（本地候选）：两模式继续共用 EagleAssetOperationService、EagleLibraryTransferService 与 setEagleTrash；现有队列按发送／元数据分通道领取，每模式每通道一批，回收／恢复每批最多32个原有逻辑项。批量快路径失败须回滚后按原项核验，不合并或改写逐项事实；实况配对按每个原组检查，不能只比较整批组件并集。对象复制共用四路执行函数，首错停止供料并排空在途后失败，发布仍走原事务。无新 Controller、provider、表或门禁例外。
+2026-10-29 主动操作效率（本地候选）：两模式继续共用 EagleAssetOperationService、EagleLibraryTransferService 与 setEagleTrash；现有队列按发送／元数据分通道领取，每模式每通道一批，回收／恢复每批最多32个原有逻辑项。批量快路径失败须回滚后按原项核验，不合并或改写逐项事实；元数据事务45秒内等待共享发布锁，且在资源写入后再次校验私密授权，过期须连同回执整体回滚；实况配对按每个原组检查，不能只比较整批组件并集。对象复制共用四路执行函数，首错停止供料并排空在途后失败，发布仍走原事务。无新 Controller、provider、表或门禁例外。
 
 2026-10-27 无状态媒体执行依赖收敛：人脸模型版本契约下沉至 library-core，纯推理与结果验证置于 worker/face-inference；现有 photo-faces 重导出兼容入口并继续持有原发布事务。计算节点不得为了复用版本常量装载 library-persistence、Prisma 或对象存储 SDK；独立 bundle 构建检查实际依赖图。这个拆分消除反向数据面耦合，不新增摄影 Controller/provider 或业务队列，原双模式／租约／隐私发布语义保持。
 
