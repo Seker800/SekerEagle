@@ -132,7 +132,11 @@ it('没有两个有照片的人物时不显示合并确认', async () => {
 it('没有可用预览的人物不参与确认，避免看不到照片时合并', async () => {
   const missing = person('b');
   missing.faces[0]!.asset.renditions = [];
-  mocks.list.mockResolvedValue({ runtimeConfigured: true, people: [person('a'), missing], nextCursor: null });
+  mocks.list.mockResolvedValue({
+    runtimeConfigured: true,
+    people: [person('a'), missing],
+    nextCursor: null,
+  });
   show();
   await screen.findByRole('button', { name: '未命名人物 1', exact: true });
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
@@ -143,7 +147,11 @@ it('换批遍历不同组合，比较结束后可以重新开始', async () => {
   fireEvent.click(next);
   fireEvent.click(next);
   const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-  expect(within(review).getAllByRole('img').map(img => img.getAttribute('src'))).toEqual(['/b/large', '/c/large']);
+  expect(
+    within(review)
+      .getAllByRole('img')
+      .map((img) => img.getAttribute('src')),
+  ).toEqual(['/b/large', '/c/large']);
   fireEvent.click(next);
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '重新比较' }));
@@ -155,7 +163,11 @@ it('合并完自动呈现下一对，已合并人物不再作为独立比较对�
   fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
   await waitFor(() => {
     const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-    expect(within(review).getAllByRole('img').map(img => img.getAttribute('src'))).toEqual(['/b/large', '/c/large']);
+    expect(
+      within(review)
+        .getAllByRole('img')
+        .map((img) => img.getAttribute('src')),
+    ).toEqual(['/b/large', '/c/large']);
   });
   fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
   await waitFor(() => expect(mocks.merge).toHaveBeenLastCalledWith('c', 'b'));

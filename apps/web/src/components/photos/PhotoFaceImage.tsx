@@ -9,11 +9,13 @@ export function facePreview(asset: EagleAssetListItem) {
 }
 
 export function representativeFace(person: PhotoPerson) {
-  return [...person.faces].sort((a, b) => facePixels(b) - facePixels(a))[0];
+  return person.faces
+    .filter((face) => facePreview(face.asset))
+    .sort((a, b) => facePixels(b) - facePixels(a))[0];
 }
 function facePixels(face: PhotoFace) {
   const preview = facePreview(face.asset);
-  return (preview?.width ?? 0) * (preview?.height ?? 0) * face.box[2]! * face.box[3]!;
+  return (preview?.width ?? 0) * (preview?.height ?? 0) * face.box[2] * face.box[3];
 }
 
 export function PhotoFaceImage({

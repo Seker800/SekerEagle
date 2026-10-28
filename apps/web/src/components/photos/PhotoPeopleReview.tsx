@@ -26,8 +26,8 @@ export function PhotoPeopleReview({
   let pair: [PhotoPerson, PhotoPerson] | undefined;
   for (let i = 0; i < candidates.length && !pair; i++) {
     for (let j = i + 1; j < candidates.length; j++) {
-      if (!skipped.has(pairKey(candidates[i]!, candidates[j]!))) {
-        pair = [candidates[i]!, candidates[j]!];
+      if (!skipped.has(pairKey(candidates[i], candidates[j]))) {
+        pair = [candidates[i], candidates[j]];
         break;
       }
     }
@@ -48,7 +48,7 @@ export function PhotoPeopleReview({
       <h3>{t('这两张照片是同一个人吗？')}</h3>
       <div className="photo-people-review-pair">
         {current.map((person) => {
-          const face = representativeFace(person)!;
+          const face = representativeFace(person);
           return (
             <button type="button" key={person.id} onClick={() => onOpen(face.asset)}>
               <PhotoFaceImage face={face} url={preview} alt={face.asset.displayName} />
