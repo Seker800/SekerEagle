@@ -124,6 +124,11 @@ export class MediaResourcePool {
           : Math.min(32, Math.max(0, this.embeddingConcurrency));
     const slots = limit - this.occupied[resource];
     if (slots <= 0 && this.claiming[resource] > 0) this.pendingWake[resource] = true;
+    const previousMemoryWait = this.memoryWaits.get(resource);
+    const clearPreviousMemoryWait = () => {
+      if (this.memoryWaits.get(resource) !== previousMemoryWait) return false;
+      return this.memoryWaits.delete(resource);
+    };
     const claimOne = async (): Promise<boolean> => {
       this.occupied[resource]++;
       this.claiming[resource]++;
@@ -135,7 +140,7 @@ export class MediaResourcePool {
         throw error;
       }
       if (job === null) {
-        if (this.memoryWaits.delete(resource)) this.wake();
+        if (clearPreviousMemoryWait()) this.wake();
         this.releaseEmptyClaim(resource);
         return false;
       }
@@ -145,7 +150,10 @@ export class MediaResourcePool {
         throw new Error('INVALID_MEMORY_RESERVATION');
       }
       if (memory > this.memoryLimitMiB - this.memoryUsedMiB) {
-        this.memoryWaits.set(resource, { cost: memory, readyAt: Date.now() + 1000 });
+        this.memoryWaits.set(resource, {
+          cost: Math.max(memory, this.memoryWaits.get(resource)?.cost ?? 0),
+          readyAt: Date.now() + 1000,
+        });
         try {
           await budget?.onMemoryWait(job);
         } finally {
@@ -154,7 +162,7 @@ export class MediaResourcePool {
         }
         return false;
       }
-      this.memoryWaits.delete(resource);
+      clearPreviousMemoryWait();
       this.memoryUsedMiB += memory;
       this.claiming[resource]--;
       this.pendingWake[resource] = false;
