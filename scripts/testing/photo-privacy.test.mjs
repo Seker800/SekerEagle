@@ -650,3 +650,83 @@ test('替换与取消人物私密并发时，继承标签和私密投影保持�
     await replacing.catch(() => {});
   }
 });
+
+test('单张人物发布的隐私投影只读取目标及实况同伴，不随整库照片数量增长', async () => {
+  const f = await fixture();
+  const identifier = randomUUID();
+  await prisma.eagleAsset.update({
+    where: { id: f.a.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+  });
+  await prisma.eagleAsset.update({
+    where: { id: f.b.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'MOTION' },
+  });
+  const material = await f.add({
+    libraryMode: 'MATERIAL',
+    livePhotoIdentifier: identifier,
+    livePhotoRole: 'STILL',
+  });
+  await prisma.eaglePhotoPerson.update({
+    where: { id: f.person.id },
+    data: { marksAssetsPrivate: true },
+  });
+  const pairIdentifiers = Array.from({ length: 6000 }, () => randomUUID());
+  await prisma.eagleAsset.createMany({
+    data: Array.from({ length: 12000 }, (_, i) => ({
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'scale.jpg',
+      displayName: 'scale',
+      normalizedDisplayName: 'scale',
+      mimeType: 'image/jpeg',
+      format: 'jpg',
+      byteSize: 1,
+      originalObjectKey: 'test/' + randomUUID(),
+      lifecycleStatus: 'READY',
+      livePhotoIdentifier: pairIdentifiers[Math.floor(i / 2)],
+      livePhotoRole: i % 2 ? 'MOTION' : 'STILL',
+    })),
+  });
+  await prisma.$executeRawUnsafe('ANALYZE "EagleAsset"');
+  let plan;
+  await prisma.$transaction(async (tx) => {
+    const wrapped = new Proxy(tx, {
+      get(target, key) {
+        if (key === '$executeRaw')
+          return async (query) => {
+            const result = await tx.$queryRawUnsafe(
+              'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + query.text,
+              ...query.values,
+            );
+            plan = result[0]['QUERY PLAN'][0].Plan;
+            return 2;
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    await syncAssetPrivacy(wrapped, f.ownerId, [f.a.id], 'PHOTO');
+  });
+  const visits = (node) =>
+    (node['Relation Name'] === 'EagleAsset'
+      ? (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']
+      : 0) + (node.Plans ?? []).reduce((sum, child) => sum + visits(child), 0);
+  assert.ok(
+    visits(plan) < 1000,
+    'single-asset privacy publication scanned ' + visits(plan) + ' asset rows',
+  );
+  assert.equal((await f.marked()).isPrivate, true);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
+    true,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: material.id } })).isPrivate,
+    false,
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.publicAsset.id } })).isPrivate,
+    false,
+  );
+});
