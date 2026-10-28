@@ -104,3 +104,52 @@ test('ready face results share a bounded durable transaction while every origina
     'coalesced publications must share one durable commit rather than eight serialized fsyncs',
   );
 });
+
+test('a blocked owner publication cannot stall another owner on the same worker', async () => {
+  const { persistPhotoFaces } = await import('./photo-faces');
+  let entered!: () => void, release!: () => void;
+  const firstEntered = new Promise<void>((done) => {
+    entered = done;
+  });
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const db = {
+    $queryRaw: async (sql: { values: unknown[] }) => {
+      if (sql.values.some((value) => String(value).endsWith(':slow:PHOTO'))) {
+        entered();
+        await held;
+      }
+      return [];
+    },
+    $executeRaw: async () => 1,
+    eagleAsset: { findFirst: async () => null },
+    eagleAssetProcessingJob: { updateMany: async () => ({ count: 1 }) },
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(db),
+  };
+  const job = (ownerId: string) => ({
+    id: ownerId,
+    ownerId,
+    libraryMode: 'PHOTO',
+    assetId: 'obsolete',
+    assetRevision: 0,
+    leaseVersion: 0,
+  });
+  const first = persistPhotoFaces(db as never, job('slow') as never, []);
+  await firstEntered;
+  const second = persistPhotoFaces(db as never, job('fast') as never, []);
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const fast = await Promise.race([
+      second.then(() => true),
+      new Promise<boolean>((done) => {
+        timer = setTimeout(() => done(false), 600);
+      }),
+    ]);
+    assert.equal(fast, true, 'independent owners need independent commit lanes');
+  } finally {
+    clearTimeout(timer);
+    release();
+    await Promise.all([first, second]);
+  }
+});
