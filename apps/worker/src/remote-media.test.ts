@@ -260,3 +260,50 @@ test('a video artifact at the forbidden 1 GiB boundary is rejected before any fi
   );
   assert.deepEqual(await readdir(directory), []);
 });
+
+test('verified media capacity can exceed four while real HTTP requests remain bounded', async (t) => {
+  const { request } = await import('node:http');
+  const { setTimeout: delay } = await import('node:timers/promises');
+  assert.throws(
+    () => createRemoteMediaServer('test-media-token', 17),
+    /INVALID_MEDIA_AGENT_CONFIGURATION/,
+  );
+  const server = createRemoteMediaServer('test-media-token', 8, true, undefined, ['faces']);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('address');
+  const base = 'http://127.0.0.1:' + address.port;
+  const headers = { authorization: 'Bearer test-media-token' };
+  const requests = Array.from({ length: 8 }, () => {
+    const req = request(base + '/v1/media/faces', {
+      method: 'POST',
+      headers: { ...headers, 'content-type': 'image/jpeg', 'content-length': '32' },
+    });
+    req.on('error', () => {});
+    req.flushHeaders();
+    return req;
+  });
+  t.after(() => {
+    requests.forEach((req) => req.destroy());
+    server.closeAllConnections();
+    server.close();
+  });
+  let active = 0;
+  for (let i = 0; i < 100; i++) {
+    const h = (await (await fetch(base + '/healthz', { headers })).json()) as {
+      capacity: { limit: number; inFlight: number };
+    };
+    assert.equal(h.capacity.limit, 8);
+    active = h.capacity.inFlight;
+    if (active === 8) break;
+    await delay(10);
+  }
+  assert.equal(active, 8);
+  const overflow = await fetch(base + '/v1/media/faces', {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'image/jpeg' },
+    body: 'bad image',
+  });
+  assert.equal(overflow.status, 503);
+});
