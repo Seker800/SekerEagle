@@ -1,4 +1,5 @@
 import { performance } from 'node:perf_hooks';
+import { setTimeout as delay } from 'node:timers/promises';
 import console from 'node:console';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -9,6 +10,7 @@ import { EagleAssetOperationService } from '../../apps/api/dist/eagle/eagle-asse
 import { EagleLibraryTransferService } from '../../apps/api/dist/eagle/eagle-library-transfer.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
 import { drainObjectDeletion } from '../../apps/worker/dist/asset-purge.js';
+import { lockOwnerPrivacyProjection } from '../../packages/library-persistence/dist/privacy-lock.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL ?? '',
   s3Endpoint: process.env.S3_ENDPOINT ?? '',
@@ -721,4 +723,31 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
       (row) => row.status === 'PENDING' && row.availableAt > new Date() && row.leaseVersion === 1,
     ),
   );
+});
+
+test('a metadata batch waits for a bounded publication lock without failing its entire selection', async () => {
+  const f = await fixture();
+  const receipt = await f.enqueue('TRASH', [await f.add(), await f.add()]);
+  const entered = deferred(),
+    release = deferred();
+  const holder = prisma.$transaction(
+    async (tx) => {
+      await lockOwnerPrivacyProjection(tx, f.ownerId, 'PHOTO');
+      entered.resolve();
+      await release.promise;
+    },
+    { timeout: 10000 },
+  );
+  await entered.promise;
+  const processing = f.service.tick();
+  try {
+    await delay(5500);
+  } finally {
+    release.resolve();
+    await holder;
+    await processing;
+  }
+  const result = await f.state(receipt.id);
+  assert.equal(result.completed, 2);
+  assert.equal(result.failed, 0);
 });
