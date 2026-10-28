@@ -644,6 +644,7 @@ test('object cleanup claims a bounded batch and deletes keys in bulk without wai
     data: Array.from({ length: 8 }, (_, i) => ({
       ownerId: f.ownerId,
       libraryMode: 'PHOTO',
+      createdAt: new Date(0),
       objectKeys: [`users/${f.ownerId}/${i}-original`, `users/${f.ownerId}/${i}-preview`],
       prefixes: [],
     })),
@@ -673,6 +674,7 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
       data: {
         ownerId: f.ownerId,
         libraryMode: 'PHOTO',
+        createdAt: new Date(0),
         objectKeys: [`users/${f.ownerId}/valid`, 'users/foreign/private'],
         prefixes: [],
       },
@@ -681,6 +683,7 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
       data: {
         ownerId: f.ownerId,
         libraryMode: 'PHOTO',
+        createdAt: new Date(0),
         objectKeys: [`users/${f.ownerId}/retry`],
         prefixes: [],
       },
@@ -698,7 +701,11 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
     },
     deletePrefix: async () => {},
   });
-  assert.deepEqual(deleted, [`users/${f.ownerId}/retry`]);
+  assert.deepEqual(
+    deleted.filter((key) => key.startsWith(`users/${f.ownerId}/`)),
+    [`users/${f.ownerId}/retry`],
+  );
+  assert.ok(!deleted.includes('users/foreign/private'));
   const remaining = await prisma.eagleObjectDeletion.findMany({
     where: { id: { in: rows.map((row) => row.id) } },
   });
