@@ -154,7 +154,7 @@ test('historical backlog discovery reads recent upload facts once even under a n
   assert.ok(actual.every((row) => row.ownerId === f.owner));
   // Nonempty recent facts must preserve replacement freshness and the exact
   // candidate order; the CTE itself may still be rescanned by a nested loop.
-  const promoted = await db.eagleAsset.findFirstOrThrow({ where: { ownerId: f.owner } });
+  const promoted = await db.eagleAsset.findUniqueOrThrow({ where: { id: actual[0].assetId } });
   await db.uploadSession.update({
     where: { objectKey: promoted.originalObjectKey },
     data: { completedAt: new Date() },
@@ -162,6 +162,7 @@ test('historical backlog discovery reads recent upload facts once even under a n
   const reference = query.text
     .replace(/WITH recent_uploads AS MATERIALIZED \([\s\S]*?\)\s*SELECT job\.\*/, 'SELECT job.*')
     .replace('LEFT JOIN recent_uploads current_upload', 'LEFT JOIN "UploadSession" current_upload');
+  assert.notEqual(reference, query.text, 'the reference must use the original upload join');
   const expected = await db.$queryRawUnsafe(reference, ...query.values);
   const nonempty = await db.$queryRaw(query);
   assert.deepEqual(
@@ -190,6 +191,11 @@ test('50k backlog discovery is amortized while every leased hint is revalidated 
   assert.equal(sample.length, 50);
   assert.ok(sample.every((row) => row.ownerId === f.owner));
   const restrictedPlan = await explain({ candidateIds: sample.map((row) => row.id) });
+  assert.ok(
+    restrictedPlan.sharedHits + restrictedPlan.sharedReads <
+      baselinePlan.sharedHits + baselinePlan.sharedReads,
+    'a bounded candidate check must read fewer blocks than full discovery',
+  );
   const measure = async (select) => {
     const start = performance.now(),
       ids = new Set();
