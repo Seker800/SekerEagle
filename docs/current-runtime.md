@@ -1,5 +1,7 @@
 # 现用运行状态与交接
 
+> **2026-10-28T23:25:28+08:00 故障复核（覆盖旧健康快照）**：用户反馈NAS高CPU、两机闲置。实测coordinator1.55%、worker12.88%、PostgreSQL261.73%；数据库占主要CPU，群晖仍执行业务领取／人物归类匹配／隐私与结果发布，并非仅转发。节点健康反复OFFLINE，而同容器直接认证GET两媒体均200/空闲；正常排空后重启原worker/coordinator，同容器/镜像/配置/挂载保留，未根治，不能当恢复完成。大量重试输入的READY默认预览为3464×1280（4,433,920像素），超过infer.py现有4,000,000像素上限；一张同尺寸纯色合成JPEG直连Mac媒体稳定复现POST faces=500/MEDIA_COMPUTATION_FAILED，同时GET health=200。原server把上游500隔离节点，worker记录REMOTE_MEDIA_REQUEST_REJECTED并重试，状态变化又使发现提示失效，形成查库/重试/离线循环。部分待办已尝试10–11次，故此前正常速度的ETA当前不可靠。根因在输入适配及单任务错误分类/节点隔离耦合；尚未修复，不放宽模型上限/质量、不批量重试历史FAILED、不更改用户暂停或网络。证据在私有`.omx/artifacts/health-flap-20261028/`，NAS`maintenance/health-flap-20261028/`保存重启快照。
+
 > **21:46 接续实测**：本轮启动后 Windows 人脸计算239次、Mac228次，两机均持续接单；最近五分钟原数据库完成人物356项、无新增FAILED。worker同窗口日志平均端到端1787ms／中位1646ms，较修复前两进程采样4338／4572ms下降；任务组成与采样窗口不同，不把此数当受控吞吐倍数。PostgreSQL当次CPU32.16%、主worker41.70%，Windows单次CPU11%（修复前采样4%），这些瞬时值不代表长期平均或硬件满载。仍观察WALSync约0.30s、隐私发布锁等待约0.82s，接下来限制在写盘／发布，不能宣称两机已满载。待办人物46,417、处理中1为此刻快照；其他PENDING旧记录均来自已删除资源，未强制执行。
 
 > **2026-10-28 21:40 当前核验（覆盖旧快照）**：供料与双机公平分配已发布。21:39:47 完成正常排空后切换，worker／compute-coordinator 镜像为 `sekereagle/{worker,compute-coordinator}:dispatch-a059ca7`，均基于原 6c 镜像，只覆盖已审查询模块 JS/map 与 fleet.mjs。API／web 仍 `nas-a48f8e07b1f47883e4ddc7d3a27808ca5d22bf9c`，PostgreSQL 原实例、3 GiB／memory+swap 4 GiB 保留；其他 API/web/PG/MinIO/gateway 容器身份、环境、挂载、限制未变，无数据库迁移、索引、JIT／耐久性或网络变更。
