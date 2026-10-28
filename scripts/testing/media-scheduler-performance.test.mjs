@@ -108,7 +108,7 @@ test('historical backlog discovery reads recent upload facts once even under a n
   const f = await fixture(4000);
   await db.eagleAsset.updateMany({
     where: { ownerId: f.owner },
-    data: { libraryAddedAt: new Date('2001-01-01'), chronologicalAt: new Date('2001-01-01') },
+    data: { libraryAddedAt: new Date('2001-01-01'), chronologicalAt: new Date('2199-01-01') },
   });
   await db.$executeRaw`INSERT INTO "UploadSession" (id,"uploaderId","libraryMode","originalName","mimeType",size,"objectKey","multipartUploadId",status,"completedAt","updatedAt")
     SELECT 'upload-'||id,"ownerId","libraryMode",'synthetic.jpg','image/jpeg',1,"originalObjectKey",'synthetic','COMPLETED','2001-01-01'::timestamp,now() FROM "EagleAsset" WHERE "ownerId"=${f.owner}`;
