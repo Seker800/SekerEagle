@@ -751,3 +751,37 @@ test('a metadata batch waits for a bounded publication lock without failing its 
   assert.equal(result.completed, 2);
   assert.equal(result.failed, 0);
 });
+
+test('a private grant expiring during the bulk write rolls back resources and all receipts', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const f = await fixture();
+  f.principal.canViewPrivate = true;
+  f.principal.privacyVisibleUntil = new Date(Date.now() + 60000).toISOString();
+  const receipt = await f.enqueue('TRASH', [
+    await f.add({ isPrivate: true }),
+    await f.add({ isPrivate: true }),
+  ]);
+  let wrote = false;
+  const delayed = prisma.$extends({
+    query: {
+      eagleAsset: {
+        async updateMany({ args, query }) {
+          const result = await query(args);
+          wrote = true;
+          t.mock.timers.tick(60001);
+          return result;
+        },
+      },
+    },
+  });
+  await f.createService(delayed).tick();
+  assert.equal(wrote, true);
+  const result = await f.state(receipt.id);
+  assert.equal(result.completed, 0);
+  assert.equal(result.failed, 2);
+  assert.deepEqual(result.errors, [{ code: 'PRIVATE_LOCKED', count: 2 }]);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, deletedAt: { not: null } } }),
+    0,
+  );
+});
