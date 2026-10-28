@@ -124,8 +124,7 @@ export class MediaResourcePool {
           : Math.min(32, Math.max(0, this.embeddingConcurrency));
     const slots = limit - this.occupied[resource];
     if (slots <= 0 && this.claiming[resource] > 0) this.pendingWake[resource] = true;
-    for (let i = 0; i < slots; i++) {
-      if (this.occupied[resource] >= limit) return;
+    const claimOne = async (): Promise<boolean> => {
       this.occupied[resource]++;
       this.claiming[resource]++;
       let job: T | null;
@@ -138,7 +137,7 @@ export class MediaResourcePool {
       if (job === null) {
         if (this.memoryWaits.delete(resource)) this.wake();
         this.releaseEmptyClaim(resource);
-        return;
+        return false;
       }
       const memory = budget?.memoryMiB(job) ?? 0;
       if (!Number.isFinite(memory) || memory < 0) {
@@ -153,7 +152,7 @@ export class MediaResourcePool {
           this.releaseEmptyClaim(resource);
           this.defer(resource, 1000, true);
         }
-        return;
+        return false;
       }
       this.memoryWaits.delete(resource);
       this.memoryUsedMiB += memory;
@@ -167,8 +166,23 @@ export class MediaResourcePool {
           this.occupied[resource]--;
           this.wake();
         });
+      return true;
+    };
+    if (resource === 'REMOTE_MEDIA') {
+      // Each slot is reserved synchronously before awaiting its database claim.
+      // Ready siblings may compute while another claim is waiting on IO.
+      await Promise.all(
+        Array.from({ length: slots }, () =>
+          this.occupied[resource] < limit ? claimOne() : Promise.resolve(false),
+        ),
+      );
+      return;
+    }
+    for (let i = 0; i < slots; i++) {
+      if (this.occupied[resource] >= limit || !(await claimOne())) return;
     }
   }
+
   private releaseEmptyClaim(resource: MediaResource) {
     this.claiming[resource]--;
     this.occupied[resource]--;
