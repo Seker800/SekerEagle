@@ -380,7 +380,9 @@ it('waits for a persisted snapshot without claiming a pending index means no GPS
     clusters: [],
   });
   const view = mount();
-  expect(await screen.findByText('地图正在后台整理，完成后会自动显示。')).toBeInTheDocument();
+  expect(
+    await screen.findByText('正在准备首批地图位置，无需等待照片分析完成。'),
+  ).toBeInTheDocument();
   expect(screen.queryByText('当前照片没有 GPS 信息。')).not.toBeInTheDocument();
   expect(mocks.getPhotos).not.toHaveBeenCalled();
   mocks.getMap.mockResolvedValue({
@@ -394,7 +396,9 @@ it('waits for a persisted snapshot without claiming a pending index means no GPS
   });
   await act(() => view.client.invalidateQueries({ queryKey: ['eagle', 'owner', 'PHOTO', 'map'] }));
   expect(await screen.findByText('全库 1000 张带位置照片')).toBeInTheDocument();
-  expect(screen.queryByText('地图正在后台整理，完成后会自动显示。')).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('正在准备首批地图位置，无需等待照片分析完成。'),
+  ).not.toBeInTheDocument();
   expect(mocks.getPhotos).not.toHaveBeenCalled();
 });
 it('labels stale-but-readable snapshots while new photos wait for background batching', async () => {
@@ -435,11 +439,20 @@ it('closes an open location when a sensitive change invalidates its map snapshot
   );
 });
 
-
 it('keeps committed partial map results visible and interactive while detail is being built', async () => {
-  mocks.getMap.mockResolvedValue({ status: 'UPDATING', partial: true, snapshotId: 'partial', total: 132, level: 3, bounds: { west: 120, east: 122, south: 30, north: 32 }, clusters: [{ ...first, id: 'partial:3/6/3', cover: asset }] });
+  mocks.getMap.mockResolvedValue({
+    status: 'UPDATING',
+    partial: true,
+    snapshotId: 'partial',
+    total: 132,
+    level: 3,
+    bounds: { west: 120, east: 122, south: 30, north: 32 },
+    clusters: [{ ...first, id: 'partial:3/6/3', cover: asset }],
+  });
   mount();
   expect(await screen.findByText('已显示可用位置，地图细节正在后台补齐。')).toBeInTheDocument();
   expect(markerButtons()).toHaveLength(1);
-  expect(screen.queryByText('地图正在后台整理，完成后会自动显示。')).not.toBeInTheDocument();
+  expect(
+    screen.queryByText('正在准备首批地图位置，无需等待照片分析完成。'),
+  ).not.toBeInTheDocument();
 });

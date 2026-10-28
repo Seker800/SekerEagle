@@ -30,23 +30,44 @@ const emptyMap = (level: number, pending: boolean) => ({
 export class PhotoMapService {
   constructor(private readonly prisma: PrismaService) {}
   async clusters(ownerId: string, includePrivate: boolean, view: MapViewportDto) {
-    const grid = mapGrid(view);
+    const requestedGrid = mapGrid(view);
     return this.prisma.$transaction(
       async (tx) => {
         const state = await tx.eaglePhotoMapState.findUnique({
           where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
         });
-        if (!state?.activeSnapshotId) return emptyMap(grid.level, Boolean(state));
-        const snapshot = await tx.eaglePhotoMapSnapshot.findFirst({
-          where: {
-            ownerId,
-            libraryMode: 'PHOTO',
-            id: state.activeSnapshotId,
-            visibilityVersion: state.visibilityVersion,
-            completedAt: { not: null },
-          },
-        });
-        if (!snapshot) return emptyMap(grid.level, true);
+        if (!state) return emptyMap(requestedGrid.level, false);
+        let snapshot = state.activeSnapshotId
+          ? await tx.eaglePhotoMapSnapshot.findFirst({
+              where: {
+                ownerId,
+                libraryMode: 'PHOTO',
+                id: state.activeSnapshotId,
+                visibilityVersion: state.visibilityVersion,
+                completedAt: { not: null },
+              },
+            })
+          : null;
+        // nextLevel advances atomically with whole committed levels. Never treat an
+        // unfinished finer level as empty or read points under an obsolete visibility version.
+        if (
+          state.buildingSnapshotId &&
+          state.nextLevel > 0 &&
+          (!snapshot || state.nextLevel > requestedGrid.level)
+        ) {
+          const building = await tx.eaglePhotoMapSnapshot.findFirst({
+            where: {
+              id: state.buildingSnapshotId,
+              ownerId,
+              libraryMode: 'PHOTO',
+              visibilityVersion: state.visibilityVersion,
+            },
+          });
+          if (building) snapshot = building;
+        }
+        if (!snapshot) return emptyMap(requestedGrid.level, true);
+        const partial = snapshot.completedAt === null;
+        const grid = partial ? mapGrid(view, Math.min(21, state.nextLevel - 1)) : requestedGrid;
         const summary = (snapshot.summary as unknown as MapSummary[]).find(
           (s) => s.includePrivate === includePrivate,
         )!;
@@ -102,8 +123,9 @@ export class PhotoMapService {
               }
             : null,
           level: grid.level,
-          status: state.dirtyAt ? 'UPDATING' : 'READY',
-          updatedAt: snapshot.completedAt!.toISOString(),
+          status: partial || state.dirtyAt ? 'UPDATING' : 'READY',
+          partial,
+          updatedAt: (snapshot.completedAt ?? snapshot.createdAt).toISOString(),
           snapshotId: snapshot.id,
           minimumPhotoCount: 0,
           clusters: cells.map((cell) => ({
@@ -143,7 +165,12 @@ export class PhotoMapService {
                 libraryMode: 'PHOTO',
                 id: cell.snapshotId,
                 visibilityVersion: state.visibilityVersion,
-                completedAt: { not: null },
+                OR: [
+                  { completedAt: { not: null } },
+                  ...(state.buildingSnapshotId === cell.snapshotId && cell.level < state.nextLevel
+                    ? [{ id: state.buildingSnapshotId }]
+                    : []),
+                ],
               },
             })
           : null;

@@ -8,7 +8,7 @@ const row = (latitude: number, n: number) => {
   const lat = (clamp(latitude, -85.05112878, 85.05112878) * Math.PI) / 180;
   return clamp(Math.floor(((1 - Math.asinh(Math.tan(lat)) / Math.PI) / 2) * n), 0, n - 1);
 };
-export function mapGrid(view: MapViewportDto) {
+export function mapGrid(view: MapViewportDto, maximumLevel = 21) {
   if (
     !Object.values(view).every(Number.isFinite) ||
     view.south >= view.north ||
@@ -23,7 +23,7 @@ export function mapGrid(view: MapViewportDto) {
     view.zoom > 16
   )
     throw new BadRequestException('地图范围无效');
-  let level = view.zoom + 5;
+  let level = Math.min(view.zoom + 5, maximumLevel);
   while (true) {
     const n = 2 ** level,
       west = column(view.west, n),

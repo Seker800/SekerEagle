@@ -4,7 +4,7 @@ import { Prisma, type PrismaClient, type EaglePhotoMapState } from '@prisma/clie
 const MAX_LEVEL = 21;
 const LEVELS_PER_STEP = 4;
 
-/** Called between media jobs at most every 15 seconds; pending ingestion never starves map work.
+/** Called between media jobs at most every 15 seconds; remote media processing never blocks map progress.
  * One owner, one fenced step. Upload/metadata writes merely coalesce the dirty marker. */
 export async function runPhotoMapBuildStep(client: PrismaClient) {
   const token = randomUUID();
@@ -13,10 +13,8 @@ export async function runPhotoMapBuildStep(client: PrismaClient) {
     WHERE ("ownerId","libraryMode")=(
       SELECT s."ownerId",s."libraryMode" FROM "EaglePhotoMapState" s
       WHERE s."dirtyAt" IS NOT NULL AND (s."lockedUntil" IS NULL OR s."lockedUntil"<now())
-        AND (s."availableAt"<=now() OR (s."buildingSnapshotId" IS NOT NULL AND s."lastError" IS NULL))
-        AND NOT EXISTS (SELECT 1 FROM "EagleMediaJob" j
-          WHERE j."ownerId"=s."ownerId" AND j."libraryMode"='PHOTO'
-          AND j.status='PROCESSING' AND j."lockedAt">now()-interval '10 minutes')
+        AND (s."availableAt"<=now()
+          OR (s."lastError" IS NULL AND (s."builtVersion"=0 OR s."buildingSnapshotId" IS NOT NULL)))
       ORDER BY s."availableAt",s."ownerId" FOR UPDATE SKIP LOCKED LIMIT 1)
     RETURNING *
   `);

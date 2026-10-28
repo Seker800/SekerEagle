@@ -123,6 +123,7 @@ export interface PhotoMapCluster {
 }
 export interface PhotoMapData {
   status?: 'PENDING' | 'UPDATING' | 'READY';
+  partial?: boolean;
   updatedAt?: string | null;
   snapshotId?: string | null;
   minimumPhotoCount?: number;

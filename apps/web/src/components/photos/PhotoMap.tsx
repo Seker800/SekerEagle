@@ -64,7 +64,10 @@ export function PhotoMap({
     queryKey: ['eagle', ownerId, 'PHOTO', 'map', includePrivate, viewport],
     queryFn: ({ signal }) => getPhotoMap(viewport, signal),
     staleTime: 30000,
-    refetchInterval: 30000,
+    refetchInterval: (query) =>
+      query.state.data?.status === 'PENDING' || query.state.data?.status === 'UPDATING'
+        ? 5000
+        : 30000,
   });
   useEffect(() => {
     if (
@@ -284,14 +287,19 @@ export function PhotoMap({
             </p>
           )}
           {locations.data?.status === 'PENDING' && (
-            <p role="status">{t('地图正在后台整理，完成后会自动显示。')}</p>
+            <p role="status">{t('正在准备首批地图位置，无需等待照片分析完成。')}</p>
           )}
           {locations.data?.status === 'UPDATING' && (
-            <p>{t('正在后台更新地图，当前显示上次整理结果。')}</p>
+            <p role="status">
+              {locations.data.partial
+                ? t('已显示可用位置，地图细节正在后台补齐。')
+                : t('正在后台更新地图，当前显示上次整理结果。')}
+            </p>
           )}
-          {locations.data?.total === 0 && locations.data?.status !== 'PENDING' && (
-            <p>{t('当前照片没有 GPS 信息。')}</p>
-          )}
+          {locations.data?.total === 0 &&
+            (!locations.data.status || locations.data.status === 'READY') && (
+              <p>{t('当前照片没有 GPS 信息。')}</p>
+            )}
           <p className={styles.hint}>
             {t('小点表示拍摄足迹；当前视野拍摄量最多的 9 个地点显示照片。')}
           </p>

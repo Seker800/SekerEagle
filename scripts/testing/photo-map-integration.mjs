@@ -195,15 +195,42 @@ try {
   const world = { west: -180, east: 180, south: -90, north: 90, zoom: 3 };
   const unbuilt = await rawService.clusters(owner, false, world);
   assert.equal(unbuilt.status, 'PENDING');
-  await runPhotoMapBuildStep(prisma);
+  // Initial indexing starts before the import quiet period and is independent of media completion.
+  for (let i = 0; i < 20; i++) {
+    await runPhotoMapBuildStep(prisma);
+    const state = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+      where: { ownerId_libraryMode: { ownerId: owner, libraryMode: 'PHOTO' } },
+    });
+    if (state.buildingSnapshotId && state.nextLevel > 0) break;
+  }
+  const partialOverview = await rawService.clusters(owner, false, world);
+  assert.equal(partialOverview.status, 'UPDATING');
+  assert.equal(partialOverview.partial, true);
+  assert.equal(partialOverview.total, 132);
+  assert.equal(partialOverview.level, 3);
   assert.equal(
-    (
-      await prisma.eaglePhotoMapState.findUniqueOrThrow({
-        where: { ownerId_libraryMode: { ownerId: owner, libraryMode: 'PHOTO' } },
-      })
-    ).buildingSnapshotId,
-    null,
+    partialOverview.clusters.reduce((count, cell) => count + cell.count, 0),
+    132,
   );
+  assert.ok(
+    partialOverview.clusters.every(
+      (cell) => !cell.cover || expected.has(cell.cover.id) || cell.cover.id === far,
+    ),
+  );
+  const partialCell = partialOverview.clusters.find((cell) => cell.count === 131);
+  assert.ok(partialCell);
+  assert.equal((await rawService.photos(owner, false, partialCell.id)).items.length, 60);
+  await assert.rejects(rawService.photos(other, false, partialCell.id), /更新/);
+  await assert.rejects(
+    rawService.photos(owner, false, `${partialOverview.snapshotId}:21/0/0`),
+    /更新/,
+  );
+  const privatePartial = await rawService.clusters(owner, true, world);
+  assert.equal(privatePartial.total, 133);
+  // A committed partial snapshot is revoked immediately by a visibility/location change.
+  await prisma.eaglePhotoMetadata.update({ where: { assetId: far }, data: { latitude: -36 } });
+  assert.equal((await rawService.clusters(owner, false, world)).status, 'PENDING');
+  await assert.rejects(rawService.photos(owner, false, partialCell.id), /更新/);
   const overview = await service.clusters(owner, false, world);
   assert.equal(overview.total, 132);
   assert.equal(
@@ -396,10 +423,9 @@ try {
     data: { status: 'PROCESSING', lockedAt: new Date() },
   });
   await runPhotoMapBuildStep(prisma);
-  assert.equal(
+  assert.ok(
     (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey })).buildingSnapshotId,
-    null,
-    'Active processing must retain its resource budget',
+    'Remote/other media PROCESSING does not block the bounded map step under the scheduler budget',
   );
   await prisma.eagleAssetProcessingJob.update({
     where: { id: busy.id },

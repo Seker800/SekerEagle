@@ -1,4 +1,9 @@
 export const enUS = {
+  '正在准备首批地图位置，无需等待照片分析完成。':
+    'Preparing the first map locations without waiting for photo analysis.',
+  '已显示可用位置，地图细节正在后台补齐。':
+    'Available locations are shown. Map details are being prepared in the background.',
+
   '预览样本中暂无匹配照片；保存后会在完整图库中计算结果。':
     'No matches in this preview sample. Saving calculates results across the full library.',
   无参数: 'No value',
