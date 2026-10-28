@@ -14,6 +14,9 @@ export class FacePublicationBatcher<T> {
     private readonly cost: (value: T) => number,
     private readonly delayMs = 200,
   ) {}
+  get idle() {
+    return !this.running && this.pending.length === 0;
+  }
   enqueue(value: T): Promise<void> {
     if (this.pending.length >= 32) return Promise.reject(new Error('FACE_PUBLICATION_CAPACITY'));
     return new Promise<void>((resolve, reject) => {

@@ -14,14 +14,22 @@ interface FacePublication {
   job: EagleAssetProcessingJob;
   detections: FaceDetection[];
 }
-const publishers = new WeakMap<PrismaClient, FacePublicationBatcher<FacePublication>>();
+const publishers = new WeakMap<
+  PrismaClient,
+  Map<string, FacePublicationBatcher<FacePublication>>
+>();
 export async function persistPhotoFaces(
   prisma: PrismaClient,
   job: EagleAssetProcessingJob,
   detections: FaceDetection[],
 ) {
   if (job.libraryMode !== 'PHOTO') throw new Error('PHOTO_FACE_LIBRARY_MISMATCH');
-  let publisher = publishers.get(prisma);
+  let owners = publishers.get(prisma);
+  if (!owners) {
+    owners = new Map();
+    publishers.set(prisma, owners);
+  }
+  let publisher = owners.get(job.ownerId);
   if (!publisher) {
     publisher = new FacePublicationBatcher<FacePublication>(
       async (entries) => {
@@ -33,9 +41,13 @@ export async function persistPhotoFaces(
       (entry) => entry.job.ownerId,
       (entry) => entry.detections.length,
     );
-    publishers.set(prisma, publisher);
+    owners.set(job.ownerId, publisher);
   }
-  await publisher.enqueue({ job, detections });
+  try {
+    await publisher.enqueue({ job, detections });
+  } finally {
+    if (publisher.idle && owners.get(job.ownerId) === publisher) owners.delete(job.ownerId);
+  }
 }
 async function persistPhotoFacesInTransaction(
   tx: Prisma.TransactionClient,
