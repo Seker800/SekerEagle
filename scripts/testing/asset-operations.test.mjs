@@ -93,7 +93,7 @@ async function fixture(mode = 'PHOTO', copy) {
   };
 }
 for (const mode of ['PHOTO', 'MATERIAL']) {
-  test(`${mode} accepts a frozen selection without running it, resumes on another instance and commits one item at a time`, async () => {
+  test(`${mode} accepts a frozen selection without running it and resumes a bounded batch on another instance`, async () => {
     const f = await fixture(mode),
       rows = [await f.add(), await f.add()];
     const receipt = await f.enqueue('TRASH', rows);
@@ -111,9 +111,8 @@ for (const mode of ['PHOTO', 'MATERIAL']) {
     );
     const resumed = f.createService();
     await resumed.tick();
-    assert.equal((await f.state(receipt.id)).completed, 1);
-    assert.equal((await f.state(receipt.id)).queued, 1);
-    await resumed.tick();
+    assert.equal((await f.state(receipt.id)).completed, 2);
+    assert.equal((await f.state(receipt.id)).queued, 0);
     assert.equal((await f.state(receipt.id)).state, 'COMPLETED');
     const restore = await f.enqueue('RESTORE', rows);
     await resumed.tick();
@@ -430,4 +429,70 @@ test('cancelling during claim discovery cannot resurrect a cancelled item', asyn
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: row.id } })).deletedAt,
     null,
   );
+});
+
+test('a blocked SEND does not block trash; a second executor cannot steal either live lane', async () => {
+  const entered = deferred(), finish = deferred();
+  const f = await fixture('PHOTO', async () => { entered.resolve(); await finish.promise; });
+  const send = await f.enqueue('SEND', [await f.add()]);
+  const processing = f.service.tick();
+  await entered.promise;
+  try {
+    const trash = await f.enqueue('TRASH', [await f.add(), await f.add()]);
+    await f.createService().tick();
+    assert.equal((await f.state(trash.id)).completed, 2);
+    assert.equal((await f.state(send.id)).running, 1);
+    assert.equal(f.copies(), 1);
+  } finally { finish.resolve(); await processing; }
+});
+
+test('metadata batches are bounded and commit one bulk resource write per batch', async () => {
+  const f = await fixture();
+  const rows = [];
+  for (let i = 0; i < 65; i++) rows.push(await f.add());
+  const receipt = await f.enqueue('TRASH', rows);
+  let writes = 0;
+  const db = prisma.$extends({ query: { eagleAsset: {
+    async updateMany({ args, query }) { writes++; return query(args); },
+  } } });
+  const executor = f.createService(db);
+  const start = performance.now();
+  await executor.tick();
+  assert.equal((await f.state(receipt.id)).completed, 32);
+  assert.equal(writes, 1);
+  await executor.tick();
+  await executor.tick();
+  assert.equal((await f.state(receipt.id)).completed, 65);
+  assert.equal(writes, 3);
+  console.log(`Synthetic 65-item trash: ${(performance.now() - start).toFixed(1)} ms, ${writes} bulk writes`);
+});
+
+test('a changed item rolls back the bulk attempt and preserves individual results', async () => {
+  const f = await fixture();
+  const rows = [await f.add(), await f.add(), await f.add()];
+  const receipt = await f.enqueue('TRASH', rows);
+  await prisma.eagleAsset.update({ where: { id: rows[1].id }, data: { rowVersion: { increment: 1 } } });
+  await f.service.tick();
+  const result = await f.state(receipt.id);
+  assert.equal(result.completed, 2);
+  assert.equal(result.failed, 1);
+  assert.deepEqual(result.errors, [{code: 'ASSET_CHANGED', count: 1}]);
+  assert.equal((await prisma.eagleAsset.findUniqueOrThrow({where:{id:rows[1].id}})).deletedAt, null);
+});
+
+test('128 synthetic resources complete with bounded database work', async () => {
+  const f = await fixture();
+  const rows = [];
+  for (let i = 0; i < 128; i++) rows.push(await f.add());
+  const receipt = await f.enqueue('TRASH', rows);
+  let writes = 0, ticks = 0;
+  const db = prisma.$extends({query:{eagleAsset:{async updateMany({args,query}){writes++;return query(args);}}}});
+  const executor = f.createService(db);
+  const start = performance.now();
+  while ((await f.state(receipt.id)).completed < rows.length && ticks < rows.length) {
+    await executor.tick(); ticks++;
+  }
+  console.log(JSON.stringify({benchmark:'trash-128',milliseconds:performance.now()-start,ticks,resourceWrites:writes}));
+  assert.equal((await f.state(receipt.id)).completed,128);
+  assert.equal(writes,4);
 });
