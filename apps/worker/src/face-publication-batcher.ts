@@ -46,7 +46,19 @@ export class FacePublicationBatcher<T> {
       await this.commit(batch.map((entry) => entry.value));
       batch.forEach((entry) => entry.resolve());
     } catch (error) {
-      batch.forEach((entry) => entry.reject(error));
+      if (batch.length === 1) batch[0]!.reject(error);
+      else {
+        // A rolled-back group must not spend healthy jobs' retry budgets.
+        // Retry each original publication independently with its lease guards.
+        for (const entry of batch) {
+          try {
+            await this.commit([entry.value]);
+            entry.resolve();
+          } catch (individualError) {
+            entry.reject(individualError);
+          }
+        }
+      }
     } finally {
       this.running = false;
       this.schedule();
