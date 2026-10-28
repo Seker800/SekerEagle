@@ -765,3 +765,51 @@ test('a failed claim alongside a memory defer cannot leak reservations or erase 
   assert.equal(ran, 1);
   assert.equal(pool.activeCount, 0);
 });
+
+test('a successful remote sibling does not consume a new-work wake needed by empty siblings', async () => {
+  let wakes = 0;
+  const pool = new MediaResourcePool(
+    1,
+    () => {
+      wakes++;
+    },
+    () => {},
+  );
+  pool.setRemoteMediaLimit(3);
+  wakes = 0;
+  const gates = Array.from({ length: 3 }, () => {
+    let resolve!: (value: number | null) => void;
+    const promise = new Promise<number | null>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  });
+  let index = 0,
+    release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  const fill = pool.fill(
+    'REMOTE_MEDIA',
+    () => gates[index++]!.promise,
+    async () => held,
+  );
+  try {
+    await pool.fill(
+      'REMOTE_MEDIA',
+      async () => null,
+      async () => {},
+    );
+    gates[0]!.resolve(1);
+    await new Promise((done) => setImmediate(done));
+    gates[1]!.resolve(null);
+    gates[2]!.resolve(null);
+    await fill;
+    assert.equal(wakes, 1, 'new work must be replayed before the long-running sibling finishes');
+  } finally {
+    gates.forEach((gate) => gate.resolve(null));
+    release();
+    await fill;
+    await new Promise((done) => setImmediate(done));
+  }
+});
