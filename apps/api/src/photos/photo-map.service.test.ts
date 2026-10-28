@@ -91,7 +91,7 @@ test('map endpoints retain browser authentication and cannot take owner or priva
 const snapshotId = '00000000-0000-4000-8000-000000000001';
 function indexedFixture(cells: Array<Record<string, unknown>> = []) {
   const queries: unknown[] = [];
-  const state = { activeSnapshotId: snapshotId, visibilityVersion: 1, dirtyAt: null };
+  const state = { activeSnapshotId: snapshotId as string | null, buildingSnapshotId: null as string | null, nextLevel: 0, visibilityVersion: 1, dirtyAt: null as Date | null };
   const snapshot = {
     id: snapshotId,
     completedAt: new Date('2026-10-24T00:00:00Z'),
@@ -230,4 +230,24 @@ test('featured locations are inside the real viewport, including views crossing 
     (f.queries.at(-1) as typeof query).where.OR.map((c) => c.id),
     ['outside-longitude'],
   );
+});
+
+
+test('a committed partial generation is readable at its available resolution before full completion', async () => {
+  const f = indexedFixture([{ x: 6, y: 3, level: 3, count: 132, latitude: 30, longitude: 120, coverId: 'photo', coverRevision: 3 }]);
+  f.state.activeSnapshotId = null;
+  f.state.buildingSnapshotId = snapshotId;
+  f.state.nextLevel = 4;
+  f.state.dirtyAt = new Date();
+  f.tx.eaglePhotoMapSnapshot.findFirst = async (input: unknown) => {
+    f.queries.push(input);
+    return { id: snapshotId, completedAt: null, createdAt: new Date('2026-10-29T00:00:00Z'), summary: [{ includePrivate: false, total: 132, south: 30, north: 31, west: 120, east: 121 }] } as never;
+  };
+  const result = await f.service.clusters('owner', false, world);
+  assert.equal(result.status, 'UPDATING');
+  assert.equal(result.total, 132);
+  assert.equal(result.level, 3);
+  assert.equal(result.clusters[0]?.id, `${snapshotId}:3/6/3`);
+  assert.match(JSON.stringify(f.queries), /"visibilityVersion":1/);
+  assert.equal((await f.service.photos('owner', false, `${snapshotId}:3/6/3`)).items.length, 0);
 });

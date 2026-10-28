@@ -434,3 +434,12 @@ it('closes an open location when a sensitive change invalidates its map snapshot
     expect(screen.queryByRole('region', { name: '此位置的照片' })).not.toBeInTheDocument(),
   );
 });
+
+
+it('keeps committed partial map results visible and interactive while detail is being built', async () => {
+  mocks.getMap.mockResolvedValue({ status: 'UPDATING', partial: true, snapshotId: 'partial', total: 132, level: 3, bounds: { west: 120, east: 122, south: 30, north: 32 }, clusters: [{ ...first, id: 'partial:3/6/3', cover: asset }] });
+  mount();
+  expect(await screen.findByText('已显示可用位置，地图细节正在后台补齐。')).toBeInTheDocument();
+  expect(markerButtons()).toHaveLength(1);
+  expect(screen.queryByText('地图正在后台整理，完成后会自动显示。')).not.toBeInTheDocument();
+});
