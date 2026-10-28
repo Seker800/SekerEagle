@@ -568,6 +568,41 @@ try {
   assert.equal(retryState.lastError, null);
   assert.equal(retryState.attempts, 0, 'a successful point-freeze resets the failure budget');
   await refresh(retryOwner);
+
+  // Freeze a usable generation while more photos arrive; imports must not make
+  // the repeatable-read transaction repeatedly abort before anything is visible.
+  const raceOwner = randomUUID();
+  await prisma.user.create({ data: { id: raceOwner, email: `${raceOwner}@example.invalid`, passwordHash: 'test-only' } });
+  await make({ ownerId: raceOwner });
+  let racingWrite;
+  const concurrentClient = {
+    $queryRaw: (...args) => prisma.$queryRaw(...args),
+    eaglePhotoMapState: prisma.eaglePhotoMapState,
+    $transaction: (callback, options) => prisma.$transaction(async (tx) => {
+      const wrapped = new Proxy(tx, { get(target, key) {
+        if (key === 'eaglePhotoMapSnapshot') return new Proxy(target[key], { get(delegate, method) {
+          if (method === 'create') return async (...args) => {
+            const snapshot = await delegate.create(...args);
+            racingWrite = make({ ownerId: raceOwner });
+            await Promise.race([racingWrite, delay(500)]);
+            return snapshot;
+          };
+          const value = delegate[method];
+          return typeof value === 'function' ? value.bind(delegate) : value;
+        } });
+        const value = target[key];
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+      return callback(wrapped);
+    }, options),
+  };
+  try {
+    await assert.doesNotReject(runPhotoMapBuildStep(concurrentClient), 'incoming photos cannot starve the first frozen map');
+  } finally { await racingWrite; }
+  const racedState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: { ownerId_libraryMode: { ownerId: raceOwner, libraryMode: 'PHOTO' } } });
+  const racedSnapshot = await prisma.eaglePhotoMapSnapshot.findUniqueOrThrow({ where: { id: racedState.buildingSnapshotId } });
+  assert.ok(racedState.requestedVersion > racedSnapshot.version, 'arrivals after the freeze are retained for the next generation');
+  await refresh(raceOwner);
   if (process.env.PHOTO_MAP_SCALE_TEST === '1') {
     const scaleOwner = randomUUID(),
       scaleIds = Array.from({ length: 50000 }, () => randomUUID());
