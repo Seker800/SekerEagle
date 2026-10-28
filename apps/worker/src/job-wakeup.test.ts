@@ -138,3 +138,31 @@ test('idle and failed drains retry without another notification', async (t) => {
   assert.equal(runs, 2);
   scheduler.stop();
 });
+
+test('a drain with an unfinished media task still arms the notification-free due-work fallback', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let time = 0;
+  let dueWorkClaimed = false;
+  const activeLongTask = true;
+  let runs = 0;
+  const scheduler = new JobWakeScheduler(
+    async () => {
+      runs++;
+      if (time >= 5000) dueWorkClaimed = true;
+      // Matches drainAndScheduleWork: active media omits nextQueueWakeAt.
+      // The scheduler itself must arm a fallback after the drain returns.
+      if (activeLongTask) return;
+      scheduler.scheduleAt(new Date(5000));
+    },
+    (error) => assert.fail(String(error)),
+    () => time,
+  );
+  scheduler.wakeNow();
+  await new Promise((resolve) => setImmediate(resolve));
+  time = 30000;
+  t.mock.timers.tick(30000);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(runs, 2);
+  assert.equal(dueWorkClaimed, true);
+  scheduler.stop();
+});
