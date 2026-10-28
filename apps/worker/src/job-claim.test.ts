@@ -345,6 +345,7 @@ test('concurrent local claims do not queue CAS writes for the same candidate ver
     canClaimBackground: async () => true,
   };
   const result = await Promise.all(rows.map(() => claimNextMediaJob(client, options)));
+  assert.ok(result.every(Boolean), 'every slot must receive a job');
   assert.equal(new Set(result.map((row) => row?.id)).size, 8);
   assert.equal(
     attempts.length,
@@ -386,4 +387,50 @@ test('local candidate reservations recover after errors and never replace databa
     null,
   );
   assert.equal(calls, 2);
+});
+
+test('a newer lease version remains claimable during an overlapping cohort', async () => {
+  const row = job('versioned', 'BACKGROUND');
+  const blocker = job('blocker', 'BACKGROUND', { ownerId: 'blocking-owner' });
+  let unblock!: (allowed: boolean) => void;
+  const blocked = new Promise<boolean>((resolve) => {
+    unblock = resolve;
+  });
+  let reached!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  let reads = 0;
+  const versions: number[] = [];
+  const client = {
+    eagleAssetProcessingJob: {
+      findMany: async () => (reads++ === 0 ? [row, blocker] : [{ ...row, leaseVersion: 1 }]),
+      updateMany: async ({ where }: { where: { leaseVersion: number } }) => {
+        versions.push(where.leaseVersion);
+        return { count: where.leaseVersion === 1 ? 1 : 0 };
+      },
+      findUniqueOrThrow: async () => ({ ...row, leaseVersion: 2, status: 'PROCESSING' as const }),
+    },
+  };
+  const options = {
+    now: new Date('2026-08-17T00:05:00Z'),
+    laneOrder: ['BACKGROUND'] as Array<'BACKGROUND'>,
+    onLeaseExhausted: async () => {},
+    canClaimBackground: async (owner: string) => {
+      if (owner === 'blocking-owner') {
+        reached();
+        return blocked;
+      }
+      return true;
+    },
+  };
+  const first = claimNextMediaJob(client, options);
+  await waiting;
+  try {
+    assert.equal((await claimNextMediaJob(client, options))?.id, row.id);
+    assert.deepEqual(versions, [0, 1]);
+  } finally {
+    unblock(false);
+  }
+  assert.equal(await first, null);
 });
