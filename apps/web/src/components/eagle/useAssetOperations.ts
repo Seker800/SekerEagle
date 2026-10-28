@@ -4,6 +4,7 @@ import type { AssetOperationKind, AssetOperationSummary } from '@sekereagle/libr
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { AssetOperationRefresher } from './asset-operation-refresh';
+import type { LibraryMode } from '../../lib/library-api-scope';
 
 export function useEnqueueAssetOperation() {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -68,6 +69,7 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
   }, [client, ownerId]);
   useEffect(() => {
     const snapshots = [material, photo];
+    const affected = new Map<LibraryMode, boolean>();
     snapshots.forEach((rows, index) => {
       const before = previous.current[index];
       if (!before) return;
@@ -83,12 +85,15 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
           publishedOperations.current.has(row.id);
         if (!published && !finished) continue;
         const final = !row.running && !row.queued;
-        refresher.current?.schedule(row.libraryMode, final);
-        if (row.kind === 'SEND')
-          refresher.current?.schedule(row.libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO', final);
+        affected.set(row.libraryMode, final || !!affected.get(row.libraryMode));
+        if (row.kind === 'SEND') {
+          const target = row.libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO';
+          affected.set(target, final || !!affected.get(target));
+        }
         if (final) publishedOperations.current.delete(row.id);
       }
     });
+    for (const [mode, final] of affected) refresher.current?.schedule(mode, final);
     previous.current = snapshots;
   }, [material, photo]);
 }

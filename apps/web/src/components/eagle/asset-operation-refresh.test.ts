@@ -55,6 +55,26 @@ it('progress fetches only the first cached page and leaves other modes and refer
   expect(
     client.getQueryState(['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}])?.isInvalidated,
   ).toBe(false);
+  queue.schedule('PHOTO', true);
+  await vi.waitFor(() => expect(tagFn).toHaveBeenCalledTimes(1));
+});
+
+it('completed refreshes limit intermediate progress to one request per four seconds', async () => {
+  vi.useFakeTimers();
+  const { queue, queryFn } = fixture();
+  queue.schedule('PHOTO', false);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(queryFn).toHaveBeenCalledTimes(1);
+  queue.schedule('PHOTO', false);
+  queue.schedule('PHOTO', false);
+  await vi.advanceTimersByTimeAsync(3999);
+  expect(queryFn).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(queryFn).toHaveBeenCalledTimes(2);
+  queue.dispose();
+  queue.schedule('PHOTO', true);
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(queryFn).toHaveBeenCalledTimes(2);
 });
 it('progress never aborts an in-flight page and coalesces repeated updates before a final refresh', async () => {
   vi.useFakeTimers();

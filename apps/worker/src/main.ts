@@ -31,7 +31,8 @@ import { claimNextScheduledTagBuild, holdTagBuildLease } from './tag-build-lease
 import { recordWorkerHeartbeat } from './worker-health';
 import { ensureCompatibleEmbeddingSpace } from './embedding-space';
 import { mediaLaneOrder, propagateFailedDependencies } from './job-recovery';
-import { prepareAssetPurge, drainObjectDeletion, nextObjectDeletionWakeAt } from './asset-purge';
+import { prepareAssetPurge } from './asset-purge';
+import { ObjectDeletionRunner } from './object-deletion-runner';
 import {
   nextBackgroundTime,
   CAMERA_MAX_IMAGE_BYTES,
@@ -119,7 +120,7 @@ let photoMapTimer: NodeJS.Timeout | undefined;
 let lastPhotoMapStep = 0;
 let stopping = false;
 let activeTagBuildCount = 0;
-let deletingObjects = false;
+let objectDeletionRunner: ObjectDeletionRunner | undefined;
 const runBackgroundProcessing = backgroundProcessingEnabled(
   process.env.EAGLE_BACKGROUND_PROCESSING_ENABLED,
 );
@@ -1350,32 +1351,7 @@ function resourceBudget(resource: MediaResource) {
   };
 }
 async function poll(): Promise<void> {
-  if (!stopping && !deletingObjects) {
-    deletingObjects = true;
-    let claimed = false;
-    void drainObjectDeletion(prisma, {
-      deleteObjects: async (keys) => {
-        const result = await storage.send(
-          new DeleteObjectsCommand({
-            Bucket: s3Bucket,
-            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
-          }),
-        );
-        if (result.Errors?.length) throw new Error('OBJECT_DELETION_INCOMPLETE');
-      },
-      deletePrefix: deleteOwnedPrefix,
-    })
-      .then((count) => {
-        claimed = count > 0;
-      })
-      .catch(reportLoopError)
-      .finally(() => {
-        deletingObjects = false;
-        // Re-evaluate pending receipts and retry deadlines immediately after a
-        // completed batch, rather than waiting for the global fallback timer.
-        if (!stopping && claimed) wakeScheduler?.wakeNow();
-      });
-  }
+  if (!stopping) objectDeletionRunner?.wake();
   if (!stopping && runTagBuilds && activeTagBuildCount === 0) {
     const build = await claimNextScheduledTagBuild(prisma);
     if (build) {
@@ -1430,7 +1406,7 @@ interface PendingMediaWakeRow {
 }
 
 async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
-  const [mediaCandidates, tagBuilds, settings, objectDeletionWakeAt] = await Promise.all([
+  const [mediaCandidates, tagBuilds, settings] = await Promise.all([
     prisma.$queryRaw<PendingMediaWakeRow[]>(buildMediaWakeQuery(allowedJobKinds)),
     runTagBuilds
       ? prisma.$queryRaw<Array<{ ownerId: string; libraryMode: LibraryMode; availableAt: Date }>>(
@@ -1438,7 +1414,6 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         )
       : Promise.resolve([]),
     prisma.eagleProcessingSetting.findMany(),
-    nextObjectDeletionWakeAt(prisma),
   ]);
   const settingsByOwner = new Map(
     settings.map(
@@ -1446,12 +1421,7 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
         [JSON.stringify([row.ownerId, row.libraryMode]), normalizeWakeSettings(row)] as const,
     ),
   );
-  // Ready receipts are already being drained; future retry deadlines still
-  // participate so a failed batch never falls back to the 30-second poll.
-  let earliest: Date | null =
-    deletingObjects && objectDeletionWakeAt && objectDeletionWakeAt <= now
-      ? null
-      : objectDeletionWakeAt;
+  let earliest: Date | null = null;
   for (const build of tagBuilds) {
     const due = new Date(Math.max(now.getTime(), build.availableAt?.getTime() ?? now.getTime()));
     const next = nextBackgroundTime(
@@ -1607,6 +1577,7 @@ async function stop(signal: string): Promise<void> {
   if (photoMapTimer) clearInterval(photoMapTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   wakeScheduler?.stop();
+  objectDeletionRunner?.stop();
   await wakeListener?.stop();
   process.stdout.write(`SekerEagle worker received ${signal}\n`);
   while (
@@ -1615,7 +1586,7 @@ async function stop(signal: string): Promise<void> {
     buildingSmartFolder ||
     buildingPhotoMap ||
     checkingHeartbeat ||
-    deletingObjects
+    objectDeletionRunner?.active
   )
     await new Promise((resolve) => setTimeout(resolve, 100));
   await prisma.eagleProcessingWorkerHeartbeat.deleteMany({ where: { workerId } });
@@ -1627,6 +1598,22 @@ async function stop(signal: string): Promise<void> {
 async function main(): Promise<void> {
   await heartbeat();
   process.stdout.write(`SekerEagle worker ready: ${workerId}\n`);
+  objectDeletionRunner = new ObjectDeletionRunner(
+    prisma,
+    {
+      deleteObjects: async (keys) => {
+        const result = await storage.send(
+          new DeleteObjectsCommand({
+            Bucket: s3Bucket,
+            Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        if (result.Errors?.length) throw new Error('OBJECT_DELETION_INCOMPLETE');
+      },
+      deletePrefix: deleteOwnedPrefix,
+    },
+    reportLoopError,
+  );
   wakeScheduler = new JobWakeScheduler(drainAndScheduleWork, reportLoopError);
   wakeListener = new PostgresWakeListener(
     databaseUrl,
