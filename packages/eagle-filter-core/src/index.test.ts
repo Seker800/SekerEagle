@@ -69,3 +69,14 @@ test('parser preserves group negation and set values', () => {
   assert.equal(query.conditions[0]?.result, 'NOT_MATCH');
   assert.deepEqual(query.conditions[0]?.rules[0]?.value, ['tag-1']);
 });
+
+
+test('semantic content is a composable rule with a validated matching breadth', () => {
+  const query = parseEagleFilterQuery({ version: 2, conditions: [{ id: 'group', match: 'ANY', result: 'NOT_MATCH', rules: [
+    { id: 'scene', field: 'SEMANTIC', operator: 'SIMILAR', value: '海边', breadth: 'STRICT' },
+    { id: 'camera', field: 'CAMERA_MODEL', operator: 'EMPTY' },
+  ] }] });
+  assert.equal(countActiveEagleFilterRules(query), 2);
+  assert.equal(query.conditions[0]!.rules[0]!.field, 'SEMANTIC');
+  assert.throws(() => parseEagleFilterQuery({ ...query, conditions: [{ ...query.conditions[0], rules: [{ ...query.conditions[0]!.rules[0], breadth: 'INVALID' }] }] }));
+});

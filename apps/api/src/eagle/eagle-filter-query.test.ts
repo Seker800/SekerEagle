@@ -112,3 +112,9 @@ test('ordinary rule compilation rejects semantic intent instead of silently broa
     /智能文件夹/,
   );
 });
+
+
+test('camera NOT_EMPTY excludes empty strings just as EMPTY includes them', () => {
+  const query = readEagleFilterQuery({ version: 2, conditions: [{ id: 'g', match: 'ALL', result: 'MATCH', rules: [{ id: 'r', field: 'CAMERA_MODEL', operator: 'NOT_EMPTY' }] }] });
+  assert.deepEqual(buildEagleFilterWhere(query, 'PHOTO'), { AND: [{ AND: [{ photoMetadata: { is: { cameraModel: { not: null } } }, NOT: { photoMetadata: { is: { cameraModel: '' } } } }] }] });
+});
