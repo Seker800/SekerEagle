@@ -159,9 +159,13 @@ it('换批遍历不同组合，比较结束后可以重新开始', async () => {
   expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled();
   expect(mocks.merge).not.toHaveBeenCalled();
 });
-it('合并完自动呈现下一对，已合并人物不再作为独立比较对象', async () => {
+it('合并后必须换一批才显示下一对，快速再点不会误合并其他人', async () => {
   show();
   fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
+  await waitFor(() => expect(mocks.privacy).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument());
+  expect(mocks.merge).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: '换一批' }));
   await waitFor(() => {
     const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
     expect(

@@ -53,3 +53,17 @@ it('尺寸缺失时沿用原片比例，零框不会产生无穷大尺寸', () =
   const image = screen.getByAltText('fallback');
   expect(image.getAttribute('style')).not.toMatch(/NaN|Infinity/);
 });
+it('只用当前图片浏览预览，排除实况视频、RAW 编辑大图与旧版本', () => {
+  const sample = face();
+  sample.asset.mediaRevision = 2;
+  sample.asset.mimeType = 'image/jpeg';
+  sample.asset.renditions = [
+    { id: 'motion', kind: 'PREVIEW', variant: 'motion', mimeType: 'video/mp4', revision: 2, width: 4000, height: 3000, byteSize: 100 },
+    { id: 'edit', kind: 'PREVIEW', variant: 'edit', mimeType: 'image/webp', revision: 2, width: 6000, height: 4000, byteSize: 100 },
+    { id: 'old', kind: 'PREVIEW', variant: 'default', mimeType: 'image/jpeg', revision: 1, width: 4000, height: 3000, byteSize: 100 },
+    { id: 'browse', kind: 'PREVIEW', variant: 'default', mimeType: 'image/jpeg', revision: 2, width: 1600, height: 1200, byteSize: 100 },
+  ];
+  expect(facePreview(sample.asset)?.id).toBe('browse');
+  sample.asset.renditions.pop();
+  expect(facePreview(sample.asset)).toBeUndefined();
+});
