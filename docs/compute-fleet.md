@@ -1,6 +1,36 @@
 # 多机计算与 Agent 控制
 
+> **2026-10-29 05:28 +0800 业务执行进程已迁至 Mac（覆盖以下历史快照）**：Windows／Mac 原生媒体继续处理 image、pyramid、video、faces；Metal 向量只走 Mac。原群晖唯一业务 worker（领取、续租、人物归类、校验、发布及原地图维护）现由 Mac 原生 LaunchAgent 接管。程序来自最新正式镜像 `sekereagle/worker:unified-fedfa7f11b60`，SHA `sha256:d569dd3b3204811971f3b8a5af0abe7f2aedbdb36a4f2ee6650769d13b5444dc`；616个运行文件逐一SHA一致，锁文件与Node22.22.3一致，无重建混入其他聊天代码。数据库和对象存储保留NAS，API/web仍unified，其他容器身份与启动状态保持。
+>
+> NAS原主worker正常排空exit0后停止。完整Compose链末尾新增 `maintenance/business-worker-mac-20261029/mac-worker-placement.json`，NAS worker设 `restart:no`、`deploy.replicas:0`，避免后续整体up重新启动。Mac常驻 `com.sekereagle.business-worker` 和 `com.sekereagle.business-worker-relay`，gui/501；私有目录 `.runtime/business-worker`、不可变版本 `releases/worker-d569dd3b3204`，环境／证书不提交。新业务身份 `worker-a25ec7fe-c346-4168-af0f-b7a90ac3324b` 已在原NAS数据库写入新鲜心跳，正式任务中心双模式ONLINE/modelIssue为空。媒体修订57仍为Windows八路、Mac六路／宿主七，Metal交互预留保持。
+>
+> 可信业务角色与无状态媒体执行器分离：只有原业务角色持有必要DB/S3/执行凭据，无JWT或浏览器秘密。客户端三个接口只监听loopback，专用双向证书接入原NAS固定服务；执行代理不暴露admin，原数据库密码、S3签名及执行令牌仍必需。Docker发布会遮蔽来源，身份取决于mTLS；受信局域网仍有预认证连接耗尽的可用性风险。未开SSH转发、改路由/Wi-Fi/全局防火墙，未接触SekerChat。
+>
+> 现有效资源／版本的媒体PENDING和PROCESSING均0。这轮57,157个人脸子任务：完成56,515、失败147，另495因资源删除或旧版本不再执行。147是此前大图限制导致的本轮失败，尚未重试；旧视频等历史失败及MATERIAL标签手动暂停保留。没有可执行积压时空闲正常，没有制造空算、重复处理或新扫描；不宣称持续硬件满载。
+>
+> 新传输七项、lint/typecheck/build/架构检查及当前正式副本17项真实隔离库隐私／人工身份／租约／事务发布验收通过；五类生产执行API经实际NAS TLS链通过，证书／数据库密码／存储／执行认证反例通过。原迁移账本59项不变。DeepSeek传输报告收到并逐条核实；两个自动切换候选的恢复缺陷已记录，未执行、未批准作为无人值守工具。实际逐步观测排空、新PID/专属心跳、其他容器一致后持久接管，三份报告和取舍见私有 `.omx/artifacts/face-repair-20261028/business-worker-move/`。
+>
+> 后续worker升级必须更新Mac不可变程序和同依赖验收，不能只在NAS拉起worker。回退先通过launchd正常停止该Mac业务PID并确认子进程退出，再用私有NAS `manual-placement-state.json` 中原容器／重启策略恢复，核对ready、新鲜心跳及稳定运行；仅在完整链仍属本版本时恢复旧链。不要执行私有未批准自动控制器。半小时巡检仍PAUSED；动态状态读检查点及 `.runtime/business-worker/placement-state.json`。
+
 > **2026-10-29 04:21 本批生产发布后核验**：API／web／worker统一发布 `unified-fedfa7f11b60` 后，约124秒窗口Windows媒体完成计数+127、Mac媒体+413，Mac向量完成真实文字查询+1，三个节点均READY；另131秒实库窗口人脸完成+581且无新增失败。两处窗口起止不同，不相加推算吞吐。原生代理及协调器未由本批换版，修订仍57；Windows已验证八路、Mac媒体六路及同宿主七名额／交互预留保持原样，未覆盖用户暂停、时段或模型／租约守卫。生产任务中心双模式ONLINE，现有人脸积压继续推进；向量、颜色等无待办时空闲是正常状态。证据见 `.omx/artifacts/unified-release-20261029/fleet-window.json`、`database-window.json` 与现用运行文档，本批没有宣称硬件满载。
+
+> **2026-10-29 02:56 当前交接**：正式worker已为 `claim-8fcfb1bc`（在118fffcb三模块流水线上仅覆盖job-claim.js/map），独立报告已收到，原CAS保留，本地重叠领取避免同版本重复抢占；13项回归及全隔离库/镜像通过。API仍privacy-9e30be7、所有原生/协调器/存储不变，登记修订57。两分钟实测Windows平均0.55/峰值1、Mac平均0.42/峰值4在途，**仍未达到硬件满载**。
+>
+> 新确认瓶颈为NOTIFY提交全局锁：30次SQL采样85个COMMIT等object、24个等WALSync、最久2.04s，pg_locks classid1262/objid0；与[PostgreSQL 16 PreCommit_Notify](https://github.com/postgres/postgres/blob/REL_16_STABLE/src/backend/commands/async.c)的提交顺序锁相符。候选2c6ef68d只新增迁移，跳过不增加可执行任务的领取/正向续租广播，仍保留新增/重试/依赖/设置/回退租约通知及同步提交。RED/GREEN、全门禁/历史升级/恢复已过，NAS唯一待迁移项/目标守卫预检已过；**候选尚未应用，等独立审查，不能当作生效**。维护API镜像仅携带迁移，不含其他聊天代码；拟只迁移函数、不重启API/worker/PG/原生执行器。
+
+> **2026-10-29 02:23 生产更新**：已正常排空上线 `worker:pipeline-118fffcb`，仅REMOTE并行领取、人脸有界批量回写三模块；独立审查两份报告均收到并逐条核实留档。其余容器/环境/挂载/限制未变，原链追加 `maintenance/pipeline-final-20261029/image.json`。Windows8/Mac6及宿主限额保持。实库尚余人脸29,494、处理中2、当前扫描FAILED147；首分钟完成67，仍未硬件满载。实际数据库并行领取争同一ID的租约更新，正在修复同进程重复CAS争抢；旧候选说明为历史状态。
+
+> **2026-10-29 01:40 未发布候选说明**：当前生产仍是下述privacy-9e30be7及原生8/6/修订57。并行领取候选4f9f9fc的独立审查发现同批兄弟可能误清新内存等待，已实测复现并在49c102f修正，**旧候选从未上线、禁止部署**。最终候选118fffcb还补充REMOTE通知补唤醒，和有界人脸回写批次：每owner独立，最多8照片/总128脸、初始等待最多200ms、排队最多32项；仍逐照片执行原租约/版本/人工身份/隐私守卫，整组事务失败再逐项原事务隔离。无人脸仅跳过未使用的人物/纠错SELECT，状态与隐私写入保留。三项模块覆盖候选尚待最后独立审核后发布，当前不能声称两机满载；生产30秒基线Win CPU均值2.13%、Win平均0.48/Mac0.30在途证明供料仍是问题。两轮隔离完整门禁与真DB恢复已通过，新补唤醒的限定worker验收正在执行。
+
+> **2026-10-29 00:47 当前生产核验（覆盖下文旧快照）**：已修复大预览人脸输入误报500导致整节点反复隔离。保留原分辨率、固定模型/阈值/向量，像素上限40M、编码字节20MiB/时间/线程/输出边界保留，已知坏图/超像素返回422，模型及基础设施故障不伪装输入错误。两机公开脸及全景兼容、4路边界和后续完整容量验证通过，DeepSeek独立报告已收到。
+>
+> 生产原生bundle SHA256为 `0f3e988ebf1df463df55b8394c717f50ce1d7b225b00761e4e221b93048ada7d`，Python SHA256为 `ff4fb54e6e86929f03843a09e41a3c9c59689009c7899da6fbe51a6ff87efc79`。**修订57：Windows四媒体共享8路/宿主8，Mac四媒体共享6路/宿主仍7，Metal3且交互预留1；同宿主后台总6守卫保持，GPU后台会与媒体竞争，不能承诺GPU独立另加2路。** Windows8/Mac6的40M人脸图、视频、切片、PHOTO图片、人脸、混合任务均真实隔离验证通过；Windows最低空闲约21.7GB，Mac事后memory_pressure系统可用82%、swap较前未增加，裸free页约17MB不是系统可用余量。源码允许最高16，仅是参数上界，fleet单节点上界8及登记实测上限仍生效，不能据此直接开16。MATERIAL图片仍受NAS worker单任务768MiB预算限制，不把代理资格冒充全链路14路。
+>
+> **NAS主worker本地PHOTO_FACE_PYTHON/MODEL_DIR/SCRIPT已持久置空，人脸只走两机**，完整Compose链保留 `maintenance/face-remote-only-20261029/remote-only.json`。worker/API现用 `sekereagle/{worker,api}:privacy-9e30be7`：仅基于各自原镜像覆盖已独立审查的library-persistence index.js/map，用既有id/实况索引替换单张投影的全分区OR扫描；同owner/PHOTO、实况同伴、空范围/全库范围、隐私锁、最终发布/版本语义不变，无新DDL/迁移/耐久性调整。API该模块与原worker完全相同，故同样最小覆盖，未发布其他聊天的API改动。web/协调器/PG/MinIO/gateway原容器不变，PG仍3GiB/memory+swap4GiB，Compose追加 `maintenance/privacy-supply-20261029/images.json`，原配置/镜像/回退在同目录。
+>
+> 目前照片仍真实处理中，持续硬件满载尚未达成。领取通道还有串行数据库等待，候选 `4f9f9fc` 仅为REMOTE_MEDIA并行领取名额、保持NAS/向量原行为和1536MiB内存/租约保护，**尚未上线**；候选镜像 `worker:parallel-4f9f9fc` 已在NAS无网只读环境通过14项pool测试，等待隔离全量门禁与独立审查后切换。用户其他聊天在改asset-operation，当前验证从生产基线5f2872d加本任务准确文件另建私有隔离副本，不能把他人的源码或失败混入本批发布。半小时巡检仍PAUSED；未改网络、模型/驱动、SekerChat、未重扫全库或重试历史FAILED。
+>
+> 本轮完整证据及三份已完成报告在私有 `.omx/artifacts/face-repair-20261028/`；动态进度/最后策略读私有检查点，不把此时间快照当实时值。
 
 > **2026-10-28T23:25:28+08:00 故障复核（覆盖旧健康快照）**：用户反馈NAS高CPU、两机闲置。实测coordinator1.55%、worker12.88%、PostgreSQL261.73%；数据库占主要CPU，群晖仍执行业务领取／人物归类匹配／隐私与结果发布，并非仅转发。节点健康反复OFFLINE，而同容器直接认证GET两媒体均200/空闲；正常排空后重启原worker/coordinator，同容器/镜像/配置/挂载保留，未根治，不能当恢复完成。大量重试输入的READY默认预览为3464×1280（4,433,920像素），超过infer.py现有4,000,000像素上限；一张同尺寸纯色合成JPEG直连Mac媒体稳定复现POST faces=500/MEDIA_COMPUTATION_FAILED，同时GET health=200。原server把上游500隔离节点，worker记录REMOTE_MEDIA_REQUEST_REJECTED并重试，状态变化又使发现提示失效，形成查库/重试/离线循环。部分待办已尝试10–11次，故此前正常速度的ETA当前不可靠。根因在输入适配及单任务错误分类/节点隔离耦合；尚未修复，不放宽模型上限/质量、不批量重试历史FAILED、不更改用户暂停或网络。证据在私有`.omx/artifacts/health-flap-20261028/`，NAS`maintenance/health-flap-20261028/`保存重启快照。
 
