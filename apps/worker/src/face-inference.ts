@@ -1,3 +1,4 @@
+import { PermanentMediaValidationError } from './media-validation-error';
 import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -54,7 +55,11 @@ export function validateFaceResult(value: unknown): FaceDetection[] {
 export async function inferPhotoFaces(bytes: Buffer): Promise<FaceDetection[]> {
   if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)
     throw new Error('PHOTO_FACE_RUNTIME_NOT_CONFIGURED');
-  if (bytes.length > 20 * 1024 * 1024) throw new Error('PHOTO_FACE_INPUT_TOO_LARGE');
+  if (bytes.length > 20 * 1024 * 1024)
+    throw new PermanentMediaValidationError(
+      'IMAGE_PIXEL_LIMIT_EXCEEDED',
+      'PHOTO_FACE_INPUT_TOO_LARGE',
+    );
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-faces-'));
   try {
     const image = join(directory, 'preview.jpg');
@@ -71,12 +76,22 @@ export async function inferPhotoFaces(bytes: Buffer): Promise<FaceDetection[]> {
         maxBuffer: 2 * 1024 * 1024,
         env: {
           PATH: process.env.PATH,
-          OPENCV_IO_MAX_IMAGE_PIXELS: '4000000',
+          OPENCV_IO_MAX_IMAGE_PIXELS: '40000000',
           OMP_NUM_THREADS: '1',
         },
       },
     );
     return validateFaceResult(JSON.parse(stdout) as unknown);
+  } catch (error) {
+    const failure = error as { code?: unknown; stderr?: unknown };
+    if (failure?.code === 2 && typeof failure.stderr === 'string') {
+      const marker = failure.stderr.trim();
+      if (marker === 'PHOTO_FACE_INPUT_INVALID')
+        throw new PermanentMediaValidationError('IMAGE_DECODE_FAILED');
+      if (marker === 'PHOTO_FACE_INPUT_TOO_LARGE')
+        throw new PermanentMediaValidationError('IMAGE_PIXEL_LIMIT_EXCEEDED');
+    }
+    throw error;
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

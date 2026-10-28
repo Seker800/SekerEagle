@@ -11,15 +11,27 @@ MODELS = {
     "sface.onnx": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
 }
 
+MAX_IMAGE_PIXELS = 40_000_000
+
+class FaceInputError(ValueError):
+    """A permanent input error, never a model or execution failure."""
+
 def infer(directory, image_path):
     directory = Path(directory)
     for name, expected in MODELS.items():
         if hashlib.sha256((directory / name).read_bytes()).hexdigest() != expected:
             raise ValueError("PHOTO_FACE_MODEL_CHECKSUM_MISMATCH")
     cv2.setNumThreads(1)
-    image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-    if image is None or image.shape[0] * image.shape[1] > 4_000_000:
-        raise ValueError("PHOTO_FACE_INPUT_INVALID")
+    try:
+        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    except cv2.error as error:
+        if "CV_IO_MAX_IMAGE_PIXELS" in str(error):
+            raise FaceInputError("PHOTO_FACE_INPUT_TOO_LARGE") from error
+        raise
+    if image is None:
+        raise FaceInputError("PHOTO_FACE_INPUT_INVALID")
+    if image.shape[0] * image.shape[1] > MAX_IMAGE_PIXELS:
+        raise FaceInputError("PHOTO_FACE_INPUT_TOO_LARGE")
     height, width = image.shape[:2]
     detector = cv2.FaceDetectorYN.create(str(directory / "yunet.onnx"), "", (width, height), 0.9, 0.3, 128)
     recognizer = cv2.FaceRecognizerSF.create(str(directory / "sface.onnx"), "")
@@ -37,4 +49,8 @@ def infer(directory, image_path):
     return {"version": "yunet-2023mar-sface-2021dec-v1", "faces": faces}
 
 if __name__ == "__main__":
-    print(json.dumps(infer(sys.argv[1], sys.argv[2]), allow_nan=False))
+    try:
+        print(json.dumps(infer(sys.argv[1], sys.argv[2]), allow_nan=False))
+    except FaceInputError as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(2)
