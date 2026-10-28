@@ -207,6 +207,20 @@ try {
       prefixes: [],
     })),
   });
+  const delayedKey = `users/${ownerId}/cleanup-delayed`;
+  await s3.send(
+    new PutObjectCommand({ Bucket: bucket, Key: delayedKey, Body: Buffer.from('synthetic') }),
+  );
+  const delayedUntil = new Date(Date.now() + 2500);
+  await db.eagleObjectDeletion.create({
+    data: {
+      ownerId,
+      libraryMode: 'MATERIAL',
+      objectKeys: [delayedKey],
+      prefixes: [],
+      availableAt: delayedUntil,
+    },
+  });
   const cleanupStart = performance.now();
   worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
     env: {
@@ -229,6 +243,11 @@ try {
     await delay(50);
   }
   const cleanupMilliseconds = performance.now() - cleanupStart;
+  assert.ok(new Date() >= delayedUntil, 'A future cleanup receipt must not run early');
+  await assert.rejects(
+    storage.headObject(delayedKey),
+    (error) => error.$metadata?.httpStatusCode === 404,
+  );
   for (const key of cleanupKeys)
     await assert.rejects(
       storage.headObject(key),
@@ -247,6 +266,7 @@ try {
       peakCopies: peak,
       sendMilliseconds,
       cleanedReceipts: cleanupKeys.length,
+      delayedReceipts: 1,
       cleanupMilliseconds,
       milliseconds: performance.now() - start,
     }),
