@@ -74,11 +74,12 @@ it('用大预览呈现人脸，直接比较两个不同人物，不需要选择�
   const review = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
   const photos = within(review).getAllByRole('img');
   expect(photos.map((img) => img.getAttribute('src'))).toEqual(['/a/large', '/b/large']);
-  fireEvent.click(screen.getByRole('button', { name: '未命名人物 1', exact: true }));
+  fireEvent.click(screen.getByRole('button', { name: '未命名人物 1' }));
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  expect(
-    screen.getByRole('button', { name: '未命名人物 1', exact: true }).querySelector('img'),
-  ).toHaveAttribute('src', '/a/large');
+  expect(screen.getByRole('button', { name: '未命名人物 1' }).querySelector('img')).toHaveAttribute(
+    'src',
+    '/a/large',
+  );
 });
 it('确认后自动合并展示的两个人，保留已有名字并刷新隐私投影', async () => {
   show();
@@ -126,7 +127,7 @@ it('没有两个有照片的人物时不显示合并确认', async () => {
     nextCursor: null,
   });
   show();
-  await screen.findByRole('button', { name: '未命名人物 1', exact: true });
+  await screen.findByRole('button', { name: '未命名人物 1' });
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
 it('没有可用预览的人物不参与确认，避免看不到照片时合并', async () => {
@@ -138,7 +139,7 @@ it('没有可用预览的人物不参与确认，避免看不到照片时合并'
     nextCursor: null,
   });
   show();
-  await screen.findByRole('button', { name: '未命名人物 1', exact: true });
+  await screen.findByRole('button', { name: '未命名人物 1' });
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
 it('换批遍历不同组合，比较结束后可以重新开始', async () => {
