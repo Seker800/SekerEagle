@@ -165,7 +165,11 @@ export class MediaResourcePool {
       clearPreviousMemoryWait();
       this.memoryUsedMiB += memory;
       this.claiming[resource]--;
-      this.pendingWake[resource] = false;
+      if (resource !== 'REMOTE_MEDIA') this.pendingWake[resource] = false;
+      else if (this.claiming[resource] === 0 && this.pendingWake[resource]) {
+        this.pendingWake[resource] = false;
+        if (this.occupied[resource] < this.remoteMediaConcurrency) this.wake();
+      }
       void Promise.resolve()
         .then(() => run(job))
         .catch(this.reportError)
