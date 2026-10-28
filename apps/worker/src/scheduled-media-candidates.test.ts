@@ -3,6 +3,36 @@ import test from 'node:test';
 import { createScheduledMediaSelector } from './scheduled-media-candidates';
 import type { ClaimFindManyInput } from './job-claim';
 
+test('unused positive windows survive 30s wakes while every claim revalidates and hints expire', async (context) => {
+  let now = 0;
+  let discoveries = 0;
+  let validations = 0;
+  context.mock.method(Date, 'now', () => now);
+  const select = createScheduledMediaSelector(
+    {
+      $queryRaw: async (sql: { text: string }) => {
+        if (sql.text.includes('job.id IN')) validations++;
+        else discoveries++;
+        return [{ id: 'still-pending' }];
+      },
+    } as never,
+    () => false,
+    'REMOTE_MEDIA',
+  );
+  const input = { where: { lane: 'BACKGROUND' }, take: 50 } as ClaimFindManyInput;
+  await select(input, 'HISTORY');
+  now = 31000;
+  await select(input, 'HISTORY');
+  assert.equal(discoveries, 1, 'unused hints should not trigger another full backlog scan');
+  assert.equal(validations, 2, 'longer-lived hints must not skip current-state validation');
+  now = 120001;
+  await select(input, 'HISTORY');
+  assert.equal(discoveries, 2, 'positive hints still have a bounded lifetime');
+  select.invalidate();
+  await select(input, 'HISTORY');
+  assert.equal(discoveries, 3, 'new work and policy changes must still invalidate hints');
+});
+
 test('FIFO fairness belongs to each lane, so reserved background turns still use automatic preferences', async () => {
   const queries: string[] = [];
   const select = createScheduledMediaSelector(
