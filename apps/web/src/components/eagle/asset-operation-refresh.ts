@@ -74,9 +74,19 @@ export class AssetOperationRefresher {
     const lists = this.client.getQueryCache().findAll({ predicate: list });
     // A previous refetch/fetchNextPage must settle before its cached cursor chain
     // is shortened; repeatedly cancelling here would starve slow connections.
-    await Promise.all(
-      lists.flatMap((query) => (query.promise ? [query.promise.catch(() => undefined)] : [])),
-    );
+    // Another mutation can replace a fetch while we wait. Follow the current
+    // promise until the original query is idle, rather than its first generation.
+    for (;;) {
+      const pending = lists.flatMap((query) =>
+        this.client.getQueryCache().get(query.queryHash) === query &&
+        query.state.fetchStatus !== 'idle' &&
+        query.promise
+          ? [query.promise.catch(() => undefined)]
+          : [],
+      );
+      if (this.disposed || !pending.length) break;
+      await Promise.all(pending);
+    }
     if (this.disposed) return;
     for (const query of lists) {
       if (this.client.getQueryCache().get(query.queryHash) !== query) continue;

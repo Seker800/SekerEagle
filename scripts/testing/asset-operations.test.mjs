@@ -655,6 +655,7 @@ test('object cleanup claims a bounded batch and deletes keys in bulk without wai
       ownerId: f.ownerId,
       libraryMode: 'PHOTO',
       createdAt: new Date(0),
+      availableAt: new Date(0),
       objectKeys: [`users/${f.ownerId}/${i}-original`, `users/${f.ownerId}/${i}-preview`],
       prefixes: [],
     })),
@@ -685,6 +686,7 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
         ownerId: f.ownerId,
         libraryMode: 'PHOTO',
         createdAt: new Date(0),
+        availableAt: new Date(0),
         objectKeys: [`users/${f.ownerId}/valid`, 'users/foreign/private'],
         prefixes: [],
       },
@@ -694,6 +696,7 @@ test('a failed or unsafe cleanup receipt never deletes foreign keys or loses its
         ownerId: f.ownerId,
         libraryMode: 'PHOTO',
         createdAt: new Date(0),
+        availableAt: new Date(0),
         objectKeys: [`users/${f.ownerId}/retry`],
         prefixes: [],
       },
@@ -862,4 +865,180 @@ test('cleanup discovery reads a bounded window from a 50k due backlog', async ()
     await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: f.ownerId } });
     await prisma.$executeRawUnsafe('ANALYZE "EagleObjectDeletion"');
   }
+});
+
+test('cleanup chunks 2001 keys and safely retries after a partially successful second chunk', async () => {
+  const f = await fixture();
+  const keys = Array.from({ length: 2001 }, (_, i) => `users/${f.ownerId}/chunk-${i}`);
+  const objects = new Set([...keys, 'users/foreign/keep']);
+  const receipt = await prisma.eagleObjectDeletion.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      objectKeys: keys,
+      prefixes: [],
+      availableAt: new Date(0),
+    },
+  });
+  const sizes = [];
+  const storage = {
+    deletePrefix: async () => {},
+    deleteObjects: async (part) => {
+      if (!part[0]?.startsWith(`users/${f.ownerId}/`)) return;
+      sizes.push(part.length);
+      if (sizes.length === 2) {
+        for (const key of part.slice(0, -1)) objects.delete(key);
+        throw Error('synthetic partial DeleteObjects failure');
+      }
+      for (const key of part) objects.delete(key);
+    },
+  };
+  await drainObjectDeletion(prisma, storage);
+  assert.deepEqual(sizes, [1000, 1000]);
+  const pending = await prisma.eagleObjectDeletion.findUniqueOrThrow({ where: { id: receipt.id } });
+  assert.equal(pending.status, 'PENDING');
+  assert.equal(pending.leaseVersion, 1);
+  await prisma.eagleObjectDeletion.update({
+    where: { id: receipt.id },
+    data: { availableAt: new Date(0) },
+  });
+  await drainObjectDeletion(prisma, storage);
+  assert.deepEqual(sizes, [1000, 1000, 1000, 1000, 1]);
+  assert.deepEqual([...objects], ['users/foreign/keep']);
+  assert.equal(await prisma.eagleObjectDeletion.findUnique({ where: { id: receipt.id } }), null);
+});
+
+test('a stale cleanup executor cannot remove a replacement receipt while its new lease is active', async () => {
+  const f = await fixture();
+  const receipt = await prisma.eagleObjectDeletion.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      objectKeys: [`users/${f.ownerId}/leased`],
+      prefixes: [],
+      availableAt: new Date(0),
+    },
+  });
+  const firstEntered = deferred(),
+    secondEntered = deferred(),
+    firstFinish = deferred(),
+    secondFinish = deferred();
+  let calls = 0;
+  const storage = {
+    deletePrefix: async () => {},
+    deleteObjects: async (keys) => {
+      if (!keys[0]?.startsWith(`users/${f.ownerId}/`)) return;
+      if (++calls === 1) {
+        firstEntered.resolve();
+        await firstFinish.promise;
+      } else {
+        secondEntered.resolve();
+        await secondFinish.promise;
+      }
+    },
+  };
+  const old = drainObjectDeletion(prisma, storage);
+  await firstEntered.promise;
+  let replacement;
+  try {
+    await prisma.eagleObjectDeletion.update({
+      where: { id: receipt.id },
+      data: { lockedAt: new Date(0) },
+    });
+    replacement = drainObjectDeletion(prisma, storage);
+    await secondEntered.promise;
+    firstFinish.resolve();
+    await old;
+    const held = await prisma.eagleObjectDeletion.findUniqueOrThrow({ where: { id: receipt.id } });
+    assert.equal(held.leaseVersion, 2);
+    assert.equal(held.status, 'PROCESSING');
+  } finally {
+    firstFinish.resolve();
+    secondFinish.resolve();
+    await old;
+    await replacement;
+  }
+  assert.equal(await prisma.eagleObjectDeletion.findUnique({ where: { id: receipt.id } }), null);
+});
+
+test('a live metadata batch excludes other executors from claiming its waiting tail', async () => {
+  const f = await fixture(),
+    rows = [];
+  for (let i = 0; i < 40; i++) rows.push(await f.add());
+  const receipt = await f.enqueue('TRASH', rows);
+  const entered = deferred(),
+    release = deferred();
+  let paused = false;
+  const adapter = {
+    eagleAssetOperationItem: prisma.eagleAssetOperationItem,
+    async $transaction(...args) {
+      const result = await prisma.$transaction(...args);
+      if (!paused && Array.isArray(result) && result[0]?.operation?.kind === 'TRASH') {
+        paused = true;
+        entered.resolve();
+        await release.promise;
+      }
+      return result;
+    },
+  };
+  const first = f.createService(adapter).tick();
+  await entered.promise;
+  try {
+    await f.createService().tick();
+    const state = await f.state(receipt.id);
+    assert.equal(state.running, 32);
+    assert.equal(state.queued, 8);
+    assert.equal(state.completed, 0);
+  } finally {
+    release.resolve();
+    await first;
+  }
+  await f.createService().tick();
+  assert.equal((await f.state(receipt.id)).completed, 40);
+});
+
+test('a mismatched live pair fails individually while an unaffected pair is trashed atomically', async () => {
+  const f = await fixture(),
+    pairs = [];
+  for (let i = 0; i < 2; i++) {
+    const livePhotoIdentifier = randomUUID();
+    const still = await f.add({ livePhotoIdentifier, livePhotoRole: 'STILL' });
+    const motion = await f.add({
+      livePhotoIdentifier,
+      livePhotoRole: 'MOTION',
+      mimeType: 'video/quicktime',
+    });
+    await prisma.eagleAssetRendition.create({
+      data: {
+        assetId: motion.id,
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        kind: 'PREVIEW',
+        variant: 'default',
+        revision: 1,
+        storageKey: `users/${f.ownerId}/assets/${motion.id}/preview.mp4`,
+        mimeType: 'video/mp4',
+        byteSize: 1,
+        status: 'READY',
+      },
+    });
+    pairs.push({ still, motion });
+  }
+  const receipt = await f.enqueue(
+    'TRASH',
+    pairs.map((pair) => pair.still),
+  );
+  await prisma.eagleAssetRendition.updateMany({
+    where: { assetId: pairs[0].motion.id },
+    data: { status: 'FAILED' },
+  });
+  await f.service.tick();
+  const state = await f.state(receipt.id);
+  assert.equal(state.completed, 1);
+  assert.equal(state.failed, 1);
+  for (let i = 0; i < pairs.length; i++)
+    for (const row of [pairs[i].still, pairs[i].motion]) {
+      const actual = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: row.id } });
+      assert.equal(actual.deletedAt !== null, i === 1);
+    }
 });

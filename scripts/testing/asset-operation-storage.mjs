@@ -188,6 +188,20 @@ try {
     await material.tick();
     assert.equal((await material.list(ownerId)).find((row) => row.id === command.id).completed, 8);
   }
+  const retrash = await material.enqueue(principal, {
+    operationId: randomUUID(),
+    kind: 'TRASH',
+    assetIds: targets.map((row) => row.id),
+  });
+  await material.tick();
+  assert.equal((await material.list(ownerId)).find((row) => row.id === retrash.id).completed, 8);
+  const empty = await material.enqueue(principal, {
+    operationId: randomUUID(),
+    kind: 'EMPTY_TRASH',
+    assetIds: [],
+  });
+  await material.tick();
+  assert.equal((await material.list(ownerId)).find((row) => row.id === empty.id).completed, 1);
   // Exercise the actual worker's wake path, not a test loop that calls drain
   // repeatedly and could conceal a missing production self-wakeup.
   const cleanupKeys = Array.from(
@@ -237,7 +251,10 @@ try {
     workerErrors = (workerErrors + bytes.toString()).slice(-2000);
   });
   const deadline = Date.now() + 20000;
-  while (await db.eagleObjectDeletion.count({ where: { ownerId } })) {
+  while (
+    (await db.eagleObjectDeletion.count({ where: { ownerId } })) ||
+    (await db.eagleAsset.count({ where: { ownerId, libraryMode: 'MATERIAL' } }))
+  ) {
     if (Date.now() > deadline || worker.exitCode !== null)
       throw Error(`Local cleanup did not drain: ${workerErrors}`);
     await delay(50);
@@ -258,6 +275,12 @@ try {
       (await storage.headObject(row.originalObjectKey)).ContentLength,
       Number(row.byteSize),
     );
+  for (const row of targets)
+    for (const key of [row.originalObjectKey, ...row.renditions.map((r) => r.storageKey)])
+      await assert.rejects(
+        storage.headObject(key),
+        (error) => error.$metadata?.httpStatusCode === 404,
+      );
   console.log(
     JSON.stringify({
       test: 'real-local-storage',
@@ -267,6 +290,7 @@ try {
       sendMilliseconds,
       cleanedReceipts: cleanupKeys.length,
       delayedReceipts: 1,
+      purgedMaterialAssets: targets.length,
       cleanupMilliseconds,
       milliseconds: performance.now() - start,
     }),

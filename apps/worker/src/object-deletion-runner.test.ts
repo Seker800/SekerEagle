@@ -18,7 +18,7 @@ function fixture(due: number[]) {
   const settled: string[] = [];
   const db = {
     $queryRaw: async (query: Prisma.Sql) => {
-      if (query.sql.includes('WITH candidates')) {
+      if (query.sql.includes('UPDATE "EagleObjectDeletion"')) {
         claims++;
         const rows = pending.filter((row) => row.availableAt.getTime() <= Date.now()).slice(0, 4);
         for (const row of rows) pending.splice(pending.indexOf(row), 1);

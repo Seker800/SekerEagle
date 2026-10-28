@@ -87,11 +87,18 @@ export async function drainObjectDeletion(
   },
 ): Promise<number> {
   const claims = await prisma.$queryRaw<EagleObjectDeletion[]>(Prisma.sql`
-    WITH candidates AS (
-      SELECT id FROM "EagleObjectDeletion"
-      WHERE (status='PENDING' AND "availableAt"<=now())
-         OR (status='PROCESSING' AND "lockedAt"<now()-interval '10 minutes')
-      ORDER BY "createdAt",id LIMIT 4 FOR UPDATE SKIP LOCKED
+    WITH pending AS (
+      SELECT id,"availableAt" AS due FROM "EagleObjectDeletion"
+      WHERE status='PENDING' AND "availableAt"<=now()
+      ORDER BY "availableAt" LIMIT 4 FOR UPDATE SKIP LOCKED
+    ), expired AS (
+      SELECT id,"lockedAt"+interval '10 minutes' AS due FROM "EagleObjectDeletion"
+      WHERE status='PROCESSING' AND "lockedAt"<now()-interval '10 minutes'
+      ORDER BY "lockedAt" LIMIT 4 FOR UPDATE SKIP LOCKED
+    ), candidates AS (
+      SELECT id FROM (
+        SELECT * FROM pending UNION ALL SELECT * FROM expired
+      ) ready ORDER BY due LIMIT 4
     )
     UPDATE "EagleObjectDeletion" d
     SET status='PROCESSING',attempts=d.attempts+1,"leaseVersion"=d."leaseVersion"+1,
