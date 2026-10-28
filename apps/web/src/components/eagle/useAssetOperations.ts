@@ -3,7 +3,7 @@ import { useQueries, useQueryClient } from '@tanstack/react-query';
 import type { AssetOperationKind, AssetOperationSummary } from '@sekereagle/library-core';
 import { createAssetOperationsApi } from '../../lib/asset-operations-api';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
-import type { LibraryMode } from '../../lib/library-api-scope';
+import { AssetOperationRefresher } from './asset-operation-refresh';
 
 export function useEnqueueAssetOperation() {
   const { ownerId, libraryMode } = useLibraryWorkspace();
@@ -41,7 +41,7 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
           query.state.data?.some((operation) => operation.running || operation.queued)
             ? 1500
             : 10000,
-        refetchIntervalInBackground: true,
+        refetchIntervalInBackground: false,
       };
     }),
   });
@@ -54,28 +54,41 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
   const material = queries[0].data,
     photo = queries[1].data;
   const previous = useRef<Array<AssetOperationSummary[] | undefined>>([material, photo]);
+  const refresher = useRef<AssetOperationRefresher | null>(null);
+  const publishedOperations = useRef(new Set<string>());
+  useEffect(() => {
+    const queue = new AssetOperationRefresher(client, ownerId);
+    refresher.current = queue;
+    previous.current = [undefined, undefined];
+    publishedOperations.current.clear();
+    return () => {
+      queue.dispose();
+      if (refresher.current === queue) refresher.current = null;
+    };
+  }, [client, ownerId]);
   useEffect(() => {
     const snapshots = [material, photo];
-    const published = snapshots.some(
-      (rows, index) =>
-        rows &&
-        previous.current[index] &&
-        rows.some(
-          (row) =>
-            row.completed >
-            (previous.current[index]?.find((old) => old.id === row.id)?.completed ?? 0),
-        ),
-    );
+    snapshots.forEach((rows, index) => {
+      const before = previous.current[index];
+      if (!before) return;
+      for (const row of rows ?? []) {
+        const old = before.find((candidate) => candidate.id === row.id);
+        const published = row.completed > (old?.completed ?? 0);
+        if (published) publishedOperations.current.add(row.id);
+        const finished =
+          !row.running &&
+          !row.queued &&
+          !!old &&
+          (!!old.running || !!old.queued) &&
+          publishedOperations.current.has(row.id);
+        if (!published && !finished) continue;
+        const final = !row.running && !row.queued;
+        refresher.current?.schedule(row.libraryMode, final);
+        if (row.kind === 'SEND')
+          refresher.current?.schedule(row.libraryMode === 'PHOTO' ? 'MATERIAL' : 'PHOTO', final);
+        if (final) publishedOperations.current.delete(row.id);
+      }
+    });
     previous.current = snapshots;
-    if (!published) return;
-    for (const mode of ['MATERIAL', 'PHOTO'] as LibraryMode[]) {
-      void client.invalidateQueries({
-        predicate: (query) =>
-          query.queryKey[0] === 'eagle' &&
-          query.queryKey[1] === ownerId &&
-          query.queryKey[2] === mode &&
-          query.queryKey[3] !== 'operations',
-      });
-    }
-  }, [material, photo, client, ownerId]);
+  }, [material, photo]);
 }

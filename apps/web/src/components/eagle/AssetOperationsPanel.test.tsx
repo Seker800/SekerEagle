@@ -130,7 +130,7 @@ it('refreshes both libraries only after publication and never invalidates the po
   for (const mode of ['MATERIAL', 'PHOTO']) {
     expect(
       predicates.some((predicate) =>
-        predicate({ queryKey: ['eagle', 'owner', mode, 'assets'] } as never),
+        predicate({ queryKey: ['eagle', 'owner', mode, 'assets', 'ALL', {}] } as never),
       ),
     ).toBe(true);
     expect(
@@ -144,4 +144,39 @@ it('refreshes both libraries only after publication and never invalidates the po
       ),
     ).toBe(false);
   }
+});
+
+it('trash progress refreshes only its own lists and counts, with a final refresh for published results', async () => {
+  mocks.list.mockImplementation(async (mode) => (mode === 'PHOTO' ? [job({ kind: 'TRASH' })] : []));
+  const client = show('ALL', false, true);
+  await waitFor(() =>
+    expect(client.getQueryData(['eagle', 'owner', 'PHOTO', 'operations', false])).toBeDefined(),
+  );
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  client.setQueryData(
+    ['eagle', 'owner', 'PHOTO', 'operations', false],
+    [job({ kind: 'TRASH', completed: 3 })],
+  );
+  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+  const predicate = invalidate.mock.calls[0]![0]!.predicate!;
+  expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'ALL', {}] } as never)).toBe(
+    true,
+  );
+  expect(
+    predicate({
+      queryKey: ['eagle', 'owner', 'PHOTO', 'assets', 'library-count', false, 0],
+    } as never),
+  ).toBe(true);
+  for (const key of [
+    ['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}],
+    ['eagle', 'owner', 'PHOTO', 'manual-tags'],
+    ['eagle', 'owner', 'PHOTO', 'statistics'],
+    ['eagle', 'owner', 'PHOTO', 'operations'],
+  ])
+    expect(predicate({ queryKey: key } as never)).toBe(false);
+  client.setQueryData(
+    ['eagle', 'owner', 'PHOTO', 'operations', false],
+    [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'FAILED' })],
+  );
+  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
 });
