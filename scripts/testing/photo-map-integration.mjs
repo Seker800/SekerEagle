@@ -181,6 +181,11 @@ try {
         where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
       });
       if (state.activeSnapshotId && state.builtVersion === state.requestedVersion) return;
+      // This test helper deliberately drains later coalesced generations without a wall-clock wait.
+      await prisma.eaglePhotoMapState.update({
+        where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
+        data: { availableAt: new Date(0) },
+      });
       await runPhotoMapBuildStep(prisma);
     }
     throw new Error('Snapshot build did not finish');
@@ -569,40 +574,93 @@ try {
   assert.equal(retryState.attempts, 0, 'a successful point-freeze resets the failure budget');
   await refresh(retryOwner);
 
-  // Freeze a usable generation while more photos arrive; imports must not make
-  // the repeatable-read transaction repeatedly abort before anything is visible.
+  // A single INSERT/SELECT freezes coordinates while concurrent facts keep arriving.
+  async function freezeDuringWrite(change) {
+    let racingWrite;
+    const concurrentClient = {
+      $queryRaw: (...args) => prisma.$queryRaw(...args),
+      eaglePhotoMapState: prisma.eaglePhotoMapState,
+      $transaction: (callback, options) =>
+        prisma.$transaction(async (tx) => {
+          const wrapped = new Proxy(tx, {
+            get(target, key) {
+              if (key === 'eaglePhotoMapSnapshot')
+                return new Proxy(target[key], {
+                  get(delegate, method) {
+                    if (method === 'create')
+                      return async (...args) => {
+                        const snapshot = await delegate.create(...args);
+                        racingWrite = change();
+                        await Promise.race([racingWrite, delay(500)]);
+                        return snapshot;
+                      };
+                    const value = delegate[method];
+                    return typeof value === 'function' ? value.bind(delegate) : value;
+                  },
+                });
+              const value = target[key];
+              return typeof value === 'function' ? value.bind(target) : value;
+            },
+          });
+          return callback(wrapped);
+        }, options),
+    };
+    try {
+      await assert.doesNotReject(
+        runPhotoMapBuildStep(concurrentClient),
+        'incoming facts cannot starve the first frozen map',
+      );
+    } finally {
+      await racingWrite;
+    }
+  }
   const raceOwner = randomUUID();
-  await prisma.user.create({ data: { id: raceOwner, email: `${raceOwner}@example.invalid`, passwordHash: 'test-only' } });
+  await prisma.user.create({
+    data: { id: raceOwner, email: `${raceOwner}@example.invalid`, passwordHash: 'test-only' },
+  });
   await make({ ownerId: raceOwner });
-  let racingWrite;
-  const concurrentClient = {
-    $queryRaw: (...args) => prisma.$queryRaw(...args),
-    eaglePhotoMapState: prisma.eaglePhotoMapState,
-    $transaction: (callback, options) => prisma.$transaction(async (tx) => {
-      const wrapped = new Proxy(tx, { get(target, key) {
-        if (key === 'eaglePhotoMapSnapshot') return new Proxy(target[key], { get(delegate, method) {
-          if (method === 'create') return async (...args) => {
-            const snapshot = await delegate.create(...args);
-            racingWrite = make({ ownerId: raceOwner });
-            await Promise.race([racingWrite, delay(500)]);
-            return snapshot;
-          };
-          const value = delegate[method];
-          return typeof value === 'function' ? value.bind(delegate) : value;
-        } });
-        const value = target[key];
-        return typeof value === 'function' ? value.bind(target) : value;
-      } });
-      return callback(wrapped);
-    }, options),
-  };
-  try {
-    await assert.doesNotReject(runPhotoMapBuildStep(concurrentClient), 'incoming photos cannot starve the first frozen map');
-  } finally { await racingWrite; }
-  const racedState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: { ownerId_libraryMode: { ownerId: raceOwner, libraryMode: 'PHOTO' } } });
-  const racedSnapshot = await prisma.eaglePhotoMapSnapshot.findUniqueOrThrow({ where: { id: racedState.buildingSnapshotId } });
-  assert.ok(racedState.requestedVersion > racedSnapshot.version, 'arrivals after the freeze are retained for the next generation');
+  await freezeDuringWrite(() => make({ ownerId: raceOwner }));
+  const racedState = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+    where: { ownerId_libraryMode: { ownerId: raceOwner, libraryMode: 'PHOTO' } },
+  });
+  const racedSnapshot = await prisma.eaglePhotoMapSnapshot.findUniqueOrThrow({
+    where: { id: racedState.buildingSnapshotId },
+  });
+  assert.ok(
+    racedState.requestedVersion > racedSnapshot.version,
+    'arrivals after the freeze are retained for the next generation',
+  );
   await refresh(raceOwner);
+
+  const privacyRaceOwner = randomUUID();
+  await prisma.user.create({
+    data: {
+      id: privacyRaceOwner,
+      email: `${privacyRaceOwner}@example.invalid`,
+      passwordHash: 'test-only',
+    },
+  });
+  const privacyRacePhoto = await make({ ownerId: privacyRaceOwner });
+  await freezeDuringWrite(() =>
+    prisma.eagleAsset.update({ where: { id: privacyRacePhoto }, data: { isPrivate: true } }),
+  );
+  const revokedState = await prisma.eaglePhotoMapState.findUniqueOrThrow({
+    where: { ownerId_libraryMode: { ownerId: privacyRaceOwner, libraryMode: 'PHOTO' } },
+  });
+  const revokedId = revokedState.buildingSnapshotId;
+  const revokedSnapshot = await prisma.eaglePhotoMapSnapshot.findUniqueOrThrow({
+    where: { id: revokedId },
+  });
+  assert.ok(
+    revokedState.visibilityVersion > revokedSnapshot.visibilityVersion,
+    'privacy changes during the freeze still invalidate the new generation',
+  );
+  assert.equal((await rawService.clusters(privacyRaceOwner, false, world)).status, 'PENDING');
+  await runPhotoMapBuildStep(prisma);
+  assert.equal(await prisma.eaglePhotoMapSnapshot.count({ where: { id: revokedId } }), 0);
+  await refresh(privacyRaceOwner);
+  assert.equal((await rawService.clusters(privacyRaceOwner, false, world)).total, 0);
+  assert.equal((await rawService.clusters(privacyRaceOwner, true, world)).total, 1);
   if (process.env.PHOTO_MAP_SCALE_TEST === '1') {
     const scaleOwner = randomUUID(),
       scaleIds = Array.from({ length: 50000 }, () => randomUUID());

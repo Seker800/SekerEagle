@@ -98,7 +98,10 @@ export async function runPhotoMapBuildStep(client: PrismaClient) {
           });
           if (!published.count) throw new Error('MAP_LEASE_LOST');
         },
-        { isolationLevel: 'RepeatableRead', timeout: 60000 },
+        // Coordinates freeze in one INSERT/SELECT statement, and summaries read
+        // only those immutable points. RC lets later dirty-marker writes survive
+        // without aborting the whole freeze; visibility and lease checks still fence publication.
+        { isolationLevel: 'ReadCommitted', timeout: 60000 },
       );
       return true;
     }
