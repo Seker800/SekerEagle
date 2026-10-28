@@ -634,3 +634,134 @@ for (const sibling of [null, 64]) {
     },
   );
 }
+
+test('mixed parallel defers retain the largest demand until enough shared memory is free', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+    1536,
+  );
+  pool.setRemoteMediaLimit(2);
+  let releaseNas!: () => void, releaseEmbedding!: () => void;
+  await pool.fill(
+    'NAS',
+    async () => 1,
+    async () =>
+      new Promise<void>((done) => {
+        releaseNas = done;
+      }),
+    { memoryMiB: () => 256, onMemoryWait: async () => {} },
+  );
+  await pool.fill(
+    'EMBEDDING',
+    async () => 1,
+    async () =>
+      new Promise<void>((done) => {
+        releaseEmbedding = done;
+      }),
+    { memoryMiB: () => 1144, onMemoryWait: async () => {} },
+  );
+  let index = 0;
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => [768, 256][index++] ?? null,
+    async () => {
+      throw Error('cannot fit');
+    },
+    { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+  );
+  releaseNas();
+  await new Promise((done) => setImmediate(done));
+  t.mock.timers.tick(1000);
+  let claims = 0;
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => {
+      claims++;
+      return null;
+    },
+    async () => {},
+  );
+  assert.equal(claims, 0, 'smaller late defer must not overwrite the larger reservation demand');
+  releaseEmbedding();
+  await new Promise((done) => setImmediate(done));
+  let run = 0,
+    index2 = 0;
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => (index2++ === 0 ? 768 : null),
+    async () => {
+      run++;
+    },
+    { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+  );
+  await new Promise((done) => setImmediate(done));
+  assert.equal(run, 1);
+  assert.equal(pool.activeCount, 0);
+});
+
+test('a failed claim alongside a memory defer cannot leak reservations or erase its fair turn', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'] });
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+    1536,
+  );
+  pool.setRemoteMediaLimit(3);
+  let release!: () => void;
+  await pool.fill(
+    'NAS',
+    async () => 1,
+    async () =>
+      new Promise<void>((done) => {
+        release = done;
+      }),
+    { memoryMiB: () => 1400, onMemoryWait: async () => {} },
+  );
+  let index = 0;
+  await assert.rejects(
+    pool.fill(
+      'REMOTE_MEDIA',
+      async () => {
+        if (index++ === 0) throw Error('claim failed');
+        return index === 2 ? 768 : null;
+      },
+      async () => {},
+      { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+    ),
+    /claim failed/,
+  );
+  await new Promise((done) => setImmediate(done));
+  assert.equal(pool.active('REMOTE_MEDIA'), 0);
+  release();
+  await new Promise((done) => setImmediate(done));
+  let nasClaims = 0;
+  await pool.fill(
+    'NAS',
+    async () => {
+      nasClaims++;
+      return null;
+    },
+    async () => {},
+  );
+  assert.equal(nasClaims, 0);
+  t.mock.timers.tick(1000);
+  let ran = 0,
+    index2 = 0;
+  await pool.fill(
+    'REMOTE_MEDIA',
+    async () => (index2++ === 0 ? 768 : null),
+    async () => {
+      ran++;
+    },
+    { memoryMiB: (job) => job, onMemoryWait: async () => {} },
+  );
+  await new Promise((done) => setImmediate(done));
+  assert.equal(ran, 1);
+  assert.equal(pool.activeCount, 0);
+});

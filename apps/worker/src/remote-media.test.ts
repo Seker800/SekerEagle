@@ -268,6 +268,7 @@ test('verified media capacity can exceed four while real HTTP requests remain bo
     () => createRemoteMediaServer('test-media-token', 17),
     /INVALID_MEDIA_AGENT_CONFIGURATION/,
   );
+  assert.doesNotThrow(() => createRemoteMediaServer('test-media-token', 16).close());
   const server = createRemoteMediaServer('test-media-token', 8, true, undefined, ['faces']);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -306,4 +307,30 @@ test('verified media capacity can exceed four while real HTTP requests remain bo
     body: 'bad image',
   });
   assert.equal(overflow.status, 503);
+  requests.forEach((req) => req.destroy());
+  for (let i = 0; i < 100; i++) {
+    const health = (await (await fetch(base + '/healthz', { headers })).json()) as {
+      capacity: { inFlight: number };
+    };
+    active = health.capacity.inFlight;
+    if (active === 0) break;
+    await delay(10);
+  }
+  assert.equal(active, 0);
+  const resumed = request(base + '/v1/media/faces', {
+    method: 'POST',
+    headers: { ...headers, 'content-type': 'image/jpeg', 'content-length': '32' },
+  });
+  resumed.on('error', () => {});
+  resumed.flushHeaders();
+  requests.push(resumed);
+  for (let i = 0; i < 100; i++) {
+    const health = (await (await fetch(base + '/healthz', { headers })).json()) as {
+      capacity: { inFlight: number };
+    };
+    active = health.capacity.inFlight;
+    if (active === 1) break;
+    await delay(10);
+  }
+  assert.equal(active, 1, 'released capacity must admit a new request');
 });

@@ -662,6 +662,11 @@ test('单张人物发布的隐私投影只读取目标及实况同伴，不随�
     where: { id: f.b.id },
     data: { livePhotoIdentifier: identifier, livePhotoRole: 'MOTION' },
   });
+  const foreign = await fixture();
+  await prisma.eagleAsset.update({
+    where: { id: foreign.a.id },
+    data: { livePhotoIdentifier: identifier, livePhotoRole: 'STILL' },
+  });
   const material = await f.add({
     libraryMode: 'MATERIAL',
     livePhotoIdentifier: identifier,
@@ -710,13 +715,20 @@ test('单张人物发布的隐私投影只读取目标及实况同伴，不随�
   });
   const visits = (node) =>
     (node['Relation Name'] === 'EagleAsset'
-      ? (node['Actual Rows'] + (node['Rows Removed by Filter'] ?? 0)) * node['Actual Loops']
+      ? (node['Actual Rows'] +
+          (node['Rows Removed by Filter'] ?? 0) +
+          (node['Rows Removed by Index Recheck'] ?? 0)) *
+        node['Actual Loops']
       : 0) + (node.Plans ?? []).reduce((sum, child) => sum + visits(child), 0);
   assert.ok(
     visits(plan) < 1000,
     'single-asset privacy publication scanned ' + visits(plan) + ' asset rows',
   );
   assert.equal((await f.marked()).isPrivate, true);
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: foreign.a.id } })).isPrivate,
+    false,
+  );
   assert.equal(
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.b.id } })).isPrivate,
     true,
@@ -729,4 +741,170 @@ test('单张人物发布的隐私投影只读取目标及实况同伴，不随�
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.publicAsset.id } })).isPrivate,
     false,
   );
+  await prisma.$transaction(async (tx) => {
+    const wrapped = new Proxy(tx, {
+      get(target, key) {
+        if (key === '$executeRaw')
+          return async (query) => {
+            const result = await tx.$queryRawUnsafe(
+              'EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ' + query.text,
+              ...query.values,
+            );
+            plan = result[0]['QUERY PLAN'][0].Plan;
+            return 0;
+          };
+        const value = Reflect.get(target, key);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    await syncAssetPrivacy(wrapped, f.ownerId, [f.publicAsset.id], 'PHOTO');
+  });
+  assert.ok(
+    visits(plan) < 1000,
+    'null-identifier publication scanned ' + visits(plan) + ' asset rows',
+  );
+});
+
+test('合并提交仍逐项保护租约、识别身份和人物私密，旧租约不污染同批结果', async () => {
+  const f = await fixture();
+  await f.rule(true);
+  const assets = await Promise.all(Array.from({ length: 8 }, () => f.add()));
+  const jobs = await Promise.all(
+    assets.map((asset) =>
+      prisma.eagleAssetProcessingJob.create({
+        data: {
+          ownerId: f.ownerId,
+          libraryMode: 'PHOTO',
+          assetId: asset.id,
+          assetRevision: asset.mediaRevision,
+          kind: 'ANALYZE_PHOTO_FACES',
+          processorVersion: FACE_MODEL_VERSION,
+          status: 'PROCESSING',
+        },
+      }),
+    ),
+  );
+  const replacement = await prisma.eagleAssetProcessingJob.update({
+    where: { id: jobs[0].id },
+    data: { leaseVersion: { increment: 1 } },
+  });
+  let transactions = 0;
+  const db = new Proxy(prisma, {
+    get(target, key) {
+      if (key === '$transaction')
+        return (work) => {
+          transactions++;
+          return prisma.$transaction(work);
+        };
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const detections = [{ box: [0.1, 0.1, 0.4, 0.4], confidence: 1, embedding }];
+  await Promise.all(jobs.map((job) => persistPhotoFaces(db, job, detections)));
+  assert.equal(transactions, 1);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: replacement.id } }))
+      .status,
+    'PROCESSING',
+  );
+  assert.equal(await prisma.eaglePhotoFace.count({ where: { assetId: assets[0].id } }), 0);
+  for (const asset of assets.slice(1)) {
+    const face = await prisma.eaglePhotoFace.findFirstOrThrow({ where: { assetId: asset.id } });
+    assert.equal(face.personId, f.person.id);
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: asset.id } })).isPrivate,
+      true,
+    );
+  }
+  assert.equal(
+    await prisma.eagleAssetProcessingJob.count({
+      where: { id: { in: jobs.slice(1).map((job) => job.id) }, status: 'COMPLETED' },
+    }),
+    7,
+  );
+  await persistPhotoFaces(db, replacement, detections);
+  assert.equal(transactions, 2);
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: replacement.id } }))
+      .status,
+    'COMPLETED',
+  );
+  assert.equal(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: assets[0].id } })).isPrivate,
+    true,
+  );
+});
+
+test('一张照片提交异常仅回滚该项，其他同批人脸仍按原事务独立发布', async () => {
+  const f = await fixture();
+  const assets = await Promise.all(Array.from({ length: 3 }, () => f.add()));
+  const jobs = await Promise.all(
+    assets.map((asset) =>
+      prisma.eagleAssetProcessingJob.create({
+        data: {
+          ownerId: f.ownerId,
+          libraryMode: 'PHOTO',
+          assetId: asset.id,
+          assetRevision: asset.mediaRevision,
+          kind: 'ANALYZE_PHOTO_FACES',
+          processorVersion: FACE_MODEL_VERSION,
+          status: 'PROCESSING',
+        },
+      }),
+    ),
+  );
+  const db = new Proxy(prisma, {
+    get(target, key) {
+      if (key === '$transaction')
+        return (work) =>
+          prisma.$transaction((tx) =>
+            work(
+              new Proxy(tx, {
+                get(transaction, field) {
+                  if (field === 'eaglePhotoFace')
+                    return new Proxy(tx.eaglePhotoFace, {
+                      get(delegate, operation) {
+                        if (operation === 'create')
+                          return (input) => {
+                            if (input.data.assetId === assets[1].id)
+                              throw Error('isolated publication failure');
+                            return delegate.create(input);
+                          };
+                        const value = Reflect.get(delegate, operation);
+                        return typeof value === 'function' ? value.bind(delegate) : value;
+                      },
+                    });
+                  const value = Reflect.get(transaction, field);
+                  return typeof value === 'function' ? value.bind(transaction) : value;
+                },
+              }),
+            ),
+          );
+      const value = Reflect.get(target, key);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const outcomes = await Promise.allSettled(
+    jobs.map((job) =>
+      persistPhotoFaces(db, job, [{ box: [0.1, 0.1, 0.4, 0.4], confidence: 1, embedding }]),
+    ),
+  );
+  assert.deepEqual(
+    outcomes.map((value) => value.status),
+    ['fulfilled', 'rejected', 'fulfilled'],
+  );
+  for (const index of [0, 2]) {
+    assert.equal(
+      (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: jobs[index].id } }))
+        .status,
+      'COMPLETED',
+    );
+    assert.equal(await prisma.eaglePhotoFace.count({ where: { assetId: assets[index].id } }), 1);
+  }
+  assert.equal(
+    (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: jobs[1].id } })).status,
+    'PROCESSING',
+  );
+  assert.equal(await prisma.eaglePhotoFace.count({ where: { assetId: assets[1].id } }), 0);
 });
