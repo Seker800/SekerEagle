@@ -115,16 +115,29 @@ test('historical backlog discovery reads recent upload facts once even under a n
   await db.$executeRaw`ANALYZE "UploadSession"`;
   await db.$executeRaw`ANALYZE "EagleMediaJob"`;
   let query;
-  await selectScheduledMediaCandidates({ $queryRaw: (q) => { query = q; return []; } },
-    input, true, false, { resource: 'EMBEDDING', historyOnly: true });
-  const plan = await db.$transaction(async (tx) => {
-    // Reproduce the production access path without relying on local cost estimates.
-    await tx.$executeRawUnsafe('SET LOCAL enable_hashjoin=off');
-    await tx.$executeRawUnsafe('SET LOCAL enable_mergejoin=off');
-    await tx.$executeRawUnsafe('SET LOCAL enable_material=off');
-    const rows = await tx.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${query}`);
-    return rows[0]['QUERY PLAN'][0];
-  }, { timeout: 60000 });
+  await selectScheduledMediaCandidates(
+    {
+      $queryRaw: (q) => {
+        query = q;
+        return [];
+      },
+    },
+    input,
+    true,
+    false,
+    { resource: 'EMBEDDING', historyOnly: true },
+  );
+  const plan = await db.$transaction(
+    async (tx) => {
+      // Reproduce the production access path without relying on local cost estimates.
+      await tx.$executeRawUnsafe('SET LOCAL enable_hashjoin=off');
+      await tx.$executeRawUnsafe('SET LOCAL enable_mergejoin=off');
+      await tx.$executeRawUnsafe('SET LOCAL enable_material=off');
+      const rows = await tx.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${query}`);
+      return rows[0]['QUERY PLAN'][0];
+    },
+    { timeout: 60000 },
+  );
   const uploadScans = [];
   const visit = (node) => {
     if (node['Relation Name'] === 'UploadSession') uploadScans.push(node);
@@ -132,12 +145,17 @@ test('historical backlog discovery reads recent upload facts once even under a n
   };
   visit(plan.Plan);
   assert.ok(uploadScans.length, 'the real query must consult upload freshness');
-  assert.ok(uploadScans.every((node) => node['Actual Loops'] <= 1),
-    `recent uploads must be read once, not per historical asset: ${uploadScans.map((node) => node['Actual Loops'])}`);
+  assert.ok(
+    uploadScans.every((node) => node['Actual Loops'] <= 1),
+    `recent uploads must be read once, not per historical asset: ${uploadScans.map((node) => node['Actual Loops'])}`,
+  );
   const actual = await db.$queryRaw(query);
   assert.equal(actual.length, 50);
   assert.ok(actual.every((row) => row.ownerId === f.owner));
-  await db.eagleAssetProcessingJob.updateMany({ where: { ownerId: f.owner }, data: { status: 'COMPLETED' } });
+  await db.eagleAssetProcessingJob.updateMany({
+    where: { ownerId: f.owner },
+    data: { status: 'COMPLETED' },
+  });
 });
 
 test('50k backlog discovery is amortized while every leased hint is revalidated against current policies and resource versions', async () => {
@@ -406,10 +424,13 @@ test('restricting upload freshness preserves recent/history ordering, replacemen
       false,
       { resource: 'EMBEDDING', ...options },
     );
-    const reference = query.text.replace(
-      'AND current_upload."completedAt">=now()-interval \'24 hours\'',
-      '',
-    );
+    const reference = query.text
+      .replace(/WITH recent_uploads AS MATERIALIZED \([\s\S]*?\)\s*SELECT job\.\*/, 'SELECT job.*')
+      .replace(
+        'LEFT JOIN recent_uploads current_upload',
+        'LEFT JOIN "UploadSession" current_upload',
+      )
+      .replace('AND current_upload."completedAt">=now()-interval \'24 hours\'', '');
     assert.notEqual(
       reference,
       query.text,

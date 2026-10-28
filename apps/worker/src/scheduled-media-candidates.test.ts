@@ -45,7 +45,7 @@ test('replacement freshness uses only the completed upload of the current owned 
     () => false,
   );
   await select({ where: { lane: 'INTERACTIVE' }, take: 50 } as ClaimFindManyInput, 'RECENT');
-  assert.match(query, /JOIN "UploadSession" current_upload/);
+  assert.match(query, /JOIN recent_uploads current_upload/);
   assert.match(query, /current_upload\."objectKey"=a\."originalObjectKey"/);
   assert.match(query, /current_upload\."uploaderId"=a\."ownerId"/);
   assert.match(query, /current_upload\."libraryMode"=a\."libraryMode"/);
