@@ -20,10 +20,18 @@ export async function syncAssetPrivacy(
     if (assetIds?.length === 0) return 0;
     // Include both components before calculating the union, including when only the video changed.
     const scope = assetIds
-      ? Prisma.sql`AND (a.id IN (${Prisma.join(assetIds)}) OR
-      (a."livePhotoIdentifier" IS NOT NULL AND a."livePhotoIdentifier" IN (
-        SELECT "livePhotoIdentifier" FROM "EagleAsset" WHERE "ownerId" = ${ownerId}
-          AND "libraryMode" = 'PHOTO' AND id IN (${Prisma.join(assetIds)}))))`
+      ? Prisma.sql`AND a.id IN (
+          SELECT seed.id FROM "EagleAsset" seed
+          WHERE seed."ownerId" = ${ownerId} AND seed."libraryMode" = 'PHOTO'
+            AND seed.id IN (${Prisma.join(assetIds)})
+          UNION
+          SELECT pair.id FROM "EagleAsset" seed
+          JOIN "EagleAsset" pair ON pair."ownerId" = seed."ownerId"
+            AND pair."libraryMode" = seed."libraryMode"
+            AND pair."livePhotoIdentifier" = seed."livePhotoIdentifier"
+          WHERE seed."ownerId" = ${ownerId} AND seed."libraryMode" = 'PHOTO'
+            AND seed.id IN (${Prisma.join(assetIds)})
+        )`
       : Prisma.empty;
     return transaction.$executeRaw(Prisma.sql`
       WITH reasons AS MATERIALIZED (
