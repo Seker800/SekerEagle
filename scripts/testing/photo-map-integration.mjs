@@ -219,7 +219,8 @@ try {
   );
   const partialCell = partialOverview.clusters.find((cell) => cell.count === 131);
   assert.ok(partialCell);
-  assert.equal((await rawService.photos(owner, false, partialCell.id)).items.length, 60);
+  const firstPartialPage = await rawService.photos(owner, false, partialCell.id);
+  assert.equal(firstPartialPage.items.length, 60);
   await assert.rejects(rawService.photos(other, false, partialCell.id), /更新/);
   await assert.rejects(
     rawService.photos(owner, false, `${partialOverview.snapshotId}:21/0/0`),
@@ -227,6 +228,23 @@ try {
   );
   const privatePartial = await rawService.clusters(owner, true, world);
   assert.equal(privatePartial.total, 133);
+  await refresh(owner);
+  assert.equal(
+    (await rawService.clusters(owner, false, world)).snapshotId,
+    partialOverview.snapshotId,
+  );
+  const resumed = await rawService.photos(
+    owner,
+    false,
+    partialCell.id,
+    firstPartialPage.nextCursor,
+  );
+  assert.equal(resumed.items.length, 60);
+  assert.equal(
+    new Set([...firstPartialPage.items, ...resumed.items].map((item) => item.id)).size,
+    120,
+    'partial member cursors survive completion of finer levels',
+  );
   // A committed partial snapshot is revoked immediately by a visibility/location change.
   await prisma.eaglePhotoMetadata.update({ where: { assetId: far }, data: { latitude: -36 } });
   assert.equal((await rawService.clusters(owner, false, world)).status, 'PENDING');
@@ -463,6 +481,13 @@ try {
   const interrupted = (await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey }))
     .buildingSnapshotId;
   assert.ok(interrupted);
+  await runPhotoMapBuildStep(prisma);
+  const partialSnapshot = await prisma.eaglePhotoMapSnapshot.findUniqueOrThrow({
+    where: { id: interrupted },
+  });
+  assert.equal(partialSnapshot.completedAt, null);
+  const partialState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: stateKey });
+  assert.ok(partialState.nextLevel > 0 && partialState.nextLevel < 22);
   await prisma.eaglePhotoMetadata.update({ where: { assetId: added }, data: { latitude: 44 } });
   await runPhotoMapBuildStep(prisma);
   assert.equal(await prisma.eaglePhotoMapSnapshot.count({ where: { id: interrupted } }), 0);

@@ -14,7 +14,7 @@ import {
 import { renderEditedCopy } from './edited-copy-render';
 import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
-import { runPhotoMapBuildStep } from './photo-map-build';
+import { canAdvancePhotoMap, runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { publishImage } from './image-publication';
 import { publishEmbedding } from './embedding-publication';
@@ -1374,11 +1374,10 @@ async function poll(): Promise<void> {
   if (resourcePool.active('NAS') >= workerConcurrency || buildingPhotoMap) return;
   if (
     runBackgroundProcessing &&
-    resourcePool.active('NAS') === 0 &&
     activeTagBuildCount === 0 &&
     !buildingSmartFolder &&
     !buildingPhotoMap &&
-    Date.now() - lastPhotoMapStep >= 15000
+    canAdvancePhotoMap(Date.now(), lastPhotoMapStep, resourcePool.active('NAS'), workerConcurrency)
   ) {
     buildingPhotoMap = true;
     lastPhotoMapStep = Date.now();

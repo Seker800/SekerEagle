@@ -4,6 +4,16 @@ import { Prisma, type PrismaClient, type EaglePhotoMapState } from '@prisma/clie
 const MAX_LEVEL = 21;
 const LEVELS_PER_STEP = 4;
 
+/** A map step uses one available NAS slot; other in-flight media may keep running. */
+export function canAdvancePhotoMap(
+  now: number,
+  lastStepAt: number,
+  activeNas: number,
+  nasCapacity: number,
+) {
+  return activeNas < nasCapacity && now - lastStepAt >= 15000;
+}
+
 /** Called between media jobs at most every 15 seconds; remote media processing never blocks map progress.
  * One owner, one fenced step. Upload/metadata writes merely coalesce the dirty marker. */
 export async function runPhotoMapBuildStep(client: PrismaClient) {

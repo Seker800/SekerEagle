@@ -134,7 +134,7 @@ function indexedFixture(cells: Array<Record<string, unknown>> = []) {
   const service = new PhotoMapService({
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never);
-  return { service, tx, queries, state };
+  return { service, tx, queries, state, snapshot };
 }
 test('map reads persisted cells and bounded current covers without a gallery scan or build on GET', async () => {
   const f = indexedFixture([
@@ -271,4 +271,41 @@ test('a committed partial generation is readable at its available resolution bef
   assert.equal(result.clusters[0]?.id, `${snapshotId}:3/6/3`);
   assert.match(JSON.stringify(f.queries), /"visibilityVersion":1/);
   assert.equal((await f.service.photos('owner', false, `${snapshotId}:3/6/3`)).items.length, 0);
+});
+
+test('retains a valid detailed generation until its replacement has the requested level', async () => {
+  const f = indexedFixture();
+  const replacement = '00000000-0000-4000-8000-000000000002';
+  f.state.buildingSnapshotId = replacement;
+  f.state.nextLevel = 4;
+  f.state.dirtyAt = new Date();
+  const old = await f.service.clusters('owner', false, world);
+  assert.equal(old.snapshotId, snapshotId);
+  assert.equal(old.level, mapGrid(world).level);
+  const initialQueryCount = f.queries.length;
+  f.state.nextLevel = 8;
+  f.tx.eaglePhotoMapSnapshot.findFirst = async (input: unknown) => {
+    f.queries.push(input);
+    return (input as { where: { id: string } }).where.id === replacement
+      ? ({ ...f.snapshot, id: replacement, completedAt: null, createdAt: new Date() } as never)
+      : f.snapshot;
+  };
+  const current = await f.service.clusters('owner', false, world);
+  assert.equal(current.snapshotId, replacement);
+  assert.equal(current.level, mapGrid(world).level);
+  assert.equal(current.status, 'UPDATING');
+  assert.equal(
+    f.queries.length - initialQueryCount,
+    3,
+    'at most two snapshot lookups and one persisted-cell lookup',
+  );
+});
+
+test('an unfinished generation with no committed level remains unavailable', async () => {
+  const f = indexedFixture();
+  f.state.activeSnapshotId = null;
+  f.state.buildingSnapshotId = snapshotId;
+  f.state.nextLevel = 0;
+  assert.equal((await f.service.clusters('owner', false, world)).status, 'PENDING');
+  assert.equal(f.queries.length, 0);
 });
