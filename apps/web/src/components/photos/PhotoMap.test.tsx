@@ -531,3 +531,39 @@ it('automatically replaces the preparing state with available locations without 
   );
   expect(markerButtons()).toHaveLength(1);
 }, 9000);
+
+it('slows polling from five to thirty seconds after the generation completes', async () => {
+  vi.useFakeTimers();
+  let view: ReturnType<typeof mount> | undefined;
+  try {
+    const data = {
+      snapshotId: 'partial',
+      total: 132,
+      level: 7,
+      clusters: [{ ...first, id: 'partial:7/100/50', cover: asset }],
+    };
+    mocks.getMap.mockResolvedValueOnce({ ...data, status: 'UPDATING', partial: true });
+    mocks.getMap.mockResolvedValue({ ...data, status: 'READY', partial: false });
+    await act(async () => {
+      view = mount();
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(mocks.getMap).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(mocks.getMap).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(mocks.getMap).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25001);
+    });
+    expect(mocks.getMap).toHaveBeenCalledTimes(3);
+  } finally {
+    view?.unmount();
+    view?.client.clear();
+    vi.useRealTimers();
+  }
+});

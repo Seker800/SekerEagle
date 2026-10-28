@@ -524,22 +524,41 @@ try {
 
   // New facts may invalidate visibility but must not erase a real retry deadline.
   const retryOwner = randomUUID();
-  await prisma.user.create({ data: { id: retryOwner, email: `${retryOwner}@example.invalid`, passwordHash: 'test-only' } });
+  await prisma.user.create({
+    data: { id: retryOwner, email: `${retryOwner}@example.invalid`, passwordHash: 'test-only' },
+  });
   const retryPhoto = await make({ ownerId: retryOwner });
   const retryKey = { ownerId_libraryMode: { ownerId: retryOwner, libraryMode: 'PHOTO' } };
   const retryAt = new Date(Date.now() + 600000);
-  await prisma.eaglePhotoMapState.update({ where: retryKey, data: { attempts: 3, lastError: 'INDEX_BUILD_FAILED', availableAt: retryAt } });
+  await prisma.eaglePhotoMapState.update({
+    where: retryKey,
+    data: { attempts: 3, lastError: 'INDEX_BUILD_FAILED', availableAt: retryAt },
+  });
   await make({ ownerId: retryOwner });
   let retryState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: retryKey });
-  assert.equal(retryState.lastError, 'INDEX_BUILD_FAILED', 'arriving photos must not erase failure backoff');
+  assert.equal(
+    retryState.lastError,
+    'INDEX_BUILD_FAILED',
+    'arriving photos must not erase failure backoff',
+  );
   assert.equal(retryState.attempts, 3);
   assert.equal(retryState.availableAt.getTime(), retryAt.getTime());
-  assert.equal(await runPhotoMapBuildStep(prisma), false, 'first-build bypass cannot skip an established retry deadline');
+  assert.equal(
+    await runPhotoMapBuildStep(prisma),
+    false,
+    'first-build bypass cannot skip an established retry deadline',
+  );
   const visibilityBefore = retryState.visibilityVersion;
   await prisma.eagleAsset.update({ where: { id: retryPhoto }, data: { isPrivate: true } });
-  await prisma.eaglePhotoMetadata.update({ where: { assetId: retryPhoto }, data: { longitude: 122 } });
+  await prisma.eaglePhotoMetadata.update({
+    where: { assetId: retryPhoto },
+    data: { longitude: 122 },
+  });
   retryState = await prisma.eaglePhotoMapState.findUniqueOrThrow({ where: retryKey });
-  assert.ok(retryState.visibilityVersion > visibilityBefore, 'sensitive changes still revoke old generations');
+  assert.ok(
+    retryState.visibilityVersion > visibilityBefore,
+    'sensitive changes still revoke old generations',
+  );
   assert.equal(retryState.attempts, 3);
   assert.equal(retryState.lastError, 'INDEX_BUILD_FAILED');
   assert.equal(retryState.availableAt.getTime(), retryAt.getTime());

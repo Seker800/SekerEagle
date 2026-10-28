@@ -133,7 +133,10 @@ function indexedFixture(cells: Array<Record<string, unknown>> = []) {
     },
   };
   const service = new PhotoMapService({
-    $transaction: async (fn: (client: typeof tx) => unknown, options: unknown) => { transactions.push(options); return fn(tx); },
+    $transaction: async (fn: (client: typeof tx) => unknown, options: unknown) => {
+      transactions.push(options);
+      return fn(tx);
+    },
   } as never);
   return { service, tx, queries, state, snapshot, transactions };
 }
@@ -320,10 +323,12 @@ test('an owner without indexed photo data gets an empty ready map without source
   assert.equal(f.queries.length, 0);
 });
 
-
 test('map cells and members share state, visibility and level boundaries under repeatable reads', async () => {
   const f = indexedFixture();
   await f.service.clusters('owner', false, world);
   await f.service.photos('owner', false, `${snapshotId}:7/20/12`);
-  assert.deepEqual(f.transactions, [{ isolationLevel: 'RepeatableRead' }, { isolationLevel: 'RepeatableRead' }]);
+  assert.deepEqual(f.transactions, [
+    { isolationLevel: 'RepeatableRead' },
+    { isolationLevel: 'RepeatableRead' },
+  ]);
 });

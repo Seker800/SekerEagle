@@ -93,6 +93,7 @@ export async function runPhotoMapBuildStep(client: PrismaClient) {
               leaseToken: null,
               lockedUntil: null,
               lastError: null,
+              attempts: 0,
             },
           });
           if (!published.count) throw new Error('MAP_LEASE_LOST');
