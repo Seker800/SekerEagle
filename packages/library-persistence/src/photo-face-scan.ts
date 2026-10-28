@@ -33,7 +33,7 @@ export async function queuePhotoFaceScan(
     async (tx) => {
       // Admission writes the whole library atomically. Leave a bounded window for
       // NAS WAL flushes, with transaction and scan-route deadlines above it.
-      await tx.$executeRaw`SET LOCAL statement_timeout = '120s'`;
+      await tx.$executeRaw`SET LOCAL statement_timeout = '600s'`;
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       const rows = await tx.$queryRaw<Array<{ queued: bigint }>>(Prisma.sql`
       WITH inserted AS (
@@ -49,6 +49,6 @@ export async function queuePhotoFaceScan(
       const queued = Number(rows[0]?.queued ?? 0);
       return { queued, scanned: queued, limit: null };
     },
-    { maxWait: 5000, timeout: 150000 },
+    { maxWait: 5000, timeout: 630000 },
   );
 }

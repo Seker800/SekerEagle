@@ -36,7 +36,11 @@ async function refreshBrowserSession(): Promise<void> {
     });
   return refreshInFlight;
 }
-export async function fetchWithBrowserSession(path: string, init?: RequestInit): Promise<Response> {
+export async function fetchWithBrowserSession(
+  path: string,
+  init?: RequestInit,
+  timeoutMs = 30_000,
+): Promise<Response> {
   if (path === '/api/auth/login') {
     authEpoch++;
     loggingOut = false;
@@ -52,8 +56,8 @@ export async function fetchWithBrowserSession(path: string, init?: RequestInit):
     ...init,
     credentials: 'include',
     signal: init?.signal
-      ? AbortSignal.any([init.signal, AbortSignal.timeout(30_000)])
-      : AbortSignal.timeout(30_000),
+      ? AbortSignal.any([init.signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs),
   };
   const response = await fetch(path, requestInit);
   if (epoch !== authEpoch) sessionEnded();
@@ -64,11 +68,15 @@ export async function fetchWithBrowserSession(path: string, init?: RequestInit):
   if (epoch !== authEpoch || loggingOut) sessionEnded();
   return retry;
 }
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetchWithBrowserSession(path, {
-    ...init,
-    headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
-  });
+export async function request<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
+  const response = await fetchWithBrowserSession(
+    path,
+    {
+      ...init,
+      headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
+    },
+    timeoutMs,
+  );
   if (!response.ok) {
     throw await errorFromResponse(response, '请求失败（{{value1}}）');
   }

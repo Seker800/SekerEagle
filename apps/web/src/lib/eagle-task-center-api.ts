@@ -9,10 +9,11 @@ import { errorFromResponse } from './api-error';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
 
 export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') {
-  async function request<T>(suffix = '', init?: RequestInit): Promise<T> {
+  async function request<T>(suffix = '', init?: RequestInit, timeoutMs?: number): Promise<T> {
     const response = await fetchWithBrowserSession(
       libraryApiPath(`/api/eagle/tasks${suffix}`, libraryMode),
       init,
+      timeoutMs,
     );
     if (!response.ok) throw await errorFromResponse(response, '读取任务中心失败（{{value1}}）');
     return response.json() as Promise<T>;
@@ -25,11 +26,15 @@ export function createEagleTaskCenterApi(libraryMode: LibraryMode = 'MATERIAL') 
         body: JSON.stringify(policy),
       }),
     startEagleTaskFamily: (family: TaskFamily) =>
-      request<{ queued: number }>('/start', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ family }),
-      }),
+      request<{ queued: number }>(
+        '/start',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ family }),
+        },
+        690_000,
+      ),
     fetchEagleTaskCenter: (signal?: AbortSignal) => request<TaskCenterOverview>('', { signal }),
     fetchEagleTaskHistory: (signal?: AbortSignal) =>
       request<TaskCenterOverview>('/history', { signal }),

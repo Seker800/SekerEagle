@@ -30,10 +30,14 @@ export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
     { signal },
   );
 export const scanPhotoPeople = () =>
-  request<{ queued: number; scanned: number; limit: number | null }>(`${base}/people/scan`, {
-    method: 'POST',
-    body: '{}',
-  });
+  request<{ queued: number; scanned: number; limit: number | null }>(
+    `${base}/people/scan`,
+    {
+      method: 'POST',
+      body: '{}',
+    },
+    690_000,
+  );
 export const renamePhotoPerson = (id: string, name: string) =>
   request(`${base}/people/${encodeURIComponent(id)}`, {
     method: 'PATCH',

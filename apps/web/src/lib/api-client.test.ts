@@ -20,15 +20,55 @@ describe('browser session recovery', () => {
 
   it('keeps normal requests short while both full-library face admission entry points wait', async () => {
     const deadlines = vi.spyOn(AbortSignal, 'timeout');
-    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({ queued: 2 }));
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => jsonResponse({ queued: 2 }));
     await request('/api/auth/me');
     await createEagleTaskCenterApi('PHOTO').startEagleTaskFamily('FACES');
     await scanPhotoPeople();
     expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([30_000, 690_000, 690_000]);
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      '/api/auth/me', '/api/photos/tasks/start', '/api/photos/photography/people/scan',
+      '/api/auth/me',
+      '/api/photos/tasks/start',
+      '/api/photos/photography/people/scan',
     ]);
     for (const [, init] of fetchMock.mock.calls) expect(init?.credentials).toBe('include');
+  });
+
+  it('keeps the same authenticated refresh and overall deadline for a long scan', async () => {
+    const deadlines = vi.spyOn(AbortSignal, 'timeout');
+    const fetchMock = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse({ message: 'expired' }, 401))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ queued: 2 }));
+    await expect(createEagleTaskCenterApi('PHOTO').startEagleTaskFamily('FACES')).resolves.toEqual({
+      queued: 2,
+    });
+    expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
+      '/api/photos/tasks/start',
+      '/api/auth/refresh',
+      '/api/photos/tasks/start',
+    ]);
+    expect(deadlines.mock.calls.map(([ms]) => ms)).toEqual([690_000, 30_000]);
+    expect(fetchMock.mock.calls[0]?.[1]?.signal).toBe(fetchMock.mock.calls[2]?.[1]?.signal);
+  });
+
+  it('still cancels a long request when its caller aborts', async () => {
+    const controller = new AbortController();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_path, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('cancelled', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    const pending = request('/api/photos/tasks/start', { signal: controller.signal }, 690_000);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('uses the desktop session coordinator when the access cookie expires', async () => {
