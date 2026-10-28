@@ -458,3 +458,53 @@ test('maintenance reserves model capacity atomically and respects model backpres
   pool.defer('EMBEDDING', 1000);
   await pool.maintenance(async (allowed) => assert.equal(allowed, false));
 });
+
+test('remote media fills reserved slots concurrently and a slow claim cannot block ready siblings', async () => {
+  const pool = new MediaResourcePool(
+    1,
+    () => {},
+    () => {},
+    1,
+    1536,
+  );
+  pool.setRemoteMediaLimit(3);
+  const gates = Array.from({ length: 3 }, () => {
+    let resolve!: (value: number | null) => void;
+    const promise = new Promise<number | null>((done) => {
+      resolve = done;
+    });
+    return { promise, resolve };
+  });
+  let claims = 0;
+  const ran: number[] = [];
+  const filling = pool.fill(
+    'REMOTE_MEDIA',
+    () => gates[claims++]!.promise,
+    async (job) => {
+      ran.push(job);
+    },
+  );
+  try {
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(
+      claims,
+      3,
+      'all available remote slots must claim before the first database request finishes',
+    );
+    await pool.fill(
+      'REMOTE_MEDIA',
+      async () => {
+        throw Error('reserved capacity exceeded');
+      },
+      async () => {},
+    );
+    gates[1]!.resolve(2);
+    gates[2]!.resolve(3);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(ran, [2, 3], 'ready work must run while an earlier claim is still waiting');
+  } finally {
+    gates.forEach((gate) => gate.resolve(null));
+    await filling;
+  }
+  assert.equal(pool.activeCount, 0);
+});
