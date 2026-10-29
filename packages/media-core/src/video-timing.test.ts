@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { probeCameraVideo, transcodeCameraVideo, type CameraVideoEncoder } from './index';
 
-test('transcoding preserves the display duration of a held final video frame', async () => {
+test('transcoding preserves the display duration of a held final video frame', { skip: !process.env.FFMPEG_PATH || !process.env.FFPROBE_PATH }, async () => {
   const directory = await mkdtemp(join(tmpdir(), 'video-tail-'));
   try {
     const source = join(directory, 'source.mp4');
