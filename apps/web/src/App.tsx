@@ -1,13 +1,10 @@
-import { PhotoPrivatePeopleSettings } from './components/photos/PhotoPrivatePeopleSettings';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
-import { AccountHome } from './components/account/AccountHome';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
 import { LibraryModeControl } from './components/eagle/LibraryModeControl';
-import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { LibraryWorkspaceProvider } from './lib/library-workspace';
 import { createPrivacyVisibilityApi } from './lib/privacy-visibility-api';
 import type { LibraryMode } from './lib/library-api-scope';
@@ -17,6 +14,20 @@ import {
   DEFAULT_PRIVACY_VISIBILITY,
   type PrivacyVisibilityState,
 } from './lib/privacy-visibility-api';
+const SekerEaglePage = lazy(() =>
+  import('./components/eagle/SekerEaglePage').then((module) => ({
+    default: module.SekerEaglePage,
+  })),
+);
+const AccountHome = lazy(() =>
+  import('./components/account/AccountHome').then((module) => ({ default: module.AccountHome })),
+);
+const PhotoPrivatePeopleSettings = lazy(() =>
+  import('./components/photos/PhotoPrivatePeopleSettings').then((module) => ({
+    default: module.PhotoPrivatePeopleSettings,
+  })),
+);
+
 export interface User {
   id: string;
   email: string;
@@ -98,14 +109,27 @@ export function App() {
   useEffect(() => {
     const timer =
       connectionUnavailable || user
-        ? window.setInterval(() => void checkSession(), connectionUnavailable ? 5000 : 30000)
+        ? window.setInterval(
+            () => {
+              if (document.visibilityState !== 'hidden') void checkSession();
+            },
+            connectionUnavailable ? 5000 : 60000,
+          )
         : null;
     const onOnline = () => void checkSession();
+    const onVisible = () => {
+      if (document.visibilityState !== 'hidden' && (user || connectionUnavailable))
+        void checkSession();
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
     const onOffline = () => setConnectionUnavailable(true);
     window.addEventListener('offline', onOffline);
     return () => {
       if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
@@ -267,43 +291,45 @@ export function App() {
     >
       <div className="standalone-eagle-shell">
         {connectionButton}
-        <SekerEaglePage
-          modeSwitcher={
-            <LibraryModeControl
-              value={libraryMode}
-              onChange={(mode) => {
-                setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-                setLibraryMode(mode);
-              }}
-            />
-          }
-          accountSummary={{ email: user.email, onLogout: () => void logout() }}
-          ownerId={user.id}
-          canManageProcessing={user.role === 'ADMIN'}
-          privacyVisibility={privacyVisibility}
-          privacyRulesRevision={privacyRulesRevision}
-          onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-          accountView={
-            <AccountHome
-              user={user}
-              onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
-              onLogout={() => void logout()}
-              privacyVisibility={privacyVisibility}
-              onPrivacyVisibilityChange={(value) => {
-                if (modeRef.current === libraryMode) setPrivacyVisibility(value);
-              }}
-              privacyExtras={
-                libraryMode === 'PHOTO' ? (
-                  <PhotoPrivatePeopleSettings
-                    includePrivate={privacyVisibility?.enabled === true}
-                    onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-                  />
-                ) : undefined
-              }
-              onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-            />
-          }
-        />
+        <Suspense fallback={<div role="status">{t('正在连接 SekerEagle…')}</div>}>
+          <SekerEaglePage
+            modeSwitcher={
+              <LibraryModeControl
+                value={libraryMode}
+                onChange={(mode) => {
+                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                  setLibraryMode(mode);
+                }}
+              />
+            }
+            accountSummary={{ email: user.email, onLogout: () => void logout() }}
+            ownerId={user.id}
+            canManageProcessing={user.role === 'ADMIN'}
+            privacyVisibility={privacyVisibility}
+            privacyRulesRevision={privacyRulesRevision}
+            onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+            accountView={
+              <AccountHome
+                user={user}
+                onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
+                onLogout={() => void logout()}
+                privacyVisibility={privacyVisibility}
+                onPrivacyVisibilityChange={(value) => {
+                  if (modeRef.current === libraryMode) setPrivacyVisibility(value);
+                }}
+                privacyExtras={
+                  libraryMode === 'PHOTO' ? (
+                    <PhotoPrivatePeopleSettings
+                      includePrivate={privacyVisibility?.enabled === true}
+                      onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                    />
+                  ) : undefined
+                }
+                onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+              />
+            }
+          />
+        </Suspense>
       </div>
     </LibraryWorkspaceProvider>
   );

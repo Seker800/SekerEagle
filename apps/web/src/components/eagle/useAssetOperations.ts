@@ -41,7 +41,7 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
         refetchInterval: (query: { state: { data?: AssetOperationSummary[] } }) =>
           query.state.data?.some((operation) => operation.running || operation.queued)
             ? 1500
-            : 10000,
+            : 60000,
         refetchIntervalInBackground: false,
       };
     }),

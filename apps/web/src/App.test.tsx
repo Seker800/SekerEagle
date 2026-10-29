@@ -165,7 +165,11 @@ it('removes both workspace caches when a running session expires', async () => {
 it('checks the session when a visible window regains focus', async () => {
   requestMock.mockResolvedValueOnce(userResponse());
   requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
-  render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <App />
+    </QueryClientProvider>,
+  );
   await screen.findByText('素材图库');
   requestMock.mockResolvedValueOnce(userResponse());
   fireEvent(window, new Event('focus'));

@@ -1,4 +1,3 @@
-import { parse } from 'exifr';
 import type { PhotoMetadata } from './photo-watermark-model';
 
 const TAGS = [
@@ -50,6 +49,7 @@ export async function readPhotoMetadata(
   const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
   const response = await fetch(source, { signal: boundedSignal, credentials: 'same-origin' });
   if (!response.ok) return {};
+  const { parse } = await import('exifr');
   const data: unknown = await parse(await response.blob(), {
     pick: TAGS,
     gps: false,

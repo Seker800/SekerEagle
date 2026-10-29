@@ -17,24 +17,33 @@ export function useEagleReferenceData(
   const manualTagsQuery = useQuery({
     queryKey: queryKeys.manualTags,
     queryFn: () => listEagleManualTags(accessToken),
+    staleTime: 60_000,
     enabled: options.enabled,
   });
   const manualTagGroupsQuery = useQuery({
     queryKey: queryKeys.manualTagGroups,
     queryFn: () => listEagleManualTagGroups(accessToken),
+    staleTime: 60_000,
     enabled: options.enabled,
   });
   const aiTagsQuery = useQuery({
     queryKey: queryKeys.aiTags,
     queryFn: () => listEagleAiTags(accessToken),
+    staleTime: 60_000,
     enabled: options.enabled !== false && options.aiTagsEnabled,
   });
   const smartFoldersQuery = useQuery({
     queryKey: queryKeys.smartFolders,
     queryFn: () => listEagleSmartFolders(accessToken),
+    staleTime: 60_000,
     enabled: options.enabled,
     refetchInterval: (query) =>
-      query.state.data?.some((folder) => folder.semanticState) ? 10_000 : false,
+      query.state.data?.some(
+        (folder) =>
+          folder.semanticState?.status === 'PENDING' || folder.semanticState?.status === 'BUILDING',
+      )
+        ? 10_000
+        : 60_000,
   });
 
   return { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery };

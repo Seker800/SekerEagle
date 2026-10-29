@@ -18,7 +18,6 @@ import { EagleResponsiveTools } from './EagleResponsiveTools';
 import { EagleResponsiveDetails } from './EagleResponsiveDetails';
 import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
-import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
@@ -41,11 +40,12 @@ import { usePhotoFilterOptions } from '../photos/usePhotoFilterOptions';
 import { PhotoCollections } from '../photos/PhotoCollections';
 import { PhotoTimelineRail } from '../photos/PhotoTimelineRail';
 import { usePhotoTimeline } from '../photos/usePhotoTimeline';
-import { PhotoMap } from '../photos/PhotoMap';
 import { PhotoMetadataDetails } from '../photos/PhotoMetadataDetails';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -147,6 +147,13 @@ import {
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
+const PhotoMap = lazy(() =>
+  import('../photos/PhotoMap').then((module) => ({ default: module.PhotoMap })),
+);
+const EagleBatchPhotoEdit = lazy(() =>
+  import('./EagleBatchPhotoEdit').then((module) => ({ default: module.EagleBatchPhotoEdit })),
+);
+
 interface SekerEaglePageProps {
   modeSwitcher?: ReactNode;
   accessToken?: string;
@@ -500,12 +507,7 @@ export function SekerEaglePage({
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
-  const secondaryReady =
-    !isAssetView ||
-    !showsAssetControls ||
-    assetsQuery.isFetched ||
-    filtersExpanded ||
-    isSmartFolderDialogOpen;
+  const secondaryReady = true;
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
       enabled: secondaryReady,
@@ -766,7 +768,7 @@ export function SekerEaglePage({
       selectVisibleMasonryItemsFromIndex(masonryViewportIndex, {
         scrollTop,
         viewportHeight,
-        overscan: Math.max(1200, viewportHeight * 2),
+        overscan: Math.max(300, viewportHeight * 0.75),
       }),
     [masonryViewportIndex, scrollTop, viewportHeight],
   );
@@ -779,7 +781,7 @@ export function SekerEaglePage({
       selectVisibleMasonryItemsFromIndex(sectionViewportIndex, {
         scrollTop,
         viewportHeight,
-        overscan: Math.max(1200, viewportHeight * 2),
+        overscan: Math.max(300, viewportHeight * 0.75),
       }),
     [sectionViewportIndex, scrollTop, viewportHeight],
   );
@@ -1989,12 +1991,14 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <PhotoMap
-                  key={`${ownerId}:${privateVisible}`}
-                  ownerId={ownerId}
-                  includePrivate={privateVisible}
-                  onOpen={openAssetPreview}
-                />
+                <Suspense fallback={null}>
+                  <PhotoMap
+                    key={`${ownerId}:${privateVisible}`}
+                    ownerId={ownerId}
+                    includePrivate={privateVisible}
+                    onOpen={openAssetPreview}
+                  />
+                </Suspense>
               )}
               <div
                 className={styles.assetBrowser}
@@ -2829,13 +2833,15 @@ export function SekerEaglePage({
         />
       ) : null}
       {batchEditIds && photoEditing.clipboard && (
-        <EagleBatchPhotoEdit
-          key={editingScope}
-          assetIds={batchEditIds}
-          recipe={photoEditing.clipboard}
-          resolveSession={photoEditing.resolveSession}
-          onClose={() => setBatchEditIds(null)}
-        />
+        <Suspense fallback={null}>
+          <EagleBatchPhotoEdit
+            key={editingScope}
+            assetIds={batchEditIds}
+            recipe={photoEditing.clipboard}
+            resolveSession={photoEditing.resolveSession}
+            onClose={() => setBatchEditIds(null)}
+          />
+        </Suspense>
       )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}
