@@ -203,8 +203,15 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
       /变化/,
     );
     assert.equal((await reviews.summary(owner, false)).named, 1);
+    for (let i = 0; i < 25; i++) await add(vector(0, 1), { name: `Named page ${i}` });
     const named = await management.people(owner, false, undefined, 'NAMED');
     assert(named.people.every((p) => p.name !== null));
+    assert.equal(named.people.length, 24);
+    assert(named.nextCursor);
+    const secondNamed = await management.people(owner, false, named.nextCursor, 'NAMED');
+    assert.equal(secondNamed.people.length, 2);
+    assert.equal(new Set([...named.people, ...secondNamed.people].map((p) => p.id)).size, 26);
+    await assert.rejects(management.people(owner, false, named.nextCursor, 'UNNAMED'), /游标/);
     const unnamed = await management.people(owner, false, undefined, 'UNNAMED');
     assert(unnamed.people.every((p) => p.name === null));
     assert(unnamed.people.length <= 24);

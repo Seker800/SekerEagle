@@ -99,7 +99,10 @@ export function PhotoPeopleReview({
             <button
               type="button"
               disabled={busy}
-              onClick={() => setSkipped((old) => new Set([...old, pair.key]))}
+              onClick={() => {
+                setError(null);
+                setSkipped((old) => new Set([...old, pair.key]));
+              }}
             >
               {t('暂时跳过')}
             </button>

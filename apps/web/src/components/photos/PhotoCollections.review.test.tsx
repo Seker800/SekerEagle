@@ -140,6 +140,8 @@ it('failed or stale decisions show the error and do not advance', async () => {
   fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('人物已变化');
   expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '暂时跳过' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 });
 it('never falls back to arbitrary pairs when the server has no similarity candidates', async () => {
   mocks.suggest.mockResolvedValue({ items: [], nextCursor: null });
