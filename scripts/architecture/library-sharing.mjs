@@ -60,6 +60,54 @@ function walk(node, visit) {
   visit(node);
   ts.forEachChild(node, (child) => walk(child, visit));
 }
+// Accept only React.lazy(() => import(required).then(module => ({default: module.Required}))).
+// Merely mentioning the module inside an unrelated loader must not satisfy composition.
+function isLazyComposition(node, tree, module, name) {
+  if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return false;
+  const init = node.initializer;
+  if (!init || !ts.isCallExpression(init) || !ts.isIdentifier(init.expression)) return false;
+  let reactLazy = false;
+  walk(tree, (child) => {
+    if (!ts.isImportDeclaration(child) || child.moduleSpecifier.text !== 'react') return;
+    const bindings = child.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings))
+      reactLazy ||= bindings.elements.some(
+        (spec) =>
+          (spec.propertyName ?? spec.name).text === 'lazy' &&
+          spec.name.text === init.expression.text,
+      );
+  });
+  const loader = init.arguments[0];
+  if (!reactLazy || !loader || !ts.isArrowFunction(loader)) return false;
+  const then = loader.body;
+  if (
+    !ts.isCallExpression(then) ||
+    !ts.isPropertyAccessExpression(then.expression) ||
+    then.expression.name.text !== 'then'
+  )
+    return false;
+  const imported = then.expression.expression;
+  if (
+    !ts.isCallExpression(imported) ||
+    imported.expression.kind !== ts.SyntaxKind.ImportKeyword ||
+    imported.arguments[0]?.text !== module
+  )
+    return false;
+  const mapping = then.arguments[0];
+  if (!mapping || !ts.isArrowFunction(mapping) || mapping.parameters.length !== 1) return false;
+  const parameter = mapping.parameters[0].name;
+  if (!ts.isIdentifier(parameter)) return false;
+  const body = ts.isParenthesizedExpression(mapping.body) ? mapping.body.expression : mapping.body;
+  if (!ts.isObjectLiteralExpression(body) || body.properties.length !== 1) return false;
+  const property = body.properties[0];
+  return (
+    ts.isPropertyAssignment(property) &&
+    property.name.getText(tree) === 'default' &&
+    ts.isPropertyAccessExpression(property.initializer) &&
+    property.initializer.expression.getText(tree) === parameter.text &&
+    property.initializer.name.text === name
+  );
+}
 function hasMode(node, aliases = new Set()) {
   let found = false;
   walk(node, (child) => {
@@ -274,6 +322,7 @@ export function checkLibrarySharing(sources) {
     for (const [name, module] of Object.entries(required)) {
       const locals = [];
       walk(tree, (node) => {
+        if (isLazyComposition(node, tree, module, name)) locals.push(node.name.text);
         if (ts.isImportDeclaration(node) && node.moduleSpecifier.text === module) {
           const bindings = node.importClause?.namedBindings;
           if (bindings && ts.isNamedImports(bindings)) {

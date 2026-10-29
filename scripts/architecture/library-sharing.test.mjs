@@ -272,8 +272,20 @@ test('rejects a browser-only pixel kernel replacing the shared server renderer',
 });
 
 test('rejects a lazy workspace sourced from a different implementation', () => {
-  rejectsMutation('apps/web/src/App.tsx', (s) => s.replace("import('./components/eagle/SekerEaglePage')", "import('./components/photos/PhotoPage')"), 'shared-composition');
+  rejectsMutation(
+    'apps/web/src/App.tsx',
+    (s) =>
+      s.replace(
+        "import('./components/eagle/SekerEaglePage')",
+        "import('./components/photos/PhotoPage')",
+      ),
+    'shared-composition',
+  );
 });
 test('rejects lazy mapping of a different component from the same module', () => {
-  rejectsMutation('apps/web/src/App.tsx', (s) => s.replace('default: module.SekerEaglePage', 'default: module.PhotoPage'), 'shared-composition');
+  rejectsMutation(
+    'apps/web/src/App.tsx',
+    (s) => s.replace('default: module.SekerEaglePage', 'default: module.PhotoPage'),
+    'shared-composition',
+  );
 });
