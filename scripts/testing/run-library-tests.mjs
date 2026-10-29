@@ -8,6 +8,7 @@ import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 const name = `sekereagle-library-test-${randomUUID()}`;
 const temp = mkdtempSync(join(tmpdir(), 'sekereagle-library-test-'));
 const migration = '20261018140000_library_modes';
+const pyramidDirectoryMigration = '20261029130000_pyramid_directory_contract';
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { encoding: 'utf8', ...options });
   if (result.status !== 0)
@@ -107,11 +108,59 @@ try {
     recursive: true,
   });
   for (const entry of readdirSync('apps/api/prisma/migrations').filter(
-    (entry) => entry > migration && entry !== 'migration_lock.toml',
+    (entry) =>
+      entry > migration && entry !== 'migration_lock.toml' && entry !== pyramidDirectoryMigration,
   )) {
     cpSync(join('apps/api/prisma/migrations', entry), join(baseline, entry), { recursive: true });
   }
   run(process.execPath, prisma, { env, stdio: 'inherit' });
+  // Upgrade a real legacy directory spelling before enabling its canonical constraint.
+  const pyramidSqlArgs = [
+    'exec',
+    '-i',
+    name,
+    'psql',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-U',
+    'sekereagle_test',
+    '-d',
+    'sekereagle_test',
+  ];
+  run('docker', pyramidSqlArgs, {
+    input: `
+    INSERT INTO "EagleAsset" (id,"ownerId","originalName","displayName","normalizedDisplayName","mimeType",format,"byteSize","originalObjectKey","deletedAt","purgeAfter","transferredAt","updatedAt") VALUES
+      ('legacy-pyramid-sent','legacy-library-owner','sent.jpg','sent','sent','image/jpeg','jpeg',1,'users/legacy-library-owner/assets/sent/original',now(),now(),now(),now()),
+      ('legacy-pyramid-trash','legacy-library-owner','trash.jpg','trash','trash','image/jpeg','jpeg',1,'users/legacy-library-owner/assets/trash/original',now(),NULL,NULL,now());
+    INSERT INTO "EagleImagePyramid" (id,"ownerId","assetId",revision,"processorVersion",status,"storagePrefix",width,height,"maxLevel","updatedAt") VALUES
+      ('legacy-prefix-active','legacy-library-owner','legacy-library-asset',0,'legacy','READY','users/legacy-library-owner/assets/active/pyramid/',1,1,0,now()),
+      ('legacy-prefix-sent','legacy-library-owner','legacy-pyramid-sent',0,'legacy','READY','users/legacy-library-owner/assets/sent/pyramid/',1,1,0,now()),
+      ('legacy-prefix-trash','legacy-library-owner','legacy-pyramid-trash',0,'legacy','READY','users/legacy-library-owner/assets/trash/pyramid/',1,1,0,now());
+  `,
+  });
+  cpSync(
+    join('apps/api/prisma/migrations', pyramidDirectoryMigration),
+    join(baseline, pyramidDirectoryMigration),
+    { recursive: true },
+  );
+  run(process.execPath, prisma, { env, stdio: 'inherit' });
+  run('docker', pyramidSqlArgs, {
+    input: `
+    DO $$ BEGIN
+      IF (SELECT count(*) FROM "EagleImagePyramid" WHERE id IN ('legacy-prefix-active','legacy-prefix-sent','legacy-prefix-trash') AND right("storagePrefix",1)<>'/') <> 3 THEN RAISE EXCEPTION 'directory normalization failed'; END IF;
+      IF (SELECT count(*) FROM "EagleObjectDeletion" WHERE "ownerId"='legacy-library-owner' AND prefixes=ARRAY['users/legacy-library-owner/assets/sent/pyramid/'] AND cardinality("objectKeys")=0) <> 1 THEN RAISE EXCEPTION 'retired source cleanup scope failed'; END IF;
+      IF (SELECT count(*) FROM "EagleObjectDeletion" WHERE "ownerId"='legacy-library-owner') <> 1 THEN RAISE EXCEPTION 'active or ordinary trash cleanup was scheduled'; END IF;
+      BEGIN
+        UPDATE "EagleImagePyramid" SET "storagePrefix"="storagePrefix"||'/' WHERE id='legacy-prefix-active';
+        RAISE EXCEPTION 'trailing separator was accepted';
+      EXCEPTION WHEN check_violation THEN NULL;
+      END;
+    END $$;
+    DELETE FROM "EagleObjectDeletion" WHERE "ownerId"='legacy-library-owner';
+    DELETE FROM "EagleImagePyramid" WHERE id IN ('legacy-prefix-active','legacy-prefix-sent','legacy-prefix-trash');
+    DELETE FROM "EagleAsset" WHERE id IN ('legacy-pyramid-sent','legacy-pyramid-trash');
+  `,
+  });
   run(
     process.execPath,
     [

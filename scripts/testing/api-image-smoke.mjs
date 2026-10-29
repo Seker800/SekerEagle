@@ -64,6 +64,8 @@ try {
     prefix,
     '--network-alias',
     'postgres',
+    '--publish',
+    '127.0.0.1::5432',
     '--tmpfs',
     '/var/lib/postgresql/data:rw',
     '--env',
@@ -95,6 +97,8 @@ try {
     prefix,
     '--network-alias',
     'minio',
+    '--publish',
+    '127.0.0.1::9000',
     '--tmpfs',
     '/data:rw',
     '--env',
@@ -173,6 +177,29 @@ try {
     '/api/photos/photography/people/review',
   ])
     assert.equal((await fetch(`${origin}${path}`)).status, 401);
+  if (process.argv.includes('--storage-check')) {
+    // Run the real-storage fixture without an API scheduler racing its explicit ticks.
+    run(['stop', api]);
+    const pgPort = run(['port', pg, '5432']).split(':').at(-1);
+    const minioPort = run(['port', minio, '9000']).split(':').at(-1);
+    assert.match(pgPort, /^\d+$/);
+    assert.match(minioPort, /^\d+$/);
+    const fixture = spawnSync(process.execPath, ['scripts/testing/asset-operation-storage.mjs'], {
+      encoding: 'utf8',
+      timeout: 90000,
+      env: {
+        ...process.env,
+        ...env,
+        DATABASE_URL: `postgresql://sekereagle_test:${password}@127.0.0.1:${pgPort}/sekereagle_test`,
+        S3_ENDPOINT: `http://127.0.0.1:${minioPort}`,
+      },
+    });
+    let output = `${fixture.stdout ?? ''}${fixture.stderr ?? ''}`;
+    for (const value of [password, accessKey, secretKey, tokenKey])
+      output = output.replaceAll(value, '[test value]');
+    process.stdout.write(output);
+    assert.equal(fixture.status, 0, 'Real-storage fixture failed');
+  }
   process.stdout.write(
     JSON.stringify({
       image,

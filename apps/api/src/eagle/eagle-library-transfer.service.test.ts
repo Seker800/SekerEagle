@@ -153,11 +153,23 @@ test('sending current browse outputs copies independent derivatives and publishe
     renditions,
     imagePyramids: [
       {
-        id: 'ready-pyramid', ownerId, libraryMode: 'PHOTO', assetId: sourceId,
+        id: 'ready-pyramid',
+        ownerId,
+        libraryMode: 'PHOTO',
+        assetId: sourceId,
         storagePrefix: `users/${ownerId}/assets/${sourceId}/ready-pyramid`,
-        status: 'READY', revision: 2, processorVersion: 'pyramid-v1',
-        width: 1, height: 1, tileSize: 512, overlap: 1, format: 'webp',
-        maxLevel: 0, tileCount: 1, byteSize: 1n, completedAt: null,
+        status: 'READY',
+        revision: 2,
+        processorVersion: 'pyramid-v1',
+        width: 1,
+        height: 1,
+        tileSize: 512,
+        overlap: 1,
+        format: 'webp',
+        maxLevel: 0,
+        tileCount: 1,
+        byteSize: 1n,
+        completedAt: null,
       },
       {
         storagePrefix: `users/${ownerId}/assets/${sourceId}/old-pyramid`,
@@ -226,7 +238,11 @@ test('sending current browse outputs copies independent derivatives and publishe
         deletion = data;
       },
     },
-    eagleImagePyramid: { create: async ({ data }: { data: Record<string, unknown> }) => { publishedPyramid = data; } },
+    eagleImagePyramid: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        publishedPyramid = data;
+      },
+    },
     eagleAssetTransferFacts: { create: async () => ({}) },
     eagleAssetRendition: {
       createMany: async ({ data }: { data: unknown[] }) => {
@@ -252,7 +268,11 @@ test('sending current browse outputs copies independent derivatives and publishe
   );
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
   assert.equal(copies.length, 5);
-  assert.equal(publishedPyramid.storagePrefix, pyramid.targetPrefix.replace(/\/+$/, ''), 'published directory must use the same canonical form as worker-created pyramids');
+  assert.equal(
+    publishedPyramid.storagePrefix,
+    pyramid.targetPrefix.replace(/\/+$/, ''),
+    'published directory must use the same canonical form as worker-created pyramids',
+  );
   assert.ok(retired?.deletedAt instanceof Date);
   assert.ok(retired?.purgeAfter instanceof Date, 'sent source bypasses recoverable trash');
   assert.ok(retired?.transferredAt instanceof Date);
@@ -260,7 +280,13 @@ test('sending current browse outputs copies independent derivatives and publishe
     deletion?.objectKeys.sort(),
     [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
-  assert.deepEqual(deletion?.prefixes?.sort(), [`users/${ownerId}/assets/${sourceId}/old-pyramid/`, `users/${ownerId}/assets/${sourceId}/ready-pyramid/`].sort());
+  assert.deepEqual(
+    deletion?.prefixes?.sort(),
+    [
+      `users/${ownerId}/assets/${sourceId}/old-pyramid/`,
+      `users/${ownerId}/assets/${sourceId}/ready-pyramid/`,
+    ].sort(),
+  );
   assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
