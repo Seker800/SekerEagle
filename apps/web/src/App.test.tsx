@@ -161,3 +161,14 @@ it('removes both workspace caches when a running session expires', async () => {
   await screen.findByRole('heading', { name: '登录素材库' });
   expect(client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-1'] })).toHaveLength(0);
 });
+
+it('checks the session when a visible window regains focus', async () => {
+  requestMock.mockResolvedValueOnce(userResponse());
+  requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
+  render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>);
+  await screen.findByText('素材图库');
+  requestMock.mockResolvedValueOnce(userResponse());
+  fireEvent(window, new Event('focus'));
+  await screen.findByText('素材图库');
+  expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2);
+});

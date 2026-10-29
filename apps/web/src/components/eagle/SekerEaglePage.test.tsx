@@ -276,14 +276,14 @@ async function selectAssetAndOpenInspector() {
 }
 
 describe('SekerEaglePage', () => {
-  it('loads the first page before secondary catalogs and statistics', async () => {
+  it('loads independent navigation catalogs while the first page is pending', async () => {
     const first = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
     listEagleAssetsMock.mockReturnValue(first.promise);
     renderPage();
     await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalled());
-    expect(listEagleManualTagsMock).not.toHaveBeenCalled();
-    expect(listEagleManualTagGroupsMock).not.toHaveBeenCalled();
-    expect(listEagleSmartFoldersMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(listEagleManualTagsMock).toHaveBeenCalled());
+    expect(listEagleManualTagGroupsMock).toHaveBeenCalled();
+    expect(listEagleSmartFoldersMock).toHaveBeenCalled();
     first.resolve({ items: [asset], nextCursor: null });
     await waitFor(() => expect(listEagleManualTagsMock).toHaveBeenCalled());
   });
