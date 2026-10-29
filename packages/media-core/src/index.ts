@@ -27,6 +27,9 @@ export interface CameraVideoProbe {
   streams?: Array<{
     codec_type?: string;
     codec_name?: string;
+    codec_tag?: string;
+    sample_rate?: string;
+    channels?: number;
     width?: number;
     height?: number;
     tags?: { rotate?: string };
@@ -95,7 +98,7 @@ export function parseCameraVideoProbe(probe: CameraVideoProbe, mimeType: string)
     durationMs: Math.round(seconds * 1000),
   };
 }
-export async function probeCameraVideo(inputPath: string, mimeType: string) {
+async function readCameraVideoProbe(inputPath: string): Promise<CameraVideoProbe> {
   const { stdout } = await run(
     process.env.FFPROBE_PATH?.trim() || 'ffprobe',
     [
@@ -110,7 +113,10 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
     ],
     { env: mediaSubprocessEnvironment(), timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
   );
-  const probe = JSON.parse(stdout) as CameraVideoProbe;
+  return JSON.parse(stdout) as CameraVideoProbe;
+}
+export async function probeCameraVideo(inputPath: string, mimeType: string) {
+  const probe = await readCameraVideoProbe(inputPath);
   const livePhotoIdentifier = normalizeLivePhotoIdentifier(
     probe.format?.tags?.['com.apple.quicktime.content.identifier'],
   );
@@ -120,6 +126,27 @@ export async function probeCameraVideo(inputPath: string, mimeType: string) {
   };
 }
 export type CameraVideoEncoder = 'libx264' | 'h264_videotoolbox' | 'h264_nvenc';
+function hasSingleEmptyAudioDescriptor(probe: CameraVideoProbe) {
+  const audio = probe.streams?.filter((stream) => stream.codec_type === 'audio') ?? [];
+  const stream = audio[0];
+  return (
+    audio.length === 1 &&
+    stream !== undefined &&
+    (!stream.codec_name || stream.codec_name === 'none') &&
+    stream.codec_tag === '0x0000' &&
+    stream.sample_rate === '0' &&
+    stream.channels === 0
+  );
+}
+/** Unsupported audio with actual packets must still fail rather than lose sound. */
+export function cameraVideoAudioArguments(
+  probe: CameraVideoProbe,
+  countedPackets?: number,
+): string[] {
+  return hasSingleEmptyAudioDescriptor(probe) && countedPackets === 0
+    ? ['-an']
+    : ['-map', '0:a:0?'];
+}
 export function cameraVideoEncodingArguments(encoder: CameraVideoEncoder = 'libx264'): string[] {
   if (encoder === 'libx264') return ['-c:v', 'libx264', '-preset', 'fast', '-crf', '22'];
   if (encoder === 'h264_videotoolbox')
@@ -134,6 +161,30 @@ export async function transcodeCameraVideo(
   durationMs: number,
   encoder: CameraVideoEncoder = 'libx264',
 ) {
+  const sourceProbe = await readCameraVideoProbe(inputPath);
+  let countedPackets: number | undefined;
+  if (hasSingleEmptyAudioDescriptor(sourceProbe)) {
+    // Read actual packet records, never infer zero from an absent counter.
+    // A nonempty record or a demuxer error preserves the ordinary audio path.
+    const packets = await run(
+      process.env.FFPROBE_PATH?.trim() || 'ffprobe',
+      [
+        '-v',
+        'error',
+        ...CAMERA_VIDEO_INPUT_OPTIONS,
+        '-select_streams',
+        'a:0',
+        '-show_packets',
+        '-show_entries',
+        'packet=stream_index',
+        '-of',
+        'csv=p=0',
+        inputPath,
+      ],
+      { env: mediaSubprocessEnvironment(), timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
+    );
+    if (!packets.stdout.trim() && !packets.stderr.trim()) countedPackets = 0;
+  }
   await run(
     process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
     [
@@ -146,12 +197,13 @@ export async function transcodeCameraVideo(
       inputPath,
       '-map',
       '0:V:0',
-      '-map',
-      '0:a:0?',
+      ...cameraVideoAudioArguments(sourceProbe, countedPackets),
       '-sn',
       '-dn',
       '-vf',
-      "scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",
+      // Explicit FPS resampling retains the final sample's display duration on
+      // hardware encoders; implicit muxer CFR conversion can truncate that hold.
+      "scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=source_fps",
       ...cameraVideoEncodingArguments(encoder),
       '-pix_fmt',
       'yuv420p',

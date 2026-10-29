@@ -21,7 +21,7 @@
         --d: #0f7a55;
         --f: #b62a2a;
         --w: #a86100;
-        --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Mono', monospace;
+        --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, "Cascadia Mono", monospace;
         --r-lg: 12px;
         --r-md: 10px;
         --r-sm: 8px;
@@ -36,8 +36,8 @@
         background: var(--bg);
         color: var(--ink);
         font-family:
-          -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB',
-          'Microsoft YaHei', sans-serif;
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", sans-serif;
         font-size: 15px;
         line-height: 1.55;
         -webkit-font-smoothing: antialiased;
@@ -112,7 +112,7 @@
         white-space: nowrap;
         flex: none;
       }
-      .scope button[aria-pressed='true'] {
+      .scope button[aria-pressed="true"] {
         background: var(--surface);
         color: var(--ink);
         font-weight: 500;
@@ -234,14 +234,14 @@
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
         grid-template-areas:
-          'code dot'
-          'name dot'
-          'count meta';
+          "code dot"
+          "name dot"
+          "count meta";
         align-content: start;
         gap: 0 8px;
       }
       .node::before {
-        content: '';
+        content: "";
         position: absolute;
         left: -1px;
         top: 12px;
@@ -350,7 +350,7 @@
         background: var(--line-2);
       }
       .edge-line::after {
-        content: '';
+        content: "";
         position: absolute;
         right: -1px;
         top: -3.5px;
@@ -395,7 +395,7 @@
         background: var(--line-2);
       }
       .branch-line::after {
-        content: '';
+        content: "";
         position: absolute;
         bottom: -1px;
         left: -3.5px;
@@ -575,7 +575,7 @@
         background: #fcfcfd;
       }
       .fam::before {
-        content: '';
+        content: "";
         position: absolute;
         left: 0;
         top: 14px;
@@ -919,10 +919,7 @@
         <div class="topbar-right">
           <span class="updated num">08:47:12 快照</span>
           <button class="icon-btn" aria-label="刷新">
-            <svg viewBox="0 0 24 24">
-              <path d="M20 11a8 8 0 1 0-2.3 5.7" />
-              <path d="M20 5v6h-6" />
-            </svg>
+            <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7" /><path d="M20 5v6h-6" /></svg>
           </button>
           <button class="icon-btn" aria-label="设置">
             <svg viewBox="0 0 24 24">
@@ -1038,9 +1035,7 @@
           <li class="guard pass">
             <span class="guard-dot" aria-hidden="true"></span>
             <span class="guard-name"><b>单类暂停</b><code>PAUSED</code></span>
-            <span class="guard-why"
-              ><em>你手动暂停</em> <b>3,512</b> 项 · 高清组件 2,304 / 标签索引 1,208</span
-            >
+            <span class="guard-why"><em>你手动暂停</em> <b>3,512</b> 项 · 高清组件 2,304 / 标签索引 1,208</span>
             <span class="guard-when">已暂停</span>
             <button class="btn">继续</button>
           </li>
@@ -1053,9 +1048,7 @@
           <li class="guard pass">
             <span class="guard-dot" aria-hidden="true"></span>
             <span class="guard-name"><b>模型容量</b><code>CAPACITY</code></span>
-            <span class="guard-why"
-              ><em>当前正常</em> <b>0</b> 项被拦 · 繁忙时只拦向量，不影响 NAS</span
-            >
+            <span class="guard-why"><em>当前正常</em> <b>0</b> 项被拦 · 繁忙时只拦向量，不影响 NAS</span>
             <span class="guard-when">通过</span>
           </li>
         </ul>
@@ -1072,7 +1065,9 @@
           <div class="fam active">
             <div>
               <div class="fam-title">图片向量 <span class="badge">照片</span></div>
-              <div class="fam-sub">当前步骤 生成图片向量 · 2 项并行 · 租约至 08:57</div>
+              <div class="fam-sub">
+                当前步骤 生成图片向量 · 2 项并行 · 租约至 08:57
+              </div>
             </div>
             <div class="states">
               <span class="st q">排队 <b>8,211</b></span>
@@ -1262,19 +1257,14 @@
       </section>
 
       <footer class="foot">
-        <span
-          >静态设计稿 · 数据为示例 ·
-          <a href="./task-center-redesign.html">对照上一版列表视图</a></span
-        >
+        <span>静态设计稿 · 数据为示例 · <a href="./task-center-redesign.html">对照上一版列表视图</a></span>
         <details class="notes">
           <summary>设计说明</summary>
           <ul>
             <li>状态只有五个：排队、执行中、已完成、失败，外加“受阻”作为排队的一个展示态。</li>
             <li>阻塞不是状态，是守卫没通过。所以“为什么不动”放在守卫里，不塞进任务状态词。</li>
             <li>状态图上的数量就是各类别当前之和，和下面的类别表能对上，不做二次推断。</li>
-            <li>
-              迁移记录只追加：每次状态变化留一条，能看到 QUEUED → RUNNING 是谁在什么时候触发的。
-            </li>
+            <li>迁移记录只追加：每次状态变化留一条，能看到 QUEUED → RUNNING 是谁在什么时候触发的。</li>
             <li>繁忙退避记成 RUNNING → QUEUED，不计失败；失败才是终止态，只能重试回到排队。</li>
             <li>状态码用等宽字，数量用等宽数字，扫描时对齐；中文名仍然优先。</li>
             <li>窄屏下状态图改为纵向流转，守卫与类别行折行，不横向滚动。</li>
