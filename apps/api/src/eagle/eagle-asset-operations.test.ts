@@ -10,6 +10,7 @@ import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { EagleController } from './eagle.controller';
 import { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
+import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { PhotosController } from '../photos/photo-library.module';
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 const input = () => ({ operationId: randomUUID(), kind: 'SEND', assetIds: [randomUUID()] });
@@ -79,4 +80,17 @@ test('principal controls owner and private visibility; publicOnly can only restr
     [principal, 'operation'],
     [principal, 'operation'],
   ]);
+});
+
+test('idle operation polling uses bounded unlocked probes and opens no claim transactions', async () => {
+  const probes: unknown[] = [];
+  let transactions = 0;
+  const service = new EagleAssetOperationService({
+    eagleAssetOperationItem: { findFirst: async (args: unknown) => { probes.push(args); return null; } },
+    $transaction: async () => { transactions++; return []; },
+  } as never, {} as never, {} as never);
+  await service.tick();
+  assert.equal(probes.length, 2);
+  assert.equal(transactions, 0);
+  for (const probe of probes) assert.deepEqual((probe as {select:unknown}).select, {id:true});
 });
