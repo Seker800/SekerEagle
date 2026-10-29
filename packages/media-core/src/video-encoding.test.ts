@@ -25,7 +25,8 @@ test('only an independently counted empty invalid audio track may be omitted', (
     { streams: [{ ...empty, codec_tag: '0x1234' }] },
     { streams: [empty, { ...empty, codec_name: 'aac' }] },
     { streams: [] },
-  ]) assert.deepEqual(cameraVideoAudioArguments(probe, 0), ['-map', '0:a:0?']);
+  ])
+    assert.deepEqual(cameraVideoAudioArguments(probe, 0), ['-map', '0:a:0?']);
   for (const count of [undefined, 1, -1, NaN])
     assert.deepEqual(cameraVideoAudioArguments({ streams: [empty] }, count), ['-map', '0:a:0?']);
 });
