@@ -1,5 +1,9 @@
 # 现用运行状态与交接
 
+> **2026/10/29 08:32 失败任务逐项诊断完成**：实际图库226条失败记录全部核验，其中147张人脸在原分辨率下逐张推理通过、37段短视频完整远端转码和接收校验通过，可按现有环境补跑；23段大视频逐段完整试算均触1GiB输出硬限并截断83.776–348.224秒，同一大文件Windows对照仍拒绝；另1段无效空音轨、1段时间戳／音视频时长不兼容。6份JPEG图像数据截断、1份NEF原始数据损坏，与存档SHA全部相符；6项颜色仅被上述JPEG上游失败阻塞。4条标签旧FAILED实际对应2个后来已有ACTIVE索引的标签，无需为旧记录重复计算，原类别手动暂停保留。
+>
+> 只读查询与隔离试算没有改变224条媒体失败记录的状态／尝试／租约版本，没有发布诊断产物、覆盖原件或重排历史任务；另一个账户2条冒烟样本单列。诊断进程和临时大文件已清理。暂时为本地两路视频预留的名额已恢复：**修订62，Windows媒体8、Mac媒体6且四能力、Metal3／交互预留1**，三节点READY；Mac业务进程及现用镜像保持，半小时巡检仍PAUSED。传输／模型／驱动／数据库未变，未改生产代码。证据及226项人类可读清单在私有 `.omx/artifacts/failed-task-audit-20261029/`，动态状态仍读检查点和compute_status。
+
 > **2026-10-29 05:28 +0800 业务执行进程已迁至 Mac（覆盖以下历史快照）**：Windows／Mac 原生媒体继续处理 image、pyramid、video、faces；Metal 向量只走 Mac。原群晖唯一业务 worker（领取、续租、人物归类、校验、发布及原地图维护）现由 Mac 原生 LaunchAgent 接管。程序来自最新正式镜像 `sekereagle/worker:unified-fedfa7f11b60`，SHA `sha256:d569dd3b3204811971f3b8a5af0abe7f2aedbdb36a4f2ee6650769d13b5444dc`；616个运行文件逐一SHA一致，锁文件与Node22.22.3一致，无重建混入其他聊天代码。数据库和对象存储保留NAS，API/web仍unified，其他容器身份与启动状态保持。
 >
 > NAS原主worker正常排空exit0后停止。完整Compose链末尾新增 `maintenance/business-worker-mac-20261029/mac-worker-placement.json`，NAS worker设 `restart:no`、`deploy.replicas:0`，避免后续整体up重新启动。Mac常驻 `com.sekereagle.business-worker` 和 `com.sekereagle.business-worker-relay`，gui/501；私有目录 `.runtime/business-worker`、不可变版本 `releases/worker-d569dd3b3204`，环境／证书不提交。新业务身份 `worker-a25ec7fe-c346-4168-af0f-b7a90ac3324b` 已在原NAS数据库写入新鲜心跳，正式任务中心双模式ONLINE/modelIssue为空。媒体修订57仍为Windows八路、Mac六路／宿主七，Metal交互预留保持。
