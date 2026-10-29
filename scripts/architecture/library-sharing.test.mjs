@@ -130,7 +130,8 @@ test('rejects a forked top-level workspace even if the existing page is retained
     (s) =>
       s
         .replace('<SekerEaglePage', "{libraryMode === 'MATERIAL' && <SekerEaglePage")
-        .replace('        />\n      </div>', '        />}\n      </div>'),
+        .replace('        <Suspense', '        <Suspense')
+        .replace('</Suspense>', '}</Suspense>'),
     'shared-composition',
   );
 });
@@ -268,4 +269,11 @@ test('rejects a browser-only pixel kernel replacing the shared server renderer',
     () => 'export function processPhotoPixels() { return new Uint8Array(); }',
     'shared-photo-render',
   );
+});
+
+test('rejects a lazy workspace sourced from a different implementation', () => {
+  rejectsMutation('apps/web/src/App.tsx', (s) => s.replace("import('./components/eagle/SekerEaglePage')", "import('./components/photos/PhotoPage')"), 'shared-composition');
+});
+test('rejects lazy mapping of a different component from the same module', () => {
+  rejectsMutation('apps/web/src/App.tsx', (s) => s.replace('default: module.SekerEaglePage', 'default: module.PhotoPage'), 'shared-composition');
 });
