@@ -118,17 +118,23 @@ test('review endpoints derive owner/private visibility from browser principal an
 test('manual face reassignment invalidates review versions of both affected identities', async () => {
   const changed: string[] = [];
   const tx = {
-    $queryRaw: async () => [], $executeRaw: async () => 0,
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
     eaglePhotoFace: {
       findFirst: async () => ({ id: 'face', personId: 'source', assetId: 'photo' }),
       update: async () => ({}),
     },
     eaglePhotoPerson: {
       findFirst: async () => ({ id: 'target', rowVersion: 1 }),
-      updateMany: async ({ where }: { where: { id: { in: string[] } } }) => { changed.push(...where.id.in); return { count: 2 }; },
+      updateMany: async ({ where }: { where: { id: { in: string[] } } }) => {
+        changed.push(...where.id.in);
+        return { count: 2 };
+      },
     },
   };
-  const service = new PhotoManagementService({ $transaction: async (fn: (tx: unknown) => unknown) => fn(tx) } as never);
+  const service = new PhotoManagementService({
+    $transaction: async (fn: (tx: unknown) => unknown) => fn(tx),
+  } as never);
   await service.reassignFace('owner', 'face', 'target', false);
-  assert.deepEqual(changed.sort(), ['source','target']);
+  assert.deepEqual(changed.sort(), ['source', 'target']);
 });

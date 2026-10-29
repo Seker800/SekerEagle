@@ -237,6 +237,16 @@ export class PhotoManagementService {
         where: { id: faceId },
         data: { personId: person.id, userAssigned: true },
       });
+      await tx.eaglePhotoPerson.updateMany({
+        where: {
+          ownerId,
+          libraryMode: 'PHOTO',
+          id: {
+            in: [...new Set([face.personId, person.id].filter((id): id is string => Boolean(id)))],
+          },
+        },
+        data: { rowVersion: { increment: 1 } },
+      });
       await syncAssetPrivacy(tx, ownerId, [face.assetId], 'PHOTO');
       return { id: person.id };
     });

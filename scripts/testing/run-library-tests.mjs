@@ -174,18 +174,15 @@ try {
       stdio: 'inherit',
     },
   );
-  run(
-    process.execPath,
-    [
-      '--test',
-      'scripts/testing/photo-face-scan.test.mjs',
-      'scripts/testing/photo-person-review.test.mjs',
-    ],
-    {
-      env,
-      stdio: 'inherit',
-    },
-  );
+  run(process.execPath, ['--test', 'scripts/testing/photo-face-scan.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
+  // Keep the synthetic identity scale fixture out of the 50k face-enqueue transaction.
+  run(process.execPath, ['--test', 'scripts/testing/photo-person-review.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   // Queue claim tests run after other fixtures to avoid competing for their leases.
   run(process.execPath, ['--test', 'scripts/testing/task-center.test.mjs'], {
     env,

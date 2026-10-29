@@ -181,6 +181,27 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     assert([separation.firstId, separation.secondId].includes(b.id));
     const detail = await db.eaglePhotoFace.findMany({ where: { personId: c.id } });
     assert(detail.some((f) => f.userAssigned));
+    const beforeReassignment = await db.eaglePhotoPerson.findMany({
+      where: { id: { in: [b.id, c.id] } },
+    });
+    const movedFace = await db.eaglePhotoFace.findFirstOrThrow({
+      where: { personId: c.id, assetRevision: 2 },
+    });
+    await management.reassignFace(owner, movedFace.id, b.id, false);
+    for (const before of beforeReassignment) {
+      const after = await db.eaglePhotoPerson.findUniqueOrThrow({ where: { id: before.id } });
+      assert.equal(after.rowVersion, before.rowVersion + 1);
+    }
+    await assert.rejects(
+      reviews.decide(owner, false, {
+        firstId: b.id,
+        secondId: c.id,
+        firstVersion: 2,
+        secondVersion: 2,
+        decision: 'SAME',
+      }),
+      /变化/,
+    );
     assert.equal((await reviews.summary(owner, false)).named, 1);
     const named = await management.people(owner, false, undefined, 'NAMED');
     assert(named.people.every((p) => p.name !== null));
