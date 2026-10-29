@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { NotFoundException } from '@nestjs/common';
 import { EagleLibraryTransferService } from './eagle-library-transfer.service';
+import { planTransferPyramid } from './eagle-transfer-pyramid';
 
 test('unauthorized or mixed source IDs fail before any object copy or operation plan', async () => {
   let copied = 0;
@@ -152,6 +153,13 @@ test('sending current browse outputs copies independent derivatives and publishe
     renditions,
     imagePyramids: [
       {
+        id: 'ready-pyramid', ownerId, libraryMode: 'PHOTO', assetId: sourceId,
+        storagePrefix: `users/${ownerId}/assets/${sourceId}/ready-pyramid`,
+        status: 'READY', revision: 2, processorVersion: 'pyramid-v1',
+        width: 1, height: 1, tileSize: 512, overlap: 1, format: 'webp',
+        maxLevel: 0, tileCount: 1, byteSize: 1n, completedAt: null,
+      },
+      {
         storagePrefix: `users/${ownerId}/assets/${sourceId}/old-pyramid`,
         status: 'FAILED',
         revision: 1,
@@ -160,6 +168,8 @@ test('sending current browse outputs copies independent derivatives and publishe
     width: 1000,
     height: 1000,
   };
+  const pyramid = planTransferPyramid(ownerId, targetId, 2, source.imagePyramids as never)!;
+  assert(pyramid);
   const operation = {
     id: 'op',
     ownerId,
@@ -177,6 +187,7 @@ test('sending current browse outputs copies independent derivatives and publishe
         targetKey: `users/${ownerId}/assets/${targetId}/original.jpg`,
         size: '1',
         renditions: plan,
+        pyramid,
       },
     ],
   };
@@ -190,6 +201,7 @@ test('sending current browse outputs copies independent derivatives and publishe
   }> = [];
   let retired: Record<string, unknown> | undefined;
   let published: unknown[] = [];
+  let publishedPyramid: Record<string, unknown> = {};
   let deletion: { objectKeys: string[]; prefixes: string[] } | undefined;
   const tx = {
     $queryRaw: async () => [],
@@ -214,6 +226,7 @@ test('sending current browse outputs copies independent derivatives and publishe
         deletion = data;
       },
     },
+    eagleImagePyramid: { create: async ({ data }: { data: Record<string, unknown> }) => { publishedPyramid = data; } },
     eagleAssetTransferFacts: { create: async () => ({}) },
     eagleAssetRendition: {
       createMany: async ({ data }: { data: unknown[] }) => {
@@ -238,7 +251,8 @@ test('sending current browse outputs copies independent derivatives and publishe
     'PHOTO',
   );
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
-  assert.equal(copies.length, 4);
+  assert.equal(copies.length, 5);
+  assert.equal(publishedPyramid.storagePrefix, pyramid.targetPrefix.replace(/\/+$/, ''), 'published directory must use the same canonical form as worker-created pyramids');
   assert.ok(retired?.deletedAt instanceof Date);
   assert.ok(retired?.purgeAfter instanceof Date, 'sent source bypasses recoverable trash');
   assert.ok(retired?.transferredAt instanceof Date);
@@ -246,7 +260,7 @@ test('sending current browse outputs copies independent derivatives and publishe
     deletion?.objectKeys.sort(),
     [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
-  assert.deepEqual(deletion?.prefixes, [`users/${ownerId}/assets/${sourceId}/old-pyramid/`]);
+  assert.deepEqual(deletion?.prefixes?.sort(), [`users/${ownerId}/assets/${sourceId}/old-pyramid/`, `users/${ownerId}/assets/${sourceId}/ready-pyramid/`].sort());
   assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
