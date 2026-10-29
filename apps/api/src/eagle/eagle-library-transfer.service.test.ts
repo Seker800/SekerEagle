@@ -150,7 +150,13 @@ test('sending current browse outputs copies independent derivatives and publishe
     lifecycleStatus: 'READY',
     annotation: null,
     renditions,
-    imagePyramids: [],
+    imagePyramids: [
+      {
+        storagePrefix: `users/${ownerId}/assets/${sourceId}/old-pyramid`,
+        status: 'FAILED',
+        revision: 1,
+      },
+    ],
     width: 1000,
     height: 1000,
   };
@@ -240,7 +246,7 @@ test('sending current browse outputs copies independent derivatives and publishe
     deletion?.objectKeys.sort(),
     [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
-  assert.deepEqual(deletion?.prefixes, []);
+  assert.deepEqual(deletion?.prefixes, [`users/${ownerId}/assets/${sourceId}/old-pyramid/`]);
   assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
