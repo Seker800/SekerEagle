@@ -28,6 +28,7 @@
 - Node.js 22、npm workspaces、NestJS、React/Vite、Prisma。
 - 修改认证、上传、对象存储或 API 时必须补安全测试。
 - 每个里程碑至少运行 lint、typecheck、unit test 和 build。
+- API 镜像发布前必须对最终镜像执行 `npm run test:api-image -- <镜像标签>`，验证独立依赖、隔离迁移及实际服务就绪；本地源码启动或镜像构建成功不能替代成品镜像启动验收。
 - 素材／照片通用能力变更必须通过 `npm run architecture:check` 与共用契约测试；不得通过新增照片版通用组件、覆盖通用 Controller 或替换共用 provider 绕过门禁。新增专属能力或调整装配边界时，先更新北极星与 `docs/library-sharing-gate.md` 的理由，再同步门禁及反例测试。
 - 使用中文提交类型：`新增`、`修复`、`重构`、`清理`、`文档`。
 - Agent 可自行判断并执行提交与 push，无需另行征求用户许可。

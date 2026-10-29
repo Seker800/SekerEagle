@@ -43,4 +43,6 @@ COPY --from=build /sekereagle/packages/vector-core ./packages/vector-core
 COPY scripts ./scripts
 COPY package.json package-lock.json ./
 USER node
+# Check the compiled entry dependency in the actual runtime filesystem.
+RUN node -e "require('./apps/api/dist/eagle/eagle-edit-request-body.js')"
 CMD ["node", "apps/api/dist/main.js"]
