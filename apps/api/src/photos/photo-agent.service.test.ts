@@ -169,3 +169,25 @@ test('manual selection DTO rejects injected ownership, unsafe actions, duplicate
   ])
     await assert.rejects(pipe.transform(input, { type: 'body', metatype: ManualPhotoActionDto }));
 });
+
+test('task listing batches visibility and proposals while hiding tasks with any inaccessible asset', async () => {
+  const calls: string[] = [];
+  const tasks = Array.from({length:20}, (_, index) => ({id:`task-${index}`,number:20-index,kind:'CITY',scope:[{id:`asset-${index}`}]}));
+  const service = new PhotoAgentService({
+    eaglePhotoAgentTask: {findMany: async () => tasks},
+    eagleAsset: {
+      count: async () => {calls.push('count'); return 1;},
+      findMany: async () => {calls.push('assets'); return tasks.slice(1).map((_, index) => ({id:`asset-${index+1}`}));},
+    },
+    eaglePhotoAgentSuggestion: {findMany: async (args: {where:{taskId:unknown}}) => {
+      calls.push('proposals');
+      assert.deepEqual(args.where.taskId, {in:tasks.slice(1).map(row=>row.id)});
+      return tasks.slice(1).map(row=>({taskId:row.id,assetId:row.scope[0]!.id,status:'PENDING'}));
+    }},
+  } as never, {} as never);
+  const result = await service.tasks('owner', {limit:20}, false);
+  assert.equal(result.items.length,19);
+  assert.deepEqual(calls,['assets','proposals']);
+  assert.equal(result.items[0]!.pendingCount,1);
+  assert.deepEqual(result.items[0]!.coverIds,['asset-1']);
+});
