@@ -118,26 +118,25 @@ export class SessionTokenService {
       throw new UnauthorizedException('访问令牌无效或已过期。');
     }
     if (
+      typeof payload.sub !== 'string' ||
+      !payload.sub ||
+      typeof payload.sessionFamilyId !== 'string' ||
       payload.kind !== 'browser' ||
       !Number.isInteger(payload.authVersion) ||
       !payload.sessionFamilyId
     ) {
       throw new UnauthorizedException('访问令牌类型无效。');
     }
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || user.disabledAt || user.authVersion !== payload.authVersion) {
-      throw new UnauthorizedException('登录状态已失效。');
-    }
-    const active = await this.prisma.refreshToken.findFirst({
-      where: {
-        userId: user.id,
-        familyId: payload.sessionFamilyId,
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      select: { id: true },
-    });
-    if (!active) throw new UnauthorizedException('登录会话已退出。');
+    // A single authoritative snapshot for account and session; never cache revocation.
+    const [user] = await this.prisma.$queryRaw<
+      Array<Pick<User, 'id' | 'email' | 'role' | 'authVersion'>>
+    >(Prisma.sql`
+      SELECT u.id,u.email,u.role,u."authVersion" FROM "User" u
+      WHERE u.id=${payload.sub} AND u."disabledAt" IS NULL AND u."authVersion"=${payload.authVersion}
+        AND EXISTS (SELECT 1 FROM "RefreshToken" r WHERE r."userId"=u.id
+          AND r."familyId"=${payload.sessionFamilyId} AND r."revokedAt" IS NULL AND r."expiresAt">${new Date()})
+    `);
+    if (!user) throw new UnauthorizedException('登录状态已失效。');
     return {
       sub: user.id,
       email: user.email,

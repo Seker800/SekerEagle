@@ -188,21 +188,35 @@ test('logout with the pre-rotation proof revokes replacement tokens in the same 
 });
 
 test('access validation uses one live scoped statement without retaining revocation facts', async () => {
-  const queries: Array<{sql:string;values:unknown[]}> = [];
+  const queries: Array<{ sql: string; values: unknown[] }> = [];
   let active = true;
-  const principal = {id:'owner',email:'owner@example.invalid',role:'USER',authVersion:2};
-  const service = new SessionTokenService({$queryRaw: async (query: {sql:string;values:unknown[]}) => {
-    queries.push(query); return active ? [principal] : [];
-  }} as never, {verifyAsync: async () => ({sub:'owner',kind:'browser',authVersion:2,sessionFamilyId:'family'})} as never, {} as never);
-  assert.equal((await service.verifyAccessToken('synthetic')).sub,'owner');
+  const principal = { id: 'owner', email: 'owner@example.invalid', role: 'USER', authVersion: 2 };
+  const service = new SessionTokenService(
+    {
+      $queryRaw: async (query: { sql: string; values: unknown[] }) => {
+        queries.push(query);
+        return active ? [principal] : [];
+      },
+    } as never,
+    {
+      verifyAsync: async () => ({
+        sub: 'owner',
+        kind: 'browser',
+        authVersion: 2,
+        sessionFamilyId: 'family',
+      }),
+    } as never,
+    {} as never,
+  );
+  assert.equal((await service.verifyAccessToken('synthetic')).sub, 'owner');
   active = false;
   await assert.rejects(service.verifyAccessToken('synthetic'), /登录状态已失效/);
-  assert.equal(queries.length,2);
+  assert.equal(queries.length, 2);
   for (const query of queries) {
-    assert.match(query.sql,/EXISTS/);
-    assert.match(query.sql,/"revokedAt" IS NULL/);
-    assert.match(query.sql,/"disabledAt" IS NULL/);
-    assert.match(query.sql,/"expiresAt">/);
+    assert.match(query.sql, /EXISTS/);
+    assert.match(query.sql, /"revokedAt" IS NULL/);
+    assert.match(query.sql, /"disabledAt" IS NULL/);
+    assert.match(query.sql, /"expiresAt">/);
     assert.ok(query.values.includes('owner'));
     assert.ok(query.values.includes('family'));
     assert.ok(query.values.includes(2));
