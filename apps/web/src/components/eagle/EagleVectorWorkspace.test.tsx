@@ -1,8 +1,11 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as desktopCache from '../../lib/desktop-cache';
 import * as eagleApi from '../../lib/eagle-api';
 import * as api from '../../lib/eagle-vector-api';
 import { EagleVectorWorkspace } from './EagleVectorWorkspace';
+
+vi.mock('../../lib/desktop-cache', () => ({ invalidateDesktopAssets: vi.fn() }));
 
 vi.mock('../../lib/eagle-api', () => ({
   listEagleManualTags: vi.fn(),
@@ -38,6 +41,7 @@ vi.mock('./EagleImageViewer', () => ({
 describe('EagleVectorWorkspace', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(desktopCache.invalidateDesktopAssets).mockResolvedValue(undefined);
     vi.mocked(api.fetchEagleVectorSummary).mockResolvedValue({
       model: 'Qwen/Qwen3-VL-Embedding-2B',
       dimensions: 1024,
@@ -199,6 +203,65 @@ describe('EagleVectorWorkspace', () => {
     fireEvent(document, new Event('visibilitychange'));
     fireEvent(document, new Event('visibilitychange'));
     expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['tags', 'items'])(
+    'clears recovered %s read errors without another mutation',
+    async (source) => {
+      const failure = new Error(`${source} read failed`);
+      if (source === 'tags') vi.mocked(api.listEagleVectorTags).mockRejectedValueOnce(failure);
+      else vi.mocked(api.listEagleVectorSuggestions).mockRejectedValueOnce(failure);
+      render(<EagleVectorWorkspace view="REVIEW" />);
+      expect(await screen.findByRole('alert')).toHaveTextContent(failure.message);
+      fireEvent(document, new Event('visibilitychange'));
+      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    },
+  );
+
+  it('refreshes a committed review even when desktop cache invalidation fails', async () => {
+    vi.mocked(desktopCache.invalidateDesktopAssets).mockRejectedValueOnce(
+      new Error('cache unavailable'),
+    );
+    render(<EagleVectorWorkspace view="REVIEW" />);
+    await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
+    fireEvent.click(screen.getByRole('button', { name: '确认' }));
+    await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('status')).toHaveTextContent('已确认 1 条人工标签建议');
+    expect(screen.getByRole('alert')).toHaveTextContent('cache unavailable');
+  });
+
+  it('refreshes after assigning a replacement tag instead of reusing a pre-write poll', async () => {
+    const manualTags = await eagleApi.listEagleManualTags('');
+    const assign = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EagleVectorWorkspace view="REVIEW" manualTags={manualTags} onAssignManualTags={assign} />,
+    );
+    const card = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
+    const oldResult = await vi.mocked(api.listEagleVectorSuggestions).mock.results[0]!.value;
+    let resolveOlder!: (value: typeof oldResult) => void;
+    vi.mocked(api.listEagleVectorSuggestions)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOlder = resolve;
+          }),
+      )
+      .mockResolvedValue({ items: [], nextCursor: null });
+    fireEvent(document, new Event('visibilitychange'));
+    await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2));
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: '指定其他标签' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '驾驶' }));
+    fireEvent.click(screen.getByRole('button', { name: '添加 1 个标签到 1 项素材' }));
+    await waitFor(() => expect(assign).toHaveBeenCalled());
+    await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(3));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /选择 red-car\.jpg/ })).not.toBeInTheDocument(),
+    );
+    await act(async () => {
+      resolveOlder(oldResult);
+    });
+    expect(screen.queryByRole('button', { name: /选择 red-car\.jpg/ })).not.toBeInTheDocument();
   });
 
   it('confirms vector suggestions into manual tags without repeating implementation details', async () => {
