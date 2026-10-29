@@ -1,4 +1,22 @@
 export const enUS = {
+  下一组: 'Next pair',
+  '暂时没有需要确认的相似人物。': 'No similar people need confirmation right now.',
+  继续查找相似人物: 'Find more similar people',
+  暂时跳过: 'Skip for now',
+  不是同一个人: 'Different people',
+  '正在查找相似人物…': 'Finding similar people…',
+  '按相似程度推荐，需要你确认；不会自动合并。':
+    'Suggested by similarity. Your confirmation is required; people are never merged automatically.',
+  '已记住：不是同一个人。': 'Remembered: different people.',
+  '暂无待整理头像。': 'No unorganized faces.',
+  '还没有已命名人物。可从待整理头像中命名，或先确认相似人物。':
+    'No named people yet. Name a person or review similar people.',
+  开始确认人物: 'Review similar people',
+  '有 {{value1}} 个头像待整理，可先确认相似人物。':
+    '{{value1}} faces need organizing. Start with similar people.',
+  待整理头像: 'Unorganized faces',
+  已命名人物: 'Named people',
+  人物整理: 'Organize people',
   '正在准备首批地图位置，无需等待照片分析完成。':
     'Preparing the first map locations without waiting for photo analysis.',
   '已显示可用位置，地图细节正在后台补齐。':
@@ -564,8 +582,8 @@ export const enUS = {
   '提交中…': 'Submitting…',
   '正在发送…': 'Sending…',
   '发送失败，请重试。': 'Sending failed. Please retry.',
-  '已发送 {{value1}} 项，原图片已移入当前图库回收站。':
-    'Sent {{value1}} items. Originals are now in this library’s trash.',
+  '已发送 {{value1}} 项，原图片已从当前图库移除，不进入回收站。':
+    'Sent {{value1}} items. Originals were removed from this library without entering the trash.',
   定位到时间线: 'Locate in timeline',
   '正在定位…': 'Locating…',
   '无法定位这张图片，请重试。': 'Unable to locate this image. Please retry.',

@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  getPhotoPeopleSummary: vi.fn(async () => ({ named: 1, unnamed: 0 })),
+  getPhotoPeopleReview: vi.fn(async () => ({ items: [], nextCursor: null })),
+  decidePhotoPeople: vi.fn(),
   updatePhotoPersonPrivacy: mocks.privacy,
   scanPhotoPeople: vi.fn(),
   renamePhotoPerson: mocks.rename,

@@ -2484,6 +2484,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/photography/people/summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_summary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/photography/people/review': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_reviewPeople'];
+    put?: never;
+    post: operations['PhotoManagementController_decidePeople'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/people/scan': {
     parameters: {
       query?: never;
@@ -3826,6 +3858,16 @@ export interface components {
     SetTagRecommendationDto: Record<string, never>;
     ReviewVectorSuggestionDto: Record<string, never>;
     BatchReviewVectorSuggestionsDto: Record<string, never>;
+    PersonReviewDto: {
+      /** Format: uuid */
+      firstId: string;
+      /** Format: uuid */
+      secondId: string;
+      firstVersion: number;
+      secondVersion: number;
+      /** @enum {string} */
+      decision: 'SAME' | 'DIFFERENT';
+    };
     RenamePersonDto: {
       name: string;
     };
@@ -7913,6 +7955,7 @@ export interface operations {
   PhotoManagementController_people: {
     parameters: {
       query?: {
+        view?: 'ALL' | 'NAMED' | 'UNNAMED';
         after?: string;
       };
       header?: never;
@@ -7922,6 +7965,64 @@ export interface operations {
     requestBody?: never;
     responses: {
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_reviewPeople: {
+    parameters: {
+      query?: {
+        view?: 'ALL' | 'NAMED' | 'UNNAMED';
+        after?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_decidePeople: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PersonReviewDto'];
+      };
+    };
+    responses: {
+      201: {
         headers: {
           [name: string]: unknown;
         };

@@ -907,6 +907,19 @@ try {
     if (!sample) throw new Error('Sending smoke requires PHOTO_WORKBENCH_LIVE=1');
     const input = { operationId: randomUUID(), assetIds: [sample.assetId] };
     const original = await api(`/eagle/assets/${sample.assetId}`);
+    const sourceHashes = new Map();
+    for (const id of [sample.assetId, original.livePhotoMotion.assetId]) {
+      const response = await fetch(`${origin}/api/eagle/assets/${id}/original`, {
+        headers: { cookie: `sekereagle_access=${accessToken}` },
+      });
+      assert.equal(response.status, 200);
+      sourceHashes.set(
+        id,
+        createHash('sha256')
+          .update(Buffer.from(await response.arrayBuffer()))
+          .digest('hex'),
+      );
+    }
     const existingPhoto = liveCases.find(
       (row) => row.mode === 'photos' && row.name === 'apple-live.jpg',
     );
@@ -930,11 +943,10 @@ try {
       const after = await fetch(`${origin}/api/photos/assets/${row.assetId}/original`, {
         headers: { cookie: `sekereagle_access=${accessToken}` },
       });
+      assert.equal(before.status, 404, 'sent sources cannot be read from the recycle bin');
       assert.equal(after.status, 200);
       assert.equal(
-        createHash('sha256')
-          .update(Buffer.from(await before.arrayBuffer()))
-          .digest('hex'),
+        sourceHashes.get(row.sourceId),
         createHash('sha256')
           .update(Buffer.from(await after.arrayBuffer()))
           .digest('hex'),
@@ -1400,6 +1412,28 @@ try {
       accessToken,
       ownerId: owner.id,
     });
+  if (process.env.PHOTO_WORKBENCH_PEOPLE === '1') {
+    const { verifyPeopleReviewHttp } = await import('./people-review-http.mjs');
+    await waitFor(
+      async () =>
+        (await db.eagleAssetRendition.count({
+          where: { assetId: { in: [a.assetId, b.assetId] }, kind: 'PREVIEW', status: 'READY' },
+        })) >= 2,
+      'people HTTP previews',
+      480,
+    );
+    console.log(
+      JSON.stringify(
+        await verifyPeopleReviewHttp({
+          db,
+          origin,
+          accessToken,
+          ownerId: owner.id,
+          assetIds: [a.assetId, b.assetId],
+        }),
+      ),
+    );
+  }
   if (basic) {
     console.log(
       'Photo HTTP smoke passed: sessions, uploads, editor copies, camera formats, live photos and cross-library sends requested by flags.',

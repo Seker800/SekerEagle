@@ -1286,6 +1286,17 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   });
   assert.equal(source.libraryMode, 'MATERIAL');
   assert.ok(source.deletedAt);
+  assert.ok(source.purgeAfter, 'a successful send must bypass the recycle bin');
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { id: source.id, deletedAt: { not: null }, purgeAfter: null },
+    }),
+    0,
+  );
+  const purge = await prisma.eagleAssetProcessingJob.findFirstOrThrow({
+    where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', assetId: source.id, kind: 'PURGE_ASSET' },
+  });
+  assert.equal(purge.assetRevision, source.mediaRevision);
   assert.equal(target.libraryMode, 'PHOTO');
   assert.equal(target.isPrivate, true);
   assert.equal(target.manualTagLinks.length, 2);
@@ -1310,6 +1321,25 @@ test('explicit sending creates independent targets, preserves privacy, removes s
     target.processingJobs.every((job) => job.libraryMode === 'PHOTO' && job.assetRevision === 1),
   );
   assert.deepEqual(await sender.send(f.ownerId, input, true), result);
+  assert.equal(copies.length, 1);
+  const { prepareAssetPurge } = await import('../../apps/worker/dist/asset-purge.js');
+  const claimed = await prisma.eagleAssetProcessingJob.update({
+    where: { id: purge.id },
+    data: { status: 'PROCESSING', leaseVersion: { increment: 1 }, lockedAt: new Date() },
+  });
+  await prisma.$transaction((tx) => prepareAssetPurge(tx, claimed));
+  assert.equal(await prisma.eagleAsset.findUnique({ where: { id: source.id } }), null);
+  const cleanup = await prisma.eagleObjectDeletion.findFirstOrThrow({
+    where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' },
+  });
+  assert.ok(cleanup.objectKeys.includes(source.originalObjectKey));
+  assert.ok(!cleanup.objectKeys.includes(target.originalObjectKey));
+  assert.ok(await prisma.eagleAsset.findUnique({ where: { id: targetId } }));
+  assert.deepEqual(
+    await sender.send(f.ownerId, input, true),
+    result,
+    'replay survives physical source cleanup',
+  );
   assert.equal(copies.length, 1);
   await assert.rejects(
     () => new EagleLibraryTransferService(prisma, storage, 'PHOTO').send(f.ownerId, input, true),
@@ -1361,6 +1391,28 @@ test('failed sends leave all sources active and retry the durable plan without d
   });
   assert.equal(pending.status, 'PENDING');
   failed = false;
+  await assert.rejects(
+    sender.send(f.ownerId, input, false, undefined, undefined, async () => {
+      throw new Error('receipt failure');
+    }),
+    /receipt failure/,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({
+      where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', deletedAt: null, purgeAfter: null },
+    }),
+    2,
+  );
+  assert.equal(
+    await prisma.eagleAssetProcessingJob.count({
+      where: { ownerId: f.ownerId, kind: 'PURGE_ASSET' },
+    }),
+    0,
+  );
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO' } }),
+    1,
+  );
   const [a, b] = await Promise.all([
     sender.send(f.ownerId, input, false),
     sender.send(f.ownerId, input, false),

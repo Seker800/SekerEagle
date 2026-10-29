@@ -6082,6 +6082,15 @@
         "operationId": "PhotoManagementController_people",
         "parameters": [
           {
+            "name": "view",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ALL", "NAMED", "UNNAMED"]
+            }
+          },
+          {
             "name": "after",
             "required": false,
             "in": "query",
@@ -6093,6 +6102,69 @@
         ],
         "responses": {
           "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/summary": {
+      "get": {
+        "operationId": "PhotoManagementController_summary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/review": {
+      "get": {
+        "operationId": "PhotoManagementController_reviewPeople",
+        "parameters": [
+          {
+            "name": "view",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["ALL", "NAMED", "UNNAMED"]
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      },
+      "post": {
+        "operationId": "PhotoManagementController_decidePeople",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonReviewDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
             "description": ""
           }
         },
@@ -8682,6 +8754,30 @@
       "BatchReviewVectorSuggestionsDto": {
         "type": "object",
         "properties": {}
+      },
+      "PersonReviewDto": {
+        "type": "object",
+        "properties": {
+          "firstId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "secondId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "firstVersion": {
+            "type": "number"
+          },
+          "secondVersion": {
+            "type": "number"
+          },
+          "decision": {
+            "type": "string",
+            "enum": ["SAME", "DIFFERENT"]
+          }
+        },
+        "required": ["firstId", "secondId", "firstVersion", "secondVersion", "decision"]
       },
       "RenamePersonDto": {
         "type": "object",

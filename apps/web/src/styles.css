@@ -1403,3 +1403,34 @@ select:focus-visible {
   border-color: rgb(var(--ui-accent-rgb) / 44%);
   color: var(--ui-accent-text);
 }
+
+.photo-person-sections {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.photo-person-sections [aria-selected='true'] {
+  background: var(--ui-selection-bg);
+  font-weight: 600;
+}
+.photo-person-hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.photo-person-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 16px;
+}
+.photo-person-card {
+  min-width: 0;
+}
+.photo-person-card strong {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -15,13 +15,15 @@ import {
 } from '@sekereagle/library-persistence';
 import { previewSelect, serializePreview } from './photo-preview';
 import { suggestPhotoGroups } from './photo-grouping';
+import {
+  visiblePhotoAssets,
+  personPreviewSelect,
+  serializePersonPreview,
+  requireVisiblePerson,
+} from './photo-person-scope';
+import { carryPersonSeparations } from './photo-person-review';
 
-const visible = (ownerId: string, includePrivate: boolean): Prisma.EagleAssetWhereInput => ({
-  ownerId,
-  libraryMode: 'PHOTO',
-  deletedAt: null,
-  ...(!includePrivate ? { isPrivate: false } : {}),
-});
+const visible = visiblePhotoAssets;
 
 @Injectable()
 export class PhotoManagementService {
@@ -74,12 +76,20 @@ export class PhotoManagementService {
       lenses: lenses.flatMap((row) => (row.lensModel ? [row.lensModel] : [])),
     };
   }
-  async people(ownerId: string, includePrivate: boolean, after?: string) {
-    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate) : null;
+  async people(
+    ownerId: string,
+    includePrivate: boolean,
+    after?: string,
+    view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
+  ) {
+    const pageSize = view === 'ALL' ? 200 : 24;
+    const cursorScope = view === 'ALL' ? ownerId : `${ownerId}:${view}`;
+    const cursor = after ? decodePeopleCursor(after, cursorScope, includePrivate) : null;
     const rows = await this.prisma.eaglePhotoPerson.findMany({
       where: {
         ownerId,
         libraryMode: 'PHOTO',
+        ...(view === 'NAMED' ? { name: { not: null } } : view === 'UNNAMED' ? { name: null } : {}),
         ...(cursor
           ? {
               AND: [
@@ -98,37 +108,18 @@ export class PhotoManagementService {
           ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
         ],
       },
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        rowVersion: true,
-        marksAssetsPrivate: true,
-        faces: {
-          where: { isCurrent: true, asset: visible(ownerId, includePrivate) },
-          select: {
-            id: true,
-            box: true,
-            confidence: true,
-            assetId: true,
-            asset: { select: previewSelect },
-          },
-          take: 20,
-          orderBy: { confidence: 'desc' },
-        },
-      },
+      select: personPreviewSelect(ownerId, includePrivate),
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 201,
+      take: pageSize + 1,
     });
     return {
       runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
       limits: { people: 200, facesPerPerson: 20 },
       nextCursor:
-        rows.length > 200 ? encodePeopleCursor(rows[199]!, ownerId, includePrivate) : null,
-      people: rows.slice(0, 200).map((person) => ({
-        ...person,
-        faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
-      })),
+        rows.length > pageSize
+          ? encodePeopleCursor(rows[pageSize - 1]!, cursorScope, includePrivate)
+          : null,
+      people: rows.slice(0, pageSize).map(serializePersonPreview),
     };
   }
   async scanFaces(ownerId: string, includePrivate: boolean) {
@@ -142,21 +133,9 @@ export class PhotoManagementService {
     id: string,
     includePrivate: boolean,
   ) {
-    const person = await tx.eaglePhotoPerson.findFirst({
-      where: {
-        id,
-        ownerId,
-        libraryMode: 'PHOTO',
-        ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
-        OR: [
-          { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
-          ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
-        ],
-      },
-    });
-    if (!person) throw new NotFoundException('人物不存在。');
-    return person;
+    return requireVisiblePerson(tx, ownerId, id, includePrivate);
   }
+
   async setPersonPrivacy(
     ownerId: string,
     id: string,
@@ -190,13 +169,25 @@ export class PhotoManagementService {
       });
     });
   }
-  async mergePeople(ownerId: string, sourceId: string, targetId: string, includePrivate: boolean) {
+  async mergePeople(
+    ownerId: string,
+    sourceId: string,
+    targetId: string,
+    includePrivate: boolean,
+    versions?: { source: number; target: number },
+  ) {
     if (sourceId === targetId) throw new BadRequestException('请选择另一个人物。');
     return this.prisma.$transaction(async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const source = await this.requirePerson(tx, ownerId, sourceId, includePrivate);
       const target = await this.requirePerson(tx, ownerId, targetId, includePrivate);
+      if (
+        versions &&
+        (source.rowVersion !== versions.source || target.rowVersion !== versions.target)
+      )
+        throw new ConflictException('人物已变化，请刷新后重试。');
+      await carryPersonSeparations(tx, ownerId, sourceId, targetId);
       await tx.eaglePhotoPerson.update({
         where: { id: targetId },
         data: {

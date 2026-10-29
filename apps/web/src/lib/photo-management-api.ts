@@ -24,9 +24,13 @@ export interface PhotoGroup {
 const base = '/api/photos/photography';
 export const getPhotoFacets = () =>
   request<{ cameras: string[]; lenses: string[] }>(`${base}/facets`);
-export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
+export const listPhotoPeople = (
+  after?: string,
+  signal?: AbortSignal,
+  view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
+) =>
   request<{ runtimeConfigured: boolean; people: PhotoPerson[]; nextCursor: string | null }>(
-    `${base}/people${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+    `${base}/people?view=${view}${after ? `&after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
 export const scanPhotoPeople = () =>
@@ -142,3 +146,24 @@ export const getPhotoMapPhotos = (cell: string, after?: string, signal?: AbortSi
     `${base}/map/${encodeURIComponent(cell)}/photos${after ? `?after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
+
+export interface PhotoPersonReview {
+  key: string;
+  first: PhotoPerson;
+  second: PhotoPerson;
+  similarity: number;
+}
+export const getPhotoPeopleSummary = () =>
+  request<{ named: number; unnamed: number }>(`${base}/people/summary`);
+export const getPhotoPeopleReview = (after?: string, signal?: AbortSignal) =>
+  request<{ items: PhotoPersonReview[]; nextCursor: string | null }>(
+    `${base}/people/review${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+    { signal },
+  );
+export const decidePhotoPeople = (input: {
+  firstId: string;
+  secondId: string;
+  firstVersion: number;
+  secondVersion: number;
+  decision: 'SAME' | 'DIFFERENT';
+}) => request(`${base}/people/review`, { method: 'POST', body: JSON.stringify(input) });

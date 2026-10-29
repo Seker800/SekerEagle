@@ -204,6 +204,7 @@ test('sending current browse outputs copies independent derivatives and publishe
       },
     },
     eagleAssetProcessingJob: {
+      updateMany: async () => ({ count: 1 }),
       createMany: async ({ data }: { data: typeof jobs }) => {
         jobs = data;
         allJobs.push(...data);
@@ -224,7 +225,12 @@ test('sending current browse outputs copies independent derivatives and publishe
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
   assert.equal(copies.length, 4);
   assert.ok(sourceRemoval.purgeAfter instanceof Date, 'successful sends bypass the recycle bin');
-  assert.ok(allJobs.some((job) => job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO'));
+  assert.ok(
+    allJobs.some(
+      (job) =>
+        job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO',
+    ),
+  );
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
   assert.ok(

@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsInt,
+  IsIn,
   Min,
   IsArray,
   ArrayMinSize,
@@ -30,13 +31,26 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoMapService } from './photo-map.service';
 import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
+import { PhotoPersonReviewService } from './photo-person-review.service';
 import { PhotoManagementService } from './photo-management.service';
 class PeopleQueryDto {
+  @ApiPropertyOptional({ enum: ['ALL', 'NAMED', 'UNNAMED'] })
+  @IsOptional()
+  @IsIn(['ALL', 'NAMED', 'UNNAMED'])
+  view?: 'ALL' | 'NAMED' | 'UNNAMED';
   @ApiPropertyOptional({ maxLength: 1024 })
   @IsOptional()
   @IsString()
   @MaxLength(1024)
   after?: string;
+}
+export class PersonReviewDto {
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') firstId!: string;
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') secondId!: string;
+  @ApiProperty() @IsInt() @Min(1) firstVersion!: number;
+  @ApiProperty() @IsInt() @Min(1) secondVersion!: number;
+  @ApiProperty({ enum: ['SAME', 'DIFFERENT'] }) @IsIn(['SAME', 'DIFFERENT']) decision!:
+    'SAME' | 'DIFFERENT';
 }
 class PersonPrivacyDto {
   @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;
@@ -74,6 +88,7 @@ export class PhotoManagementController {
   constructor(
     private readonly photos: PhotoManagementService,
     private readonly map: PhotoMapService,
+    private readonly review: PhotoPersonReviewService,
   ) {}
   @Get('map')
   mapClusters(@CurrentPrincipal() p: AuthPrincipal, @Query() query: MapViewportDto) {
@@ -96,7 +111,22 @@ export class PhotoManagementController {
     return this.photos.facets(p.sub, p.canViewPrivate);
   }
   @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
-    return this.photos.people(p.sub, p.canViewPrivate, query.after);
+    return this.photos.people(p.sub, p.canViewPrivate, query.after, query.view);
+  }
+  @Get('people/summary') summary(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.review.summary(p.sub, p.canViewPrivate);
+  }
+  @Get('people/review') reviewPeople(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Query() query: PeopleQueryDto,
+  ) {
+    return this.review.suggestions(p.sub, p.canViewPrivate, query.after);
+  }
+  @Post('people/review') @UseGuards(BrowserOriginGuard) decidePeople(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Body() dto: PersonReviewDto,
+  ) {
+    return this.review.decide(p.sub, p.canViewPrivate, dto);
   }
   @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(
     @CurrentPrincipal() p: AuthPrincipal,

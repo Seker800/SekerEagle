@@ -6,6 +6,9 @@ import { PhotoCollections } from './PhotoCollections';
 const mocks = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  getPhotoPeopleSummary: vi.fn(async () => ({ named: 1, unnamed: 0 })),
+  getPhotoPeopleReview: vi.fn(async () => ({ items: [], nextCursor: null })),
+  decidePhotoPeople: vi.fn(),
   scanPhotoPeople: vi.fn(),
   renamePhotoPerson: vi.fn(),
   mergePhotoPeople: vi.fn(),
@@ -46,7 +49,7 @@ it('配置完成但没有人物结果时提示分析现有图库', async () => {
   mocks.list.mockResolvedValue({ runtimeConfigured: true, people: [] });
   showPeople();
   expect(
-    await screen.findByText('暂无人物。可点击“分析人物”扫描图库中的照片。'),
+    await screen.findByText('还没有已命名人物。可从待整理头像中命名，或先确认相似人物。'),
   ).toBeInTheDocument();
   expect(screen.getByRole('button', { name: '分析人物' })).toBeEnabled();
   expect(screen.queryByText(/尚未配置/)).not.toBeInTheDocument();

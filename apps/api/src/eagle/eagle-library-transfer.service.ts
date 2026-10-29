@@ -4,7 +4,7 @@ import {
   copyTransferPyramid,
   type TransferPyramid,
 } from './eagle-transfer-pyramid';
-import { isCameraRawMime } from '@sekereagle/library-core';
+import { isCameraRawMime, mediaRequeueData } from '@sekereagle/library-core';
 import { copyTransferFacts, transferFactIncludes } from './eagle-transfer-facts';
 import {
   planTransferRenditions,
@@ -99,6 +99,7 @@ export class EagleLibraryTransferService {
       beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
       componentIds: readonly string[];
     },
+    afterPublish?: (tx: Prisma.TransactionClient, result: LibraryTransferResult) => Promise<void>,
   ): Promise<LibraryTransferResult> {
     const ids = [...new Set(input.assetIds)].sort();
     if (!ids.length || ids.length !== input.assetIds.length || ids.length > 100)
@@ -458,9 +459,34 @@ export class EagleLibraryTransferService {
             data: jobs.map((job) => ({ ...job, libraryMode: targetMode })),
           });
         }
+        // A send is a move, not a user trash action. Publish the independent target and
+        // irreversibly retire its source in this same transaction. The existing purge
+        // worker owns physical cleanup and its retryable object-deletion receipts.
+        const retiredAt = new Date();
         await tx.eagleAsset.updateMany({
           where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          data: { deletedAt: new Date(), rowVersion: { increment: 1 } },
+          data: { deletedAt: retiredAt, purgeAfter: retiredAt, rowVersion: { increment: 1 } },
+        });
+        await tx.eagleAssetProcessingJob.createMany({
+          data: sources.map((source) => ({
+            ownerId,
+            libraryMode: this.sourceMode,
+            assetId: source.id,
+            assetRevision: source.mediaRevision,
+            kind: 'PURGE_ASSET',
+            lane: 'MAINTENANCE',
+          })),
+          skipDuplicates: true,
+        });
+        await tx.eagleAssetProcessingJob.updateMany({
+          where: {
+            ownerId,
+            libraryMode: this.sourceMode,
+            assetId: { in: sourceIds },
+            kind: 'PURGE_ASSET',
+            status: { in: ['PENDING', 'FAILED', 'COMPLETED'] },
+          },
+          data: mediaRequeueData(retiredAt),
         });
         const result: LibraryTransferResult = {
           targetMode,
@@ -472,6 +498,7 @@ export class EagleLibraryTransferService {
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
           data: { status: 'COMPLETED', result: result as unknown as Prisma.InputJsonValue },
         });
+        if (afterPublish) await afterPublish(tx, result);
         return result;
       },
       { timeout: 30000 },

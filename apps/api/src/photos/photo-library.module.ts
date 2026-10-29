@@ -4,6 +4,7 @@ import { PhotoMapService } from './photo-map.service';
 import { PhotoAgentService } from './photo-agent.service';
 import { PhotoAgentController } from './photo-agent.controller';
 import { PhotoManagementController } from './photo-management.controller';
+import { PhotoPersonReviewService } from './photo-person-review.service';
 import { PhotoManagementService } from './photo-management.service';
 import {
   Body,
@@ -97,6 +98,7 @@ export class PhotoPrivacyVisibilityController {
   ],
   providers: [
     PhotoManagementService,
+    PhotoPersonReviewService,
     PhotoMapService,
     PhotoStatisticsService,
     PhotoAgentService,
