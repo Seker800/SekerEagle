@@ -22,6 +22,8 @@ const env = {
   S3_ACCESS_KEY_ID: accessKey,
   S3_SECRET_ACCESS_KEY: secretKey,
   JWT_ACCESS_SECRET: tokenKey,
+  ACCESS_TOKEN_TTL_SECONDS: '900',
+  REFRESH_TOKEN_TTL_SECONDS: '2592000',
   CANONICAL_ORIGIN: 'http://localhost:8180',
   PORT: '3000',
   MLX_EMBEDDING_URL: 'http://127.0.0.1:1',
@@ -142,7 +144,6 @@ try {
   run([
     'run',
     '--detach',
-    '--rm',
     '--pull',
     'never',
     '--name',
@@ -181,6 +182,19 @@ try {
       unauthenticatedPeople: 401,
     }) + '\n',
   );
+} catch (error) {
+  const last = containers.at(-1);
+  if (last?.endsWith('-api')) {
+    const logs = spawnSync('docker', ['logs', '--tail', '80', last], {
+      encoding: 'utf8',
+      timeout: 5000,
+    });
+    let diagnostic = `${logs.stdout ?? ''}${logs.stderr ?? ''}`;
+    for (const value of [password, accessKey, secretKey, tokenKey])
+      diagnostic = diagnostic.replaceAll(value, '[test value]');
+    process.stderr.write(diagnostic);
+  }
+  throw error;
 } finally {
   for (const name of containers.reverse())
     spawnSync('docker', ['rm', '--force', name], { stdio: 'ignore', timeout: 30000 });
