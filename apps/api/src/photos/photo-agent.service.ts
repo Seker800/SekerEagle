@@ -202,7 +202,7 @@ export class PhotoAgentService {
       where: {
         ...scope(ownerId, includePrivate),
         id: { in: frozen.map((a) => a.id) },
-        purgeAfter: null,
+        OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
       },
       select,
     });
@@ -243,7 +243,11 @@ export class PhotoAgentService {
     for (const row of rows.slice(0, input.limit)) {
       const ids = (row.scope as unknown as Snapshot[]).map((a) => a.id);
       const count = await this.prisma.eagleAsset.count({
-        where: { ...scope(ownerId, includePrivate), id: { in: ids }, purgeAfter: null },
+        where: {
+          ...scope(ownerId, includePrivate),
+          id: { in: ids },
+          OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
+        },
       });
       if (count === ids.length) {
         const { scope: _, ...summary } = row;

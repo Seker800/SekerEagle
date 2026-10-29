@@ -403,6 +403,7 @@ model EagleAsset {
   livePhotoIdentifier            String?
   livePhotoRole                  String?
   deletedAt                      DateTime?
+  transferredAt                  DateTime?
   purgeAfter                     DateTime?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
@@ -1017,6 +1018,8 @@ model EagleVectorTagSuggestion {
   @@index([ownerId, libraryMode, snapshotId])
   @@index([ownerId, libraryMode, embeddingId])
   @@index([generationId])
+  @@index([ownerId, libraryMode, status, score(sort: Desc), id(sort: Desc), isActive, invalidatedAt], map: "EagleVectorTagSuggestion_review_score_idx")
+  @@index([ownerId, libraryMode, suggestedTagId, status, score(sort: Desc), id(sort: Desc), isActive, invalidatedAt], map: "EagleVectorTagSuggestion_review_tag_score_idx")
 }
 
 model EagleTagSemanticBuild {

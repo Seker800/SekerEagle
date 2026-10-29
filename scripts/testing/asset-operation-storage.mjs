@@ -270,11 +270,27 @@ try {
       storage.headObject(key),
       (error) => error.$metadata?.httpStatusCode === 404,
     );
-  for (const row of fixtures)
-    assert.equal(
-      (await storage.headObject(row.originalObjectKey)).ContentLength,
-      Number(row.byteSize),
+  // Sending removes all original source bytes while preserving the source audit identity.
+  for (const key of payloads.keys())
+    await assert.rejects(
+      storage.headObject(key),
+      (error) => error.$metadata?.httpStatusCode === 404,
     );
+  for (const row of fixtures) {
+    const source = await db.eagleAsset.findUniqueOrThrow({ where: { id: row.id } });
+    assert.ok(source.transferredAt);
+    assert.ok(source.purgeAfter);
+  }
+  assert.equal(
+    (
+      await new EagleService(db, undefined, 'PHOTO').listAssets(
+        ownerId,
+        { limit: 40 },
+        { trash: true },
+      )
+    ).items.length,
+    0,
+  );
   for (const row of targets)
     for (const key of [row.originalObjectKey, ...row.renditions.map((r) => r.storageKey)])
       await assert.rejects(

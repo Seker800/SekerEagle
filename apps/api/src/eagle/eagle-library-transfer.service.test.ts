@@ -150,6 +150,7 @@ test('sending current browse outputs copies independent derivatives and publishe
     lifecycleStatus: 'READY',
     annotation: null,
     renditions,
+    imagePyramids: [],
     width: 1000,
     height: 1000,
   };
@@ -175,7 +176,7 @@ test('sending current browse outputs copies independent derivatives and publishe
   };
   const copies: string[][] = [];
   const created: Record<string, unknown>[] = [];
-  let jobs: Array<{
+  const jobs: Array<{
     kind: string;
     processorVersion?: string;
     assetId: string;
@@ -183,6 +184,7 @@ test('sending current browse outputs copies independent derivatives and publishe
   }> = [];
   let retired: Record<string, unknown> | undefined;
   let published: unknown[] = [];
+  let deletion: { objectKeys: string[]; prefixes: string[] } | undefined;
   const tx = {
     $queryRaw: async () => [],
     eagleLibraryTransfer: {
@@ -199,6 +201,11 @@ test('sending current browse outputs copies independent derivatives and publishe
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
         retired = data;
         return { count: 1 };
+      },
+    },
+    eagleObjectDeletion: {
+      create: async ({ data }: { data: { objectKeys: string[]; prefixes: string[] } }) => {
+        deletion = data;
       },
     },
     eagleAssetTransferFacts: { create: async () => ({}) },
@@ -228,13 +235,13 @@ test('sending current browse outputs copies independent derivatives and publishe
   assert.equal(copies.length, 4);
   assert.ok(retired?.deletedAt instanceof Date);
   assert.ok(retired?.purgeAfter instanceof Date, 'sent source bypasses recoverable trash');
-  assert.ok(
-    jobs.some(
-      (job) =>
-        job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO',
-    ),
+  assert.ok(retired?.transferredAt instanceof Date);
+  assert.deepEqual(
+    deletion?.objectKeys.sort(),
+    [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
-  assert.ok(!jobs.some((job) => job.kind === 'PURGE_ASSET' && job.assetId === targetId));
+  assert.deepEqual(deletion?.prefixes, []);
+  assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
   assert.ok(

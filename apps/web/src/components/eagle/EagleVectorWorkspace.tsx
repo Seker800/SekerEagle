@@ -14,10 +14,7 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
-import {
-  invalidateDesktopAssets,
-  invalidateDesktopAssetsAndRefresh,
-} from '../../lib/desktop-cache';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import styles from './EagleVectorWorkspace.module.css';

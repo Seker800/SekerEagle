@@ -459,24 +459,34 @@ export class EagleLibraryTransferService {
           });
         }
         // Publishing the independent target and retiring the source are atomic.
-        // purgeAfter excludes the source from recoverable trash immediately;
-        // the existing leased cleanup pipeline owns eventual physical deletion.
+        // Keep the non-restorable source identity for approval history and privacy checks.
+        // Only source objects enter the existing durable deletion outbox.
         const retiredAt = new Date();
         const retired = await tx.eagleAsset.updateMany({
           where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          data: { deletedAt: retiredAt, purgeAfter: retiredAt, rowVersion: { increment: 1 } },
+          data: {
+            deletedAt: retiredAt,
+            purgeAfter: retiredAt,
+            transferredAt: retiredAt,
+            rowVersion: { increment: 1 },
+          },
         });
         if (retired.count !== items.length)
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
-        await tx.eagleAssetProcessingJob.createMany({
-          data: items.map((item) => ({
-            ownerId,
-            libraryMode: this.sourceMode,
-            assetId: item.sourceId,
-            assetRevision: item.revision,
-            kind: 'PURGE_ASSET' as const,
-            lane: 'MAINTENANCE' as const,
-          })),
+        const objectKeys = [
+          ...new Set(
+            sources.flatMap((source) => [
+              source.originalObjectKey,
+              ...source.renditions.map((r) => r.storageKey),
+            ]),
+          ),
+        ];
+        const prefixes = sources.flatMap((source) =>
+          source.imagePyramids.map((p) => `${p.storagePrefix}/`),
+        );
+        for (const key of [...objectKeys, ...prefixes]) assertOwnedObjectKey(ownerId, key);
+        await tx.eagleObjectDeletion.create({
+          data: { ownerId, libraryMode: this.sourceMode, objectKeys, prefixes },
         });
         const result: LibraryTransferResult = {
           targetMode,

@@ -1288,26 +1288,20 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   assert.ok(source.deletedAt);
   assert.ok(source.purgeAfter, 'a successful send must never leave recoverable trash');
   assert.equal(
-    (await f.materials.listAssets(f.ownerId, { limit: 50, trash: true }, true)).items.length,
+    (await f.materials.listAssets(f.ownerId, { limit: 50 }, { trash: true, includePrivate: true }))
+      .items.length,
     0,
   );
   await assert.rejects(
     () => f.materials.setTrash(f.ownerId, [source.id], true, true),
     NotFoundException,
   );
-  assert.equal(
-    await prisma.eagleAssetProcessingJob.count({
-      where: {
-        ownerId: f.ownerId,
-        libraryMode: 'MATERIAL',
-        assetId: source.id,
-        assetRevision: source.mediaRevision,
-        kind: 'PURGE_ASSET',
-        status: 'PENDING',
-      },
-    }),
-    1,
-  );
+  assert.ok(source.transferredAt);
+  const cleanup = await prisma.eagleObjectDeletion.findFirstOrThrow({
+    where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' },
+  });
+  assert.deepEqual(cleanup.objectKeys, [source.originalObjectKey]);
+  assert.ok(!cleanup.objectKeys.includes(target.originalObjectKey));
   assert.equal(target.libraryMode, 'PHOTO');
   assert.equal(target.isPrivate, true);
   assert.equal(target.manualTagLinks.length, 2);
@@ -2701,6 +2695,83 @@ test('same-name tags with different privacy rules never change existing target t
       (await prisma.eagleManualTag.findUniqueOrThrow({ where: { id: existing.id } }))
         .marksAssetsPrivate,
       !privateSource,
+    );
+  }
+});
+
+test('legacy transfer retirement preserves restored sources and changed or missing targets', async () => {
+  const { readFileSync } = await import('node:fs');
+  const { EagleLibraryTransferService } =
+    await import('../../apps/api/dist/eagle/eagle-library-transfer.service.js');
+  const sql = readFileSync(
+    'apps/api/prisma/migrations/20261029080000_transfer_retirement_and_review_indexes/migration.sql',
+    'utf8',
+  ).split('-- Retire only')[1];
+  const migration = '-- Retire only' + sql.replace('\nCOMMIT;', '');
+  const fixturesToCheck = [];
+  for (const variant of [
+    'untouched',
+    'restored',
+    'target-changed',
+    'target-trashed',
+    'target-missing',
+    'failed',
+    'foreign-target',
+  ]) {
+    const f = await fixtures();
+    const sender = new EagleLibraryTransferService(
+      prisma,
+      { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) },
+      'PHOTO',
+    );
+    const operationId = randomUUID();
+    const result = await sender.send(f.ownerId, { operationId, assetIds: [f.photo.id] }, false);
+    const targetId = result.assets[0].assetId;
+    await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: f.ownerId } });
+    await prisma.eagleAsset.update({
+      where: { id: f.photo.id },
+      data: {
+        purgeAfter: null,
+        transferredAt: null,
+        ...(variant === 'restored' ? { rowVersion: { increment: 2 } } : {}),
+      },
+    });
+    if (variant === 'target-changed')
+      await prisma.eagleAsset.update({
+        where: { id: targetId },
+        data: { rowVersion: { increment: 1 } },
+      });
+    if (variant === 'target-trashed')
+      await prisma.eagleAsset.update({ where: { id: targetId }, data: { deletedAt: new Date() } });
+    if (variant === 'target-missing') await prisma.eagleAsset.delete({ where: { id: targetId } });
+    if (variant === 'failed')
+      await prisma.eagleLibraryTransfer.update({
+        where: { id: operationId },
+        data: { status: 'ABANDONED' },
+      });
+    if (variant === 'foreign-target') {
+      const other = await fixtures();
+      const op = await prisma.eagleLibraryTransfer.findUniqueOrThrow({
+        where: { id: operationId },
+      });
+      await prisma.eagleLibraryTransfer.update({
+        where: { id: operationId },
+        data: { plan: op.plan.map((item) => ({ ...item, targetId: other.material.id })) },
+      });
+    }
+    fixturesToCheck.push({ f, variant });
+  }
+  await prisma.$executeRawUnsafe(migration);
+  await prisma.$executeRawUnsafe(migration);
+  for (const { f, variant } of fixturesToCheck) {
+    const source = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.photo.id } });
+    const retired = variant === 'untouched';
+    assert.equal(Boolean(source.transferredAt), retired, variant);
+    assert.equal(Boolean(source.purgeAfter), retired, variant);
+    assert.equal(
+      await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }),
+      retired ? 1 : 0,
+      variant,
     );
   }
 });
