@@ -30,7 +30,6 @@ export interface CameraVideoProbe {
     codec_tag?: string;
     sample_rate?: string;
     channels?: number;
-    nb_read_packets?: string;
     width?: number;
     height?: number;
     tags?: { rotate?: string };
@@ -99,17 +98,13 @@ export function parseCameraVideoProbe(probe: CameraVideoProbe, mimeType: string)
     durationMs: Math.round(seconds * 1000),
   };
 }
-async function readCameraVideoProbe(
-  inputPath: string,
-  audioPacketCount = false,
-): Promise<CameraVideoProbe> {
+async function readCameraVideoProbe(inputPath: string): Promise<CameraVideoProbe> {
   const { stdout } = await run(
     process.env.FFPROBE_PATH?.trim() || 'ffprobe',
     [
       '-v',
       'error',
       ...CAMERA_VIDEO_INPUT_OPTIONS,
-      ...(audioPacketCount ? ['-select_streams', 'a:0', '-count_packets'] : []),
       '-show_format',
       '-show_streams',
       '-of',
@@ -169,12 +164,26 @@ export async function transcodeCameraVideo(
   const sourceProbe = await readCameraVideoProbe(inputPath);
   let countedPackets: number | undefined;
   if (hasSingleEmptyAudioDescriptor(sourceProbe)) {
-    // Only the exceptional invalid descriptor needs a bounded full packet scan.
-    // FFprobe omits nb_read_packets for a stream with zero packets.
-    const counted = await readCameraVideoProbe(inputPath, true);
-    const audio = counted.streams?.filter((stream) => stream.codec_type === 'audio') ?? [];
-    if (audio.length === 1 && hasSingleEmptyAudioDescriptor(counted))
-      countedPackets = Number(audio[0]?.nb_read_packets ?? '0');
+    // Read actual packet records, never infer zero from an absent counter.
+    // A nonempty record or a demuxer error preserves the ordinary audio path.
+    const packets = await run(
+      process.env.FFPROBE_PATH?.trim() || 'ffprobe',
+      [
+        '-v',
+        'error',
+        ...CAMERA_VIDEO_INPUT_OPTIONS,
+        '-select_streams',
+        'a:0',
+        '-show_packets',
+        '-show_entries',
+        'packet=stream_index',
+        '-of',
+        'csv=p=0',
+        inputPath,
+      ],
+      { env: mediaSubprocessEnvironment(), timeout: 120_000, maxBuffer: 2 * 1024 * 1024 },
+    );
+    if (!packets.stdout.trim() && !packets.stderr.trim()) countedPackets = 0;
   }
   await run(
     process.env.FFMPEG_PATH?.trim() || 'ffmpeg',
