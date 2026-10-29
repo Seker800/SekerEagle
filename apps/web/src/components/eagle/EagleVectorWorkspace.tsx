@@ -89,6 +89,9 @@ export function EagleVectorWorkspace({
   } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [tagLoadError, setTagLoadError] = useState('');
+  const [itemLoadError, setItemLoadError] = useState('');
+  const displayedError = error || itemLoadError || tagLoadError;
   const [notice, setNotice] = useState('');
   const imagePreview = useImagePreviewState();
   const clearSelection = useCallback(() => {
@@ -104,8 +107,11 @@ export function EagleVectorWorkspace({
     imagePreview.closePreview();
     clearSelection();
   }, [clearSelection, controlledView, imagePreview.closePreview]);
-  const reportLoadError = useCallback((cause: unknown) => {
-    setError(cause instanceof Error ? cause.message : t('读取向量处理状态失败'));
+  const reportTagLoadError = useCallback((cause: unknown) => {
+    setTagLoadError(cause instanceof Error ? cause.message : t('读取向量处理状态失败'));
+  }, []);
+  const reportItemLoadError = useCallback((cause: unknown) => {
+    setItemLoadError(cause instanceof Error ? cause.message : t('读取向量处理状态失败'));
   }, []);
   const loadTags = useCallback(
     () => (view !== 'UNCLASSIFIED' ? listEagleVectorTags() : Promise.resolve(null)),
@@ -113,8 +119,9 @@ export function EagleVectorWorkspace({
   );
   const applyTags = useCallback((next: EagleVectorTag[] | null) => {
     if (next) setTags(next);
+    setTagLoadError('');
   }, []);
-  const reloadTags = useReloadableWorkspaceData(loadTags, applyTags, reportLoadError);
+  const reloadTags = useReloadableWorkspaceData(loadTags, applyTags, reportTagLoadError);
   const loadItems = useCallback(
     async () => ({
       suggestions:
@@ -129,8 +136,9 @@ export function EagleVectorWorkspace({
       setUnclassified(next.unclassified.items);
       setUnclassifiedCursor(next.unclassified.nextCursor);
     }
+    setItemLoadError('');
   }, []);
-  const reloadItems = useReloadableWorkspaceData(loadItems, applyItems, reportLoadError);
+  const reloadItems = useReloadableWorkspaceData(loadItems, applyItems, reportItemLoadError);
   const reload = useCallback(
     async (fresh = false) => {
       // Tag statistics must not gate the current page or its next review action.
@@ -269,14 +277,22 @@ export function EagleVectorWorkspace({
     window.addEventListener('keydown', navigate);
     return () => window.removeEventListener('keydown', navigate);
   }, [imagePreview.previewImage, openPreview, previewAssets]);
-  const act = async <T,>(action: () => Promise<T>, message: string | ((result: T) => string)) => {
+  const act = async <T,>(
+    action: () => Promise<T>,
+    message: string | ((result: T) => string),
+    afterCommit?: (result: T) => Promise<void>,
+  ) => {
     setBusy(true);
     setError('');
     setNotice('');
     try {
       const result = await action();
       setNotice(typeof message === 'function' ? message(result) : message);
-      await reload(true);
+      // A cache/host failure must not hide a committed write or prevent its list refresh.
+      const outcomes = await Promise.allSettled([reload(true), afterCommit?.(result)]);
+      const failed = outcomes.find((outcome) => outcome.status === 'rejected');
+      if (failed?.status === 'rejected')
+        setError(failed.reason instanceof Error ? failed.reason.message : t('操作失败'));
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('操作失败'));
@@ -320,16 +336,7 @@ export function EagleVectorWorkspace({
   };
   const review = async (ids: string[], action: 'ACCEPT' | 'REJECT') => {
     const reviewed = await act(
-      async () => {
-        const result = await reviewEagleVectorSuggestions(ids, action);
-        if (action === 'ACCEPT') {
-          if (result.items.some(({ privacyChanged }) => privacyChanged)) {
-            onAssetPrivacyChanged?.();
-          }
-          await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
-        }
-        return result;
-      },
+      () => reviewEagleVectorSuggestions(ids, action),
       action === 'ACCEPT'
         ? t('已确认 {{value1}} 条人工标签建议', {
             value1: ids.length,
@@ -337,6 +344,14 @@ export function EagleVectorWorkspace({
         : t('已拒绝 {{value1}} 条建议', {
             value1: ids.length,
           }),
+      action === 'ACCEPT'
+        ? async (result) => {
+            if (result.items.some(({ privacyChanged }) => privacyChanged)) {
+              onAssetPrivacyChanged?.();
+            }
+            await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
+          }
+        : undefined,
     );
     if (reviewed) clearSelection();
   };
@@ -447,7 +462,7 @@ export function EagleVectorWorkspace({
       );
       setTagPickerTarget(null);
       clearSelection();
-      await Promise.all([reload(), refreshDistance()]);
+      await Promise.all([reload(true), refreshDistance()]);
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('修改人工标签失败'));
@@ -485,7 +500,7 @@ export function EagleVectorWorkspace({
       );
       setTagPickerTarget(null);
       clearSelection();
-      await reload();
+      await reload(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('添加人工标签失败'));
     } finally {
@@ -547,9 +562,9 @@ export function EagleVectorWorkspace({
         <p>{pageCopy.description}</p>
       </header>
 
-      {error ? (
+      {displayedError ? (
         <div className={styles.error} role="alert">
-          {error}
+          {displayedError}
         </div>
       ) : null}
       {notice ? (
@@ -982,7 +997,7 @@ export function EagleVectorWorkspace({
               : manualTags
           }
           pending={busy}
-          error={error || undefined}
+          error={displayedError || undefined}
           onCreate={onCreateManualTag}
           onClose={() => setTagPickerTarget(null)}
           onApply={(tagIds) => void assignManualTags(tagIds)}
