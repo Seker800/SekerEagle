@@ -198,27 +198,11 @@ export class PhotoAgentService {
     });
     if (!task) throw new NotFoundException('整理任务不存在。');
     const frozen = task.scope as unknown as Snapshot[];
-    // Completed moves can be replayed while their source tombstones await cleanup.
-    // This does not authorize any media read or any new mutation of a retired source.
-    const moves = await tx.eagleLibraryTransfer.findMany({
-      where: {
-        ownerId,
-        sourceMode: 'PHOTO',
-        status: 'COMPLETED',
-        sourceIds: { hasSome: frozen.map((a) => a.id) },
-      },
-      select: { result: true },
-    });
-    const movedIds = moves.flatMap((move) =>
-      (move.result as unknown as { assets: Array<{ sourceId: string }> }).assets.map(
-        (a) => a.sourceId,
-      ),
-    );
     const assets = await tx.eagleAsset.findMany({
       where: {
         ...scope(ownerId, includePrivate),
         id: { in: frozen.map((a) => a.id) },
-        OR: [{ purgeAfter: null }, { id: { in: movedIds } }],
+        OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
       },
       select,
     });
@@ -259,7 +243,11 @@ export class PhotoAgentService {
     for (const row of rows.slice(0, input.limit)) {
       const ids = (row.scope as unknown as Snapshot[]).map((a) => a.id);
       const count = await this.prisma.eagleAsset.count({
-        where: { ...scope(ownerId, includePrivate), id: { in: ids }, purgeAfter: null },
+        where: {
+          ...scope(ownerId, includePrivate),
+          id: { in: ids },
+          OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
+        },
       });
       if (count === ids.length) {
         const { scope: _, ...summary } = row;
@@ -970,11 +958,19 @@ export class PhotoAgentService {
     });
     if (approved.status === 'ACCEPTED') return approved;
     try {
-      let published: typeof approved | undefined;
-      const finish = async (
-        tx: Prisma.TransactionClient,
-        result: Awaited<ReturnType<EagleLibraryTransferService['send']>>,
-      ) => {
+      const result = await this.transfer.send(
+        ownerId,
+        { operationId: suggestionId, assetIds: [approved.assetId] },
+        includePrivate,
+        new Map([
+          [
+            approved.assetId,
+            { mediaRevision: approved.assetRevision, rowVersion: approved.assetRowVersion },
+          ],
+        ]),
+      );
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "EaglePhotoAgentTask" WHERE id=${taskId} AND "ownerId"=${ownerId} FOR UPDATE`;
         const current = await tx.eaglePhotoAgentSuggestion.findUniqueOrThrow({
           where: { id: suggestionId },
         });
@@ -997,23 +993,7 @@ export class PhotoAgentService {
           approved,
         );
         return updated;
-      };
-      const result = await this.transfer.send(
-        ownerId,
-        { operationId: suggestionId, assetIds: [approved.assetId] },
-        includePrivate,
-        new Map([
-          [
-            approved.assetId,
-            { mediaRevision: approved.assetRevision, rowVersion: approved.assetRowVersion },
-          ],
-        ]),
-        undefined,
-        async (tx, result) => {
-          published = await finish(tx, result);
-        },
-      );
-      return published ?? (await this.prisma.$transaction((tx) => finish(tx, result)));
+      });
     } catch (error) {
       // No automatic retry. Another manual approval resumes the same durable send plan.
       await this.prisma.$transaction(async (tx) => {

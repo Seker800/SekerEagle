@@ -199,14 +199,10 @@ export async function performManualPhotoAction(
           { mediaRevision: t.mediaRevision, rowVersion: t.rowVersion },
         ]),
       ),
-      undefined,
-      async (tx) => {
-        await finish(tx, prepared.start);
-      },
     );
     return await db.$transaction(
       async (tx) => {
-        // Publication already committed this receipt atomically with retiring the source.
+        await lock(tx);
         return finish(tx, prepared.start);
       },
       { timeout: 30000 },

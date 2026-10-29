@@ -153,6 +153,11 @@ try {
       stdio: 'inherit',
     },
   );
+  // Keep the synthetic scale fixture out of concurrent privacy transactions.
+  run(process.execPath, ['--test', 'scripts/testing/vector-review-performance.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   run(
     process.execPath,
     [

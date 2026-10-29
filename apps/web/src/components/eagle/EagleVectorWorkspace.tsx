@@ -1,3 +1,4 @@
+import { useReloadableWorkspaceData } from './useReloadableWorkspaceData';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
@@ -13,7 +14,7 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
-import { invalidateDesktopAssetsAndRefresh } from '../../lib/desktop-cache';
+import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import styles from './EagleVectorWorkspace.module.css';
@@ -103,30 +104,41 @@ export function EagleVectorWorkspace({
     imagePreview.closePreview();
     clearSelection();
   }, [clearSelection, controlledView, imagePreview.closePreview]);
-  const reload = useCallback(async () => {
-    setError('');
-    try {
-      const [nextTags, nextSuggestions, nextUnclassified] = await Promise.all([
-        view === 'REVIEW' || view === 'TAGS' || view === 'DISTANCE'
-          ? listEagleVectorTags()
-          : Promise.resolve(null),
-        view === 'REVIEW'
-          ? listEagleVectorSuggestions(tagFilter || undefined)
-          : Promise.resolve(null),
-        view === 'UNCLASSIFIED' ? listEagleUnclassifiedAssets() : Promise.resolve(null),
-      ]);
-      if (nextTags) setTags(nextTags);
-      if (nextSuggestions) {
-        setSuggestions(nextSuggestions.items);
-      }
-      if (nextUnclassified) {
-        setUnclassified(nextUnclassified.items);
-        setUnclassifiedCursor(nextUnclassified.nextCursor);
-      }
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : t('读取向量处理状态失败'));
+  const reportLoadError = useCallback((cause: unknown) => {
+    setError(cause instanceof Error ? cause.message : t('读取向量处理状态失败'));
+  }, []);
+  const loadTags = useCallback(
+    () => (view !== 'UNCLASSIFIED' ? listEagleVectorTags() : Promise.resolve(null)),
+    [view],
+  );
+  const applyTags = useCallback((next: EagleVectorTag[] | null) => {
+    if (next) setTags(next);
+  }, []);
+  const reloadTags = useReloadableWorkspaceData(loadTags, applyTags, reportLoadError);
+  const loadItems = useCallback(
+    async () => ({
+      suggestions:
+        view === 'REVIEW' ? await listEagleVectorSuggestions(tagFilter || undefined) : null,
+      unclassified: view === 'UNCLASSIFIED' ? await listEagleUnclassifiedAssets() : null,
+    }),
+    [tagFilter, view],
+  );
+  const applyItems = useCallback((next: Awaited<ReturnType<typeof loadItems>>) => {
+    if (next.suggestions) setSuggestions(next.suggestions.items);
+    if (next.unclassified) {
+      setUnclassified(next.unclassified.items);
+      setUnclassifiedCursor(next.unclassified.nextCursor);
     }
-  }, [tagFilter, view]);
+  }, []);
+  const reloadItems = useReloadableWorkspaceData(loadItems, applyItems, reportLoadError);
+  const reload = useCallback(
+    async (fresh = false) => {
+      // Tag statistics must not gate the current page or its next review action.
+      void reloadTags(fresh);
+      await reloadItems(fresh);
+    },
+    [reloadItems, reloadTags],
+  );
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
@@ -138,21 +150,18 @@ export function EagleVectorWorkspace({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [clearSelection, imagePreview.previewImage]);
   useEffect(() => {
-    void reload();
-  }, [reload]);
-  useEffect(() => {
     const timer = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void reload();
+      if (!busy && document.visibilityState === 'visible') void reload();
     }, 10000);
     const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') void reload();
+      if (!busy && document.visibilityState === 'visible') void reload();
     };
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibilityChange);
     };
-  }, [reload]);
+  }, [busy, reload]);
   useEffect(() => {
     if ((view !== 'TAGS' && view !== 'DISTANCE') || providedManualTags) return;
     let cancelled = false;
@@ -267,7 +276,7 @@ export function EagleVectorWorkspace({
     try {
       const result = await action();
       setNotice(typeof message === 'function' ? message(result) : message);
-      await reload();
+      await reload(true);
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('操作失败'));
@@ -317,10 +326,7 @@ export function EagleVectorWorkspace({
           if (result.items.some(({ privacyChanged }) => privacyChanged)) {
             onAssetPrivacyChanged?.();
           }
-          await invalidateDesktopAssetsAndRefresh(
-            result.items.map(({ assetId }) => assetId),
-            reload,
-          );
+          await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
         }
         return result;
       },

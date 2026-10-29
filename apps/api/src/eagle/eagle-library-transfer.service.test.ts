@@ -150,6 +150,7 @@ test('sending current browse outputs copies independent derivatives and publishe
     lifecycleStatus: 'READY',
     annotation: null,
     renditions,
+    imagePyramids: [],
     width: 1000,
     height: 1000,
   };
@@ -175,10 +176,15 @@ test('sending current browse outputs copies independent derivatives and publishe
   };
   const copies: string[][] = [];
   const created: Record<string, unknown>[] = [];
-  let jobs: Array<{ kind: string; processorVersion: string }> = [];
+  const jobs: Array<{
+    kind: string;
+    processorVersion?: string;
+    assetId: string;
+    libraryMode: string;
+  }> = [];
+  let retired: Record<string, unknown> | undefined;
   let published: unknown[] = [];
-  let sourceRemoval: Record<string, unknown> = {};
-  const allJobs: Array<{ kind: string; assetId?: string; libraryMode?: string }> = [];
+  let deletion: { objectKeys: string[]; prefixes: string[] } | undefined;
   const tx = {
     $queryRaw: async () => [],
     eagleLibraryTransfer: {
@@ -193,8 +199,13 @@ test('sending current browse outputs copies independent derivatives and publishe
         return data;
       },
       updateMany: async ({ data }: { data: Record<string, unknown> }) => {
-        sourceRemoval = data;
+        retired = data;
         return { count: 1 };
+      },
+    },
+    eagleObjectDeletion: {
+      create: async ({ data }: { data: { objectKeys: string[]; prefixes: string[] } }) => {
+        deletion = data;
       },
     },
     eagleAssetTransferFacts: { create: async () => ({}) },
@@ -204,10 +215,8 @@ test('sending current browse outputs copies independent derivatives and publishe
       },
     },
     eagleAssetProcessingJob: {
-      updateMany: async () => ({ count: 1 }),
       createMany: async ({ data }: { data: typeof jobs }) => {
-        jobs = data;
-        allJobs.push(...data);
+        jobs.push(...data);
       },
     },
   };
@@ -224,13 +233,15 @@ test('sending current browse outputs copies independent derivatives and publishe
   );
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
   assert.equal(copies.length, 4);
-  assert.ok(sourceRemoval.purgeAfter instanceof Date, 'successful sends bypass the recycle bin');
-  assert.ok(
-    allJobs.some(
-      (job) =>
-        job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO',
-    ),
+  assert.ok(retired?.deletedAt instanceof Date);
+  assert.ok(retired?.purgeAfter instanceof Date, 'sent source bypasses recoverable trash');
+  assert.ok(retired?.transferredAt instanceof Date);
+  assert.deepEqual(
+    deletion?.objectKeys.sort(),
+    [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
+  assert.deepEqual(deletion?.prefixes, []);
+  assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);
   assert.ok(
