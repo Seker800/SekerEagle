@@ -458,9 +458,25 @@ export class EagleLibraryTransferService {
             data: jobs.map((job) => ({ ...job, libraryMode: targetMode })),
           });
         }
-        await tx.eagleAsset.updateMany({
+        // Publishing the independent target and retiring the source are atomic.
+        // purgeAfter excludes the source from recoverable trash immediately;
+        // the existing leased cleanup pipeline owns eventual physical deletion.
+        const retiredAt = new Date();
+        const retired = await tx.eagleAsset.updateMany({
           where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
-          data: { deletedAt: new Date(), rowVersion: { increment: 1 } },
+          data: { deletedAt: retiredAt, purgeAfter: retiredAt, rowVersion: { increment: 1 } },
+        });
+        if (retired.count !== items.length)
+          throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+        await tx.eagleAssetProcessingJob.createMany({
+          data: items.map((item) => ({
+            ownerId,
+            libraryMode: this.sourceMode,
+            assetId: item.sourceId,
+            assetRevision: item.revision,
+            kind: 'PURGE_ASSET' as const,
+            lane: 'MAINTENANCE' as const,
+          })),
         });
         const result: LibraryTransferResult = {
           targetMode,

@@ -175,7 +175,12 @@ test('sending current browse outputs copies independent derivatives and publishe
   };
   const copies: string[][] = [];
   const created: Record<string, unknown>[] = [];
-  let jobs: Array<{ kind: string; processorVersion?: string; assetId: string; libraryMode: string }> = [];
+  let jobs: Array<{
+    kind: string;
+    processorVersion?: string;
+    assetId: string;
+    libraryMode: string;
+  }> = [];
   let retired: Record<string, unknown> | undefined;
   let published: unknown[] = [];
   const tx = {
@@ -223,7 +228,12 @@ test('sending current browse outputs copies independent derivatives and publishe
   assert.equal(copies.length, 4);
   assert.ok(retired?.deletedAt instanceof Date);
   assert.ok(retired?.purgeAfter instanceof Date, 'sent source bypasses recoverable trash');
-  assert.ok(jobs.some((job) => job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO'));
+  assert.ok(
+    jobs.some(
+      (job) =>
+        job.kind === 'PURGE_ASSET' && job.assetId === sourceId && job.libraryMode === 'PHOTO',
+    ),
+  );
   assert.ok(!jobs.some((job) => job.kind === 'PURGE_ASSET' && job.assetId === targetId));
   assert.equal(created[0]!.lifecycleStatus, 'READY');
   assert.equal(published.length, 3);

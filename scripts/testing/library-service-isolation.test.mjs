@@ -1286,6 +1286,28 @@ test('explicit sending creates independent targets, preserves privacy, removes s
   });
   assert.equal(source.libraryMode, 'MATERIAL');
   assert.ok(source.deletedAt);
+  assert.ok(source.purgeAfter, 'a successful send must never leave recoverable trash');
+  assert.equal(
+    (await f.materials.listAssets(f.ownerId, { limit: 50, trash: true }, true)).items.length,
+    0,
+  );
+  await assert.rejects(
+    () => f.materials.setTrash(f.ownerId, [source.id], true, true),
+    NotFoundException,
+  );
+  assert.equal(
+    await prisma.eagleAssetProcessingJob.count({
+      where: {
+        ownerId: f.ownerId,
+        libraryMode: 'MATERIAL',
+        assetId: source.id,
+        assetRevision: source.mediaRevision,
+        kind: 'PURGE_ASSET',
+        status: 'PENDING',
+      },
+    }),
+    1,
+  );
   assert.equal(target.libraryMode, 'PHOTO');
   assert.equal(target.isPrivate, true);
   assert.equal(target.manualTagLinks.length, 2);

@@ -128,16 +128,15 @@ describe('EagleVectorWorkspace', () => {
     vi.mocked(api.listEagleTagDistanceAssets).mockResolvedValue({ items: [], nextCursor: null });
   });
 
-
   it('loads review cards independently of slow tag statistics', async () => {
     vi.mocked(api.listEagleVectorTags).mockReturnValue(new Promise(() => {}));
     render(<EagleVectorWorkspace view="REVIEW" />);
-    expect(await screen.findByRole('button', { name: '选择 red-car.jpg' })).toBeVisible();
+    expect(await screen.findByRole('button', { name: /选择 red-car\.jpg/ })).toBeVisible();
   });
 
   it('refreshes only once after confirming a suggestion', async () => {
     render(<EagleVectorWorkspace view="REVIEW" />);
-    await screen.findByRole('button', { name: '选择 red-car.jpg' });
+    await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
     expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2);
@@ -145,29 +144,51 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('does not reload all tag statistics when switching a filter and ignores older results', async () => {
-    vi.mocked(api.listEagleVectorTags).mockResolvedValue([{
-      id: 'tag-1', name: '汽车', color: null, assetCount: 10,
-      recommendationEnabled: true, currentSnapshotId: 'snapshot-1',
-      lastGeneratedAt: null, activeBuild: null, currentSnapshot: null,
-      pendingSuggestionCount: 3,
-    }]);
+    vi.mocked(api.listEagleVectorTags).mockResolvedValue([
+      {
+        id: 'tag-1',
+        name: '汽车',
+        color: null,
+        assetCount: 10,
+        recommendationEnabled: true,
+        currentSnapshotId: 'snapshot-1',
+        lastGeneratedAt: null,
+        activeBuild: null,
+        currentSnapshot: null,
+        pendingSuggestionCount: 3,
+      },
+    ]);
     const original = { items: [] as api.EagleVectorSuggestion[], nextCursor: null };
     let resolveOlder!: (value: typeof original) => void;
     vi.mocked(api.listEagleVectorSuggestions)
-      .mockImplementationOnce(() => new Promise((resolve) => { resolveOlder = resolve; }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveOlder = resolve;
+          }),
+      )
       .mockResolvedValueOnce(original);
     render(<EagleVectorWorkspace view="REVIEW" />);
     const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
     fireEvent.click(await within(filters).findByRole('button', { name: '汽车3' }));
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenLastCalledWith('tag-1'));
     await act(async () => {
-      resolveOlder({ items: [{
-        id: 'stale', score: 0.9, distance: 0.1, prototypeRank: 0, createdAt: '',
-        suggestedTag: { id: 'other', name: '旧标签', color: null },
-        asset: { id: 'stale', displayName: 'stale.jpg', width: 1, height: 1, renditions: [] },
-      }], nextCursor: null });
+      resolveOlder({
+        items: [
+          {
+            id: 'stale',
+            score: 0.9,
+            distance: 0.1,
+            prototypeRank: 0,
+            createdAt: '',
+            suggestedTag: { id: 'other', name: '旧标签', color: null },
+            asset: { id: 'stale', displayName: 'stale.jpg', width: 1, height: 1, renditions: [] },
+          },
+        ],
+        nextCursor: null,
+      });
     });
-    expect(screen.queryByRole('button', { name: '选择 stale.jpg' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /选择 stale\.jpg/ })).not.toBeInTheDocument();
     expect(api.listEagleVectorTags).toHaveBeenCalledTimes(1);
   });
 
