@@ -239,40 +239,64 @@ export class PhotoAgentService {
         rationale: true,
       },
     });
-    const visible = [];
-    for (const row of rows.slice(0, input.limit)) {
-      const ids = (row.scope as unknown as Snapshot[]).map((a) => a.id);
-      const count = await this.prisma.eagleAsset.count({
-        where: {
-          ...scope(ownerId, includePrivate),
-          id: { in: ids },
-          OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
-        },
-      });
-      if (count === ids.length) {
-        const { scope: _, ...summary } = row;
-        void _;
-        const proposals = await this.prisma.eaglePhotoAgentSuggestion.findMany({
-          where: { taskId: row.id, ownerId, libraryMode: 'PHOTO' },
-          select: { assetId: true, status: true },
+    const page = rows.slice(0, input.limit);
+    const ids = [
+      ...new Set(
+        page.flatMap((row) => (row.scope as unknown as Snapshot[]).map((asset) => asset.id)),
+      ),
+    ];
+    const accessible = ids.length
+      ? await this.prisma.eagleAsset.findMany({
+          where: {
+            ...scope(ownerId, includePrivate),
+            id: { in: ids },
+            OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
+          },
+          select: { id: true },
+        })
+      : [];
+    const accessibleIds = new Set(accessible.map((asset) => asset.id));
+    const visibleTasks = page.filter((row) => {
+      const assetIds = (row.scope as unknown as Snapshot[]).map((asset) => asset.id);
+      return (
+        new Set(assetIds).size === assetIds.length && assetIds.every((id) => accessibleIds.has(id))
+      );
+    });
+    const proposals = visibleTasks.length
+      ? await this.prisma.eaglePhotoAgentSuggestion.findMany({
+          where: {
+            taskId: { in: visibleTasks.map((row) => row.id) },
+            ownerId,
+            libraryMode: 'PHOTO',
+          },
+          select: { taskId: true, assetId: true, status: true },
           orderBy: { number: 'asc' },
-        });
-        visible.push({
-          ...summary,
-          assetCount: proposals.length,
-          pendingCount: proposals.filter((item) => item.status === 'PENDING').length,
-          acceptedCount: proposals.filter((item) => item.status === 'ACCEPTED').length,
-          retryCount: proposals.filter((item) => ['FAILED', 'APPLYING'].includes(item.status))
-            .length,
-          rejectedCount: proposals.filter((item) => ['REJECTED', 'UNDONE'].includes(item.status))
-            .length,
-          coverIds: proposals
-            .filter((item) => item.status !== 'ACCEPTED' || row.kind === 'CITY')
-            .slice(0, 4)
-            .map((item) => item.assetId),
-        });
-      }
+        })
+      : [];
+    const byTask = new Map<string, typeof proposals>();
+    for (const proposal of proposals) {
+      const group = byTask.get(proposal.taskId) ?? [];
+      group.push(proposal);
+      byTask.set(proposal.taskId, group);
     }
+    const visible = visibleTasks.map((row) => {
+      const { scope: _, ...summary } = row;
+      void _;
+      const proposals = byTask.get(row.id) ?? [];
+      return {
+        ...summary,
+        assetCount: proposals.length,
+        pendingCount: proposals.filter((item) => item.status === 'PENDING').length,
+        acceptedCount: proposals.filter((item) => item.status === 'ACCEPTED').length,
+        retryCount: proposals.filter((item) => ['FAILED', 'APPLYING'].includes(item.status)).length,
+        rejectedCount: proposals.filter((item) => ['REJECTED', 'UNDONE'].includes(item.status))
+          .length,
+        coverIds: proposals
+          .filter((item) => item.status !== 'ACCEPTED' || row.kind === 'CITY')
+          .slice(0, 4)
+          .map((item) => item.assetId),
+      };
+    });
     return { items: visible, next: rows.length > input.limit ? rows[input.limit - 1]!.id : null };
   }
   async detail(ownerId: string, id: string, includePrivate: boolean) {
