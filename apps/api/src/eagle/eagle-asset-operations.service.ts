@@ -64,7 +64,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
     this.timer = setInterval(
       () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
-      500,
+      5000,
     );
     this.timer.unref();
   }
@@ -310,6 +310,10 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         },
         { timeout: 15000 },
       )
+      .then((result) => {
+        this.wake();
+        return result;
+      })
       .catch((error: unknown) => {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
           throw new NotFoundException('操作不存在。');
@@ -317,7 +321,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       });
   }
   async retry(principal: AuthPrincipal, id: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const operation = await this.owned(tx, id, principal.sub, principal.canViewPrivate);
       const privateUntil =
         operation.isPrivate && principal.privacyVisibleUntil
@@ -340,6 +344,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       });
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
+    this.wake();
+    return result;
   }
   async cancel(principal: AuthPrincipal, id: string) {
     return this.prisma.$transaction(async (tx) => {
@@ -356,7 +362,22 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
   }
+  private wake() {
+    if (!this.timer || this.stopping) return;
+    void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
+  }
   private async claim(lane: OperationLane): Promise<ClaimedItem[]> {
+    // Only a hint: the locked transaction below remains the sole claim authority.
+    // Other API processes discover committed work within the five-second fallback.
+    const candidate = await this.prisma.eagleAssetOperationItem.findFirst({
+      where: {
+        libraryMode: this.libraryMode,
+        operation: { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } },
+        OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: new Date() } }],
+      },
+      select: { id: true },
+    });
+    if (!candidate) return [];
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`asset-operations:${this.libraryMode}`}))`;
       const now = new Date();

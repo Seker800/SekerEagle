@@ -85,12 +85,24 @@ test('principal controls owner and private visibility; publicOnly can only restr
 test('idle operation polling uses bounded unlocked probes and opens no claim transactions', async () => {
   const probes: unknown[] = [];
   let transactions = 0;
-  const service = new EagleAssetOperationService({
-    eagleAssetOperationItem: { findFirst: async (args: unknown) => { probes.push(args); return null; } },
-    $transaction: async () => { transactions++; return []; },
-  } as never, {} as never, {} as never);
+  const service = new EagleAssetOperationService(
+    {
+      eagleAssetOperationItem: {
+        findFirst: async (args: unknown) => {
+          probes.push(args);
+          return null;
+        },
+      },
+      $transaction: async () => {
+        transactions++;
+        return [];
+      },
+    } as never,
+    {} as never,
+    {} as never,
+  );
   await service.tick();
   assert.equal(probes.length, 2);
   assert.equal(transactions, 0);
-  for (const probe of probes) assert.deepEqual((probe as {select:unknown}).select, {id:true});
+  for (const probe of probes) assert.deepEqual((probe as { select: unknown }).select, { id: true });
 });
