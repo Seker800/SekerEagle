@@ -2724,6 +2724,24 @@ test('legacy transfer retirement preserves restored sources and changed or missi
       { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) },
       'PHOTO',
     );
+    const prefix = `users/${f.ownerId}/assets/${f.photo.id}/old-pyramid`;
+    await prisma.eagleImagePyramid.create({
+      data: {
+        ownerId: f.ownerId,
+        libraryMode: 'PHOTO',
+        assetId: f.photo.id,
+        revision: 0,
+        processorVersion: 'synthetic-legacy',
+        status: 'FAILED',
+        storagePrefix: prefix,
+        tileSize: 256,
+        overlap: 0,
+        format: 'webp',
+        width: 1,
+        height: 1,
+        maxLevel: 0,
+      },
+    });
     const operationId = randomUUID();
     const result = await sender.send(f.ownerId, { operationId, assetIds: [f.photo.id] }, false);
     const targetId = result.assets[0].assetId;
@@ -2759,15 +2777,24 @@ test('legacy transfer retirement preserves restored sources and changed or missi
         data: { plan: op.plan.map((item) => ({ ...item, targetId: other.material.id })) },
       });
     }
-    fixturesToCheck.push({ f, variant });
+    fixturesToCheck.push({ f, variant, targetId, prefix });
   }
   await prisma.$executeRawUnsafe(migration);
   await prisma.$executeRawUnsafe(migration);
-  for (const { f, variant } of fixturesToCheck) {
+  for (const { f, variant, targetId, prefix } of fixturesToCheck) {
     const source = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.photo.id } });
     const retired = variant === 'untouched';
     assert.equal(Boolean(source.transferredAt), retired, variant);
     assert.equal(Boolean(source.purgeAfter), retired, variant);
+    if (retired) {
+      const receipt = await prisma.eagleObjectDeletion.findFirstOrThrow({
+        where: { ownerId: f.ownerId },
+      });
+      assert.deepEqual(receipt.objectKeys, [f.photo.originalObjectKey]);
+      assert.deepEqual(receipt.prefixes, [`${prefix}/`]);
+      const target = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: targetId } });
+      assert.ok(!receipt.objectKeys.includes(target.originalObjectKey));
+    }
     assert.equal(
       await prisma.eagleObjectDeletion.count({ where: { ownerId: f.ownerId } }),
       retired ? 1 : 0,
