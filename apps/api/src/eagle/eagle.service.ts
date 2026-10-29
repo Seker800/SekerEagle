@@ -342,7 +342,7 @@ export class EagleService {
         take: query.limit + 1,
         ...(query.offset ? { skip: query.offset } : {}),
       }),
-      filterColor
+      filterColor && !query.cursor
         ? this.prisma.eagleAsset.count({
             where: {
               ownerId,
@@ -353,7 +353,7 @@ export class EagleService {
             },
           })
         : Promise.resolve(0),
-      filterColor
+      filterColor && !query.cursor
         ? this.prisma.eagleAssetColorAnalysis.count({
             where: {
               ownerId,
@@ -402,14 +402,15 @@ export class EagleService {
               query.sort,
             )
           : null,
-      colorCoverage: filterColor
-        ? {
-            eligible: colorEligible,
-            completed: colorCompleted,
-            percentage: colorEligible ? Math.round((colorCompleted / colorEligible) * 100) : 100,
-            processorVersion: COLOR_PROCESSOR_VERSION,
-          }
-        : null,
+      colorCoverage:
+        filterColor && !query.cursor
+          ? {
+              eligible: colorEligible,
+              completed: colorCompleted,
+              percentage: colorEligible ? Math.round((colorCompleted / colorEligible) * 100) : 100,
+              processorVersion: COLOR_PROCESSOR_VERSION,
+            }
+          : null,
     };
   }
 
@@ -584,33 +585,34 @@ export class EagleService {
       after = candidates.at(-1);
     }
     const page = ranked.slice(0, query.limit);
-    const [colorEligible, colorCompleted] = filterColor
-      ? await Promise.all([
-          this.prisma.eagleAsset.count({
-            where: {
-              ownerId,
-              deletedAt: null,
-              mimeType: { startsWith: 'image/' },
-              ...privateVisibilityWhere(includePrivate),
-              libraryMode: this.libraryMode,
-            },
-          }),
-          this.prisma.eagleAssetColorAnalysis.count({
-            where: {
-              ownerId,
-              processorVersion: COLOR_PROCESSOR_VERSION,
-              isCurrent: true,
-              status: 'COMPLETED',
-              asset: {
+    const [colorEligible, colorCompleted] =
+      filterColor && !query.cursor
+        ? await Promise.all([
+            this.prisma.eagleAsset.count({
+              where: {
+                ownerId,
                 deletedAt: null,
                 mimeType: { startsWith: 'image/' },
                 ...privateVisibilityWhere(includePrivate),
+                libraryMode: this.libraryMode,
               },
-              libraryMode: this.libraryMode,
-            },
-          }),
-        ])
-      : [0, 0];
+            }),
+            this.prisma.eagleAssetColorAnalysis.count({
+              where: {
+                ownerId,
+                processorVersion: COLOR_PROCESSOR_VERSION,
+                isCurrent: true,
+                status: 'COMPLETED',
+                asset: {
+                  deletedAt: null,
+                  mimeType: { startsWith: 'image/' },
+                  ...privateVisibilityWhere(includePrivate),
+                },
+                libraryMode: this.libraryMode,
+              },
+            }),
+          ])
+        : [0, 0];
     return {
       items: await this.withLivePhotoMotions(
         ownerId,
@@ -650,14 +652,15 @@ export class EagleService {
         status: context.status,
         spaceId: context.spaceId,
       },
-      colorCoverage: filterColor
-        ? {
-            eligible: colorEligible,
-            completed: colorCompleted,
-            percentage: colorEligible ? Math.round((colorCompleted / colorEligible) * 100) : 100,
-            processorVersion: COLOR_PROCESSOR_VERSION,
-          }
-        : null,
+      colorCoverage:
+        filterColor && !query.cursor
+          ? {
+              eligible: colorEligible,
+              completed: colorCompleted,
+              percentage: colorEligible ? Math.round((colorCompleted / colorEligible) * 100) : 100,
+              processorVersion: COLOR_PROCESSOR_VERSION,
+            }
+          : null,
     };
   }
 
@@ -1314,7 +1317,8 @@ export class EagleService {
         await transaction.eagleManualTag.delete({
           where: { id: tagId, libraryMode: this.libraryMode },
         });
-        await syncAssetPrivacy(transaction, ownerId, undefined, this.libraryMode);
+        // A privacy-rule tag is rejected above while holding the projection lock.
+        // Removing an ordinary tag cannot change any asset's privacy reasons.
       });
       return { deletedId: tagId };
     } catch (error) {
