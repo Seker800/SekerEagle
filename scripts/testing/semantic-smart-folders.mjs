@@ -178,7 +178,8 @@ try {
       return { embedding: vector() };
     },
   };
-  const step = () => runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer));
+  let continuations = 0;
+  const step = () => runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer), true, () => continuations++);
   // The application and database can have different clocks. A completed batch must
   // remain immediately claimable rather than wait for the application's wall clock.
   const actualNow = Date.now;
@@ -195,6 +196,7 @@ try {
     true,
     'successful batches must be immediately claimable by the database clock',
   );
+  assert.equal(continuations, 1, 'a committed unfinished batch must request continuation without a fixed five-second delay');
   let state = (await service.listSmartFolders(ownerId))[0].semanticState;
   assert.equal(state.status, 'BUILDING');
   assert.equal(
@@ -271,6 +273,11 @@ try {
     }),
     /游标无效/,
   );
+  const previewOrderService = new EagleService(client, {prepare: async () => ({status:'READY',spaceId,vector:`[${vector().join(',')}]`})}, 'PHOTO');
+  const previewOrder = await previewOrderService.countAssets(ownerId, intent());
+  const savedOrder = await service.listAssets(ownerId, {smartFolderId:folder.id, smartFolderOrder:'RELEVANCE',limit:12});
+  assert.deepEqual(previewOrder.previewItems.map(row=>row.id), savedOrder.items.map(row=>row.id), 'the preview and the saved relevance page must show the same leading matches');
+
   // Dynamic ordinary rules do not trigger a new vector build.
   const withRating = {
     ...intent(),
