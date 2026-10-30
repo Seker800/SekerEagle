@@ -1,3 +1,4 @@
+import { AsyncContent } from '../AsyncContent';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { IconChartBar } from '@tabler/icons-react';
@@ -43,7 +44,6 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
   lazy,
-  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -1769,7 +1769,7 @@ export function SekerEaglePage({
           {libraryView === 'ACCOUNT' ? (
             accountView
           ) : libraryView === 'PROCESSING' ? (
-            <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+            <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
               <EagleTaskCenter
                 key={`${storeScope}:${privateVisible}`}
                 includePrivate={privateVisible}
@@ -1779,9 +1779,9 @@ export function SekerEaglePage({
                   setPhotoView('agent');
                 }}
               />
-            </Suspense>
+            </AsyncContent>
           ) : getVectorWorkspaceView(libraryView) ? (
-            <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+            <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
               <EagleVectorWorkspace
                 view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
                 manualTags={manualTags}
@@ -1794,7 +1794,7 @@ export function SekerEaglePage({
                 }}
                 onAssetPrivacyChanged={resetAssetPrivacyState}
               />
-            </Suspense>
+            </AsyncContent>
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
               kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
@@ -1982,21 +1982,21 @@ export function SekerEaglePage({
                 </div>
               )}
               {libraryMode === 'PHOTO' && photoView === 'statistics' && (
-                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
                   <PhotoStatistics
                     key={`${ownerId}:${privateVisible}`}
                     ownerId={ownerId}
                     includePrivate={privateVisible}
                   />
-                </Suspense>
+                </AsyncContent>
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
-                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
                   <PhotoAgentReview
                     key={`${ownerId}:${privateVisible}`}
                     includePrivate={privateVisible}
                   />
-                </Suspense>
+                </AsyncContent>
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
@@ -2013,14 +2013,14 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
                   <PhotoMap
                     key={`${ownerId}:${privateVisible}`}
                     ownerId={ownerId}
                     includePrivate={privateVisible}
                     onOpen={openAssetPreview}
                   />
-                </Suspense>
+                </AsyncContent>
               )}
               <div
                 className={styles.assetBrowser}
@@ -2855,7 +2855,7 @@ export function SekerEaglePage({
         />
       ) : null}
       {batchEditIds && photoEditing.clipboard && (
-        <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+        <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
           <EagleBatchPhotoEdit
             key={editingScope}
             assetIds={batchEditIds}
@@ -2863,7 +2863,7 @@ export function SekerEaglePage({
             resolveSession={photoEditing.resolveSession}
             onClose={() => setBatchEditIds(null)}
           />
-        </Suspense>
+        </AsyncContent>
       )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}

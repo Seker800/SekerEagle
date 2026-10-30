@@ -130,7 +130,7 @@ test('rejects a forked top-level workspace even if the existing page is retained
     (s) =>
       s
         .replace('<SekerEaglePage', "{libraryMode === 'MATERIAL' && <SekerEaglePage")
-        .replace('        />\n        </Suspense>', '        />}\n        </Suspense>'),
+        .replace('        />\n        </AsyncContent>', '        />}\n        </AsyncContent>'),
     'shared-composition',
   );
 });
