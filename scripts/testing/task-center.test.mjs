@@ -577,8 +577,15 @@ test('separate resource claims prioritize new uploads over newer-dated historica
     chronologicalAt: new Date('2022-01-01Z'),
   });
   const jobs = [];
-  for (const a of [historyOld, historyNew, recent]) jobs.push(await f.job(a));
-  const browse = await f.job(recent, { kind: 'GENERATE_RENDITIONS', lane: 'INTERACTIVE' });
+  // This test exercises resource order, not the sub-millisecond retry gate:
+  // CURRENT_TIMESTAMP rounded into timestamp(3) can be just ahead of now().
+  for (const a of [historyOld, historyNew, recent])
+    jobs.push(await f.job(a, { availableAt: new Date(0) }));
+  const browse = await f.job(recent, {
+    kind: 'GENERATE_RENDITIONS',
+    lane: 'INTERACTIVE',
+    availableAt: new Date(0),
+  });
   const input = { where: { lane: 'BACKGROUND' }, take: 10000 };
   const select = async (resource, freshOnly = false) =>
     (
