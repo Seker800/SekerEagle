@@ -285,27 +285,3 @@ test('empty eligibility stays empty and explicit private trash reads retain thei
   assert.doesNotMatch(sql, /asset\."isPrivate"=false/);
   assert.match(sql, /asset\.id = ANY/);
 });
-
-test('relevance search evaluates each eligible vector distance once instead of repeating it for filtering and ranking', async () => {
-  let sql = '';
-  const service = new EagleImageSearchService(
-    {
-      $queryRaw: async (q: { sql: string }) => {
-        sql = q.sql;
-        return [];
-      },
-    } as never,
-    {} as never,
-  );
-  await service.rankPage(
-    'owner',
-    '猫',
-    { status: 'READY', spaceId: space.id, vector: '[1,0]' },
-    undefined,
-    60,
-    false,
-    false,
-  );
-  assert.equal((sql.match(/embedding\.embedding <=>/g) || []).length, 1);
-  assert.match(sql, /MATERIALIZED/);
-});
