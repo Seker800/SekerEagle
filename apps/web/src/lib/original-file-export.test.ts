@@ -57,3 +57,15 @@ describe('original file export', () => {
     expect(downloadOriginalFilesBridge).toHaveBeenCalledWith(['asset-1', 'asset-2'], 'zh-CN');
   });
 });
+
+it.each(['MATERIAL', 'PHOTO'] as const)(
+  'reports a browser transfer as initiated rather than saved in %s',
+  async (libraryMode) => {
+    await expect(
+      saveOriginalFile(
+        { ...first, libraryMode },
+        { desktopBridge: null, triggerBrowserDownload: vi.fn() },
+      ),
+    ).resolves.toEqual({ saved: false, initiated: true });
+  },
+);
