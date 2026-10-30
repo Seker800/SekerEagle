@@ -2293,7 +2293,9 @@ describe('SekerEaglePage', () => {
     });
   });
 
-  it('opens semantic folders in the same relevance order as their preview', async () => {
+  it('opens semantic folders in relevance order without chronological section headings', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    listEagleAssetsMock.mockResolvedValue({items: [{...asset, chronologicalAt: '2026-04-10T12:00:00Z', libraryAddedAt: '2026-04-10T12:00:00Z'}], nextCursor: null});
     listEagleSmartFoldersMock.mockResolvedValue([
       {
         id: 'scene-folder',
@@ -2322,6 +2324,7 @@ describe('SekerEaglePage', () => {
         expect.anything(),
       ),
     );
+    expect(screen.queryByText('2026年4月')).not.toBeInTheDocument();
   });
 
   it('keeps saved smart-folder conditions separate from temporary filter controls', async () => {

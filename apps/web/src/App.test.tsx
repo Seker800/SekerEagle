@@ -1,10 +1,11 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError } from './lib/api-error';
 
 const requestMock = vi.hoisted(() => vi.fn());
+const accountFailure = vi.hoisted(() => ({ enabled: false }));
 vi.mock('./lib/api-client', () => ({ request: requestMock }));
 vi.mock('./components/eagle/SekerEaglePage', () => ({
   SekerEaglePage: ({
@@ -21,9 +22,10 @@ vi.mock('./components/eagle/SekerEaglePage', () => ({
   ),
 }));
 vi.mock('./components/account/AccountHome', () => ({
-  AccountHome: ({ onLogout }: { onLogout: () => void }) => (
-    <button onClick={onLogout}>退出账号</button>
-  ),
+  AccountHome: ({ onLogout }: { onLogout: () => void }) => {
+    if (accountFailure.enabled) throw new Error('Failed to fetch dynamically imported module');
+    return <button onClick={onLogout}>退出账号</button>;
+  },
 }));
 vi.mock('./components/desktop/DesktopConnectionButton', () => ({
   DesktopConnectionButton: () => <div>连接设置入口</div>,
@@ -33,7 +35,7 @@ function userResponse() {
   return { user: { id: 'owner-1', email: 'owner@example.com', role: 'USER' } };
 }
 
-afterEach(() => requestMock.mockReset());
+afterEach(() => { requestMock.mockReset(); accountFailure.enabled = false; });
 
 describe('startup session recovery', () => {
   it('shows connection recovery instead of login after a network failure, then resumes automatically', async () => {
@@ -172,7 +174,20 @@ it('checks the session when a visible window regains focus', async () => {
   );
   await screen.findByText('素材图库');
   requestMock.mockResolvedValueOnce(userResponse());
+  await act(async () => { await Promise.resolve(); });
   fireEvent(window, new Event('focus'));
-  await screen.findByText('素材图库');
-  expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2);
+  await waitFor(() => expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2));
+});
+
+it('keeps the gallery visible when an account chunk fails to load', async () => {
+  accountFailure.enabled = true;
+  requestMock.mockResolvedValueOnce(userResponse());
+  requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  try {
+    render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('界面加载失败');
+    expect(screen.getByText('素材图库')).toBeVisible();
+    expect(screen.getByRole('button', { name: '刷新' })).toBeVisible();
+  } finally { errors.mockRestore(); }
 });
