@@ -1,5 +1,4 @@
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
-import { LibraryPrivacyToggle } from './LibraryPrivacyToggle';
 import { EagleUploadQueue } from './EagleUploadQueue';
 import { AsyncViewBoundary } from '../AsyncViewBoundary';
 import { useAssetOperationProgress } from './useAssetOperations';
@@ -187,7 +186,6 @@ interface SekerEaglePageProps {
   accountSummary?: { email: string; onLogout: () => void };
   privacyVisibility?: PrivacyVisibilityState;
   privacyRulesRevision?: number;
-  onPrivacyVisibilityChange?: (value: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
 }
 type EagleAssetContextMenu = {
@@ -297,7 +295,6 @@ export function SekerEaglePage({
   accountSummary,
   privacyVisibility,
   privacyRulesRevision = 0,
-  onPrivacyVisibilityChange,
   onPrivacyRulesChange,
 }: SekerEaglePageProps) {
   const { libraryMode } = useLibraryWorkspace();
@@ -2087,13 +2084,6 @@ export function SekerEaglePage({
                     </label>
                     {!compact && toolbarTools}
                   </>
-                )}
-                {onPrivacyVisibilityChange && privacyVisibility && (
-                  <LibraryPrivacyToggle
-                    value={privacyVisibility}
-                    onChange={onPrivacyVisibilityChange}
-                    onOpen={() => changeLibraryView('PRIVATE')}
-                  />
                 )}
               </div>
 

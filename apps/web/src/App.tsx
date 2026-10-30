@@ -330,12 +330,6 @@ export function App() {
             canManageProcessing={user.role === 'ADMIN'}
             privacyVisibility={privacyVisibility}
             privacyRulesRevision={privacyRulesRevision}
-            onPrivacyVisibilityChange={(value) => {
-              if (modeRef.current === libraryMode) {
-                privacyVisibilityEpoch.current++;
-                setPrivacyVisibility(value);
-              }
-            }}
             onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             accountView={
               <AsyncViewBoundary>
