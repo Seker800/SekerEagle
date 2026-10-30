@@ -133,7 +133,7 @@ export class EagleImageSearchService {
           }>
         >(Prisma.sql`
         WITH ordered AS MATERIALIZED (
-          SELECT asset.id,${date} AS "orderDate" FROM "EagleAsset" asset
+          SELECT asset.id,asset."ownerId",asset."libraryMode",asset."mediaRevision",asset."normalizedDisplayName",asset."originalName",${date} AS "orderDate" FROM "EagleAsset" asset
           WHERE ${visible}
           ${position ? Prisma.sql`AND (${date},asset.id)<(${new Date(position.libraryAddedAt)},${position.assetId})` : Prisma.empty}
           ORDER BY ${date} DESC,asset.id DESC LIMIT ${windowSize}
@@ -141,9 +141,9 @@ export class EagleImageSearchService {
         SELECT asset.id AS "assetId",
           GREATEST(CASE WHEN ${nameMatch} THEN 3 ELSE 0 END,COALESCE(manual.tier,0),CASE WHEN semantic.similarity>=${threshold} THEN 1 ELSE 0 END)::integer AS tier,
           GREATEST(CASE WHEN ${nameMatch} OR manual.tier IS NOT NULL THEN 1::double precision ELSE 0::double precision END,COALESCE(semantic.similarity,0)) AS similarity,
-          ordered."orderDate" AS "libraryAddedAt",
+          asset."orderDate" AS "libraryAddedAt",
           (${nameMatch} OR manual.tier IS NOT NULL OR COALESCE(semantic.similarity>=${threshold},false)) AS matches
-        FROM ordered JOIN "EagleAsset" asset ON asset.id=ordered.id
+        FROM ordered asset
         LEFT JOIN LATERAL (
           SELECT max(CASE WHEN tag."normalizedName"=${normalized} THEN 5 ELSE 4 END)::integer AS tier
           FROM "EagleAssetManualTag" link JOIN "EagleManualTag" tag
@@ -152,7 +152,7 @@ export class EagleImageSearchService {
             AND strpos(tag."normalizedName",${normalized})>0
         ) manual ON true
         LEFT JOIN LATERAL (${semanticProbe}) semantic ON true
-        ORDER BY ordered."orderDate" DESC,asset.id DESC
+        ORDER BY asset."orderDate" DESC,asset.id DESC
       `);
         for (const row of rows) {
           if (!row.matches) continue;
