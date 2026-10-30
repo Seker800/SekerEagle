@@ -4,9 +4,11 @@ import { log } from 'node:console';
 import { randomUUID } from 'node:crypto';
 import test, { after } from 'node:test';
 import { PrismaClient } from '@prisma/client';
+import { PHOTO_FACE_MODEL_VERSION } from '../../packages/library-core/dist/index.js';
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoManagementService } from '../../apps/api/dist/photos/photo-management.service.js';
 import { PhotoPersonReviewService } from '../../apps/api/dist/photos/photo-person-review.service.js';
+import { readPhotoPeopleReview } from '../../apps/api/dist/photos/photo-people-review.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
   s3Endpoint: process.env.S3_ENDPOINT,
@@ -19,7 +21,7 @@ const vector = (x, y) => [x, y, ...Array(126).fill(0)];
 test('similarity reviews are global, private-scoped, persistent, versioned and survive merges', async () => {
   const owner = randomUUID(),
     other = randomUUID(),
-    model = 'review-synthetic-v1';
+    model = PHOTO_FACE_MODEL_VERSION;
   await db.user.createMany({
     data: [owner, other].map((id) => ({
       id,
@@ -35,7 +37,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
       data: {
         ownerId: options.ownerId ?? owner,
         id: options.id ?? randomUUID(),
-        modelVersion: model,
+        modelVersion: options.model ?? model,
         prototype,
         name: options.name ?? null,
         marksAssetsPrivate: options.isPrivate ?? false,
@@ -65,10 +67,10 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
         assetId: asset.id,
         assetRevision: options.stale ? 1 : 2,
         personId: p.id,
-        embedding: prototype,
-        modelVersion: model,
-        box: [0.1, 0.1, 0.4, 0.4],
-        confidence: 0.99,
+        embedding: options.embedding ?? prototype,
+        modelVersion: options.model ?? model,
+        box: options.box ?? [0.1, 0.1, 0.4, 0.4],
+        confidence: options.confidence ?? 0.99,
       },
     });
     if (!options.noPreview)
@@ -92,7 +94,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
   }
   try {
     const a = await add(vector(1, 0), { id: '00000000-0000-4000-8000-000000000001' }),
-      b = await add(vector(0.35, Math.sqrt(1 - 0.35 ** 2)), {
+      b = await add(vector(0.8, 0.6), {
         id: '00000000-0000-4000-8000-000000000002',
       }),
       c = await add(vector(0, 1), { name: 'Named' });
@@ -103,6 +105,15 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     // More than one anchor page, with a real pair beyond the old first directory page.
     for (let i = 0; i < 20; i++)
       await add([0, 0, ...Array.from({ length: 126 }, (_, j) => (j === i ? 1 : 0))]);
+    const lowResolution = await add(vector(1, 0), { box: [0.1, 0.1, 0.02, 0.02] }),
+      lowConfidence = await add(vector(1, 0), { confidence: 0.94 }),
+      wrongModel = await add(vector(1, 0), { model: 'incompatible-model' });
+    const basis = (axis, component = 1, second = 0) =>
+      Array.from({ length: 128 }, (_, i) => (i === axis ? component : i === axis + 1 ? second : 0));
+    const weakA = await add(basis(100)),
+      weakB = await add(basis(100, 0.55, Math.sqrt(1 - 0.55 ** 2)));
+    const namedA = await add(basis(102), { name: 'Named A' }),
+      namedB = await add(basis(102), { name: 'Named B' });
     const currentFace = await db.eaglePhotoFace.findFirstOrThrow({ where: { personId: a.id } });
     const oldFace = await db.eaglePhotoFace.create({
       data: {
@@ -134,6 +145,45 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     for (const pair of first.items)
       for (const person of [pair.first, pair.second])
         assert(![hidden.id, foreign.id, stale.id, missing.id].includes(person.id));
+    const priority = await readPhotoPeopleReview(db, owner, false);
+    assert(
+      priority.pairs.some(
+        (p) => [p.first.id, p.second.id].includes(a.id) && [p.first.id, p.second.id].includes(b.id),
+      ),
+    );
+    // Both read routes use the same evidence rules, with no weaker fallback.
+    const excluded = [
+      hidden,
+      foreign,
+      stale,
+      missing,
+      lowResolution,
+      lowConfidence,
+      wrongModel,
+      weakA,
+      weakB,
+    ];
+    for (const pair of [...first.items, ...priority.pairs]) {
+      for (const person of [pair.first, pair.second]) {
+        assert(
+          !excluded.some((p) => p.id === person.id),
+          'unusable or weak evidence must not become a question',
+        );
+        assert.equal(
+          person.faces.length,
+          1,
+          'display precisely the matching face, not a different large face',
+        );
+        assert(!person.faces.some((f) => f.id === oldFace.id));
+      }
+      assert(
+        !(
+          [pair.first.id, pair.second.id].includes(namedA.id) &&
+          [pair.first.id, pair.second.id].includes(namedB.id)
+        ),
+      );
+    }
+    assert(!JSON.stringify(priority).includes('embedding'));
     assert(!JSON.stringify(first).includes('prototype'));
     assert(!JSON.stringify(first).includes('embedding'));
     await assert.rejects(reviews.suggestions(other, false, first.nextCursor), /游标无效/);
@@ -202,15 +252,20 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
       }),
       /变化/,
     );
-    assert.equal((await reviews.summary(owner, false)).named, 1);
+    assert.equal((await reviews.summary(owner, false)).named, 3);
+    assert.equal(
+      (await reviews.summary(owner, false)).unnamed,
+      27,
+      'stale-only groups are excluded from the count',
+    );
     for (let i = 0; i < 25; i++) await add(vector(0, 1), { name: `Named page ${i}` });
     const named = await management.people(owner, false, undefined, 'NAMED');
     assert(named.people.every((p) => p.name !== null));
     assert.equal(named.people.length, 24);
     assert(named.nextCursor);
     const secondNamed = await management.people(owner, false, named.nextCursor, 'NAMED');
-    assert.equal(secondNamed.people.length, 2);
-    assert.equal(new Set([...named.people, ...secondNamed.people].map((p) => p.id)).size, 26);
+    assert.equal(secondNamed.people.length, 4);
+    assert.equal(new Set([...named.people, ...secondNamed.people].map((p) => p.id)).size, 28);
     await assert.rejects(management.people(owner, false, named.nextCursor, 'UNNAMED'), /游标/);
     const unnamed = await management.people(owner, false, undefined, 'UNNAMED');
     assert(unnamed.people.every((p) => p.name === null));
@@ -230,7 +285,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
 
 test('two thousand identities yield bounded recommendations including a target beyond the first 200 directory entries', async () => {
   const ownerId = randomUUID(),
-    modelVersion = 'scale-review-v1',
+    modelVersion = PHOTO_FACE_MODEL_VERSION,
     count = 2000;
   const records = Array.from({ length: count }, (_, i) => ({
     id:

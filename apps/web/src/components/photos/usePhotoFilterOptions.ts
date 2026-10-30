@@ -29,7 +29,7 @@ export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
           .flatMap((page) => page.people)
           .map((person, index) => ({
             value: person.id,
-            label: person.name ?? t('未命名人物 {{value1}}', { value1: index + 1 }),
+            label: person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 }),
           })) ?? [],
     },
   };

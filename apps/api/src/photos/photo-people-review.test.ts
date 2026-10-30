@@ -101,7 +101,7 @@ test('ranking prefers likeness then photo volume, filters incompatible/invalid v
       Array.from({ length: 20 }, (_, i) => candidate(String(i))),
       [],
     ).length,
-    100,
+    40,
   );
   assert.deepEqual(rankPhotoPeopleReviewCandidates([], []), []);
 });

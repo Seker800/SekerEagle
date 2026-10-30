@@ -69,6 +69,7 @@ export function rankPhotoPeopleReviewCandidates(
         });
     }
   }
+  const degree = new Map<string, number>();
   return pairs
     .sort((a, b) => {
       const totalA = a.firstCount + a.secondCount,
@@ -85,12 +86,18 @@ export function rankPhotoPeopleReviewCandidates(
             ? minimumA > minimumB
               ? -1
               : 1
-            : b.similarity - a.similarity ||
-              a.firstId.localeCompare(b.firstId) ||
-              a.secondId.localeCompare(b.secondId))
+            : a.firstId.localeCompare(b.firstId) || a.secondId.localeCompare(b.secondId))
       );
     })
-    .slice(0, 100);
+    .filter((pair) => {
+      // A popular identity must not consume the entire evidence window.
+      if ((degree.get(pair.firstId) ?? 0) >= 4 || (degree.get(pair.secondId) ?? 0) >= 4)
+        return false;
+      degree.set(pair.firstId, (degree.get(pair.firstId) ?? 0) + 1);
+      degree.set(pair.secondId, (degree.get(pair.secondId) ?? 0) + 1);
+      return true;
+    })
+    .slice(0, 800);
 }
 
 export function readPhotoPeopleReview(
