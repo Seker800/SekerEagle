@@ -27,14 +27,23 @@ const config = { getOrThrow: () => 3600 };
 test('one SQL per access verification preserves immediate account, family, expiry and role checks', async () => {
   const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
   let queries = 0;
-  measured.$on('query', () => queries++);
+  const statements = [];
+  measured.$on('query', ({ query }) => {
+    // Prisma may deliver the preceding createSession COMMIT event after its
+    // promise resolves. Count the account/session reads under measurement.
+    if (/^SELECT\b/u.test(query)) {
+      queries++;
+      statements.push(query);
+    }
+  });
   const sessions = new SessionTokenService(measured, jwt, config);
   const users = [];
   async function verify(token, accepted) {
     queries = 0;
+    statements.length = 0;
     if (accepted) await sessions.verifyAccessToken(token);
     else await assert.rejects(sessions.verifyAccessToken(token));
-    assert.equal(queries, 1);
+    assert.equal(queries, 1, JSON.stringify(statements));
   }
   try {
     for (let index = 0; index < 2; index++)

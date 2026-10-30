@@ -4,7 +4,7 @@ import console from 'node:console';
 import { setTimeout } from 'node:timers';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import http from 'node:http';
@@ -100,7 +100,10 @@ server { listen 3000; listen 9000; root /fixtures;
   const entry = shell.body.toString().match(/src="([^"]+\.js)"/u)?.[1];
   assert.ok(entry);
   const measurements = [];
-  for (const path of [entry, '/api/fixtures']) {
+  const assets = readdirSync(resolve('apps/web/dist/assets')).filter((name) => /\.(geojson|wasm)$/u.test(name));
+  assert.ok(assets.some((name) => name.endsWith('.geojson')));
+  assert.ok(assets.some((name) => name.endsWith('.wasm')));
+  for (const path of [entry, '/api/fixtures', ...assets.map((name) => `/assets/${name}`)]) {
     const plain = await get(port, path, { 'Accept-Encoding': 'identity' });
     const zipped = await get(port, path, { 'Accept-Encoding': 'gzip' });
     assert.equal(zipped.status, 200);
@@ -109,7 +112,7 @@ server { listen 3000; listen 9000; root /fixtures;
     assert.deepEqual(gunzipSync(zipped.body), plain.body);
     assert.ok(zipped.body.length < plain.body.length * 0.6);
     measurements.push({
-      path: path.startsWith('/assets/') ? 'login JS' : path,
+      path: path === entry ? 'login JS' : path,
       rawBytes: plain.body.length,
       gzipBytes: zipped.body.length,
     });
