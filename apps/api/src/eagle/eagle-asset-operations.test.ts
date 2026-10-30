@@ -106,3 +106,93 @@ test('idle operation polling uses bounded unlocked probes and opens no claim tra
   assert.equal(transactions, 0);
   for (const probe of probes) assert.deepEqual((probe as { select: unknown }).select, { id: true });
 });
+
+test('a command committed during an empty probe is picked up without waiting for the idle interval', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  let resolveProbe!: (value: null) => void;
+  const firstProbe = new Promise<null>((resolve) => {
+    resolveProbe = resolve;
+  });
+  let sendProbes = 0;
+  const item = { status: 'PENDING', weight: 1, errorCode: null };
+  const tx = {
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
+    eagleAssetOperation: {
+      findUnique: async () => ({
+        id: 'operation',
+        ownerId: 'owner',
+        libraryMode: 'MATERIAL',
+        kind: 'SEND',
+        isPrivate: false,
+        inputIds: ['asset'],
+        items: [item],
+      }),
+    },
+  };
+  const service = new EagleAssetOperationService(
+    {
+      eagleAssetOperationItem: {
+        findFirst: async (args: { where: { operation: { kind: unknown } } }) => {
+          if (args.where.operation.kind === 'SEND') {
+            sendProbes++;
+            if (sendProbes === 1) return firstProbe;
+          }
+          return null;
+        },
+      },
+      $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx),
+    } as never,
+    {} as never,
+    {} as never,
+  );
+  const prior = process.env.EAGLE_ASSET_OPERATIONS_ENABLED;
+  process.env.EAGLE_ASSET_OPERATIONS_ENABLED = 'true';
+  try {
+    service.onModuleInit();
+    const polling = service.tick();
+    await service.enqueue({ sub: 'owner', canViewPrivate: false } as never, {
+      operationId: 'operation',
+      kind: 'SEND',
+      assetIds: ['asset'],
+    });
+    resolveProbe(null);
+    await polling;
+    t.mock.timers.tick(0);
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.equal(sendProbes, 2, 'the committed wake must survive an in-flight empty probe');
+  } finally {
+    service.onModuleDestroy();
+    if (prior === undefined) delete process.env.EAGLE_ASSET_OPERATIONS_ENABLED;
+    else process.env.EAGLE_ASSET_OPERATIONS_ENABLED = prior;
+  }
+});
+
+test('a positive probe still enters the locked claim and cannot overlap an active lane lease', async () => {
+  let transactions = 0,
+    locks = 0;
+  const tx = {
+    $executeRaw: async () => {
+      locks++;
+      return 0;
+    },
+    eagleAssetOperationItem: {
+      count: async () => 1,
+      findFirst: async () => assert.fail('active lease must prevent another claim'),
+    },
+  };
+  const service = new EagleAssetOperationService(
+    {
+      eagleAssetOperationItem: { findFirst: async () => ({ id: 'hint' }) },
+      $transaction: async (work: (tx: unknown) => Promise<unknown>) => {
+        transactions++;
+        return work(tx);
+      },
+    } as never,
+    {} as never,
+    {} as never,
+  );
+  await service.tick();
+  assert.equal(transactions, 2);
+  assert.equal(locks, 2);
+});
