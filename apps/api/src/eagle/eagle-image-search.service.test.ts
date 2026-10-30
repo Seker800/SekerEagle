@@ -141,3 +141,14 @@ test('explicit search date order uses date and ID for both ORDER BY and continua
     assert.ok(sql.includes('asset."isPrivate"=false'));
   }
 });
+
+test('date-ordered mobile searches do not sort and aggregate every matching vector before LIMIT', async () => {
+  let sql = '';
+  const service = new EagleImageSearchService({$queryRaw: async (q: {sql: string}) => {sql=q.sql;return [];}} as never, {} as never, 'PHOTO');
+  await service.rankPage('owner', '山峰', {status:'READY',spaceId:space.id,vector:'[1,0]'}, undefined, 60, false, false, undefined, 'CAPTURED_AT');
+  assert.doesNotMatch(sql, /UNION ALL|GROUP BY "assetId"/);
+  assert.match(sql, /LATERAL/);
+  assert.match(sql, /asset\."ownerId"=/);
+  assert.match(sql, /embedding\."assetId"=asset\.id/);
+  assert.match(sql, /embedding\."assetRevision"=asset\."mediaRevision"/);
+});
