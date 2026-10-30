@@ -1,17 +1,17 @@
 import { useRef, useState } from 'react';
 import { t } from '../../i18n';
-import type { PhotoPerson } from '../../lib/photo-management-api';
+import type { PhotoPerson, PhotoPeopleReviewPair } from '../../lib/photo-management-api';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { PhotoFaceImage, representativeFace } from './PhotoFaceImage';
 
 export function PhotoPeopleReview({
-  people,
+  pairs,
   pending,
   onConfirm,
   onOpen,
   preview,
 }: {
-  people: PhotoPerson[];
+  pairs: PhotoPeopleReviewPair[];
   pending: boolean;
   onConfirm: (source: PhotoPerson, target: PhotoPerson) => Promise<boolean>;
   onOpen: (asset: EagleAssetListItem) => void;
@@ -20,31 +20,17 @@ export function PhotoPeopleReview({
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [merged, setMerged] = useState<Set<string>>(new Set());
   const submitting = useRef(false);
-  const [completed, setCompleted] = useState(false);
-  const candidates = people.filter(
-    (person) => !merged.has(person.id) && representativeFace(person),
+  const candidates = pairs.filter(
+    ({ first, second }) =>
+      !merged.has(first.id) &&
+      !merged.has(second.id) &&
+      representativeFace(first) &&
+      representativeFace(second),
   );
-  let pair: [PhotoPerson, PhotoPerson] | undefined;
-  for (let i = 0; i < candidates.length && !pair; i++) {
-    for (let j = i + 1; j < candidates.length; j++) {
-      if (!skipped.has(pairKey(candidates[i], candidates[j]))) {
-        pair = [candidates[i], candidates[j]];
-        break;
-      }
-    }
-  }
-  if (completed)
-    return (
-      <div className="photo-people-review">
-        <p>{t('人物已合并')}</p>
-        {candidates.length >= 2 && (
-          <button type="button" disabled={pending} onClick={() => setCompleted(false)}>
-            {t('换一批')}
-          </button>
-        )}
-      </div>
-    );
-  if (candidates.length < 2) return null;
+  const candidate = candidates.find(({ first, second }) => !skipped.has(pairKey(first, second)));
+  const pair: [PhotoPeopleReviewPair['first'], PhotoPeopleReviewPair['second']] | undefined =
+    candidate ? [candidate.first, candidate.second] : undefined;
+  if (!candidates.length) return null;
   if (!pair)
     return (
       <div className="photo-people-review">
@@ -66,8 +52,14 @@ export function PhotoPeopleReview({
           if (!face) return null;
           return (
             <button type="button" key={person.id} onClick={() => onOpen(face.asset)}>
+              <img
+                className="photo-people-review-original"
+                src={preview(face.asset) ?? undefined}
+                alt={t('完整照片：{{value1}}', { value1: face.asset.displayName })}
+              />
               <PhotoFaceImage face={face} url={preview} alt={face.asset.displayName} />
               <span>{person.name ?? t('未命名人物')}</span>
+              <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
             </button>
           );
         })}
@@ -77,14 +69,16 @@ export function PhotoPeopleReview({
         <button
           type="button"
           disabled={pending}
-          onClick={() => {
-            if (submitting.current) return;
+          onKeyDown={(event) => {
+            if (event.repeat) event.preventDefault();
+          }}
+          onClick={(event) => {
+            if (event.detail > 1 || submitting.current) return;
             submitting.current = true;
             void onConfirm(source, target)
               .then((success) => {
                 if (success) {
                   setMerged((old) => new Set([...old, source.id]));
-                  setCompleted(true);
                 }
               })
               .finally(() => {

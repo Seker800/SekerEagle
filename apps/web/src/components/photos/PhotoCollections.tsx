@@ -3,11 +3,12 @@ import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useRef, useState } from 'react';
 import { PhotoFaceImage, facePreview, representativeFace } from './PhotoFaceImage';
 import { PhotoPeopleReview } from './PhotoPeopleReview';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
   scanPhotoPeople,
+  reviewPhotoPeople,
   renamePhotoPerson,
   mergePhotoPeople,
   splitPhotoFace,
@@ -34,6 +35,11 @@ export function PhotoCollections({
   const [pending, setPending] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
   const people = usePhotoPeople(ownerId, includePrivate, true, true);
+  const review = useQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people-review', includePrivate],
+    queryFn: ({ signal }) => reviewPhotoPeople(signal),
+    staleTime: 30000,
+  });
   const actionPending = useRef(false);
   async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
     if (actionPending.current) return false;
@@ -54,7 +60,7 @@ export function PhotoCollections({
         await queryClient.invalidateQueries({
           queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
         });
-      await people.refetch();
+      await Promise.all([people.refetch(), review.refetch()]);
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
@@ -100,9 +106,10 @@ export function PhotoCollections({
       {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
       {
         <>
+          {review.error && <p role="alert">{review.error.message}</p>}
           <PhotoPeopleReview
             key={`${ownerId}:${includePrivate}`}
-            people={people.data?.people ?? []}
+            pairs={review.data?.pairs ?? []}
             pending={pending}
             onConfirm={(source, target) =>
               perform(async () => {

@@ -14,6 +14,7 @@ import {
   queuePhotoFaceScan,
 } from '@sekereagle/library-persistence';
 import { previewSelect, serializePreview } from './photo-preview';
+import { readPhotoPeopleReview } from './photo-people-review';
 import { suggestPhotoGroups } from './photo-grouping';
 
 const visible = (ownerId: string, includePrivate: boolean): Prisma.EagleAssetWhereInput => ({
@@ -130,6 +131,9 @@ export class PhotoManagementService {
         faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
       })),
     };
+  }
+  reviewPeople(ownerId: string, includePrivate: boolean) {
+    return readPhotoPeopleReview(this.prisma, ownerId, includePrivate);
   }
   async scanFaces(ownerId: string, includePrivate: boolean) {
     if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)

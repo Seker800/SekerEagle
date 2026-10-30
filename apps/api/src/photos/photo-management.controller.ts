@@ -98,6 +98,10 @@ export class PhotoManagementController {
   @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
     return this.photos.people(p.sub, p.canViewPrivate, query.after);
   }
+  @Get('people/review')
+  reviewPeople(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.photos.reviewPeople(p.sub, p.canViewPrivate);
+  }
   @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(
     @CurrentPrincipal() p: AuthPrincipal,
   ) {

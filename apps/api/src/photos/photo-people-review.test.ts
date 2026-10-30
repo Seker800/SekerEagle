@@ -12,12 +12,16 @@ test('review uses a scoped repeatable snapshot and never exposes biometric proto
         $queryRaw: async (query: { text: string; values: unknown[] }) => {
           sql = query.text;
           assert.ok(query.values.includes('owner'));
-          return [{ firstId: 'a', secondId: 'b', firstCount: 30n, secondCount: 20n, similarity: 0.4 }];
+          return [
+            { firstId: 'a', secondId: 'b', firstCount: 30n, secondCount: 20n, similarity: 0.4 },
+          ];
         },
-        eaglePhotoPerson: { findMany: async (query: {where: unknown}) => {
-          where = query.where;
-          return ['a', 'b'].map(id => ({ id, prototype: [1], name: null, faces: [] }));
-        } },
+        eaglePhotoPerson: {
+          findMany: async (query: { where: unknown }) => {
+            where = query.where;
+            return ['a', 'b'].map((id) => ({ id, prototype: [1], name: null, faces: [] }));
+          },
+        },
       });
     },
   } as never);
@@ -32,5 +36,10 @@ test('review uses a scoped repeatable snapshot and never exposes biometric proto
   assert.match(sql, /NOT EXISTS/);
   assert.match(sql, /LIMIT 400/);
   assert.match(sql, /LIMIT 100/);
-  assert.deepEqual(where, { ownerId: 'owner', libraryMode: 'PHOTO', id: { in: ['a', 'b'] }, marksAssetsPrivate: false });
+  assert.deepEqual(where, {
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    id: { in: ['a', 'b'] },
+    marksAssetsPrivate: false,
+  });
 });

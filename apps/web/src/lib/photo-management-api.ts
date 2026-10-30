@@ -14,6 +14,14 @@ export interface PhotoPerson {
   marksAssetsPrivate: boolean;
   faces: PhotoFace[];
 }
+export interface PhotoPeopleReviewPair {
+  first: PhotoPerson & { photoCount: number };
+  second: PhotoPerson & { photoCount: number };
+  similarity: number;
+}
+export const reviewPhotoPeople = (signal?: AbortSignal) =>
+  request<{ pairs: PhotoPeopleReviewPair[] }>('/api/photos/photography/people/review', { signal });
+
 export interface PhotoGroup {
   id: string;
   kind: 'BURST' | 'SIMILAR' | 'MANUAL' | 'EDITED';
