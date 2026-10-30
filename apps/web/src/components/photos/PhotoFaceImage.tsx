@@ -1,3 +1,4 @@
+import { representativePhotoFace } from '@sekereagle/library-core';
 import type { PhotoFace, PhotoPerson } from '../../lib/photo-management-api';
 import { selectEagleBrowseRendition } from '../../lib/eagle-browse-rendition';
 import type { EagleAssetListItem, EagleRendition } from '../../lib/eagle-api';
@@ -8,13 +9,7 @@ export function facePreview(asset: EagleAssetListItem): EagleRendition | undefin
 }
 
 export function representativeFace(person: PhotoPerson): PhotoFace | undefined {
-  return person.faces
-    .filter((face) => facePreview(face.asset))
-    .sort((a, b) => facePixels(b) - facePixels(a))[0];
-}
-function facePixels(face: PhotoFace) {
-  const preview = facePreview(face.asset);
-  return (preview?.width ?? 0) * (preview?.height ?? 0) * face.box[2] * face.box[3];
+  return representativePhotoFace(person.faces);
 }
 
 export function PhotoFaceImage({

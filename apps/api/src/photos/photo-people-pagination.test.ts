@@ -41,7 +41,7 @@ test('people pages enforce owner/privacy and return a stable continuation instea
   assert.equal(queries[0]?.where.marksAssetsPrivate, false);
 });
 
-test('people card and option projections do not fetch unused faces, EXIF or biometric vectors', async () => {
+test('people cards bound media candidates and options do not fetch faces, EXIF or biometric vectors', async () => {
   type Query = {
     where: Record<string, unknown>;
     select: {
@@ -59,7 +59,7 @@ test('people card and option projections do not fetch unused faces, EXIF or biom
     },
   } as never);
   await service.people('owner', false, undefined, 'cards');
-  assert.equal(queries[0]!.select.faces!.take, 1);
+  assert.equal(queries[0]!.select.faces!.take, 20);
   assert.equal(queries[0]!.select.faces!.select.asset.select.photoMetadata, false);
   assert.equal(queries[0]!.select.prototype, undefined);
   await service.people('owner', false, undefined, 'options');
@@ -131,7 +131,7 @@ test('cards return one clear browsable representative from the original bounded 
     eaglePhotoPerson: { findMany: async () => [{ id: 'p', createdAt: new Date(), faces }] },
   } as never);
   const result = await service.people('owner', false, undefined, 'cards');
-  const card = result.people[0] as { faces: Array<{ id: string }> };
+  const card = result.people[0] as unknown as { faces: Array<{ id: string }> };
   assert.equal(card.faces.length, 1);
   assert.equal(card.faces[0]?.id, 'face-1');
 });

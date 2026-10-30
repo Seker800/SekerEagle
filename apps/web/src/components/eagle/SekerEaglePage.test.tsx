@@ -493,6 +493,34 @@ describe('SekerEaglePage', () => {
     },
   );
 
+  it('coalesces rapid quick-filter changes into one list request', async () => {
+    const view = renderPage();
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
+    fireEvent.click(screen.getByRole('button', { name: '格式筛选' }));
+    const popover = screen.getByRole('dialog', { name: '格式筛选' });
+    const before = listEagleAssetsMock.mock.calls.length;
+    vi.useFakeTimers();
+    try {
+      for (const name of ['WEBP', 'PNG', 'JPEG'])
+        fireEvent.click(within(popover).getByRole('checkbox', { name }));
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(before);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(149);
+      });
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(before);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(before + 1);
+      const last = JSON.stringify(listEagleAssetsMock.mock.calls.at(-1)?.[1]);
+      for (const format of ['webp', 'png', 'jpeg']) expect(last).toContain(format);
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps old cards visible but unavailable while an uncached search is pending', async () => {
     renderPage();
     await screen.findByRole('button', { name: /Owl Reference/ });

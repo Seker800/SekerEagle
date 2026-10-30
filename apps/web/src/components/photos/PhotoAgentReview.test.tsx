@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, it, expect, vi } from 'vitest';
 import { PhotoAgentReview } from './PhotoAgentReview';
@@ -201,6 +201,7 @@ it('keeps operation history collapsed below photo cards', async () => {
   await open();
   const history = screen.getByText('操作记录').closest('details')!;
   expect(history.open).toBe(false);
+  expect(mocks.history).not.toHaveBeenCalled();
   const cards = screen.getAllByRole('article');
   expect(
     cards.at(-1)!.compareDocumentPosition(history) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -325,4 +326,26 @@ it('never automatically retries manual sends and retains the operation identifie
   fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
   await waitFor(() => expect(mocks.manual).toHaveBeenCalledTimes(2));
   expect(mocks.manual.mock.calls[0][1].operationId).toBe(mocks.manual.mock.calls[1][1].operationId);
+});
+
+it('polls the unopened approval inbox once per minute rather than every ten seconds', async () => {
+  vi.useFakeTimers();
+  const view = mount();
+  try {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(mocks.list).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(59_998);
+    });
+    expect(mocks.list).toHaveBeenCalledOnce();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+    });
+    expect(mocks.list).toHaveBeenCalledTimes(2);
+  } finally {
+    view.unmount();
+    vi.useRealTimers();
+  }
 });

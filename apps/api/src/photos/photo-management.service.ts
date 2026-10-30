@@ -1,3 +1,4 @@
+import { representativePhotoFace } from '@sekereagle/library-core';
 import {
   BadRequestException,
   ConflictException,
@@ -142,19 +143,23 @@ export class PhotoManagementService {
             assetId: true,
             asset: { select: view === 'cards' ? facePreviewSelect : previewSelect },
           },
-          take: view === 'cards' ? 1 : 20,
+          take: 20,
           orderBy: [{ confidence: 'desc' }, { id: 'asc' }],
         },
       },
     });
     return {
       ...page(rows),
-      people: rows
-        .slice(0, 200)
-        .map((person) => ({
-          ...person,
-          faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
-        })),
+      people: rows.slice(0, 200).map((person) => ({
+        ...person,
+        faces: (view === 'cards'
+          ? (() => {
+              const face = representativePhotoFace(person.faces);
+              return face ? [face] : [];
+            })()
+          : person.faces
+        ).map((face) => ({ ...face, asset: serializePreview(face.asset) })),
+      })),
     };
   }
   async personFaces(ownerId: string, personId: string, includePrivate: boolean, after?: string) {
@@ -190,12 +195,10 @@ export class PhotoManagementService {
     return {
       nextCursor:
         rows.length > 20 ? encodePeopleCursor(rows[19]!, ownerId, includePrivate, personId) : null,
-      faces: rows
-        .slice(0, 20)
-        .map(({ createdAt: _createdAt, ...face }) => ({
-          ...face,
-          asset: serializePreview(face.asset),
-        })),
+      faces: rows.slice(0, 20).map(({ createdAt: _createdAt, ...face }) => ({
+        ...face,
+        asset: serializePreview(face.asset),
+      })),
     };
   }
   reviewPeople(ownerId: string, includePrivate: boolean) {

@@ -33,6 +33,6 @@ it('loads paged identity options without fetching person cards or faces', async 
   await act(async () => {
     await view.result.current.people.fetchNextPage();
   });
-  expect(view.result.current.fieldOptions.PERSON).toHaveLength(2);
+  await waitFor(() => expect(view.result.current.fieldOptions.PERSON).toHaveLength(2));
   expect(mocks.options.mock.calls[1]?.[0]).toBe('next');
 });
