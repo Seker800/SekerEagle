@@ -162,6 +162,19 @@ public final class MobileBackupTest {
     return media(name, "image/png", bytes.toByteArray(), publish);
   }
 
+  private Uri uniqueImage(String name) throws Exception {
+    Bitmap bitmap = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888);
+    bitmap.eraseColor(0xff174938);
+    byte[] identity =
+        UUID.randomUUID().toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    for (int i = 0; i < identity.length; i++)
+      bitmap.setPixel(i % 32, i / 32, Color.rgb(identity[i] & 255, 73, 56));
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, bytes);
+    bitmap.recycle();
+    return media(name, "image/png", bytes.toByteArray(), true);
+  }
+
   private Uri media(String name, String mime, byte[] bytes, boolean publish) throws Exception {
     ContentValues values = new ContentValues();
     values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
@@ -1141,7 +1154,7 @@ public final class MobileBackupTest {
 
   @Test
   public void immediatePauseAndResumeRetiresTheLatestServiceStart() throws Exception {
-    Uri file = image("handoff.png", 0xff174938, true);
+    Uri file = uniqueImage("handoff.png");
     BackupScreen.addRule(settings, scope, "media", path);
     settings.setValue(scope, "lastFinished", "historical-completion");
     String previous = settings.value(scope, "lastFinished", "");

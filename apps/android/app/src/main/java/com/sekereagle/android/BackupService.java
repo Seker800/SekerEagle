@@ -33,6 +33,7 @@ public final class BackupService extends Service {
   private static final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final AtomicBoolean working = new AtomicBoolean();
   private volatile boolean cancelled;
+  private volatile boolean retiring;
   private volatile ApiClient activeApi;
   private Intent pendingRestart;
   private int latestStartId;
@@ -120,10 +121,11 @@ public final class BackupService extends Service {
       return START_NOT_STICKY;
     }
     if (working.get()) {
-      if (cancelled) pendingRestart = new Intent(intent);
+      if (cancelled || retiring) pendingRestart = new Intent(intent);
       return START_NOT_STICKY;
     }
     working.set(true);
+    retiring = false;
     cancelled = false;
     manual = explicit;
     timedOut = false;
@@ -243,15 +245,16 @@ public final class BackupService extends Service {
       activeApi = null;
       if (wake != null && wake.isHeld()) wake.release();
       if (current == this) {
+        retiring = true;
         if (cancelled && settings.flag(scope, "userPaused", false)) pendingMessage = "备份已暂停";
         flushUpdate();
-        settings.setFlag(scope, "running", false);
         // Keep the retiring run occupied until its main-thread handoff. New starts
         // queue behind it, so an old completion can never stop a newer run.
         new Handler(Looper.getMainLooper())
             .post(
                 () -> {
                   if (current != this) return;
+                  settings.setFlag(scope, "running", false);
                   working.set(false);
                   Intent restart = pendingRestart;
                   pendingRestart = null;
