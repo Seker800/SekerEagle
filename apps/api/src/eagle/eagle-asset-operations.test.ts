@@ -177,7 +177,25 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
       return 0;
     },
     eagleAssetOperationItem: {
-      count: async () => 1,
+      count: async ({
+        where,
+      }: {
+        where: {
+          libraryMode: string;
+          status: string;
+          leaseUntil: { gt: Date };
+          operation: { kind: unknown };
+        };
+      }) => {
+        assert.equal(where.libraryMode, 'MATERIAL');
+        assert.equal(where.status, 'RUNNING');
+        assert.ok(where.leaseUntil.gt instanceof Date);
+        assert.ok(
+          where.operation.kind === 'SEND' ||
+            JSON.stringify(where.operation.kind) === JSON.stringify({ not: 'SEND' }),
+        );
+        return 1;
+      },
       findFirst: async () => assert.fail('active lease must prevent another claim'),
     },
   };

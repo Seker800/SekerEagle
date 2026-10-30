@@ -1,3 +1,4 @@
+import { AsyncViewBoundary } from '../AsyncViewBoundary';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { PhotoStatistics } from '../photos/PhotoStatistics';
@@ -45,7 +46,6 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
   lazy,
-  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -725,12 +725,14 @@ export function SekerEaglePage({
   );
   const timelineSectionKeys = useMemo(
     () =>
-      isPhotoTimeline && !deferredSearch
+      isPhotoTimeline &&
+      !deferredSearch &&
+      !(activeSmartFolderId && smartFolderOrder === 'RELEVANCE')
         ? compact
           ? createPhotoTimelineDayKeys(assets)
           : createPhotoTimelineSectionKeys(assets)
         : undefined,
-    [assets, isPhotoTimeline, deferredSearch, compact],
+    [assets, isPhotoTimeline, deferredSearch, compact, activeSmartFolderId, smartFolderOrder],
   );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
@@ -1995,14 +1997,14 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <Suspense fallback={null}>
+                <AsyncViewBoundary>
                   <PhotoMap
                     key={`${ownerId}:${privateVisible}`}
                     ownerId={ownerId}
                     includePrivate={privateVisible}
                     onOpen={openAssetPreview}
                   />
-                </Suspense>
+                </AsyncViewBoundary>
               )}
               <div
                 className={styles.assetBrowser}
@@ -2049,37 +2051,56 @@ export function SekerEaglePage({
                         </button>
                       </div>
                     )}
-                    {!assetsQuery.isLoading && !assetsQuery.isError && assets.length === 0 && (
+                    {!assetsQuery.isLoading &&
+                    !assetsQuery.isError &&
+                    assets.length === 0 &&
+                    activeSmartFolder?.semanticState &&
+                    !activeSmartFolder.semanticState.hasResults &&
+                    activeSmartFolder.semanticState.status !== 'READY' ? (
                       <div className={styles.emptyState}>
-                        <span className={styles.emptyMark}>
-                          <img src={sekerEagleLogo} alt="" />
-                        </span>
-                        <strong>
-                          {search || activeFilterCount || activeSmartFolderId
-                            ? libraryMode === 'PHOTO'
-                              ? t('没有匹配的照片')
-                              : t('没有匹配的素材')
-                            : libraryView === 'TRASH'
-                              ? t('回收站是空的')
-                              : libraryView === 'PRIVATE'
-                                ? t('暂无隐私素材')
-                                : libraryMode === 'PHOTO'
-                                  ? t('暂无照片')
-                                  : t('把第一份灵感放进来')}
-                        </strong>
-                        <p>
-                          {search || activeFilterCount || activeSmartFolderId
-                            ? t('尝试其他名称或标签。')
-                            : libraryView === 'TRASH'
-                              ? t('移除的素材会暂时保留在这里。')
-                              : libraryView === 'PRIVATE'
-                                ? t('为素材添加已配置的私密标签。')
-                                : libraryMode === 'PHOTO'
-                                  ? t('将照片拖入此处。')
-                                  : t('将图片、RAW 或相机视频拖入此处。')}
-                        </p>
+                        {activeSmartFolder.semanticState.status === 'FAILED'
+                          ? t('匹配生成失败，请重试。')
+                          : t('正在生成匹配结果…')}
                       </div>
-                    )}
+                    ) : null}
+                    {!assetsQuery.isLoading &&
+                      !assetsQuery.isError &&
+                      assets.length === 0 &&
+                      !(
+                        activeSmartFolder?.semanticState &&
+                        !activeSmartFolder.semanticState.hasResults &&
+                        activeSmartFolder.semanticState.status !== 'READY'
+                      ) && (
+                        <div className={styles.emptyState}>
+                          <span className={styles.emptyMark}>
+                            <img src={sekerEagleLogo} alt="" />
+                          </span>
+                          <strong>
+                            {search || activeFilterCount || activeSmartFolderId
+                              ? libraryMode === 'PHOTO'
+                                ? t('没有匹配的照片')
+                                : t('没有匹配的素材')
+                              : libraryView === 'TRASH'
+                                ? t('回收站是空的')
+                                : libraryView === 'PRIVATE'
+                                  ? t('暂无隐私素材')
+                                  : libraryMode === 'PHOTO'
+                                    ? t('暂无照片')
+                                    : t('把第一份灵感放进来')}
+                          </strong>
+                          <p>
+                            {search || activeFilterCount || activeSmartFolderId
+                              ? t('尝试其他名称或标签。')
+                              : libraryView === 'TRASH'
+                                ? t('移除的素材会暂时保留在这里。')
+                                : libraryView === 'PRIVATE'
+                                  ? t('为素材添加已配置的私密标签。')
+                                  : libraryMode === 'PHOTO'
+                                    ? t('将照片拖入此处。')
+                                    : t('将图片、RAW 或相机视频拖入此处。')}
+                          </p>
+                        </div>
+                      )}
                     <div
                       ref={masonryRef}
                       className={styles.masonry}
@@ -2837,7 +2858,7 @@ export function SekerEaglePage({
         />
       ) : null}
       {batchEditIds && photoEditing.clipboard && (
-        <Suspense fallback={null}>
+        <AsyncViewBoundary>
           <EagleBatchPhotoEdit
             key={editingScope}
             assetIds={batchEditIds}
@@ -2845,7 +2866,7 @@ export function SekerEaglePage({
             resolveSession={photoEditing.resolveSession}
             onClose={() => setBatchEditIds(null)}
           />
-        </Suspense>
+        </AsyncViewBoundary>
       )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}

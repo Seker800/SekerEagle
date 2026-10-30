@@ -2293,9 +2293,47 @@ describe('SekerEaglePage', () => {
     });
   });
 
+  it('explains pending first builds instead of claiming the preview matched nothing', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    listEagleAssetsMock.mockResolvedValue({ items: [], nextCursor: null });
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'scene-folder',
+        name: '画面结果',
+        color: null,
+        parentId: null,
+        queryVersion: 2,
+        queryJson: { version: 2, conditions: [], semantic: { text: '截图', breadth: 'BROAD' } },
+        position: 0,
+        rowVersion: 1,
+        semanticState: {
+          id: 'snapshot',
+          status: 'BUILDING',
+          isActive: false,
+          hasResults: false,
+          updatedAt: '2026-10-29T00:00:00Z',
+        },
+      },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('正在生成匹配结果');
+    expect(screen.queryByText('没有匹配的照片')).not.toBeInTheDocument();
+    expect(screen.queryByText('尝试其他名称或标签。')).not.toBeInTheDocument();
+  });
+
   it('opens semantic folders in relevance order without chronological section headings', async () => {
     testWorkspaceMode.value = 'PHOTO';
-    listEagleAssetsMock.mockResolvedValue({items: [{...asset, chronologicalAt: '2026-04-10T12:00:00Z', libraryAddedAt: '2026-04-10T12:00:00Z'}], nextCursor: null});
+    listEagleAssetsMock.mockResolvedValue({
+      items: [
+        {
+          ...asset,
+          chronologicalAt: '2026-04-10T12:00:00Z',
+          libraryAddedAt: '2026-04-10T12:00:00Z',
+        },
+      ],
+      nextCursor: null,
+    });
     listEagleSmartFoldersMock.mockResolvedValue([
       {
         id: 'scene-folder',
@@ -2316,6 +2354,7 @@ describe('SekerEaglePage', () => {
       },
     ]);
     renderPage();
+    expect(await screen.findByText('2026年4月')).toBeVisible();
     fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
     await waitFor(() =>
       expect(listEagleAssetsMock).toHaveBeenCalledWith(

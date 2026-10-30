@@ -222,15 +222,26 @@ test('image search preserves the ranked order without resolving AI tags', async 
       },
     ]),
   );
+  let coverageCounts = 0;
   const service = new EagleService(
     {
       $queryRaw: async (query: unknown) => {
         rankingQuery = JSON.stringify(query);
         return [{ assetId: 'manual-asset' }, { assetId: 'ai-asset' }];
       },
+      eagleAssetColorAnalysis: {
+        count: async () => {
+          coverageCounts++;
+          return 7;
+        },
+      },
       eagleAsset: {
+        count: async () => {
+          coverageCounts++;
+          return 10;
+        },
         findMany: async (query: { where: { AND: Array<{ id?: { in?: string[] } }> } }) =>
-          (query.where.AND.at(-1)?.id?.in ?? []).flatMap((id) => {
+          (query.where.AND?.at(-1)?.id?.in ?? [...assets.keys()]).flatMap((id) => {
             const asset = assets.get(id);
             return asset ? [asset] : [];
           }),
@@ -259,6 +270,19 @@ test('image search preserves the ranked order without resolving AI tags', async 
   assert.equal(rankingQuery, 'direct-images');
   assert.ok('imageSearch' in result);
   assert.deepEqual(result.imageSearch, { status: 'READY', spaceId: 'space' });
+  const first = await service.listAssets('owner-1', { limit: 1, search: 'ui', color: '#abcdef' });
+  assert.equal(coverageCounts, 2);
+  assert.equal(first.colorCoverage?.completed, 7);
+  assert.ok(first.nextCursor);
+  coverageCounts = 0;
+  const next = await service.listAssets('owner-1', {
+    limit: 1,
+    search: 'ui',
+    color: '#abcdef',
+    cursor: first.nextCursor!,
+  });
+  assert.equal(coverageCounts, 0);
+  assert.equal(next.colorCoverage, null);
 });
 
 test('private assets stay out of the regular gallery and use a dedicated unlocked view', async () => {

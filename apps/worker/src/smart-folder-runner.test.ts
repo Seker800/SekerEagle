@@ -71,3 +71,31 @@ test('a denied maintenance grant never spins or bypasses model eligibility', asy
     runner.stop();
   }
 });
+
+test('unexpected failures back off for thirty seconds without a busy retry loop', async (t) => {
+  t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 100000 });
+  let attempts = 0;
+  const errors: unknown[] = [];
+  const runner = new SmartFolderBuildRunner(
+    async () => {
+      attempts++;
+      throw new Error('database unavailable');
+    },
+    async () => false,
+    (error) => errors.push(error),
+  );
+  try {
+    runner.wake();
+    await flush();
+    assert.equal(attempts, 1);
+    assert.equal(errors.length, 1);
+    t.mock.timers.tick(29999);
+    await flush();
+    assert.equal(attempts, 1);
+    t.mock.timers.tick(1);
+    await flush();
+    assert.equal(attempts, 2);
+  } finally {
+    runner.stop();
+  }
+});

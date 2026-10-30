@@ -43,7 +43,9 @@ export function useEagleReferenceData(
           folder.semanticState?.status === 'PENDING' || folder.semanticState?.status === 'BUILDING',
       )
         ? 10_000
-        : 60_000,
+        : query.state.data?.some((folder) => folder.semanticState)
+          ? 60_000
+          : false,
   });
 
   return { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery };

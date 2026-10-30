@@ -1,4 +1,6 @@
 export const enUS = {
+  '正在加载界面…': 'Loading view…',
+  '界面加载失败，请刷新后重试。': 'Unable to load this view. Refresh to try again.',
   下一组: 'Next pair',
   '暂时没有需要确认的相似人物。': 'No similar people need confirmation right now.',
   继续查找相似人物: 'Find more similar people',

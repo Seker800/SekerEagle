@@ -60,7 +60,7 @@ function walk(node, visit) {
   visit(node);
   ts.forEachChild(node, (child) => walk(child, visit));
 }
-// Accept only React.lazy(() => import(required).then(module => ({default: module.Required}))).
+// Accept only the named React import lazy(() => import(required).then(module => ({default: module.Required}))).
 // Merely mentioning the module inside an unrelated loader must not satisfy composition.
 function isLazyComposition(node, tree, module, name) {
   if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return false;

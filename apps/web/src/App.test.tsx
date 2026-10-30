@@ -35,7 +35,10 @@ function userResponse() {
   return { user: { id: 'owner-1', email: 'owner@example.com', role: 'USER' } };
 }
 
-afterEach(() => { requestMock.mockReset(); accountFailure.enabled = false; });
+afterEach(() => {
+  requestMock.mockReset();
+  accountFailure.enabled = false;
+});
 
 describe('startup session recovery', () => {
   it('shows connection recovery instead of login after a network failure, then resumes automatically', async () => {
@@ -174,9 +177,13 @@ it('checks the session when a visible window regains focus', async () => {
   );
   await screen.findByText('素材图库');
   requestMock.mockResolvedValueOnce(userResponse());
-  await act(async () => { await Promise.resolve(); });
+  await act(async () => {
+    await Promise.resolve();
+  });
   fireEvent(window, new Event('focus'));
-  await waitFor(() => expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2));
+  await waitFor(() =>
+    expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2),
+  );
 });
 
 it('keeps the gallery visible when an account chunk fails to load', async () => {
@@ -185,9 +192,15 @@ it('keeps the gallery visible when an account chunk fails to load', async () => 
   requestMock.mockResolvedValue({ enabled: false, expiresAt: null });
   const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
   try {
-    render(<QueryClientProvider client={new QueryClient()}><App /></QueryClientProvider>);
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <App />
+      </QueryClientProvider>,
+    );
     expect(await screen.findByRole('alert')).toHaveTextContent('界面加载失败');
     expect(screen.getByText('素材图库')).toBeVisible();
     expect(screen.getByRole('button', { name: '刷新' })).toBeVisible();
-  } finally { errors.mockRestore(); }
+  } finally {
+    errors.mockRestore();
+  }
 });
