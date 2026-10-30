@@ -10,13 +10,16 @@ export interface MapCity {
   population: number;
   minZoom: number;
 }
-export async function loadLocalBasemap(signal: AbortSignal) {
+export async function loadLocalBasemap(signal: AbortSignal, includeLand = true) {
   const read = async (url: string) => {
     const response = await fetch(url, { signal, credentials: 'same-origin' });
     if (!response.ok) throw new Error('LOCAL_BASEMAP_UNAVAILABLE');
     return response.json() as Promise<unknown>;
   };
-  const [land, cities] = await Promise.all([read(landUrl), read(citiesUrl)]);
+  const [land, cities] = await Promise.all([
+    includeLand ? read(landUrl) : Promise.resolve({ type: 'FeatureCollection', features: [] }),
+    read(citiesUrl),
+  ]);
   return { land: land as GeoJsonObject, cities: (cities as { cities: MapCity[] }).cities };
 }
 /** Highest-population labels win; the viewport has a fixed label budget and avoids overlapping text. */

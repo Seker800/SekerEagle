@@ -183,7 +183,11 @@ describe('whole-library location map', () => {
     expect(mocks.tiles).not.toHaveBeenCalled();
     expect(
       (vi.mocked(fetch).mock.calls as unknown[][]).every(
-        ([url]) => new URL(String(url), window.location.href).origin === window.location.origin,
+        ([url]) =>
+          new URL(
+            String(url),
+            window.location.href,
+          ).origin === window.location.origin,
       ),
     ).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '显示全部照片位置' }));
@@ -574,7 +578,11 @@ it('does not download the fallback land dataset when a self-hosted overview is a
   mount();
   await waitFor(() => expect(addSelfHostedBasemap).toHaveBeenCalled());
   await waitFor(() => expect(fetch).toHaveBeenCalled());
-  const paths = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+  const paths = vi
+    .mocked(fetch)
+    .mock.calls.map(([url]) =>
+      typeof url === 'string' ? url : url instanceof URL ? url.href : url.url,
+    );
   expect(paths.some((url) => url.includes('cities'))).toBe(true);
   expect(paths.some((url) => url.includes('land'))).toBe(false);
 });

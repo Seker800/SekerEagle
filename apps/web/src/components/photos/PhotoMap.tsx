@@ -147,51 +147,57 @@ export function PhotoMap({
     const land = palette.getPropertyValue('--map-land').trim() || '#25272d';
     setStatus('LOADING');
     let updateLabels: (() => void) | undefined;
-    void loadLocalBasemap(controller.signal)
-      .then(async (data) => {
+    void (async () => {
+      // The installed archive already includes a world overview. Only fallback
+      // installations need Natural Earth land; city lookup is still shared.
+      let vectorLayer: Awaited<ReturnType<typeof addSelfHostedBasemap>> = null;
+      try {
+        vectorLayer = await addSelfHostedBasemap(map, controller.signal);
+      } catch {
         if (controller.signal.aborted) return;
-        if (data.cities.length) setCities(data.cities);
-        const vectorLayer = await addSelfHostedBasemap(map, controller.signal);
-        if (controller.signal.aborted) return;
-        setHasDetailedMap(Boolean(vectorLayer));
-        if (vectorLayer) {
-          setStatus('READY');
-          return;
-        }
-        map.attributionControl.addAttribution(
-          '<a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
-        );
-        L.geoJSON(data.land, {
-          interactive: false,
-          style: { color: '#363b43', weight: 0.8, opacity: 1, fillColor: land, fillOpacity: 1 },
-        }).addTo(map);
-        updateLabels = () => {
-          labels.clearLayers();
-          const visible = selectCityLabels(
-            data.cities,
-            map.getZoom(),
-            (city) => map.getBounds().contains([city.latitude, city.longitude]),
-            (city) => map.latLngToContainerPoint([city.latitude, city.longitude]),
-          );
-          for (const city of visible) {
-            const label = document.createElement('span');
-            label.className = styles.city;
-            label.textContent = getLocale() === 'zh-CN' ? city.nameZh : city.name;
-            L.marker([city.latitude, city.longitude], {
-              pane: 'photoCities',
-              interactive: false,
-              keyboard: false,
-              icon: L.divIcon({ className: styles.cityIcon, html: label, iconSize: [0, 0] }),
-            }).addTo(labels);
-          }
-        };
-        map.on('moveend zoomend', updateLabels);
-        updateLabels();
+      }
+      if (controller.signal.aborted) return;
+      const data = await loadLocalBasemap(controller.signal, !vectorLayer);
+      if (controller.signal.aborted) return;
+      if (data.cities.length) setCities(data.cities);
+      setHasDetailedMap(Boolean(vectorLayer));
+      if (vectorLayer) {
         setStatus('READY');
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setStatus('ERROR');
-      });
+        return;
+      }
+      map.attributionControl.addAttribution(
+        '<a href="https://www.naturalearthdata.com/about/terms-of-use/" target="_blank" rel="noopener noreferrer">Natural Earth</a>',
+      );
+      L.geoJSON(data.land, {
+        interactive: false,
+        style: { color: '#363b43', weight: 0.8, opacity: 1, fillColor: land, fillOpacity: 1 },
+      }).addTo(map);
+      updateLabels = () => {
+        labels.clearLayers();
+        const visible = selectCityLabels(
+          data.cities,
+          map.getZoom(),
+          (city) => map.getBounds().contains([city.latitude, city.longitude]),
+          (city) => map.latLngToContainerPoint([city.latitude, city.longitude]),
+        );
+        for (const city of visible) {
+          const label = document.createElement('span');
+          label.className = styles.city;
+          label.textContent = getLocale() === 'zh-CN' ? city.nameZh : city.name;
+          L.marker([city.latitude, city.longitude], {
+            pane: 'photoCities',
+            interactive: false,
+            keyboard: false,
+            icon: L.divIcon({ className: styles.cityIcon, html: label, iconSize: [0, 0] }),
+          }).addTo(labels);
+        }
+      };
+      map.on('moveend zoomend', updateLabels);
+      updateLabels();
+      setStatus('READY');
+    })().catch(() => {
+      if (!controller.signal.aborted) setStatus('ERROR');
+    });
     return () => {
       clearTimeout(moveTimer);
       map.off('moveend', updateViewport);

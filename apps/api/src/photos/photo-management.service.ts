@@ -150,21 +150,19 @@ export class PhotoManagementService {
     });
     return {
       ...page(rows),
-      people: rows.slice(0, 200).map((person) => ({
-        ...person,
-        faces: (view === 'cards'
-          ? (() => {
-              const face = representativePhotoFace(person.faces);
-              return face ? [face] : [];
-            })()
-          : person.faces
-        ).map((face) => ({ ...face, asset: serializePreview(face.asset) })),
-      })),
+      people: rows.slice(0, 200).map((person) => {
+        const representative = view === 'cards' ? representativePhotoFace(person.faces) : undefined;
+        const faces = view === 'cards' ? (representative ? [representative] : []) : person.faces;
+        return {
+          ...person,
+          faces: faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
+        };
+      }),
     };
   }
   async personFaces(ownerId: string, personId: string, includePrivate: boolean, after?: string) {
-    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate, personId) : null;
     await this.requirePerson(this.prisma, ownerId, personId, includePrivate);
+    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate, personId) : null;
     const rows = await this.prisma.eaglePhotoFace.findMany({
       where: {
         ownerId,

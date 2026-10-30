@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import { log } from 'node:console';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -315,6 +316,29 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       origin: defaults.CANONICAL_ORIGIN,
       'content-type': 'application/json',
     };
+    const peopleUrl = `${base}/api/photos/photography/people`;
+    const faceUrl = `${peopleUrl}/${f.person.id}/faces`;
+    assert.equal((await fetch(peopleUrl + '?view=options')).status, 401);
+    assert.equal((await fetch(faceUrl)).status, 401);
+    for (const query of ['ownerId=other', 'includePrivate=true', 'view=embedding']) {
+      await delay(150);
+      assert.equal((await fetch(`${peopleUrl}?${query}`, { headers: auth })).status, 400);
+    }
+    const optionsResponse = await fetch(peopleUrl + '?view=options', { headers: auth });
+    assert.equal(optionsResponse.status, 200);
+    const option = (await optionsResponse.json()).people[0];
+    assert.deepEqual(Object.keys(option).sort(), ['id', 'name']);
+    assert.equal((await fetch(faceUrl, { headers: auth })).status, 200);
+    const foreignPerson = await fixture();
+    assert.equal(
+      (await fetch(`${peopleUrl}/${foreignPerson.person.id}/faces`, { headers: auth })).status,
+      404,
+    );
+    assert.equal(
+      (await fetch(`${base}/api/eagle/photography/people/${f.person.id}/faces`, { headers: auth }))
+        .status,
+      404,
+    );
     const reviewUrl = `${base}/api/photos/photography/people/review`;
     assert.equal((await fetch(reviewUrl)).status, 401);
     const reviewResponse = await fetch(reviewUrl, { headers: auth });
@@ -386,6 +410,8 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
     const pat = await app.get(PatService).create(f.ownerId, 'privacy-read', ['photo:read']);
     const bearer = { authorization: `Bearer ${pat.token}`, 'content-type': 'application/json' };
     assert.equal((await fetch(reviewUrl, { headers: bearer })).status, 403);
+    assert.equal((await fetch(peopleUrl + '?view=cards', { headers: bearer })).status, 403);
+    assert.equal((await fetch(faceUrl, { headers: bearer })).status, 403);
     assert.equal((await patch(bearer)).status, 403);
     assert.equal((await patch({ ...auth, origin: 'https://invalid.example' })).status, 403);
     assert.equal((await patch(auth, { ...body, ownerId: randomUUID() })).status, 400);
@@ -1119,6 +1145,28 @@ test('人物确认在一万张照片五百个人物下保持候选上限与全�
   assert.equal(result.pairs.length, 100);
   assert.ok(result.pairs.every((p) => [p.first.id, p.second.id].includes(people[499].id)));
   assert.ok(result.pairs.every((p) => p.first.photoCount + p.second.photoCount === 41));
+  const service = new PhotoManagementService(prisma);
+  const full = await service.people(ownerId, false);
+  const cards = await service.people(ownerId, false, undefined, 'cards');
+  const options = await service.people(ownerId, false, undefined, 'options');
+  const bytes = (value) => Buffer.byteLength(JSON.stringify(value));
+  assert.equal(full.people.flatMap((person) => person.faces).length, 4000);
+  assert.equal(cards.people.flatMap((person) => person.faces).length, 200);
+  assert.equal(cards.people.length, 200);
+  assert.ok(cards.nextCursor && options.nextCursor);
+  assert.ok(bytes(cards) < bytes(full) / 10);
+  assert.ok(bytes(options) < bytes(cards) / 5);
+  log(
+    JSON.stringify({
+      syntheticOnly: true,
+      metric: 'people-projection-bytes',
+      full: bytes(full),
+      cards: bytes(cards),
+      options: bytes(options),
+      productionTiming: false,
+    }),
+  );
+
   log(
     JSON.stringify({
       syntheticOnly: true,
@@ -1129,4 +1177,61 @@ test('人物确认在一万张照片五百个人物下保持候选上限与全�
       productionTiming: false,
     }),
   );
+});
+
+test('人物卡片、姓名选项和脸分页维持撤权边界且不暴露 EXIF 或生物特征', async () => {
+  const f = await fixture();
+  const rows = Array.from({ length: 22 }, () => ({
+    id: randomUUID(),
+    ownerId: f.ownerId,
+    libraryMode: 'PHOTO',
+    assetId: f.a.id,
+    assetRevision: f.a.mediaRevision,
+    modelVersion: FACE_MODEL_VERSION,
+    personId: f.person.id,
+    box: [0.1, 0.1, 0.3, 0.3],
+    confidence: 0.9,
+    embedding,
+  }));
+  await prisma.eaglePhotoFace.createMany({ data: rows });
+  await prisma.eagleAssetRendition.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      assetId: f.a.id,
+      kind: 'PREVIEW',
+      revision: f.a.mediaRevision,
+      mimeType: 'image/jpeg',
+      storageKey: 'test/' + randomUUID(),
+      byteSize: 1,
+      width: 1600,
+      height: 1200,
+      status: 'READY',
+    },
+  });
+  const card = (await f.service.people(f.ownerId, false, undefined, 'cards')).people[0];
+  assert.equal(card.faces.length, 1);
+  assert.equal('photoMetadata' in card.faces[0].asset, false);
+  assert.equal('prototype' in card, false);
+  assert.equal('embedding' in card.faces[0], false);
+  assert.equal('originalObjectKey' in card.faces[0].asset, false);
+  const options = await f.service.people(f.ownerId, false, undefined, 'options');
+  assert.deepEqual(options.people, [{ id: f.person.id, name: f.person.name }]);
+  const first = await f.service.personFaces(f.ownerId, f.person.id, false);
+  assert.equal(first.faces.length, 20);
+  const second = await f.service.personFaces(f.ownerId, f.person.id, false, first.nextCursor);
+  assert.equal(second.faces.length, 3);
+  assert.equal(new Set([...first.faces, ...second.faces].map((face) => face.id)).size, 23);
+  await assert.rejects(f.service.personFaces(randomUUID(), f.person.id, false), /人物不存在/);
+  await f.rule(true);
+  assert.deepEqual((await f.service.people(f.ownerId, false, undefined, 'options')).people, []);
+  await assert.rejects(
+    f.service.personFaces(f.ownerId, f.person.id, false, first.nextCursor),
+    /人物不存在/,
+  );
+  await assert.rejects(
+    f.service.personFaces(f.ownerId, f.person.id, true, first.nextCursor),
+    /游标无效/,
+  );
+  assert.equal((await f.service.personFaces(f.ownerId, f.person.id, true)).faces.length, 20);
 });
