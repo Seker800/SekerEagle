@@ -1,3 +1,4 @@
+import type { EagleQuickFilterState } from './eagle-quick-filter-state';
 import type { QueryClient } from '@tanstack/react-query';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { EagleAssetEntityStore } from './eagle-asset-entity-store';
@@ -27,6 +28,17 @@ export function getEagleWorkspaceCache(
 }
 
 class EagleWorkspaceCache {
+  browse: {
+    search: string;
+    quickFilters: EagleQuickFilterState;
+    activeSmartFolderId: string | null;
+    smartFolderOrder: 'DATE' | 'RELEVANCE';
+  } | null = null;
+  readonly scrollPositions = new Map<string, number>();
+  clearNavigation() {
+    this.browse = null;
+    this.scrollPositions.clear();
+  }
   readonly store;
   readonly thumbnails = new ThumbnailLoadService({ maxEntries: 512, maxBytes: 128 * 1024 * 1024 });
   readonly #keys;
@@ -58,6 +70,7 @@ class EagleWorkspaceCache {
       // removes private catalogs/details, rather than merely hiding their cards.
       if (privateVisible) {
         this.client.removeQueries({ queryKey: this.#keys.root });
+        this.clearNavigation();
         this.store.clear();
         this.thumbnails.dispose();
       }
@@ -72,6 +85,7 @@ class EagleWorkspaceCache {
     if (this.#disposed || this.#references) return;
     const lists = this.client.getQueryCache().findAll({ queryKey: this.#keys.assets });
     if (lists.some(({ queryKey }) => queryKey.length === this.#keys.assets.length + 2)) return;
+    this.clearNavigation();
     this.#disposed = true;
     this.#unsubscribe();
     this.store.clear();

@@ -55,7 +55,13 @@ import {
   type MouseEvent,
   type ReactNode,
 } from 'react';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  hashKey,
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
@@ -132,6 +138,7 @@ import { useEagleMasonryLayout } from './eagle-masonry-layout';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
+import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
@@ -322,8 +329,6 @@ export function SekerEaglePage({
     [queryClient, ownerId, libraryMode],
   );
   const thumbnailLoadService = workspaceCache.thumbnails;
-  const assetViewport = useEagleAssetViewport();
-  const assetViewportRef = assetViewport.elementRef;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
   const importDragActiveRef = useRef(false);
@@ -339,11 +344,17 @@ export function SekerEaglePage({
   const [photoView, setPhotoView] = useState<
     'timeline' | 'map' | 'people' | 'agent' | 'statistics'
   >('timeline');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() =>
+    privateVisible ? '' : (workspaceCache.browse?.search ?? ''),
+  );
   const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
-  const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>('DATE');
-  const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(null);
+  const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>(() =>
+    privateVisible ? 'DATE' : (workspaceCache.browse?.smartFolderOrder ?? 'DATE'),
+  );
+  const [activeSmartFolderId, setActiveSmartFolderId] = useState<string | null>(() =>
+    privateVisible ? null : (workspaceCache.browse?.activeSmartFolderId ?? null),
+  );
   const [isSmartFolderDialogOpen, setIsSmartFolderDialogOpen] = useState(false);
   const [editingSmartFolder, setEditingSmartFolder] = useState<EagleSmartFolder | null>(null);
   const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
@@ -360,7 +371,11 @@ export function SekerEaglePage({
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
-  const [quickFilters, setQuickFilters] = useState(createEmptyEagleQuickFilterState);
+  const [quickFilters, setQuickFilters] = useState(
+    () =>
+      (!privateVisible && workspaceCache.browse?.quickFilters) ||
+      createEmptyEagleQuickFilterState(),
+  );
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const filterPanelId = useId();
   useEffect(() => {
@@ -375,7 +390,6 @@ export function SekerEaglePage({
   const [assetActionPending, setAssetActionPending] = useState<'copy' | 'save' | null>(null);
   const [assetActionError, setAssetActionError] = useState<string | null>(null);
   const [transferStatus, setTransferStatus] = useState<string | null>(null);
-  const { scrollTop, viewportHeight } = assetViewport;
   const [thumbnailSize, setThumbnailSize] = useState(() => readThumbnailSize(preferencesKey));
   const [editorTitle, setEditorTitle] = useState('');
   const [editorDescription, setEditorDescription] = useState('');
@@ -492,6 +506,24 @@ export function SekerEaglePage({
       activeSmartFolderId && smartFolderOrder === 'RELEVANCE' ? 'RELEVANCE' : undefined,
     privacy: libraryView === 'PRIVATE' ? 'PRIVATE' : undefined,
   };
+  const listKey = queryKeys.assetList(libraryView, assetFilters);
+  const visibilityScope = `${privateVisible}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`;
+  const assetViewport = useEagleAssetViewport(hashKey(listKey), workspaceCache.scrollPositions);
+  const assetViewportRef = assetViewport.elementRef;
+  const { scrollTop, viewportHeight } = assetViewport;
+  useEffect(() => {
+    if (!privateVisible && libraryView === 'ACTIVE') {
+      workspaceCache.browse = { search, quickFilters, activeSmartFolderId, smartFolderOrder };
+    }
+  }, [
+    workspaceCache,
+    privateVisible,
+    libraryView,
+    search,
+    quickFilters,
+    activeSmartFolderId,
+    smartFolderOrder,
+  ]);
   const assetStore = workspaceCache.store;
   useEffect(() => workspaceCache.retain(privateVisible), [workspaceCache, privateVisible]);
   const assetStoreRevision = useSyncExternalStore(
@@ -500,7 +532,18 @@ export function SekerEaglePage({
     assetStore.getSnapshot,
   );
   const assetsQuery = useInfiniteQuery({
-    queryKey: queryKeys.assetList(libraryView, assetFilters),
+    queryKey: listKey,
+    meta: { visibilityScope },
+    placeholderData: (
+      previous: InfiniteData<NormalizedEagleAssetPage, string> | undefined,
+      query,
+    ) => {
+      if (privateVisible || query?.meta?.visibilityScope !== visibilityScope) return undefined;
+      const previousKey = query?.queryKey;
+      return previousKey && previousKey.slice(0, 5).every((part, index) => part === listKey[index])
+        ? previous
+        : undefined;
+    },
     queryFn: async ({ pageParam, signal }) => {
       const pageFilters = { ...assetFilters, cursor: pageParam || undefined };
       const page =
@@ -516,6 +559,14 @@ export function SekerEaglePage({
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
+  const listIdentity = hashKey(listKey);
+  useEffect(() => {
+    setSelectedAssetId(null);
+    setSelectedAssetIds([]);
+    setAssetContextMenu(null);
+    setIsBatchSelection(false);
+    selectionAnchorIdRef.current = null;
+  }, [listIdentity]);
   const secondaryReady =
     !isAssetView ||
     !showsAssetControls ||
@@ -548,6 +599,7 @@ export function SekerEaglePage({
     filtersExpanded || isSmartFolderDialogOpen,
   );
   const resetAssetPrivacyState = useCallback(() => {
+    workspaceCache.clearNavigation();
     thumbnailScheduler.clear({ abortActive: true });
     thumbnailLoadService.dispose();
     assetStore.clear();
@@ -562,6 +614,7 @@ export function SekerEaglePage({
     selectionAnchorIdRef.current = null;
     void queryClient.resetQueries({ queryKey: queryKeys.root });
   }, [
+    workspaceCache,
     assetStore,
     imagePreview,
     queryClient,
@@ -925,7 +978,12 @@ export function SekerEaglePage({
     if (!sentinel || typeof IntersectionObserver === 'undefined') return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && assetsQuery.hasNextPage && !assetsQuery.isFetchingNextPage) {
+        if (
+          entry.isIntersecting &&
+          !assetsQuery.isPlaceholderData &&
+          assetsQuery.hasNextPage &&
+          !assetsQuery.isFetchingNextPage
+        ) {
           void assetsQuery.fetchNextPage();
         }
       },
@@ -933,7 +991,13 @@ export function SekerEaglePage({
     );
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [assetsQuery.fetchNextPage, assetsQuery.hasNextPage, assetsQuery.isFetchingNextPage]);
+  }, [
+    assetsQuery.fetchNextPage,
+    assetsQuery.hasNextPage,
+    assetsQuery.isFetchingNextPage,
+    assetsQuery.isPlaceholderData,
+    libraryView,
+  ]);
   const resetFilters = () => {
     setQuickFilters(createEmptyEagleQuickFilterState());
   };
@@ -942,14 +1006,21 @@ export function SekerEaglePage({
     setTimelineCursor('');
     setPhotoView('timeline');
     setLibraryView(view);
-    setActiveSmartFolderId(null);
+    if (
+      view === 'PRIVATE' ||
+      view === 'TRASH' ||
+      libraryView === 'PRIVATE' ||
+      libraryView === 'TRASH'
+    ) {
+      setActiveSmartFolderId(null);
+      resetFilters();
+    }
     setSelectedAssetIds([]);
     setSelectedAssetId(null);
     setIsBatchSelection(false);
     setSelectionMode(false);
     setAssetContextMenu(null);
     selectionAnchorIdRef.current = null;
-    resetFilters();
   };
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setPhotoView('timeline');
@@ -2035,10 +2106,18 @@ export function SekerEaglePage({
                   className={`${styles.assetViewport} ${isPhotoTimeline ? styles.horizontalViewport : ''}`}
                   role="region"
                   aria-label={libraryMode === 'PHOTO' ? t('照片时间线') : t('素材瀑布流')}
+                  aria-busy={assetsQuery.isFetching && !assetsQuery.isFetchingNextPage}
                   data-bidirectional={Boolean(browserCursor)}
                   onClick={clearAssetSelection}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
+                  {assetsQuery.isFetching &&
+                    !assetsQuery.isFetchingNextPage &&
+                    !assetsQuery.isLoading && (
+                      <div className={styles.queryProgress} role="status">
+                        {t('正在更新结果…')}
+                      </div>
+                    )}
                   <div className={styles.scrollContent}>
                     {assetsQuery.isFetchPreviousPageError && (
                       <button type="button" onClick={loadPreviousPage}>
@@ -2125,6 +2204,7 @@ export function SekerEaglePage({
                         return (
                           <button
                             key={asset.id}
+                            disabled={assetsQuery.isPlaceholderData}
                             data-asset-id={asset.id}
                             type="button"
                             className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}

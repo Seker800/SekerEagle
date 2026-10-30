@@ -1172,3 +1172,13 @@
   border-radius: 5px;
   background: var(--eagle-panel-raised);
 }
+
+.queryProgress {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 4px 12px;
+  background: var(--color-surface, #202127);
+  border-top: 2px solid var(--color-accent, #a3bd81);
+  font-size: 12px;
+}

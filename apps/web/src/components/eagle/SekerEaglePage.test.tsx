@@ -535,6 +535,47 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('北京');
   });
 
+  it('keeps browse memories separate between modes and clears them on privacy changes', async () => {
+    const view = renderPage('mode-memory');
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '北京' },
+    });
+    await waitFor(() =>
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+    );
+    view.rerender(<></>);
+    testWorkspaceMode.value = 'PHOTO';
+    view.rerender(view.renderForOwner('mode-memory'));
+    expect(screen.getByRole('searchbox')).toHaveValue('');
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    view.rerender(<></>);
+    testWorkspaceMode.value = 'MATERIAL';
+    view.rerender(view.renderForOwner('mode-memory'));
+    expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('北京');
+    view.rerender(<></>);
+    view.client.clear();
+    view.rerender(view.renderForOwner('mode-memory'));
+    expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('');
+  });
+
+  it('does not retain active cards as placeholders for trash or an unlocked private scope', async () => {
+    renderPage('private-placeholder', false, {
+      enabled: true,
+      durationHours: 1,
+      expiresAt: '2099-01-01T00:00:00Z',
+    });
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    listEagleAssetsMock.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '北京' },
+    });
+    await waitFor(() =>
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+    );
+    expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument();
+  });
+
   it('shows cached cards while refreshing an invalidated list in the background', async () => {
     const view = renderPage('refresh-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });

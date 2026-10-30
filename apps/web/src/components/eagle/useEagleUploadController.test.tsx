@@ -49,3 +49,56 @@ it('pins every file of a drag batch to the mode at drop time, including queued f
   });
   expect(photo).toHaveBeenCalledOnce();
 });
+
+it('keeps independent file progress, all failures and a dismissible success summary', async () => {
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  material.mockReset();
+  let finish!: () => void;
+  material.mockImplementation((_token, file, progress) => {
+    progress({ percent: file.name === 'a.jpg' ? 25 : 75 });
+    return new Promise<void>((done) => {
+      if (file.name === 'a.jpg') finish = done;
+      else done();
+    });
+  });
+  const view = renderHook(
+    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    { wrapper },
+  );
+  let pending!: Promise<void>;
+  act(() => {
+    pending = view.result.current.importFiles([new File(['a'], 'a.jpg'), new File(['b'], 'b.jpg')]);
+  });
+  expect(view.result.current.uploads.find((item) => item.name === 'a.jpg')?.percent).toBe(25);
+  await act(async () => {
+    finish();
+    await pending;
+  });
+  expect(view.result.current.uploads.every((item) => item.state === 'completed')).toBe(true);
+  expect(view.result.current.uploadStatus).toContain('2/2');
+  act(() => view.result.current.dismissUploads());
+  expect(view.result.current.uploads).toHaveLength(0);
+  material.mockRejectedValue(new Error('网络断开'));
+  await act(async () => {
+    await view.result.current.importFiles([new File(['c'], 'c.jpg'), new File(['d'], 'd.jpg')]);
+  });
+  expect(view.result.current.uploads.filter((item) => item.state === 'failed')).toHaveLength(2);
+  material.mockResolvedValue({});
+  const failed = view.result.current.uploads[0];
+  await act(async () => {
+    await view.result.current.retryUpload(failed.id);
+  });
+  expect(view.result.current.uploads.find((item) => item.id === failed.id)?.state).toBe(
+    'completed',
+  );
+  expect(view.result.current.uploads.find((item) => item.name === 'd.jpg')?.error).toContain(
+    '网络断开',
+  );
+});
