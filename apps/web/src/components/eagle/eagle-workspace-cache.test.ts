@@ -190,3 +190,21 @@ it('reclaims only unreferenced entities after query removal, truncation and deta
   expect(cache.store.size).toBe(2);
   release();
 });
+
+it('keeps an independently cached detail after the final list leaves and collects it on detail GC', async () => {
+  vi.useFakeTimers();
+  const { client, cache, keys } = fixture();
+  const leave = cache.retain(false);
+  const detail = makeEagleAsset({ id: 'detail' });
+  cache.store.upsertMany([detail]);
+  client.setQueryData(keys.assetDetail(detail.id, 'ACTIVE'), detail);
+  client.removeQueries({ queryKey: keys.assetList('ACTIVE', {}), exact: true });
+  leave();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).toBe(cache);
+  expect(cache.store.get(detail.id)).toBeDefined();
+  client.removeQueries({ queryKey: keys.assetDetails });
+  await vi.advanceTimersByTimeAsync(1);
+  expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).not.toBe(cache);
+  expect(cache.store.size).toBe(0);
+});

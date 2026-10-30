@@ -155,3 +155,20 @@ it('publishes only accepted facts and keeps same-time ready rendition sets monot
   store.clear();
   expect(notifications).toBe(2);
 });
+
+it('accepts equal-time completion but rejects a late equal-time processing state', () => {
+  const store = new EagleAssetEntityStore();
+  store.upsertMany([{ ...entity('a', 1, 1), lifecycleStatus: 'PROCESSING' }]);
+  const update = {
+    id: 'a',
+    mediaRevision: 1,
+    lifecycleStatus: 'READY' as const,
+    mediaErrorCode: null,
+    updatedAt: '2026-10-30T00:00:00Z',
+    renditions: [],
+  };
+  store.mergeProcessingUpdates([update]);
+  expect(store.get('a')?.lifecycleStatus).toBe('READY');
+  store.mergeProcessingUpdates([{ ...update, lifecycleStatus: 'PROCESSING' }]);
+  expect(store.get('a')?.lifecycleStatus).toBe('READY');
+});
