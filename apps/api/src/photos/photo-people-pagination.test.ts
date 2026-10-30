@@ -202,8 +202,10 @@ test('named directory pagination composes with lightweight projections and isola
 test('camera and lens choices do not silently disappear after the first 500 models', async () => {
   const models = Array.from({ length: 501 }, (_, i) => `Camera ${i}`);
   const service = new PhotoManagementService({
-    eaglePhotoMetadata: { groupBy: async (query: { by: string[]; take?: number }) =>
-      models.slice(0, query.take).map((name) => ({ [query.by[0]!]: name })) },
+    eaglePhotoMetadata: {
+      groupBy: async (query: { by: string[]; take?: number }) =>
+        models.slice(0, query.take).map((name) => ({ [query.by[0]!]: name })),
+    },
   } as never);
   const result = await service.facets('owner', false);
   assert.equal(result.cameras.length, 501);

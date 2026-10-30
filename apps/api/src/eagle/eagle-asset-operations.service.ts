@@ -36,6 +36,8 @@ type OperationWithItems = Pick<EagleAssetOperation, 'id' | 'kind' | 'libraryMode
 };
 const LEASE_MS = 120_000;
 const METADATA_BATCH_SIZE = 32;
+const ADMISSION_BATCH_SIZE = 512;
+const SEND_CONCURRENCY = 4;
 // Transfer publication may hold the shared privacy lock for up to 30 seconds.
 // Leave a bounded write budget after that wait, inside the 120-second lease.
 const METADATA_TRANSACTION_TIMEOUT_MS = 45_000;
@@ -117,7 +119,6 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         },
         select,
         orderBy: { createdAt: 'asc' },
-        take: 20,
       }),
       this.prisma.eagleAssetOperation.findMany({
         where: this.libraryModeWhere(ownerId, includePrivate),
@@ -159,7 +160,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   ) {
     const operation = await tx.eagleAssetOperation.findFirst({
       where: { id, ...this.libraryModeWhere(ownerId, includePrivate) },
-      include: { items: true },
+      include: { items: { select: { status: true, weight: true, errorCode: true } } },
     });
     if (!operation) throw new NotFoundException('操作不存在。');
     return operation;
@@ -168,7 +169,6 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     const ids = [...new Set(input.assetIds)].sort();
     if (
       ids.length !== input.assetIds.length ||
-      ids.length > 1000 ||
       (input.kind === 'EMPTY_TRASH' ? ids.length !== 0 : ids.length === 0)
     )
       throw new BadRequestException('请选择不重复的资源。');
@@ -178,7 +178,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
           const existing = await tx.eagleAssetOperation.findUnique({
             where: { id: input.operationId, ownerId: principal.sub, libraryMode: this.libraryMode },
-            include: { items: true },
+            include: { items: { select: { status: true, weight: true, errorCode: true } } },
           });
           if (existing) {
             if (
@@ -194,28 +194,33 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
               throw new ConflictException('操作标识与选择不一致。');
             return this.summary(existing);
           }
-          const active = await tx.eagleAssetOperation.count({
-            where: {
-              ownerId: principal.sub,
-              libraryMode: this.libraryMode,
-              items: { some: { status: { in: ['PENDING', 'RUNNING'] } } },
-            },
-          });
-          if (active >= 20) throw new ConflictException('排队操作较多，请稍后再试。');
-          const resources =
-            input.kind === 'EMPTY_TRASH'
-              ? []
-              : await resolveEagleTrashTargets(
-                  tx,
-                  { ownerId: principal.sub, libraryMode: this.libraryMode },
-                  ids,
-                  input.kind === 'RESTORE',
-                  principal.canViewPrivate,
-                );
-          const rows = resources.length
-            ? await tx.eagleAsset.findMany({
+          const resourcesById = new Map<
+            string,
+            Awaited<ReturnType<typeof resolveEagleTrashTargets>>[number]
+          >();
+          for (let offset = 0; offset < ids.length; offset += ADMISSION_BATCH_SIZE) {
+            const part = await resolveEagleTrashTargets(
+              tx,
+              { ownerId: principal.sub, libraryMode: this.libraryMode },
+              ids.slice(offset, offset + ADMISSION_BATCH_SIZE),
+              input.kind === 'RESTORE',
+              principal.canViewPrivate,
+            );
+            for (const resource of part) resourcesById.set(resource.id, resource);
+          }
+          const rows: Array<{
+            id: string;
+            livePhotoIdentifier: string | null;
+            isPrivate: boolean;
+            mimeType: string;
+            lifecycleStatus: string;
+          }> = [];
+          const resourceIds = [...resourcesById.keys()];
+          for (let offset = 0; offset < resourceIds.length; offset += ADMISSION_BATCH_SIZE) {
+            rows.push(
+              ...(await tx.eagleAsset.findMany({
                 where: {
-                  id: { in: resources.map((row) => row.id) },
+                  id: { in: resourceIds.slice(offset, offset + ADMISSION_BATCH_SIZE) },
                   ownerId: principal.sub,
                   libraryMode: this.libraryMode,
                 },
@@ -226,19 +231,16 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
                   mimeType: true,
                   lifecycleStatus: true,
                 },
-              })
-            : [];
+              })),
+            );
+          }
+          const rowsById = new Map(rows.map((row) => [row.id, row]));
           if (
             input.kind === 'SEND' &&
-            ids.some(
-              (id) =>
-                !rows.some(
-                  (row) =>
-                    row.id === id &&
-                    row.mimeType.startsWith('image/') &&
-                    row.lifecycleStatus === 'READY',
-                ),
-            )
+            ids.some((id) => {
+              const row = rowsById.get(id);
+              return !row || !row.mimeType.startsWith('image/') || row.lifecycleStatus !== 'READY';
+            })
           )
             throw new ConflictException('请等待图片处理完成后发送。');
           const isPrivate =
@@ -266,7 +268,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           for (const row of rows) {
             const key = row.livePhotoIdentifier ? `live:${row.livePhotoIdentifier}` : row.id;
             const group = groups.get(key) ?? [];
-            const resource = resources.find((candidate) => candidate.id === row.id)!;
+            const resource = resourcesById.get(row.id)!;
             group.push({
               id: resource.id,
               mediaRevision: resource.mediaRevision,
@@ -274,12 +276,15 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             });
             groups.set(key, group);
           }
+          const selectedIds = new Set(ids);
           const items =
             input.kind === 'EMPTY_TRASH'
               ? [{ assetIds: [], snapshots: [], weight: 1 }]
               : [...groups.values()]
                   .map((snapshots) => {
-                    const assetIds = ids.filter((id) => snapshots.some((row) => row.id === id));
+                    const assetIds = snapshots
+                      .map((row) => row.id)
+                      .filter((id) => selectedIds.has(id));
                     return { assetIds, snapshots, weight: assetIds.length };
                   })
                   .filter((item) => item.weight > 0);
@@ -293,21 +298,31 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
               authVersion: principal.authVersion,
               isPrivate,
               privateUntil,
-              items: {
-                createMany: {
-                  data: items.map((item, ordinal) => ({
-                    id: randomUUID(),
-                    ordinal,
-                    assetIds: item.assetIds,
-                    weight: item.weight,
-                    snapshots: item.snapshots,
-                  })),
-                },
-              },
             },
-            include: { items: true },
           });
-          return this.summary(operation);
+          const pendingItems = items.map((item, ordinal) => ({
+            id: randomUUID(),
+            operationId: operation.id,
+            ownerId: principal.sub,
+            libraryMode: this.libraryMode,
+            ordinal,
+            assetIds: item.assetIds,
+            weight: item.weight,
+            snapshots: item.snapshots,
+          }));
+          for (let offset = 0; offset < pendingItems.length; offset += ADMISSION_BATCH_SIZE) {
+            await tx.eagleAssetOperationItem.createMany({
+              data: pendingItems.slice(offset, offset + ADMISSION_BATCH_SIZE),
+            });
+          }
+          return this.summary({
+            ...operation,
+            items: items.map((item) => ({
+              status: 'PENDING',
+              weight: item.weight,
+              errorCode: null,
+            })),
+          });
         },
         { timeout: 15000 },
       )
@@ -406,7 +421,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       // Only one command is batched: owner, authorization, kind and frozen selection
       // stay together. Persisted per-resource receipts and retry identities are unchanged.
       const candidates =
-        lane === 'SEND' || first.operation.kind === 'EMPTY_TRASH'
+        first.operation.kind === 'EMPTY_TRASH'
           ? [first]
           : await tx.eagleAssetOperationItem.findMany({
               where: {
@@ -416,7 +431,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
                 ownerId: first.ownerId,
               },
               orderBy: { ordinal: 'asc' },
-              take: METADATA_BATCH_SIZE,
+              take: lane === 'SEND' ? SEND_CONCURRENCY : METADATA_BATCH_SIZE,
             });
       if (!candidates.length) return [];
       const claimed = await tx.eagleAssetOperationItem.updateMany({
@@ -541,7 +556,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           .catch(() => this.logger.warn('ASSET_OPERATION_HEARTBEAT_FAILED'));
       }, 5000);
       heartbeat.unref();
-      await this.execute(items);
+      if (lane === 'SEND') {
+        const results = await Promise.allSettled(items.map((item) => this.execute([item])));
+        const failed = results.find((result) => result.status === 'rejected');
+        if (failed?.status === 'rejected') throw failed.reason;
+      } else await this.execute(items);
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       this.running.delete(lane);

@@ -59,13 +59,11 @@ export class PhotoManagementService {
         by: ['cameraModel'],
         where: { ...where, cameraModel: { not: null } },
         orderBy: { cameraModel: 'asc' },
-        take: 500,
       }),
       this.prisma.eaglePhotoMetadata.groupBy({
         by: ['lensModel'],
         where: { ...where, lensModel: { not: null } },
         orderBy: { lensModel: 'asc' },
-        take: 500,
       }),
     ]);
     return {
