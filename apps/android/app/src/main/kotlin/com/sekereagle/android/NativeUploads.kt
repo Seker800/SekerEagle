@@ -108,19 +108,25 @@ class NativeUploads(
             scope.launch(Dispatchers.IO) {
                 try {
                     val catalog = MediaCatalog(app)
-                    val entries = selected.mapIndexed { index, uri ->
-                        if (guard.get()) throw CancellationException()
-                        try {
-                            catalog.selected(uri).let { NativeUploadEntry(uri, it.name, it.size) }
-                        } catch (reason: Exception) {
-                            NativeUploadEntry(uri, "文件 ${index + 1}", error = safeMessage(reason))
+                    val entries =
+                        selected.mapIndexed { index, uri ->
+                            if (guard.get()) throw CancellationException()
+                            try {
+                                catalog.selected(uri).let {
+                                    NativeUploadEntry(uri, it.name, it.size)
+                                }
+                            } catch (reason: Exception) {
+                                NativeUploadEntry(
+                                    uri,
+                                    "文件 ${index + 1}",
+                                    error = safeMessage(reason),
+                                )
+                            }
                         }
-                    }
                     publish(ticket, NativeUploadState(mode, NativeUploadPhase.READY, entries))
                 } catch (reason: CancellationException) {
-                    val remaining = selected.map {
-                        NativeUploadEntry(it, it.lastPathSegment ?: "所选文件")
-                    }
+                    val remaining =
+                        selected.map { NativeUploadEntry(it, it.lastPathSegment ?: "所选文件") }
                     publish(
                         ticket,
                         NativeUploadState(
@@ -226,7 +232,7 @@ class NativeUploads(
                                     connection,
                                     authEpoch,
                                     { stage ->
-                                        result = result.copy(stage = stage)
+                                        result = result.copy(stage = stage, bytes = 0)
                                         publish(ticket, result)
                                     },
                                     { bytes ->
@@ -241,7 +247,14 @@ class NativeUploads(
                                     },
                                     requestGuard,
                                 )
-                            val hash = catalog.hash(item, ::check)
+                            val hash =
+                                catalog.hash(item, ::check) { bytes ->
+                                    val now = android.os.SystemClock.elapsedRealtime()
+                                    if (now - lastUpdate > 100 || bytes == item.size) {
+                                        lastUpdate = now
+                                        publish(ticket, result.copy(bytes = bytes))
+                                    }
+                                }
                             val source =
                                 BackupEngine.File(
                                     item.uri.toString(),

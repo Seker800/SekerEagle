@@ -84,23 +84,41 @@ final class MediaCatalog {
     String[] projection = {
       "_id", "_display_name", "relative_path", "_size", "date_modified", "is_pending", "is_trashed"
     };
-    try (Cursor cursor =
-        resolver.query(collection, projection, "is_pending=0 AND is_trashed=0", null, "_id ASC")) {
-      if (cursor == null) throw new IOException("无法读取手机媒体目录");
-      while (cursor.moveToNext()) {
-        String name = cursor.getString(1), path = cursor.getString(2);
-        JSONObject entry = name == null ? null : format(name);
-        if (entry == null || path == null || path.isEmpty()) continue;
-        visitor.visit(
-            new Item(
-                ContentUris.withAppendedId(collection, cursor.getLong(0)),
-                name,
-                path,
-                entry.getString("mimeType"),
-                cursor.getLong(3),
-                cursor.getLong(4) * 1000,
-                false));
+    long after = -1;
+    for (; ; ) {
+      List<Item> batch = new ArrayList<>();
+      int rows = 0;
+      android.os.Bundle arguments = new android.os.Bundle();
+      arguments.putString(
+          ContentResolver.QUERY_ARG_SQL_SELECTION, "is_pending=0 AND is_trashed=0 AND _id>?");
+      arguments.putStringArray(
+          ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, new String[] {Long.toString(after)});
+      arguments.putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, new String[] {"_id"});
+      arguments.putInt(
+          ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_ASCENDING);
+      arguments.putInt(ContentResolver.QUERY_ARG_LIMIT, 256);
+      try (Cursor cursor = resolver.query(collection, projection, arguments, null)) {
+        if (cursor == null) throw new IOException("无法读取手机媒体目录");
+        while (rows < 256 && cursor.moveToNext()) {
+          rows++;
+          after = cursor.getLong(0);
+          String name = cursor.getString(1), path = cursor.getString(2);
+          JSONObject entry = name == null ? null : format(name);
+          if (entry == null || path == null || path.isEmpty()) continue;
+          batch.add(
+              new Item(
+                  ContentUris.withAppendedId(collection, after),
+                  name,
+                  path,
+                  entry.getString("mimeType"),
+                  cursor.getLong(3),
+                  cursor.getLong(4) * 1000,
+                  false));
+        }
       }
+      // No provider cursor remains open across hashing or network transmission.
+      for (Item item : batch) visitor.visit(item);
+      if (rows < 256) return;
     }
   }
 
@@ -243,6 +261,7 @@ final class MediaCatalog {
     InputStream input = resolver.openInputStream(item.uri);
     if (input == null) throw new IOException("文件无法读取");
     try {
+      if (offset == 0) return input;
       if (input instanceof FileInputStream) ((FileInputStream) input).getChannel().position(offset);
       else {
         long remaining = offset;
@@ -264,6 +283,11 @@ final class MediaCatalog {
   }
 
   String hash(Item item, BackupEngine.Guard guard) throws Exception {
+    return hash(item, guard, bytes -> {});
+  }
+
+  String hash(Item item, BackupEngine.Guard guard, java.util.function.LongConsumer progress)
+      throws Exception {
     MessageDigest digest = MessageDigest.getInstance("SHA-256");
     long count = 0;
     try (InputStream input = open(item, 0, guard)) {
@@ -274,6 +298,7 @@ final class MediaCatalog {
         count += length;
         if (count > item.size) throw new IOException("文件正在变化");
         digest.update(buffer, 0, length);
+        progress.accept(count);
       }
     }
     if (count != item.size) throw new IOException("文件读取未完成");

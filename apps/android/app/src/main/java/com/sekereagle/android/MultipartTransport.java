@@ -1,11 +1,17 @@
 package com.sekereagle.android;
 
 import com.sekereagle.android.core.BackupEngine;
+import com.sekereagle.android.core.ForwardUploadSource;
 import java.io.*;
 import java.util.*;
+import java.util.concurrent.*;
 import org.json.*;
 
 final class MultipartTransport implements BackupEngine.Transport {
+  // Shared across backup and manual queues: at most 3 buffers of at most 8 MiB.
+  private static final Semaphore slots = new Semaphore(3, true);
+  private static final ExecutorService uploads = Executors.newFixedThreadPool(3);
+
   private final UploadApi api;
   private final String path;
   private final MediaCatalog catalog;
@@ -143,34 +149,112 @@ final class MultipartTransport implements BackupEngine.Transport {
     }
     JSONArray parts = new JSONArray();
     int total = (int) ((item.size + cp.partSize - 1) / cp.partSize);
-    for (int number = 1; number <= total; number++) {
-      guard.check();
-      long offset = (number - 1L) * cp.partSize, length = Math.min(cp.partSize, item.size - offset);
-      JSONObject part = committed.get(number);
-      boolean reusable = part != null && (!part.has("size") || part.getLong("size") == length);
-      String etag;
-      if (reusable) etag = part.getString("etag");
-      else {
-        if (!status.equals("INITIATED")) throw new IOException("上传已进入确认阶段，等待服务器恢复");
-        etag = null;
-        for (int attempt = 0; attempt < 2; attempt++) {
+    ArrayDeque<Future<JSONObject>> pending = new ArrayDeque<>();
+    try (ForwardUploadSource source = new ForwardUploadSource(catalog.open(item, 0, guard))) {
+      try {
+        for (int number = 1; number <= total; number++) {
           guard.check();
-          JSONObject signed =
-              api.request("POST", path + "/" + cp.session + "/parts/" + number, new JSONObject());
-          try (InputStream input = catalog.open(item, offset, guard)) {
-            etag = api.put(signed.getString("uploadUrl"), input, length, guard);
-            break;
-          } catch (ApiClient.Failure error) {
-            if (attempt != 0 || !error.renewSignature()) throw error;
+          long offset = (number - 1L) * cp.partSize,
+              length = Math.min(cp.partSize, item.size - offset);
+          JSONObject part = committed.get(number);
+          boolean reusable = part != null && (!part.has("size") || part.getLong("size") == length);
+          if (reusable) {
+            parts.put(
+                new JSONObject().put("partNumber", number).put("etag", part.getString("etag")));
+            continue;
+          }
+          if (!status.equals("INITIATED")) throw new IOException("上传已进入确认阶段，等待服务器恢复");
+          if (pending.size() == 3) parts.put(await(pending.removeFirst()));
+          slots.acquire();
+          boolean scheduled = false;
+          try {
+            guard.check();
+            final int partNumber = number;
+            if (length <= ForwardUploadSource.MAX_BUFFER) {
+              byte[] buffer = source.read(offset, (int) length, guard);
+              pending.add(
+                  uploads.submit(
+                      () -> {
+                        try {
+                          return uploadPart(cp.session, partNumber, buffer, guard);
+                        } finally {
+                          slots.release();
+                        }
+                      }));
+              scheduled = true;
+            } else {
+              // Legacy sessions may have larger parts. Stream them without a large allocation.
+              while (!pending.isEmpty()) parts.put(await(pending.removeFirst()));
+              guard.check();
+              JSONObject signed =
+                  api.request(
+                      "POST", path + "/" + cp.session + "/parts/" + number, new JSONObject());
+              String etag =
+                  api.put(
+                      signed.getString("uploadUrl"),
+                      source.part(offset, length, guard),
+                      length,
+                      guard);
+              parts.put(new JSONObject().put("partNumber", number).put("etag", etag));
+            }
+          } finally {
+            if (!scheduled) slots.release();
+          }
+        }
+        while (!pending.isEmpty()) parts.put(await(pending.removeFirst()));
+      } finally {
+        // Finish every in-flight write before handing a checkpoint to another run.
+        while (!pending.isEmpty()) {
+          try {
+            await(pending.removeFirst());
+          } catch (Exception ignored) {
           }
         }
       }
-      parts.put(new JSONObject().put("partNumber", number).put("etag", etag));
     }
     guard.check();
     JSONObject completed =
         api.request(
             "POST", path + "/" + cp.session + "/complete", new JSONObject().put("parts", parts));
     if (completed.optString("assetId").isEmpty()) throw new IOException("服务器尚未确认原文件入库");
+  }
+
+  private JSONObject uploadPart(String session, int number, byte[] bytes, BackupEngine.Guard guard)
+      throws Exception {
+    for (int attempt = 0; attempt < 2; attempt++) {
+      guard.check();
+      JSONObject signed =
+          api.request("POST", path + "/" + session + "/parts/" + number, new JSONObject());
+      try {
+        String etag =
+            api.put(
+                signed.getString("uploadUrl"),
+                new ByteArrayInputStream(bytes),
+                bytes.length,
+                guard);
+        return new JSONObject().put("partNumber", number).put("etag", etag);
+      } catch (ApiClient.Failure error) {
+        if (attempt != 0 || !error.renewSignature()) throw error;
+      }
+    }
+    throw new IOException("分片未能上传");
+  }
+
+  private static JSONObject await(Future<JSONObject> future) throws Exception {
+    boolean interrupted = false;
+    try {
+      for (; ; ) {
+        try {
+          return future.get();
+        } catch (InterruptedException error) {
+          interrupted = true;
+        }
+      }
+    } catch (ExecutionException error) {
+      if (error.getCause() instanceof Exception) throw (Exception) error.getCause();
+      throw error;
+    } finally {
+      if (interrupted) Thread.currentThread().interrupt();
+    }
   }
 }

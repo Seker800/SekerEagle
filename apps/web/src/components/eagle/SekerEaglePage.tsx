@@ -1206,7 +1206,7 @@ export function SekerEaglePage({
       selectedIds: selectedAssetIds,
       draggedId: assetId,
     });
-  const originalDownloadComponents = async (selected: EagleAssetListItem[]) => {
+  const queueOriginalDownloads = async (selected: EagleAssetListItem[]) => {
     const epoch = workspaceCache.downloads.epoch;
     const originals = new Map(selected.map((asset) => [asset.id, asset]));
     for (const asset of selected) {
@@ -1215,18 +1215,16 @@ export function SekerEaglePage({
     }
     if (epoch !== workspaceCache.downloads.epoch)
       throw new DOMException('Scope revoked', 'AbortError');
-    return [...originals.values()];
+    return downloadOriginalFiles([...originals.values()], {
+      queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
+    });
   };
   const saveSelectedOriginal = () => {
     if (!contextMenuAsset || assetActionPending) return;
     setAssetActionPending('save');
     setAssetActionError(null);
     const download = contextMenuAsset.livePhotoMotion
-      ? originalDownloadComponents([contextMenuAsset]).then((targets) =>
-          downloadOriginalFiles(targets, {
-            queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
-          }),
-        )
+      ? queueOriginalDownloads([contextMenuAsset])
       : saveOriginalFile(contextMenuAsset);
     void download.then(
       () => {
@@ -1282,23 +1280,17 @@ export function SekerEaglePage({
     if (selectedAssets.length < 2) return;
     setIsBatchDownloading(true);
     setOriginalFileError(null);
-    void originalDownloadComponents(selectedAssets)
-      .then((targets) =>
-        downloadOriginalFiles(targets, {
-          queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
-        }),
-      )
-      .then(
-        () => {
-          setAssetContextMenu(null);
-          setIsBatchDownloading(false);
-        },
-        () => {
-          setAssetContextMenu(null);
-          setIsBatchDownloading(false);
-          setOriginalFileError(t('批量下载原文件失败。'));
-        },
-      );
+    void queueOriginalDownloads(selectedAssets).then(
+      () => {
+        setAssetContextMenu(null);
+        setIsBatchDownloading(false);
+      },
+      () => {
+        setAssetContextMenu(null);
+        setIsBatchDownloading(false);
+        setOriginalFileError(t('批量下载原文件失败。'));
+      },
+    );
   };
   const locationId = assetLocator.location?.assetId;
   const locationCoverId =

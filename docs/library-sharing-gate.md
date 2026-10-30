@@ -215,3 +215,5 @@ npm run ci:check
 任务决策、媒体分类与展示属于两库共用领域规则，放在 library-core；SQL 编译与事件持久化属于既有 library-persistence／Prisma，不新增模式 Controller、provider 或组件。源表仍为调度事实，事件表仅保留转换证据。照片私密与当前媒体版本的过滤继续在聚合和领取前执行。此变更不申请装配例外，现有结构门禁及反例继续适用。
 
 2026-10-29 可信业务进程物理迁移（已验证上线）：仅改变原 worker 的宿主与受限传输，不新增 Controller/provider、照片版通用实现或第二队列。无状态媒体 bundle 的 Prisma/S3 禁止依赖与依赖图门禁保持；新私有传输脚本不进入媒体 bundle。可信应用 worker 与无状态执行器分别装配，不能将业务凭据下放当作媒体能力扩容。北极星已记录用户授权、单活动进程、原守卫及回退边界。
+
+2026-10-30 读取与工作区补充：人物卡片／姓名选项／脸分页均在原 PhotoManagementService／Controller 内使用显式投影，沿用 owner／PHOTO／私密及脸可见性，不增加 provider；代表图选择下沉纯 library-core helper，网页继续共享媒体缩略图。智能文件夹仅增加可选展示插槽，不在通用规则组件导入摄影接口。原工作区缓存持有公共选择与下载队列，原 owner／mode keyed 装配不变；撤权清理继续覆盖队列。安卓备份和手动上传仍共用原 BackupEngine／MultipartTransport；下载复用原 NativeTransferManager／NativeUploadService 的应用与前台生命周期，不增加模式分叉或第二个后台服务。服务端最终确认仍属于原 EagleUploadService，只有经过原授权校验的同作用域在途调用合并，不新增持久队列或跳过原校验。

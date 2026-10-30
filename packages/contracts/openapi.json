@@ -6089,6 +6089,45 @@
               "maxLength": 1024,
               "type": "string"
             }
+          },
+          {
+            "name": "view",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["full", "cards", "options"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
+    "/api/photos/photography/people/{id}/faces": {
+      "get": {
+        "operationId": "PhotoManagementController_personFaces",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "after",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "maxLength": 1024,
+              "type": "string"
+            }
           }
         ],
         "responses": {

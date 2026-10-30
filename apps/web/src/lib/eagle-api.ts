@@ -297,10 +297,16 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     }
   >();
   async function api<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetchWithBrowserSession(libraryApiPath(`/api${path}`, libraryMode), {
-      ...init,
-      headers: init?.body ? { 'content-type': 'application/json', ...init.headers } : init?.headers,
-    });
+    const response = await fetchWithBrowserSession(
+      libraryApiPath(`/api${path}`, libraryMode),
+      {
+        ...init,
+        headers: init?.body
+          ? { 'content-type': 'application/json', ...init.headers }
+          : init?.headers,
+      },
+      /^\/eagle\/uploads\/[a-fA-F0-9-]{36}\/complete$/.test(path) ? 660_000 : undefined,
+    );
     if (!response.ok) {
       throw await errorFromResponse(response, '请求失败（{{value1}}）');
     }

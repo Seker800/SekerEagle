@@ -523,9 +523,17 @@ test('concurrent finalization retries share inspection and consume one failed at
       },
     } as never,
   );
-  const results = await Promise.allSettled(Array.from({length: 3}, () =>
-    service.complete(ownerId, sessionId, {parts: [{partNumber: 1, etag: 'etag'}]})));
-  assert.ok(results.every(result => result.status === 'rejected' && result.reason instanceof ServiceUnavailableException));
+  const results = await Promise.allSettled(
+    Array.from({ length: 3 }, () =>
+      service.complete(ownerId, sessionId, { parts: [{ partNumber: 1, etag: 'etag' }] }),
+    ),
+  );
+  assert.ok(
+    results.every(
+      (result) =>
+        result.status === 'rejected' && result.reason instanceof ServiceUnavailableException,
+    ),
+  );
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0]?.finalizationAttempts, { increment: 1 });
   assert.equal(updates[0]?.objectCleanupPending, false);

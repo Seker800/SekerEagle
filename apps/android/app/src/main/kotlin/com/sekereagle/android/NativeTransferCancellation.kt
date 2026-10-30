@@ -9,18 +9,24 @@ class NativeTransferCancellation {
     var cancelled = false
         private set
 
-    private var connection: HttpURLConnection? = null
+    private val connections = mutableSetOf<HttpURLConnection>()
 
     @Synchronized
     fun bind(value: HttpURLConnection) {
         check()
-        connection = value
+        connections.add(value)
+    }
+
+    @Synchronized
+    fun unbind(value: HttpURLConnection) {
+        connections.remove(value)
     }
 
     @Synchronized
     fun cancel() {
         cancelled = true
-        connection?.disconnect()
+        connections.forEach { it.disconnect() }
+        connections.clear()
     }
 
     fun check() {

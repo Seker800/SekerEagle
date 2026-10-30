@@ -8,8 +8,13 @@ import android.database.sqlite.SQLiteOpenHelper;
 import com.sekereagle.android.core.BackupEngine;
 
 final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store {
+
   BackupJournal(Context context) {
-    super(context, "mobile-backup.db", null, 2);
+    this(context, "mobile-backup.db");
+  }
+
+  BackupJournal(Context context, String name) {
+    super(context, name, null, 3);
     setWriteAheadLoggingEnabled(true);
   }
 
@@ -20,13 +25,71 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
             + " part_size INTEGER NOT NULL, confirmed INTEGER NOT NULL, terminal_error TEXT NOT"
             + " NULL DEFAULT '')");
     db.execSQL("CREATE TABLE receipts (key TEXT PRIMARY KEY)");
+    createProgress(db);
   }
 
   @Override
   public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-    if (oldVersion == 1 && newVersion == 2)
+    if (oldVersion < 2)
       db.execSQL("ALTER TABLE files ADD COLUMN terminal_error TEXT NOT NULL DEFAULT ''");
-    else throw new IllegalStateException("Unsupported journal migration");
+    if (oldVersion < 3) createProgress(db);
+  }
+
+  private static void createProgress(SQLiteDatabase db) {
+    db.execSQL(
+        "CREATE TABLE scan_progress (scope TEXT NOT NULL, key TEXT NOT NULL, result TEXT NOT NULL,"
+            + " PRIMARY KEY(scope,key))");
+    db.execSQL(
+        "CREATE TABLE scan_runs (scope TEXT PRIMARY KEY, seen INTEGER NOT NULL, uploaded INTEGER"
+            + " NOT NULL, skipped INTEGER NOT NULL, failed INTEGER NOT NULL)");
+    db.execSQL(
+        "CREATE TRIGGER scan_insert AFTER INSERT ON scan_progress BEGIN INSERT INTO scan_runs"
+            + " VALUES (new.scope,1,new.result='UPLOADED',new.result='SKIPPED',new.result='FAILED')"
+            + " ON CONFLICT(scope) DO UPDATE SET"
+            + " seen=seen+1,uploaded=uploaded+(new.result='UPLOADED'),skipped=skipped+(new.result='SKIPPED'),failed=failed+(new.result='FAILED');"
+            + " END");
+    db.execSQL(
+        "CREATE TRIGGER scan_update AFTER UPDATE ON scan_progress BEGIN UPDATE scan_runs SET"
+            + " uploaded=uploaded+(new.result='UPLOADED')-(old.result='UPLOADED'),skipped=skipped+(new.result='SKIPPED')-(old.result='SKIPPED'),failed=failed+(new.result='FAILED')-(old.result='FAILED')"
+            + " WHERE scope=new.scope; END");
+    db.execSQL(
+        "CREATE TRIGGER scan_delete AFTER DELETE ON scan_progress BEGIN UPDATE scan_runs SET"
+            + " seen=seen-1,uploaded=uploaded-(old.result='UPLOADED'),skipped=skipped-(old.result='SKIPPED'),failed=failed-(old.result='FAILED')"
+            + " WHERE scope=old.scope; END");
+  }
+
+  void beginScan(String scope, boolean resume) {
+    if (!resume) getWritableDatabase().delete("scan_progress", "scope=?", new String[] {scope});
+  }
+
+  boolean scanCompleted(String scope, String key) {
+    try (Cursor cursor =
+        getReadableDatabase()
+            .rawQuery(
+                "SELECT 1 FROM scan_progress WHERE scope=? AND key=? AND result IN"
+                    + " ('UPLOADED','SKIPPED')",
+                new String[] {scope, key})) {
+      return cursor.moveToFirst();
+    }
+  }
+
+  void scanResult(String scope, String key, String result) {
+    getWritableDatabase()
+        .execSQL(
+            "INSERT INTO scan_progress(scope,key,result) VALUES (?,?,?) ON CONFLICT(scope,key) DO"
+                + " UPDATE SET result=excluded.result",
+            new Object[] {scope, key, result});
+  }
+
+  int[] scanCounts(String scope) {
+    try (Cursor cursor =
+        getReadableDatabase()
+            .rawQuery(
+                "SELECT seen,uploaded,skipped,failed FROM scan_runs WHERE scope=?",
+                new String[] {scope})) {
+      if (!cursor.moveToFirst()) return new int[] {0, 0, 0, 0};
+      return new int[] {cursor.getInt(0), cursor.getInt(1), cursor.getInt(2), cursor.getInt(3)};
+    }
   }
 
   @Override
@@ -82,13 +145,20 @@ final class BackupJournal extends SQLiteOpenHelper implements BackupEngine.Store
 
   void retryFailures(String scope) {
     getWritableDatabase()
-        .delete("files", "key LIKE ? AND terminal_error <> ''", new String[] {scope + ":%"});
+        .delete(
+            "files",
+            "key LIKE ? AND terminal_error <> ''",
+            new String[] {
+              scope + ":%",
+            });
   }
 
   void forget(String scope) {
     SQLiteDatabase db = getWritableDatabase();
     db.beginTransaction();
     try {
+      db.delete("scan_progress", "scope=?", new String[] {scope});
+      db.delete("scan_runs", "scope=?", new String[] {scope});
       db.delete("files", "key LIKE ?", new String[] {scope + ":%"});
       db.delete("receipts", "key LIKE ?", new String[] {scope + ":%"});
       db.setTransactionSuccessful();

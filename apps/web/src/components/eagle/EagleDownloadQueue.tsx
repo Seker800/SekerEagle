@@ -17,12 +17,13 @@ export function EagleDownloadQueue({ queue }: { queue: OriginalDownloadQueue }) 
   };
   const pending = items.some((item) => ['queued', 'failed', 'cancelled'].includes(item.state));
   return (
-    <section className={styles.queue} aria-label={t('下载队列')}>
+    <section className={styles.queue} aria-label={t('下载队列')} aria-busy={running}>
       <strong>
         {t('下载队列')} ·{' '}
         {items.filter((item) => item.state === 'completed' || item.state === 'browser').length}/
         {items.length}
       </strong>
+      {running && <span role="status">{t('正在下载')}</span>}
       {pending && !running && queue.canSaveToDirectory() && (
         <button type="button" onClick={() => void queue.saveToDirectory()}>
           {t('保存到文件夹')}

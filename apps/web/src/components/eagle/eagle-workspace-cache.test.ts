@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { createEagleQueryKeys } from './eagle-query-keys';
 
+const fetchOriginal = vi.hoisted(() => vi.fn());
+vi.mock('../../lib/api-client', () => ({ fetchWithBrowserSession: fetchOriginal }));
 const clients: QueryClient[] = [];
 function fixture(mode: 'MATERIAL' | 'PHOTO' = 'MATERIAL', owner = 'owner') {
   const client = new QueryClient();
@@ -15,6 +17,7 @@ function fixture(mode: 'MATERIAL' | 'PHOTO' = 'MATERIAL', owner = 'owner') {
 afterEach(() => {
   for (const client of clients.splice(0)) client.clear();
   vi.useRealTimers();
+  vi.unstubAllGlobals();
 });
 
 describe('workspace cache lifetime', () => {
@@ -115,4 +118,47 @@ describe('workspace cache lifetime', () => {
     await Promise.resolve();
     expect(getEagleWorkspaceCache(client, 'owner', 'PHOTO')).not.toBe(cache);
   });
+});
+
+it('keeps an active download across public query GC but cancels it on session clear', async () => {
+  vi.useFakeTimers();
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: 25 } } });
+  clients.push(client);
+  const cache = getEagleWorkspaceCache(client, 'owner', 'PHOTO');
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
+  client.setQueryData(keys.assetList('ACTIVE', {}), { pages: [] });
+  const leave = cache.retain(false);
+  vi.stubGlobal(
+    'showDirectoryPicker',
+    vi.fn().mockResolvedValue({
+      getDirectoryHandle: async () => ({
+        getFileHandle: async () => ({
+          createWritable: async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }),
+        }),
+        removeEntry: vi.fn(),
+      }),
+    }),
+  );
+  let requested!: () => void;
+  const started = new Promise<void>((done) => {
+    requested = done;
+  });
+  fetchOriginal.mockImplementation(
+    (_url: string, init: { signal: AbortSignal }) =>
+      new Promise((_resolve, reject) => {
+        requested();
+        init.signal.addEventListener('abort', () =>
+          reject(new DOMException('aborted', 'AbortError')),
+        );
+      }),
+  );
+  cache.downloads.enqueue([{ id: 'a', originalName: 'large.jpg', libraryMode: 'PHOTO' }]);
+  const saving = cache.downloads.saveToDirectory();
+  await started;
+  leave();
+  await vi.advanceTimersByTimeAsync(26);
+  expect(cache.downloads.getSnapshot().running).toBe(true);
+  client.clear();
+  await saving;
+  expect(cache.downloads.getSnapshot().items).toHaveLength(0);
 });

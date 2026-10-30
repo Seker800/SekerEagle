@@ -28,6 +28,7 @@ class NativeBackgroundTransferTest {
     private class Server : AutoCloseable {
         private val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val origin = "http://127.0.0.1:${socket.localPort}"
+        val downloadName = "background-download-${java.util.UUID.randomUUID()}.png"
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val paths = CopyOnWriteArrayList<String>()
@@ -48,7 +49,10 @@ class NativeBackgroundTransferTest {
                             }
                             repeat(size) { reader.read() }
                             paths.add(path)
-                            if (path.endsWith("/check-content") && !held) {
+                            if (
+                                (path.endsWith("/check-content") || path.endsWith("/original")) &&
+                                    !held
+                            ) {
                                 held = true
                                 entered.countDown()
                                 release.await(20, TimeUnit.SECONDS)
@@ -57,6 +61,9 @@ class NativeBackgroundTransferTest {
                                 when {
                                     path == "/api/auth/me" ->
                                         """{"user":{"id":"owner","email":"fixture@example.invalid"},"desktopCache":{"deploymentId":"background"}}"""
+                                    path.endsWith("/assets/fixture") ->
+                                        """{"mediaRevision":1,"byteSize":4,"mimeType":"image/png","originalName":"$downloadName"}"""
+                                    path.endsWith("/original") -> "data"
                                     path.endsWith("/check-content") -> """{"exists":false}"""
                                     path.endsWith("/uploads") ->
                                         """{"id":"11111111-1111-4111-8111-111111111111","partSize":5242880}"""
@@ -70,11 +77,13 @@ class NativeBackgroundTransferTest {
                                         """{"items":[],"nextCursor":null}"""
                                     else -> "{}"
                                 }
+                            val mime =
+                                if (path.endsWith("/original")) "image/png" else "application/json"
                             runCatching {
                                 client
                                     .getOutputStream()
                                     .write(
-                                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nETag: test-etag\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body"
+                                        "HTTP/1.1 200 OK\r\nContent-Type: $mime\r\nETag: test-etag\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n$body"
                                             .toByteArray()
                                     )
                             }
@@ -221,6 +230,61 @@ class NativeBackgroundTransferTest {
             compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
             compose.runOnUiThread { manager.clear() }
             context.contentResolver.delete(uri, null, null)
+        }
+    }
+
+    @Test
+    fun downloadSurvivesBackgroundAndActivityRecreation() {
+        compose.waitUntil(10000) {
+            compose.onAllNodesWithTag("native-library").fetchSemanticsNodes().isNotEmpty()
+        }
+        val model = ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java]
+        val manager = model.transfers
+        val names = mutableListOf<android.net.Uri>()
+        try {
+            compose.runOnUiThread {
+                manager.startDownload(
+                    NativeSession.open(context, server.origin),
+                    identity,
+                    GalleryMode.PHOTO,
+                    listOf(
+                        NativeAsset("fixture", "fixture.png", "", "", 1, 1, null, null, false, 1)
+                    ),
+                )
+            }
+            assertTrue(server.entered.await(5, TimeUnit.SECONDS))
+            compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+            assertTrue(manager.downloads.state.value!!.running)
+            compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+            compose.activityRule.scenario.recreate()
+            server.release.countDown()
+            compose.waitUntil(10000) { manager.downloads.state.value?.running == false }
+            assertEquals(1, manager.downloads.state.value!!.completed)
+            assertFalse(manager.downloads.state.value!!.cancelled)
+            assertSame(
+                manager.downloads,
+                ViewModelProvider(compose.activity)[NativeGalleryViewModel::class.java].downloads,
+            )
+        } finally {
+            compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+            compose.runOnUiThread { manager.clear() }
+            context.contentResolver
+                .query(
+                    MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                    arrayOf("_id"),
+                    "_display_name=?",
+                    arrayOf(server.downloadName),
+                    null,
+                )
+                ?.use { cursor ->
+                    while (cursor.moveToNext()) names.add(
+                        android.content.ContentUris.withAppendedId(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI,
+                            cursor.getLong(0),
+                        )
+                    )
+                }
+            names.forEach { context.contentResolver.delete(it, null, null) }
         }
     }
 

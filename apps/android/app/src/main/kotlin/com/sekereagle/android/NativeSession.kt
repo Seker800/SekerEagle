@@ -44,7 +44,6 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             }
         )
 
-    @Synchronized
     fun json(
         method: String,
         path: String,
@@ -63,7 +62,6 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         return if (bytes.isEmpty()) JSONObject() else JSONObject(String(bytes, Charsets.UTF_8))
     }
 
-    @Synchronized
     fun array(
         path: String,
         limit: Int = 2 * 1024 * 1024,
@@ -81,7 +79,6 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             epoch
         }
 
-    @Synchronized
     internal fun jsonAtEpoch(
         ticket: Int,
         method: String,
@@ -90,7 +87,17 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         cancellation: NativeTransferCancellation? = null,
     ): JSONObject {
         ensureActive(ticket)
-        return json(method, path, body, cancellation)
+        val bytes =
+            request(
+                method,
+                path,
+                body?.toString()?.toByteArray(Charsets.UTF_8),
+                2 * 1024 * 1024,
+                true,
+                cancellation,
+                expectedEpoch = ticket,
+            )
+        return if (bytes.isEmpty()) JSONObject() else JSONObject(String(bytes, Charsets.UTF_8))
     }
 
     internal fun checkAuthorization(ticket: Int) {
@@ -212,9 +219,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
     }
 
     private fun ensureActive(ticket: Int) =
-        synchronized(credentialLock) {
-            if (blocked || ticket != epoch) throw Failure(401)
-        }
+        synchronized(credentialLock) { if (blocked || ticket != epoch) throw Failure(401) }
 
     private fun request(
         method: String,
@@ -224,6 +229,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         refresh: Boolean,
         cancellation: NativeTransferCancellation? = null,
         image: Boolean = false,
+        expectedEpoch: Int? = null,
     ): ByteArray =
         exchange(
             method,
@@ -232,6 +238,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             refresh,
             if (image) "image/*" else "application/json",
             cancellation = cancellation,
+            expectedEpoch = expectedEpoch,
         ) { connection, checkActive ->
             if (connection.contentLengthLong > limit) throw IOException("响应超过本次读取预算")
             if (image && !connection.contentType.orEmpty().startsWith("image/"))
@@ -267,7 +274,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             )
         )
         com.sekereagle.android.core.NativeDownloadPolicy.validate(size, mime)
-        exchange("GET", path, null, true, mime, cancellation::bind) { connection, active ->
+        exchange("GET", path, null, true, mime, cancellation = cancellation) { connection, active ->
             cancellation.check()
             if (
                 connection.responseCode != 200 ||
@@ -299,12 +306,13 @@ class NativeSession private constructor(context: Context, val origin: String) : 
         accept: String,
         onConnection: (HttpURLConnection) -> Unit = {},
         cancellation: NativeTransferCancellation? = null,
+        expectedEpoch: Int? = null,
         consume: (HttpURLConnection, () -> Unit) -> T,
     ): T {
         NativeGalleryPolicy.safePath(path)
         val (ticket, cookie) =
             synchronized(credentialLock) {
-                if (blocked) throw Failure(401)
+                if (blocked || (expectedEpoch != null && expectedEpoch != epoch)) throw Failure(401)
                 epoch to jar.header(path)
             }
         val connection = URL(origin + path).openConnection() as HttpURLConnection
@@ -313,7 +321,10 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             onConnection(connection)
             connection.instanceFollowRedirects = false
             connection.connectTimeout = 15_000
-            connection.readTimeout = 30_000
+            connection.readTimeout =
+                if (path.matches(Regex("/api/(eagle|photos)/uploads/[a-fA-F0-9-]{36}/complete")))
+                    660_000
+                else 30_000
             connection.requestMethod = method
             connection.setRequestProperty("Origin", origin)
             connection.setRequestProperty("Cookie", cookie)
@@ -345,6 +356,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                             2 * 1024 * 1024,
                             false,
                             cancellation,
+                            expectedEpoch = ticket,
                         )
                 }
                 return exchange(
@@ -355,6 +367,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
                     accept,
                     onConnection,
                     cancellation,
+                    ticket,
                     consume,
                 )
             }
@@ -398,6 +411,7 @@ class NativeSession private constructor(context: Context, val origin: String) : 
             cancellation?.check()
             throw reason
         } finally {
+            cancellation?.unbind(connection)
             connection.disconnect()
         }
     }

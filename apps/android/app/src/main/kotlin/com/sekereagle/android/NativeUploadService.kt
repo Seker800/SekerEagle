@@ -7,6 +7,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 
 /** Foreground lifetime only; task state and upload mechanics belong to the shared manager. */
 class NativeUploadService : Service() {
@@ -37,6 +38,7 @@ class NativeUploadService : Service() {
         target = scope
         if (intent?.action == "pause") {
             manager.halt(target, "已暂停")
+            manager.downloads.cancel()
             finished = true
             stopSelf()
             return START_NOT_STICKY
@@ -52,26 +54,39 @@ class NativeUploadService : Service() {
         }
         manager.dispatch(scope)
         observe?.cancel()
-        observe = lifetime.launch {
-            manager.state.collectLatest { queue ->
-                val own = queue.batches.filter { it.scope == target }
-                val batch = own.firstOrNull { it.id == queue.activeId }
-                if (batch != null) {
-                    keepAwake()
-                    val progress = batch.progress
-                    val text =
-                        if (progress == null) batch.message
-                        else
-                            "${batch.mode.title} · ${progress.uploaded + progress.skipped}/${batch.entries.size} · ${batch.message}"
-                    getSystemService(NotificationManager::class.java)
-                        .notify(NOTICE, notification(text))
-                } else if (own.none { it.waiting }) {
-                    finished = true
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf(startId)
-                }
+        observe =
+            lifetime.launch {
+                combine(manager.state, manager.downloads.state) { queue, download ->
+                        queue to download
+                    }
+                    .collectLatest { (queue, download) ->
+                        val own = queue.batches.filter { it.scope == target }
+                        val batch = own.firstOrNull { it.id == queue.activeId }
+                        if (batch != null) {
+                            keepAwake()
+                            val progress = batch.progress
+                            val text =
+                                if (progress == null) batch.message
+                                else
+                                    "${batch.mode.title} · ${progress.uploaded + progress.skipped}/${batch.entries.size} · ${batch.message}"
+                            getSystemService(NotificationManager::class.java)
+                                .notify(NOTICE, notification(text))
+                        } else if (download?.running == true) {
+                            keepAwake()
+                            getSystemService(NotificationManager::class.java)
+                                .notify(
+                                    NOTICE,
+                                    notification(
+                                        "已保存 ${download.completed}/${download.total} · ${download.current}"
+                                    ),
+                                )
+                        } else if (own.none { it.waiting }) {
+                            finished = true
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf(startId)
+                        }
+                    }
             }
-        }
         return START_NOT_STICKY
     }
 
@@ -113,18 +128,22 @@ class NativeUploadService : Service() {
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(Notification.Action.Builder(null, "暂停上传", pause).build())
+            .addAction(Notification.Action.Builder(null, "暂停传输", pause).build())
             .build()
     }
 
     override fun onTimeout(startId: Int, foregroundServiceType: Int) {
         manager.halt(target, "系统传输时限已到，回到传输列表继续")
+        manager.downloads.cancel()
         finished = true
         stopSelf()
     }
 
     override fun onDestroy() {
-        if (!finished) manager.halt(target, "后台服务已停止，点击继续")
+        if (!finished) {
+            manager.halt(target, "后台服务已停止，点击继续")
+            manager.downloads.cancel()
+        }
         lifetime.cancel()
         if (wake?.isHeld == true) wake?.release()
         super.onDestroy()

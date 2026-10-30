@@ -360,7 +360,7 @@ public final class MainActivity extends Activity {
                       && settings.flag(scope, "enabled", false)
                       && settings.flag(scope, "auto", false)) {
                     autoPending = false;
-                    startBackup();
+                    startBackup(false);
                   }
                 });
           } catch (Exception e) {
@@ -414,7 +414,7 @@ public final class MainActivity extends Activity {
                 () -> {
                   if (scope.equals(activeScope)) {
                     show("backup");
-                    if (settings.flag(scope, "auto", false)) startBackup();
+                    if (settings.flag(scope, "auto", false)) startBackup(false);
                   }
                 });
           } catch (Exception e) {
@@ -459,17 +459,25 @@ public final class MainActivity extends Activity {
   }
 
   void startBackup() {
+    startBackup(true);
+  }
+
+  private void startBackup(boolean manual) {
     String scope = activeScope;
     if (!resumed || scope.isEmpty() || !settings.flag(scope, "enabled", false)) {
       toast("请先登录并启用手机备份");
       return;
     }
+    if (!manual && settings.flag(scope, "userPaused", false)) return;
     if (!mediaPermission() && hasMediaRules(scope)) {
       toast("请先授予完整的照片和视频访问权限");
       return;
     }
     try {
-      startForegroundService(new Intent(this, BackupService.class).putExtra("scope", scope));
+      startForegroundService(
+          new Intent(this, BackupService.class)
+              .putExtra("scope", scope)
+              .putExtra("manual", manual));
     } catch (RuntimeException e) {
       toast("系统暂不允许启动备份，请重新打开后重试");
     }
@@ -483,7 +491,7 @@ public final class MainActivity extends Activity {
   }
 
   void pause() {
-    stopService(new Intent(this, BackupService.class));
+    BackupService.pause(this);
   }
 
   boolean mediaPermission() {

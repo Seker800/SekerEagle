@@ -162,7 +162,7 @@ export function PhotoStatistics({
         <form
           className={styles.dateRange}
           onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) applyDates();
+            if (!event.currentTarget.contains(event.relatedTarget)) applyDates();
           }}
           onSubmit={(event) => {
             event.preventDefault();

@@ -1,3 +1,4 @@
+import type { OriginalFileTarget } from '../../lib/original-file-export';
 import type * as PrivacyApiModule from '../../lib/eagle-privacy-api';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import '@testing-library/jest-dom/vitest';
@@ -407,10 +408,15 @@ describe('SekerEaglePage', () => {
       ).sekerDesktop?.saveOriginalFile;
       return bridge ? bridge(target.id) : Promise.resolve({ saved: true });
     });
-    downloadOriginalFilesMock.mockImplementation((targets, dependencies) => {
-      dependencies.queueBrowserDownloads(targets);
-      return Promise.resolve({ downloaded: 0 });
-    });
+    downloadOriginalFilesMock.mockImplementation(
+      (
+        targets: readonly OriginalFileTarget[],
+        dependencies: { queueBrowserDownloads: (targets: readonly OriginalFileTarget[]) => void },
+      ) => {
+        dependencies.queueBrowserDownloads(targets);
+        return Promise.resolve({ downloaded: 0 });
+      },
+    );
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
       id: 'folder-1',

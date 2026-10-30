@@ -22,6 +22,25 @@ test('full-library face scan gets a bounded admission timeout without widening o
   assert.match(ordinary[1], /proxy_read_timeout 15s;/u);
 });
 
+test('original-file confirmation has a bounded deadline scoped to valid upload routes', async () => {
+  const gateway = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
+  const upload = gateway.match(/location ~ "([^"]+)" \{([\s\S]*?)\n {2}\}/u);
+  assert.ok(upload);
+  const route = new RegExp(upload[1]);
+  for (const mode of ['eagle', 'photos']) {
+    assert.ok(route.test(`/api/${mode}/uploads/12345678-1234-4234-8234-123456789abc/complete`));
+    for (const suffix of [
+      'assets',
+      'uploads/bad/complete',
+      'uploads/12345678-1234-4234-8234-123456789abc/parts',
+    ])
+      assert.equal(route.test(`/api/${mode}/${suffix}`), false);
+  }
+  assert.equal(route.test('/api/auth/me'), false);
+  assert.match(upload[2], /proxy_read_timeout 660s;/u);
+  assert.match(upload[2], /proxy_send_timeout 15s;/u);
+});
+
 async function render(options = {}) {
   const { createNasStagingCompose } = await import('./deploy-nas.mjs');
   return createNasStagingCompose(base, { revision: 'f8e4864739a9', ...options });

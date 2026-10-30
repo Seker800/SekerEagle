@@ -81,7 +81,9 @@ fun NativeTransferScreen(
         permissionMessage = null
         runCatching {
                 context.startForegroundService(
-                    Intent(context, BackupService::class.java).putExtra("scope", identity.scope)
+                    Intent(context, BackupService::class.java)
+                        .putExtra("scope", identity.scope)
+                        .putExtra("manual", true)
                 )
             }
             .onFailure { permissionMessage = "系统暂不允许启动备份，请回到应用后重试" }
@@ -166,11 +168,7 @@ fun NativeTransferScreen(
                             )
                         if (backup.running) {
                             LinearProgressIndicator(Modifier.fillMaxWidth())
-                            TextButton({
-                                context.stopService(Intent(context, BackupService::class.java))
-                            }) {
-                                Text("暂停备份")
-                            }
+                            TextButton({ BackupService.pause(context) }) { Text("暂停备份") }
                         } else if (backup.enabled) TextButton({ scanAndBackup() }) { Text("扫描并备份") }
                         permissionMessage?.let {
                             Text(
@@ -227,7 +225,11 @@ fun NativeTransferScreen(
                                 color = MaterialTheme.colorScheme.error,
                             )
                         if (active) {
-                            if (progress != null && progress.size > 0 && progress.stage == "上传原文件")
+                            if (
+                                progress != null &&
+                                    progress.size > 0 &&
+                                    progress.stage in setOf("上传原文件", "校验原文件")
+                            )
                                 LinearProgressIndicator(
                                     progress = {
                                         (progress.bytes.toDouble() / progress.size)

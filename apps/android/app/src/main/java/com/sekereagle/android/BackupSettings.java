@@ -16,6 +16,7 @@ import org.json.JSONObject;
 
 /** Only app-private configuration; credentials are encrypted with a non-exportable device key. */
 final class BackupSettings {
+
   private final SharedPreferences preferences;
 
   BackupSettings(Context context) {
@@ -58,12 +59,25 @@ final class BackupSettings {
     } else editor.apply();
   }
 
+  void snapshot(String scope, String status, String counts, String errors, String rows) {
+    preferences
+        .edit()
+        .putString(scope + ":status", status)
+        .putString(scope + ":counts", counts)
+        .putString(scope + ":errors", errors)
+        .putString(scope + ":transferRows", rows)
+        .apply();
+  }
+
   boolean flag(String scope, String key, boolean fallback) {
     return preferences.getBoolean(scope + ":" + key, fallback);
   }
 
   void setFlag(String scope, String key, boolean value) {
-    preferences.edit().putBoolean(scope + ":" + key, value).apply();
+    SharedPreferences.Editor editor = preferences.edit().putBoolean(scope + ":" + key, value);
+    if (key.equals("userPaused")) {
+      if (!editor.commit()) throw new IllegalStateException("暂停状态未能保存，请检查手机存储");
+    } else editor.apply();
   }
 
   JSONArray rules(String scope) {

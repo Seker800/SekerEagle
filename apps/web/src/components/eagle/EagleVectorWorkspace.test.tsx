@@ -283,7 +283,7 @@ describe('EagleVectorWorkspace', () => {
     expect(
       screen.queryByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
     ).not.toBeInTheDocument();
-    expect(screen.getByText('建议：汽车')).toBeInTheDocument();
+    expect(await screen.findByText('建议：汽车')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() =>
       expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),

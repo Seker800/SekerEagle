@@ -161,12 +161,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     var repository: NativeGalleryRepository? = null
         private set
 
-    val downloads =
-        NativeDownloads(application, viewModelScope) { expired ->
-            if (session === expired) expire()
-        }
-
     val transfers = NativeTransferManager.get(application)
+    val downloads = transfers.downloads
     private var uploadPickerTarget: Pair<String, GalleryMode>? = null
 
     fun prepareUploadSelection(): Boolean {
@@ -196,7 +192,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val connection = session ?: return
         if (current.busy || current.trash || assets.isEmpty()) return
         if (assets.any { candidate -> current.items.none { it.id == candidate.id } }) return
-        downloads.start(connection, current.mode, assets.toList())
+        val identity = current.identity ?: return
+        transfers.startDownload(connection, identity, current.mode, assets.toList())
     }
 
     fun downloadSelected() {
@@ -1173,7 +1170,6 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     fun onBackground() {
         foreground = false
-        downloads.cancel()
     }
 
     fun backupNeedsMediaPermission(scope: String = state.value.identity?.scope.orEmpty()): Boolean {
@@ -1218,7 +1214,8 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         if (
             settings.active() != identity.scope ||
                 !settings.flag(identity.scope, "enabled", false) ||
-                !settings.flag(identity.scope, "auto", false)
+                !settings.flag(identity.scope, "auto", false) ||
+                settings.flag(identity.scope, "userPaused", false)
         )
             return
         // Partial photo grants are not a complete directory scan; wait for explicit consent
@@ -1247,7 +1244,6 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
 
     override fun onCleared() {
         cancelOptions()
-        downloads.clear()
         uploadPickerTarget = null
         repository?.clear()
     }

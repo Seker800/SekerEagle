@@ -8,8 +8,41 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
-final class ApiClient implements UploadApi {
+final class ApiClient implements UploadApi, AutoCloseable {
+
+  private final java.util.Set<HttpURLConnection> active =
+      java.util.concurrent.ConcurrentHashMap.newKeySet();
+  private volatile boolean closed;
+  private NativeTransferCancellation cancellation;
+
+  @Override
+  public void close() {
+    closed = true;
+    active.forEach(HttpURLConnection::disconnect);
+  }
+
+  private HttpURLConnection track(String url) throws Exception {
+    if (closed) throw new IOException("传输已暂停");
+    HttpURLConnection connection = open(url);
+    active.add(connection);
+    try {
+      if (cancellation != null) cancellation.bind(connection);
+    } catch (RuntimeException error) {
+      active.remove(connection);
+      connection.disconnect();
+      throw error;
+    }
+    if (closed) {
+      active.remove(connection);
+      if (cancellation != null) cancellation.unbind(connection);
+      connection.disconnect();
+      throw new IOException("传输已暂停");
+    }
+    return connection;
+  }
+
   static final class Failure extends com.sekereagle.android.core.UploadFailure {
+
     Failure(int status) {
       this(status, Endpoint.API);
     }
@@ -27,10 +60,17 @@ final class ApiClient implements UploadApi {
     this.token = token;
   }
 
+  ApiClient(String origin, String token, NativeTransferCancellation cancellation) {
+    this(origin, token);
+    this.cancellation = cancellation;
+  }
+
   public JSONObject request(String method, String path, JSONObject body) throws Exception {
     if (!path.startsWith("/api/")) throw new IOException("无效接口路径");
-    HttpURLConnection connection = open(origin + path);
+    HttpURLConnection connection = track(origin + path);
     try {
+      if (path.matches("/api/(eagle|photos)/uploads/[a-fA-F0-9-]{36}/complete"))
+        connection.setReadTimeout(660_000);
       connection.setRequestMethod(method);
       connection.setRequestProperty("Origin", origin);
       connection.setRequestProperty("Accept", "application/json");
@@ -50,9 +90,12 @@ final class ApiClient implements UploadApi {
       int code = connection.getResponseCode();
       if (code < 200 || code >= 300) throw new Failure(code);
       try (InputStream input = connection.getInputStream()) {
-        return new JSONObject(new String(readBounded(input), StandardCharsets.UTF_8));
+        JSONObject result = new JSONObject(new String(readBounded(input), StandardCharsets.UTF_8));
+        return result;
       }
     } finally {
+      active.remove(connection);
+      if (cancellation != null) cancellation.unbind(connection);
       connection.disconnect();
     }
   }
@@ -65,7 +108,7 @@ final class ApiClient implements UploadApi {
       throws Exception {
     // Signed object URLs are rewritten to the authenticated gateway, as in the shared Web client.
     String target = BackupPolicy.uploadUrl(url, origin);
-    HttpURLConnection connection = open(target);
+    HttpURLConnection connection = track(target);
     try {
       connection.setRequestMethod("PUT");
       connection.setDoOutput(true);
@@ -87,8 +130,13 @@ final class ApiClient implements UploadApi {
         throw new Failure(code, com.sekereagle.android.core.UploadFailure.Endpoint.SIGNED_PART);
       String etag = connection.getHeaderField("ETag");
       if (etag == null || etag.isEmpty()) throw new IOException("服务器未确认上传分片");
+      try (InputStream response = connection.getInputStream()) {
+        readBounded(response);
+      }
       return etag;
     } finally {
+      active.remove(connection);
+      if (cancellation != null) cancellation.unbind(connection);
       connection.disconnect();
     }
   }

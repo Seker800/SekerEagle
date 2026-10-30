@@ -58,6 +58,11 @@ async function loadEditedCopySource(
 
 @Injectable()
 export class EagleUploadService {
+  private readonly finalizations = new Map<
+    string,
+    ReturnType<EagleUploadService['finalizeAssembledOnce']>
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: ObjectStorageService,
@@ -310,7 +315,23 @@ export class EagleUploadService {
     return this.finalizeAssembled({ ...session, status: 'ASSEMBLED' }, parts);
   }
 
-  private async finalizeAssembled(
+  private finalizeAssembled(
+    session: Awaited<ReturnType<EagleUploadService['requireCompletable']>>,
+    parts: ReturnType<typeof normalizeParts>,
+  ) {
+    const key = JSON.stringify([this.libraryMode, session.uploaderId, session.id]);
+    const active = this.finalizations.get(key);
+    if (active) return active;
+    const work = this.finalizeAssembledOnce(session, parts);
+    this.finalizations.set(key, work);
+    const release = () => {
+      if (this.finalizations.get(key) === work) this.finalizations.delete(key);
+    };
+    void work.then(release, release);
+    return work;
+  }
+
+  private async finalizeAssembledOnce(
     session: Awaited<ReturnType<EagleUploadService['requireCompletable']>>,
     parts: ReturnType<typeof normalizeParts>,
   ) {

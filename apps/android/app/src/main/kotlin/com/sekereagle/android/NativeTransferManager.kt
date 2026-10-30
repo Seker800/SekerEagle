@@ -54,11 +54,39 @@ class NativeTransferManager private constructor(context: Context) {
     internal val state = mutable.asStateFlow()
     private val changes = MutableSharedFlow<NativeTransferEvent>(extraBufferCapacity = 20)
     internal val events = changes.asSharedFlow()
+    private var downloadScope = ""
+    private var downloadMode = GalleryMode.PHOTO
+    internal val downloads =
+        NativeDownloads(app, applicationScope) {
+            changes.tryEmit(NativeTransferEvent(downloadScope, downloadMode, unauthorized = true))
+        }
+
+    internal fun startDownload(
+        session: NativeSession,
+        identity: NativeIdentity,
+        mode: GalleryMode,
+        assets: List<NativeAsset>,
+    ) {
+        require(
+            settings.active() == identity.scope &&
+                settings.origin() == identity.origin &&
+                session.origin == identity.origin
+        )
+        if (downloads.state.value?.running == true) return
+        downloadScope = identity.scope
+        downloadMode = mode
+        downloads.start(session, mode, assets)
+    }
+
     private var worker: NativeUploads? = null
     private var observation: Job? = null
     private var queuedAdds = 0
 
     init {
+        downloads.startForeground = {
+            check(downloadScope == settings.active())
+            startService(downloadScope)
+        }
         applicationScope.launch {
             mutable.value =
                 NativeTransferQueue(
@@ -337,6 +365,8 @@ class NativeTransferManager private constructor(context: Context) {
     internal fun clear() {
         // Revoke in-flight work immediately; persistent removal follows in command order.
         worker?.clear()
+        downloads.clear()
+        downloadScope = ""
         command { clearNow() }
     }
 

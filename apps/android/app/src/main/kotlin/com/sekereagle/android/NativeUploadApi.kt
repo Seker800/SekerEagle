@@ -13,8 +13,8 @@ internal class NativeUploadApi(
     private val progress: (Long) -> Unit,
     private val cancellation: NativeTransferCancellation? = null,
 ) : UploadApi {
-    private val signedParts = ApiClient(session.origin, "")
-    private var transferred = 0L
+    private val signedParts = ApiClient(session.origin, "", cancellation)
+    private val transferred = java.util.concurrent.atomic.AtomicLong()
     var duplicate = false
         private set
 
@@ -60,8 +60,7 @@ internal class NativeUploadApi(
                     check()
                     val count = input.read(buffer, offset, length)
                     if (count > 0) {
-                        transferred += count
-                        progress(transferred)
+                        progress(transferred.addAndGet(count.toLong()))
                     }
                     return count
                 }

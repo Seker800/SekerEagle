@@ -64,7 +64,7 @@ export class OriginalDownloadQueue {
       ...targets.map((target, index): QueueItem => ({
         id: ++this.#nextId,
         target,
-        fileName: names[this.#snapshot.items.length + index]!,
+        fileName: names[this.#snapshot.items.length + index],
         state: 'queued',
         received: 0,
       })),

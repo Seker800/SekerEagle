@@ -2484,6 +2484,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/photography/people/{id}/faces': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_personFaces'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/people/review': {
     parameters: {
       query?: never;
@@ -7930,9 +7946,31 @@ export interface operations {
     parameters: {
       query?: {
         after?: string;
+        view?: 'full' | 'cards' | 'options';
       };
       header?: never;
       path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_personFaces: {
+    parameters: {
+      query?: {
+        after?: string;
+      };
+      header?: never;
+      path: {
+        id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;

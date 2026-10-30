@@ -1,6 +1,6 @@
 import { OriginalDownloadQueue } from '../../lib/original-download-queue';
 import type { EagleQuickFilterState } from './eagle-quick-filter-state';
-import type { QueryClient } from '@tanstack/react-query';
+import { QueryObserver, type QueryClient } from '@tanstack/react-query';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { EagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
@@ -56,7 +56,24 @@ class EagleWorkspaceCache {
     isBatchSelection: boolean;
     selectionMode: boolean;
   } | null = null;
-  readonly downloads = new OriginalDownloadQueue(() => this.retain(false));
+  readonly downloads = new OriginalDownloadQueue(() => {
+    const release = this.retain(false);
+    const query = this.client.getQueryCache().findAll({ queryKey: this.#keys.root })[0];
+    // Observe without fetching: normal GC must not revoke an ongoing save. An
+    // explicit session/privacy removal still removes the query and aborts it.
+    const observer = query
+      ? new QueryObserver(this.client, {
+          ...query.options,
+          queryKey: query.queryKey,
+          enabled: false,
+        })
+      : undefined;
+    const unsubscribe = observer?.subscribe(() => undefined);
+    return () => {
+      unsubscribe?.();
+      release();
+    };
+  });
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
     this.downloads.clear();

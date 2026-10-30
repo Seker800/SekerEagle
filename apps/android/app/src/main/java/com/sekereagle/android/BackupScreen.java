@@ -339,7 +339,7 @@ final class BackupScreen extends ScrollView {
             "保留成功回执，仅重新检查失败项",
             () -> {
               sheet.dismiss();
-              if (settings.flag(scope, "running", false)) {
+              if (BackupService.isRunning(scope)) {
                 activity.toast("请先暂停当前备份");
                 return;
               }
@@ -364,7 +364,7 @@ final class BackupScreen extends ScrollView {
                   .setPositiveButton(
                       "重新检查",
                       (d, w) -> {
-                        if (settings.flag(scope, "running", false)) {
+                        if (BackupService.isRunning(scope)) {
                           activity.toast("请先暂停当前备份");
                           return;
                         }
@@ -391,7 +391,7 @@ final class BackupScreen extends ScrollView {
         settings.value(
             scope, "status", settings.flag(scope, "allMedia", false) ? "已选择全部手机相册" : "选择目录后即可开始"));
     counts.setText(settings.value(scope, "counts", "原片备份 · 尚未开始"));
-    boolean running = settings.flag(scope, "running", false);
+    boolean running = BackupService.isRunning(scope);
     primary.setText(running ? "正在备份…" : "立即备份");
     primary.setEnabled(!running);
     pause.setVisibility(running ? VISIBLE : GONE);
@@ -404,7 +404,7 @@ final class BackupScreen extends ScrollView {
     StringBuilder details = new StringBuilder();
     for (int i = 0; i < list.length(); i++) details.append(list.optString(i)).append('\n');
     errors.setText(details);
-    focus(settings.flag(scope, "focused", false) && settings.flag(scope, "running", false));
+    focus(settings.flag(scope, "focused", false) && BackupService.isRunning(scope));
   }
 
   private void folderPicker(List<String> folders) {

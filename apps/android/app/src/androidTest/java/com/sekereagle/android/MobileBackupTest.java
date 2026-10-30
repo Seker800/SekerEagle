@@ -20,6 +20,7 @@ import org.junit.*;
 
 /** Real Android media + SQLite + Keystore + HTTP API + private test object storage. */
 public final class MobileBackupTest {
+
   private Instrumentation getInstrumentation() {
     return InstrumentationRegistry.getInstrumentation();
   }
@@ -40,7 +41,7 @@ public final class MobileBackupTest {
         android.os.Build.VERSION.SDK_INT >= 33
             ? new String[] {
               android.Manifest.permission.READ_MEDIA_IMAGES,
-              android.Manifest.permission.READ_MEDIA_VIDEO
+              android.Manifest.permission.READ_MEDIA_VIDEO,
             }
             : new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE};
     for (String permission : permissions) {
@@ -94,6 +95,7 @@ public final class MobileBackupTest {
     settings.saveToken(scope, token.getString("token"));
     settings.setFlag(scope, "enabled", true);
     settings.setFlag(scope, "auto", false);
+    settings.setFlag(scope, "userPaused", false);
     settings.setFlag(scope, "wifi", false);
     path = "Pictures/SekerEagleTest-" + UUID.randomUUID() + "/";
     settings.rules(scope, new JSONArray());
@@ -169,9 +171,9 @@ public final class MobileBackupTest {
     Uri collection =
         path.startsWith("Download/")
             ? MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            : (mime.startsWith("video/")
+            : mime.startsWith("video/")
                 ? MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                : MediaStore.Images.Media.EXTERNAL_CONTENT_URI;
     Uri uri = context.getContentResolver().insert(collection, values);
     assertNotNull(uri);
     created.add(uri);
@@ -962,7 +964,10 @@ public final class MobileBackupTest {
   public void testRawAndVideoPreserveOriginalBytes() throws Exception {
     List<Uri> files = new ArrayList<>();
     for (String[] format :
-        new String[][] {{"synthetic.dng", "image/x-adobe-dng"}, {"synthetic.mp4", "video/mp4"}}) {
+        new String[][] {
+          {"synthetic.dng", "image/x-adobe-dng"},
+          {"synthetic.mp4", "video/mp4"},
+        }) {
       byte[] bytes;
       try (InputStream input = getInstrumentation().getContext().getAssets().open(format[0])) {
         bytes = input.readAllBytes();
@@ -1035,14 +1040,34 @@ public final class MobileBackupTest {
                 com.sekereagle.android.core.BackupEngine.Save save,
                 com.sekereagle.android.core.BackupEngine.Guard guard)
                 throws Exception {
-              int[] checks = {0};
-              transport.upload(
-                  source,
-                  cp,
-                  save,
-                  () -> {
-                    if (++checks[0] > 25) throw new IOException("test interruption");
-                  });
+              java.util.concurrent.atomic.AtomicInteger completedParts =
+                  new java.util.concurrent.atomic.AtomicInteger();
+              UploadApi observed =
+                  new UploadApi() {
+                    public JSONObject request(String method, String path, JSONObject body)
+                        throws Exception {
+                      return api.request(method, path, body);
+                    }
+
+                    public String put(
+                        String url,
+                        InputStream input,
+                        long size,
+                        com.sekereagle.android.core.BackupEngine.Guard check)
+                        throws Exception {
+                      String etag = api.put(url, input, size, check);
+                      completedParts.incrementAndGet();
+                      return etag;
+                    }
+                  };
+              new MultipartTransport(observed, "PHOTO", catalog, item)
+                  .upload(
+                      source,
+                      cp,
+                      save,
+                      () -> {
+                        if (completedParts.get() > 0) throw new IOException("test interruption");
+                      });
             }
           };
       try {
@@ -1056,11 +1081,11 @@ public final class MobileBackupTest {
       assertFalse(cp.confirmed);
       session = cp.session;
       assertFalse(session.isEmpty());
-      assertEquals(
-          1,
+      assertTrue(
           api.request("GET", "/api/photos/uploads/" + session + "/parts", null)
-              .getJSONArray("parts")
-              .length());
+                  .getJSONArray("parts")
+                  .length()
+              >= 1);
     }
     try (BackupJournal restored = new BackupJournal(context)) {
       assertEquals(
@@ -1084,6 +1109,28 @@ public final class MobileBackupTest {
     getInstrumentation().waitForIdleSync();
     launch();
     assertFalse(settings.flag(scope, "running", false));
+  }
+
+  @Test
+  public void userPauseSurvivesAutomaticReopenAndExplicitRunCanResume() throws Exception {
+    image("pause-reopen.png", 0xff174938, true);
+    BackupScreen.addRule(settings, scope, "media", path);
+    runScan();
+    String finished = settings.value(scope, "lastFinished", "");
+    String counts = settings.value(scope, "counts", "");
+    getInstrumentation().runOnMainSync(() -> activity.pause());
+    assertTrue(new BackupSettings(context).flag(scope, "userPaused", false));
+    settings.setFlag(scope, "auto", true);
+    getInstrumentation().runOnMainSync(() -> activity.finish());
+    getInstrumentation().waitForIdleSync();
+    launch();
+    Thread.sleep(1500);
+    assertEquals(finished, settings.value(scope, "lastFinished", ""));
+    assertEquals(counts, settings.value(scope, "counts", ""));
+    assertFalse(BackupService.isRunning(scope));
+    settings.setFlag(scope, "auto", false);
+    runScan();
+    assertFalse(settings.flag(scope, "userPaused", true));
   }
 
   @Test

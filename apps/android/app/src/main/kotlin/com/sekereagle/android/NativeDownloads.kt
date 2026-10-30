@@ -35,6 +35,7 @@ class NativeDownloads(
     private var job: Job? = null
     private var connection: NativeSession? = null
     private var mode = GalleryMode.PHOTO
+    internal var startForeground: (() -> Unit)? = null
 
     fun start(
         session: NativeSession,
@@ -53,6 +54,18 @@ class NativeDownloads(
         val cancel = NativeTransferCancellation().also { cancellation = it }
         val initial = NativeDownloadState(total = completed + assets.size, completed = completed)
         mutable.value = initial
+        try {
+            startForeground?.invoke()
+        } catch (_: RuntimeException) {
+            mutable.value =
+                initial.copy(
+                    running = false,
+                    cancelled = true,
+                    remaining = assets,
+                    current = "系统暂未允许后台传输，请回到应用后重试",
+                )
+            return
+        }
         fun publish(value: NativeDownloadState) {
             mutable.update { if (generation.get() == ticket) value else it }
         }

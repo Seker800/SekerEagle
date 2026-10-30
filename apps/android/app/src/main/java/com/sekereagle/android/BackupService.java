@@ -9,6 +9,7 @@ import android.net.*;
 import android.os.*;
 import com.sekereagle.android.core.BackupEngine;
 import com.sekereagle.android.core.BackupPermissionPolicy;
+import com.sekereagle.android.core.BackupRunPolicy;
 import java.io.IOException;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,18 +17,50 @@ import org.json.*;
 
 /** Visible, bounded foreground work. The next app opening resumes durable checkpoints. */
 public final class BackupService extends Service {
+
   private static volatile BackupService current;
 
   static boolean isRunning(String scope) {
     BackupService service = current;
-    return service != null && service.working.get() && service.scope.equals(scope);
+    return (service != null
+        && service.working.get()
+        && !service.cancelled
+        && service.scope.equals(scope));
   }
 
   static final String CHANNEL = "mobile-backup";
   static final int NOTICE = 42;
-  private final ExecutorService executor = Executors.newSingleThreadExecutor();
+  private static final ExecutorService executor = Executors.newSingleThreadExecutor();
   private final AtomicBoolean working = new AtomicBoolean();
   private volatile boolean cancelled;
+  private volatile ApiClient activeApi;
+  private Intent pendingRestart;
+  private int latestStartId;
+  private boolean manual;
+  private boolean timedOut;
+  private long lastConditions, lastUpdate;
+  private String pendingMessage = "";
+
+  static void pause(Context context) {
+    BackupSettings state = new BackupSettings(context);
+    String scope = state.active();
+    if (scope.isEmpty()) return;
+    state.setFlag(scope, "userPaused", true);
+    state.setValue(scope, "status", "备份已暂停");
+    BackupService service = current;
+    if (service != null && scope.equals(service.scope)) service.pauseRun();
+  }
+
+  private void pauseRun() {
+    cancelled = true;
+    pendingRestart = null;
+    settings.setFlag(scope, "userPaused", true);
+    settings.setValue(scope, "status", "备份已暂停");
+    ApiClient api = activeApi;
+    if (api != null) api.close();
+    getSystemService(NotificationManager.class).notify(NOTICE, notification("备份已暂停"));
+  }
+
   private BackupSettings settings;
   private String scope = "";
   private int seen, uploaded, skipped, failed;
@@ -37,6 +70,7 @@ public final class BackupService extends Service {
   private long wakeUntil;
 
   static final class Hold extends IOException {
+
     Hold(String reason) {
       super(reason);
     }
@@ -54,9 +88,9 @@ public final class BackupService extends Service {
 
   @Override
   public int onStartCommand(Intent intent, int flags, int startId) {
+    latestStartId = startId;
     if (intent != null && "pause".equals(intent.getAction())) {
-      cancelled = true;
-      stopSelf();
+      pause(this);
       return START_NOT_STICKY;
     }
     String requested = intent == null ? "" : intent.getStringExtra("scope");
@@ -64,14 +98,29 @@ public final class BackupService extends Service {
       stopSelf();
       return START_NOT_STICKY;
     }
-    if (!working.compareAndSet(false, true)) return START_NOT_STICKY;
-    // A stopped-but-not-destroyed instance may be asked to run again; a previous pause flag or
-    // counters must never leak into the new run.
+    boolean explicit = intent != null && intent.getBooleanExtra("manual", false);
+    if (!BackupRunPolicy.mayStart(explicit, settings.flag(requested, "userPaused", false))) {
+      if (!working.get()) scope = requested;
+      // A stale automatic start can race the durable pause write. Honour Android's
+      // foreground-start contract even when declining to perform any work.
+      startForeground(NOTICE, notification("备份已暂停"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
+      if (!working.get()) {
+        stopForeground(STOP_FOREGROUND_DETACH);
+        stopSelfResult(startId);
+      }
+      return START_NOT_STICKY;
+    }
+    if (working.get()) {
+      if (cancelled && explicit) pendingRestart = new Intent(intent);
+      return START_NOT_STICKY;
+    }
+    working.set(true);
     cancelled = false;
+    manual = explicit;
+    timedOut = false;
     scope = requested;
-    seen = uploaded = skipped = failed = 0;
-    errors = new JSONArray();
-    transferRows = new JSONArray();
+    if (explicit) settings.setFlag(scope, "userPaused", false);
+    lastConditions = lastUpdate = 0;
     startForeground(NOTICE, notification("正在准备扫描"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
     executor.execute(() -> runBackup(startId));
     return START_NOT_STICKY;
@@ -80,11 +129,21 @@ public final class BackupService extends Service {
   private void runBackup(int startId) {
     settings.setFlag(scope, "running", true);
     try (BackupJournal journal = new BackupJournal(this)) {
+      boolean resume = settings.flag(scope, "scanOpen", false);
+      refreshCounts(journal);
+      errors = resume ? new JSONArray(settings.value(scope, "errors", "[]")) : new JSONArray();
+      transferRows =
+          resume ? new JSONArray(settings.value(scope, "transferRows", "[]")) : new JSONArray();
+      guard();
+      journal.beginScan(scope, resume);
+      settings.setFlag(scope, "scanOpen", true);
+      refreshCounts(journal);
       String origin = settings.value(scope, "origin", "");
       if (!origin.equals(settings.origin())) throw new Hold("服务地址已变化，备份已暂停");
       String token = settings.token(scope);
       if (token.isEmpty()) throw new Hold("请登录并启用备份授权");
       ApiClient api = new ApiClient(origin, token);
+      activeApi = api;
       JSONObject me = api.request("GET", "/api/auth/me", null);
       if (!me.getJSONObject("user").getString("id").equals(settings.value(scope, "owner", ""))
           || !me.getJSONObject("desktopCache")
@@ -99,15 +158,21 @@ public final class BackupService extends Service {
       JSONArray rules = settings.scanRules(scope);
       if (rules.length() == 0) throw new Hold("请先选择备份目录");
       if (BackupPermissionPolicy.requiresCompleteMediaAccess(mediaRuleCount(rules))
-          && !hasMediaPermission())
-        throw new Hold("请授予完整的照片和视频访问权限，避免备份遗漏");
+          && !hasMediaPermission()) throw new Hold("请授予完整的照片和视频访问权限，避免备份遗漏");
       MediaCatalog catalog = new MediaCatalog(this);
       update("正在扫描所选目录");
       catalog.scan(
           rules,
           (item, mode) -> {
             guard();
-            seen++;
+            String fileKey =
+                mode
+                    + ":"
+                    + com.sekereagle.android.core.BackupPolicy.digest(
+                        item.uri + "\n" + item.size + "\n" + item.modified);
+            if (item.modified > 0 && journal.scanCompleted(scope, fileKey)) return;
+            journal.scanResult(scope, fileKey, "CHECKING");
+            refreshCounts(journal);
             update("正在检查：" + item.name);
             try {
               catalog.checkSize(item);
@@ -122,8 +187,9 @@ public final class BackupService extends Service {
                       () -> catalog.hash(item, this::guard),
                       () -> catalog.stable(item));
               BackupEngine.Result result = engine.process(scope, mode, source);
-              if (result == BackupEngine.Result.UPLOADED) uploaded++;
-              else skipped++;
+              guard();
+              journal.scanResult(scope, fileKey, result.name());
+              refreshCounts(journal);
               recordTransfer(
                   item.name, mode, result == BackupEngine.Result.UPLOADED ? "已上传" : "已存在");
             } catch (Hold e) {
@@ -132,38 +198,77 @@ public final class BackupService extends Service {
               if (e.status == 401 || e.status == 403) {
                 throw e;
               }
+              guard();
+              journal.scanResult(scope, fileKey, "FAILED");
+              refreshCounts(journal);
               failure(item.name, e);
             } catch (SecurityException e) {
+              guard();
+              journal.scanResult(scope, fileKey, "FAILED");
+              refreshCounts(journal);
               failure(item.name, new IOException("文件访问权限失效，请重新授权"));
             } catch (Exception e) {
+              guard();
+              journal.scanResult(scope, fileKey, "FAILED");
+              refreshCounts(journal);
               failure(item.name, e);
             }
             update("正在扫描并备份");
           },
           this::guard);
+      guard();
+      settings.setFlag(scope, "scanOpen", false);
       update(failed == 0 ? "备份完成" : "备份结束，有失败项可重试");
       settings.setValue(scope, "lastFinished", Long.toString(System.currentTimeMillis()));
     } catch (ApiClient.Failure e) {
-      if (e.invalidatesCredential()) settings.setValue(scope, "credential", "");
+      if (current == this && !cancelled && e.invalidatesCredential())
+        settings.setValue(scope, "credential", "");
       update(e.getMessage());
     } catch (SecurityException e) {
       update("目录权限不足，请授权照片视频或重新选择目录");
     } catch (Exception e) {
       update(safeMessage(e));
     } finally {
+      ApiClient api = activeApi;
+      if (api != null) api.close();
+      activeApi = null;
       if (wake != null && wake.isHeld()) wake.release();
-      settings.setFlag(scope, "running", false);
-      working.set(false);
-      stopForeground(STOP_FOREGROUND_REMOVE);
-      stopSelf();
+      if (current == this) {
+        if (cancelled && settings.flag(scope, "userPaused", false)) pendingMessage = "备份已暂停";
+        flushUpdate();
+        settings.setFlag(scope, "running", false);
+        working.set(false);
+        new Handler(Looper.getMainLooper())
+            .post(
+                () -> {
+                  if (current != this) return;
+                  Intent restart = pendingRestart;
+                  pendingRestart = null;
+                  if (restart != null) {
+                    onStartCommand(restart, 0, startId);
+                    return;
+                  }
+                  stopForeground(
+                      settings.flag(scope, "userPaused", false)
+                          ? STOP_FOREGROUND_DETACH
+                          : STOP_FOREGROUND_REMOVE);
+                  stopSelfResult(latestStartId);
+                });
+      } else working.set(false);
     }
   }
 
+  private void refreshCounts(BackupJournal journal) {
+    int[] counts = journal.scanCounts(scope);
+    seen = counts[0];
+    uploaded = counts[1];
+    skipped = counts[2];
+    failed = counts[3];
+  }
+
   private void failure(String name, Exception e) throws Exception {
-    failed++;
     recordTransfer(name, "", "失败：" + safeMessage(e));
     if (errors.length() < 20) errors.put(name + "：" + safeMessage(e));
-    settings.setValue(scope, "errors", errors.toString());
   }
 
   private void recordTransfer(String name, String mode, String result) throws Exception {
@@ -173,7 +278,6 @@ public final class BackupService extends Service {
     recent.put(
         name + (mode.isEmpty() ? "" : mode.equals("PHOTO") ? " · 照片" : " · 素材") + " · " + result);
     transferRows = recent;
-    settings.setValue(scope, "transferRows", transferRows.toString());
   }
 
   private static String safeMessage(Exception e) {
@@ -186,31 +290,44 @@ public final class BackupService extends Service {
     return "备份未完成，可重新扫描重试";
   }
 
-  private void guard() throws Hold {
-    if (cancelled
+  private synchronized void guard() throws Hold {
+    if (current != this
+        || cancelled
         || Thread.currentThread().isInterrupted()
         || !scope.equals(settings.active())
         || !settings.flag(scope, "enabled", false)) throw new Hold("备份已暂停");
     keepAwake();
+    long now = SystemClock.elapsedRealtime();
+    if (lastConditions != 0 && now - lastConditions < 1000) return;
+    lastConditions = now;
     ConnectivityManager manager = getSystemService(ConnectivityManager.class);
     NetworkCapabilities network = manager.getNetworkCapabilities(manager.getActiveNetwork());
     if (network == null || !network.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET))
       throw new Hold("等待网络连接");
-    if (settings.flag(scope, "wifi", true)
-        && !network.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-        && !network.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET))
-      throw new Hold("等待 Wi-Fi");
+    boolean unmetered =
+        network.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+            || network.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET);
     Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+    boolean charging = false;
+    int percent = 100;
     if (battery != null) {
       int status = battery.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
-      boolean charging =
+      charging =
           status == BatteryManager.BATTERY_STATUS_CHARGING
               || status == BatteryManager.BATTERY_STATUS_FULL;
-      if (settings.flag(scope, "charging", false) && !charging) throw new Hold("等待充电");
-      int level = battery.getIntExtra(BatteryManager.EXTRA_LEVEL, 100),
-          scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
-      if (!charging && scale > 0 && level * 100L / scale <= 15) throw new Hold("电量低于 15%，等待充电");
+      int scale = battery.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+      if (scale > 0)
+        percent = (int) ((battery.getIntExtra(BatteryManager.EXTRA_LEVEL, 100) * 100L) / scale);
     }
+    String hold =
+        BackupRunPolicy.hold(
+            manual,
+            unmetered,
+            settings.flag(scope, "wifi", true),
+            settings.flag(scope, "charging", false),
+            charging,
+            percent);
+    if (!hold.isEmpty()) throw new Hold(hold);
   }
 
   private static int mediaRuleCount(JSONArray rules) {
@@ -252,13 +369,23 @@ public final class BackupService extends Service {
   }
 
   private void update(String message) {
-    settings.setValue(scope, "status", message);
-    settings.setValue(
+    if (current != this || cancelled) return;
+    pendingMessage = message;
+    long now = SystemClock.elapsedRealtime();
+    if (lastUpdate != 0 && now - lastUpdate < 1000) return;
+    lastUpdate = now;
+    flushUpdate();
+  }
+
+  private void flushUpdate() {
+    if (current != this) return;
+    settings.snapshot(
         scope,
-        "counts",
-        "扫描 " + seen + " · 已上传 " + uploaded + " · 已存在 " + skipped + " · 失败 " + failed);
-    settings.setValue(scope, "errors", errors.toString());
-    getSystemService(NotificationManager.class).notify(NOTICE, notification(message));
+        pendingMessage,
+        "扫描 " + seen + " · 已上传 " + uploaded + " · 已存在 " + skipped + " · 失败 " + failed,
+        errors.toString(),
+        transferRows.toString());
+    getSystemService(NotificationManager.class).notify(NOTICE, notification(pendingMessage));
   }
 
   private Notification notification(String text) {
@@ -274,31 +401,53 @@ public final class BackupService extends Service {
         PendingIntent.getService(
             this,
             1,
-            new Intent(this, BackupService.class).setAction("pause"),
+            new Intent(this, BackupService.class).setAction("pause").putExtra("scope", scope),
+            PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    boolean paused = settings.flag(scope, "userPaused", false);
+    PendingIntent resume =
+        PendingIntent.getForegroundService(
+            this,
+            2,
+            new Intent(this, BackupService.class).putExtra("scope", scope).putExtra("manual", true),
             PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     return new Notification.Builder(this, CHANNEL)
         .setSmallIcon(R.drawable.ic_notification)
         .setContentTitle("SekerEagle 手机备份")
         .setContentText(text)
         .setContentIntent(open)
-        .setOngoing(true)
+        .setOngoing(!paused)
         .setOnlyAlertOnce(true)
-        .addAction(new Notification.Action.Builder(null, "暂停", pause).build())
+        .setSubText(settings.value(scope, "counts", ""))
+        .addAction(
+            new Notification.Action.Builder(null, paused ? "继续" : "暂停", paused ? resume : pause)
+                .build())
         .build();
   }
 
   @Override
   public void onTimeout(int startId, int foregroundServiceType) {
     cancelled = true;
-    update("系统执行时限已到，下次打开继续");
+    timedOut = true;
+    pendingMessage = "系统执行时限已到，下次打开继续";
+    flushUpdate();
     stopSelf();
   }
 
   @Override
   public void onDestroy() {
     cancelled = true;
-    if (current == this) current = null;
-    executor.shutdownNow();
+    if (current == this) {
+      if (!scope.isEmpty()) {
+        if (working.get() && !settings.flag(scope, "userPaused", false) && !timedOut) {
+          pendingMessage = "备份未完成，下次打开继续";
+          flushUpdate();
+        }
+        settings.setFlag(scope, "running", false);
+      }
+      current = null;
+    }
+    ApiClient api = activeApi;
+    if (api != null) api.close();
     if (wake != null && wake.isHeld()) wake.release();
     super.onDestroy();
   }
