@@ -1112,6 +1112,15 @@ public final class MobileBackupTest {
   }
 
   @Test
+  public void internalStopDoesNotBecomeADurableUserPause() throws Exception {
+    getInstrumentation().runOnMainSync(() -> activity.enable(false));
+    assertFalse(settings.flag(scope, "userPaused", false));
+    settings.setFlag(scope, "userPaused", true);
+    getInstrumentation().runOnMainSync(() -> activity.enable(false));
+    assertTrue(settings.flag(scope, "userPaused", false));
+  }
+
+  @Test
   public void userPauseSurvivesAutomaticReopenAndExplicitRunCanResume() throws Exception {
     image("pause-reopen.png", 0xff174938, true);
     BackupScreen.addRule(settings, scope, "media", path);
