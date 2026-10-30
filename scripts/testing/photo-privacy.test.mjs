@@ -315,13 +315,14 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       origin: defaults.CANONICAL_ORIGIN,
       'content-type': 'application/json',
     };
-    const reviewUrl = `${base}/api/photos/photography/people/review`;
+    const reviewUrl = `${base}/api/photos/photography/people/review-priority`;
     assert.equal((await fetch(reviewUrl)).status, 401);
     const reviewResponse = await fetch(reviewUrl, { headers: auth });
     assert.equal(reviewResponse.status, 200);
     assert.deepEqual(await reviewResponse.json(), { pairs: [] });
     assert.equal(
-      (await fetch(`${base}/api/eagle/photography/people/review`, { headers: auth })).status,
+      (await fetch(`${base}/api/eagle/photography/people/review-priority`, { headers: auth }))
+        .status,
       404,
     );
     const settingsUrl = `${base}/api/photos/privacy-settings`;

@@ -164,7 +164,9 @@ it('removes both workspace caches when a running session expires', async () => {
   requestMock.mockRejectedValueOnce(new ApiError('登录已过期', 401, null));
   fireEvent(window, new Event('online'));
   await screen.findByRole('heading', { name: '登录素材库' });
-  expect(client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-1'] })).toHaveLength(0);
+  await waitFor(() =>
+    expect(client.getQueryCache().findAll({ queryKey: ['eagle', 'owner-1'] })).toHaveLength(0),
+  );
 });
 
 it('checks the session when a visible window regains focus', async () => {

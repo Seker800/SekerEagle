@@ -717,7 +717,10 @@ describe('SekerEaglePage', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['推荐审核32', '待分类6', '任务中心']);
-    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
+    expect(await screen.findByTestId('eagle-vector-workspace')).toHaveAttribute(
+      'data-view',
+      'REVIEW',
+    );
     fireEvent.click(
       within(pendingNavigation).getByRole('button', {
         name: '任务中心',
