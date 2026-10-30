@@ -1,4 +1,13 @@
 export const enUS = {
+  下载队列: 'Download queue',
+  等待下载: 'Waiting to download',
+  正在下载: 'Downloading',
+  下载完成: 'Download complete',
+  下载失败: 'Download failed',
+  已交给浏览器: 'Handed to browser',
+  保存到文件夹: 'Save to folder',
+  发起下载: 'Start download',
+
   清除搜索与筛选: 'Clear search and filters',
   隐藏隐私内容: 'Hide private content',
   '正在继续…': 'Resuming…',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronDown, IconRefresh, IconX } from '@tabler/icons-react';
 import { t } from '../../i18n';
@@ -46,23 +46,25 @@ export function PhotoStatistics({
   });
   const options = result;
   const data = result.data;
-  useEffect(() => {
-    if (panel !== 'date') return;
+  const applyDates = useCallback(() => {
     if (dates.start && dates.end && dates.start > dates.end) {
       setRangeError(true);
-      return;
+      return false;
     }
     setRangeError(false);
-    const timer = window.setTimeout(() => {
-      setPreset(dates.start || dates.end ? 'custom' : 'all');
-      setInput((current) =>
-        current.start === (dates.start || undefined) && current.end === (dates.end || undefined)
-          ? current
-          : { ...current, start: dates.start || undefined, end: dates.end || undefined },
-      );
-    }, 350);
+    setPreset(dates.start || dates.end ? 'custom' : 'all');
+    setInput((current) =>
+      current.start === (dates.start || undefined) && current.end === (dates.end || undefined)
+        ? current
+        : { ...current, start: dates.start || undefined, end: dates.end || undefined },
+    );
+    return true;
+  }, [dates]);
+  useEffect(() => {
+    if (panel !== 'date') return;
+    const timer = window.setTimeout(applyDates, 350);
     return () => window.clearTimeout(timer);
-  }, [dates, panel]);
+  }, [applyDates, panel]);
   function openPanel(next: Exclude<Panel, null>) {
     setPanel((value) => (value === next ? null : next));
     setSearch('');
@@ -159,20 +161,12 @@ export function PhotoStatistics({
       {panel === 'date' && (
         <form
           className={styles.dateRange}
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) applyDates();
+          }}
           onSubmit={(event) => {
             event.preventDefault();
-            if (dates.start && dates.end && dates.start > dates.end) {
-              setRangeError(true);
-              return;
-            }
-            setRangeError(false);
-            setPreset(dates.start || dates.end ? 'custom' : 'all');
-            setPanel(null);
-            setInput((value) => ({
-              ...value,
-              start: dates.start || undefined,
-              end: dates.end || undefined,
-            }));
+            if (applyDates()) setPanel(null);
           }}
         >
           <label>

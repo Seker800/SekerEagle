@@ -1,3 +1,4 @@
+import { OriginalDownloadQueue } from '../../lib/original-download-queue';
 import type { EagleQuickFilterState } from './eagle-quick-filter-state';
 import type { QueryClient } from '@tanstack/react-query';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
@@ -55,8 +56,10 @@ class EagleWorkspaceCache {
     isBatchSelection: boolean;
     selectionMode: boolean;
   } | null = null;
+  readonly downloads = new OriginalDownloadQueue(() => this.retain(false));
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
+    this.downloads.clear();
     this.browse = null;
     this.scrollPositions.clear();
   }
@@ -77,7 +80,11 @@ class EagleWorkspaceCache {
     // Query clients (including connection/session resets) must not share entities.
     this.store = new EagleAssetEntityStore();
     this.#unsubscribe = client.getQueryCache().subscribe((event) => {
-      if (event.type === 'removed') this.#collect();
+      if (event.type === 'removed') {
+        if (!client.getQueryCache().findAll({ queryKey: this.#keys.root }).length)
+          this.downloads.clear();
+        this.#collect();
+      }
     });
   }
 

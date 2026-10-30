@@ -104,6 +104,7 @@ import {
 } from '../../lib/eagle-api';
 import type { PrivacyVisibilityState } from '../../lib/privacy-visibility-api';
 import { canCopyImageToClipboard, copyImageToClipboard } from '../../lib/image-clipboard';
+import { EagleDownloadQueue } from './EagleDownloadQueue';
 import { downloadOriginalFiles, saveOriginalFile } from '../../lib/original-file-export';
 
 import { EagleAssetLightbox } from './EagleAssetLightbox';
@@ -753,6 +754,29 @@ export function SekerEaglePage({
   );
   const previewStack = photoStacks.find((stack) => stack.assetIds.includes(previewAssetId ?? ''));
   const assetsById = useMemo(() => new Map(assets.map((item) => [item.id, item])), [assets]);
+  useEffect(() => {
+    if (
+      !isAssetView ||
+      !showsAssetControls ||
+      !assetsQuery.isFetched ||
+      assetsQuery.isFetching ||
+      assetsQuery.isPlaceholderData
+    )
+      return;
+    setSelectedAssetIds((current) => {
+      const next = current.filter((id) => assetsById.has(id));
+      return next.length === current.length ? current : next;
+    });
+    if (selectedAssetId && !assetsById.has(selectedAssetId)) setSelectedAssetId(null);
+  }, [
+    isAssetView,
+    showsAssetControls,
+    assetsQuery.isFetched,
+    assetsQuery.isFetching,
+    assetsQuery.isPlaceholderData,
+    assetsById,
+    selectedAssetId,
+  ]);
   const selectedTransferAssets = selectedAssetIds.flatMap((id) => {
     const asset = assetsById.get(id);
     return asset ? [asset] : [];
@@ -1183,11 +1207,14 @@ export function SekerEaglePage({
       draggedId: assetId,
     });
   const originalDownloadComponents = async (selected: EagleAssetListItem[]) => {
+    const epoch = workspaceCache.downloads.epoch;
     const originals = new Map(selected.map((asset) => [asset.id, asset]));
     for (const asset of selected) {
       const id = asset.livePhotoMotion?.assetId;
       if (id && !originals.has(id)) originals.set(id, await getEagleAsset(accessToken, id));
     }
+    if (epoch !== workspaceCache.downloads.epoch)
+      throw new DOMException('Scope revoked', 'AbortError');
     return [...originals.values()];
   };
   const saveSelectedOriginal = () => {
@@ -1195,7 +1222,11 @@ export function SekerEaglePage({
     setAssetActionPending('save');
     setAssetActionError(null);
     const download = contextMenuAsset.livePhotoMotion
-      ? originalDownloadComponents([contextMenuAsset]).then(downloadOriginalFiles)
+      ? originalDownloadComponents([contextMenuAsset]).then((targets) =>
+          downloadOriginalFiles(targets, {
+            queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
+          }),
+        )
       : saveOriginalFile(contextMenuAsset);
     void download.then(
       () => {
@@ -1252,7 +1283,11 @@ export function SekerEaglePage({
     setIsBatchDownloading(true);
     setOriginalFileError(null);
     void originalDownloadComponents(selectedAssets)
-      .then(downloadOriginalFiles)
+      .then((targets) =>
+        downloadOriginalFiles(targets, {
+          queueBrowserDownloads: (items) => workspaceCache.downloads.enqueue(items),
+        }),
+      )
       .then(
         () => {
           setAssetContextMenu(null);
@@ -2977,6 +3012,7 @@ export function SekerEaglePage({
         />
       )}
 
+      <EagleDownloadQueue queue={workspaceCache.downloads} />
       {isDragging && (
         <div className={styles.dropOverlay}>
           <IconPlus size={32} />

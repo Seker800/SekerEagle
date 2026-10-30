@@ -54,16 +54,14 @@ it('waits for an explicit folder choice, streams each file and retries only fail
 it('clears names and cancels pending requests when the owning scope is revoked', async () => {
   vi.stubGlobal(
     'showDirectoryPicker',
-    vi
-      .fn()
-      .mockResolvedValue({
-        getDirectoryHandle: async () => ({
-          getFileHandle: async () => ({
-            createWritable: async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }),
-          }),
-          removeEntry: vi.fn(),
+    vi.fn().mockResolvedValue({
+      getDirectoryHandle: async () => ({
+        getFileHandle: async () => ({
+          createWritable: async () => ({ write: vi.fn(), close: vi.fn(), abort: vi.fn() }),
         }),
+        removeEntry: vi.fn(),
       }),
+    }),
   );
   let requested!: () => void;
   const started = new Promise<void>((done) => {

@@ -407,17 +407,9 @@ describe('SekerEaglePage', () => {
       ).sekerDesktop?.saveOriginalFile;
       return bridge ? bridge(target.id) : Promise.resolve({ saved: true });
     });
-    downloadOriginalFilesMock.mockImplementation((targets: Array<{ id: string }>) => {
-      const bridge = (
-        globalThis as {
-          sekerDesktop?: {
-            downloadOriginalFiles?: (assetIds: string[]) => Promise<{ downloaded: number }>;
-          };
-        }
-      ).sekerDesktop?.downloadOriginalFiles;
-      return bridge
-        ? bridge(targets.map(({ id }) => id))
-        : Promise.resolve({ downloaded: targets.length });
+    downloadOriginalFilesMock.mockImplementation((targets, dependencies) => {
+      dependencies.queueBrowserDownloads(targets);
+      return Promise.resolve({ downloaded: 0 });
     });
     listEagleSmartFoldersMock.mockResolvedValue([]);
     createEagleSmartFolderMock.mockResolvedValue({
@@ -1432,7 +1424,7 @@ describe('SekerEaglePage', () => {
       }),
     );
     fireEvent.doubleClick(await screen.findByRole('button', { name: /AI标签 猫头鹰/ }));
-    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
+    expect(screen.getByRole('button', { name: '收起筛选' })).toBeInTheDocument();
     const aiFilterButton = screen.getByRole('button', { name: 'AI 标签筛选，1' });
     fireEvent.click(aiFilterButton);
     const aiFilterPanel = screen.getByRole('dialog', { name: 'AI 标签筛选' });
@@ -1996,7 +1988,10 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(firstCard);
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
-    await waitFor(() => expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2']));
+    fireEvent.click(await screen.findByRole('button', { name: '保存到文件夹' }));
+    await waitFor(() =>
+      expect(downloadOriginalFiles).toHaveBeenCalledWith(['asset-1', 'asset-2'], 'zh-CN'),
+    );
     expect(screen.queryByRole('menu', { name: '素材操作' })).not.toBeInTheDocument();
   });
 
@@ -2013,7 +2008,10 @@ describe('SekerEaglePage', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
     await waitFor(() =>
-      expect(downloadOriginalFilesMock).toHaveBeenCalledWith([asset, secondAsset]),
+      expect(downloadOriginalFilesMock).toHaveBeenCalledWith(
+        [asset, secondAsset],
+        expect.objectContaining({ queueBrowserDownloads: expect.any(Function) }),
+      ),
     );
   });
 
@@ -2049,8 +2047,9 @@ describe('SekerEaglePage', () => {
     fireEvent.contextMenu(secondCard);
     fireEvent.click(screen.getByRole('menuitem', { name: '批量下载（2）…' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('批量下载原文件失败。');
-    expect(screen.getByRole('alert')).not.toHaveTextContent('目标文件夹不可写');
+    fireEvent.click(await screen.findByRole('button', { name: '保存到文件夹' }));
+    await waitFor(() => expect(screen.getAllByText('下载失败')).toHaveLength(2));
+    expect(screen.getByRole('button', { name: '保存到文件夹' })).toBeEnabled();
   });
 
   it('downloads selected originals only after an explicit drag gesture', async () => {

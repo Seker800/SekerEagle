@@ -1,0 +1,37 @@
+.queue {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 90;
+  width: min(460px, calc(100vw - 40px));
+  max-height: 45vh;
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--border-color, #555);
+  border-radius: 12px;
+  background: var(--panel-bg, #252525);
+  color: var(--text-primary, #eee);
+  box-shadow: 0 8px 32px #0005;
+}
+.queue ul {
+  list-style: none;
+  padding: 0;
+}
+.queue li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+}
+.queue button {
+  margin: 4px;
+}
+.queue progress {
+  width: 100%;
+}
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}

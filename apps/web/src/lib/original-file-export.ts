@@ -18,6 +18,7 @@ interface SaveOriginalFileDependencies {
   triggerBrowserDownload?: TriggerBrowserDownload;
 }
 interface DownloadOriginalFilesDependencies {
+  queueBrowserDownloads?: (targets: readonly OriginalFileTarget[]) => void;
   desktopBridge?: DesktopOriginalFileDownloadBridge | null;
   triggerBrowserDownload?: TriggerBrowserDownload;
 }
@@ -46,6 +47,10 @@ export function downloadOriginalFiles(
   downloaded: number;
 }> {
   if (targets.length < 2) return Promise.reject(new Error(t('批量下载至少需要选择 2 项素材。')));
+  if (dependencies.queueBrowserDownloads) {
+    dependencies.queueBrowserDownloads(targets);
+    return Promise.resolve({ downloaded: 0 });
+  }
   const desktopBridge =
     dependencies.desktopBridge === undefined
       ? getDesktopOriginalFileDownloadBridge()
@@ -55,11 +60,7 @@ export function downloadOriginalFiles(
       targets.map(({ id }) => id),
       getLocale(),
     );
-  const download = dependencies.triggerBrowserDownload ?? triggerBrowserDownload;
-  targets.forEach((target) =>
-    download(getEagleAssetContentUrl(target.id, target.libraryMode), target.originalName),
-  );
-  return Promise.resolve({ downloaded: targets.length });
+  return Promise.reject(new Error(t('批量下载原文件失败。')));
 }
 function triggerBrowserDownload(url: string, fileName: string): void {
   const link = document.createElement('a');
