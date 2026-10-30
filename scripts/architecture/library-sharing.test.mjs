@@ -130,9 +130,17 @@ test('rejects a forked top-level workspace even if the existing page is retained
     (s) =>
       s
         .replace('<SekerEaglePage', "{libraryMode === 'MATERIAL' && <SekerEaglePage")
-        .replace('        />\n      </div>', '        />}\n      </div>'),
+        .replace('        />\n        </Suspense>', '        />}\n        </Suspense>'),
     'shared-composition',
   );
+});
+test('rejects lazy composition with a different module, export, factory or mode branch', () => {
+  for (const [before, after] of [
+    ["import('./components/eagle/SekerEaglePage')", "import('./components/photos/PhotoPage')"],
+    ['default: module.SekerEaglePage', 'default: module.PhotoPage'],
+    ['const SekerEaglePage = lazy(', 'const SekerEaglePage = fakeLazy('],
+    ["import('./components/eagle/SekerEaglePage')", "libraryMode === 'PHOTO' ? import('./components/eagle/SekerEaglePage') : import('./components/photos/PhotoPage')"],
+  ]) rejectsMutation('apps/web/src/App.tsx', (s) => s.replace(before, after), 'shared-composition');
 });
 test('rejects missing core imports, a copied photo controller, and a removed provider registry', () => {
   rejectsMutation(
