@@ -1751,6 +1751,47 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it.each([
+    ['MATERIAL', false],
+    ['MATERIAL', true],
+    ['PHOTO', false],
+    ['PHOTO', true],
+  ] as const)(
+    'does not expose a privacy visibility control on the %s home with visibility=%s',
+    async (mode, enabled) => {
+      testWorkspaceMode.value = mode;
+      // Even an older caller supplying the former callback cannot restore the shortcut.
+      const props = {
+        ownerId: 'owner-test',
+        accessToken: 'token',
+        privacyVisibility: {
+          enabled,
+          durationHours: 3,
+          expiresAt: enabled ? '2099-01-01T00:00:00.000Z' : null,
+        },
+        onPrivacyVisibilityChange: vi.fn(),
+      };
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={client}>
+          <MemoryRouter>
+            <LibraryWorkspaceProvider ownerId="owner-test" libraryMode={mode}>
+              <SekerEaglePage {...props} />
+            </LibraryWorkspaceProvider>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await screen.findByRole('button', { name: /Owl Reference/ });
+      expect(
+        screen.queryByRole('button', { name: /显示隐私内容|隐藏隐私内容/ }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('switch', { name: /显示隐私内容|隐藏隐私内容/ }),
+      ).not.toBeInTheDocument();
+      expect(props.onPrivacyVisibilityChange).not.toHaveBeenCalled();
+    },
+  );
+
   it('shows the temporary privacy view without exposing a second per-asset privacy source', async () => {
     renderPage('owner-test', false, {
       enabled: true,
