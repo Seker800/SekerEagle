@@ -93,13 +93,11 @@ beforeEach(() => {
     const { people } = (await mocks.list()) as { people: PhotoPerson[] };
     return {
       pairs: people.flatMap((first: PhotoPerson, i: number) =>
-        people
-          .slice(i + 1)
-          .map((second: PhotoPerson) => ({
-            first: { ...first, photoCount: 1 },
-            second: { ...second, photoCount: 1 },
-            similarity: 0.4,
-          })),
+        people.slice(i + 1).map((second: PhotoPerson) => ({
+          first: { ...first, photoCount: 1 },
+          second: { ...second, photoCount: 1 },
+          similarity: 0.4,
+        })),
       ),
     };
   });
@@ -253,4 +251,13 @@ it('两个人均已命名时，确认前明确告知保留哪个名字', async (
   expect(await screen.findByText('合并后保留名称：小王')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
   await waitFor(() => expect(mocks.merge).toHaveBeenCalledWith('b', 'a'));
+});
+
+it('长按确认键阻止浏览器重复触发下一题', async () => {
+  show();
+  const confirm = await screen.findByRole('button', { name: '是，同一个人' });
+  expect(fireEvent.keyDown(confirm, { key: 'Enter', repeat: true })).toBe(false);
+  expect(fireEvent.keyDown(confirm, { key: ' ', repeat: true })).toBe(false);
+  expect(fireEvent.keyDown(confirm, { key: 'Enter', repeat: false })).toBe(true);
+  expect(mocks.merge).not.toHaveBeenCalled();
 });
