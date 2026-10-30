@@ -1112,6 +1112,39 @@ public final class MobileBackupTest {
   }
 
   @Test
+  public void immediatePauseAndResumeRetiresTheLatestServiceStart() throws Exception {
+    image("handoff.png", 0xff174938, true);
+    BackupScreen.addRule(settings, scope, "media", path);
+    getInstrumentation().runOnMainSync(() -> activity.startBackup());
+    waitUntil(() -> BackupService.isRunning(scope), 15000, "backup run started");
+    getInstrumentation()
+        .runOnMainSync(
+            () -> {
+              activity.pause();
+              activity.startBackup();
+              activity.startBackup();
+            });
+    waitUntil(
+        () -> !settings.value(scope, "lastFinished", "").isEmpty(),
+        30000,
+        "resumed backup finished");
+    java.lang.reflect.Field field = BackupService.class.getDeclaredField("current");
+    field.setAccessible(true);
+    waitUntil(
+        () -> {
+          try {
+            return field.get(null) == null;
+          } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+          }
+        },
+        15000,
+        "latest service start retired");
+    assertFalse(settings.flag(scope, "userPaused", true));
+    assertTrue(exists(created.get(created.size() - 1), "photos"));
+  }
+
+  @Test
   public void internalStopDoesNotBecomeADurableUserPause() throws Exception {
     getInstrumentation().runOnMainSync(() -> activity.enable(false));
     assertFalse(settings.flag(scope, "userPaused", false));

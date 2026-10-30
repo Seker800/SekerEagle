@@ -314,7 +314,7 @@ public final class MainActivity extends Activity {
             () -> {
               try {
                 String next = BackupPolicy.origin(address.getText().toString(), BuildConfig.DEBUG);
-                pause();
+                cancelBackup();
                 settings.origin(next);
                 activeScope = "";
                 nextCheck = 0;
@@ -346,7 +346,7 @@ public final class MainActivity extends Activity {
                   checking = false;
                   if (!origin.equals(settings.origin()) || !resumed) return;
                   if (!scope.equals(activeScope)) {
-                    pause();
+                    cancelBackup();
                     activeScope = scope;
                     settings.active(scope);
                     autoPending = true;
@@ -373,7 +373,7 @@ public final class MainActivity extends Activity {
                               || ((ApiClient.Failure) e).status == 403))
                       || (e instanceof NativeSession.Failure
                           && ((NativeSession.Failure) e).getStatus() == 401)) {
-                    pause();
+                    cancelBackup();
                     activeScope = "";
                     settings.active("");
                     if (backup != null && !backup.scope.isEmpty()) show("backup");
@@ -392,7 +392,7 @@ public final class MainActivity extends Activity {
     String scope = activeScope;
     settings.setFlag(scope, "enabled", value);
     if (!value) {
-      pause();
+      cancelBackup();
       show("backup");
       return;
     }
@@ -432,7 +432,7 @@ public final class MainActivity extends Activity {
     String scope = activeScope;
     String origin = settings.origin();
     if (scope.isEmpty()) return;
-    pause();
+    cancelBackup();
     settings.setFlag(scope, "enabled", false);
     settings.setFlag(scope, "auto", false);
     io.execute(
@@ -488,6 +488,10 @@ public final class MainActivity extends Activity {
     for (int i = 0; i < rules.length(); i++)
       if (rules.optJSONObject(i).optString("type").equals("media")) return true;
     return false;
+  }
+
+  void cancelBackup() {
+    BackupService.cancel(this);
   }
 
   void pause() {

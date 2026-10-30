@@ -102,12 +102,12 @@ final class BackupScreen extends ScrollView {
             activity.withMediaPermission(
                 () -> {
                   if (!scope.equals(settings.active())) return;
-                  activity.pause();
+                  activity.cancelBackup();
                   settings.setFlag(scope, "allMedia", true);
                   activity.show("backup");
                 });
           else {
-            activity.pause();
+            activity.cancelBackup();
             settings.setFlag(scope, "allMedia", false);
             activity.show("backup");
           }
@@ -131,7 +131,7 @@ final class BackupScreen extends ScrollView {
                               dialog.dismiss();
                               return;
                             }
-                            activity.pause();
+                            activity.cancelBackup();
                             settings.setValue(
                                 scope, "allMediaMode", which == 0 ? "PHOTO" : "MATERIAL");
                             dialog.dismiss();
@@ -448,7 +448,7 @@ final class BackupScreen extends ScrollView {
                 "添加（0）",
                 (d, which) -> {
                   if (!scope.equals(settings.active())) return;
-                  activity.pause();
+                  activity.cancelBackup();
                   for (int i = 0; i < candidates.size(); i++)
                     if (selected[i]) addRule(settings, scope, "media", candidates.get(i));
                   activity.show("backup");
@@ -487,7 +487,7 @@ final class BackupScreen extends ScrollView {
             },
             (d, which) -> {
               if (!scope.equals(settings.active())) return;
-              activity.pause();
+              activity.cancelBackup();
               try {
                 if (which == 3) rules.remove(index);
                 else if (which == 2) rule.put("recursive", !rule.optBoolean("recursive", true));

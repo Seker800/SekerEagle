@@ -48,17 +48,26 @@ public final class BackupService extends Service {
     state.setFlag(scope, "userPaused", true);
     state.setValue(scope, "status", "备份已暂停");
     BackupService service = current;
-    if (service != null && scope.equals(service.scope)) service.pauseRun();
+    if (service != null && scope.equals(service.scope)) service.cancelRun(true);
   }
 
-  private void pauseRun() {
+  /** Stop obsolete work without changing the user's durable pause preference. */
+  static void cancel(Context context) {
+    BackupSettings state = new BackupSettings(context);
+    BackupService service = current;
+    if (service != null && state.active().equals(service.scope)) service.cancelRun(false);
+  }
+
+  private void cancelRun(boolean userPause) {
     cancelled = true;
     pendingRestart = null;
-    settings.setFlag(scope, "userPaused", true);
-    settings.setValue(scope, "status", "备份已暂停");
+    if (userPause) settings.setFlag(scope, "userPaused", true);
+    String message = settings.flag(scope, "userPaused", false) ? "备份已暂停" : "备份已停止";
+    pendingMessage = message;
+    settings.setValue(scope, "status", message);
     ApiClient api = activeApi;
     if (api != null) api.close();
-    getSystemService(NotificationManager.class).notify(NOTICE, notification("备份已暂停"));
+    getSystemService(NotificationManager.class).notify(NOTICE, notification(message));
   }
 
   private BackupSettings settings;
@@ -111,7 +120,7 @@ public final class BackupService extends Service {
       return START_NOT_STICKY;
     }
     if (working.get()) {
-      if (cancelled && explicit) pendingRestart = new Intent(intent);
+      if (cancelled) pendingRestart = new Intent(intent);
       return START_NOT_STICKY;
     }
     working.set(true);
@@ -122,11 +131,11 @@ public final class BackupService extends Service {
     if (explicit) settings.setFlag(scope, "userPaused", false);
     lastConditions = lastUpdate = 0;
     startForeground(NOTICE, notification("正在准备扫描"), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC);
-    executor.execute(() -> runBackup(startId));
+    executor.execute(this::runBackup);
     return START_NOT_STICKY;
   }
 
-  private void runBackup(int startId) {
+  private void runBackup() {
     settings.setFlag(scope, "running", true);
     try (BackupJournal journal = new BackupJournal(this)) {
       boolean resume = settings.flag(scope, "scanOpen", false);
@@ -237,15 +246,17 @@ public final class BackupService extends Service {
         if (cancelled && settings.flag(scope, "userPaused", false)) pendingMessage = "备份已暂停";
         flushUpdate();
         settings.setFlag(scope, "running", false);
-        working.set(false);
+        // Keep the retiring run occupied until its main-thread handoff. New starts
+        // queue behind it, so an old completion can never stop a newer run.
         new Handler(Looper.getMainLooper())
             .post(
                 () -> {
                   if (current != this) return;
+                  working.set(false);
                   Intent restart = pendingRestart;
                   pendingRestart = null;
                   if (restart != null) {
-                    onStartCommand(restart, 0, startId);
+                    onStartCommand(restart, 0, latestStartId);
                     return;
                   }
                   stopForeground(
