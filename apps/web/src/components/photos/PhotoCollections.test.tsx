@@ -5,12 +5,14 @@ import { PhotoCollections } from './PhotoCollections';
 import { PhotoPrivatePeopleSettings } from './PhotoPrivatePeopleSettings';
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
+  faces: vi.fn(),
   privacy: vi.fn(),
   rename: vi.fn(),
   clear: vi.fn(),
 }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  listPhotoPersonFaces: mocks.faces,
   reviewPhotoPeople: vi.fn().mockResolvedValue({ pairs: [] }),
   updatePhotoPersonPrivacy: mocks.privacy,
   scanPhotoPeople: vi.fn(),
@@ -38,6 +40,7 @@ beforeEach(() => {
       { id: 'person', name: '测试人物', rowVersion: 3, marksAssetsPrivate: false, faces: [] },
     ],
   });
+  mocks.faces.mockResolvedValue({ faces: [], nextCursor: null });
   mocks.privacy.mockResolvedValue({});
   mocks.clear.mockResolvedValue(undefined);
 });
@@ -187,4 +190,21 @@ it('翻到第二页后停止周期性重拉整个目录', async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+it('loads face detail only after selecting a person', async () => {
+  wrapper(
+    <PhotoCollections
+      includePrivate={false}
+      onPrivacyRulesChange={vi.fn()}
+      onOpen={vi.fn()}
+      onPerson={vi.fn()}
+    />,
+  );
+  const person = await screen.findByRole('button', { name: '测试人物' });
+  expect(mocks.faces).not.toHaveBeenCalled();
+  fireEvent.click(person);
+  await waitFor(() =>
+    expect(mocks.faces).toHaveBeenCalledWith('person', undefined, expect.any(AbortSignal)),
+  );
 });

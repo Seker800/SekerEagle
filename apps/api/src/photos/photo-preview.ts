@@ -35,8 +35,25 @@ export const previewSelect = {
   },
   photoMetadata: true,
 } satisfies Prisma.EagleAssetSelect;
-export const serializePreview = (
-  asset: Prisma.EagleAssetGetPayload<{ select: typeof previewSelect }>,
+/** Person cards need browser media, not the complete EXIF record. */
+export const facePreviewSelect = {
+  ...previewSelect,
+  photoMetadata: false,
+  renditions: {
+    ...previewSelect.renditions,
+    where: {
+      status: 'READY' as const,
+      kind: { in: ['THUMBNAIL', 'PREVIEW', 'POSTER'] as Array<'THUMBNAIL' | 'PREVIEW' | 'POSTER'> },
+    },
+  },
+} satisfies Prisma.EagleAssetSelect;
+export const serializePreview = <
+  T extends Pick<
+    Prisma.EagleAssetGetPayload<{ select: typeof previewSelect }>,
+    'byteSize' | 'renditions'
+  >,
+>(
+  asset: T,
 ) => ({
   ...asset,
   byteSize: Number(asset.byteSize),

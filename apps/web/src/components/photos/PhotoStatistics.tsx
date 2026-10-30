@@ -44,12 +44,7 @@ export function PhotoStatistics({
         ? previous
         : undefined,
   });
-  const options = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'statistics', includePrivate, 'options'],
-    queryFn: ({ signal }) =>
-      getPhotoStatistics({ grain: 'year', groupBy: 'camera', cameras: [], lenses: [] }, signal),
-    staleTime: 30000,
-  });
+  const options = result;
   const data = result.data;
   function openPanel(next: Exclude<Panel, null>) {
     setPanel((value) => (value === next ? null : next));
@@ -139,7 +134,6 @@ export function PhotoStatistics({
           title={t('刷新统计')}
           onClick={() => {
             void result.refetch();
-            void options.refetch();
           }}
         >
           <IconRefresh size={14} aria-hidden />

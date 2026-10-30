@@ -13,7 +13,7 @@ import {
   syncAssetPrivacy,
   queuePhotoFaceScan,
 } from '@sekereagle/library-persistence';
-import { previewSelect, serializePreview } from './photo-preview';
+import { facePreviewSelect, previewSelect, serializePreview } from './photo-preview';
 import { readPhotoPeopleReview } from './photo-people-review';
 import { suggestPhotoGroups } from './photo-grouping';
 
@@ -75,12 +75,17 @@ export class PhotoManagementService {
       lenses: lenses.flatMap((row) => (row.lensModel ? [row.lensModel] : [])),
     };
   }
-  async people(ownerId: string, includePrivate: boolean, after?: string) {
+  async people(
+    ownerId: string,
+    includePrivate: boolean,
+    after?: string,
+    view: 'full' | 'cards' | 'options' = 'full',
+  ) {
     const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate) : null;
-    const rows = await this.prisma.eaglePhotoPerson.findMany({
+    const pageQuery = {
       where: {
         ownerId,
-        libraryMode: 'PHOTO',
+        libraryMode: 'PHOTO' as const,
         ...(cursor
           ? {
               AND: [
@@ -99,6 +104,24 @@ export class PhotoManagementService {
           ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
         ],
       },
+      orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
+      take: 201,
+    };
+    const page = (rows: Array<{ id: string; createdAt: Date }>) => ({
+      runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
+      limits: { people: 200, facesPerPerson: view === 'options' ? 0 : view === 'cards' ? 1 : 20 },
+      nextCursor:
+        rows.length > 200 ? encodePeopleCursor(rows[199]!, ownerId, includePrivate) : null,
+    });
+    if (view === 'options') {
+      const rows = await this.prisma.eaglePhotoPerson.findMany({
+        ...pageQuery,
+        select: { id: true, name: true, createdAt: true },
+      });
+      return { ...page(rows), people: rows.slice(0, 200).map(({ id, name }) => ({ id, name })) };
+    }
+    const rows = await this.prisma.eaglePhotoPerson.findMany({
+      ...pageQuery,
       select: {
         id: true,
         name: true,
@@ -106,30 +129,73 @@ export class PhotoManagementService {
         rowVersion: true,
         marksAssetsPrivate: true,
         faces: {
-          where: { isCurrent: true, asset: visible(ownerId, includePrivate) },
+          where: {
+            ownerId,
+            libraryMode: 'PHOTO' as const,
+            isCurrent: true,
+            asset: visible(ownerId, includePrivate),
+          },
           select: {
             id: true,
             box: true,
             confidence: true,
             assetId: true,
-            asset: { select: previewSelect },
+            asset: { select: view === 'cards' ? facePreviewSelect : previewSelect },
           },
-          take: 20,
-          orderBy: { confidence: 'desc' },
+          take: view === 'cards' ? 1 : 20,
+          orderBy: [{ confidence: 'desc' }, { id: 'asc' }],
         },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      take: 201,
     });
     return {
-      runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
-      limits: { people: 200, facesPerPerson: 20 },
+      ...page(rows),
+      people: rows
+        .slice(0, 200)
+        .map((person) => ({
+          ...person,
+          faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
+        })),
+    };
+  }
+  async personFaces(ownerId: string, personId: string, includePrivate: boolean, after?: string) {
+    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate, personId) : null;
+    await this.requirePerson(this.prisma, ownerId, personId, includePrivate);
+    const rows = await this.prisma.eaglePhotoFace.findMany({
+      where: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        personId,
+        isCurrent: true,
+        asset: visible(ownerId, includePrivate),
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { gt: cursor.createdAt } },
+                { createdAt: cursor.createdAt, id: { gt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        box: true,
+        confidence: true,
+        assetId: true,
+        asset: { select: facePreviewSelect },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: 21,
+    });
+    return {
       nextCursor:
-        rows.length > 200 ? encodePeopleCursor(rows[199]!, ownerId, includePrivate) : null,
-      people: rows.slice(0, 200).map((person) => ({
-        ...person,
-        faces: person.faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
-      })),
+        rows.length > 20 ? encodePeopleCursor(rows[19]!, ownerId, includePrivate, personId) : null,
+      faces: rows
+        .slice(0, 20)
+        .map(({ createdAt: _createdAt, ...face }) => ({
+          ...face,
+          asset: serializePreview(face.asset),
+        })),
     };
   }
   reviewPeople(ownerId: string, includePrivate: boolean) {
@@ -141,7 +207,7 @@ export class PhotoManagementService {
     return queuePhotoFaceScan(this.prisma, ownerId, includePrivate);
   }
   private async requirePerson(
-    tx: Prisma.TransactionClient,
+    tx: Pick<Prisma.TransactionClient, 'eaglePhotoPerson'>,
     ownerId: string,
     id: string,
     includePrivate: boolean,
@@ -464,10 +530,12 @@ function encodePeopleCursor(
   person: { id: string; createdAt: Date },
   ownerId: string,
   includePrivate: boolean,
+  personId?: string,
 ): string {
   return Buffer.from(
     JSON.stringify({
       v: 1,
+      personId,
       ownerId,
       includePrivate,
       id: person.id,
@@ -479,6 +547,7 @@ function decodePeopleCursor(
   value: string,
   ownerId: string,
   includePrivate: boolean,
+  personId?: string,
 ): { id: string; createdAt: Date } {
   try {
     if (value.length > 1024) throw new Error('Cursor too long');
@@ -489,6 +558,7 @@ function decodePeopleCursor(
     const createdAt = new Date(String(row.createdAt));
     if (
       row.v !== 1 ||
+      row.personId !== personId ||
       row.ownerId !== ownerId ||
       row.includePrivate !== includePrivate ||
       typeof row.id !== 'string' ||

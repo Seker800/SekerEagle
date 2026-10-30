@@ -8,9 +8,11 @@ import {
   SetMetadata,
   UseGuards,
   Query,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsIn,
   IsInt,
   Min,
   IsArray,
@@ -31,12 +33,18 @@ import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoMapService } from './photo-map.service';
 import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
 import { PhotoManagementService } from './photo-management.service';
-class PeopleQueryDto {
+export class PeopleCursorDto {
   @ApiPropertyOptional({ maxLength: 1024 })
   @IsOptional()
   @IsString()
   @MaxLength(1024)
   after?: string;
+}
+export class PeopleQueryDto extends PeopleCursorDto {
+  @ApiPropertyOptional({ enum: ['full', 'cards', 'options'] })
+  @IsOptional()
+  @IsIn(['full', 'cards', 'options'])
+  view?: 'full' | 'cards' | 'options';
 }
 class PersonPrivacyDto {
   @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;
@@ -96,7 +104,15 @@ export class PhotoManagementController {
     return this.photos.facets(p.sub, p.canViewPrivate);
   }
   @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
-    return this.photos.people(p.sub, p.canViewPrivate, query.after);
+    return this.photos.people(p.sub, p.canViewPrivate, query.after, query.view);
+  }
+  @Get('people/:id/faces')
+  personFaces(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) id: string,
+    @Query() query: PeopleCursorDto,
+  ) {
+    return this.photos.personFaces(p.sub, id, p.canViewPrivate, query.after);
   }
   @Get('people/review')
   reviewPeople(@CurrentPrincipal() p: AuthPrincipal) {
