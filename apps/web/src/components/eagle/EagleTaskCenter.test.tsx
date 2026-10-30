@@ -186,6 +186,13 @@ describe('unified task center', () => {
     );
     expect(screen.getByLabelText('开始时间')).toHaveValue('22:00');
   });
+  it('shows the pending pause action until the server confirms it', async () => {
+    vi.mocked(api.updateEagleTaskPolicy).mockImplementation(() => new Promise(() => undefined));
+    mount();
+    await screen.findByRole('heading', { name: '2B 向量搜图' });
+    fireEvent.click(screen.getByRole('button', { name: '暂停这项工作' }));
+    expect(await screen.findByRole('button', { name: '正在暂停…' })).toBeDisabled();
+  });
   it('pauses one category without exposing or sending a manual priority', async () => {
     mount();
     await screen.findByRole('heading', { name: '2B 向量搜图' });

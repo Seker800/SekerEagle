@@ -56,6 +56,30 @@ describe('startup session recovery', () => {
     expect(requestMock.mock.calls.filter(([path]) => path === '/api/auth/me')).toHaveLength(2);
   });
 
+  it('pauses session checks while offline and checks again on reconnect', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+    requestMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    const view = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <App />
+      </QueryClientProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(requestMock).not.toHaveBeenCalled();
+    vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(true);
+    requestMock.mockResolvedValue(userResponse());
+    await act(async () => {
+      fireEvent(window, new Event('online'));
+    });
+    expect(requestMock.mock.calls.some(([path]) => path === '/api/auth/me')).toBe(true);
+    view.unmount();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
   it.each([401, 403])(
     'shows login after the server rejects the refresh session (%i)',
     async (status) => {

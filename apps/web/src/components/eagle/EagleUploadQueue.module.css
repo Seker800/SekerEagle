@@ -1,0 +1,36 @@
+.queue {
+  margin: 8px 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 12px;
+}
+.queue header,
+.queue li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.queue header {
+  justify-content: space-between;
+}
+.queue ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  max-height: 180px;
+  overflow: auto;
+}
+.queue li {
+  padding: 4px 0;
+}
+.name {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.queue progress {
+  width: 120px;
+}

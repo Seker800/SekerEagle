@@ -32,7 +32,7 @@ it('pins every file of a drag batch to the mode at drop time, including queued f
     (name) => new File(['jpeg'], `${name}.jpg`, { type: 'image/jpeg' }),
   );
   let pending!: Promise<void>;
-  act(() => {
+  await act(async () => {
     pending = view.result.current.importFiles(files);
   });
   expect(material).toHaveBeenCalledTimes(2);
@@ -73,7 +73,7 @@ it('keeps independent file progress, all failures and a dismissible success summ
     { wrapper },
   );
   let pending!: Promise<void>;
-  act(() => {
+  await act(async () => {
     pending = view.result.current.importFiles([new File(['a'], 'a.jpg'), new File(['b'], 'b.jpg')]);
   });
   expect(view.result.current.uploads.find((item) => item.name === 'a.jpg')?.percent).toBe(25);

@@ -1,4 +1,9 @@
 export const enUS = {
+  '导入完成 {{value1}}/{{value2}}': 'Import complete {{value1}}/{{value2}}',
+  等待导入: 'Waiting to import',
+  导入成功: 'Imported',
+  清除已结束的导入: 'Dismiss finished imports',
+  导入队列: 'Import queue',
   '正在更新结果…': 'Updating results…',
   '界面加载失败，请重新加载。': 'The view could not load. Please reload the page.',
   '正在准备首批地图位置，无需等待照片分析完成。':

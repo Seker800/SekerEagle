@@ -1,3 +1,4 @@
+import { EagleUploadQueue } from './EagleUploadQueue';
 import { AsyncContent } from '../AsyncContent';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
@@ -407,7 +408,8 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     photoEditing.open(asset);
   };
-  const { importFiles, uploadStatus } = useEagleUploadController(accessToken, queryKeys.assets);
+  const { importFiles, uploadStatus, uploads, dismissUploads, retryUpload } =
+    useEagleUploadController(accessToken, queryKeys.assets);
   useEffect(() => {
     window.localStorage.setItem(preferencesKey, JSON.stringify({ thumbnailSize }));
   }, [thumbnailSize, preferencesKey]);
@@ -2007,11 +2009,12 @@ export function SekerEaglePage({
                 </div>
               )}
               {selectionToolbar}
-              {uploadStatus && (
-                <div className={styles.statusBar} role="status">
-                  {uploadStatus}
-                </div>
-              )}
+              <EagleUploadQueue
+                items={uploads}
+                status={uploadStatus}
+                onRetry={retryUpload}
+                onDismiss={dismissUploads}
+              />
               {assetDragStatus && (
                 <div className={styles.statusBar} role="status">
                   {assetDragStatus.phase === 'preparing'
