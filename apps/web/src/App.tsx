@@ -1,13 +1,10 @@
-import { PhotoPrivatePeopleSettings } from './components/photos/PhotoPrivatePeopleSettings';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
-import { AccountHome } from './components/account/AccountHome';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
 import { LibraryModeControl } from './components/eagle/LibraryModeControl';
-import { SekerEaglePage } from './components/eagle/SekerEaglePage';
 import { LibraryWorkspaceProvider } from './lib/library-workspace';
 import { createPrivacyVisibilityApi } from './lib/privacy-visibility-api';
 import type { LibraryMode } from './lib/library-api-scope';
@@ -22,6 +19,19 @@ export interface User {
   email: string;
   role: 'USER' | 'ADMIN';
 }
+const SekerEaglePage = lazy(() =>
+  import('./components/eagle/SekerEaglePage').then((module) => ({
+    default: module.SekerEaglePage,
+  })),
+);
+const AccountHome = lazy(() =>
+  import('./components/account/AccountHome').then((module) => ({ default: module.AccountHome })),
+);
+const PhotoPrivatePeopleSettings = lazy(() =>
+  import('./components/photos/PhotoPrivatePeopleSettings').then((module) => ({
+    default: module.PhotoPrivatePeopleSettings,
+  })),
+);
 export function App() {
   const queryClient = useQueryClient();
   const [libraryMode, setLibraryMode] = useState<LibraryMode>(() =>
@@ -267,43 +277,55 @@ export function App() {
     >
       <div className="standalone-eagle-shell">
         {connectionButton}
-        <SekerEaglePage
-          modeSwitcher={
-            <LibraryModeControl
-              value={libraryMode}
-              onChange={(mode) => {
-                setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
-                setLibraryMode(mode);
-              }}
-            />
+        <Suspense
+          fallback={
+            <main className="auth-shell" role="status">
+              {t('正在加载素材…')}
+            </main>
           }
-          accountSummary={{ email: user.email, onLogout: () => void logout() }}
-          ownerId={user.id}
-          canManageProcessing={user.role === 'ADMIN'}
-          privacyVisibility={privacyVisibility}
-          privacyRulesRevision={privacyRulesRevision}
-          onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-          accountView={
-            <AccountHome
-              user={user}
-              onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
-              onLogout={() => void logout()}
-              privacyVisibility={privacyVisibility}
-              onPrivacyVisibilityChange={(value) => {
-                if (modeRef.current === libraryMode) setPrivacyVisibility(value);
-              }}
-              privacyExtras={
-                libraryMode === 'PHOTO' ? (
-                  <PhotoPrivatePeopleSettings
-                    includePrivate={privacyVisibility?.enabled === true}
-                    onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-                  />
-                ) : undefined
-              }
-              onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-            />
-          }
-        />
+        >
+          <SekerEaglePage
+            modeSwitcher={
+              <LibraryModeControl
+                value={libraryMode}
+                onChange={(mode) => {
+                  setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+                  setLibraryMode(mode);
+                }}
+              />
+            }
+            accountSummary={{ email: user.email, onLogout: () => void logout() }}
+            ownerId={user.id}
+            canManageProcessing={user.role === 'ADMIN'}
+            privacyVisibility={privacyVisibility}
+            privacyRulesRevision={privacyRulesRevision}
+            onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+            accountView={
+              <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AccountHome
+                  user={user}
+                  onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
+                  onLogout={() => void logout()}
+                  privacyVisibility={privacyVisibility}
+                  onPrivacyVisibilityChange={(value) => {
+                    if (modeRef.current === libraryMode) setPrivacyVisibility(value);
+                  }}
+                  privacyExtras={
+                    libraryMode === 'PHOTO' ? (
+                      <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                        <PhotoPrivatePeopleSettings
+                          includePrivate={privacyVisibility?.enabled === true}
+                          onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                        />
+                      </Suspense>
+                    ) : undefined
+                  }
+                  onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                />
+              </Suspense>
+            }
+          />
+        </Suspense>
       </div>
     </LibraryWorkspaceProvider>
   );

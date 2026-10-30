@@ -310,6 +310,7 @@ export function EagleAssetThumbnail({
         src={activeSource}
         alt={alt}
         draggable={false}
+        decoding="async"
         onLoad={handleLoad}
         onError={handleError}
       />

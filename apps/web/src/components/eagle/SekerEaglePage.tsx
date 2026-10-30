@@ -1,6 +1,5 @@
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
-import { PhotoStatistics } from '../photos/PhotoStatistics';
 import { IconChartBar } from '@tabler/icons-react';
 import { EagleSmartFolderStatus } from './EagleSmartFolderStatus';
 import { useEaglePrependAnchor } from './useEaglePrependAnchor';
@@ -16,9 +15,7 @@ import { EagleMobileMore, isAndroidClient } from './EagleMobileMore';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { EagleResponsiveTools } from './EagleResponsiveTools';
 import { EagleResponsiveDetails } from './EagleResponsiveDetails';
-import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
-import { EagleBatchPhotoEdit } from './EagleBatchPhotoEdit';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
 import { EagleLibraryNavigation } from './EagleLibraryNavigation';
@@ -41,11 +38,12 @@ import { usePhotoFilterOptions } from '../photos/usePhotoFilterOptions';
 import { PhotoCollections } from '../photos/PhotoCollections';
 import { PhotoTimelineRail } from '../photos/PhotoTimelineRail';
 import { usePhotoTimeline } from '../photos/usePhotoTimeline';
-import { PhotoMap } from '../photos/PhotoMap';
 import { PhotoMetadataDetails } from '../photos/PhotoMetadataDetails';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { getLocale, t } from '../../i18n';
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -120,8 +118,7 @@ import {
 } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
-import { EagleTaskCenter } from './EagleTaskCenter';
-import { EagleVectorWorkspace, type EagleVectorWorkspaceView } from './EagleVectorWorkspace';
+import type { EagleVectorWorkspaceView } from './EagleVectorWorkspace';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
 import {
@@ -147,6 +144,25 @@ import {
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
+const PhotoMap = lazy(() =>
+  import('../photos/PhotoMap').then((module) => ({ default: module.PhotoMap })),
+);
+const PhotoStatistics = lazy(() =>
+  import('../photos/PhotoStatistics').then((module) => ({ default: module.PhotoStatistics })),
+);
+const PhotoAgentReview = lazy(() =>
+  import('../photos/PhotoAgentReview').then((module) => ({ default: module.PhotoAgentReview })),
+);
+const EagleBatchPhotoEdit = lazy(() =>
+  import('./EagleBatchPhotoEdit').then((module) => ({ default: module.EagleBatchPhotoEdit })),
+);
+const EagleTaskCenter = lazy(() =>
+  import('./EagleTaskCenter').then((module) => ({ default: module.EagleTaskCenter })),
+);
+const EagleVectorWorkspace = lazy(() =>
+  import('./EagleVectorWorkspace').then((module) => ({ default: module.EagleVectorWorkspace })),
+);
+
 interface SekerEaglePageProps {
   modeSwitcher?: ReactNode;
   accessToken?: string;
@@ -1753,28 +1769,32 @@ export function SekerEaglePage({
           {libraryView === 'ACCOUNT' ? (
             accountView
           ) : libraryView === 'PROCESSING' ? (
-            <EagleTaskCenter
-              key={`${storeScope}:${privateVisible}`}
-              includePrivate={privateVisible}
-              canManageProcessing={canManageProcessing}
-              onReview={() => {
-                changeLibraryView('ACTIVE');
-                setPhotoView('agent');
-              }}
-            />
+            <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+              <EagleTaskCenter
+                key={`${storeScope}:${privateVisible}`}
+                includePrivate={privateVisible}
+                canManageProcessing={canManageProcessing}
+                onReview={() => {
+                  changeLibraryView('ACTIVE');
+                  setPhotoView('agent');
+                }}
+              />
+            </Suspense>
           ) : getVectorWorkspaceView(libraryView) ? (
-            <EagleVectorWorkspace
-              view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
-              manualTags={manualTags}
-              onCreateManualTag={(name) => createBatchTagMutation.mutateAsync(name)}
-              onChangeManualTags={async ({ assetIds, addTagIds, removeTagIds }) => {
-                await batchTagMutation.mutateAsync({ assetIds, addTagIds, removeTagIds });
-              }}
-              onTrashAssets={async (assetIds) => {
-                await trashMutation.mutateAsync(assetIds);
-              }}
-              onAssetPrivacyChanged={resetAssetPrivacyState}
-            />
+            <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+              <EagleVectorWorkspace
+                view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
+                manualTags={manualTags}
+                onCreateManualTag={(name) => createBatchTagMutation.mutateAsync(name)}
+                onChangeManualTags={async ({ assetIds, addTagIds, removeTagIds }) => {
+                  await batchTagMutation.mutateAsync({ assetIds, addTagIds, removeTagIds });
+                }}
+                onTrashAssets={async (assetIds) => {
+                  await trashMutation.mutateAsync(assetIds);
+                }}
+                onAssetPrivacyChanged={resetAssetPrivacyState}
+              />
+            </Suspense>
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
               kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
@@ -1962,17 +1982,21 @@ export function SekerEaglePage({
                 </div>
               )}
               {libraryMode === 'PHOTO' && photoView === 'statistics' && (
-                <PhotoStatistics
-                  key={`${ownerId}:${privateVisible}`}
-                  ownerId={ownerId}
-                  includePrivate={privateVisible}
-                />
+                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                  <PhotoStatistics
+                    key={`${ownerId}:${privateVisible}`}
+                    ownerId={ownerId}
+                    includePrivate={privateVisible}
+                  />
+                </Suspense>
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
-                <PhotoAgentReview
-                  key={`${ownerId}:${privateVisible}`}
-                  includePrivate={privateVisible}
-                />
+                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                  <PhotoAgentReview
+                    key={`${ownerId}:${privateVisible}`}
+                    includePrivate={privateVisible}
+                  />
+                </Suspense>
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
@@ -1989,12 +2013,14 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <PhotoMap
-                  key={`${ownerId}:${privateVisible}`}
-                  ownerId={ownerId}
-                  includePrivate={privateVisible}
-                  onOpen={openAssetPreview}
-                />
+                <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                  <PhotoMap
+                    key={`${ownerId}:${privateVisible}`}
+                    ownerId={ownerId}
+                    includePrivate={privateVisible}
+                    onOpen={openAssetPreview}
+                  />
+                </Suspense>
               )}
               <div
                 className={styles.assetBrowser}
@@ -2829,13 +2855,15 @@ export function SekerEaglePage({
         />
       ) : null}
       {batchEditIds && photoEditing.clipboard && (
-        <EagleBatchPhotoEdit
-          key={editingScope}
-          assetIds={batchEditIds}
-          recipe={photoEditing.clipboard}
-          resolveSession={photoEditing.resolveSession}
-          onClose={() => setBatchEditIds(null)}
-        />
+        <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+          <EagleBatchPhotoEdit
+            key={editingScope}
+            assetIds={batchEditIds}
+            recipe={photoEditing.clipboard}
+            resolveSession={photoEditing.resolveSession}
+            onClose={() => setBatchEditIds(null)}
+          />
+        </Suspense>
       )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}

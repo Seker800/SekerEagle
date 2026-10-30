@@ -16,14 +16,24 @@ test('production login and gallery exclude optional map, EXIF and batch-render p
     seen.add(chunk.fileName);
     return [
       ...Object.keys(chunk.modules),
-      ...chunk.imports.flatMap((name) => byName.has(name) ? staticModules(byName.get(name), seen) : []),
+      ...chunk.imports.flatMap((name) =>
+        byName.has(name) ? staticModules(byName.get(name), seen) : [],
+      ),
     ];
   }
   const entry = chunks.find((chunk) => chunk.isEntry);
   assert.ok(entry);
   const login = staticModules(entry).join('\n');
-  assert.doesNotMatch(login, /SekerEaglePage\.tsx|PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u);
-  const gallery = chunks.find((chunk) => Object.keys(chunk.modules).some((id) => id.endsWith('/SekerEaglePage.tsx')));
+  assert.doesNotMatch(
+    login,
+    /SekerEaglePage\.tsx|PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
+  );
+  const gallery = chunks.find((chunk) =>
+    Object.keys(chunk.modules).some((id) => id.endsWith('/SekerEaglePage.tsx')),
+  );
   assert.ok(gallery);
-  assert.doesNotMatch(staticModules(gallery).join('\n'), /PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u);
+  assert.doesNotMatch(
+    staticModules(gallery).join('\n'),
+    /PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
+  );
 });
