@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
 import { PhotoManagementService } from './photo-management.service';
 
 test('people pages enforce owner/privacy and return a stable continuation instead of truncating', async () => {
@@ -38,4 +39,67 @@ test('people pages enforce owner/privacy and return a stable continuation instea
   assert.equal(queries[0]?.where.ownerId, 'owner');
   assert.equal(queries[0]?.where.libraryMode, 'PHOTO');
   assert.equal(queries[0]?.where.marksAssetsPrivate, false);
+});
+
+test('people card and option projections do not fetch unused faces, EXIF or biometric vectors', async () => {
+  type Query = {
+    where: Record<string, unknown>;
+    select: {
+      faces?: { take: number; select: { asset: { select: { photoMetadata?: boolean } } } };
+      prototype?: unknown;
+    };
+  };
+  const queries: Query[] = [];
+  const service = new PhotoManagementService({
+    eaglePhotoPerson: {
+      findMany: async (query: Query) => {
+        queries.push(query);
+        return [];
+      },
+    },
+  } as never);
+  await service.people('owner', false, undefined, 'cards');
+  assert.equal(queries[0]!.select.faces!.take, 1);
+  assert.equal(queries[0]!.select.faces!.select.asset.select.photoMetadata, false);
+  assert.equal(queries[0]!.select.prototype, undefined);
+  await service.people('owner', false, undefined, 'options');
+  assert.deepEqual(Object.keys(queries[1]!.select).sort(), ['createdAt', 'id', 'name']);
+  assert.equal(queries[1]!.where.ownerId, 'owner');
+  assert.equal(queries[1]!.where.libraryMode, 'PHOTO');
+  assert.equal(queries[1]!.where.marksAssetsPrivate, false);
+});
+
+test('person face pages reject invisible people and bind cursors to owner, privacy and person', async () => {
+  let visible = false;
+  let calls = 0;
+  const personId = '11111111-1111-4111-8111-111111111111';
+  const service = new PhotoManagementService({
+    eaglePhotoPerson: { findFirst: async () => (visible ? { id: personId } : null) },
+    eaglePhotoFace: {
+      findMany: async () => {
+        calls++;
+        return Array.from({ length: 21 }, (_, i) => ({
+          id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+          createdAt: new Date('2026-01-01'),
+          asset: { byteSize: 1n, renditions: [] },
+        }));
+      },
+    },
+  } as never);
+  await assert.rejects(service.personFaces('owner', personId, false), /人物不存在/);
+  assert.equal(calls, 0);
+  visible = true;
+  const page = await service.personFaces('owner', personId, false);
+  assert.equal(page.faces.length, 20);
+  assert.ok(page.nextCursor);
+  for (const [owner, person, privateVisible] of [
+    ['other', personId, false],
+    ['owner', 'other-person', false],
+    ['owner', personId, true],
+  ] as const) {
+    await assert.rejects(
+      service.personFaces(owner, person, privateVisible, page.nextCursor),
+      /游标无效/,
+    );
+  }
 });

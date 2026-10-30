@@ -31,6 +31,16 @@ beforeEach(() => {
   get.mockReset();
 });
 describe('photo statistics', () => {
+  it('uses the existing aggregate response for global device options and refreshes only once', async () => {
+    get.mockResolvedValue(data);
+    mount();
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
+    expect(get).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: '相机筛选' }));
+    expect(screen.getByRole('checkbox', { name: 'Camera B' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '刷新统计' }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
   it('shows three charts, calendar gaps, totals and unknown dates', async () => {
     get.mockResolvedValue(data);
     mount();
