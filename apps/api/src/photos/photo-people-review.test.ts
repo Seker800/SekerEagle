@@ -13,7 +13,15 @@ test('review uses a scoped repeatable snapshot and never exposes biometric proto
           sql = query.text;
           assert.ok(query.values.includes('owner'));
           return [
-            { firstId: 'a', secondId: 'b', firstCount: 30n, secondCount: 20n, similarity: 0.4 },
+            {
+              firstId: 'a',
+              firstFaceId: 'face-a',
+              secondFaceId: 'face-b',
+              secondId: 'b',
+              firstCount: 30n,
+              secondCount: 20n,
+              similarity: 0.4,
+            },
           ];
         },
         eaglePhotoPerson: {

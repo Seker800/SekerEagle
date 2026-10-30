@@ -34,7 +34,7 @@ export function PhotoPeopleReview({
   if (!pair)
     return (
       <div className="photo-people-review">
-        <p>{t('本批人物已比较完，可加载更多人物或重新比较。')}</p>
+        <p>{t('本批疑似组合已比较完，可重新比较。')}</p>
         <button type="button" disabled={pending} onClick={() => setSkipped(new Set())}>
           {t('重新比较')}
         </button>

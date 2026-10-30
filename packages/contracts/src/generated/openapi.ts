@@ -2484,6 +2484,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/photography/people/review': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_reviewPeople'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/people/scan': {
     parameters: {
       query?: never;
@@ -7915,6 +7931,23 @@ export interface operations {
       query?: {
         after?: string;
       };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_reviewPeople: {
+    parameters: {
+      query?: never;
       header?: never;
       path?: never;
       cookie?: never;

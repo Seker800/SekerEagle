@@ -1369,6 +1369,21 @@ select:focus-visible {
   border: 1px solid var(--ui-line);
   border-radius: var(--ui-radius-panel);
 }
+.photo-people-review button {
+  padding: 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-text);
+  background: var(--ui-panel);
+  cursor: pointer;
+}
+.photo-people-review button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.photo-people-review button:hover:not(:disabled) {
+  background: var(--ui-raised);
+}
 .photo-people-review h3 {
   margin: 0 0 16px;
   font-size: 15px;

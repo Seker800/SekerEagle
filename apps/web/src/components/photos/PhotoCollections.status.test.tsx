@@ -6,6 +6,7 @@ import { PhotoCollections } from './PhotoCollections';
 const mocks = vi.hoisted(() => ({ list: vi.fn() }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  reviewPhotoPeople: vi.fn().mockResolvedValue({ pairs: [] }),
   scanPhotoPeople: vi.fn(),
   renamePhotoPerson: vi.fn(),
   mergePhotoPeople: vi.fn(),

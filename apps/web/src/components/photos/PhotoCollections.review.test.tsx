@@ -32,7 +32,6 @@ const person = (id: string, name: string | null = null) =>
     id,
     name,
     rowVersion: 1,
-    photoCount: 1,
     marksAssetsPrivate: false,
     faces: [
       {
@@ -91,10 +90,16 @@ beforeEach(() => {
     nextCursor: null,
   });
   mocks.review.mockImplementation(async () => {
-    const { people } = await mocks.list();
+    const { people } = (await mocks.list()) as { people: PhotoPerson[] };
     return {
       pairs: people.flatMap((first: PhotoPerson, i: number) =>
-        people.slice(i + 1).map((second: PhotoPerson) => ({ first, second, similarity: 0.4 })),
+        people
+          .slice(i + 1)
+          .map((second: PhotoPerson) => ({
+            first: { ...first, photoCount: 1 },
+            second: { ...second, photoCount: 1 },
+            similarity: 0.4,
+          })),
       ),
     };
   });
