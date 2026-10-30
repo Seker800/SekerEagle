@@ -1,5 +1,13 @@
 # 现用运行状态与交接
 
+> **2026-10-30 本轮生产发布完成，覆盖下方“停止发布／本地候选”旧交接**：用户明确授权核对分支和已有独立审查后部署。全部 18 个本地业务分支、远端 codex 业务分支及旧工作树提交已归入 main；本轮生产源码固定为 `f166dc0167de259400434676b68b8ab829d505fb`。API／web 当前为 `sekereagle/{api,web}:production-f166dc0167de`，群晖实查均 healthy、零重启；62 项迁移无新增待执行项。
+>
+> 唯一业务 worker 已正常交接到 Mac 原生目录 `.runtime/business-worker/releases/worker-f166dc0167de`，本次现场 PID17421、worker ID `worker-e02751e8-e3f5-41ff-93e4-0ece24ebe762`，后续以 LaunchAgent／数据库心跳实时核验。程序来自同一固定提交，原生依赖克隆自已验收的 worker-608f73af5847，完整包资源与 688 项文件哈希验证；实际候选进程通过隔离 DB／HTTP 图片、向量、视频、切片、策略排空和正常退出验收。NAS worker 继续 stopped／restart=no／compose replicas=0；中继、数据库、对象存储、协调器容器身份保持。计算策略修订66、Windows8／Mac媒体6／Metal3及交互预留、用户类别暂停和时段保持。
+>
+> 原完整 Compose 链仅追加 `maintenance/production-f166dc01-20261030/images.json`，未重建数据库或对象卷；网关在原挂载文件上启用已核验的 gzip／连接复用并平滑 reload。真实 HTTPS 首页逐字节匹配候选，入口脚本523623→163945字节、陆地数据1257963→421799、城市数据836172→224502；地图归档 Range206／128字节保持。真实 Chrome 普通登录、双模式读取、人物轻选项、统计、照片签名直传、模式返回及匿名401通过，零页面脚本异常；仅写入临时验收主体，结束已删除该账号及4个所属对象。
+>
+> 本次现用库一致性备份 `maintenance/production-f166dc01-20261030/before.dump` 为855068199字节，SHA256与完整只读归档解析记录同目录。第一次激活因环境变量数组顺序比较触发自动回滚，已证实键和值完全一致后按映射比较重试成功；没有放宽运行配置约束，旧镜像／原配置及回滚记录保留。详见 [本轮发布与审查处置](production-release-2026-10-30.md)。
+
 > **2026-10-30 整合候选已完成本地验收，按用户最新要求停止推送／发布**：现用 API／web 仍为下条 `people-a33cf6504037`；Mac 唯一业务 worker 仍为原 release、PID22931（本次收尾现场值，后续仍以实时检查为准）。本批没有执行 Git push、切换容器或重启业务 worker。12个工作树检查时均干净，截至检查时的全部本地与远端 codex 开发分支及等价隔离验收提交已归并至本地 main；后续其他分支及统一 push 由用户自行安排。
 >
 > 待发布运行代码为 `608f73af5847cb456beaf2d700e5674db7a9ce24`；之后仅合并测试／文档。NAS已载入 `sekereagle/{api,web,worker}:integrated-608f73af5847`，均为amd64；载入镜像不代表已运行。API直接构建自608f；web构建自58616eee，其后web仅测试变化；worker构建自58822009977b，其后worker仅测试变化，实际593份程序哈希和原生依赖已核对。Mac新目录 `.runtime/business-worker/releases/worker-608f73af5847` 仅准备，LaunchAgent、placement状态及worker.env均未切换。网关压缩／连接复用候选仍未替换现用配置。原数据库、对象存储、协调器、媒体节点、用户暂停及容量保持。

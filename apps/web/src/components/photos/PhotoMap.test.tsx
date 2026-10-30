@@ -183,11 +183,7 @@ describe('whole-library location map', () => {
     expect(mocks.tiles).not.toHaveBeenCalled();
     expect(
       (vi.mocked(fetch).mock.calls as unknown[][]).every(
-        ([url]) =>
-          new URL(
-            String(url),
-            window.location.href,
-          ).origin === window.location.origin,
+        ([url]) => new URL(String(url), window.location.href).origin === window.location.origin,
       ),
     ).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: '显示全部照片位置' }));
