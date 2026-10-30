@@ -166,3 +166,37 @@ it('keeps an active download across public query GC but cancels it on session cl
   await saving;
   expect(cache.downloads.getSnapshot().items).toHaveLength(0);
 });
+
+it('reclaims only unreferenced entities after query removal, truncation and detail removal', async () => {
+  vi.useFakeTimers();
+  const { client, cache, keys } = fixture();
+  const release = cache.retain(false);
+  const item = (id: string) =>
+    ({
+      id,
+      rowVersion: 1,
+      mediaRevision: 1,
+      renditions: [],
+      manualTags: [],
+    }) as import('../../lib/eagle-api').EagleAssetListItem;
+  const page = (ids: string[]) =>
+    cache.store.normalizePage({
+      items: ids.map(item),
+    } as import('../../lib/eagle-api').EagleAssetPage);
+  const first = keys.assetList('ACTIVE', {}),
+    second = keys.assetList('ACTIVE', { search: 'old' });
+  client.setQueryData(first, { pages: [page(['shared', 'current']), page(['tail'])] });
+  client.setQueryData(second, { pages: [page(['shared', 'old'])] });
+  client.setQueryData([...keys.assetDetail('old'), 'ACTIVE'], item('old'));
+  client.removeQueries({ queryKey: second, exact: true });
+  client.setQueryData(first, { pages: [page(['shared', 'current'])] });
+  await vi.runOnlyPendingTimersAsync();
+  expect(cache.store.get('tail')).toBeUndefined();
+  expect(cache.store.get('shared')).toBeDefined();
+  expect(cache.store.get('old')).toBeDefined();
+  client.removeQueries({ queryKey: keys.assetDetail('old') });
+  await vi.runOnlyPendingTimersAsync();
+  expect(cache.store.get('old')).toBeUndefined();
+  expect(cache.store.size).toBe(2);
+  release();
+});

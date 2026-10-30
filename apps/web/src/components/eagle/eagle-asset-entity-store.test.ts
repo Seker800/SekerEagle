@@ -51,3 +51,41 @@ it('replaces the media revision together with its renditions after original repl
   expect(store.get('asset-1')?.mediaRevision).toBe(2);
   expect(store.get('asset-1')?.renditions[0].revision).toBe(2);
 });
+
+const entity = (
+  id: string,
+  rowVersion: number,
+  mediaRevision = rowVersion,
+  date = '2026-10-30T00:00:00Z',
+) =>
+  ({
+    id,
+    rowVersion,
+    mediaRevision,
+    displayName: `name-${rowVersion}`,
+    updatedAt: date,
+    lifecycleStatus: 'READY',
+    renditions: [],
+    manualTags: [],
+  }) as import('../../lib/eagle-api').EagleAssetListItem;
+it('rejects stale metadata and media independently across list and processing responses', () => {
+  const store = new EagleAssetEntityStore();
+  store.upsertMany([entity('a', 2, 2)]);
+  store.upsertMany([entity('a', 1, 1, '2026-10-31T00:00:00Z')]);
+  expect(store.get('a')).toMatchObject({ rowVersion: 2, mediaRevision: 2, displayName: 'name-2' });
+  store.mergeProcessingUpdates([
+    {
+      id: 'a',
+      mediaRevision: 1,
+      lifecycleStatus: 'FAILED',
+      mediaErrorCode: 'old',
+      updatedAt: '2026-11-01T00:00:00Z',
+      renditions: [],
+    },
+  ]);
+  expect(store.get('a')).toMatchObject({ mediaRevision: 2, lifecycleStatus: 'READY' });
+  store.upsertMany([entity('a', 3, 1)]);
+  expect(store.get('a')).toMatchObject({ rowVersion: 3, mediaRevision: 2, displayName: 'name-3' });
+  store.upsertMany([entity('a', 2, 3)]);
+  expect(store.get('a')).toMatchObject({ rowVersion: 3, mediaRevision: 3, displayName: 'name-3' });
+});
