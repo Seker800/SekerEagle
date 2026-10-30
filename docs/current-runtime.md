@@ -1,5 +1,11 @@
 # 现用运行状态与交接
 
+> **2026-10-31 安卓2B搜索修复已上线**：API为 `sekereagle/api:android-search-e332c5f47e2a`，源码固定 `e332c5f47e2a7d6c49c9a6fe95a92fcc671a7af7`；网页继续原 `people-quality-a3bcda8eea99`，唯一Mac业务worker继续f166dc01 release／现场PID17421，NAS worker保持停止。日期搜索改为有界窗口直接核验并补齐私密／拍摄日期索引，精确筛选与分页不截断；迁移累计63项。原完整Compose链末尾为 `maintenance/android-search-20261030/refined/images.json`，API healthy；网页、数据库、对象存储、网关、协调器和中继容器身份／用户策略保持，模型与名额未改。
+>
+> 安卓候选 **0.9.12／29** 已导出 `apps/android/release/SekerEagle-0.9.12-android-debug.apk`，同一调试签名。旧请求显式断开、向量不可用提示名称回退；18项Android16设备搜索回归、80项JVM、核心覆盖及安卓完整check通过。实际APK经普通登录连接生产，在两个模式上传公开样图、由原worker生成真实当前2B向量，以不匹配名称／标签的描述成功搜图；临时账号、2个资源／人物及8个所属对象已清理，模拟器恢复原固定图库，没有安装实体手机。
+>
+> 同一约6.4万照片库只读复测完整列表：稳定后的拍摄日期463ms、添加日期308ms，60项约118KB；切换后首轮仍曾出现1.493s／16.007s长尾，未做生产冷缓存清空或p95压测，不能把稳定样本当所有查询保证。相关度路径的额外物化A/B无收益，已撤回未发布，保留原精确语义。完整CI／契约、隔离数据库升级与完整恢复、最终API镜像启动均通过。初次任务备份855435973字节已验证SHA和完整解析，位于 `maintenance/android-search-20261030/before.dump`；后续API细化无新迁移，保留该备份和逐次镜像回退，不用历史备份覆盖现用数据。详见 [安卓搜索验收](android-search-verification-2026-10-31.md)，私有证据 `.omx/artifacts/android-search-20261030/`。
+
 > **2026-10-30 人物确认质量修复已上线（覆盖下方 API／web 旧镜像）**：API／web 均为 `sekereagle/{api,web}:people-quality-a3bcda8eea99`，源码固定 `a3bcda8eea99917f064e76e4ce2571c985032ad5`，现场均 healthy、零重启。两个推荐入口共用清晰人脸与强相似证据门槛，多照片要求独立支持；相似证据优先，照片数不再把弱匹配推到前面，展示实际用于匹配的人脸。待整理计数明确是自动分组而非真实人数；没有无依据合并历史人物，也没有改动自动归类模型／阈值或真实身份。
 >
 > 原完整 Compose 链仅追加 `maintenance/people-review-quality-20261030/images.json`；62项迁移无待执行。唯一 Mac 业务worker仍为原 f166dc01 release，现场仍PID17421；NAS worker保持停止，数据库、存储、网关、协调器和中继容器身份保持，用户暂停／时段／策略逐项未变。首页隐私开关仍已移除。
