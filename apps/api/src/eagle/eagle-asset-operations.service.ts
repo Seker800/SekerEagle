@@ -64,13 +64,20 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     if (process.env.EAGLE_ASSET_OPERATIONS_ENABLED === 'false') return;
     this.timer = setInterval(
       () => void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),
-      500,
+      5000,
     );
     this.timer.unref();
   }
   onModuleDestroy() {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
+  }
+
+  // Local admissions do not wait for the cross-process recovery poll. Wake only
+  // after the admitting transaction commits; durable claims remain authoritative.
+  private wake() {
+    if (this.timer && !this.stopping)
+      void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
   }
 
   private libraryModeWhere(ownerId: string, includePrivate: boolean) {
@@ -314,10 +321,14 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
           throw new NotFoundException('操作不存在。');
         throw error;
+      })
+      .then((result) => {
+        this.wake();
+        return result;
       });
   }
   async retry(principal: AuthPrincipal, id: string) {
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const operation = await this.owned(tx, id, principal.sub, principal.canViewPrivate);
       const privateUntil =
         operation.isPrivate && principal.privacyVisibleUntil
@@ -340,6 +351,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       });
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
+    this.wake();
+    return result;
   }
   async cancel(principal: AuthPrincipal, id: string) {
     return this.prisma.$transaction(async (tx) => {

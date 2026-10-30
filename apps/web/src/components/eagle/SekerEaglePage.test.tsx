@@ -717,14 +717,17 @@ describe('SekerEaglePage', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['推荐审核32', '待分类6', '任务中心']);
-    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
+    expect(await screen.findByTestId('eagle-vector-workspace')).toHaveAttribute(
+      'data-view',
+      'REVIEW',
+    );
     fireEvent.click(
       within(pendingNavigation).getByRole('button', {
         name: '任务中心',
       }),
     );
 
-    expect(screen.getByTestId('eagle-processing-page')).toBeInTheDocument();
+    expect(await screen.findByTestId('eagle-processing-page')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'AI 内容识别设置' })).not.toBeInTheDocument();
   });
