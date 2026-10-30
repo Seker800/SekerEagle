@@ -150,6 +150,23 @@ describe('EagleImageViewer', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 
+  it('shows an existing thumbnail while loading and removes it when the viewer opens', async () => {
+    render(
+      <EagleImageViewer
+        image={image}
+        onClose={vi.fn()}
+        loadingPlaceholder={<img src="blob:cached-thumbnail" alt="缩略图占位" />}
+      />,
+    );
+    expect(screen.getByRole('img', { name: '缩略图占位' })).toHaveAttribute(
+      'src',
+      'blob:cached-thumbnail',
+    );
+    await waitFor(() => expect(handlers.has('open')).toBe(true));
+    act(() => handlers.get('open')?.());
+    expect(screen.queryByRole('img', { name: '缩略图占位' })).not.toBeInTheDocument();
+  });
+
   it('uses a low-latency viewer without a navigator thumbnail', async () => {
     render(<EagleImageViewer image={image} onClose={vi.fn()} />);
 

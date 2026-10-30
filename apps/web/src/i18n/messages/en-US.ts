@@ -1,4 +1,6 @@
 export const enUS = {
+  '正在继续…': 'Resuming…',
+  '正在暂停…': 'Pausing…',
   '导入完成 {{value1}}/{{value2}}': 'Import complete {{value1}}/{{value2}}',
   等待导入: 'Waiting to import',
   导入成功: 'Imported',

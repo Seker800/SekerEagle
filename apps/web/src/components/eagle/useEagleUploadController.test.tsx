@@ -61,13 +61,15 @@ it('keeps independent file progress, all failures and a dismissible success summ
   );
   material.mockReset();
   let finish!: () => void;
-  material.mockImplementation((_token, file, progress) => {
-    progress({ percent: file.name === 'a.jpg' ? 25 : 75 });
-    return new Promise<void>((done) => {
-      if (file.name === 'a.jpg') finish = done;
-      else done();
-    });
-  });
+  material.mockImplementation(
+    (_token: string, file: File, progress: (value: { percent: number }) => void) => {
+      progress({ percent: file.name === 'a.jpg' ? 25 : 75 });
+      return new Promise<void>((done) => {
+        if (file.name === 'a.jpg') finish = done;
+        else done();
+      });
+    },
+  );
   const view = renderHook(
     () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
     { wrapper },

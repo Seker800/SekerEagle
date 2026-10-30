@@ -48,6 +48,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [connectionUnavailable, setConnectionUnavailable] = useState(false);
   const [checkingConnection, setCheckingConnection] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine !== false);
+  const [reconnectDelay, setReconnectDelay] = useState(5000);
   const checkInFlight = useRef(false);
   const sessionEpoch = useRef(0);
   const mounted = useRef(false);
@@ -63,6 +65,11 @@ export function App() {
     };
   }, [queryClient, sessionOwnerId]);
   const checkSession = useCallback(async () => {
+    if (navigator.onLine === false) {
+      setConnectionUnavailable(true);
+      setLoading(false);
+      return;
+    }
     if (checkInFlight.current) return;
     checkInFlight.current = true;
     const epoch = sessionEpoch.current;
@@ -78,6 +85,7 @@ export function App() {
             : current,
         );
         setConnectionUnavailable(false);
+        setReconnectDelay(5000);
       }
     } catch (cause) {
       if (mounted.current && epoch === sessionEpoch.current) {
@@ -89,6 +97,7 @@ export function App() {
           setConnectionUnavailable(false);
         } else {
           setConnectionUnavailable(true);
+          setReconnectDelay((current) => Math.min(60_000, current * 2));
         }
       }
     } finally {
@@ -108,19 +117,28 @@ export function App() {
   }, [checkSession]);
   useEffect(() => {
     const timer =
-      connectionUnavailable || user
-        ? window.setInterval(() => void checkSession(), connectionUnavailable ? 5000 : 30000)
+      isOnline && (connectionUnavailable || user)
+        ? window.setInterval(
+            () => void checkSession(),
+            connectionUnavailable ? reconnectDelay : 30000,
+          )
         : null;
-    const onOnline = () => void checkSession();
+    const onOnline = () => {
+      setIsOnline(true);
+      void checkSession();
+    };
     window.addEventListener('online', onOnline);
-    const onOffline = () => setConnectionUnavailable(true);
+    const onOffline = () => {
+      setIsOnline(false);
+      setConnectionUnavailable(true);
+    };
     window.addEventListener('offline', onOffline);
     return () => {
       if (timer !== null) window.clearInterval(timer);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
-  }, [checkSession, connectionUnavailable, user]);
+  }, [checkSession, connectionUnavailable, user, isOnline, reconnectDelay]);
   useEffect(() => {
     if (!user) {
       setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);

@@ -47,6 +47,7 @@ export function useEagleUploadController(accessToken: string, assetsQueryKey: Qu
         try {
           await job.run();
           update(id, { state: 'completed', percent: 100 });
+          jobs.current.delete(id);
           keys.set(hashKey(job.key), job.key);
         } catch (error) {
           update(id, {

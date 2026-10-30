@@ -378,6 +378,15 @@ export function EagleTaskCenter({
                 schedule={card.schedule}
                 mode={card.mode}
                 busy={retry.isPending || policy.isPending || start.isPending}
+                pendingPolicy={
+                  policy.isPending &&
+                  policy.variables?.mode === card.mode &&
+                  policy.variables.family === card.group.id
+                    ? policy.variables.paused
+                      ? 'pause'
+                      : 'resume'
+                    : undefined
+                }
                 onStart={() => start.mutate({ mode: card.mode, family: card.group.id })}
                 onRetry={() => retry.mutate({ mode: card.mode, family: card.group.id })}
                 onPolicy={(paused) =>
@@ -424,6 +433,7 @@ function TaskCard({
   schedule,
   mode,
   busy,
+  pendingPolicy,
   onRetry,
   onStart,
   onPolicy,
@@ -435,6 +445,7 @@ function TaskCard({
   schedule: BackgroundSchedule;
   mode: LibraryMode;
   busy: boolean;
+  pendingPolicy?: 'pause' | 'resume';
   onRetry: () => void;
   onStart: () => void;
   onPolicy: (paused: boolean) => void;
@@ -521,7 +532,13 @@ function TaskCard({
           )}
           {management.canPause && (
             <button type="button" disabled={busy} onClick={() => onPolicy(!management.paused)}>
-              {management.paused ? t('继续这项工作') : t('暂停这项工作')}
+              {pendingPolicy === 'pause'
+                ? t('正在暂停…')
+                : pendingPolicy === 'resume'
+                  ? t('正在继续…')
+                  : management.paused
+                    ? t('继续这项工作')
+                    : t('暂停这项工作')}
             </button>
           )}
         </div>

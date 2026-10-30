@@ -5,9 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <title>SekerEagle</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        background: #111214;
+        color: #ededee;
+      }
+      .boot {
+        width: min(600px, 80vw);
+        margin: 20vh auto;
+      }
+      .boot span {
+        display: block;
+        height: 18px;
+        margin-bottom: 18px;
+        border-radius: 8px;
+        background: #25262a;
+      }
+      .boot span:first-child {
+        width: 36%;
+      }
+      .boot span:last-child {
+        height: 160px;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot" role="status" aria-label="SekerEagle"><span></span><span></span></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
