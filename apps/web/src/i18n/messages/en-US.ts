@@ -651,12 +651,13 @@ export const enUS = {
     'No photo groups yet. Scan for bursts and similar photos.',
   人物名称: 'Person name',
   查看此人物的照片: 'View this person’s photos',
+  '完整照片：{{value1}}': 'Full photo: {{value1}}',
   '这两张照片是同一个人吗？': 'Is this the same person in both photos?',
   '是，同一个人': 'Yes, merge people',
   换一批: 'Show another pair',
   重新比较: 'Compare again',
-  '本批人物已比较完，可加载更多人物或重新比较。':
-    'All loaded people have been compared. Load more people or compare again.',
+  '本批疑似组合已比较完，可重新比较。':
+    'All suggested pairs in this batch have been compared. Compare again to restart.',
   '合并后保留名称：{{value1}}': 'Name after merging: {{value1}}',
   人物已合并: 'People merged',
   合并到人物: 'Merge into person',

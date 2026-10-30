@@ -6171,6 +6171,18 @@
         "tags": ["photo-management"]
       }
     },
+    "/api/photos/photography/people/review-priority": {
+      "get": {
+        "operationId": "PhotoManagementController_priorityPeople",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": ["photo-management"]
+      }
+    },
     "/api/photos/photography/people/scan": {
       "post": {
         "operationId": "PhotoManagementController_scanPeople",

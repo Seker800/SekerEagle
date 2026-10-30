@@ -1369,13 +1369,28 @@ select:focus-visible {
   border: 1px solid var(--ui-line);
   border-radius: var(--ui-radius-panel);
 }
+.photo-people-review button {
+  padding: 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-control);
+  color: var(--ui-text);
+  background: var(--ui-panel);
+  cursor: pointer;
+}
+.photo-people-review button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.photo-people-review button:hover:not(:disabled) {
+  background: var(--ui-raised);
+}
 .photo-people-review h3 {
   margin: 0 0 16px;
   font-size: 15px;
 }
 .photo-people-review-pair {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 200px));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   justify-content: center;
   gap: 16px;
 }
@@ -1386,8 +1401,15 @@ select:focus-visible {
   gap: 10px;
   min-width: 0;
 }
-.photo-people-review-pair .photo-face-crop {
+.photo-people-review-original {
   width: 100%;
+  height: clamp(200px, 32vh, 420px);
+  object-fit: contain;
+  background: var(--ui-bg);
+  border-radius: var(--ui-radius-control);
+}
+.photo-people-review-pair .photo-face-crop {
+  width: min(100%, 160px);
   height: auto;
   aspect-ratio: 1;
   border-radius: var(--ui-radius-control);

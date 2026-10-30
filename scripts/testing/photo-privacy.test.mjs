@@ -315,6 +315,15 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
       origin: defaults.CANONICAL_ORIGIN,
       'content-type': 'application/json',
     };
+    const reviewUrl = `${base}/api/photos/photography/people/review`;
+    assert.equal((await fetch(reviewUrl)).status, 401);
+    const reviewResponse = await fetch(reviewUrl, { headers: auth });
+    assert.equal(reviewResponse.status, 200);
+    assert.deepEqual(await reviewResponse.json(), { pairs: [] });
+    assert.equal(
+      (await fetch(`${base}/api/eagle/photography/people/review`, { headers: auth })).status,
+      404,
+    );
     const settingsUrl = `${base}/api/photos/privacy-settings`;
     assert.equal(
       (
@@ -376,6 +385,7 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
     assert.equal((await patch({ 'content-type': 'application/json' })).status, 401);
     const pat = await app.get(PatService).create(f.ownerId, 'privacy-read', ['photo:read']);
     const bearer = { authorization: `Bearer ${pat.token}`, 'content-type': 'application/json' };
+    assert.equal((await fetch(reviewUrl, { headers: bearer })).status, 403);
     assert.equal((await patch(bearer)).status, 403);
     assert.equal((await patch({ ...auth, origin: 'https://invalid.example' })).status, 403);
     assert.equal((await patch(auth, { ...body, ownerId: randomUUID() })).status, 400);
@@ -936,5 +946,118 @@ test('无人脸结果跳过向量读取仍保留人工人物纠错及其私密�
   assert.equal(
     (await prisma.eagleAssetProcessingJob.findUniqueOrThrow({ where: { id: job.id } })).status,
     'COMPLETED',
+  );
+});
+
+test('人物确认全库按照片量排序相似组合，排除同框、旧版本及不可见数据', async () => {
+  const f = await fixture();
+  const addPerson = (prototype = embedding, more = {}) =>
+    prisma.eaglePhotoPerson.create({
+      data: { ownerId: f.ownerId, prototype, modelVersion: FACE_MODEL_VERSION, ...more },
+    });
+  const first = await addPerson(),
+    second = await addPerson(),
+    single = await addPerson();
+  const unrelated = await addPerson([0, 1, ...Array(126).fill(0)]);
+  const oldModel = await addPerson(embedding, { modelVersion: 'different-model' });
+  const hidden = await addPerson(embedding, { marksAssetsPrivate: true });
+  const sample = async (person, more = {}, asset) => {
+    asset ??= await f.add(more);
+    await prisma.eagleAssetRendition.upsert({
+      where: {
+        assetId_kind_revision_variant: {
+          assetId: asset.id,
+          kind: 'PREVIEW',
+          revision: asset.mediaRevision,
+          variant: 'default',
+        },
+      },
+      create: {
+        ownerId: f.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        kind: 'PREVIEW',
+        revision: asset.mediaRevision,
+        mimeType: 'image/jpeg',
+        storageKey: `test/${randomUUID()}`,
+        byteSize: 1,
+        width: 1600,
+        height: 1200,
+        status: 'READY',
+      },
+      update: {},
+    });
+    await prisma.eaglePhotoFace.create({
+      data: {
+        id: randomUUID(),
+        ownerId: f.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        personId: person.id,
+        assetRevision: asset.mediaRevision,
+        modelVersion: person.modelVersion,
+        embedding: person.prototype,
+        box: [0.1, 0.1, 0.3, 0.3],
+        confidence: 0.99,
+      },
+    });
+    return asset;
+  };
+  const shared = await sample(first);
+  for (let i = 0; i < 4; i++) await sample(first);
+  for (let i = 0; i < 3; i++) await sample(second);
+  await sample(single);
+  await sample(unrelated);
+  await sample(oldModel);
+  await sample(hidden, { isPrivate: true });
+  // Counts include only current, visible, PHOTO assets with a usable browsing image.
+  await sample(first, { isPrivate: true });
+  await sample(first, { deletedAt: new Date() });
+  const stale = await sample(first);
+  await prisma.eagleAsset.update({
+    where: { id: stale.id },
+    data: { mediaRevision: { increment: 1 } },
+  });
+  const result = await f.service.reviewPeople(f.ownerId, false);
+  assert.equal(result.pairs.length, 3);
+  const top = result.pairs[0];
+  assert.deepEqual(new Set([top.first.id, top.second.id]), new Set([first.id, second.id]));
+  assert.deepEqual([top.first.photoCount, top.second.photoCount].sort(), [3, 5]);
+  assert.equal(JSON.stringify(result).includes('prototype'), false);
+  assert.equal(JSON.stringify(result).includes('embedding'), false);
+  assert.equal(JSON.stringify(result).includes(stale.id), false);
+  assert.equal((await f.service.reviewPeople(randomUUID(), false)).pairs.length, 0);
+  assert.ok(
+    (await f.service.reviewPeople(f.ownerId, true)).pairs.some((pair) =>
+      [pair.first.id, pair.second.id].includes(hidden.id),
+    ),
+  );
+  const excludedIds = [first.id, second.id].sort();
+  await prisma.eaglePhotoPersonSeparation.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      firstId: excludedIds[0],
+      secondId: excludedIds[1],
+    },
+  });
+  assert.ok(
+    !(await f.service.reviewPeople(f.ownerId, false)).pairs.some(
+      (pair) =>
+        [pair.first.id, pair.second.id].includes(first.id) &&
+        [pair.first.id, pair.second.id].includes(second.id),
+    ),
+    'priority candidates must preserve a saved different-person decision',
+  );
+  await prisma.eaglePhotoPersonSeparation.deleteMany({ where: { ownerId: f.ownerId } });
+  await sample(second, {}, shared);
+  const after = await f.service.reviewPeople(f.ownerId, false);
+  assert.ok(after.pairs.every((pair) => new Set([pair.first.id, pair.second.id]).size === 2));
+  assert.ok(
+    !after.pairs.some(
+      (pair) =>
+        [pair.first.id, pair.second.id].includes(first.id) &&
+        [pair.first.id, pair.second.id].includes(second.id),
+    ),
   );
 });

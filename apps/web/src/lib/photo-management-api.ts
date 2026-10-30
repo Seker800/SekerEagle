@@ -14,6 +14,16 @@ export interface PhotoPerson {
   marksAssetsPrivate: boolean;
   faces: PhotoFace[];
 }
+export interface PhotoPeopleReviewPair {
+  first: PhotoPerson & { photoCount: number };
+  second: PhotoPerson & { photoCount: number };
+  similarity: number;
+}
+export const reviewPhotoPeople = (signal?: AbortSignal) =>
+  request<{ pairs: PhotoPeopleReviewPair[] }>('/api/photos/photography/people/review-priority', {
+    signal,
+  });
+
 export interface PhotoGroup {
   id: string;
   kind: 'BURST' | 'SIMILAR' | 'MANUAL' | 'EDITED';
@@ -149,17 +159,33 @@ export const getPhotoMapPhotos = (cell: string, after?: string, signal?: AbortSi
 
 export interface PhotoPersonReview {
   key: string;
-  first: PhotoPerson;
-  second: PhotoPerson;
+  first: PhotoPerson & { photoCount?: number };
+  second: PhotoPerson & { photoCount?: number };
   similarity: number;
 }
 export const getPhotoPeopleSummary = () =>
   request<{ named: number; unnamed: number }>(`${base}/people/summary`);
-export const getPhotoPeopleReview = (after?: string, signal?: AbortSignal) =>
-  request<{ items: PhotoPersonReview[]; nextCursor: string | null }>(
-    `${base}/people/review${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+// Start with the largest visible identities, then retain full-library pagination.
+const PRIORITY_REVIEW_COMPLETE = 'priority-complete';
+export async function getPhotoPeopleReview(
+  after?: string,
+  signal?: AbortSignal,
+): Promise<{ items: PhotoPersonReview[]; nextCursor: string | null }> {
+  if (after === undefined) {
+    const { pairs } = await reviewPhotoPeople(signal);
+    return {
+      items: pairs.map((pair) => ({
+        ...pair,
+        key: [pair.first.id, pair.second.id].sort().join(':'),
+      })),
+      nextCursor: PRIORITY_REVIEW_COMPLETE,
+    };
+  }
+  return request(
+    `${base}/people/review${after === PRIORITY_REVIEW_COMPLETE ? '' : `?after=${encodeURIComponent(after)}`}`,
     { signal },
   );
+}
 export const decidePhotoPeople = (input: {
   firstId: string;
   secondId: string;

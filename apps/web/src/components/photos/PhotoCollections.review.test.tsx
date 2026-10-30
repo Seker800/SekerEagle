@@ -115,7 +115,9 @@ it('uses the server-recommended pair and persists SAME with both current version
     }),
   );
   expect(await screen.findByText('人物已合并')).toBeVisible();
-  expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
+  expect(await screen.findByRole('button', { name: '是，同一个人' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }), { detail: 2 });
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
 });
 it('persists DIFFERENT instead of silently skipping or merging', async () => {
   show();
@@ -130,7 +132,7 @@ it('skip changes the suggestion without saving an identity decision', async () =
   const region = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
   expect((await within(region).findAllByRole('img'))[0]).toHaveAttribute('src', '/a');
   fireEvent.click(screen.getByRole('button', { name: '暂时跳过' }));
-  expect(within(region).getAllByRole('img')[1]).toHaveAttribute('src', '/c');
+  expect(within(region).getAllByRole('img')[2]).toHaveAttribute('src', '/c');
   expect(mocks.decide).not.toHaveBeenCalled();
 });
 it('failed or stale decisions show the error and do not advance', async () => {
@@ -159,4 +161,14 @@ it('can traverse the full library instead of stopping at the directory page', as
   fireEvent.click(await screen.findByRole('button', { name: '继续查找相似人物' }));
   await screen.findByRole('button', { name: '是，同一个人' });
   expect(mocks.suggest.mock.calls.some(([cursor]) => cursor === 'next-anchor')).toBe(true);
+});
+
+it('shows complete photos beside the crops and blocks held confirmation keys', async () => {
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  const region = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
+  await waitFor(() => expect(within(region).getAllByRole('img')).toHaveLength(4));
+  const button = screen.getByRole('button', { name: '是，同一个人' });
+  expect(fireEvent.keyDown(button, { key: 'Enter', repeat: true })).toBe(false);
+  expect(mocks.decide).not.toHaveBeenCalled();
 });

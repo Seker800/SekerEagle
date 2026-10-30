@@ -106,6 +106,27 @@ async function fixture(mode = 'PHOTO', copy) {
   };
 }
 for (const mode of ['PHOTO', 'MATERIAL']) {
+  test(`${mode} local admission executes after commit without waiting for the five-second recovery poll`, async () => {
+    const f = await fixture(mode);
+    const asset = await f.add();
+    f.service.onModuleInit();
+    try {
+      const receipt = await f.enqueue('TRASH', [asset]);
+      // This deadline is shorter than the recovery poll, so completion requires
+      // the post-commit local wake rather than a lucky timer tick.
+      const deadline = performance.now() + 3000;
+      let state;
+      do {
+        state = await f.state(receipt.id);
+        if (state.completed === 1) break;
+        await delay(10);
+      } while (performance.now() < deadline);
+      assert.equal(state.completed, 1);
+      assert.ok((await prisma.eagleAsset.findUniqueOrThrow({ where: { id: asset.id } })).deletedAt);
+    } finally {
+      f.service.onModuleDestroy();
+    }
+  });
   test(`${mode} accepts a frozen selection without running it and resumes a bounded batch on another instance`, async () => {
     const f = await fixture(mode),
       rows = [await f.add(), await f.add()];

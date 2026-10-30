@@ -8,7 +8,7 @@ test('access and privacy grants accept HS256 only even with the correct signing 
   const jwt = new JwtService({ secret: 'synthetic-test-only-secret-32-characters' });
   const db = {
     user: {
-      findUnique: async () => ({
+      findFirst: async () => ({
         id: 'owner',
         email: 'owner@example.invalid',
         role: 'USER',

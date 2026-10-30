@@ -67,15 +67,9 @@ export function PhotoPeopleReview({
       <h3>{t('这两张照片是同一个人吗？')}</h3>
       <p>{t('按相似程度推荐，需要你确认；不会自动合并。')}</p>
       {(error || query.error) && <p role="alert">{error ?? query.error?.message}</p>}
+      {result && <p role="status">{result}</p>}
       {query.isPending ? (
         <p role="status">{t('正在查找相似人物…')}</p>
-      ) : result ? (
-        <>
-          <p role="status">{result}</p>
-          <button type="button" disabled={busy} onClick={() => setResult(null)}>
-            {t('下一组')}
-          </button>
-        </>
       ) : pair ? (
         <>
           <div className="photo-people-review-pair">
@@ -83,17 +77,43 @@ export function PhotoPeopleReview({
               const face = representativeFace(person);
               return face ? (
                 <button key={person.id} type="button" onClick={() => onOpen(face.asset)}>
+                  <img
+                    className="photo-people-review-original"
+                    src={preview(face.asset) ?? undefined}
+                    alt={t('完整照片：{{value1}}', { value1: face.asset.displayName })}
+                  />
                   <PhotoFaceImage face={face} url={preview} alt={person.name ?? t('未命名人物')} />
                   <span>{person.name ?? t('未命名人物')}</span>
+                  {person.photoCount !== undefined && (
+                    <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+                  )}
                 </button>
               ) : null;
             })}
           </div>
           <div className="photo-people-review-actions">
-            <button type="button" disabled={busy} onClick={() => void decide('SAME')}>
+            <button
+              type="button"
+              disabled={busy}
+              onKeyDown={(event) => {
+                if (event.repeat) event.preventDefault();
+              }}
+              onClick={(event) => {
+                if (event.detail <= 1) void decide('SAME');
+              }}
+            >
               {t('是，同一个人')}
             </button>
-            <button type="button" disabled={busy} onClick={() => void decide('DIFFERENT')}>
+            <button
+              type="button"
+              disabled={busy}
+              onKeyDown={(event) => {
+                if (event.repeat) event.preventDefault();
+              }}
+              onClick={(event) => {
+                if (event.detail <= 1) void decide('DIFFERENT');
+              }}
+            >
               {t('不是同一个人')}
             </button>
             <button
