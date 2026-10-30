@@ -8,13 +8,13 @@ export function usePhotoPeople(
   poll = false,
 ) {
   const query = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate],
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate, 'cards'],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled,
     staleTime: 30000,
-    refetchInterval: (query) => (poll && query.state.data?.pages.length === 1 ? 10000 : false),
+    refetchInterval: (query) => (poll && query.state.data?.pages.length === 1 ? 30000 : false),
   });
   return {
     ...query,

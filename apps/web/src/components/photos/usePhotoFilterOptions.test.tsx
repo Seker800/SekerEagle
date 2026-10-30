@@ -27,7 +27,9 @@ it('loads paged identity options without fetching person cards or faces', async 
   const view = renderHook(() => usePhotoFilterOptions(false, true), { wrapper });
   await waitFor(() => expect(mocks.options).toHaveBeenCalledOnce());
   expect(mocks.full).not.toHaveBeenCalled();
-  expect(view.result.current.fieldOptions.PERSON).toEqual([{ value: 'p1', label: '第一人' }]);
+  await waitFor(() =>
+    expect(view.result.current.fieldOptions.PERSON).toEqual([{ value: 'p1', label: '第一人' }]),
+  );
   await act(async () => {
     await view.result.current.people.fetchNextPage();
   });

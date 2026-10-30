@@ -1320,18 +1320,41 @@ export function SekerEaglePage({
     setIsDragging(false);
     void importFiles([...event.dataTransfer.files]);
   };
+  const peopleOptionsAction =
+    libraryMode === 'PHOTO' ? (
+      <>
+        {photoFieldOptions.people.error && (
+          <span role="alert">
+            {photoFieldOptions.people.error.message}
+            <button type="button" onClick={() => void photoFieldOptions.people.refetch()}>
+              {t('重试')}
+            </button>
+          </span>
+        )}
+        {photoFieldOptions.people.hasNextPage && (
+          <button
+            type="button"
+            disabled={photoFieldOptions.people.isFetchingNextPage}
+            onClick={() => void photoFieldOptions.people.fetchNextPage()}
+          >
+            {t('加载更多人物')}
+          </button>
+        )}
+      </>
+    ) : undefined;
   const quickFilterPanel =
     libraryView === 'ACTIVE' && showsAssetControls && filtersExpanded ? (
       <div id={filterPanelId}>
         <EagleQuickFilterBar
           presentation={compact ? 'sheet' : 'toolbar'}
-          fieldOptions={photoFieldOptions}
+          fieldOptions={photoFieldOptions.fieldOptions}
           value={quickFilters}
           manualTags={manualTags}
           aiTags={aiTags}
           onRequestAiTags={() => setAiTagReferenceRequested(true)}
           onChange={setQuickFilters}
         />
+        {peopleOptionsAction}
       </div>
     ) : null;
   const selectionToolbar = showsAssetControls &&
@@ -2965,7 +2988,8 @@ export function SekerEaglePage({
       {isSmartFolderDialogOpen && (
         <EagleSmartFolderDialog
           key={editingScope}
-          fieldOptions={photoFieldOptions}
+          fieldOptions={photoFieldOptions.fieldOptions}
+          fieldOptionsAction={peopleOptionsAction}
           accessToken={accessToken}
           initialQuery={
             editingSmartFolder ? toEagleFilterQuery(editingSmartFolder.queryJson) : filterQuery

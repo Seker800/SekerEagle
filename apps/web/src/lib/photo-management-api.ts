@@ -34,7 +34,17 @@ export const getPhotoFacets = () =>
   request<{ cameras: string[]; lenses: string[] }>(`${base}/facets`);
 export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
   request<{ runtimeConfigured: boolean; people: PhotoPerson[]; nextCursor: string | null }>(
-    `${base}/people${after ? `?after=${encodeURIComponent(after)}` : ''}`,
+    `${base}/people?view=cards${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    { signal },
+  );
+export const listPhotoPeopleOptions = (after?: string, signal?: AbortSignal) =>
+  request<{ people: Array<Pick<PhotoPerson, 'id' | 'name'>>; nextCursor: string | null }>(
+    `${base}/people?view=options${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    { signal },
+  );
+export const listPhotoPersonFaces = (personId: string, after?: string, signal?: AbortSignal) =>
+  request<{ faces: PhotoFace[]; nextCursor: string | null }>(
+    `${base}/people/${encodeURIComponent(personId)}/faces${after ? `?after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
 export const scanPhotoPeople = () =>

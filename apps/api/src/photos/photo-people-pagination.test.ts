@@ -103,3 +103,35 @@ test('person face pages reject invisible people and bind cursors to owner, priva
     );
   }
 });
+
+test('cards return one clear browsable representative from the original bounded candidate set', async () => {
+  const faces = [0.1, 0.3].map((side, index) => ({
+    id: `face-${index}`,
+    box: [0.1, 0.1, side, side],
+    confidence: 1 - index * 0.01,
+    assetId: `asset-${index}`,
+    asset: {
+      mimeType: 'image/jpeg',
+      mediaRevision: 1,
+      byteSize: 1n,
+      renditions: [
+        {
+          id: 'thumb',
+          kind: 'THUMBNAIL',
+          revision: 1,
+          width: 100,
+          height: 100,
+          mimeType: 'image/jpeg',
+          byteSize: 1n,
+        },
+      ],
+    },
+  }));
+  const service = new PhotoManagementService({
+    eaglePhotoPerson: { findMany: async () => [{ id: 'p', createdAt: new Date(), faces }] },
+  } as never);
+  const result = await service.people('owner', false, undefined, 'cards');
+  const card = result.people[0] as { faces: Array<{ id: string }> };
+  assert.equal(card.faces.length, 1);
+  assert.equal(card.faces[0]?.id, 'face-1');
+});

@@ -3,11 +3,12 @@ import { getDesktopCacheBridge } from '../../lib/media-resolver';
 import { useRef, useState } from 'react';
 import { PhotoFaceImage, facePreview, representativeFace } from './PhotoFaceImage';
 import { PhotoPeopleReview } from './PhotoPeopleReview';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { t } from '../../i18n';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
   scanPhotoPeople,
+  listPhotoPersonFaces,
   reviewPhotoPeople,
   renamePhotoPerson,
   mergePhotoPeople,
@@ -60,7 +61,11 @@ export function PhotoCollections({
         await queryClient.invalidateQueries({
           queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
         });
-      await Promise.all([people.refetch(), review.refetch()]);
+      await Promise.all([
+        people.refetch(),
+        review.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
+      ]);
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
@@ -153,6 +158,7 @@ export function PhotoCollections({
           {people.data?.people.find((person) => person.id === selectedPerson) && (
             <PersonEditor
               key={selectedPerson}
+              includePrivate={includePrivate}
               person={people.data.people.find((person) => person.id === selectedPerson)!}
               pending={pending}
               perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
@@ -185,6 +191,7 @@ export function PhotoCollections({
 }
 function PersonEditor({
   person,
+  includePrivate,
   pending,
   perform,
   onPerson,
@@ -193,6 +200,7 @@ function PersonEditor({
   onPrivacyChange,
 }: {
   person: PhotoPerson;
+  includePrivate: boolean;
   pending: boolean;
   perform: (action: () => Promise<unknown>, changesPrivacy?: boolean) => Promise<boolean>;
   onPrivacyChange: (person: PhotoPerson, checked: boolean) => Promise<boolean>;
@@ -200,6 +208,14 @@ function PersonEditor({
   onOpen: (asset: EagleAssetListItem) => void;
   thumbnail: (asset: EagleAssetListItem) => string | null;
 }) {
+  const { ownerId } = useLibraryWorkspace();
+  const faces = useInfiniteQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces', includePrivate, person.id],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) => listPhotoPersonFaces(person.id, pageParam, signal),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    staleTime: 30000,
+  });
   const [name, setName] = useState(person.name ?? '');
   return (
     <div className="photo-person-editor">
@@ -230,24 +246,44 @@ function PersonEditor({
         {t('查看此人物的照片')}
       </button>
       <div className="photo-group-grid">
-        {person.faces.slice(0, 20).map((face) => {
-          const src = thumbnail(face.asset);
-          return (
-            <div key={face.id}>
-              <button type="button" onClick={() => onOpen(face.asset)}>
-                {src && <img loading="lazy" src={src} alt={face.asset.displayName} />}
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => void perform(() => splitPhotoFace(face.id), true)}
-              >
-                {t('这不是同一个人')}
-              </button>
-            </div>
-          );
-        })}
+        {faces.isPending && <p role="status">{t('正在加载照片…')}</p>}
+        {faces.error && (
+          <div role="alert">
+            {faces.error.message}
+            <button type="button" onClick={() => void faces.refetch()}>
+              {t('重试')}
+            </button>
+          </div>
+        )}
+        {faces.data?.pages
+          .flatMap((page) => page.faces)
+          .map((face) => {
+            const src = thumbnail(face.asset);
+            return (
+              <div key={face.id}>
+                <button type="button" onClick={() => onOpen(face.asset)}>
+                  {src && <img loading="lazy" src={src} alt={face.asset.displayName} />}
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => void perform(() => splitPhotoFace(face.id), true)}
+                >
+                  {t('这不是同一个人')}
+                </button>
+              </div>
+            );
+          })}
       </div>
+      {faces.hasNextPage && (
+        <button
+          type="button"
+          disabled={faces.isFetchingNextPage}
+          onClick={() => void faces.fetchNextPage()}
+        >
+          {t('加载更多')}
+        </button>
+      )}
     </div>
   );
 }

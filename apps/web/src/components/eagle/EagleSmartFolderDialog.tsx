@@ -1,6 +1,6 @@
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { t } from '../../i18n';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type ReactNode, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { IconFolderBolt, IconX } from '@tabler/icons-react';
 import {
@@ -20,6 +20,7 @@ import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './EagleSmartFolderDialog.module.css';
 interface EagleSmartFolderDialogProps {
   fieldOptions?: EagleFilterOptions;
+  fieldOptionsAction?: ReactNode;
   accessToken?: string;
   initialQuery: EagleFilterQuery;
   initialName?: string;
@@ -44,6 +45,7 @@ function createEditableQuery(query: EagleFilterQuery): EagleFilterQuery {
 }
 export function EagleSmartFolderDialog({
   fieldOptions,
+  fieldOptionsAction,
   accessToken = '',
   initialQuery,
   initialName = '',
@@ -150,6 +152,7 @@ export function EagleSmartFolderDialog({
             aiTags={aiTags}
             onChange={setQuery}
           />
+          {fieldOptionsAction}
           {semantic && (
             <section className={styles.semanticPanel} aria-label={t('画面内容')}>
               <p className={styles.explainer}>
