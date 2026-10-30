@@ -217,6 +217,33 @@ public final class MobileBackupTest {
         .getBoolean("exists");
   }
 
+  private static Object serviceField(Object service, String name) throws Exception {
+    java.lang.reflect.Field field = BackupService.class.getDeclaredField(name);
+    field.setAccessible(true);
+    return field.get(service);
+  }
+
+  private static BackupService currentBackup() throws Exception {
+    return (BackupService) serviceField(null, "current");
+  }
+
+  // Hold the actual serial worker, without adding test hooks to the application.
+  private CountDownLatch holdBackupExecutor() throws Exception {
+    ExecutorService executor = (ExecutorService) serviceField(null, "executor");
+    CountDownLatch entered = new CountDownLatch(1), release = new CountDownLatch(1);
+    executor.execute(
+        () -> {
+          entered.countDown();
+          try {
+            release.await();
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        });
+    assertTrue(entered.await(5, TimeUnit.SECONDS));
+    return release;
+  }
+
   private void runScan() throws Exception {
     String previous = settings.value(scope, "lastFinished", "");
     getInstrumentation()
@@ -228,7 +255,8 @@ public final class MobileBackupTest {
     waitUntil(
         () ->
             !settings.value(scope, "lastFinished", "").equals(previous)
-                && !settings.flag(scope, "running", false),
+                && !BackupService.isRunning(scope)
+                && currentBackup() == null,
         90000,
         "backup completion");
     assertEquals("备份完成", settings.value(scope, "status", ""));
@@ -1113,35 +1141,133 @@ public final class MobileBackupTest {
 
   @Test
   public void immediatePauseAndResumeRetiresTheLatestServiceStart() throws Exception {
-    image("handoff.png", 0xff174938, true);
+    Uri file = image("handoff.png", 0xff174938, true);
     BackupScreen.addRule(settings, scope, "media", path);
-    getInstrumentation().runOnMainSync(() -> activity.startBackup());
-    waitUntil(() -> BackupService.isRunning(scope), 15000, "backup run started");
-    getInstrumentation()
-        .runOnMainSync(
-            () -> {
-              activity.pause();
-              activity.startBackup();
-              activity.startBackup();
-            });
+    settings.setValue(scope, "lastFinished", "historical-completion");
+    String previous = settings.value(scope, "lastFinished", "");
+    CountDownLatch release = holdBackupExecutor();
+    try {
+      getInstrumentation().runOnMainSync(() -> activity.startBackup());
+      waitUntil(() -> BackupService.isRunning(scope), 15000, "backup run started");
+      getInstrumentation()
+          .runOnMainSync(
+              () -> {
+                activity.pause();
+                activity.startBackup();
+                activity.startBackup();
+              });
+      waitUntil(
+          () -> serviceField(currentBackup(), "pendingRestart") != null, 15000, "resume queued");
+      // The held initial run cannot have uploaded this file or completed the scan.
+      assertFalse(exists(file, "photos"));
+      assertEquals(previous, settings.value(scope, "lastFinished", ""));
+    } finally {
+      release.countDown();
+    }
     waitUntil(
-        () -> !settings.value(scope, "lastFinished", "").isEmpty(),
+        () ->
+            !settings.value(scope, "lastFinished", "").equals(previous) && currentBackup() == null,
         30000,
-        "resumed backup finished");
-    java.lang.reflect.Field field = BackupService.class.getDeclaredField("current");
-    field.setAccessible(true);
-    waitUntil(
-        () -> {
-          try {
-            return field.get(null) == null;
-          } catch (IllegalAccessException e) {
-            throw new AssertionError(e);
-          }
-        },
-        15000,
-        "latest service start retired");
+        "resumed run completed and retired");
+    assertEquals("备份完成", settings.value(scope, "status", ""));
     assertFalse(settings.flag(scope, "userPaused", true));
-    assertTrue(exists(created.get(created.size() - 1), "photos"));
+    assertTrue(exists(file, "photos"));
+  }
+
+  @Test
+  public void runningInternalCancelStopsWithoutCreatingAUserPause() throws Exception {
+    cancelRunningBackup(false);
+  }
+
+  @Test
+  public void runningInternalCancelPreservesPauseAndClearsAPendingResume() throws Exception {
+    cancelRunningBackup(true);
+  }
+
+  private void cancelRunningBackup(boolean userPaused) throws Exception {
+    BackupScreen.addRule(settings, scope, "media", path);
+    String previous = settings.value(scope, "lastFinished", "");
+    CountDownLatch release = holdBackupExecutor();
+    try {
+      getInstrumentation().runOnMainSync(() -> activity.startBackup());
+      waitUntil(() -> BackupService.isRunning(scope), 15000, "running internal cancel");
+      BackupService service = currentBackup();
+      getInstrumentation()
+          .runOnMainSync(
+              () -> {
+                if (userPaused) {
+                  activity.pause();
+                  try {
+                    service.onStartCommand(
+                        new Intent(context, BackupService.class)
+                            .putExtra("scope", scope)
+                            .putExtra("manual", true),
+                        0,
+                        (int) serviceField(service, "latestStartId"));
+                    assertNotNull(serviceField(service, "pendingRestart"));
+                  } catch (Exception e) {
+                    throw new AssertionError(e);
+                  }
+                }
+                activity.cancelBackup();
+                assertEquals(userPaused, settings.flag(scope, "userPaused", false));
+                assertEquals(userPaused ? "备份已暂停" : "备份已停止", settings.value(scope, "status", ""));
+              });
+    } finally {
+      release.countDown();
+    }
+    waitUntil(() -> currentBackup() == null, 15000, "internally cancelled run retired");
+    assertEquals(userPaused, settings.flag(scope, "userPaused", false));
+    assertEquals(userPaused ? "备份已暂停" : "备份已停止", settings.value(scope, "status", ""));
+    assertEquals(previous, settings.value(scope, "lastFinished", ""));
+  }
+
+  @Test
+  public void automaticStartDuringNormalRetirementIsNotLost() throws Exception {
+    BackupScreen.addRule(settings, scope, "media", path);
+    String previous = settings.value(scope, "lastFinished", "");
+    CountDownLatch release = holdBackupExecutor();
+    Uri[] nextFile = {null};
+    try {
+      getInstrumentation().runOnMainSync(() -> activity.startBackup());
+      waitUntil(() -> BackupService.isRunning(scope), 15000, "initial empty scan started");
+      BackupService service = currentBackup();
+      ExecutorService executor = (ExecutorService) serviceField(null, "executor");
+      CompletableFuture<Void> retiredWorker = new CompletableFuture<>();
+      executor.execute(() -> retiredWorker.complete(null));
+      getInstrumentation()
+          .runOnMainSync(
+              () -> {
+                release.countDown();
+                try {
+                  // The main looper is deliberately held here: the real worker has finished,
+                  // but its completion callback cannot hand off the service until we return.
+                  retiredWorker.get(4, TimeUnit.SECONDS);
+                  assertFalse(previous.equals(settings.value(scope, "lastFinished", "")));
+                  assertSame(service, currentBackup());
+                  nextFile[0] = image("after-retirement.png", 0xff834123, true);
+                  settings.setValue(scope, "lastFinished", "first-run-completed");
+                  service.onStartCommand(
+                      new Intent(context, BackupService.class)
+                          .putExtra("scope", scope)
+                          .putExtra("manual", false),
+                      0,
+                      (int) serviceField(service, "latestStartId"));
+                } catch (Exception e) {
+                  throw new AssertionError(e);
+                }
+              });
+    } finally {
+      release.countDown();
+    }
+    waitUntil(
+        () ->
+            !settings.value(scope, "lastFinished", "").equals("first-run-completed")
+                && currentBackup() == null,
+        15000,
+        "queued automatic scan completed");
+    assertEquals("备份完成", settings.value(scope, "status", ""));
+    assertTrue(exists(nextFile[0], "photos"));
   }
 
   @Test
