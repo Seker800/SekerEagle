@@ -48,7 +48,7 @@ describe('useEagleAssetViewport', () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  it('resets stale virtual scroll state and observes the replacement viewport after tag navigation', () => {
+  it('restores virtual and physical scroll position after tag navigation', () => {
     render(<Harness />);
     const firstViewport = screen.getByRole('region', { name: '素材瀑布流' });
     Object.defineProperty(firstViewport, 'scrollTop', { configurable: true, value: 2400 });
@@ -58,7 +58,8 @@ describe('useEagleAssetViewport', () => {
     fireEvent.click(screen.getByRole('button', { name: '切换页面' }));
     fireEvent.click(screen.getByRole('button', { name: '切换页面' }));
 
-    expect(screen.getByLabelText('虚拟滚动位置')).toHaveTextContent('0');
+    expect(screen.getByLabelText('虚拟滚动位置')).toHaveTextContent('2400');
+    expect(screen.getByRole('region', { name: '素材瀑布流' }).scrollTop).toBe(2400);
     expect(ResizeObserverMock.instances).toHaveLength(2);
     expect(ResizeObserverMock.instances[0]?.disconnect).toHaveBeenCalled();
   });

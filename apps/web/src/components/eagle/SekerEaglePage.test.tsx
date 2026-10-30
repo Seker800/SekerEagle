@@ -493,6 +493,48 @@ describe('SekerEaglePage', () => {
     },
   );
 
+  it('keeps old cards visible but unavailable while an uncached search is pending', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    const next = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
+    listEagleAssetsMock.mockReturnValue(next.promise);
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '北京' },
+    });
+    await waitFor(() =>
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+    );
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '素材瀑布流' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByRole('status', { name: '正在加载素材…' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Owl Reference/ }));
+    expect(screen.queryByRole('complementary', { name: '素材详情' })).not.toBeInTheDocument();
+    next.resolve({ items: [], nextCursor: null });
+    await screen.findByText('没有匹配的素材');
+    expect(screen.queryByRole('button', { name: /Owl Reference/ })).not.toBeInTheDocument();
+  });
+
+  it('retains search and filters across tag navigation and workspace remounts', async () => {
+    const view = renderPage('browse-owner');
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '北京' },
+    });
+    await waitFor(() =>
+      expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ search: '北京' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: '标签' }));
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: '素材库导航' })).getByRole('button', {
+        name: /^全部/,
+      }),
+    );
+    expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('北京');
+    view.rerender(<></>);
+    view.rerender(view.renderForOwner('browse-owner'));
+    expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('北京');
+  });
+
   it('shows cached cards while refreshing an invalidated list in the background', async () => {
     const view = renderPage('refresh-owner');
     await screen.findByRole('button', { name: /Owl Reference/ });
