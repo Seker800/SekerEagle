@@ -42,6 +42,7 @@ data class GalleryState(
     val items: List<NativeAsset> = emptyList(),
     val cursor: String? = null,
     val query: String = "",
+    val imageSearchStatus: String? = null,
     val loading: Boolean = false,
     val refreshing: Boolean = false,
     val loaded: Boolean = false,
@@ -203,6 +204,19 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     private var operation: Job? = null
+    private var pageCancellation: NativeTransferCancellation? = null
+
+    private fun cancelOperation() {
+        pageCancellation?.cancel()
+        pageCancellation = null
+        operation?.cancel()
+    }
+
+    private fun beginPageRead(): NativeTransferCancellation {
+        cancelOperation()
+        return NativeTransferCancellation().also { pageCancellation = it }
+    }
+
     private var sessionJob: Job? = null
     private var signingOut: Job? = null
     private var foregroundJob: Job? = null
@@ -280,7 +294,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         uploadPickerTarget = null
         sessionJob?.cancel()
         timelineJob?.cancel()
-        operation?.cancel()
+        cancelOperation()
         val request = ++generation
         repository?.clear()
         repository = null
@@ -360,7 +374,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         transferRefreshPending = false
         downloads.clear()
         uploadPickerTarget = null
-        operation?.cancel()
+        cancelOperation()
         cancelOptions()
         timelineJob?.cancel()
         prefetchJob?.cancel()
@@ -401,7 +415,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val identity = current.identity ?: return
         if (current.busy || current.sort == order) return
         settings.setValue(identity.scope, GallerySort.key(current.mode), order.name)
-        operation?.cancel()
+        cancelOperation()
         generation++
         mutable.value =
             current.copy(
@@ -423,7 +437,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val snapshot = state.value
         val repo = repository ?: return
         if (next && (snapshot.loading || snapshot.cursor == null)) return
-        operation?.cancel()
+        val cancellation = beginPageRead()
         val request = ++generation
         mutable.value =
             snapshot.copy(
@@ -446,6 +460,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         snapshot.sort,
                         before,
                         offset,
+                        cancellation = cancellation,
                     )
                 if (request != generation) return@launch
                 mutable.value =
@@ -455,6 +470,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                                 it.id
                             },
                         cursor = page.cursor,
+                        imageSearchStatus = page.imageSearchStatus,
                         loaded = true,
                         loading = false,
                         refreshing = false,
@@ -493,7 +509,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val snapshot = state.value
         val repo = repository ?: return
         if (snapshot.busy || snapshot.loading) return
-        operation?.cancel()
+        val cancellation = beginPageRead()
         val request = ++generation
         transferRefreshPending = false
         mutable.value =
@@ -503,6 +519,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             try {
                 val items = mutableListOf<NativeAsset>()
                 var cursor: String? = null
+                var imageSearchStatus: String? = null
                 do {
                     val page =
                         repo.page(
@@ -521,15 +538,18 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                                 )
                                     snapshot.windowOffset
                                 else 0,
+                            cancellation = cancellation,
                         )
                     items.addAll(page.items)
                     cursor = page.cursor
+                    imageSearchStatus = page.imageSearchStatus
                 } while (cursor != null && items.size < maxOf(60, snapshot.items.size))
                 if (request != generation) return@launch
                 mutable.value =
                     state.value.copy(
                         items = items.distinctBy { it.id },
                         cursor = cursor,
+                        imageSearchStatus = imageSearchStatus,
                         loaded = true,
                         selected = state.value.selected.intersect(items.map { it.id }.toSet()),
                         loading = false,
@@ -569,6 +589,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             return
         val start = (snapshot.windowOffset - 60).coerceAtLeast(0)
         val day = index.dayAt(start) ?: return
+        val cancellation = beginPageRead()
         val request = ++generation
         mutable.value =
             snapshot.copy(loading = true, refreshing = false, error = null, readRetry = null)
@@ -581,6 +602,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
                         sort = snapshot.sort,
                         before = day.before,
                         offset = start - day.offset,
+                        cancellation = cancellation,
                     )
                 if (request != generation) return@launch
                 mutable.value =
@@ -677,6 +699,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         mutable.value =
             current.copy(
                 query = query,
+                imageSearchStatus = null,
                 scrollRequest = current.scrollRequest + 1,
                 filters = filters,
                 filterPanel = null,
@@ -1004,7 +1027,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val repo = repository ?: return
         val asset = snapshot.items.firstOrNull { it.id == id } ?: return
         if (snapshot.busy || snapshot.trash) return
-        operation?.cancel()
+        cancelOperation()
         val request = ++generation
         mutable.value =
             snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
@@ -1044,7 +1067,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val repo = repository ?: return
         val assets = s.items.filter { it.id in s.selected }
         if (assets.size != s.selected.size) return
-        operation?.cancel()
+        cancelOperation()
         val request = ++generation
         mutable.value = s.copy(busy = true, loading = false, refreshing = false, message = null)
         mutation = viewModelScope.launch {
@@ -1086,7 +1109,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
     }
 
     fun logout() {
-        operation?.cancel()
+        cancelOperation()
         sessionJob?.cancel()
         generation++
         val old = session
@@ -1105,7 +1128,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         downloads.clear()
         transfers.clear()
         uploadPickerTarget = null
-        operation?.cancel()
+        cancelOperation()
         generation++
         settings.active("")
         getApplication<Application>()

@@ -360,6 +360,10 @@ internal fun NativeLibraryPage(
                             CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                         }
                     }
+                if (state.query.isNotBlank() && state.imageSearchStatus == "UNAVAILABLE")
+                    item(span = { GridItemSpan(maxLineSpan) }) {
+                        Text("向量搜索暂不可用，当前仅匹配名称和人工标签", color = NativeMuted, modifier = Modifier.padding(16.dp))
+                    }
                 if (state.error != null)
                     item(span = { GridItemSpan(maxLineSpan) }) {
                         Column(

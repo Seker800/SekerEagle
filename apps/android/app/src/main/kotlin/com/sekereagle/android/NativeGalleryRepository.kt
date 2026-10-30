@@ -62,7 +62,7 @@ data class NativeTimeline(val days: List<NativeDay>, val total: Long) {
     }
 }
 
-data class NativePage(val items: List<NativeAsset>, val cursor: String?)
+data class NativePage(val items: List<NativeAsset>, val cursor: String?, val imageSearchStatus: String? = null)
 
 /**
  * Older servers only expose extensions. Map the aliases whose stored inspection format differs, so
@@ -115,6 +115,7 @@ class NativeGalleryRepository(
         sort: GallerySort = GallerySort.default(mode),
         before: String? = null,
         offset: Long = 0,
+        cancellation: NativeTransferCancellation? = null,
     ): NativePage =
         withContext(Dispatchers.IO) {
             val result =
@@ -128,11 +129,13 @@ class NativeGalleryRepository(
                             ?: "") +
                         (if (offset > 0) "&offset=$offset" else "") +
                         filters.parameters().querySuffix(),
+                    cancellation = cancellation,
                 )
             val items = result.getJSONArray("items")
             NativePage(
                 (0 until items.length()).map { parse(items.getJSONObject(it), mode, sort) },
                 result.optString("nextCursor").takeUnless { it.isEmpty() || it == "null" },
+                result.optJSONObject("imageSearch")?.optString("status")?.takeIf { search.isNotBlank() && it in setOf("READY", "UNAVAILABLE") },
             )
         }
 
