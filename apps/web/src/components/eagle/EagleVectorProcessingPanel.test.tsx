@@ -1,13 +1,17 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as api from '../../lib/eagle-vector-api';
 import { EagleVectorProcessingPanel } from './EagleVectorProcessingPanel';
 
-vi.mock('../../lib/eagle-vector-api', () => ({
-  fetchEagleVectorSummary: vi.fn(),
-  retryFailedEagleEmbeddings: vi.fn(),
-  scanMissingEagleEmbeddings: vi.fn(),
-}));
+vi.mock('../../lib/eagle-vector-api', () => {
+  const api = {
+    fetchEagleVectorSummary: vi.fn(),
+    retryFailedEagleEmbeddings: vi.fn(),
+    scanMissingEagleEmbeddings: vi.fn(),
+  };
+  return { ...api, createEagleVectorApi: () => api };
+});
 
 describe('EagleVectorProcessingPanel', () => {
   beforeEach(() => {

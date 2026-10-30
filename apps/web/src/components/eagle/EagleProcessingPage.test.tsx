@@ -1,16 +1,20 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EagleProcessingPage } from './EagleProcessingPage';
 import * as api from '../../lib/eagle-processing-admin-api';
 
-vi.mock('../../lib/eagle-processing-admin-api', () => ({
-  fetchEagleProcessingSummary: vi.fn(),
-  listEagleProcessingJobs: vi.fn(),
-  updateEagleProcessingSettings: vi.fn(),
-  retryEagleProcessingJob: vi.fn(),
-  retryAllFailedEagleProcessingJobs: vi.fn(),
-  reconcileEagleProcessingJobs: vi.fn(),
-}));
+vi.mock('../../lib/eagle-processing-admin-api', () => {
+  const api = {
+    fetchEagleProcessingSummary: vi.fn(),
+    listEagleProcessingJobs: vi.fn(),
+    updateEagleProcessingSettings: vi.fn(),
+    retryEagleProcessingJob: vi.fn(),
+    retryAllFailedEagleProcessingJobs: vi.fn(),
+    reconcileEagleProcessingJobs: vi.fn(),
+  };
+  return { ...api, createEagleProcessingAdminApi: () => api };
+});
 vi.mock('./EagleVectorProcessingPanel', () => ({
   EagleVectorProcessingPanel: () => <div data-testid="vector-processing-panel">图片向量状态</div>,
 }));

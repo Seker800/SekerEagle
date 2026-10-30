@@ -1,4 +1,5 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { renderInPhotoWorkspace as render } from '../../test/render-in-workspace';
+import { act, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, it, expect, vi } from 'vitest';
 import { PhotoAgentReview } from './PhotoAgentReview';

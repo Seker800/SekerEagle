@@ -27,6 +27,7 @@ export function saveOriginalFile(
   dependencies: SaveOriginalFileDependencies = {},
 ): Promise<{
   saved: boolean;
+  initiated?: true;
 }> {
   const desktopBridge =
     dependencies.desktopBridge === undefined
@@ -38,7 +39,7 @@ export function saveOriginalFile(
     getEagleAssetContentUrl(target.id, target.libraryMode),
     target.originalName,
   );
-  return Promise.resolve({ saved: true });
+  return Promise.resolve({ saved: false, initiated: true });
 }
 export function downloadOriginalFiles(
   targets: readonly OriginalFileTarget[],

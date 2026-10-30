@@ -1,9 +1,10 @@
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
 import type { OriginalFileTarget } from '../../lib/original-file-export';
 import type * as PrivacyApiModule from '../../lib/eagle-privacy-api';
 import { LibraryWorkspaceProvider } from '../../lib/library-workspace';
 import '@testing-library/jest-dom/vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import type * as WorkspaceModule from '../../lib/library-workspace';
 import { MemoryRouter } from 'react-router-dom';
@@ -39,10 +40,13 @@ vi.mock('../media/photo-editor/PhotoEditor', () => ({
   },
 }));
 
-vi.mock('../../lib/eagle-privacy-api', async (original) => ({
-  ...(await original<typeof PrivacyApiModule>()),
-  getEaglePrivacySettings: async () => ({ tagIds: [] }),
-}));
+vi.mock('../../lib/eagle-privacy-api', async (original) => {
+  const api = {
+    ...(await original<typeof PrivacyApiModule>()),
+    getEaglePrivacySettings: async () => ({ tagIds: [] }),
+  };
+  return { ...api, createEaglePrivacyApi: () => api };
+});
 vi.mock('openseadragon', () => ({ default: openSeadragonMock }));
 const testWorkspaceMode = vi.hoisted(() => ({ value: 'MATERIAL' as 'MATERIAL' | 'PHOTO' }));
 vi.mock('../../lib/library-workspace', async (original) => {
@@ -125,43 +129,46 @@ const saveOriginalFileMock = vi.fn();
 const downloadOriginalFilesMock = vi.fn();
 let intersectionCallback: IntersectionObserverCallback | null = null;
 
-vi.mock('../../lib/eagle-api', () => ({
-  getEagleEditRecipe: async () => null,
-  saveEagleEditRecipe: async () => ({ saved: true }),
-  getEagleAssetContentUrl: (assetId: string) => `/api/eagle/assets/${assetId}/content`,
-  getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
-    `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,
-  getEaglePyramidDescriptor: (...args: unknown[]) => getEaglePyramidDescriptorMock(...args),
-  countEagleAssets: (...args: unknown[]) => countEagleAssetsMock(...args),
-  listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
-  getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
-  getEagleAssetLocation: (...args: unknown[]) => getEagleAssetLocationMock(...args),
-  sendEagleAssets: (...args: unknown[]) => sendEagleAssetsMock(...args),
-  getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
-  listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
-  listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
-  listEagleManualTagGroups: (...args: unknown[]) => listEagleManualTagGroupsMock(...args),
-  listEagleAiTags: (...args: unknown[]) => listEagleAiTagsMock(...args),
-  createEagleManualTag: (...args: unknown[]) => createEagleManualTagMock(...args),
-  createEagleManualTagGroup: vi.fn(),
-  updateEagleManualTag: vi.fn(),
-  deleteEagleManualTag: vi.fn(),
-  updateEagleManualTagGroup: vi.fn(),
-  deleteEagleManualTagGroup: vi.fn(),
-  replaceEagleAssetManualTags: (...args: unknown[]) => replaceEagleAssetManualTagsMock(...args),
-  batchChangeEagleManualTags: (...args: unknown[]) => batchChangeEagleManualTagsMock(...args),
-  listEagleTrash: (...args: unknown[]) => listEagleTrashMock(...args),
-  batchTrashEagleAssets: (...args: unknown[]) => batchTrashEagleAssetsMock(...args),
-  batchRestoreEagleAssets: (...args: unknown[]) => batchRestoreEagleAssetsMock(...args),
-  emptyEagleTrash: (...args: unknown[]) => emptyEagleTrashMock(...args),
-  updateEagleAsset: (...args: unknown[]) => updateEagleAssetMock(...args),
-  batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
-  uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
-  listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
-  createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
-  updateEagleSmartFolder: (...args: unknown[]) => updateEagleSmartFolderMock(...args),
-  moveEagleSmartFolder: (...args: unknown[]) => moveEagleSmartFolderMock(...args),
-}));
+vi.mock('../../lib/eagle-api', () => {
+  const api = {
+    getEagleEditRecipe: async () => null,
+    saveEagleEditRecipe: async () => ({ saved: true }),
+    getEagleAssetContentUrl: (assetId: string) => `/api/eagle/assets/${assetId}/content`,
+    getEagleRenditionContentUrl: (assetId: string, renditionId: string) =>
+      `/api/eagle/assets/${assetId}/renditions/${renditionId}/content`,
+    getEaglePyramidDescriptor: (...args: unknown[]) => getEaglePyramidDescriptorMock(...args),
+    countEagleAssets: (...args: unknown[]) => countEagleAssetsMock(...args),
+    listEagleAssets: (...args: unknown[]) => listEagleAssetsMock(...args),
+    getEagleAsset: (...args: unknown[]) => getEagleAssetMock(...args),
+    getEagleAssetLocation: (...args: unknown[]) => getEagleAssetLocationMock(...args),
+    sendEagleAssets: (...args: unknown[]) => sendEagleAssetsMock(...args),
+    getEagleTrashAsset: (...args: unknown[]) => getEagleTrashAssetMock(...args),
+    listEagleAssetUpdates: (...args: unknown[]) => listEagleAssetUpdatesMock(...args),
+    listEagleManualTags: (...args: unknown[]) => listEagleManualTagsMock(...args),
+    listEagleManualTagGroups: (...args: unknown[]) => listEagleManualTagGroupsMock(...args),
+    listEagleAiTags: (...args: unknown[]) => listEagleAiTagsMock(...args),
+    createEagleManualTag: (...args: unknown[]) => createEagleManualTagMock(...args),
+    createEagleManualTagGroup: vi.fn(),
+    updateEagleManualTag: vi.fn(),
+    deleteEagleManualTag: vi.fn(),
+    updateEagleManualTagGroup: vi.fn(),
+    deleteEagleManualTagGroup: vi.fn(),
+    replaceEagleAssetManualTags: (...args: unknown[]) => replaceEagleAssetManualTagsMock(...args),
+    batchChangeEagleManualTags: (...args: unknown[]) => batchChangeEagleManualTagsMock(...args),
+    listEagleTrash: (...args: unknown[]) => listEagleTrashMock(...args),
+    batchTrashEagleAssets: (...args: unknown[]) => batchTrashEagleAssetsMock(...args),
+    batchRestoreEagleAssets: (...args: unknown[]) => batchRestoreEagleAssetsMock(...args),
+    emptyEagleTrash: (...args: unknown[]) => emptyEagleTrashMock(...args),
+    updateEagleAsset: (...args: unknown[]) => updateEagleAssetMock(...args),
+    batchUpdateEagleAssets: (...args: unknown[]) => batchUpdateEagleAssetsMock(...args),
+    uploadEagleAsset: (...args: unknown[]) => uploadEagleAssetMock(...args),
+    listEagleSmartFolders: (...args: unknown[]) => listEagleSmartFoldersMock(...args),
+    createEagleSmartFolder: (...args: unknown[]) => createEagleSmartFolderMock(...args),
+    updateEagleSmartFolder: (...args: unknown[]) => updateEagleSmartFolderMock(...args),
+    moveEagleSmartFolder: (...args: unknown[]) => moveEagleSmartFolderMock(...args),
+  };
+  return { ...api, createEagleApi: () => api };
+});
 
 vi.mock('./EagleTaskCenter', () => ({
   EagleTaskCenter: () => (
@@ -171,9 +178,12 @@ vi.mock('./EagleTaskCenter', () => ({
   ),
 }));
 
-vi.mock('../../lib/eagle-vector-api', () => ({
-  fetchEagleVectorSummary: (...args: unknown[]) => fetchEagleVectorSummaryMock(...args),
-}));
+vi.mock('../../lib/eagle-vector-api', () => {
+  const api = {
+    fetchEagleVectorSummary: (...args: unknown[]) => fetchEagleVectorSummaryMock(...args),
+  };
+  return { ...api, createEagleVectorApi: () => api };
+});
 
 vi.mock('../../lib/image-clipboard', () => ({
   canCopyImageToClipboard: () => canCopyImageToClipboardMock(),

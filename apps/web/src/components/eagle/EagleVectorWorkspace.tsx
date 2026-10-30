@@ -14,7 +14,6 @@ import {
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { normalizeEagleTagSearchText, searchAndSortEagleTags } from './eagle-tag-index';
 import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selection';
-import { invalidateDesktopAssets } from '../../lib/desktop-cache';
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useImagePreviewState } from '../media/image-preview/useImagePreviewState';
 import styles from './EagleVectorWorkspace.module.css';
@@ -33,7 +32,7 @@ interface EagleVectorWorkspaceProps {
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
   onTrashAssets?: (assetIds: string[]) => Promise<void>;
   onAssetPrivacyChanged?: () => void;
-  onAssetRelationsChanged?: (assetIds: string[]) => Promise<void>;
+  onAssetRelationsChanged: (assetIds: string[]) => Promise<void>;
 }
 export function EagleVectorWorkspace({
   view: controlledView,
@@ -44,7 +43,7 @@ export function EagleVectorWorkspace({
   onTrashAssets,
   onAssetPrivacyChanged,
   onAssetRelationsChanged,
-}: EagleVectorWorkspaceProps = {}) {
+}: EagleVectorWorkspaceProps) {
   const {
     api: {
       listEagleManualTags,
@@ -352,8 +351,7 @@ export function EagleVectorWorkspace({
               onAssetPrivacyChanged?.();
             }
             const ids = result.items.map(({ assetId }) => assetId);
-            if (onAssetRelationsChanged) await onAssetRelationsChanged(ids);
-            else await invalidateDesktopAssets(ids);
+            await onAssetRelationsChanged(ids);
           }
         : undefined,
     );

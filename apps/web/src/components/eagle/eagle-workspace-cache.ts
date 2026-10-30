@@ -119,7 +119,8 @@ class EagleWorkspaceCache {
     // Query clients (including connection/session resets) must not share entities.
     this.store = new EagleAssetEntityStore();
     this.#unsubscribe = client.getQueryCache().subscribe((event) => {
-      const key: readonly unknown[] = event.query.queryKey;
+      const key: unknown = event.query.queryKey;
+      if (!Array.isArray(key)) return;
       if (!this.#keys.root.every((part, index) => key[index] === part)) return;
       if (event.type === 'updated' && event.action.type === 'success') {
         const ids = queryAssetReferences(key, event.query.state.data);

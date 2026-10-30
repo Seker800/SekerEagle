@@ -62,7 +62,7 @@ beforeEach(() => {
   vi.mocked(api.fetchEagleTaskCenter).mockResolvedValue(summary);
   vi.mocked(api.fetchEagleTaskHistory).mockResolvedValue({ ...summary, groups: [] });
   vi.mocked(api.updateEagleTaskSchedule).mockResolvedValue(summary.settings);
-  vi.mocked(api.createEagleTaskCenterApi).mockReturnValue({
+  const photoApi = {
     fetchEagleTaskCenter: vi.fn().mockResolvedValue({ ...summary, groups: [] }),
     fetchEagleTaskHistory: vi.fn().mockResolvedValue({ ...summary, groups: [] }),
     fetchEagleTaskEvents: vi.fn().mockResolvedValue([]),
@@ -70,7 +70,20 @@ beforeEach(() => {
     updateEagleTaskPolicy: vi.fn(),
     retryEagleTaskFamily: vi.fn(),
     startEagleTaskFamily: vi.fn(),
-  });
+  };
+  vi.mocked(api.createEagleTaskCenterApi).mockImplementation((mode) =>
+    mode === 'PHOTO'
+      ? photoApi
+      : {
+          fetchEagleTaskCenter: api.fetchEagleTaskCenter,
+          fetchEagleTaskHistory: api.fetchEagleTaskHistory,
+          fetchEagleTaskEvents: api.fetchEagleTaskEvents,
+          updateEagleTaskSchedule: api.updateEagleTaskSchedule,
+          updateEagleTaskPolicy: api.updateEagleTaskPolicy,
+          retryEagleTaskFamily: api.retryEagleTaskFamily,
+          startEagleTaskFamily: api.startEagleTaskFamily,
+        },
+  );
 });
 describe('unified task center', () => {
   it('keeps one status and remaining count visible while technical facts stay collapsed', async () => {

@@ -1,3 +1,4 @@
+import { mergeEagleAssetFacts } from './eagle-asset-facts';
 import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { useEnqueueAssetOperation } from './useAssetOperations';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
@@ -105,7 +106,7 @@ export function useEagleMutations(
       if (asset)
         queryClient.setQueriesData<EagleAsset>(
           { queryKey: queryKeys.assetDetailPrefix(asset.id) },
-          (current) => (current && current.rowVersion <= asset.rowVersion ? asset : current),
+          (current) => (current ? mergeEagleAssetFacts(current, asset).asset : current),
         );
       await invalidate(queryKeys.assets, queryKeys.assetDetails);
     },
@@ -143,7 +144,7 @@ export function useEagleMutations(
       if (asset)
         queryClient.setQueriesData<EagleAsset>(
           { queryKey: queryKeys.assetDetailPrefix(asset.id) },
-          (current) => (current && current.rowVersion <= asset.rowVersion ? asset : current),
+          (current) => (current ? mergeEagleAssetFacts(current, asset).asset : current),
         );
       await invalidate(queryKeys.assets, queryKeys.assetDetails);
     },

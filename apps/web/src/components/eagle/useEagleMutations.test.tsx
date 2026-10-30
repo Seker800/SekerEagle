@@ -14,7 +14,7 @@ it('rating writes through existing view details without creating a ghost short k
   const client = new QueryClient();
   const keys = createEagleQueryKeys('A');
   const inspector = [...keys.assetDetailPrefix('a'), 'ACTIVE'];
-  client.setQueryData(inspector, {...asset('a', 1), mediaRevision: 3});
+  client.setQueryData(inspector, { ...asset('a', 1), mediaRevision: 3 });
   vi.stubGlobal(
     'fetch',
     vi.fn(async () => json({ ...asset('a', 2), rating: 5 })),

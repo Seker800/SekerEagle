@@ -1,5 +1,6 @@
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
 import '@testing-library/jest-dom/vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountHome } from './AccountHome';
 

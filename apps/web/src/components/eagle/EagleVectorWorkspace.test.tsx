@@ -1,4 +1,5 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { renderInWorkspace as render } from '../../test/render-in-workspace';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as desktopCache from '../../lib/desktop-cache';
 import * as eagleApi from '../../lib/eagle-api';
@@ -7,25 +8,31 @@ import { EagleVectorWorkspace } from './EagleVectorWorkspace';
 
 vi.mock('../../lib/desktop-cache', () => ({ invalidateDesktopAssets: vi.fn() }));
 
-vi.mock('../../lib/eagle-api', () => ({
-  listEagleManualTags: vi.fn(),
-}));
+vi.mock('../../lib/eagle-api', () => {
+  const api = {
+    listEagleManualTags: vi.fn(),
+  };
+  return { ...api, createEagleApi: () => api };
+});
 
-vi.mock('../../lib/eagle-vector-api', () => ({
-  fetchEagleVectorSummary: vi.fn(),
-  listEagleVectorTags: vi.fn(),
-  listEagleVectorSuggestions: vi.fn(),
-  listEagleUnclassifiedAssets: vi.fn(),
-  listEagleTagDistanceAssets: vi.fn(),
-  setEagleVectorTagEnabled: vi.fn(),
-  rebuildEagleVectorTag: vi.fn(),
-  reviewEagleVectorSuggestions: vi.fn(),
-  retryFailedEagleEmbeddings: vi.fn(),
-  scanMissingEagleEmbeddings: vi.fn(),
-  scanUnclassifiedEagleSuggestions: vi.fn(),
-  getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
-  getVectorPreviewUrl: vi.fn(() => '/preview'),
-}));
+vi.mock('../../lib/eagle-vector-api', () => {
+  const api = {
+    fetchEagleVectorSummary: vi.fn(),
+    listEagleVectorTags: vi.fn(),
+    listEagleVectorSuggestions: vi.fn(),
+    listEagleUnclassifiedAssets: vi.fn(),
+    listEagleTagDistanceAssets: vi.fn(),
+    setEagleVectorTagEnabled: vi.fn(),
+    rebuildEagleVectorTag: vi.fn(),
+    reviewEagleVectorSuggestions: vi.fn(),
+    retryFailedEagleEmbeddings: vi.fn(),
+    scanMissingEagleEmbeddings: vi.fn(),
+    scanUnclassifiedEagleSuggestions: vi.fn(),
+    getVectorThumbnailUrl: vi.fn(() => '/thumbnail'),
+    getVectorPreviewUrl: vi.fn(() => '/preview'),
+  };
+  return { ...api, createEagleVectorApi: () => api };
+});
 
 vi.mock('./EagleImageViewer', () => ({
   preloadEagleImageViewer: vi.fn(),
@@ -134,12 +141,22 @@ describe('EagleVectorWorkspace', () => {
 
   it('loads review cards independently of slow tag statistics', async () => {
     vi.mocked(api.listEagleVectorTags).mockReturnValue(new Promise(() => {}));
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
     expect(await screen.findByRole('button', { name: /选择 red-car\.jpg/ })).toBeVisible();
   });
 
   it('refreshes only once after confirming a suggestion', async () => {
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
     await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
@@ -172,7 +189,12 @@ describe('EagleVectorWorkspace', () => {
           }),
       )
       .mockResolvedValueOnce(original);
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
     const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
     fireEvent.click(await within(filters).findByRole('button', { name: '汽车3' }));
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenLastCalledWith('tag-1'));
@@ -198,7 +220,12 @@ describe('EagleVectorWorkspace', () => {
 
   it('coalesces overlapping background refreshes while a page request is pending', async () => {
     vi.mocked(api.listEagleVectorSuggestions).mockReturnValue(new Promise(() => {}));
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(1));
     fireEvent(document, new Event('visibilitychange'));
     fireEvent(document, new Event('visibilitychange'));
@@ -211,7 +238,12 @@ describe('EagleVectorWorkspace', () => {
       const failure = new Error(`${source} read failed`);
       if (source === 'tags') vi.mocked(api.listEagleVectorTags).mockRejectedValueOnce(failure);
       else vi.mocked(api.listEagleVectorSuggestions).mockRejectedValueOnce(failure);
-      render(<EagleVectorWorkspace view="REVIEW" />);
+      render(
+        <EagleVectorWorkspace
+          onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+          view="REVIEW"
+        />,
+      );
       expect(await screen.findByRole('alert')).toHaveTextContent(failure.message);
       fireEvent(document, new Event('visibilitychange'));
       await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
@@ -222,7 +254,12 @@ describe('EagleVectorWorkspace', () => {
     vi.mocked(desktopCache.invalidateDesktopAssets).mockRejectedValueOnce(
       new Error('cache unavailable'),
     );
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
     await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     fireEvent.click(screen.getByRole('button', { name: '确认' }));
     await waitFor(() => expect(api.listEagleVectorSuggestions).toHaveBeenCalledTimes(2));
@@ -234,7 +271,12 @@ describe('EagleVectorWorkspace', () => {
     const manualTags = await eagleApi.listEagleManualTags('');
     const assign = vi.fn().mockResolvedValue(undefined);
     render(
-      <EagleVectorWorkspace view="REVIEW" manualTags={manualTags} onAssignManualTags={assign} />,
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+        manualTags={manualTags}
+        onAssignManualTags={assign}
+      />,
     );
     const card = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     const oldResult = await vi.mocked(api.listEagleVectorSuggestions).mock.results[0]!.value;
@@ -366,7 +408,12 @@ describe('EagleVectorWorkspace', () => {
       nextCursor: 'cursor-2',
     });
 
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
 
     const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
     expect(within(filters).queryByRole('combobox')).not.toBeInTheDocument();
@@ -404,7 +451,13 @@ describe('EagleVectorWorkspace', () => {
 
   it('acknowledges queued trash without claiming that processing already completed', async () => {
     const trashAssets = vi.fn().mockResolvedValue(undefined);
-    render(<EagleVectorWorkspace view="REVIEW" onTrashAssets={trashAssets} />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+        onTrashAssets={trashAssets}
+      />,
+    );
 
     const card = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     fireEvent.contextMenu(card, { clientX: 120, clientY: 160 });
@@ -467,7 +520,7 @@ describe('EagleVectorWorkspace', () => {
       nextCursor: null,
     });
 
-    render(<EagleVectorWorkspace />);
+    render(<EagleVectorWorkspace onAssetRelationsChanged={desktopCache.invalidateDesktopAssets} />);
     const grid = await screen.findByRole('grid', { name: '待确认的智能标签建议' });
     const first = within(grid).getByRole('button', { name: /red-car\.jpg/ });
     const second = within(grid).getByRole('button', { name: /night-road\.jpg/ });
@@ -501,7 +554,12 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('shows available recommendation tags as a searchable card palette instead of a dropdown list', async () => {
-    render(<EagleVectorWorkspace view="TAGS" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="TAGS"
+      />,
+    );
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
     expect(screen.getByText('还没有参与推荐的标签，请从上方搜索并添加。')).toBeInTheDocument();
     const palette = await screen.findByRole('list', { name: '可添加的推荐标签卡片' });
@@ -563,7 +621,12 @@ describe('EagleVectorWorkspace', () => {
       },
     ]);
 
-    render(<EagleVectorWorkspace view="TAGS" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="TAGS"
+      />,
+    );
 
     const grid = await screen.findByRole('list', { name: '参与推荐的标签卡片' });
     expect(within(grid).getAllByRole('listitem')).toHaveLength(2);
@@ -616,7 +679,12 @@ describe('EagleVectorWorkspace', () => {
       },
     ]);
 
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
 
     const filters = await screen.findByRole('group', { name: '推荐标签筛选' });
     expect(within(filters).getByRole('button', { name: /汽车/ })).toBeInTheDocument();
@@ -660,7 +728,12 @@ describe('EagleVectorWorkspace', () => {
       nextCursor: null,
     });
 
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
 
     const first = await screen.findByRole('button', { name: /选择 red-car\.jpg/ });
     const second = screen.getByRole('button', { name: /选择 road\.jpg/ });
@@ -751,6 +824,7 @@ describe('EagleVectorWorkspace', () => {
 
     render(
       <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
         view="TAGS"
         manualTags={[
           {
@@ -868,7 +942,13 @@ describe('EagleVectorWorkspace', () => {
     });
     const changeManualTags = vi.fn().mockResolvedValue(undefined);
 
-    render(<EagleVectorWorkspace view="TAGS" onChangeManualTags={changeManualTags} />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="TAGS"
+        onChangeManualTags={changeManualTags}
+      />,
+    );
     fireEvent.click(await screen.findByRole('button', { name: '检查汽车的图片距离' }));
     fireEvent.click(await screen.findByRole('button', { name: /选择 wrong\.jpg/ }));
     fireEvent.click(screen.getByRole('button', { name: '从“汽车”移除' }));
@@ -884,7 +964,12 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('renders one focused workflow without nesting the three peer entries again', async () => {
-    render(<EagleVectorWorkspace view="REVIEW" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="REVIEW"
+      />,
+    );
 
     expect(await screen.findByRole('heading', { name: '推荐审核' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: '向量处理视图' })).not.toBeInTheDocument();
@@ -911,6 +996,7 @@ describe('EagleVectorWorkspace', () => {
 
     render(
       <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
         view="UNCLASSIFIED"
         manualTags={[
           {
@@ -968,7 +1054,12 @@ describe('EagleVectorWorkspace', () => {
       nextCursor: null,
     });
 
-    render(<EagleVectorWorkspace view="UNCLASSIFIED" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="UNCLASSIFIED"
+      />,
+    );
 
     const first = await screen.findByRole('button', { name: '选择 one.jpg' });
     const second = screen.getByRole('button', { name: '选择 two.jpg' });
@@ -983,7 +1074,12 @@ describe('EagleVectorWorkspace', () => {
   });
 
   it('lets owners rescan untagged assets for suggestions from the unclassified page', async () => {
-    render(<EagleVectorWorkspace view="UNCLASSIFIED" />);
+    render(
+      <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
+        view="UNCLASSIFIED"
+      />,
+    );
 
     fireEvent.click(await screen.findByRole('button', { name: '扫描无标签图片' }));
 
@@ -997,6 +1093,7 @@ describe('EagleVectorWorkspace', () => {
     const assignManualTags = vi.fn().mockResolvedValue(undefined);
     render(
       <EagleVectorWorkspace
+        onAssetRelationsChanged={desktopCache.invalidateDesktopAssets}
         view="REVIEW"
         manualTags={[
           {

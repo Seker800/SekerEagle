@@ -7,34 +7,22 @@ import * as visibility from './privacy-visibility-api';
 import * as tasks from './eagle-task-center-api';
 import type { LibraryMode } from './library-api-scope';
 
-const materialApi = {
-  ...assets,
-  ...vectors,
-  ...processing,
-  ...privacy,
-  ...visibility,
-  ...tasks,
-};
-function photoApi() {
+function createWorkspaceApi(mode: LibraryMode) {
   return {
-    ...assets.createEagleApi('PHOTO'),
-    ...vectors.createEagleVectorApi('PHOTO'),
-    ...processing.createEagleProcessingAdminApi('PHOTO'),
-    ...privacy.createEaglePrivacyApi('PHOTO'),
-    ...visibility.createPrivacyVisibilityApi('PHOTO'),
-    ...tasks.createEagleTaskCenterApi('PHOTO'),
+    ...assets.createEagleApi(mode),
+    ...vectors.createEagleVectorApi(mode),
+    ...processing.createEagleProcessingAdminApi(mode),
+    ...privacy.createEaglePrivacyApi(mode),
+    ...visibility.createPrivacyVisibilityApi(mode),
+    ...tasks.createEagleTaskCenterApi(mode),
   };
 }
 interface LibraryWorkspace {
   libraryMode: LibraryMode;
   ownerId: string;
-  api: ReturnType<typeof photoApi>;
+  api: ReturnType<typeof createWorkspaceApi>;
 }
-const LibraryWorkspaceContext = createContext<LibraryWorkspace>({
-  libraryMode: 'MATERIAL',
-  ownerId: '',
-  api: materialApi,
-});
+const LibraryWorkspaceContext = createContext<LibraryWorkspace | null>(null);
 export function LibraryWorkspaceProvider({
   libraryMode,
   ownerId,
@@ -45,7 +33,7 @@ export function LibraryWorkspaceProvider({
   children: ReactNode;
 }) {
   const value = useMemo(
-    () => ({ libraryMode, ownerId, api: libraryMode === 'PHOTO' ? photoApi() : materialApi }),
+    () => ({ libraryMode, ownerId, api: createWorkspaceApi(libraryMode) }),
     [libraryMode, ownerId],
   );
   return (
@@ -53,5 +41,7 @@ export function LibraryWorkspaceProvider({
   );
 }
 export function useLibraryWorkspace() {
-  return useContext(LibraryWorkspaceContext);
+  const workspace = useContext(LibraryWorkspaceContext);
+  if (!workspace) throw new Error('LibraryWorkspaceProvider is required.');
+  return workspace;
 }

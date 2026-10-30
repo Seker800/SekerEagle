@@ -294,3 +294,17 @@ describe('EagleTagPage', () => {
     expect(screen.getByText('2 / 2')).toBeInTheDocument();
   });
 });
+
+it('shows settled partial results and offers only the unfinished names for retry', () => {
+  const retry = vi.fn();
+  renderManualPage({
+    error: 'partial failure',
+    batchFailure: { completed: 3, items: [manualTags[0]], retry },
+  });
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent('已完成 3 项，待重试 1 项');
+  expect(within(status).getByRole('listitem')).toHaveTextContent('Reference');
+  expect(within(status).queryByText('UI 界面')).not.toBeInTheDocument();
+  fireEvent.click(within(status).getByRole('button', { name: '重试未完成项' }));
+  expect(retry).toHaveBeenCalledOnce();
+});
