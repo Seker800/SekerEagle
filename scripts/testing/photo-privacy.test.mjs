@@ -1005,6 +1005,7 @@ test('人物确认全库按照片量排序相似组合，排除同框、旧版�
     return asset;
   };
   const shared = await sample(first);
+  await sample(first, {}, shared); // 同一人物在同张照片的第二张脸不增加照片计数。
   for (let i = 0; i < 4; i++) await sample(first);
   for (let i = 0; i < 3; i++) await sample(second);
   await sample(single);
@@ -1014,6 +1015,8 @@ test('人物确认全库按照片量排序相似组合，排除同框、旧版�
   // Counts include only current, visible, PHOTO assets with a usable browsing image.
   await sample(first, { isPrivate: true });
   await sample(first, { deletedAt: new Date() });
+  const noPreview = await sample(first);
+  await prisma.eagleAssetRendition.deleteMany({ where: { assetId: noPreview.id } });
   const stale = await sample(first);
   await prisma.eagleAsset.update({
     where: { id: stale.id },
@@ -1060,5 +1063,89 @@ test('人物确认全库按照片量排序相似组合，排除同框、旧版�
         [pair.first.id, pair.second.id].includes(first.id) &&
         [pair.first.id, pair.second.id].includes(second.id),
     ),
+  );
+});
+
+test('人物确认在一万张照片五百个人物下保持候选上限与全库排序', async () => {
+  const ownerId = randomUUID(),
+    embedding = [1, ...Array(127).fill(0)];
+  await prisma.user.create({
+    data: { id: ownerId, email: ownerId + '@example.invalid', passwordHash: 'synthetic-only' },
+  });
+  const people = Array.from({ length: 500 }, () => ({
+    id: randomUUID(),
+    ownerId,
+    libraryMode: 'PHOTO',
+    prototype: embedding,
+    modelVersion: 'synthetic-128',
+  }));
+  await prisma.eaglePhotoPerson.createMany({ data: people });
+  const assets = [],
+    faces = [],
+    renditions = [];
+  for (let i = 0; i < 10001; i++) {
+    const id = randomUUID(),
+      person = people[i === 10000 ? 499 : Math.floor(i / 20)];
+    assets.push({
+      id,
+      ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'synthetic.jpg',
+      displayName: 'synthetic',
+      normalizedDisplayName: 'synthetic',
+      mimeType: 'image/jpeg',
+      format: 'jpg',
+      byteSize: 1,
+      mediaRevision: 1,
+      originalObjectKey: 'test/' + id,
+      lifecycleStatus: 'READY',
+    });
+    faces.push({
+      id: randomUUID(),
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: id,
+      assetRevision: 1,
+      modelVersion: person.modelVersion,
+      personId: person.id,
+      box: [0.1, 0.1, 0.3, 0.3],
+      confidence: 0.99,
+      embedding,
+    });
+    renditions.push({
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: id,
+      kind: 'PREVIEW',
+      revision: 1,
+      mimeType: 'image/jpeg',
+      storageKey: 'test/' + randomUUID(),
+      byteSize: 1,
+      width: 1600,
+      height: 1200,
+      status: 'READY',
+    });
+  }
+  for (let i = 0; i < assets.length; i += 100) {
+    await prisma.eagleAsset.createMany({ data: assets.slice(i, i + 100) });
+    await prisma.eaglePhotoFace.createMany({ data: faces.slice(i, i + 100) });
+    await prisma.eagleAssetRendition.createMany({ data: renditions.slice(i, i + 100) });
+  }
+  await prisma.$executeRawUnsafe('ANALYZE');
+  const start = performance.now();
+  const result = await new PhotoManagementService(prisma).reviewPeople(ownerId, false);
+  const elapsedMs = performance.now() - start;
+  assert.equal(result.pairs.length, 100);
+  assert.ok(result.pairs.every((p) => [p.first.id, p.second.id].includes(people[499].id)));
+  assert.ok(result.pairs.every((p) => p.first.photoCount + p.second.photoCount === 41));
+  log(
+    JSON.stringify({
+      syntheticOnly: true,
+      photos: 10001,
+      people: 500,
+      pairs: result.pairs.length,
+      elapsedMs,
+      productionTiming: false,
+    }),
   );
 });
