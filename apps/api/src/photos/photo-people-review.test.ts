@@ -22,6 +22,7 @@ test('review uses a scoped repeatable snapshot and never exposes biometric proto
           if (queries.length === 2) return [];
           return [{ faceId: 'face-a' }, { faceId: 'face-b' }];
         },
+        eaglePhotoPersonSeparation: { findMany: async () => [] },
         eaglePhotoPerson: {
           findMany: async (query: { where: unknown }) => {
             where = query.where;

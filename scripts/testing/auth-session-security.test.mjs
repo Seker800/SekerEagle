@@ -262,3 +262,42 @@ test('concurrent account reset holds the row before either login or refresh can 
     await prisma.user.delete({ where: { id: user.id } });
   }
 });
+
+test('live access validation immediately honors family revocation, expiry, account disable and owner isolation', async () => {
+  const passwords = new PasswordService(prisma);
+  const user = await passwords.createUser(
+    `${randomUUID()}@example.invalid`,
+    'synthetic-password-123',
+    'USER',
+  );
+  const other = await passwords.createUser(
+    `${randomUUID()}@example.invalid`,
+    'synthetic-password-456',
+    'USER',
+  );
+  const sessions = new SessionTokenService(prisma, jwt, config);
+  const family = randomUUID();
+  try {
+    const first = await sessions.createSession(user, family);
+    await sessions.createSession(other, family);
+    assert.equal((await sessions.verifyAccessToken(first.accessToken)).sub, user.id);
+    await sessions.revoke(first.refreshToken);
+    await assert.rejects(sessions.verifyAccessToken(first.accessToken));
+    const fresh = await sessions.createSession(user);
+    await prisma.refreshToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { expiresAt: new Date(0) },
+    });
+    await assert.rejects(sessions.verifyAccessToken(fresh.accessToken));
+    const enabled = await sessions.createSession(user);
+    await prisma.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
+    await assert.rejects(sessions.verifyAccessToken(enabled.accessToken));
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { disabledAt: null, authVersion: { increment: 1 } },
+    });
+    await assert.rejects(sessions.verifyAccessToken(enabled.accessToken));
+  } finally {
+    await prisma.user.deleteMany({ where: { id: { in: [user.id, other.id] } } });
+  }
+});

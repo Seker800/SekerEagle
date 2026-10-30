@@ -1,4 +1,4 @@
-import { AsyncContent } from './components/AsyncContent';
+import { AsyncViewBoundary } from './components/AsyncViewBoundary';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
 import { lazy, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -15,11 +15,6 @@ import {
   DEFAULT_PRIVACY_VISIBILITY,
   type PrivacyVisibilityState,
 } from './lib/privacy-visibility-api';
-export interface User {
-  id: string;
-  email: string;
-  role: 'USER' | 'ADMIN';
-}
 const SekerEaglePage = lazy(() =>
   import('./components/eagle/SekerEaglePage').then((module) => ({
     default: module.SekerEaglePage,
@@ -33,6 +28,12 @@ const PhotoPrivatePeopleSettings = lazy(() =>
     default: module.PhotoPrivatePeopleSettings,
   })),
 );
+
+export interface User {
+  id: string;
+  email: string;
+  role: 'USER' | 'ADMIN';
+}
 export function App() {
   const queryClient = useQueryClient();
   const [libraryMode, setLibraryMode] = useState<LibraryMode>(() =>
@@ -120,14 +121,26 @@ export function App() {
     const timer =
       isOnline && (connectionUnavailable || user)
         ? window.setInterval(
-            () => void checkSession(),
-            connectionUnavailable ? reconnectDelay : 30000,
+            () => {
+              if (document.visibilityState !== 'hidden') void checkSession();
+            },
+            connectionUnavailable ? reconnectDelay : 60000,
           )
         : null;
     const onOnline = () => {
       setIsOnline(true);
       void checkSession();
     };
+    const onVisible = () => {
+      if (
+        navigator.onLine &&
+        document.visibilityState !== 'hidden' &&
+        (user || connectionUnavailable)
+      )
+        void checkSession();
+    };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnline);
     const onOffline = () => {
       setIsOnline(false);
@@ -136,6 +149,8 @@ export function App() {
     window.addEventListener('offline', onOffline);
     return () => {
       if (timer !== null) window.clearInterval(timer);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
     };
@@ -299,13 +314,7 @@ export function App() {
     >
       <div className="standalone-eagle-shell">
         {connectionButton}
-        <AsyncContent
-          fallback={
-            <main className="auth-shell" role="status">
-              {t('正在加载素材…')}
-            </main>
-          }
-        >
+        <AsyncViewBoundary>
           <SekerEaglePage
             modeSwitcher={
               <LibraryModeControl
@@ -329,7 +338,7 @@ export function App() {
             }}
             onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             accountView={
-              <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+              <AsyncViewBoundary>
                 <AccountHome
                   user={user}
                   onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
@@ -343,20 +352,18 @@ export function App() {
                   }}
                   privacyExtras={
                     libraryMode === 'PHOTO' ? (
-                      <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
-                        <PhotoPrivatePeopleSettings
-                          includePrivate={privacyVisibility?.enabled === true}
-                          onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
-                        />
-                      </AsyncContent>
+                      <PhotoPrivatePeopleSettings
+                        includePrivate={privacyVisibility?.enabled === true}
+                        onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
+                      />
                     ) : undefined
                   }
                   onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
                 />
-              </AsyncContent>
+              </AsyncViewBoundary>
             }
           />
-        </AsyncContent>
+        </AsyncViewBoundary>
       </div>
     </LibraryWorkspaceProvider>
   );

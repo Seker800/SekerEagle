@@ -22,6 +22,11 @@ export type TransferPyramid = Pick<
   targetPrefix: string;
   completedAt: string | null;
 };
+/** Persist directories without a separator; append one only when addressing a child. */
+export function pyramidStoragePrefix(prefix: string): string {
+  return prefix.replace(/\/+$/, '');
+}
+
 export function planTransferPyramid(
   ownerId: string,
   targetId: string,
@@ -90,7 +95,7 @@ export async function copyTransferPyramid(
   const tiles = transferPyramidTiles(p);
   let total = 0n;
   await runTransferWork(tiles, async (relative) => {
-    const sourceKey = `${p.storagePrefix.replace(/\/$/, '')}/${relative}`,
+    const sourceKey = `${pyramidStoragePrefix(p.storagePrefix)}/${relative}`,
       targetKey = p.targetPrefix + relative;
     const before = await storage.headObject(sourceKey);
     const size = BigInt(before.ContentLength ?? -1);

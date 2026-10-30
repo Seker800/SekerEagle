@@ -6,7 +6,7 @@ const query = { version: 2, conditions: [], semantic: { text: '海边日落', br
 
 test('semantic preview reports unavailability rather than counting the entire library', async () => {
   const service = new EagleService(
-    {} as never,
+    { eagleSmartFolderSemanticSnapshot: { findFirst: async () => null } } as never,
     { prepare: async () => ({ status: 'UNAVAILABLE' }) } as never,
     'PHOTO',
   );
@@ -22,6 +22,7 @@ test('semantic preview rechecks media revision, privacy, owner and mode when hyd
   const raw: Array<{ strings: readonly string[]; values: unknown[] }> = [];
   const service = new EagleService(
     {
+      eagleSmartFolderSemanticSnapshot: { findFirst: async () => null },
       $queryRaw: async (sql: (typeof raw)[number]) => {
         raw.push(sql);
         return [{ id: 'candidate', mediaRevision: 3 }];

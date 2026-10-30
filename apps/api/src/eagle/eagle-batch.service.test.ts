@@ -310,3 +310,28 @@ test('batch trash rejects inside the transaction so partial updates roll back', 
   );
   assert.equal(rejectionWasInsideTransaction, true);
 });
+
+test('deleting a non-private tag does not recalculate unrelated library privacy', async () => {
+  let privacyWrites = 0;
+  const tx = {
+    $queryRaw: async () => [],
+    eagleManualTag: {
+      findFirst: async () => ({ id: 'public-tag', marksAssetsPrivate: false }),
+      delete: async () => ({}),
+    },
+    eagleAssetManualTag: { deleteMany: async () => ({ count: 1 }) },
+    eagleAsset: {
+      updateMany: async () => {
+        privacyWrites++;
+        return { count: 0 };
+      },
+    },
+  };
+  const service = new EagleService({
+    $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx),
+  } as never);
+  assert.deepEqual(await service.deleteManualTag('owner', 'public-tag'), {
+    deletedId: 'public-tag',
+  });
+  assert.equal(privacyWrites, 0);
+});

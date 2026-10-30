@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { encodeEagleAssetCursor } from './eagle-cursor';
 import { EagleService } from './eagle.service';
 
 test('a parent smart folder evaluates itself and its direct children as a union', async () => {
@@ -221,15 +222,26 @@ test('image search preserves the ranked order without resolving AI tags', async 
       },
     ]),
   );
+  let coverageCounts = 0;
   const service = new EagleService(
     {
       $queryRaw: async (query: unknown) => {
         rankingQuery = JSON.stringify(query);
         return [{ assetId: 'manual-asset' }, { assetId: 'ai-asset' }];
       },
+      eagleAssetColorAnalysis: {
+        count: async () => {
+          coverageCounts++;
+          return 7;
+        },
+      },
       eagleAsset: {
+        count: async () => {
+          coverageCounts++;
+          return 10;
+        },
         findMany: async (query: { where: { AND: Array<{ id?: { in?: string[] } }> } }) =>
-          (query.where.AND.at(-1)?.id?.in ?? []).flatMap((id) => {
+          (query.where.AND?.at(-1)?.id?.in ?? [...assets.keys()]).flatMap((id) => {
             const asset = assets.get(id);
             return asset ? [asset] : [];
           }),
@@ -258,6 +270,19 @@ test('image search preserves the ranked order without resolving AI tags', async 
   assert.equal(rankingQuery, 'direct-images');
   assert.ok('imageSearch' in result);
   assert.deepEqual(result.imageSearch, { status: 'READY', spaceId: 'space' });
+  const first = await service.listAssets('owner-1', { limit: 1, search: 'ui', color: '#abcdef' });
+  assert.equal(coverageCounts, 2);
+  assert.equal(first.colorCoverage?.completed, 7);
+  assert.ok(first.nextCursor);
+  coverageCounts = 0;
+  const next = await service.listAssets('owner-1', {
+    limit: 1,
+    search: 'ui',
+    color: '#abcdef',
+    cursor: first.nextCursor!,
+  });
+  assert.equal(coverageCounts, 0);
+  assert.equal(next.colorCoverage, null);
 });
 
 test('private assets stay out of the regular gallery and use a dedicated unlocked view', async () => {
@@ -489,4 +514,30 @@ test('date navigation can seek inside a large day and resumes ordinary keyset pa
   assert.ok(JSON.stringify(input.where).includes('owner'));
   await assert.rejects(() => service.listAssets('owner', { limit: 60, offset: 1, cursor: 'old' }));
   await assert.rejects(() => service.listAssets('owner', { limit: 60, offset: 1, search: 'cat' }));
+});
+
+test('color pagination does not recount coverage already returned with the first page', async () => {
+  let counts = 0;
+  const service = new EagleService({
+    eagleAsset: {
+      findMany: async () => [],
+      count: async () => {
+        counts++;
+        return 10;
+      },
+    },
+    eagleAssetColorAnalysis: {
+      count: async () => {
+        counts++;
+        return 7;
+      },
+    },
+  } as never);
+  const cursor = encodeEagleAssetCursor(
+    { id: 'asset', libraryAddedAt: new Date('2026-01-01') },
+    { ownerId: 'owner-1', libraryMode: 'MATERIAL' },
+  );
+  const result = await service.listAssets('owner-1', { limit: 30, color: '#abcdef', cursor });
+  assert.equal(counts, 0);
+  assert.equal(result.colorCoverage, null);
 });

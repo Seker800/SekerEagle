@@ -16,9 +16,8 @@ export function useEagleLibraryCount(
     queryKey: [...queryKeys.assets, 'library-count', privateVisible, privacyRevision],
     queryFn: () =>
       api.countEagleAssets(accessToken, { version: EAGLE_FILTER_QUERY_VERSION, conditions: [] }),
-    staleTime: 30_000,
+    staleTime: 60_000,
     enabled,
-    refetchInterval: 30_000,
     select: (result) => result.count,
   });
 }

@@ -9,7 +9,7 @@
 ## 产品边界
 
 - 开始产品设计或代码修改前，先读 `docs/architecture.md` 的 North star；素材／照片双模式的确定边界与执行计划分别见该文档和 `docs/photo-management-plan.md`。
-- 素材与照片采用导入托管、业务完全隔离的双模式；不得引入双重归属或群晖外部目录图库；仅用户显式「发送到」可跨模式移动，必须创建独立目标资源并在成功后移除源模式可见项，亦不得仅用前端过滤实现隔离。
+- 素材与照片采用导入托管、业务完全隔离的双模式；不得引入双重归属或群晖外部目录图库；仅用户显式「发送到」可跨模式移动，必须创建独立目标资源并在成功后直接移除源项且不进入回收站，亦不得仅用前端过滤实现隔离。
 - 本仓库是独立的 SekerEagle，不依赖 SekerChat 运行时、数据库、MinIO、Cookie 或 secrets。
 - SekerChat 是完全受保护的外部系统。不得从本仓库连接、迁移、修改或删除 SekerChat 数据。
 - 所有用户资源必须由认证主体推导 ownerId；DTO 不接受 ownerId。
@@ -28,6 +28,7 @@
 - Node.js 22、npm workspaces、NestJS、React/Vite、Prisma。
 - 修改认证、上传、对象存储或 API 时必须补安全测试。
 - 每个里程碑至少运行 lint、typecheck、unit test 和 build。
+- API 镜像发布前必须对最终镜像执行 `npm run test:api-image -- <镜像标签>`，验证独立依赖、隔离迁移及实际服务就绪；本地源码启动或镜像构建成功不能替代成品镜像启动验收。
 - 素材／照片通用能力变更必须通过 `npm run architecture:check` 与共用契约测试；不得通过新增照片版通用组件、覆盖通用 Controller 或替换共用 provider 绕过门禁。新增专属能力或调整装配边界时，先更新北极星与 `docs/library-sharing-gate.md` 的理由，再同步门禁及反例测试。
 - 使用中文提交类型：`新增`、`修复`、`重构`、`清理`、`文档`。
 - Agent 可自行判断并执行提交与 push，无需另行征求用户许可。

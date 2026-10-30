@@ -1,6 +1,6 @@
 import { LibraryPrivacyToggle } from './LibraryPrivacyToggle';
 import { EagleUploadQueue } from './EagleUploadQueue';
-import { AsyncContent } from '../AsyncContent';
+import { AsyncViewBoundary } from '../AsyncViewBoundary';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
 import { IconChartBar } from '@tabler/icons-react';
@@ -64,7 +64,7 @@ import {
   useQueryClient,
   type InfiniteData,
 } from '@tanstack/react-query';
-import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
+import { readEagleSemanticIntent, toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
   IconCopy,
@@ -158,23 +158,23 @@ import {
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
-const PhotoMap = lazy(() =>
-  import('../photos/PhotoMap').then((module) => ({ default: module.PhotoMap })),
-);
 const PhotoStatistics = lazy(() =>
   import('../photos/PhotoStatistics').then((module) => ({ default: module.PhotoStatistics })),
 );
 const PhotoAgentReview = lazy(() =>
   import('../photos/PhotoAgentReview').then((module) => ({ default: module.PhotoAgentReview })),
 );
-const EagleBatchPhotoEdit = lazy(() =>
-  import('./EagleBatchPhotoEdit').then((module) => ({ default: module.EagleBatchPhotoEdit })),
-);
 const EagleTaskCenter = lazy(() =>
   import('./EagleTaskCenter').then((module) => ({ default: module.EagleTaskCenter })),
 );
 const EagleVectorWorkspace = lazy(() =>
   import('./EagleVectorWorkspace').then((module) => ({ default: module.EagleVectorWorkspace })),
+);
+const PhotoMap = lazy(() =>
+  import('../photos/PhotoMap').then((module) => ({ default: module.PhotoMap })),
+);
+const EagleBatchPhotoEdit = lazy(() =>
+  import('./EagleBatchPhotoEdit').then((module) => ({ default: module.EagleBatchPhotoEdit })),
 );
 
 interface SekerEaglePageProps {
@@ -610,12 +610,7 @@ export function SekerEaglePage({
     setIsBatchSelection(false);
     selectionAnchorIdRef.current = null;
   }, [selectionScope]);
-  const secondaryReady =
-    !isAssetView ||
-    !showsAssetControls ||
-    assetsQuery.isFetched ||
-    filtersExpanded ||
-    isSmartFolderDialogOpen;
+  const secondaryReady = true;
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
       enabled: secondaryReady,
@@ -858,12 +853,14 @@ export function SekerEaglePage({
   );
   const timelineSectionKeys = useMemo(
     () =>
-      isPhotoTimeline && !deferredSearch
+      isPhotoTimeline &&
+      !deferredSearch &&
+      !(activeSmartFolderId && smartFolderOrder === 'RELEVANCE')
         ? compact
           ? createPhotoTimelineDayKeys(assets)
           : createPhotoTimelineSectionKeys(assets)
         : undefined,
-    [assets, isPhotoTimeline, deferredSearch, compact],
+    [assets, isPhotoTimeline, deferredSearch, compact, activeSmartFolderId, smartFolderOrder],
   );
   const { containerRef: masonryRef, layout: masonryLayout } = useEagleMasonryLayout(assets, {
     targetCardWidth: thumbnailSize,
@@ -901,7 +898,7 @@ export function SekerEaglePage({
       selectVisibleMasonryItemsFromIndex(masonryViewportIndex, {
         scrollTop,
         viewportHeight,
-        overscan: Math.max(1200, viewportHeight * 2),
+        overscan: Math.max(300, viewportHeight * 0.75),
       }),
     [masonryViewportIndex, scrollTop, viewportHeight],
   );
@@ -914,7 +911,7 @@ export function SekerEaglePage({
       selectVisibleMasonryItemsFromIndex(sectionViewportIndex, {
         scrollTop,
         viewportHeight,
-        overscan: Math.max(1200, viewportHeight * 2),
+        overscan: Math.max(300, viewportHeight * 0.75),
       }),
     [sectionViewportIndex, scrollTop, viewportHeight],
   );
@@ -1091,7 +1088,11 @@ export function SekerEaglePage({
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setPhotoView('timeline');
     setLibraryView('ACTIVE');
-    setSmartFolderOrder('DATE');
+    setSmartFolderOrder(
+      folder.semanticState || readEagleSemanticIntent(toEagleFilterQuery(folder.queryJson))
+        ? 'RELEVANCE'
+        : 'DATE',
+    );
     setActiveSmartFolderId(folder.id);
     resetFilters();
     setSelectedAssetId(null);
@@ -1932,7 +1933,7 @@ export function SekerEaglePage({
           {libraryView === 'ACCOUNT' ? (
             accountView
           ) : libraryView === 'PROCESSING' ? (
-            <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+            <AsyncViewBoundary>
               <EagleTaskCenter
                 key={`${storeScope}:${privateVisible}`}
                 includePrivate={privateVisible}
@@ -1942,9 +1943,9 @@ export function SekerEaglePage({
                   setPhotoView('agent');
                 }}
               />
-            </AsyncContent>
+            </AsyncViewBoundary>
           ) : getVectorWorkspaceView(libraryView) ? (
-            <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+            <AsyncViewBoundary>
               <EagleVectorWorkspace
                 view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
                 manualTags={manualTags}
@@ -1957,7 +1958,7 @@ export function SekerEaglePage({
                 }}
                 onAssetPrivacyChanged={resetAssetPrivacyState}
               />
-            </AsyncContent>
+            </AsyncViewBoundary>
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
               kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
@@ -2153,21 +2154,21 @@ export function SekerEaglePage({
                 </div>
               )}
               {libraryMode === 'PHOTO' && photoView === 'statistics' && (
-                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncViewBoundary>
                   <PhotoStatistics
                     key={`${ownerId}:${privateVisible}`}
                     ownerId={ownerId}
                     includePrivate={privateVisible}
                   />
-                </AsyncContent>
+                </AsyncViewBoundary>
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
-                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncViewBoundary>
                   <PhotoAgentReview
                     key={`${ownerId}:${privateVisible}`}
                     includePrivate={privateVisible}
                   />
-                </AsyncContent>
+                </AsyncViewBoundary>
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections
@@ -2184,14 +2185,14 @@ export function SekerEaglePage({
                 />
               )}
               {libraryMode === 'PHOTO' && photoView === 'map' && (
-                <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                <AsyncViewBoundary>
                   <PhotoMap
                     key={`${ownerId}:${privateVisible}`}
                     ownerId={ownerId}
                     includePrivate={privateVisible}
                     onOpen={openAssetPreview}
                   />
-                </AsyncContent>
+                </AsyncViewBoundary>
               )}
               <div
                 className={styles.assetBrowser}
@@ -2249,49 +2250,68 @@ export function SekerEaglePage({
                         </button>
                       </div>
                     )}
-                    {!assetsQuery.isLoading && !assetsQuery.isError && assets.length === 0 && (
+                    {!assetsQuery.isLoading &&
+                    !assetsQuery.isError &&
+                    assets.length === 0 &&
+                    activeSmartFolder?.semanticState &&
+                    !activeSmartFolder.semanticState.hasResults &&
+                    activeSmartFolder.semanticState.status !== 'READY' ? (
                       <div className={styles.emptyState}>
-                        <span className={styles.emptyMark}>
-                          <img src={sekerEagleLogo} alt="" />
-                        </span>
-                        <strong>
-                          {search || activeFilterCount || activeSmartFolderId
-                            ? libraryMode === 'PHOTO'
-                              ? t('没有匹配的照片')
-                              : t('没有匹配的素材')
-                            : libraryView === 'TRASH'
-                              ? t('回收站是空的')
-                              : libraryView === 'PRIVATE'
-                                ? t('暂无隐私素材')
-                                : libraryMode === 'PHOTO'
-                                  ? t('暂无照片')
-                                  : t('把第一份灵感放进来')}
-                        </strong>
-                        <p>
-                          {search || activeFilterCount || activeSmartFolderId
-                            ? t('尝试其他名称或标签。')
-                            : libraryView === 'TRASH'
-                              ? t('移除的素材会暂时保留在这里。')
-                              : libraryView === 'PRIVATE'
-                                ? t('为素材添加已配置的私密标签。')
-                                : libraryMode === 'PHOTO'
-                                  ? t('将照片拖入此处。')
-                                  : t('将图片、RAW 或相机视频拖入此处。')}
-                        </p>
-                        {(search || activeFilterCount || activeSmartFolderId) && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSearch('');
-                              setQuickFilters(createEmptyEagleQuickFilterState());
-                              setActiveSmartFolderId(null);
-                            }}
-                          >
-                            {t('清除搜索与筛选')}
-                          </button>
-                        )}
+                        {activeSmartFolder.semanticState.status === 'FAILED'
+                          ? t('匹配生成失败，请重试。')
+                          : t('正在生成匹配结果…')}
                       </div>
-                    )}
+                    ) : null}
+                    {!assetsQuery.isLoading &&
+                      !assetsQuery.isError &&
+                      assets.length === 0 &&
+                      !(
+                        activeSmartFolder?.semanticState &&
+                        !activeSmartFolder.semanticState.hasResults &&
+                        activeSmartFolder.semanticState.status !== 'READY'
+                      ) && (
+                        <div className={styles.emptyState}>
+                          <span className={styles.emptyMark}>
+                            <img src={sekerEagleLogo} alt="" />
+                          </span>
+                          <strong>
+                            {search || activeFilterCount || activeSmartFolderId
+                              ? libraryMode === 'PHOTO'
+                                ? t('没有匹配的照片')
+                                : t('没有匹配的素材')
+                              : libraryView === 'TRASH'
+                                ? t('回收站是空的')
+                                : libraryView === 'PRIVATE'
+                                  ? t('暂无隐私素材')
+                                  : libraryMode === 'PHOTO'
+                                    ? t('暂无照片')
+                                    : t('把第一份灵感放进来')}
+                          </strong>
+                          <p>
+                            {search || activeFilterCount || activeSmartFolderId
+                              ? t('尝试其他名称或标签。')
+                              : libraryView === 'TRASH'
+                                ? t('移除的素材会暂时保留在这里。')
+                                : libraryView === 'PRIVATE'
+                                  ? t('为素材添加已配置的私密标签。')
+                                  : libraryMode === 'PHOTO'
+                                    ? t('将照片拖入此处。')
+                                    : t('将图片、RAW 或相机视频拖入此处。')}
+                          </p>
+                          {(search || activeFilterCount || activeSmartFolderId) && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSearch('');
+                                setQuickFilters(createEmptyEagleQuickFilterState());
+                                setActiveSmartFolderId(null);
+                              }}
+                            >
+                              {t('清除搜索与筛选')}
+                            </button>
+                          )}
+                        </div>
+                      )}
                     <div
                       ref={masonryRef}
                       className={styles.masonry}
@@ -3060,7 +3080,7 @@ export function SekerEaglePage({
         />
       ) : null}
       {batchEditIds && photoEditing.clipboard && (
-        <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
+        <AsyncViewBoundary>
           <EagleBatchPhotoEdit
             key={editingScope}
             assetIds={batchEditIds}
@@ -3068,7 +3088,7 @@ export function SekerEaglePage({
             resolveSession={photoEditing.resolveSession}
             onClose={() => setBatchEditIds(null)}
           />
-        </AsyncContent>
+        </AsyncViewBoundary>
       )}
       <EaglePhotoEditorDialog
         session={photoEditing.session}

@@ -32,6 +32,7 @@ import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from '../eagle/library-mode';
 import { PhotoMapService } from './photo-map.service';
 import { MapViewportDto, MapPhotosDto } from './photo-map.dto';
+import { PhotoPersonReviewService } from './photo-person-review.service';
 import { PhotoManagementService } from './photo-management.service';
 export class PeopleCursorDto {
   @ApiPropertyOptional({ maxLength: 1024 })
@@ -41,10 +42,22 @@ export class PeopleCursorDto {
   after?: string;
 }
 export class PeopleQueryDto extends PeopleCursorDto {
+  @ApiPropertyOptional({ enum: ['ALL', 'NAMED', 'UNNAMED', 'full', 'cards', 'options'] })
+  @IsOptional()
+  @IsIn(['ALL', 'NAMED', 'UNNAMED', 'full', 'cards', 'options'])
+  view?: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options';
   @ApiPropertyOptional({ enum: ['full', 'cards', 'options'] })
   @IsOptional()
   @IsIn(['full', 'cards', 'options'])
-  view?: 'full' | 'cards' | 'options';
+  projection?: 'full' | 'cards' | 'options';
+}
+export class PersonReviewDto {
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') firstId!: string;
+  @ApiProperty({ format: 'uuid' }) @IsUUID('4') secondId!: string;
+  @ApiProperty() @IsInt() @Min(1) firstVersion!: number;
+  @ApiProperty() @IsInt() @Min(1) secondVersion!: number;
+  @ApiProperty({ enum: ['SAME', 'DIFFERENT'] }) @IsIn(['SAME', 'DIFFERENT']) decision!:
+    'SAME' | 'DIFFERENT';
 }
 class PersonPrivacyDto {
   @ApiProperty() @IsBoolean() marksAssetsPrivate!: boolean;
@@ -82,6 +95,7 @@ export class PhotoManagementController {
   constructor(
     private readonly photos: PhotoManagementService,
     private readonly map: PhotoMapService,
+    private readonly review: PhotoPersonReviewService,
   ) {}
   @Get('map')
   mapClusters(@CurrentPrincipal() p: AuthPrincipal, @Query() query: MapViewportDto) {
@@ -104,7 +118,7 @@ export class PhotoManagementController {
     return this.photos.facets(p.sub, p.canViewPrivate);
   }
   @Get('people') people(@CurrentPrincipal() p: AuthPrincipal, @Query() query: PeopleQueryDto) {
-    return this.photos.people(p.sub, p.canViewPrivate, query.after, query.view);
+    return this.photos.people(p.sub, p.canViewPrivate, query.after, query.view, query.projection);
   }
   @Get('people/:id/faces')
   personFaces(
@@ -114,8 +128,23 @@ export class PhotoManagementController {
   ) {
     return this.photos.personFaces(p.sub, id, p.canViewPrivate, query.after);
   }
-  @Get('people/review')
-  reviewPeople(@CurrentPrincipal() p: AuthPrincipal) {
+  @Get('people/summary') summary(@CurrentPrincipal() p: AuthPrincipal) {
+    return this.review.summary(p.sub, p.canViewPrivate);
+  }
+  @Get('people/review') reviewPeople(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Query() query: PeopleQueryDto,
+  ) {
+    return this.review.suggestions(p.sub, p.canViewPrivate, query.after);
+  }
+  @Post('people/review') @UseGuards(BrowserOriginGuard) decidePeople(
+    @CurrentPrincipal() p: AuthPrincipal,
+    @Body() dto: PersonReviewDto,
+  ) {
+    return this.review.decide(p.sub, p.canViewPrivate, dto);
+  }
+  @Get('people/review-priority')
+  priorityPeople(@CurrentPrincipal() p: AuthPrincipal) {
     return this.photos.reviewPeople(p.sub, p.canViewPrivate);
   }
   @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(

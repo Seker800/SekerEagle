@@ -49,3 +49,9 @@ test('web health check and gateway target the actual web listener', async () => 
   assert.ok(web.includes(`http://127.0.0.1:${port}/`));
   assert.ok(gateway.includes(`server web:${port} resolve;`));
 });
+
+test('geographic JSON has an explicit compressible MIME type without overriding server asset types', async () => {
+  const config = await readFile(new URL('../apps/web/nginx.conf', import.meta.url), 'utf8');
+  assert.match(config.split('server {')[0], /types\s*\{\s*application\/geo\+json\s+geojson;/);
+  assert.match(config, /gzip_types[^;]*application\/geo\+json/);
+});

@@ -164,3 +164,37 @@ test('people reads reject caller-supplied identity, permission and invalid proje
       view,
     );
 });
+
+test('named directory pagination composes with lightweight projections and isolates cursors', async () => {
+  const queries: Array<{ where: { name: unknown }; take: number; select: { faces?: unknown } }> =
+    [];
+  const service = new PhotoManagementService({
+    eaglePhotoPerson: {
+      findMany: async (query: (typeof queries)[number]) => {
+        queries.push(query);
+        return Array.from({ length: query.take }, (_, i) => ({
+          id: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+          name: 'name',
+          createdAt: new Date('2026-01-01'),
+          faces: [],
+        }));
+      },
+    },
+  } as never);
+  const cards = await service.people('owner', false, undefined, 'NAMED', 'cards');
+  assert.equal(cards.people.length, 24);
+  assert.equal(cards.limits.facesPerPerson, 1);
+  assert.deepEqual(queries[0]!.where.name, { not: null });
+  assert.equal(queries[0]!.take, 25);
+  assert.ok(cards.nextCursor);
+  await assert.rejects(
+    service.people('owner', false, cards.nextCursor, 'UNNAMED', 'cards'),
+    /游标无效/,
+  );
+  await assert.rejects(
+    service.people('owner', false, cards.nextCursor, 'ALL', 'cards'),
+    /游标无效/,
+  );
+  await service.people('owner', false, undefined, 'NAMED', 'options');
+  assert.equal(queries[1]!.select.faces, undefined);
+});

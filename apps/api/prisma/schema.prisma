@@ -1386,6 +1386,8 @@ model EaglePhotoPerson {
   updatedAt DateTime @updatedAt
   owner User @relation(fields:[ownerId],references:[id],onDelete:Restrict)
   faces EaglePhotoFace[]
+  separatedAsFirst EaglePhotoPersonSeparation[] @relation("PersonSeparationFirst")
+  separatedAsSecond EaglePhotoPersonSeparation[] @relation("PersonSeparationSecond")
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode])
   @@index([ownerId, libraryMode, createdAt, id])
@@ -1720,4 +1722,16 @@ model EagleAssetTransferFacts {
   createdAt DateTime @default(now())
   asset EagleAsset @relation(fields:[ownerId,libraryMode,assetId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   @@id([ownerId,libraryMode,assetId])
+}
+
+model EaglePhotoPersonSeparation {
+  ownerId String
+  libraryMode LibraryMode @default(PHOTO)
+  firstId String
+  secondId String
+  createdAt DateTime @default(now())
+  first EaglePhotoPerson @relation("PersonSeparationFirst",fields:[ownerId,libraryMode,firstId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  second EaglePhotoPerson @relation("PersonSeparationSecond",fields:[ownerId,libraryMode,secondId],references:[ownerId,libraryMode,id],onDelete:Cascade)
+  @@id([ownerId,libraryMode,firstId,secondId])
+  @@index([ownerId,libraryMode,secondId])
 }

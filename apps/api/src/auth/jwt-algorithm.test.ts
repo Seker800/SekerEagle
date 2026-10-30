@@ -18,7 +18,15 @@ test('access and privacy grants accept HS256 only even with the correct signing 
     },
     refreshToken: { findFirst: async () => ({ id: 'session' }) },
   };
-  const sessions = new SessionTokenService(db as never, jwt, {} as never);
+  const sessions = new SessionTokenService(
+    {
+      $queryRaw: async () => [
+        { id: 'owner', email: 'owner@example.invalid', role: 'USER', authVersion: 1 },
+      ],
+    } as never,
+    jwt,
+    {} as never,
+  );
   const privacy = new PrivacyVisibilityService(db as never, jwt, {} as never);
   const access = { sub: 'owner', kind: 'browser', authVersion: 1, sessionFamilyId: 'family' };
   for (const algorithm of ['HS384', 'HS512'] as const) {

@@ -74,16 +74,6 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     if (this.timer) clearInterval(this.timer);
   }
 
-  // Local admissions do not wait for the cross-process recovery poll. Wake only
-  // after the admitting transaction commits; durable claims remain authoritative.
-  private wake() {
-    if (this.timer && !this.stopping) {
-      this.pendingWake.add('SEND');
-      this.pendingWake.add('METADATA');
-      void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
-    }
-  }
-
   private libraryModeWhere(ownerId: string, includePrivate: boolean) {
     return {
       ownerId,
@@ -321,14 +311,14 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
         },
         { timeout: 15000 },
       )
+      .then((result) => {
+        this.wake();
+        return result;
+      })
       .catch((error: unknown) => {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
           throw new NotFoundException('操作不存在。');
         throw error;
-      })
-      .then((result) => {
-        this.wake();
-        return result;
       });
   }
   async retry(principal: AuthPrincipal, id: string) {
@@ -373,7 +363,22 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
   }
+  private wake() {
+    if (!this.timer || this.stopping) return;
+    void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
+  }
   private async claim(lane: OperationLane): Promise<ClaimedItem[]> {
+    // Only a hint: the locked transaction below remains the sole claim authority.
+    // Other API processes discover committed work within the five-second fallback.
+    const candidate = await this.prisma.eagleAssetOperationItem.findFirst({
+      where: {
+        libraryMode: this.libraryMode,
+        operation: { kind: lane === 'SEND' ? 'SEND' : { not: 'SEND' } },
+        OR: [{ status: 'PENDING' }, { status: 'RUNNING', leaseUntil: { lte: new Date() } }],
+      },
+      select: { id: true },
+    });
+    if (!candidate) return [];
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`asset-operations:${this.libraryMode}`}))`;
       const now = new Date();
@@ -511,8 +516,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     if (failed?.status === 'rejected') throw failed.reason;
   }
   private async tickLane(lane: OperationLane) {
-    if (this.running.has(lane) || this.stopping) return;
-    this.pendingWake.delete(lane);
+    if (this.stopping) return;
+    if (this.running.has(lane)) {
+      this.pendingWake.add(lane);
+      return;
+    }
     this.running.add(lane);
     let heartbeat: NodeJS.Timeout | undefined;
     let processed = false;
@@ -537,7 +545,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       this.running.delete(lane);
-      if ((processed || this.pendingWake.has(lane)) && !this.stopping && this.timer) {
+      const pendingWake = this.pendingWake.delete(lane);
+      if ((processed || pendingWake) && !this.stopping && this.timer) {
         const next = setTimeout(
           () =>
             void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),

@@ -80,6 +80,7 @@ test('map endpoints retain browser authentication and cannot take owner or priva
         calls.push(args);
       },
     } as never,
+    {} as never,
   );
   const principal = { sub: 'authenticated-owner', canViewPrivate: false } as never;
   controller.mapClusters(principal, world);

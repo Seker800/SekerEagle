@@ -2,6 +2,7 @@ import { runTransferWork } from './eagle-transfer-work';
 import {
   planTransferPyramid,
   copyTransferPyramid,
+  pyramidStoragePrefix,
   type TransferPyramid,
 } from './eagle-transfer-pyramid';
 import { isCameraRawMime } from '@sekereagle/library-core';
@@ -324,7 +325,8 @@ export class EagleLibraryTransferService {
                 p.id === item.pyramid!.id &&
                 p.revision === item.revision &&
                 p.status === 'READY' &&
-                p.storagePrefix === item.pyramid!.storagePrefix &&
+                pyramidStoragePrefix(p.storagePrefix) ===
+                  pyramidStoragePrefix(item.pyramid!.storagePrefix) &&
                 String(p.byteSize) === item.pyramid!.size,
             )
           )
@@ -391,7 +393,7 @@ export class EagleLibraryTransferService {
                 revision: 1,
                 processorVersion: p.processorVersion,
                 status: 'READY',
-                storagePrefix: p.targetPrefix,
+                storagePrefix: pyramidStoragePrefix(p.targetPrefix),
                 tileSize: p.tileSize,
                 overlap: p.overlap,
                 format: p.format,
@@ -482,7 +484,7 @@ export class EagleLibraryTransferService {
           ),
         ];
         const prefixes = sources.flatMap((source) =>
-          source.imagePyramids.map((p) => `${p.storagePrefix}/`),
+          source.imagePyramids.map((p) => `${pyramidStoragePrefix(p.storagePrefix)}/`),
         );
         for (const key of [...objectKeys, ...prefixes]) assertOwnedObjectKey(ownerId, key);
         await tx.eagleObjectDeletion.create({

@@ -39,6 +39,7 @@ const fs=require('fs'),a=process.argv.slice(2);fs.writeFileSync(a.at(-1),'output
       await writeFile(source, JSON.stringify(sample));
       await transcodeCameraVideo(source, output, 1000);
       const args = JSON.parse(await readFile(output + '.args', 'utf8')) as string[];
+      assert.match(args[args.indexOf('-vf') + 1]!, /fps=source_fps/);
       assert.equal(args.includes('-an'), sample.omit);
       assert.equal(args.includes('0:a:0?'), !sample.omit);
     }

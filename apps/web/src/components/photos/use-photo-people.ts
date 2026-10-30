@@ -6,11 +6,12 @@ export function usePhotoPeople(
   includePrivate: boolean,
   enabled = true,
   poll = false,
+  view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
 ) {
   const query = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate, 'cards'],
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people', includePrivate, view, 'cards'],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal),
+    queryFn: ({ pageParam, signal }) => listPhotoPeople(pageParam, signal, view),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
     enabled,
     staleTime: 30000,

@@ -56,59 +56,47 @@ const controllers = {
   PhotoProcessingController: 'EagleProcessingController',
   PhotoTaskCenterController: 'EagleTaskCenterController',
 };
-
-/** Recognize only the fixed React.lazy(() => import(path).then(m => ({default: m.Export}))) form. */
-function fixedLazyBinding(node, module, name, tree) {
+function walk(node, visit) {
+  visit(node);
+  ts.forEachChild(node, (child) => walk(child, visit));
+}
+// Accept only the named React import lazy(() => import(required).then(module => ({default: module.Required}))).
+// Merely mentioning the module inside an unrelated loader must not satisfy composition.
+function isLazyComposition(node, tree, module, name) {
   if (!ts.isVariableDeclaration(node) || !ts.isIdentifier(node.name)) return false;
-  if (node.parent.parent.parent !== tree || !(node.parent.flags & ts.NodeFlags.Const)) return false;
-  const factory = node.initializer;
-  if (
-    !factory ||
-    !ts.isCallExpression(factory) ||
-    !ts.isIdentifier(factory.expression) ||
-    factory.arguments.length !== 1
-  )
-    return false;
-  const isReactLazy = tree.statements.some(
-    (statement) =>
-      ts.isImportDeclaration(statement) &&
-      statement.moduleSpecifier.text === 'react' &&
-      statement.importClause?.namedBindings &&
-      ts.isNamedImports(statement.importClause.namedBindings) &&
-      statement.importClause.namedBindings.elements.some(
+  const init = node.initializer;
+  if (!init || !ts.isCallExpression(init) || !ts.isIdentifier(init.expression)) return false;
+  let reactLazy = false;
+  walk(tree, (child) => {
+    if (!ts.isImportDeclaration(child) || child.moduleSpecifier.text !== 'react') return;
+    const bindings = child.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings))
+      reactLazy ||= bindings.elements.some(
         (spec) =>
-          !spec.isTypeOnly &&
           (spec.propertyName ?? spec.name).text === 'lazy' &&
-          spec.name.text === factory.expression.text,
-      ),
-  );
-  if (!isReactLazy) return false;
-  const loader = factory.arguments[0];
-  if (!ts.isArrowFunction(loader) || loader.parameters.length !== 0) return false;
-  const chain = loader.body;
+          spec.name.text === init.expression.text,
+      );
+  });
+  const loader = init.arguments[0];
+  if (!reactLazy || !loader || !ts.isArrowFunction(loader)) return false;
+  const then = loader.body;
   if (
-    !ts.isCallExpression(chain) ||
-    chain.arguments.length !== 1 ||
-    !ts.isPropertyAccessExpression(chain.expression) ||
-    chain.expression.name.text !== 'then'
+    !ts.isCallExpression(then) ||
+    !ts.isPropertyAccessExpression(then.expression) ||
+    then.expression.name.text !== 'then'
   )
     return false;
-  const load = chain.expression.expression;
+  const imported = then.expression.expression;
   if (
-    !ts.isCallExpression(load) ||
-    load.expression.kind !== ts.SyntaxKind.ImportKeyword ||
-    load.arguments.length !== 1 ||
-    !ts.isStringLiteral(load.arguments[0]) ||
-    load.arguments[0].text !== module
+    !ts.isCallExpression(imported) ||
+    imported.expression.kind !== ts.SyntaxKind.ImportKeyword ||
+    imported.arguments[0]?.text !== module
   )
     return false;
-  const mapping = chain.arguments[0];
-  if (
-    !ts.isArrowFunction(mapping) ||
-    mapping.parameters.length !== 1 ||
-    !ts.isIdentifier(mapping.parameters[0].name)
-  )
-    return false;
+  const mapping = then.arguments[0];
+  if (!mapping || !ts.isArrowFunction(mapping) || mapping.parameters.length !== 1) return false;
+  const parameter = mapping.parameters[0].name;
+  if (!ts.isIdentifier(parameter)) return false;
   const body = ts.isParenthesizedExpression(mapping.body) ? mapping.body.expression : mapping.body;
   if (!ts.isObjectLiteralExpression(body) || body.properties.length !== 1) return false;
   const property = body.properties[0];
@@ -116,14 +104,9 @@ function fixedLazyBinding(node, module, name, tree) {
     ts.isPropertyAssignment(property) &&
     property.name.getText(tree) === 'default' &&
     ts.isPropertyAccessExpression(property.initializer) &&
-    ts.isIdentifier(property.initializer.expression) &&
-    property.initializer.expression.text === mapping.parameters[0].name.text &&
+    property.initializer.expression.getText(tree) === parameter.text &&
     property.initializer.name.text === name
   );
-}
-function walk(node, visit) {
-  visit(node);
-  ts.forEachChild(node, (child) => walk(child, visit));
 }
 function hasMode(node, aliases = new Set()) {
   let found = false;
@@ -339,7 +322,7 @@ export function checkLibrarySharing(sources) {
     for (const [name, module] of Object.entries(required)) {
       const locals = [];
       walk(tree, (node) => {
-        if (fixedLazyBinding(node, module, name, tree)) locals.push(node.name.text);
+        if (isLazyComposition(node, tree, module, name)) locals.push(node.name.text);
         if (ts.isImportDeclaration(node) && node.moduleSpecifier.text === module) {
           const bindings = node.importClause?.namedBindings;
           if (bindings && ts.isNamedImports(bindings)) {
@@ -449,6 +432,7 @@ export function checkLibrarySharing(sources) {
     // Only photography providers and immutable scope bindings may supplement the common list.
     const allowed = new Set([
       'PhotoManagementService',
+      'PhotoPersonReviewService',
       'PhotoMapService',
       'PhotoStatisticsService',
       'PhotoRevisionObserver',

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
-import { spawnSync } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
+import { setTimeout, clearTimeout } from 'node:timers';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PrismaClient, Prisma } from '@prisma/client';
@@ -178,7 +180,9 @@ try {
       return { embedding: vector() };
     },
   };
-  const step = () => runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer));
+  let continuations = 0;
+  const step = () =>
+    runSmartFolderBuildStep(client, spaceId, infer.run.bind(infer), true, () => continuations++);
   // The application and database can have different clocks. A completed batch must
   // remain immediately claimable rather than wait for the application's wall clock.
   const actualNow = Date.now;
@@ -195,6 +199,11 @@ try {
     true,
     'successful batches must be immediately claimable by the database clock',
   );
+  assert.equal(
+    continuations,
+    1,
+    'a committed unfinished batch must request continuation without a fixed five-second delay',
+  );
   let state = (await service.listSmartFolders(ownerId))[0].semanticState;
   assert.equal(state.status, 'BUILDING');
   assert.equal(
@@ -203,6 +212,31 @@ try {
     500,
   );
   assert.ok(!('scannedCount' in state), 'public status must not expose private indexing counts');
+  await client.eagleProcessingSetting.update({
+    where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
+    data: { mode: 'MANUAL' },
+  });
+  assert.equal(
+    await step(),
+    false,
+    'an immediate continuation must still honor a newly paused schedule',
+  );
+  assert.equal(continuations, 1);
+  await client.eagleProcessingSetting.update({
+    where: { ownerId_libraryMode: { ownerId, libraryMode: 'PHOTO' } },
+    data: { mode: 'ALWAYS' },
+  });
+  await client.eagleTaskPolicy.create({
+    data: { ownerId, libraryMode: 'PHOTO', family: 'SMART_FOLDERS', paused: true },
+  });
+  assert.equal(await step(), false, 'an immediate continuation must still honor a category pause');
+  assert.equal(continuations, 1);
+  await client.eagleTaskPolicy.delete({
+    where: {
+      ownerId_libraryMode_family: { ownerId, libraryMode: 'PHOTO', family: 'SMART_FOLDERS' },
+    },
+  });
+
   assert.equal(
     (await service.listAssets(ownerId, { smartFolderId: folder.id, limit: 100 })).items.length,
     0,
@@ -213,6 +247,7 @@ try {
     matchSmartFoldersForEmbedding(tx, { ownerId, libraryMode: 'PHOTO' }, during.id),
   );
   await step();
+  assert.equal(continuations, 1, 'the final batch must not request an immediate idle loop');
   assert.equal(infer.calls, 1, 'query vector must persist across build steps');
   state = (await service.listSmartFolders(ownerId))[0].semanticState;
   assert.equal(state.status, 'READY');
@@ -271,6 +306,45 @@ try {
     }),
     /游标无效/,
   );
+  const previewOrderService = new EagleService(
+    client,
+    { prepare: async () => ({ status: 'READY', spaceId, vector: `[${vector().join(',')}]` }) },
+    'PHOTO',
+  );
+  const previewOrder = await previewOrderService.countAssets(ownerId, intent());
+  const uncachedOrder = await previewOrderService.countAssets(
+    ownerId,
+    intent('uncached-equivalent-vector'),
+  );
+  const savedOrder = await service.listAssets(ownerId, {
+    smartFolderId: folder.id,
+    smartFolderOrder: 'RELEVANCE',
+    limit: 12,
+  });
+  assert.deepEqual(
+    previewOrder.previewItems.map((row) => row.id),
+    savedOrder.items.map((row) => row.id),
+    'the preview and the saved relevance page must show the same leading matches',
+  );
+  assert.deepEqual(
+    uncachedOrder.previewItems.map((row) => row.id),
+    savedOrder.items.map((row) => row.id),
+    'uncached samples must use the same relevance and tie ordering',
+  );
+  const noModelPreview = new EagleService(
+    client,
+    {
+      prepare: async () => {
+        throw new Error('cached preview must not call inference');
+      },
+    },
+    'PHOTO',
+  );
+  assert.deepEqual(
+    (await noModelPreview.countAssets(ownerId, intent())).previewItems.map((row) => row.id),
+    savedOrder.items.map((row) => row.id),
+  );
+
   // Dynamic ordinary rules do not trigger a new vector build.
   const withRating = {
     ...intent(),
@@ -446,7 +520,15 @@ try {
       }),
     ),
   );
-  await runSmartFolderBuildStep(client, 'test-new-space', infer.run.bind(infer));
+  let spaceContinuations = 0;
+  await runSmartFolderBuildStep(
+    client,
+    'test-new-space',
+    infer.run.bind(infer),
+    true,
+    () => spaceContinuations++,
+  );
+  assert.equal(spaceContinuations, 0, 'space waiting must not request an immediate continuation');
   assert.equal((await service.listSmartFolders(ownerId))[0].semanticState.status, 'BUILDING');
   assert.ok(
     (await service.listAssets(ownerId, { smartFolderId: folder.id, limit: 10 })).items.length > 0,
@@ -637,6 +719,141 @@ try {
     'reconciliation discovers nested scene rules',
   );
   await service.deleteSmartFolder(ruleOwner, ruleFolder.id);
+  const raceOwner = randomUUID();
+  await client.user.create({
+    data: { id: raceOwner, email: `${raceOwner}@example.invalid`, passwordHash: 'test-only' },
+  });
+  await client.eagleProcessingSetting.create({
+    data: { ownerId: raceOwner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  await asset('race-old', { owner: raceOwner, axis: 0 });
+  await asset('race-new', { owner: raceOwner, axis: 1 });
+  const raceFolder = await service.createSmartFolder(raceOwner, {
+    name: 'race',
+    query: intent('race-old'),
+  });
+  while (await runSmartFolderBuildStep(client, spaceId, async () => ({ embedding: vector() }))) {
+    /* drain bounded synthetic batches */
+  }
+  let switched = false;
+  const racingClient = new Proxy(client, {
+    get(target, key) {
+      if (key === 'eagleSmartFolderSemanticSnapshot')
+        return new Proxy(target[key], {
+          get(delegate, method) {
+            if (method === 'findFirst')
+              return async (args) => {
+                const snapshot = await delegate.findFirst(args);
+                if (snapshot && !switched) {
+                  switched = true;
+                  await service.updateSmartFolder(raceOwner, raceFolder.id, {
+                    query: intent('race-new'),
+                  });
+                  while (
+                    await runSmartFolderBuildStep(client, spaceId, async () => ({
+                      embedding: vector(1),
+                    }))
+                  ) {
+                    /* drain bounded synthetic batches */
+                  }
+                }
+                return snapshot;
+              };
+            return Reflect.get(delegate, method);
+          },
+        });
+      const value = Reflect.get(target, key, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const raced = await new EagleService(racingClient, undefined, 'PHOTO').countAssets(
+    raceOwner,
+    intent('race-old'),
+  );
+  assert.equal(switched, true);
+  assert.deepEqual(
+    raced.previewItems,
+    [],
+    'a concurrent snapshot replacement cannot evaluate an old intent using new matches',
+  );
+  assert.deepEqual(
+    (await noModelPreview.countAssets(raceOwner, intent('race-new'))).previewItems.map(
+      (row) => row.id,
+    ),
+    ['race-new'],
+  );
+  // Exercise the actual main worker clock, not just the pure build function.
+  await client.eagleEmbeddingSpace.updateMany({ data: { isCurrent: false } });
+  await client.eagleEmbeddingSpace.update({ where: { id: spaceId }, data: { isCurrent: true } });
+  const timedOwner = randomUUID();
+  await client.user.create({
+    data: { id: timedOwner, email: `${timedOwner}@example.invalid`, passwordHash: 'test-only' },
+  });
+  await client.eagleProcessingSetting.create({
+    data: { ownerId: timedOwner, libraryMode: 'PHOTO', mode: 'ALWAYS' },
+  });
+  for (let i = 0; i < 501; i++) await asset(`timed-${i}`, { owner: timedOwner });
+  const timedFolder = await service.createSmartFolder(timedOwner, {
+    name: 'timed',
+    query: intent('timed'),
+  });
+  await client.$executeRaw(
+    Prisma.sql`UPDATE "EagleSmartFolderSemanticSnapshot" SET "queryVector"=${`[${vector().join(',')}]`}::vector,"availableAt"='2000-01-01'::timestamp WHERE "folderId"=${timedFolder.id}`,
+  );
+  const worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
+    env: {
+      ...env,
+      S3_ENDPOINT: 'http://127.0.0.1:1',
+      S3_ACCESS_KEY_ID: 'synthetic',
+      S3_SECRET_ACCESS_KEY: 'synthetic',
+      MLX_EMBEDDING_URL: 'http://127.0.0.1:1',
+      MLX_EMBEDDING_TOKEN: 'synthetic',
+      MLX_EMBEDDING_REVISION: 'test',
+      MLX_EMBEDDING_SPACE_ID: spaceId,
+      EAGLE_BACKGROUND_PROCESSING_ENABLED: 'true',
+      EAGLE_PROCESSING_JOB_KINDS: 'GENERATE_EMBEDDING',
+    },
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let workerError = '';
+  worker.stderr.on('data', (chunk) => {
+    workerError += String(chunk);
+  });
+  let elapsedAfterFirstBatchMs;
+  try {
+    let firstBatchAt;
+    for (let i = 0; i < 500; i++) {
+      assert.equal(worker.exitCode, null, workerError);
+      const state = await client.eagleSmartFolderSemanticSnapshot.findFirst({
+        where: { folderId: timedFolder.id },
+      });
+      if (state.scannedCount >= 500 && firstBatchAt === undefined) firstBatchAt = performance.now();
+      if (state.status === 'READY') {
+        elapsedAfterFirstBatchMs = performance.now() - (firstBatchAt ?? performance.now());
+        break;
+      }
+      await delay(20);
+    }
+    assert.notEqual(elapsedAfterFirstBatchMs, undefined, workerError);
+    assert.ok(
+      elapsedAfterFirstBatchMs < 4000,
+      `following batch waited ${elapsedAfterFirstBatchMs}ms`,
+    );
+    assert.equal(
+      await client.eagleSmartFolderSemanticMatch.count({
+        where: { snapshot: { folderId: timedFolder.id } },
+      }),
+      501,
+    );
+  } finally {
+    const exited = new Promise((resolve) => worker.once('exit', resolve));
+    worker.kill('SIGTERM');
+    const deadline = setTimeout(() => worker.kill('SIGKILL'), 5000);
+    await exited;
+    clearTimeout(deadline);
+  }
+  assert.equal(worker.exitCode, 0, workerError);
+  log(JSON.stringify({ actualWorkerBatches: 2, fullMatches: 501, elapsedAfterFirstBatchMs }));
   log(
     'Semantic smart folders: migration, full build, cached paging, increment, rules, privacy, owner/mode, replacement, retries, leases and cleanup passed.',
   );

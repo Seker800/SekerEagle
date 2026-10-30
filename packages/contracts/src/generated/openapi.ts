@@ -2500,6 +2500,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/photos/photography/people/summary': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_summary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/photos/photography/people/review': {
     parameters: {
       query?: never;
@@ -2508,6 +2524,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations['PhotoManagementController_reviewPeople'];
+    put?: never;
+    post: operations['PhotoManagementController_decidePeople'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/photos/photography/people/review-priority': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations['PhotoManagementController_priorityPeople'];
     put?: never;
     post?: never;
     delete?: never;
@@ -3858,6 +3890,16 @@ export interface components {
     SetTagRecommendationDto: Record<string, never>;
     ReviewVectorSuggestionDto: Record<string, never>;
     BatchReviewVectorSuggestionsDto: Record<string, never>;
+    PersonReviewDto: {
+      /** Format: uuid */
+      firstId: string;
+      /** Format: uuid */
+      secondId: string;
+      firstVersion: number;
+      secondVersion: number;
+      /** @enum {string} */
+      decision: 'SAME' | 'DIFFERENT';
+    };
     RenamePersonDto: {
       name: string;
     };
@@ -7946,7 +7988,8 @@ export interface operations {
     parameters: {
       query?: {
         after?: string;
-        view?: 'full' | 'cards' | 'options';
+        view?: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options';
+        projection?: 'full' | 'cards' | 'options';
       };
       header?: never;
       path?: never;
@@ -7983,7 +8026,66 @@ export interface operations {
       };
     };
   };
+  PhotoManagementController_summary: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   PhotoManagementController_reviewPeople: {
+    parameters: {
+      query?: {
+        after?: string;
+        view?: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options';
+        projection?: 'full' | 'cards' | 'options';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_decidePeople: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['PersonReviewDto'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  PhotoManagementController_priorityPeople: {
     parameters: {
       query?: never;
       header?: never;

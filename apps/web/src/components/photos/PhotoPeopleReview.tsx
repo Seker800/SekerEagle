@@ -1,106 +1,144 @@
 import { useRef, useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { t } from '../../i18n';
-import type { PhotoPerson, PhotoPeopleReviewPair } from '../../lib/photo-management-api';
+import { getPhotoPeopleReview, decidePhotoPeople } from '../../lib/photo-management-api';
 import type { EagleAssetListItem } from '../../lib/eagle-api';
 import { PhotoFaceImage, representativeFace } from './PhotoFaceImage';
-
 export function PhotoPeopleReview({
-  pairs,
+  ownerId,
+  includePrivate,
   pending,
-  onConfirm,
+  onChanged,
   onOpen,
   preview,
 }: {
-  pairs: PhotoPeopleReviewPair[];
+  ownerId: string | null;
+  includePrivate: boolean;
   pending: boolean;
-  onConfirm: (source: PhotoPerson, target: PhotoPerson) => Promise<boolean>;
+  onChanged: (privacy: boolean) => Promise<unknown>;
   onOpen: (asset: EagleAssetListItem) => void;
   preview: (asset: EagleAssetListItem) => string | null;
 }) {
+  const query = useInfiniteQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'person-review', includePrivate],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam, signal }) => getPhotoPeopleReview(pageParam, signal),
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    staleTime: 30000,
+  });
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
-  const [merged, setMerged] = useState<Set<string>>(new Set());
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const submitting = useRef(false);
-  const candidates = pairs.filter(
-    ({ first, second }) =>
-      !merged.has(first.id) &&
-      !merged.has(second.id) &&
-      representativeFace(first) &&
-      representativeFace(second),
+  const all = query.data?.pages.flatMap((p) => p.items) ?? [];
+  const pair = all.find(
+    (item) =>
+      !skipped.has(item.key) && representativeFace(item.first) && representativeFace(item.second),
   );
-  const candidate = candidates.find(({ first, second }) => !skipped.has(pairKey(first, second)));
-  const pair: [PhotoPeopleReviewPair['first'], PhotoPeopleReviewPair['second']] | undefined =
-    candidate ? [candidate.first, candidate.second] : undefined;
-  if (!candidates.length) return null;
-  if (!pair)
-    return (
-      <div className="photo-people-review">
-        <p>{t('本批疑似组合已比较完，可重新比较。')}</p>
-        <button type="button" disabled={pending} onClick={() => setSkipped(new Set())}>
-          {t('重新比较')}
-        </button>
-      </div>
-    );
-  const current = pair;
-  const [first, second] = current;
-  const [source, target] = !first.name && second.name ? [first, second] : [second, first];
+  const busy = pending || saving;
+  async function decide(decision: 'SAME' | 'DIFFERENT') {
+    if (!pair || submitting.current) return;
+    submitting.current = true;
+    setSaving(true);
+    setError(null);
+    const target = pair.first.name && !pair.second.name ? pair.first : pair.second;
+    const source = target === pair.first ? pair.second : pair.first;
+    try {
+      await decidePhotoPeople({
+        firstId: source.id,
+        secondId: target.id,
+        firstVersion: source.rowVersion,
+        secondVersion: target.rowVersion,
+        decision,
+      });
+      setSkipped((old) => new Set([...old, pair.key]));
+      setResult(decision === 'SAME' ? t('人物已合并') : t('已记住：不是同一个人。'));
+      await onChanged(decision === 'SAME');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t('操作失败'));
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+    }
+  }
   return (
     <section className="photo-people-review" aria-label={t('这两张照片是同一个人吗？')}>
       <h3>{t('这两张照片是同一个人吗？')}</h3>
-      <div className="photo-people-review-pair">
-        {current.map((person) => {
-          const face = representativeFace(person);
-          if (!face) return null;
-          return (
-            <button type="button" key={person.id} onClick={() => onOpen(face.asset)}>
-              <img
-                className="photo-people-review-original"
-                src={preview(face.asset) ?? undefined}
-                alt={t('完整照片：{{value1}}', { value1: face.asset.displayName })}
-              />
-              <PhotoFaceImage face={face} url={preview} alt={face.asset.displayName} />
-              <span>{person.name ?? t('未命名人物')}</span>
-              <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+      <p>{t('按相似程度推荐，需要你确认；不会自动合并。')}</p>
+      {(error || query.error) && <p role="alert">{error ?? query.error?.message}</p>}
+      {result && <p role="status">{result}</p>}
+      {query.isPending ? (
+        <p role="status">{t('正在查找相似人物…')}</p>
+      ) : pair ? (
+        <>
+          <div className="photo-people-review-pair">
+            {[pair.first, pair.second].map((person) => {
+              const face = representativeFace(person);
+              return face ? (
+                <button key={person.id} type="button" onClick={() => onOpen(face.asset)}>
+                  <img
+                    className="photo-people-review-original"
+                    src={preview(face.asset) ?? undefined}
+                    alt={t('完整照片：{{value1}}', { value1: face.asset.displayName })}
+                  />
+                  <PhotoFaceImage face={face} url={preview} alt={person.name ?? t('未命名人物')} />
+                  <span>{person.name ?? t('未命名人物')}</span>
+                  {person.photoCount !== undefined && (
+                    <span>{t('{{value1}} 张照片', { value1: person.photoCount })}</span>
+                  )}
+                </button>
+              ) : null;
+            })}
+          </div>
+          <div className="photo-people-review-actions">
+            <button
+              type="button"
+              disabled={busy}
+              onKeyDown={(event) => {
+                if (event.repeat) event.preventDefault();
+              }}
+              onClick={(event) => {
+                if (event.detail <= 1) void decide('SAME');
+              }}
+            >
+              {t('是，同一个人')}
             </button>
-          );
-        })}
-      </div>
-      {target.name && <p>{t('合并后保留名称：{{value1}}', { value1: target.name })}</p>}
-      <div className="photo-people-review-actions">
+            <button
+              type="button"
+              disabled={busy}
+              onKeyDown={(event) => {
+                if (event.repeat) event.preventDefault();
+              }}
+              onClick={(event) => {
+                if (event.detail <= 1) void decide('DIFFERENT');
+              }}
+            >
+              {t('不是同一个人')}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setError(null);
+                setSkipped((old) => new Set([...old, pair.key]));
+              }}
+            >
+              {t('暂时跳过')}
+            </button>
+          </div>
+        </>
+      ) : query.hasNextPage ? (
         <button
           type="button"
-          disabled={pending}
-          onKeyDown={(event) => {
-            if (event.repeat) event.preventDefault();
-          }}
-          onClick={(event) => {
-            if (event.detail > 1 || submitting.current) return;
-            submitting.current = true;
-            void onConfirm(source, target)
-              .then((success) => {
-                if (success) {
-                  setMerged((old) => new Set([...old, source.id]));
-                }
-              })
-              .finally(() => {
-                submitting.current = false;
-              });
-          }}
+          disabled={query.isFetchingNextPage || busy}
+          onClick={() => void query.fetchNextPage()}
         >
-          {t('是，同一个人')}
+          {query.isFetchingNextPage ? t('正在查找相似人物…') : t('继续查找相似人物')}
         </button>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => {
-            setSkipped((old) => new Set([...old, pairKey(...current)]));
-          }}
-        >
-          {t('换一批')}
-        </button>
-      </div>
+      ) : (
+        <p>{t('暂时没有需要确认的相似人物。')}</p>
+      )}
     </section>
   );
-}
-function pairKey(a: PhotoPerson, b: PhotoPerson) {
-  return JSON.stringify([a.id, b.id].sort());
 }

@@ -3,18 +3,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { PhotoCollections } from './PhotoCollections';
 import type { PhotoPerson } from '../../lib/photo-management-api';
-
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
-  review: vi.fn(),
-  merge: vi.fn(),
-  privacy: vi.fn(),
+  summary: vi.fn(),
+  suggest: vi.fn(),
+  decide: vi.fn(),
 }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
   listPhotoPersonFaces: vi.fn().mockResolvedValue({ faces: [], nextCursor: null }),
-  reviewPhotoPeople: mocks.review,
-  mergePhotoPeople: mocks.merge,
+  getPhotoPeopleSummary: mocks.summary,
+  getPhotoPeopleReview: mocks.suggest,
+  decidePhotoPeople: mocks.decide,
   scanPhotoPeople: vi.fn(),
   renamePhotoPerson: vi.fn(),
   splitPhotoFace: vi.fn(),
@@ -23,9 +23,7 @@ vi.mock('../../lib/photo-management-api', () => ({
 vi.mock('../../lib/library-workspace', () => ({
   useLibraryWorkspace: () => ({
     ownerId: 'owner',
-    api: {
-      getEagleRenditionContentUrl: (asset: string, rendition: string) => `/${asset}/${rendition}`,
-    },
+    api: { getEagleRenditionContentUrl: (id: string) => `/${id}` },
   }),
 }));
 const person = (id: string, name: string | null = null) =>
@@ -37,30 +35,23 @@ const person = (id: string, name: string | null = null) =>
     faces: [
       {
         id: `face-${id}`,
-        box: [0.3, 0.2, 0.1, 0.2],
+        box: [0.2, 0.2, 0.3, 0.3],
         confidence: 0.99,
         assetId: id,
         asset: {
           id,
-          displayName: `照片-${id}`,
+          displayName: id,
           mimeType: 'image/jpeg',
           mediaRevision: 1,
-          width: 4000,
-          height: 3000,
+          width: 1600,
+          height: 1200,
           renditions: [
             {
-              id: 'small',
-              kind: 'THUMBNAIL',
-              mimeType: 'image/jpeg',
-              revision: 1,
-              width: 256,
-              height: 192,
-            },
-            {
-              id: 'large',
+              id: 'preview',
               kind: 'PREVIEW',
-              mimeType: 'image/jpeg',
+              variant: 'default',
               revision: 1,
+              mimeType: 'image/jpeg',
               width: 1600,
               height: 1200,
             },
@@ -69,196 +60,116 @@ const person = (id: string, name: string | null = null) =>
       },
     ],
   }) as PhotoPerson;
-function show() {
-  return render(
+const a = person('a'),
+  b = person('b', '小明'),
+  c = person('c');
+const items = [
+  { key: 'a:b', first: a, second: b, similarity: 0.7 },
+  { key: 'b:c', first: b, second: c, similarity: 0.6 },
+];
+const show = () =>
+  render(
     <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      client={
+        new QueryClient({
+          defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+        })
+      }
     >
       <PhotoCollections
         includePrivate={false}
-        onPrivacyRulesChange={mocks.privacy}
+        onPrivacyRulesChange={vi.fn()}
         onOpen={vi.fn()}
         onPerson={vi.fn()}
       />
     </QueryClientProvider>,
   );
-}
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.list.mockResolvedValue({
-    runtimeConfigured: true,
-    people: [person('a'), person('b', '小明'), person('c')],
-    nextCursor: null,
-  });
-  mocks.review.mockImplementation(async () => {
-    const { people } = (await mocks.list()) as { people: PhotoPerson[] };
-    return {
-      pairs: people.flatMap((first: PhotoPerson, i: number) =>
-        people.slice(i + 1).map((second: PhotoPerson) => ({
-          first: { ...first, photoCount: 1 },
-          second: { ...second, photoCount: 1 },
-          similarity: 0.4,
-        })),
-      ),
-    };
-  });
-  mocks.merge.mockResolvedValue({ id: 'b' });
+  mocks.list.mockResolvedValue({ runtimeConfigured: true, people: [b], nextCursor: null });
+  mocks.summary.mockResolvedValue({ named: 1, unnamed: 3000 });
+  mocks.suggest.mockResolvedValue({ items, nextCursor: null });
+  mocks.decide.mockResolvedValue({ saved: true });
 });
-it('用大预览呈现人脸，直接比较两个不同人物，不需要选择合并目标', async () => {
+it('defaults to named people and makes the review entry explicit, not a wall of thousands of avatars', async () => {
   show();
-  const review = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
-  const photos = within(review).getAllByRole('img');
-  expect(photos.map((img) => img.getAttribute('src'))).toEqual([
-    '/a/large',
-    '/a/large',
-    '/b/large',
-    '/b/large',
-  ]);
-  fireEvent.click(screen.getByRole('button', { name: '未命名人物 1' }));
-  expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: '未命名人物 1' }).querySelector('img')).toHaveAttribute(
-    'src',
-    '/a/large',
+  await screen.findByRole('button', { name: '小明' });
+  expect(screen.getByRole('tab', { name: '已命名人物 (1)' })).toHaveAttribute(
+    'aria-selected',
+    'true',
   );
+  expect(screen.getByText('有 3000 个头像待整理，可先确认相似人物。')).toBeVisible();
+  expect(mocks.suggest).not.toHaveBeenCalled();
+  expect(mocks.list.mock.calls[0]?.[2]).toBe('NAMED');
 });
-it('确认后自动合并展示的两个人，保留已有名字并刷新隐私投影', async () => {
+it('uses the server-recommended pair and persists SAME with both current versions', async () => {
   show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
   fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
-  await waitFor(() => expect(mocks.merge).toHaveBeenCalledWith('a', 'b'));
-  await waitFor(() => expect(mocks.privacy).toHaveBeenCalledTimes(1));
-  expect(await screen.findByRole('status')).toHaveTextContent('人物已合并');
-});
-it('换一批更新比较对象且不执行合并', async () => {
-  show();
-  fireEvent.click(await screen.findByRole('button', { name: '换一批' }));
-  const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-  expect(
-    within(review)
-      .getAllByRole('img')
-      .map((img) => img.getAttribute('src')),
-  ).toEqual(['/a/large', '/a/large', '/c/large', '/c/large']);
-  expect(mocks.merge).not.toHaveBeenCalled();
-});
-it('提交时禁止换批和重复确认，失败保留原照片供重试', async () => {
-  let reject!: (error: Error) => void;
-  mocks.merge.mockReturnValue(
-    new Promise((_, no) => {
-      reject = no;
+  await waitFor(() =>
+    expect(mocks.decide).toHaveBeenCalledWith({
+      firstId: 'a',
+      secondId: 'b',
+      firstVersion: 1,
+      secondVersion: 1,
+      decision: 'SAME',
     }),
   );
-  show();
-  const confirm = await screen.findByRole('button', { name: '是，同一个人' });
-  fireEvent.click(confirm);
-  fireEvent.click(confirm);
-  expect(screen.getByRole('button', { name: '换一批' })).toBeDisabled();
-  expect(mocks.merge).toHaveBeenCalledTimes(1);
-  reject(new Error('合并失败'));
-  expect(await screen.findByRole('alert')).toHaveTextContent('合并失败');
-  expect(confirm).toBeEnabled();
-  expect(
-    within(screen.getByRole('region', { name: '这两张照片是同一个人吗？' })).getAllByRole('img')[3],
-  ).toHaveAttribute('src', '/b/large');
-  expect(mocks.privacy).not.toHaveBeenCalled();
-});
-it('没有两个有照片的人物时不显示合并确认', async () => {
-  mocks.list.mockResolvedValue({
-    runtimeConfigured: true,
-    people: [person('a'), { ...person('b'), faces: [] }],
-    nextCursor: null,
-  });
-  show();
-  await screen.findByRole('button', { name: '未命名人物 1' });
-  expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
-});
-it('没有可用预览的人物不参与确认，避免看不到照片时合并', async () => {
-  const missing = person('b');
-  missing.faces[0]!.asset.renditions = [];
-  mocks.list.mockResolvedValue({
-    runtimeConfigured: true,
-    people: [person('a'), missing],
-    nextCursor: null,
-  });
-  show();
-  await screen.findByRole('button', { name: '未命名人物 1' });
-  expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
-});
-it('换批遍历不同组合，比较结束后可以重新开始', async () => {
-  show();
-  const next = await screen.findByRole('button', { name: '换一批' });
-  fireEvent.click(next);
-  fireEvent.click(next);
-  const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-  expect(
-    within(review)
-      .getAllByRole('img')
-      .map((img) => img.getAttribute('src')),
-  ).toEqual(['/b/large', '/b/large', '/c/large', '/c/large']);
-  fireEvent.click(next);
-  expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '重新比较' }));
-  expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled();
-  expect(mocks.merge).not.toHaveBeenCalled();
-});
-it('合并成功自动展示下一对，连点不会误合并其他人', async () => {
-  show();
-  const confirm = await screen.findByRole('button', { name: '是，同一个人' });
-  fireEvent.click(confirm);
-  fireEvent.click(confirm);
-  await waitFor(() => expect(mocks.privacy).toHaveBeenCalledTimes(1));
-  await waitFor(() => expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled());
-  const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-  expect(
-    within(review)
-      .getAllByRole('img')
-      .map((img) => img.getAttribute('src')),
-  ).toEqual(['/b/large', '/b/large', '/c/large', '/c/large']);
+  expect(await screen.findByText('人物已合并')).toBeVisible();
+  expect(await screen.findByRole('button', { name: '是，同一个人' })).toBeEnabled();
   fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }), { detail: 2 });
-  expect(mocks.merge).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
-  await waitFor(() => expect(mocks.merge).toHaveBeenLastCalledWith('c', 'b'));
+  expect(mocks.decide).toHaveBeenCalledTimes(1);
 });
-it('使用服务端排序的疑似组合，不从人物列表随意配对', async () => {
-  mocks.review.mockResolvedValue({
-    pairs: [
-      {
-        first: { ...person('c'), photoCount: 100 },
-        second: { ...person('b'), photoCount: 80 },
-        similarity: 0.42,
-      },
-    ],
-  });
+it('persists DIFFERENT instead of silently skipping or merging', async () => {
   show();
-  const review = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
-  expect(
-    within(review)
-      .getAllByRole('img')
-      .map((img) => img.getAttribute('src')),
-  ).toEqual(['/c/large', '/c/large', '/b/large', '/b/large']);
-  expect(within(review).getByText('100 张照片')).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  fireEvent.click(await screen.findByRole('button', { name: '不是同一个人' }));
+  await waitFor(() => expect(mocks.decide.mock.calls[0]?.[0].decision).toBe('DIFFERENT'));
+  expect(await screen.findByText('已记住：不是同一个人。')).toBeVisible();
 });
-it('没有疑似组合时不把无关人物凑成问题', async () => {
-  mocks.review.mockResolvedValue({ pairs: [] });
+it('skip changes the suggestion without saving an identity decision', async () => {
   show();
-  await screen.findByRole('button', { name: '未命名人物 1' });
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  const region = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
+  expect((await within(region).findAllByRole('img'))[0]).toHaveAttribute('src', '/a');
+  fireEvent.click(screen.getByRole('button', { name: '暂时跳过' }));
+  expect(within(region).getAllByRole('img')[2]).toHaveAttribute('src', '/c');
+  expect(mocks.decide).not.toHaveBeenCalled();
+});
+it('failed or stale decisions show the error and do not advance', async () => {
+  mocks.decide.mockRejectedValue(new Error('人物已变化，请刷新后重试。'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('人物已变化');
+  expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled();
+  fireEvent.click(screen.getByRole('button', { name: '暂时跳过' }));
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});
+it('never falls back to arbitrary pairs when the server has no similarity candidates', async () => {
+  mocks.suggest.mockResolvedValue({ items: [], nextCursor: null });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  expect(await screen.findByText('暂时没有需要确认的相似人物。')).toBeVisible();
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
-it('两个人均已命名时，确认前明确告知保留哪个名字', async () => {
-  mocks.list.mockResolvedValue({
-    runtimeConfigured: true,
-    people: [person('a', '小王'), person('b', '王先生')],
-    nextCursor: null,
-  });
+it('can traverse the full library instead of stopping at the directory page', async () => {
+  mocks.suggest.mockImplementation(async (after?: string) =>
+    after ? { items: [items[0]], nextCursor: null } : { items: [], nextCursor: 'next-anchor' },
+  );
   show();
-  expect(await screen.findByText('合并后保留名称：小王')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
-  await waitFor(() => expect(mocks.merge).toHaveBeenCalledWith('b', 'a'));
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  fireEvent.click(await screen.findByRole('button', { name: '继续查找相似人物' }));
+  await screen.findByRole('button', { name: '是，同一个人' });
+  expect(mocks.suggest.mock.calls.some(([cursor]) => cursor === 'next-anchor')).toBe(true);
 });
 
-it('长按确认键阻止浏览器重复触发下一题', async () => {
+it('shows complete photos beside the crops and blocks held confirmation keys', async () => {
   show();
-  const confirm = await screen.findByRole('button', { name: '是，同一个人' });
-  expect(fireEvent.keyDown(confirm, { key: 'Enter', repeat: true })).toBe(false);
-  expect(fireEvent.keyDown(confirm, { key: ' ', repeat: true })).toBe(false);
-  expect(fireEvent.keyDown(confirm, { key: 'Enter', repeat: false })).toBe(true);
-  expect(mocks.merge).not.toHaveBeenCalled();
+  fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
+  const region = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
+  await waitFor(() => expect(within(region).getAllByRole('img')).toHaveLength(4));
+  const button = screen.getByRole('button', { name: '是，同一个人' });
+  expect(fireEvent.keyDown(button, { key: 'Enter', repeat: true })).toBe(false);
+  expect(mocks.decide).not.toHaveBeenCalled();
 });

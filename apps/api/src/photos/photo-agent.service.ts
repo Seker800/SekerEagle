@@ -241,9 +241,11 @@ export class PhotoAgentService {
     });
     const page = rows.slice(0, input.limit);
     const ids = [
-      ...new Set(page.flatMap((row) => (row.scope as unknown as Snapshot[]).map((a) => a.id))),
+      ...new Set(
+        page.flatMap((row) => (row.scope as unknown as Snapshot[]).map((asset) => asset.id)),
+      ),
     ];
-    const assets = ids.length
+    const accessible = ids.length
       ? await this.prisma.eagleAsset.findMany({
           where: {
             ...scope(ownerId, includePrivate),
@@ -253,10 +255,12 @@ export class PhotoAgentService {
           select: { id: true },
         })
       : [];
-    const visibleIds = new Set(assets.map((asset) => asset.id));
+    const accessibleIds = new Set(accessible.map((asset) => asset.id));
     const visibleTasks = page.filter((row) => {
-      const frozen = (row.scope as unknown as Snapshot[]).map((a) => a.id);
-      return new Set(frozen.filter((id) => visibleIds.has(id))).size === frozen.length;
+      const assetIds = (row.scope as unknown as Snapshot[]).map((asset) => asset.id);
+      return (
+        new Set(assetIds).size === assetIds.length && assetIds.every((id) => accessibleIds.has(id))
+      );
     });
     const proposals = visibleTasks.length
       ? await this.prisma.eaglePhotoAgentSuggestion.findMany({
@@ -271,22 +275,23 @@ export class PhotoAgentService {
       : [];
     const byTask = new Map<string, typeof proposals>();
     for (const proposal of proposals) {
-      const items = byTask.get(proposal.taskId) ?? [];
-      items.push(proposal);
-      byTask.set(proposal.taskId, items);
+      const group = byTask.get(proposal.taskId) ?? [];
+      group.push(proposal);
+      byTask.set(proposal.taskId, group);
     }
     const visible = visibleTasks.map((row) => {
       const { scope: _, ...summary } = row;
       void _;
-      const items = byTask.get(row.id) ?? [];
+      const proposals = byTask.get(row.id) ?? [];
       return {
         ...summary,
-        assetCount: items.length,
-        pendingCount: items.filter((item) => item.status === 'PENDING').length,
-        acceptedCount: items.filter((item) => item.status === 'ACCEPTED').length,
-        retryCount: items.filter((item) => ['FAILED', 'APPLYING'].includes(item.status)).length,
-        rejectedCount: items.filter((item) => ['REJECTED', 'UNDONE'].includes(item.status)).length,
-        coverIds: items
+        assetCount: proposals.length,
+        pendingCount: proposals.filter((item) => item.status === 'PENDING').length,
+        acceptedCount: proposals.filter((item) => item.status === 'ACCEPTED').length,
+        retryCount: proposals.filter((item) => ['FAILED', 'APPLYING'].includes(item.status)).length,
+        rejectedCount: proposals.filter((item) => ['REJECTED', 'UNDONE'].includes(item.status))
+          .length,
+        coverIds: proposals
           .filter((item) => item.status !== 'ACCEPTED' || row.kind === 'CITY')
           .slice(0, 4)
           .map((item) => item.assetId),

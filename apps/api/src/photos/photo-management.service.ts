@@ -17,13 +17,10 @@ import {
 import { facePreviewSelect, previewSelect, serializePreview } from './photo-preview';
 import { readPhotoPeopleReview } from './photo-people-review';
 import { suggestPhotoGroups } from './photo-grouping';
+import { visiblePhotoAssets, requireVisiblePerson } from './photo-person-scope';
+import { carryPersonSeparations } from './photo-person-review';
 
-const visible = (ownerId: string, includePrivate: boolean): Prisma.EagleAssetWhereInput => ({
-  ownerId,
-  libraryMode: 'PHOTO',
-  deletedAt: null,
-  ...(!includePrivate ? { isPrivate: false } : {}),
-});
+const visible = visiblePhotoAssets;
 
 @Injectable()
 export class PhotoManagementService {
@@ -80,13 +77,24 @@ export class PhotoManagementService {
     ownerId: string,
     includePrivate: boolean,
     after?: string,
-    view: 'full' | 'cards' | 'options' = 'full',
+    view: 'ALL' | 'NAMED' | 'UNNAMED' | 'full' | 'cards' | 'options' = 'ALL',
+    projection: 'full' | 'cards' | 'options' = 'full',
   ) {
-    const cursor = after ? decodePeopleCursor(after, ownerId, includePrivate) : null;
+    const category = view === 'NAMED' || view === 'UNNAMED' ? view : 'ALL';
+    const representation =
+      view === 'cards' || view === 'options' || view === 'full' ? view : projection;
+    const pageSize = category === 'ALL' ? 200 : 24;
+    const cursorScope = category === 'ALL' ? ownerId : `${ownerId}:${category}`;
+    const cursor = after ? decodePeopleCursor(after, cursorScope, includePrivate) : null;
     const pageQuery = {
       where: {
         ownerId,
         libraryMode: 'PHOTO' as const,
+        ...(category === 'NAMED'
+          ? { name: { not: null } }
+          : category === 'UNNAMED'
+            ? { name: null }
+            : {}),
         ...(cursor
           ? {
               AND: [
@@ -106,20 +114,28 @@ export class PhotoManagementService {
         ],
       },
       orderBy: [{ createdAt: 'asc' as const }, { id: 'asc' as const }],
-      take: 201,
+      take: pageSize + 1,
     };
     const page = (rows: Array<{ id: string; createdAt: Date }>) => ({
       runtimeConfigured: Boolean(process.env.PHOTO_FACE_PYTHON && process.env.PHOTO_FACE_MODEL_DIR),
-      limits: { people: 200, facesPerPerson: view === 'options' ? 0 : view === 'cards' ? 1 : 20 },
+      limits: {
+        people: pageSize,
+        facesPerPerson: representation === 'options' ? 0 : representation === 'cards' ? 1 : 20,
+      },
       nextCursor:
-        rows.length > 200 ? encodePeopleCursor(rows[199]!, ownerId, includePrivate) : null,
+        rows.length > pageSize
+          ? encodePeopleCursor(rows[pageSize - 1]!, cursorScope, includePrivate)
+          : null,
     });
-    if (view === 'options') {
+    if (representation === 'options') {
       const rows = await this.prisma.eaglePhotoPerson.findMany({
         ...pageQuery,
         select: { id: true, name: true, createdAt: true },
       });
-      return { ...page(rows), people: rows.slice(0, 200).map(({ id, name }) => ({ id, name })) };
+      return {
+        ...page(rows),
+        people: rows.slice(0, pageSize).map(({ id, name }) => ({ id, name })),
+      };
     }
     const rows = await this.prisma.eaglePhotoPerson.findMany({
       ...pageQuery,
@@ -141,7 +157,7 @@ export class PhotoManagementService {
             box: true,
             confidence: true,
             assetId: true,
-            asset: { select: view === 'cards' ? facePreviewSelect : previewSelect },
+            asset: { select: representation === 'cards' ? facePreviewSelect : previewSelect },
           },
           take: 20,
           orderBy: [{ confidence: 'desc' }, { id: 'asc' }],
@@ -150,9 +166,11 @@ export class PhotoManagementService {
     });
     return {
       ...page(rows),
-      people: rows.slice(0, 200).map((person) => {
-        const representative = view === 'cards' ? representativePhotoFace(person.faces) : undefined;
-        const faces = view === 'cards' ? (representative ? [representative] : []) : person.faces;
+      people: rows.slice(0, pageSize).map((person) => {
+        const representative =
+          representation === 'cards' ? representativePhotoFace(person.faces) : undefined;
+        const faces =
+          representation === 'cards' ? (representative ? [representative] : []) : person.faces;
         return {
           ...person,
           faces: faces.map((face) => ({ ...face, asset: serializePreview(face.asset) })),
@@ -213,21 +231,9 @@ export class PhotoManagementService {
     id: string,
     includePrivate: boolean,
   ) {
-    const person = await tx.eaglePhotoPerson.findFirst({
-      where: {
-        id,
-        ownerId,
-        libraryMode: 'PHOTO',
-        ...(!includePrivate ? { marksAssetsPrivate: false } : {}),
-        OR: [
-          { faces: { some: { isCurrent: true, asset: visible(ownerId, includePrivate) } } },
-          ...(includePrivate ? [{ marksAssetsPrivate: true }] : []),
-        ],
-      },
-    });
-    if (!person) throw new NotFoundException('人物不存在。');
-    return person;
+    return requireVisiblePerson(tx, ownerId, id, includePrivate);
   }
+
   async setPersonPrivacy(
     ownerId: string,
     id: string,
@@ -261,13 +267,25 @@ export class PhotoManagementService {
       });
     });
   }
-  async mergePeople(ownerId: string, sourceId: string, targetId: string, includePrivate: boolean) {
+  async mergePeople(
+    ownerId: string,
+    sourceId: string,
+    targetId: string,
+    includePrivate: boolean,
+    versions?: { source: number; target: number },
+  ) {
     if (sourceId === targetId) throw new BadRequestException('请选择另一个人物。');
     return this.prisma.$transaction(async (tx) => {
       await lockOwnerPrivacyProjection(tx, ownerId, 'PHOTO');
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`photo-people:${ownerId}`}))`;
       const source = await this.requirePerson(tx, ownerId, sourceId, includePrivate);
       const target = await this.requirePerson(tx, ownerId, targetId, includePrivate);
+      if (
+        versions &&
+        (source.rowVersion !== versions.source || target.rowVersion !== versions.target)
+      )
+        throw new ConflictException('人物已变化，请刷新后重试。');
+      await carryPersonSeparations(tx, ownerId, sourceId, targetId);
       await tx.eaglePhotoPerson.update({
         where: { id: targetId },
         data: {
@@ -316,6 +334,16 @@ export class PhotoManagementService {
       await tx.eaglePhotoFace.update({
         where: { id: faceId },
         data: { personId: person.id, userAssigned: true },
+      });
+      await tx.eaglePhotoPerson.updateMany({
+        where: {
+          ownerId,
+          libraryMode: 'PHOTO',
+          id: {
+            in: [...new Set([face.personId, person.id].filter((id): id is string => Boolean(id)))],
+          },
+        },
+        data: { rowVersion: { increment: 1 } },
       });
       await syncAssetPrivacy(tx, ownerId, [face.assetId], 'PHOTO');
       return { id: person.id };

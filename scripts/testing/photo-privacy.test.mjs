@@ -339,13 +339,14 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
         .status,
       404,
     );
-    const reviewUrl = `${base}/api/photos/photography/people/review`;
+    const reviewUrl = `${base}/api/photos/photography/people/review-priority`;
     assert.equal((await fetch(reviewUrl)).status, 401);
     const reviewResponse = await fetch(reviewUrl, { headers: auth });
     assert.equal(reviewResponse.status, 200);
     assert.deepEqual(await reviewResponse.json(), { pairs: [] });
     assert.equal(
-      (await fetch(`${base}/api/eagle/photography/people/review`, { headers: auth })).status,
+      (await fetch(`${base}/api/eagle/photography/people/review-priority`, { headers: auth }))
+        .status,
       404,
     );
     const settingsUrl = `${base}/api/photos/privacy-settings`;
@@ -1061,6 +1062,24 @@ test('人物确认全库按照片量排序相似组合，排除同框、旧版�
       [pair.first.id, pair.second.id].includes(hidden.id),
     ),
   );
+  const excludedIds = [first.id, second.id].sort();
+  await prisma.eaglePhotoPersonSeparation.create({
+    data: {
+      ownerId: f.ownerId,
+      libraryMode: 'PHOTO',
+      firstId: excludedIds[0],
+      secondId: excludedIds[1],
+    },
+  });
+  assert.ok(
+    !(await f.service.reviewPeople(f.ownerId, false)).pairs.some(
+      (pair) =>
+        [pair.first.id, pair.second.id].includes(first.id) &&
+        [pair.first.id, pair.second.id].includes(second.id),
+    ),
+    'priority candidates must preserve a saved different-person decision',
+  );
+  await prisma.eaglePhotoPersonSeparation.deleteMany({ where: { ownerId: f.ownerId } });
   await sample(second, {}, shared);
   const after = await f.service.reviewPeople(f.ownerId, false);
   assert.ok(after.pairs.every((pair) => new Set([pair.first.id, pair.second.id]).size === 2));

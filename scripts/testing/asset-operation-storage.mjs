@@ -1,6 +1,8 @@
 import { Buffer } from 'node:buffer';
 import { performance } from 'node:perf_hooks';
 import console from 'node:console';
+import sharp from 'sharp';
+import { EagleMediaService } from '../../apps/api/dist/eagle/eagle-media.service.js';
 // Real local PostgreSQL + S3 exercise; runner must supply an isolated, guarded test target.
 import assert from 'node:assert/strict';
 import { randomUUID, createHash } from 'node:crypto';
@@ -297,11 +299,162 @@ try {
         storage.headObject(key),
         (error) => error.$metadata?.httpStatusCode === 404,
       );
+  // Real files: move a pyramid twice, resume a legacy-spelled frozen plan,
+  // read the final tile through the shared media service, and retire both source directories.
+  const pyramidAssetId = randomUUID();
+  const tile = await sharp({ create: { width: 1, height: 1, channels: 3, background: '#a34d76' } })
+    .webp()
+    .toBuffer();
+  const originalKey = `users/${ownerId}/assets/${pyramidAssetId}/original.webp`;
+  const pyramidPrefix = `users/${ownerId}/assets/${pyramidAssetId}/pyramids/1/pyramid-v1`;
+  const pyramidSource = await db.eagleAsset.create({
+    data: {
+      id: pyramidAssetId,
+      ownerId,
+      libraryMode: 'PHOTO',
+      originalName: 'roundtrip.webp',
+      displayName: 'Roundtrip',
+      normalizedDisplayName: 'roundtrip',
+      mimeType: 'image/webp',
+      format: 'webp',
+      byteSize: tile.length,
+      originalObjectKey: originalKey,
+      lifecycleStatus: 'READY',
+      mediaRevision: 1,
+      width: 1,
+      height: 1,
+    },
+  });
+  const initialKeys = [originalKey, `${pyramidPrefix}/0/0_0.webp`];
+  for (const [kind, variant] of [
+    ['PREVIEW', 'default'],
+    ['THUMBNAIL', '256'],
+    ['THUMBNAIL', '512'],
+  ]) {
+    const key = `users/${ownerId}/assets/${pyramidAssetId}/${kind}-${variant}.webp`;
+    initialKeys.push(key);
+    await db.eagleAssetRendition.create({
+      data: {
+        ownerId,
+        libraryMode: 'PHOTO',
+        assetId: pyramidAssetId,
+        revision: 1,
+        kind,
+        variant,
+        status: 'READY',
+        storageKey: key,
+        mimeType: 'image/webp',
+        byteSize: tile.length,
+        width: 1,
+        height: 1,
+      },
+    });
+  }
+  for (const key of initialKeys)
+    await s3.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: tile }));
+  await db.eagleImagePyramid.create({
+    data: {
+      ownerId,
+      libraryMode: 'PHOTO',
+      assetId: pyramidAssetId,
+      revision: 1,
+      processorVersion: 'pyramid-v1',
+      status: 'READY',
+      storagePrefix: pyramidPrefix,
+      width: 1,
+      height: 1,
+      maxLevel: 0,
+      tileSize: 512,
+      overlap: 1,
+      tileCount: 1,
+      byteSize: tile.length,
+    },
+  });
+  const outbound = await new EagleLibraryTransferService(db, storage, 'PHOTO').send(
+    ownerId,
+    { operationId: randomUUID(), assetIds: [pyramidSource.id] },
+    false,
+  );
+  const middleId = outbound.assets[0].assetId;
+  const middle = await db.eagleAsset.findUniqueOrThrow({
+    where: { id: middleId },
+    include: { renditions: true, imagePyramids: true },
+  });
+  assert(!middle.imagePyramids[0].storagePrefix.endsWith('/'));
+  const retryId = randomUUID();
+  const interrupted = new EagleLibraryTransferService(
+    db,
+    {
+      copyObject: async () => {
+        throw new Error('synthetic copy interruption');
+      },
+      headObject: (...args) => storage.headObject(...args),
+    },
+    'MATERIAL',
+  );
+  await assert.rejects(
+    interrupted.send(ownerId, { operationId: retryId, assetIds: [middleId] }, false),
+    /interruption/,
+  );
+  const frozen = await db.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: retryId } });
+  await db.eagleLibraryTransfer.update({
+    where: { id: retryId },
+    data: {
+      plan: frozen.plan.map((item) => ({
+        ...item,
+        pyramid: { ...item.pyramid, storagePrefix: item.pyramid.storagePrefix + '/' },
+      })),
+    },
+  });
+  const inbound = await new EagleLibraryTransferService(db, storage, 'MATERIAL').send(
+    ownerId,
+    { operationId: retryId, assetIds: [middleId] },
+    false,
+  );
+  const final = await db.eagleAsset.findUniqueOrThrow({
+    where: { id: inbound.assets[0].assetId },
+    include: { imagePyramids: true },
+  });
+  assert(!final.imagePyramids[0].storagePrefix.endsWith('/'));
+  const opened = await new EagleMediaService(db, storage, 'PHOTO').getPyramidTile(
+    ownerId,
+    final.id,
+    final.imagePyramids[0].id,
+    0,
+    0,
+    0,
+  );
+  const chunks = [];
+  for await (const chunk of opened.stream) chunks.push(Buffer.from(chunk));
+  assert.deepEqual(Buffer.concat(chunks), tile);
+  const roundTripDeadline = Date.now() + 10000;
+  while (await db.eagleObjectDeletion.count({ where: { ownerId } })) {
+    if (Date.now() > roundTripDeadline || worker.exitCode !== null)
+      throw new Error('Roundtrip cleanup did not drain');
+    await delay(50);
+  }
+  const middleKeys = [
+    middle.originalObjectKey,
+    ...middle.renditions.map((r) => r.storageKey),
+    `${middle.imagePyramids[0].storagePrefix}/0/0_0.webp`,
+  ];
+  for (const key of [...initialKeys, ...middleKeys])
+    await assert.rejects(
+      storage.headObject(key),
+      (error) => error.$metadata?.httpStatusCode === 404,
+    );
+  assert.equal(
+    (await storage.headObject(`${final.imagePyramids[0].storagePrefix}/0/0_0.webp`)).ContentLength,
+    tile.length,
+  );
   console.log(
     JSON.stringify({
       test: 'real-local-storage',
       sent: result.completed,
       checkedCopies: 32,
+      roundTripTileReadable: true,
+      legacyFrozenPlanResumed: true,
+      retiredRoundTripObjectsAbsent: initialKeys.length + middleKeys.length,
       peakCopies: peak,
       sendMilliseconds,
       cleanedReceipts: cleanupKeys.length,

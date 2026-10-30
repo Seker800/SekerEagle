@@ -9,9 +9,8 @@ import { useLibraryWorkspace } from '../../lib/library-workspace';
 import {
   scanPhotoPeople,
   listPhotoPersonFaces,
-  reviewPhotoPeople,
   renamePhotoPerson,
-  mergePhotoPeople,
+  getPhotoPeopleSummary,
   splitPhotoFace,
   updatePhotoPersonPrivacy,
   type PhotoPerson,
@@ -35,12 +34,18 @@ export function PhotoCollections({
   const [feedback, setFeedback] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<string | null>(null);
-  const people = usePhotoPeople(ownerId, includePrivate, true, true);
-  const review = useQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people-review', includePrivate],
-    queryFn: ({ signal }) => reviewPhotoPeople(signal),
-    staleTime: 30000,
+  const [view, setView] = useState<'NAMED' | 'UNNAMED' | 'REVIEW'>('NAMED');
+  const summary = useQuery({
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people-summary', includePrivate],
+    queryFn: getPhotoPeopleSummary,
   });
+  const people = usePhotoPeople(
+    ownerId,
+    includePrivate,
+    view !== 'REVIEW',
+    true,
+    view === 'REVIEW' ? 'NAMED' : view,
+  );
   const actionPending = useRef(false);
   async function perform(action: () => Promise<unknown>, changesPrivacy = false) {
     if (actionPending.current) return false;
@@ -62,8 +67,9 @@ export function PhotoCollections({
           queryKey: ['eagle', ownerId, 'PHOTO', 'asset-detail'],
         });
       await Promise.all([
-        people.refetch(),
-        review.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'people'] }),
+        summary.refetch(),
+        queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-review'] }),
         queryClient.invalidateQueries({ queryKey: ['eagle', ownerId, 'PHOTO', 'person-faces'] }),
       ]);
       return true;
@@ -103,86 +109,129 @@ export function PhotoCollections({
           {t('分析人物')}
         </button>
       </div>
-      {people.isPending && <p role="status">{t('正在加载人物…')}</p>}
+      {view !== 'REVIEW' && people.isPending && <p role="status">{t('正在加载人物…')}</p>}
       {!people.isPending && !people.error && people.data?.runtimeConfigured === false && (
         <p role="status">{t('人物识别服务尚未配置，暂时无法分析照片。')}</p>
       )}
       {feedback && <p role="status">{feedback}</p>}
-      {(error || people.error) && <p role="alert">{error ?? people.error?.message}</p>}
+      {(error || people.error || summary.error) && (
+        <p role="alert">{error ?? people.error?.message ?? summary.error?.message}</p>
+      )}
       {
         <>
-          {review.error && <p role="alert">{review.error.message}</p>}
-          <PhotoPeopleReview
-            key={`${ownerId}:${includePrivate}`}
-            pairs={review.data?.pairs ?? []}
-            pending={pending}
-            onConfirm={(source, target) =>
-              perform(async () => {
-                await mergePhotoPeople(source.id, target.id);
-                setSelectedPerson(null);
-                setFeedback(t('人物已合并'));
-              }, true)
-            }
-            onOpen={onOpen}
-            preview={thumbnail}
-          />
-          <div className="photo-person-grid">
-            {people.data?.people.map((person, index) => {
-              const face = representativeFace(person),
-                src = face ? thumbnail(face.asset) : null;
-              return (
+          <div className="photo-person-sections" role="tablist" aria-label={t('人物整理')}>
+            {(
+              [
+                ['NAMED', t('已命名人物')],
+                ['REVIEW', t('待确认')],
+                ['UNNAMED', t('待整理头像')],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={view === id}
+                key={id}
+                onClick={() => {
+                  setView(id);
+                  setSelectedPerson(null);
+                }}
+              >
+                {label}
+                {id === 'NAMED' && summary.data
+                  ? ` (${summary.data.named})`
+                  : id === 'UNNAMED' && summary.data
+                    ? ` (${summary.data.unnamed})`
+                    : ''}
+              </button>
+            ))}
+          </div>
+          {view === 'NAMED' && summary.data && summary.data.unnamed > 0 && (
+            <p className="photo-person-hint">
+              {t('有 {{value1}} 个头像待整理，可先确认相似人物。', {
+                value1: summary.data.unnamed,
+              })}
+              <button type="button" onClick={() => setView('REVIEW')}>
+                {t('开始确认人物')}
+              </button>
+            </p>
+          )}
+          {view === 'REVIEW' ? (
+            <PhotoPeopleReview
+              key={`${ownerId}:${includePrivate}`}
+              ownerId={ownerId}
+              includePrivate={includePrivate}
+              pending={pending}
+              onChanged={(privacy) => perform(async () => {}, privacy)}
+              onOpen={onOpen}
+              preview={thumbnail}
+            />
+          ) : (
+            <>
+              <div className="photo-person-grid">
+                {people.data?.people.map((person, index) => {
+                  const face = representativeFace(person),
+                    src = face ? thumbnail(face.asset) : null;
+                  return (
+                    <button
+                      type="button"
+                      key={person.id}
+                      className="photo-person-card"
+                      onClick={() => setSelectedPerson(person.id)}
+                      aria-pressed={selectedPerson === person.id}
+                    >
+                      {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
+                      <strong>
+                        {person.name ?? t('未命名人物 {{value1}}', { value1: index + 1 })}
+                      </strong>
+                    </button>
+                  );
+                })}
+              </div>
+              {people.hasNextPage && (
                 <button
                   type="button"
-                  key={person.id}
-                  className="photo-person-card"
-                  onClick={() => setSelectedPerson(person.id)}
-                  aria-pressed={selectedPerson === person.id}
+                  disabled={people.isFetchingNextPage}
+                  onClick={() => void people.fetchNextPage()}
                 >
-                  {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
-                  <strong>
-                    {person.name ?? t('未命名人物 {{value1}}', { value1: index + 1 })}
-                  </strong>
+                  {t('加载更多人物')}
                 </button>
-              );
-            })}
-          </div>
-          {people.hasNextPage && (
-            <button
-              type="button"
-              disabled={people.isFetchingNextPage}
-              onClick={() => void people.fetchNextPage()}
-            >
-              {t('加载更多人物')}
-            </button>
+              )}
+              {people.data?.people.find((person) => person.id === selectedPerson) && (
+                <PersonEditor
+                  key={selectedPerson}
+                  includePrivate={includePrivate}
+                  person={people.data.people.find((person) => person.id === selectedPerson)!}
+                  pending={pending}
+                  perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
+                  onPrivacyChange={(person, checked) =>
+                    perform(async () => {
+                      await updatePhotoPersonPrivacy(person, checked);
+                      setFeedback(
+                        checked && !includePrivate
+                          ? t('已设为私密，开启显示隐私内容后可管理。')
+                          : t('人物隐私规则已更新。'),
+                      );
+                    }, true)
+                  }
+                  onPerson={onPerson}
+                  onOpen={onOpen}
+                  thumbnail={thumbnail}
+                />
+              )}
+            </>
           )}
-          {people.data?.people.find((person) => person.id === selectedPerson) && (
-            <PersonEditor
-              key={selectedPerson}
-              includePrivate={includePrivate}
-              person={people.data.people.find((person) => person.id === selectedPerson)!}
-              pending={pending}
-              perform={(action, changesPrivacy) => perform(action, changesPrivacy)}
-              onPrivacyChange={(person, checked) =>
-                perform(async () => {
-                  await updatePhotoPersonPrivacy(person, checked);
-                  setFeedback(
-                    checked && !includePrivate
-                      ? t('已设为私密，开启显示隐私内容后可管理。')
-                      : t('人物隐私规则已更新。'),
-                  );
-                }, true)
-              }
-              onPerson={onPerson}
-              onOpen={onOpen}
-              thumbnail={thumbnail}
-            />
-          )}
-          {!people.isPending &&
+          {view !== 'REVIEW' &&
+            !people.isPending &&
             !people.error &&
             !feedback &&
             people.data?.runtimeConfigured === true &&
             people.data.people.length === 0 && (
-              <p>{t('暂无人物。可点击“分析人物”扫描图库中的照片。')}</p>
+              <p>
+                {view === 'NAMED'
+                  ? t('还没有已命名人物。可从待整理头像中命名，或先确认相似人物。')
+                  : t('暂无待整理头像。')}
+              </p>
             )}
         </>
       }

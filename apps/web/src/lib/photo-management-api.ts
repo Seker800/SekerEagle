@@ -20,7 +20,9 @@ export interface PhotoPeopleReviewPair {
   similarity: number;
 }
 export const reviewPhotoPeople = (signal?: AbortSignal) =>
-  request<{ pairs: PhotoPeopleReviewPair[] }>('/api/photos/photography/people/review', { signal });
+  request<{ pairs: PhotoPeopleReviewPair[] }>('/api/photos/photography/people/review-priority', {
+    signal,
+  });
 
 export interface PhotoGroup {
   id: string;
@@ -32,9 +34,13 @@ export interface PhotoGroup {
 const base = '/api/photos/photography';
 export const getPhotoFacets = () =>
   request<{ cameras: string[]; lenses: string[] }>(`${base}/facets`);
-export const listPhotoPeople = (after?: string, signal?: AbortSignal) =>
+export const listPhotoPeople = (
+  after?: string,
+  signal?: AbortSignal,
+  view: 'ALL' | 'NAMED' | 'UNNAMED' = 'ALL',
+) =>
   request<{ runtimeConfigured: boolean; people: PhotoPerson[]; nextCursor: string | null }>(
-    `${base}/people?view=cards${after ? `&after=${encodeURIComponent(after)}` : ''}`,
+    `${base}/people?view=${view}&projection=cards${after ? `&after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
 export const listPhotoPeopleOptions = (after?: string, signal?: AbortSignal) =>
@@ -160,3 +166,40 @@ export const getPhotoMapPhotos = (cell: string, after?: string, signal?: AbortSi
     `${base}/map/${encodeURIComponent(cell)}/photos${after ? `?after=${encodeURIComponent(after)}` : ''}`,
     { signal },
   );
+
+export interface PhotoPersonReview {
+  key: string;
+  first: PhotoPerson & { photoCount?: number };
+  second: PhotoPerson & { photoCount?: number };
+  similarity: number;
+}
+export const getPhotoPeopleSummary = () =>
+  request<{ named: number; unnamed: number }>(`${base}/people/summary`);
+// Start with the largest visible identities, then retain full-library pagination.
+const PRIORITY_REVIEW_COMPLETE = 'priority-complete';
+export async function getPhotoPeopleReview(
+  after?: string,
+  signal?: AbortSignal,
+): Promise<{ items: PhotoPersonReview[]; nextCursor: string | null }> {
+  if (after === undefined) {
+    const { pairs } = await reviewPhotoPeople(signal);
+    return {
+      items: pairs.map((pair) => ({
+        ...pair,
+        key: [pair.first.id, pair.second.id].sort().join(':'),
+      })),
+      nextCursor: PRIORITY_REVIEW_COMPLETE,
+    };
+  }
+  return request(
+    `${base}/people/review${after === PRIORITY_REVIEW_COMPLETE ? '' : `?after=${encodeURIComponent(after)}`}`,
+    { signal },
+  );
+}
+export const decidePhotoPeople = (input: {
+  firstId: string;
+  secondId: string;
+  firstVersion: number;
+  secondVersion: number;
+  decision: 'SAME' | 'DIFFERENT';
+}) => request(`${base}/people/review`, { method: 'POST', body: JSON.stringify(input) });

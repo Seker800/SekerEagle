@@ -115,7 +115,16 @@ export function readPhotoPeopleReview(
         AND x."assetRevision" = a."mediaRevision" AND y."assetRevision" = a."mediaRevision" AND a."deletedAt" IS NULL
         ${includePrivate ? Prisma.empty : Prisma.sql`AND a."isPrivate" = false`}
     `);
-      const pairs = rankPhotoPeopleReviewCandidates(candidates, blocked);
+      const separations = await tx.eaglePhotoPersonSeparation.findMany({
+        where: {
+          ownerId,
+          libraryMode: 'PHOTO',
+          firstId: { in: candidateIds },
+          secondId: { in: candidateIds },
+        },
+        select: { firstId: true, secondId: true },
+      });
+      const pairs = rankPhotoPeopleReviewCandidates(candidates, [...blocked, ...separations]);
       const ids = [...new Set(pairs.flatMap((pair) => [pair.firstId, pair.secondId]))];
       if (!ids.length) return { pairs: [] };
       const representatives = await tx.$queryRaw<Array<{ faceId: string }>>(Prisma.sql`

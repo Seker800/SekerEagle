@@ -277,14 +277,14 @@ async function selectAssetAndOpenInspector() {
 }
 
 describe('SekerEaglePage', () => {
-  it('loads the first page before secondary catalogs and statistics', async () => {
+  it('loads independent navigation catalogs while the first page is pending', async () => {
     const first = createDeferred<{ items: (typeof asset)[]; nextCursor: null }>();
     listEagleAssetsMock.mockReturnValue(first.promise);
     renderPage();
     await waitFor(() => expect(listEagleAssetsMock).toHaveBeenCalled());
-    expect(listEagleManualTagsMock).not.toHaveBeenCalled();
-    expect(listEagleManualTagGroupsMock).not.toHaveBeenCalled();
-    expect(listEagleSmartFoldersMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(listEagleManualTagsMock).toHaveBeenCalled());
+    expect(listEagleManualTagGroupsMock).toHaveBeenCalled();
+    expect(listEagleSmartFoldersMock).toHaveBeenCalled();
     first.resolve({ items: [asset], nextCursor: null });
     await waitFor(() => expect(listEagleManualTagsMock).toHaveBeenCalled());
   });
@@ -873,7 +873,7 @@ describe('SekerEaglePage', () => {
       }),
     );
 
-    expect(await screen.findByTestId('eagle-processing-page')).toBeInTheDocument();
+    expect(screen.getByTestId('eagle-processing-page')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '任务中心' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'AI 内容识别设置' })).not.toBeInTheDocument();
   });
@@ -2453,6 +2453,79 @@ describe('SekerEaglePage', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: '新建智能文件夹' })).not.toBeInTheDocument();
     });
+  });
+
+  it('explains pending first builds instead of claiming the preview matched nothing', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    listEagleAssetsMock.mockResolvedValue({ items: [], nextCursor: null });
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'scene-folder',
+        name: '画面结果',
+        color: null,
+        parentId: null,
+        queryVersion: 2,
+        queryJson: { version: 2, conditions: [], semantic: { text: '截图', breadth: 'BROAD' } },
+        position: 0,
+        rowVersion: 1,
+        semanticState: {
+          id: 'snapshot',
+          status: 'BUILDING',
+          isActive: false,
+          hasResults: false,
+          updatedAt: '2026-10-29T00:00:00Z',
+        },
+      },
+    ]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('正在生成匹配结果');
+    expect(screen.queryByText('没有匹配的照片')).not.toBeInTheDocument();
+    expect(screen.queryByText('尝试其他名称或标签。')).not.toBeInTheDocument();
+  });
+
+  it('opens semantic folders in relevance order without chronological section headings', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    listEagleAssetsMock.mockResolvedValue({
+      items: [
+        {
+          ...asset,
+          chronologicalAt: '2026-04-10T12:00:00Z',
+          libraryAddedAt: '2026-04-10T12:00:00Z',
+        },
+      ],
+      nextCursor: null,
+    });
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'scene-folder',
+        name: '画面结果',
+        color: null,
+        parentId: null,
+        queryVersion: 2,
+        queryJson: { version: 2, conditions: [], semantic: { text: '截图', breadth: 'BROAD' } },
+        position: 0,
+        rowVersion: 1,
+        semanticState: {
+          id: 'snapshot',
+          status: 'READY',
+          isActive: true,
+          hasResults: true,
+          updatedAt: '2026-10-29T00:00:00Z',
+        },
+      },
+    ]);
+    renderPage();
+    expect(await screen.findByText('2026年4月')).toBeVisible();
+    fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(
+        'token',
+        expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
+        expect.anything(),
+      ),
+    );
+    expect(screen.queryByText('2026年4月')).not.toBeInTheDocument();
   });
 
   it('keeps saved smart-folder conditions separate from temporary filter controls', async () => {
