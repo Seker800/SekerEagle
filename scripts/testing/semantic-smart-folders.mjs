@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { log } from 'node:console';
+import { performance } from 'node:perf_hooks';
+import { setTimeout, clearTimeout } from 'node:timers';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
