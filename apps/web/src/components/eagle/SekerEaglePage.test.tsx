@@ -2294,10 +2294,34 @@ describe('SekerEaglePage', () => {
   });
 
   it('opens semantic folders in the same relevance order as their preview', async () => {
-    listEagleSmartFoldersMock.mockResolvedValue([{id:'scene-folder',name:'画面结果',color:null,parentId:null,queryVersion:2,queryJson:{version:2,conditions:[],semantic:{text:'截图',breadth:'BROAD'}},position:0,rowVersion:1,semanticState:{id:'snapshot',status:'READY',isActive:true,hasResults:true,updatedAt:'2026-10-29T00:00:00Z'}}]);
+    listEagleSmartFoldersMock.mockResolvedValue([
+      {
+        id: 'scene-folder',
+        name: '画面结果',
+        color: null,
+        parentId: null,
+        queryVersion: 2,
+        queryJson: { version: 2, conditions: [], semantic: { text: '截图', breadth: 'BROAD' } },
+        position: 0,
+        rowVersion: 1,
+        semanticState: {
+          id: 'snapshot',
+          status: 'READY',
+          isActive: true,
+          hasResults: true,
+          updatedAt: '2026-10-29T00:00:00Z',
+        },
+      },
+    ]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button',{name:'画面结果'}));
-    await waitFor(()=>expect(listEagleAssetsMock).toHaveBeenCalledWith('token',expect.objectContaining({smartFolderId:'scene-folder',smartFolderOrder:'RELEVANCE'}),expect.anything()));
+    fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
+    await waitFor(() =>
+      expect(listEagleAssetsMock).toHaveBeenCalledWith(
+        'token',
+        expect.objectContaining({ smartFolderId: 'scene-folder', smartFolderOrder: 'RELEVANCE' }),
+        expect.anything(),
+      ),
+    );
   });
 
   it('keeps saved smart-folder conditions separate from temporary filter controls', async () => {

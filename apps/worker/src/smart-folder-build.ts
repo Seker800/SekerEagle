@@ -73,6 +73,7 @@ export async function runSmartFolderBuildStep(
   spaceId: string,
   embedText: (text: string) => Promise<{ embedding: number[] }>,
   allowModelRequest = true,
+  onContinue?: () => void,
 ) {
   const token = randomUUID();
   const [build] = await client.$queryRaw<
@@ -91,6 +92,7 @@ export async function runSmartFolderBuildStep(
   `);
   if (!build) return false;
   try {
+    let continueImmediately = false;
     if (!build.hasVector) {
       const { embedding } = await embedText(build.text);
       validateQueryVector(embedding);
@@ -175,9 +177,12 @@ export async function runSmartFolderBuildStep(
             attempts: 0,
           },
         });
+        continueImmediately = !done && !waitingForSpace;
       },
       { timeout: 30_000, maxWait: 5_000 },
     );
+    // Only committed, unfinished batches can request another bounded step.
+    if (continueImmediately) onContinue?.();
   } catch (error) {
     const backoff = embeddingBackoff(error);
     const attempts = build.attempts + (backoff ? 0 : 1);

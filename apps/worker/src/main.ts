@@ -16,6 +16,7 @@ import { mediaQueueAgeOrder } from './media-queue-policy';
 import { MediaResourcePool, type MediaResource } from './media-resource-pool';
 import { canAdvancePhotoMap, runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
+import { SmartFolderBuildRunner } from './smart-folder-runner';
 import { publishImage } from './image-publication';
 import { publishEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
@@ -113,7 +114,7 @@ let checkingHeartbeat = false;
 let heartbeatTimer: NodeJS.Timeout | undefined;
 let wakeScheduler: JobWakeScheduler | undefined;
 let wakeListener: PostgresWakeListener | undefined;
-let smartFolderTimer: NodeJS.Timeout | undefined;
+let smartFolderRunner: SmartFolderBuildRunner | undefined;
 let buildingSmartFolder = false;
 let buildingPhotoMap = false;
 let photoMapTimer: NodeJS.Timeout | undefined;
@@ -1572,7 +1573,7 @@ function assertExpectedHash(expected: string | null | undefined, actual: string)
 async function stop(signal: string): Promise<void> {
   if (stopping) return;
   stopping = true;
-  if (smartFolderTimer) clearInterval(smartFolderTimer);
+  smartFolderRunner?.stop();
   if (photoMapTimer) clearInterval(photoMapTimer);
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   wakeScheduler?.stop();
@@ -1632,6 +1633,7 @@ async function main(): Promise<void> {
     const tick = async (allowModelRequest: boolean) => {
       if (stopping || buildingSmartFolder || buildingPhotoMap) return;
       buildingSmartFolder = true;
+      let continueImmediately = false;
       try {
         await reconcileSmartFolderSpaces(prisma, embeddingSpaceId);
         await runSmartFolderBuildStep(
@@ -1654,22 +1656,21 @@ async function main(): Promise<void> {
           allowModelRequest &&
             embeddingReadiness === 'READY' &&
             (embeddingClient.computeRuntime?.backgroundLimit ?? legacyEmbeddingLimit) > 0,
+          () => {
+            continueImmediately = true;
+          },
         );
+        return continueImmediately;
       } finally {
         buildingSmartFolder = false;
       }
     };
-    const queueFolderStep = () => {
-      if (stopping) return;
-      void resourcePool
-        .maintenance(async (allowModelRequest) => {
-          if (!stopping) await tick(allowModelRequest);
-        })
-        .catch(reportLoopError);
-    };
-    smartFolderTimer = setInterval(queueFolderStep, 5_000);
-    smartFolderTimer.unref();
-    queueFolderStep();
+    smartFolderRunner = new SmartFolderBuildRunner(
+      (run) => resourcePool.maintenance(run),
+      tick,
+      reportLoopError,
+    );
+    smartFolderRunner.wake();
   }
   if (runBackgroundProcessing) {
     photoMapTimer = setInterval(() => wakeScheduler?.wakeNow(), 15000);

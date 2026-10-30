@@ -58,7 +58,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
+import { readEagleSemanticIntent, toEagleFilterQuery } from '@sekereagle/eagle-filter-core';
 import {
   IconCheck,
   IconCopy,
@@ -940,7 +940,11 @@ export function SekerEaglePage({
   const applySmartFolder = (folder: EagleSmartFolder) => {
     setPhotoView('timeline');
     setLibraryView('ACTIVE');
-    setSmartFolderOrder('DATE');
+    setSmartFolderOrder(
+      folder.semanticState || readEagleSemanticIntent(toEagleFilterQuery(folder.queryJson))
+        ? 'RELEVANCE'
+        : 'DATE',
+    );
     setActiveSmartFolderId(folder.id);
     resetFilters();
     setSelectedAssetId(null);
