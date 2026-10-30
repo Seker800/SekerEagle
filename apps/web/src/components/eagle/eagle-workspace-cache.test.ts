@@ -1,3 +1,4 @@
+import { makeEagleAsset, makeEaglePage } from '../../test/eagle-fixtures';
 import type * as BrowserApi from '../../lib/api-client';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -171,31 +172,20 @@ it('reclaims only unreferenced entities after query removal, truncation and deta
   vi.useFakeTimers();
   const { client, cache, keys } = fixture();
   const release = cache.retain(false);
-  const item = (id: string) =>
-    ({
-      id,
-      rowVersion: 1,
-      mediaRevision: 1,
-      renditions: [],
-      manualTags: [],
-    }) as import('../../lib/eagle-api').EagleAssetListItem;
-  const page = (ids: string[]) =>
-    cache.store.normalizePage({
-      items: ids.map(item),
-    } as import('../../lib/eagle-api').EagleAssetPage);
+  const page = (ids: string[]) => cache.store.normalizePage(makeEaglePage(ids));
   const first = keys.assetList('ACTIVE', {}),
     second = keys.assetList('ACTIVE', { search: 'old' });
   client.setQueryData(first, { pages: [page(['shared', 'current']), page(['tail'])] });
   client.setQueryData(second, { pages: [page(['shared', 'old'])] });
-  client.setQueryData([...keys.assetDetail('old'), 'ACTIVE'], item('old'));
+  client.setQueryData([...keys.assetDetailPrefix('old'), 'ACTIVE'], makeEagleAsset({ id: 'old' }));
   client.removeQueries({ queryKey: second, exact: true });
   client.setQueryData(first, { pages: [page(['shared', 'current'])] });
-  await vi.runOnlyPendingTimersAsync();
+  await vi.advanceTimersByTimeAsync(1);
   expect(cache.store.get('tail')).toBeUndefined();
   expect(cache.store.get('shared')).toBeDefined();
   expect(cache.store.get('old')).toBeDefined();
-  client.removeQueries({ queryKey: keys.assetDetail('old') });
-  await vi.runOnlyPendingTimersAsync();
+  client.removeQueries({ queryKey: keys.assetDetailPrefix('old') });
+  await vi.advanceTimersByTimeAsync(1);
   expect(cache.store.get('old')).toBeUndefined();
   expect(cache.store.size).toBe(2);
   release();

@@ -266,17 +266,23 @@ describe('EagleVectorWorkspace', () => {
 
   it('confirms vector suggestions into manual tags without repeating implementation details', async () => {
     const onAssetPrivacyChanged = vi.fn();
+    const onAssetRelationsChanged = vi.fn().mockResolvedValue(undefined);
     vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
       items: [
         {
           id: 'suggestion-1',
           status: 'ACCEPTED',
           assetId: 'asset-1',
-          privacyChanged: true,
+          privacyChanged: false,
         },
       ],
     });
-    render(<EagleVectorWorkspace onAssetPrivacyChanged={onAssetPrivacyChanged} />);
+    render(
+      <EagleVectorWorkspace
+        onAssetPrivacyChanged={onAssetPrivacyChanged}
+        onAssetRelationsChanged={onAssetRelationsChanged}
+      />,
+    );
     expect(
       await screen.findByText('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
     ).toBeInTheDocument();
@@ -288,7 +294,8 @@ describe('EagleVectorWorkspace', () => {
     await waitFor(() =>
       expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),
     );
-    expect(onAssetPrivacyChanged).toHaveBeenCalledOnce();
+    expect(onAssetPrivacyChanged).not.toHaveBeenCalled();
+    expect(onAssetRelationsChanged).toHaveBeenCalledWith(['asset-1']);
     await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
     fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
     await waitFor(() =>

@@ -33,6 +33,7 @@ interface EagleVectorWorkspaceProps {
   onCreateManualTag?: (name: string) => Promise<EagleManualTag>;
   onTrashAssets?: (assetIds: string[]) => Promise<void>;
   onAssetPrivacyChanged?: () => void;
+  onAssetRelationsChanged?: (assetIds: string[]) => Promise<void>;
 }
 export function EagleVectorWorkspace({
   view: controlledView,
@@ -42,6 +43,7 @@ export function EagleVectorWorkspace({
   onCreateManualTag,
   onTrashAssets,
   onAssetPrivacyChanged,
+  onAssetRelationsChanged,
 }: EagleVectorWorkspaceProps = {}) {
   const {
     api: {
@@ -349,7 +351,9 @@ export function EagleVectorWorkspace({
             if (result.items.some(({ privacyChanged }) => privacyChanged)) {
               onAssetPrivacyChanged?.();
             }
-            await invalidateDesktopAssets(result.items.map(({ assetId }) => assetId));
+            const ids = result.items.map(({ assetId }) => assetId);
+            if (onAssetRelationsChanged) await onAssetRelationsChanged(ids);
+            else await invalidateDesktopAssets(ids);
           }
         : undefined,
     );

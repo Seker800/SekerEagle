@@ -1,9 +1,10 @@
+import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { useEnqueueAssetOperation } from './useAssetOperations';
 import { useLibraryWorkspace } from '../../lib/library-workspace';
 import { useRef } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { EagleFilterQuery } from '@sekereagle/eagle-filter-core';
-import { mapWithConcurrency } from '../../lib/async-pool';
+import { ConcurrentWorkError, mapWithConcurrency } from '../../lib/async-pool';
 import {
   type EagleAsset,
   type EagleAssetChanges,
@@ -15,7 +16,6 @@ import {
 import type { MoveEagleSmartFolderInput } from './EagleSmartFolderTree';
 import type { createEagleQueryKeys } from './eagle-query-keys';
 import { moveSmartFolderInTree } from './eagle-smart-folder-order';
-import { invalidateDesktopAssetsAndRefresh } from '../../lib/desktop-cache';
 
 type EagleQueryKeys = ReturnType<typeof createEagleQueryKeys>;
 type EagleAssetMetadataInput = Pick<EagleAssetChanges, 'displayName' | 'description' | 'sourceUrl'>;
@@ -102,8 +102,12 @@ export function useEagleMutations(
     },
     onSuccess: async ({ asset, versions }) => {
       rememberVersions(versions);
-      if (asset) queryClient.setQueryData(queryKeys.assetDetail(asset.id), asset);
-      await invalidate(queryKeys.assets);
+      if (asset)
+        queryClient.setQueriesData<EagleAsset>(
+          { queryKey: queryKeys.assetDetailPrefix(asset.id) },
+          (current) => (current && current.rowVersion <= asset.rowVersion ? asset : current),
+        );
+      await invalidate(queryKeys.assets, queryKeys.assetDetails);
     },
   });
   const metadataMutation = useMutation({
@@ -136,7 +140,11 @@ export function useEagleMutations(
     onSuccess: async ({ asset, versions }, variables) => {
       rememberVersions(versions);
       callbacks.onMetadataSaved(variables.assetId, variables.revision);
-      if (asset) queryClient.setQueryData(queryKeys.assetDetail(asset.id), asset);
+      if (asset)
+        queryClient.setQueriesData<EagleAsset>(
+          { queryKey: queryKeys.assetDetailPrefix(asset.id) },
+          (current) => (current && current.rowVersion <= asset.rowVersion ? asset : current),
+        );
       await invalidate(queryKeys.assets, queryKeys.assetDetails);
     },
   });
@@ -145,9 +153,7 @@ export function useEagleMutations(
       replaceEagleAssetManualTags(accessToken, assetId, tagIds),
     onSuccess: async ({ privacyChangedAssetCount }, { assetId }) => {
       if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
-      await invalidateDesktopAssetsAndRefresh([assetId], () =>
-        invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags),
-      );
+      await refreshEagleAssetRelations(queryClient, queryKeys, [assetId]);
     },
   });
   const createTagMutation = useMutation({
@@ -178,7 +184,7 @@ export function useEagleMutations(
       mapWithConcurrency(tags, 4, (tag) =>
         updateEagleManualTag(accessToken, tag.id, { ...changes, rowVersion: tag.rowVersion }),
       ),
-    onSuccess: () =>
+    onSettled: () =>
       invalidate(
         queryKeys.manualTags,
         queryKeys.manualTagGroups,
@@ -189,7 +195,7 @@ export function useEagleMutations(
   const deleteTagsMutation = useMutation({
     mutationFn: (tags: EagleManualTag[]) =>
       mapWithConcurrency(tags, 4, (tag) => deleteEagleManualTag(accessToken, tag.id)),
-    onSuccess: () =>
+    onSettled: () =>
       invalidate(
         queryKeys.manualTags,
         queryKeys.manualTagGroups,
@@ -236,9 +242,7 @@ export function useEagleMutations(
     onSuccess: async ({ privacyChangedAssetCount }, { assetIds }) => {
       callbacks.onBatchTagsApplied();
       if (privacyChangedAssetCount > 0) callbacks.onAssetPrivacyChanged();
-      await invalidateDesktopAssetsAndRefresh(assetIds, () =>
-        invalidate(queryKeys.assets, queryKeys.assetDetails, queryKeys.manualTags),
-      );
+      await refreshEagleAssetRelations(queryClient, queryKeys, assetIds);
     },
   });
   const trashMutation = useMutation({
@@ -308,7 +312,33 @@ export function useEagleMutations(
     },
   });
 
+  const tagFailure = [updateTagsMutation, deleteTagsMutation]
+    .filter((mutation) => mutation.error instanceof ConcurrentWorkError)
+    .sort((a, b) => b.submittedAt - a.submittedAt)[0];
+  const tagError = tagFailure?.error as ConcurrentWorkError<EagleManualTag, unknown> | undefined;
+  const tagBatchFailure = tagError
+    ? {
+        completed: tagError.completed.length,
+        items: tagError.retryItems,
+        retry: () => {
+          const current = queryClient.getQueryData<EagleManualTag[]>(queryKeys.manualTags);
+          const tags = tagError.retryItems.flatMap((tag) => {
+            const latest = current?.find((item) => item.id === tag.id);
+            return current ? (latest ? [latest] : []) : [tag];
+          });
+          if (!tags.length) {
+            tagFailure?.reset();
+            return;
+          }
+          if (tagFailure === updateTagsMutation && updateTagsMutation.variables)
+            updateTagsMutation.mutate({ ...updateTagsMutation.variables, tags });
+          else deleteTagsMutation.mutate(tags);
+        },
+      }
+    : undefined;
+
   return {
+    tagBatchFailure,
     ratingMutation,
     metadataMutation,
     replaceTagsMutation,

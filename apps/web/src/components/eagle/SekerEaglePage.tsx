@@ -1,3 +1,4 @@
+import { refreshEagleAssetRelations } from './eagle-write-refresh';
 import { LibraryPrivacyToggle } from './LibraryPrivacyToggle';
 import { EagleUploadQueue } from './EagleUploadQueue';
 import { AsyncViewBoundary } from '../AsyncViewBoundary';
@@ -589,6 +590,7 @@ export function SekerEaglePage({
         libraryView === 'TRASH'
           ? await listEagleTrash(accessToken, pageFilters, signal)
           : await listEagleAssets(accessToken, pageFilters, signal);
+      signal.throwIfAborted();
       return assetStore.normalizePage(page);
     },
     initialPageParam: browserCursor,
@@ -666,6 +668,7 @@ export function SekerEaglePage({
     createTagMutation,
     createBatchTagMutation,
     createTagGroupMutation,
+    tagBatchFailure,
     updateTagsMutation,
     deleteTagsMutation,
     updateTagGroupMutation,
@@ -780,7 +783,7 @@ export function SekerEaglePage({
     selectedAssetIds.length === 1 ? (assetsById.get(selectedAssetIds[0]) ?? null) : null;
   const imageClipboardAvailable = canCopyImageToClipboard();
   const selectedAssetQuery = useQuery({
-    queryKey: [...queryKeys.assetDetail(selectedAssetId), libraryView],
+    queryKey: queryKeys.assetDetail(selectedAssetId, libraryView),
     queryFn: ({ signal }) =>
       libraryView === 'TRASH'
         ? getEagleTrashAsset(accessToken, selectedAssetId!, signal)
@@ -1957,6 +1960,9 @@ export function SekerEaglePage({
                   await trashMutation.mutateAsync(assetIds);
                 }}
                 onAssetPrivacyChanged={resetAssetPrivacyState}
+                onAssetRelationsChanged={(ids) =>
+                  refreshEagleAssetRelations(queryClient, queryKeys, ids)
+                }
               />
             </AsyncViewBoundary>
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
@@ -1973,6 +1979,7 @@ export function SekerEaglePage({
                 updateTagGroupMutation.isPending ||
                 deleteTagGroupMutation.isPending
               }
+              batchFailure={tagBatchFailure}
               error={
                 (
                   createTagMutation.error ??

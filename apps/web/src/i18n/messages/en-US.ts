@@ -1,4 +1,6 @@
 export const enUS = {
+  '已完成 {{value1}} 项，待重试 {{value2}} 项': 'Completed {{value1}}, awaiting retry {{value2}}',
+  重试未完成项: 'Retry unfinished items',
   下载队列: 'Download queue',
   等待下载: 'Waiting to download',
   正在下载: 'Downloading',

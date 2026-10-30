@@ -49,6 +49,7 @@ interface EagleTagPageProps {
   creating?: boolean;
   busy?: boolean;
   error?: string;
+  batchFailure?: { completed: number; items: EagleManualTag[]; retry: () => void };
   onCreateManualTag: (name: string) => void;
   onCreateManualTagGroup: (name: string) => void;
   onUpdateManualTags: (tags: EagleManualTag[], changes: EagleManualTagChanges) => void;
@@ -71,6 +72,7 @@ export function EagleTagPage({
   creating,
   busy,
   error,
+  batchFailure,
   onCreateManualTag,
   onCreateManualTagGroup,
   onUpdateManualTags,
@@ -540,6 +542,24 @@ export function EagleTagPage({
           </form>
         )}
         {error && <p className={styles.error}>{error}</p>}
+        {batchFailure && (
+          <div role="status">
+            <p>
+              {t('已完成 {{value1}} 项，待重试 {{value2}} 项', {
+                value1: batchFailure.completed,
+                value2: batchFailure.items.length,
+              })}
+            </p>
+            <ul>
+              {batchFailure.items.map((tag) => (
+                <li key={tag.id}>{tag.name}</li>
+              ))}
+            </ul>
+            <button type="button" disabled={busy} onClick={batchFailure.retry}>
+              {t('重试未完成项')}
+            </button>
+          </div>
+        )}
 
         <div className={styles.catalog}>
           <ul

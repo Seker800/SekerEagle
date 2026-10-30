@@ -93,6 +93,21 @@ class EagleWorkspaceCache {
   readonly #unsubscribe;
   #references = 0;
   #disposed = false;
+  #entityReferences = new Map<string, Set<string>>();
+  #entityCollection: ReturnType<typeof setTimeout> | undefined;
+  // Wait until query promises have published their normalized pages. In particular,
+  // never collect a just-normalized response inside a query observer notification.
+  #scheduleEntityCollection() {
+    if (this.#entityCollection !== undefined || this.#disposed) return;
+    this.#entityCollection = setTimeout(() => {
+      this.#entityCollection = undefined;
+      if (this.#disposed) return;
+      const ids = new Set<string>();
+      for (const references of this.#entityReferences.values())
+        for (const id of references) ids.add(id);
+      this.store.retainOnly(ids);
+    }, 0);
+  }
 
   constructor(
     private readonly client: QueryClient,
@@ -104,7 +119,19 @@ class EagleWorkspaceCache {
     // Query clients (including connection/session resets) must not share entities.
     this.store = new EagleAssetEntityStore();
     this.#unsubscribe = client.getQueryCache().subscribe((event) => {
+      const key: readonly unknown[] = event.query.queryKey;
+      if (!this.#keys.root.every((part, index) => key[index] === part)) return;
+      if (event.type === 'updated' && event.action.type === 'success') {
+        const ids = queryAssetReferences(key, event.query.state.data);
+        if (ids) {
+          this.#entityReferences.set(event.query.queryHash, ids);
+          this.#scheduleEntityCollection();
+        } else if (this.#entityReferences.delete(event.query.queryHash))
+          this.#scheduleEntityCollection();
+      }
       if (event.type === 'removed') {
+        this.#entityReferences.delete(event.query.queryHash);
+        this.#scheduleEntityCollection();
         if (!client.getQueryCache().findAll({ queryKey: this.#keys.root }).length) {
           this.downloads.clear();
           this.uploads.clear();
@@ -139,12 +166,49 @@ class EagleWorkspaceCache {
     if (this.#disposed || this.#references) return;
     const lists = this.client.getQueryCache().findAll({ queryKey: this.#keys.assets });
     if (lists.some(({ queryKey }) => queryKey.length === this.#keys.assets.length + 2)) return;
+    if (
+      this.client
+        .getQueryCache()
+        .findAll({ queryKey: this.#keys.assetDetails })
+        .some((query) => query.state.data !== undefined)
+    )
+      return;
     this.clearNavigation();
     this.uploads.dispose();
     this.#disposed = true;
+    clearTimeout(this.#entityCollection);
+    this.#entityReferences.clear();
     this.#unsubscribe();
     this.store.clear();
     this.thumbnails.dispose();
     this.onDispose();
   }
+}
+
+function queryAssetReferences(key: readonly unknown[], data: unknown): Set<string> | null {
+  if (!data || typeof data !== 'object') return null;
+  if (key[3] === 'asset-detail' && 'id' in data && typeof data.id === 'string')
+    return new Set([data.id]);
+  if (key[3] !== 'assets' || key.length !== 6 || !('pages' in data) || !Array.isArray(data.pages))
+    return null;
+  const ids = new Set<string>();
+  for (const page of data.pages as unknown[]) {
+    if (!page || typeof page !== 'object') continue;
+    if ('assetIds' in page && Array.isArray(page.assetIds))
+      for (const id of page.assetIds as unknown[]) if (typeof id === 'string') ids.add(id);
+    if ('photoStacks' in page && Array.isArray(page.photoStacks))
+      for (const stack of page.photoStacks as unknown[]) {
+        if (
+          stack &&
+          typeof stack === 'object' &&
+          'cover' in stack &&
+          stack.cover &&
+          typeof stack.cover === 'object' &&
+          'id' in stack.cover &&
+          typeof stack.cover.id === 'string'
+        )
+          ids.add(stack.cover.id);
+      }
+  }
+  return ids;
 }

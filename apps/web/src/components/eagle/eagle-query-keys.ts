@@ -8,7 +8,9 @@ export function createEagleQueryKeys(
     assets: [...root, 'assets'] as const,
     assetList: (view: string, filters: object) => [...root, 'assets', view, filters] as const,
     assetDetails: [...root, 'asset-detail'] as const,
-    assetDetail: (assetId: string | null) => [...root, 'asset-detail', assetId] as const,
+    assetDetailPrefix: (assetId: string | null) => [...root, 'asset-detail', assetId] as const,
+    assetDetail: (assetId: string | null, view: string) =>
+      [...root, 'asset-detail', assetId, view] as const,
     assetUpdates: (assetIds: string[]) => [...root, 'asset-updates', assetIds] as const,
     manualTags: [...root, 'manual-tags'] as const,
     manualTagGroups: [...root, 'manual-tag-groups'] as const,

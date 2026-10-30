@@ -8,7 +8,7 @@ describe('createEagleQueryKeys', () => {
     const ownerB = createEagleQueryKeys('owner-b');
 
     expect(ownerA.assets).toEqual(['eagle', 'owner-a', 'MATERIAL', 'assets']);
-    expect(ownerA.assetDetail('asset-1')).toEqual([
+    expect(ownerA.assetDetailPrefix('asset-1')).toEqual([
       'eagle',
       'owner-a',
       'MATERIAL',

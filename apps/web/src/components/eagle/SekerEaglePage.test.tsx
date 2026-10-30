@@ -2856,6 +2856,7 @@ describe('SekerEaglePage', () => {
     listEagleAssetUpdatesMock.mockResolvedValueOnce([
       {
         id: asset.id,
+        mediaRevision: asset.mediaRevision,
         lifecycleStatus: 'READY',
         mediaErrorCode: null,
         updatedAt: '2026-08-14T00:00:01.000Z',
