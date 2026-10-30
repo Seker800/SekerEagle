@@ -1,3 +1,4 @@
+import { LibraryUploadQueue } from '../../lib/library-upload-queue';
 import { OriginalDownloadQueue } from '../../lib/original-download-queue';
 import type { EagleQuickFilterState } from './eagle-quick-filter-state';
 import { QueryObserver, type QueryClient } from '@tanstack/react-query';
@@ -56,7 +57,12 @@ class EagleWorkspaceCache {
     isBatchSelection: boolean;
     selectionMode: boolean;
   } | null = null;
-  readonly downloads = new OriginalDownloadQueue(() => {
+  readonly uploads = new LibraryUploadQueue(
+    (key) => this.client.invalidateQueries({ queryKey: key }),
+    () => this.retainTransfer(),
+  );
+  readonly downloads = new OriginalDownloadQueue(() => this.retainTransfer());
+  private retainTransfer() {
     const release = this.retain(false);
     const query = this.client.getQueryCache().findAll({ queryKey: this.#keys.root })[0];
     // Observe without fetching: normal GC must not revoke an ongoing save. An
@@ -73,10 +79,11 @@ class EagleWorkspaceCache {
       unsubscribe?.();
       release();
     };
-  });
+  }
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
     this.downloads.clear();
+    this.uploads.clear();
     this.browse = null;
     this.scrollPositions.clear();
   }
@@ -98,8 +105,10 @@ class EagleWorkspaceCache {
     this.store = new EagleAssetEntityStore();
     this.#unsubscribe = client.getQueryCache().subscribe((event) => {
       if (event.type === 'removed') {
-        if (!client.getQueryCache().findAll({ queryKey: this.#keys.root }).length)
+        if (!client.getQueryCache().findAll({ queryKey: this.#keys.root }).length) {
           this.downloads.clear();
+          this.uploads.clear();
+        }
         this.#collect();
       }
     });
@@ -131,6 +140,7 @@ class EagleWorkspaceCache {
     const lists = this.client.getQueryCache().findAll({ queryKey: this.#keys.assets });
     if (lists.some(({ queryKey }) => queryKey.length === this.#keys.assets.length + 2)) return;
     this.clearNavigation();
+    this.uploads.dispose();
     this.#disposed = true;
     this.#unsubscribe();
     this.store.clear();

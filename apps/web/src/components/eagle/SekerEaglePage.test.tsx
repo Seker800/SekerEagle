@@ -2270,7 +2270,9 @@ describe('SekerEaglePage', () => {
     });
 
     await waitFor(() => {
-      expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', file, expect.any(Function));
+      expect(uploadEagleAssetMock).toHaveBeenCalledWith('token', file, expect.any(Function), {
+        signal: expect.any(AbortSignal),
+      });
     });
   });
 

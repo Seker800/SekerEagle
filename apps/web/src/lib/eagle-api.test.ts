@@ -110,3 +110,55 @@ describe('listEagleAssetUpdates', () => {
     ]);
   });
 });
+
+it('session revocation cancels an object PUT and prevents completion or cleanup under a new login', async () => {
+  const { fetchWithBrowserSession } = await import('./api-client');
+  let putSignal!: AbortSignal;
+  let started!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const mock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (url === '/api/auth/logout' || url === '/api/auth/login')
+      return new Response(null, { status: 204 });
+    if (url === '/api/eagle/uploads') return Response.json({ id: 'session', partSize: 10 });
+    if (url.endsWith('/parts/1'))
+      return Response.json({
+        uploadUrl: `${window.location.origin}/sekereagle-assets/part?X-Amz-Signature=test`,
+      });
+    if (init?.method === 'PUT') {
+      putSignal = init.signal!;
+      started();
+      return new Promise<Response>((_resolve, reject) =>
+        putSignal.addEventListener(
+          'abort',
+          () => reject(new DOMException('cancelled', 'AbortError')),
+          { once: true },
+        ),
+      );
+    }
+    throw new Error(`unexpected request: ${url}`);
+  });
+  try {
+    const upload = uploadEagleAsset(
+      '',
+      new File(['image'], 'test.png', { type: 'image/png' }),
+      vi.fn(),
+    );
+    const rejected = expect(upload).rejects.toMatchObject({ name: 'AbortError' });
+    await ready;
+    await fetchWithBrowserSession('/api/auth/logout');
+    await fetchWithBrowserSession('/api/auth/login');
+    await rejected;
+    expect(putSignal.aborted).toBe(true);
+    expect(
+      mock.mock.calls.some(
+        ([url, init]) =>
+          (typeof url === 'string' && url.includes('/complete')) || init?.method === 'DELETE',
+      ),
+    ).toBe(false);
+  } finally {
+    mock.mockRestore();
+  }
+});

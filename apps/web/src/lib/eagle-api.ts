@@ -1,3 +1,4 @@
+import { getBrowserSessionSignal } from './api-client';
 import type { PhotoEditRecipe } from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
@@ -670,13 +671,18 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     file: File,
     onProgress: (value: { percent: number }) => void,
     options?: {
-      duplicatePolicy: 'CREATE_COPY';
+      duplicatePolicy?: 'CREATE_COPY';
+      signal?: AbortSignal;
       copySourceAssetId?: string;
       copySourceRowVersion?: number;
       editRecipe?: PhotoEditRecipe;
       retry?: boolean;
     },
   ) {
+    const signal = options?.signal
+      ? AbortSignal.any([options.signal, getBrowserSessionSignal()])
+      : getBrowserSessionSignal();
+    signal.throwIfAborted();
     const declaration = JSON.stringify({
       duplicatePolicy: options?.duplicatePolicy,
       copySourceAssetId: options?.copySourceAssetId,
@@ -687,7 +693,10 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     if (retained && retained.declaration !== declaration)
       throw new Error(t('原照片已变化，请重新打开编辑器。'));
     if (retained?.completedAssetId)
-      return { duplicate: false, asset: await getEagleAsset('', retained.completedAssetId) };
+      return {
+        duplicate: false,
+        asset: await getEagleAsset('', retained.completedAssetId, signal),
+      };
     const session = retained
       ? { id: retained.sessionId, partSize: retained.partSize }
       : await api<{
@@ -695,6 +704,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
           partSize: number;
         }>('/eagle/uploads', {
           method: 'POST',
+          signal,
           body: JSON.stringify({
             originalName: file.name,
             mimeType:
@@ -722,7 +732,11 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         const partNumber = index + 1;
         const { uploadUrl } = await api<{
           uploadUrl: string;
-        }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, { method: 'POST', body: '{}' });
+        }>(`/eagle/uploads/${session.id}/parts/${partNumber}`, {
+          method: 'POST',
+          body: '{}',
+          signal,
+        });
         const response = await fetch(resolveObjectUploadUrl(uploadUrl, window.location.origin), {
           method: 'PUT',
           body: file.slice(
@@ -730,6 +744,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
             Math.min(file.size, (index + 1) * session.partSize),
           ),
           credentials: 'omit',
+          signal,
         });
         if (!response.ok)
           throw new Error(
@@ -747,13 +762,17 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
         duplicate: boolean;
       }>(`/eagle/uploads/${session.id}/complete`, {
         method: 'POST',
+        signal,
         body: JSON.stringify({ parts }),
       });
       if (retained) retained.completedAssetId = completed.assetId;
-      return { duplicate: completed.duplicate, asset: await getEagleAsset('', completed.assetId) };
+      return {
+        duplicate: completed.duplicate,
+        asset: await getEagleAsset('', completed.assetId, signal),
+      };
     } catch (error) {
-      if (!options?.retry)
-        await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}' }).catch(
+      if (!options?.retry && !signal.aborted)
+        await api(`/eagle/uploads/${session.id}`, { method: 'DELETE', body: '{}', signal }).catch(
           () => undefined,
         );
       throw error;

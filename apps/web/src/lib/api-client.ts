@@ -3,6 +3,13 @@ const REFRESH_PATH = '/api/auth/refresh';
 const NON_REFRESHABLE_PATHS = new Set(['/api/auth/login', REFRESH_PATH]);
 let refreshInFlight: Promise<void> | undefined;
 let authEpoch = 0;
+let sessionController = new AbortController();
+export const getBrowserSessionSignal = () => sessionController.signal;
+function advanceSession() {
+  authEpoch++;
+  sessionController.abort();
+  sessionController = new AbortController();
+}
 let loggingOut = false;
 function sessionEnded(): never {
   throw new DOMException('Session ended', 'AbortError');
@@ -42,15 +49,16 @@ export async function fetchWithBrowserSession(
   timeoutMs = 30_000,
 ): Promise<Response> {
   if (path === '/api/auth/login') {
-    authEpoch++;
+    advanceSession();
     loggingOut = false;
   }
   if (path === '/api/auth/logout') {
-    authEpoch++;
+    advanceSession();
     loggingOut = true;
     await refreshInFlight?.catch(() => undefined);
     return fetch(path, { ...init, credentials: 'include', signal: AbortSignal.timeout(30_000) });
   }
+  init?.signal?.throwIfAborted();
   const epoch = authEpoch;
   const requestInit: RequestInit = {
     ...init,

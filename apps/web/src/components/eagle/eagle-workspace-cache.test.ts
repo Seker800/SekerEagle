@@ -1,10 +1,14 @@
+import type * as BrowserApi from '../../lib/api-client';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { createEagleQueryKeys } from './eagle-query-keys';
 
 const fetchOriginal = vi.hoisted(() => vi.fn());
-vi.mock('../../lib/api-client', () => ({ fetchWithBrowserSession: fetchOriginal }));
+vi.mock('../../lib/api-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof BrowserApi>()),
+  fetchWithBrowserSession: fetchOriginal,
+}));
 const clients: QueryClient[] = [];
 function fixture(mode: 'MATERIAL' | 'PHOTO' = 'MATERIAL', owner = 'owner') {
   const client = new QueryClient();
