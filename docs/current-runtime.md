@@ -1,5 +1,9 @@
 # 现用运行状态与交接
 
+> **2026-10-30 首页隐私入口移除已上线**：按用户最新要求，网页镜像更新为 `sekereagle/web:privacy-90288a9da687`，源码固定 `90288a9da687e84a69baec344c5bc8f87b938364`。素材／照片共用首页删除隐私显示快捷组件及授权回调，隐私可见性仅在账号页设置；既有期限、撤权清理与服务端守卫保留。原 Compose 链仅追加 `maintenance/privacy-home-90288a9d-20261030/images.json`，web healthy；API、worker、网关、数据库、对象存储、协调器及中继容器身份均未改变，NAS worker 仍停止。API和唯一Mac业务worker继续采用下方f166dc01正式版本。真实Chrome经普通登录验证两种模式在账号页显示开／关时均无首页开关，账号页授权／撤销正常、零脚本错误；临时验收主体已清理。
+>
+> 同轮处理 [DeepSeek后续审查](deepseek-followup-2026-10-30.md)：真实设备稳定复现并修复安卓正常收尾丢失启动，补强运行中内部取消及恢复新完成记录验证；9项设备回归、安卓完整check及核心覆盖率80%门槛通过，已恢复原固定模拟器图库。安卓为调试候选，未发布正式手机安装包。本次完整网页／桌面及共享契约验收结果见处置记录。
+
 > **2026-10-30 本轮生产发布完成，覆盖下方“停止发布／本地候选”旧交接**：用户明确授权核对分支和已有独立审查后部署。全部 18 个本地业务分支、远端 codex 业务分支及旧工作树提交已归入 main；本轮生产源码固定为 `f166dc0167de259400434676b68b8ab829d505fb`。API／web 当前为 `sekereagle/{api,web}:production-f166dc0167de`，群晖实查均 healthy、零重启；62 项迁移无新增待执行项。
 >
 > 唯一业务 worker 已正常交接到 Mac 原生目录 `.runtime/business-worker/releases/worker-f166dc0167de`，本次现场 PID17421、worker ID `worker-e02751e8-e3f5-41ff-93e4-0ece24ebe762`，后续以 LaunchAgent／数据库心跳实时核验。程序来自同一固定提交，原生依赖克隆自已验收的 worker-608f73af5847，完整包资源与 688 项文件哈希验证；实际候选进程通过隔离 DB／HTTP 图片、向量、视频、切片、策略排空和正常退出验收。NAS worker 继续 stopped／restart=no／compose replicas=0；中继、数据库、对象存储、协调器容器身份保持。计算策略修订66、Windows8／Mac媒体6／Metal3及交互预留、用户类别暂停和时段保持。
