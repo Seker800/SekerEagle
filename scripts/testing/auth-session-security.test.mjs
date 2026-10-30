@@ -30,7 +30,11 @@ test('one SQL per access verification preserves immediate account, family, expir
   measured.$on('query', ({ query }) => {
     // Query events are asynchronous; a completed Prisma promise is not an
     // event-delivery fence. Account locks/COMMITs from session creation are excluded.
-    if (/^SELECT\b/u.test(query) && query.includes('"User"."email"')) nextAccountRead?.(query);
+    if (
+      /^SELECT\b/u.test(query.trimStart()) &&
+      (query.includes('"User"."email"') || /FROM\s+"User"\s+u\b/u.test(query))
+    )
+      nextAccountRead?.(query);
   });
   const sessions = new SessionTokenService(measured, jwt, config);
   const users = [];
@@ -51,7 +55,7 @@ test('one SQL per access verification preserves immediate account, family, expir
       ]);
       // The real account statement itself must contain the active-family check;
       // a separate token SELECT cannot satisfy this assertion.
-      assert.match(query, /EXISTS\(SELECT.*"RefreshToken"/u);
+      assert.match(query, /EXISTS\s*\(SELECT[\s\S]*"RefreshToken"/u);
       return principal;
     } finally {
       nextAccountRead = undefined;
