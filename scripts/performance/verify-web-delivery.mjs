@@ -100,7 +100,9 @@ server { listen 3000; listen 9000; root /fixtures;
   const entry = shell.body.toString().match(/src="([^"]+\.js)"/u)?.[1];
   assert.ok(entry);
   const measurements = [];
-  const assets = readdirSync(resolve('apps/web/dist/assets')).filter((name) => /\.(geojson|wasm)$/u.test(name));
+  const assets = readdirSync(resolve('apps/web/dist/assets')).filter((name) =>
+    /\.(geojson|wasm)$/u.test(name),
+  );
   assert.ok(assets.some((name) => name.endsWith('.geojson')));
   assert.ok(assets.some((name) => name.endsWith('.wasm')));
   for (const path of [entry, '/api/fixtures', ...assets.map((name) => `/assets/${name}`)]) {
@@ -111,6 +113,14 @@ server { listen 3000; listen 9000; root /fixtures;
     assert.match(zipped.headers.vary, /Accept-Encoding/iu);
     assert.deepEqual(gunzipSync(zipped.body), plain.body);
     assert.ok(zipped.body.length < plain.body.length * 0.6);
+    if (path.startsWith('/assets/')) {
+      assert.equal(plain.headers['cache-control'], 'public, max-age=31536000, immutable');
+      assert.ok(
+        plain.headers['x-content-type-options']
+          .split(',')
+          .every((value) => value.trim() === 'nosniff'),
+      );
+    }
     measurements.push({
       path: path === entry ? 'login JS' : path,
       rawBytes: plain.body.length,
@@ -124,6 +134,7 @@ server { listen 3000; listen 9000; root /fixtures;
   assert.equal(media.status, 206);
   assert.equal(media.headers['content-encoding'], undefined);
   assert.equal(media.body.length, 100);
+  assert.equal((await get(port, '/assets/missing.geojson')).status, 404);
   assert.equal((await get(port, '/missing/spa/route')).headers['cache-control'], 'no-cache');
   console.log(
     JSON.stringify({ measurements, mediaRange: 'passed', spaRevalidation: 'passed' }, null, 2),
