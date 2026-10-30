@@ -52,6 +52,7 @@ class OperationAccessError extends Error {
 export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private readonly running = new Set<OperationLane>();
+  private readonly pendingWake = new Set<OperationLane>();
   private stopping = false;
   private readonly logger = new Logger(EagleAssetOperationService.name);
   constructor(
@@ -515,7 +516,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     if (failed?.status === 'rejected') throw failed.reason;
   }
   private async tickLane(lane: OperationLane) {
-    if (this.running.has(lane) || this.stopping) return;
+    if (this.stopping) return;
+    if (this.running.has(lane)) {
+      this.pendingWake.add(lane);
+      return;
+    }
     this.running.add(lane);
     let heartbeat: NodeJS.Timeout | undefined;
     let processed = false;
@@ -540,7 +545,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       this.running.delete(lane);
-      if (processed && !this.stopping && this.timer) {
+      const pendingWake = this.pendingWake.delete(lane);
+      if ((processed || pendingWake) && !this.stopping && this.timer) {
         const next = setTimeout(
           () =>
             void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),

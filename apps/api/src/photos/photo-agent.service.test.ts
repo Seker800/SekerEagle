@@ -178,6 +178,7 @@ test('task listing batches visibility and proposals while hiding tasks with any 
     kind: 'CITY',
     scope: [{ id: `asset-${index}` }],
   }));
+  tasks[19]!.scope.push({ id: 'asset-19' });
   const service = new PhotoAgentService(
     {
       eaglePhotoAgentTask: { findMany: async () => tasks },
@@ -192,11 +193,12 @@ test('task listing batches visibility and proposals while hiding tasks with any 
         },
       },
       eaglePhotoAgentSuggestion: {
-        findMany: async (args: { where: { taskId: unknown } }) => {
+        findMany: async (args: { where: { taskId: unknown }; orderBy: unknown }) => {
           calls.push('proposals');
-          assert.deepEqual(args.where.taskId, { in: tasks.slice(1).map((row) => row.id) });
+          assert.deepEqual(args.where.taskId, { in: tasks.slice(1, -1).map((row) => row.id) });
+          assert.deepEqual(args.orderBy, { number: 'asc' });
           return tasks
-            .slice(1)
+            .slice(1, -1)
             .map((row) => ({ taskId: row.id, assetId: row.scope[0]!.id, status: 'PENDING' }));
         },
       },
@@ -204,7 +206,7 @@ test('task listing batches visibility and proposals while hiding tasks with any 
     {} as never,
   );
   const result = await service.tasks('owner', { limit: 20 }, false);
-  assert.equal(result.items.length, 19);
+  assert.equal(result.items.length, 18);
   assert.deepEqual(calls, ['assets', 'proposals']);
   assert.equal(result.items[0]!.pendingCount, 1);
   assert.deepEqual(result.items[0]!.coverIds, ['asset-1']);
