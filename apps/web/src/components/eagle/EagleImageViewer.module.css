@@ -50,3 +50,18 @@
     transform: translateX(155%);
   }
 }
+
+.thumbnailPlaceholder {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.thumbnailPlaceholder img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0.55;
+}
+.loadState > :not(.thumbnailPlaceholder) {
+  position: relative;
+}

@@ -80,6 +80,10 @@ it('keeps independent file progress, all failures and a dismissible success summ
   });
   expect(view.result.current.uploads.find((item) => item.name === 'a.jpg')?.percent).toBe(25);
   await act(async () => {
+    await view.result.current.retryUpload(view.result.current.uploads[0]!.id);
+  });
+  expect(material).toHaveBeenCalledTimes(2);
+  await act(async () => {
     finish();
     await pending;
   });
@@ -87,6 +91,11 @@ it('keeps independent file progress, all failures and a dismissible success summ
   expect(view.result.current.uploadStatus).toContain('2/2');
   act(() => view.result.current.dismissUploads());
   expect(view.result.current.uploads).toHaveLength(0);
+  await act(async () => {
+    await view.result.current.importFiles([]);
+    await view.result.current.retryUpload(-1);
+  });
+  expect(view.result.current.uploadStatus).toBeNull();
   material.mockRejectedValue(new Error('网络断开'));
   await act(async () => {
     await view.result.current.importFiles([new File(['c'], 'c.jpg'), new File(['d'], 'd.jpg')]);

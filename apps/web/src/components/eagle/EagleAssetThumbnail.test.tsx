@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
-import { EagleAssetThumbnail, getEagleAssetThumbnailUrls } from './EagleAssetThumbnail';
+import {
+  CachedEagleAssetThumbnail,
+  EagleAssetThumbnail,
+  getEagleAssetThumbnailUrls,
+} from './EagleAssetThumbnail';
 
 const videoAsset: EagleAssetListItem = {
   id: 'video-1',
@@ -310,4 +314,31 @@ it('shows a previously loaded thumbnail immediately even while cold images occup
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   }
+});
+
+it('viewer placeholders acquire only a cached current-version blob and release it on close', async () => {
+  const service = new ThumbnailLoadService();
+  const release = vi.fn();
+  const acquire = vi
+    .spyOn(service, 'acquireCached')
+    .mockReturnValue({ url: 'blob:viewer-thumb', release });
+  const load = vi.spyOn(service, 'load');
+  const view = render(
+    <CachedEagleAssetThumbnail asset={imageAsset} loadService={service} displayWidth={240} />,
+  );
+  expect(view.container.querySelector('img')).toHaveAttribute('src', 'blob:viewer-thumb');
+  expect(acquire).toHaveBeenCalledWith(expect.stringContaining('image-1:1:'));
+  expect(load).not.toHaveBeenCalled();
+  acquire.mockReturnValue(null);
+  view.rerender(
+    <CachedEagleAssetThumbnail
+      asset={{ ...imageAsset, mediaRevision: 2 }}
+      loadService={service}
+      displayWidth={240}
+    />,
+  );
+  expect(view.container.querySelector('img')).toBeNull();
+  expect(release).toHaveBeenCalledOnce();
+  view.unmount();
+  vi.restoreAllMocks();
 });

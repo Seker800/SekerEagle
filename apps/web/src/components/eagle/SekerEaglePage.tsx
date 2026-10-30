@@ -115,7 +115,7 @@ import {
 import { EagleImageViewer, preloadEagleImageViewer } from './EagleImageViewer';
 import { useEagleAssetLocation, useEagleAssetLocationFocus } from './useEagleAssetLocation';
 import { useEagleAssetViewport } from './eagle-asset-viewport';
-import { EagleAssetThumbnail } from './EagleAssetThumbnail';
+import { CachedEagleAssetThumbnail, EagleAssetThumbnail } from './EagleAssetThumbnail';
 import {
   getEaglePreviewContentUrl,
   getEagleEditContentUrl,
@@ -2922,6 +2922,15 @@ export function SekerEaglePage({
           asset={previewImageAsset ?? undefined}
           readOnly={libraryView === 'TRASH'}
           image={imagePreview.previewImage}
+          loadingPlaceholder={
+            previewImageAsset ? (
+              <CachedEagleAssetThumbnail
+                asset={previewImageAsset}
+                loadService={thumbnailLoadService}
+                displayWidth={thumbnailSize}
+              />
+            ) : undefined
+          }
           subtitle={previewImageAsset ? eagleViewerMetadata(previewImageAsset) : undefined}
           navigation={previewNavigation}
           descriptor={previewPyramidQuery.data}

@@ -130,6 +130,7 @@ export function EagleImageViewer({
   collection,
   actions,
   loading = false,
+  loadingPlaceholder,
   error,
   onRetry,
 }: {
@@ -146,6 +147,7 @@ export function EagleImageViewer({
   collection?: ReactNode;
   actions?: ReactNode;
   loading?: boolean;
+  loadingPlaceholder?: ReactNode;
   error?: string;
   onRetry?: () => void;
 }) {
@@ -408,6 +410,9 @@ export function EagleImageViewer({
       <div ref={viewerElementRef} className={styles.viewer} data-testid="eagle-image-viewer" />
       {displayStatus !== 'ready' ? (
         <div className={styles.loadState} role={displayStatus === 'error' ? 'alert' : 'status'}>
+          {displayStatus === 'loading' && loadingPlaceholder ? (
+            <div className={styles.thumbnailPlaceholder}>{loadingPlaceholder}</div>
+          ) : null}
           {displayStatus === 'loading' ? (
             <>
               <div className={styles.progress} aria-hidden="true">

@@ -50,6 +50,35 @@ export function getEagleAssetThumbnailUrls(
       : [];
   });
 }
+/** Reuse only an already-authorized blob; opening the viewer adds no thumbnail request. */
+export function CachedEagleAssetThumbnail({
+  asset,
+  loadService,
+  displayWidth,
+}: {
+  asset: EagleAssetListItem;
+  loadService: ThumbnailLoadService;
+  displayWidth: number;
+}) {
+  const identity = `${asset.id}:${asset.mediaRevision}`;
+  const [cached, setCached] = useState<{ identity: string; url: string } | null>(null);
+  useLayoutEffect(() => {
+    const candidates = getEagleAssetThumbnailUrls(
+      asset,
+      Math.ceil(displayWidth * (globalThis.devicePixelRatio || 1)),
+    );
+    const loaded = candidates
+      .map((url) => `${identity}:${url}`)
+      .reduce<LoadedThumbnail | null>(
+        (current, key) => current ?? loadService.acquireCached(key),
+        null,
+      );
+    setCached(loaded ? { identity, url: loaded.url } : null);
+    return () => loaded?.release();
+  }, [asset, identity, displayWidth, loadService]);
+  return cached?.identity === identity ? <img src={cached.url} alt="" /> : null;
+}
+
 export function EagleAssetThumbnail({
   asset,
   scheduler,

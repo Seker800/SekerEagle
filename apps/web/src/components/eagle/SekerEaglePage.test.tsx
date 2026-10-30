@@ -535,7 +535,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('北京');
   });
 
-  it('keeps browse memories separate between modes and clears them on privacy changes', async () => {
+  it('keeps browse memories separate between modes and clears them on session reset', async () => {
     const view = renderPage('mode-memory');
     await screen.findByRole('button', { name: /Owl Reference/ });
     fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
@@ -559,7 +559,7 @@ describe('SekerEaglePage', () => {
     expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('');
   });
 
-  it('does not retain active cards as placeholders for trash or an unlocked private scope', async () => {
+  it('does not retain active cards as placeholders in an unlocked private scope', async () => {
     renderPage('private-placeholder', false, {
       enabled: true,
       durationHours: 1,

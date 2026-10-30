@@ -1178,7 +1178,7 @@
   top: 0;
   z-index: 2;
   padding: 4px 12px;
-  background: var(--color-surface, #202127);
-  border-top: 2px solid var(--color-accent, #a3bd81);
+  background: var(--ui-raised);
+  border-top: 2px solid var(--ui-accent);
   font-size: 12px;
 }
