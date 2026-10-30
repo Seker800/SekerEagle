@@ -440,6 +440,7 @@ model EagleAsset {
   @@unique([ownerId, libraryMode, id])
   @@index([ownerId, libraryMode, deletedAt, libraryAddedAt, id])
   @@index([ownerId, libraryMode, deletedAt, chronologicalAt, id])
+  @@index([ownerId, libraryMode, isPrivate, deletedAt, chronologicalAt, id], map: "EagleAsset_owner_mode_privacy_chronological_idx")
   @@index([ownerId, libraryMode, livePhotoIdentifier, livePhotoRole], map: "EagleAsset_live_photo_pair_idx")
   @@index([ownerId, libraryMode, isPrivate, deletedAt, libraryAddedAt, id])
   @@index([ownerId, libraryMode, deletedAt, rating])

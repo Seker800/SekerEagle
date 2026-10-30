@@ -1266,6 +1266,7 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             .getOrDefault(emptyList())
 
     override fun onCleared() {
+        cancelOperation()
         cancelOptions()
         uploadPickerTarget = null
         repository?.clear()

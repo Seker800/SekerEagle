@@ -973,6 +973,72 @@ test('direct image-vector retrieval isolates owner/mode/private/revisions and co
     (await photos.listAssets(f.ownerId, { limit: 10, search: '海边' })).items.map((row) => row.id),
     [f.photo.id],
   );
+  // Date paging must preserve the exact relevance query's eligible set and scores,
+  // including owner/mode/privacy/current-version guards, without a top-K shortcut.
+  for (const [mode, reader] of [
+    ['MATERIAL', search],
+    ['PHOTO', new EagleImageSearchService(prisma, client, 'PHOTO')],
+  ]) {
+    for (const sort of ['CAPTURED_AT', 'ADDED_AT']) {
+      const context = await reader.prepare(f.ownerId, '海边');
+      const oracle = await reader.rankPage(
+        f.ownerId,
+        '海边',
+        context,
+        undefined,
+        100,
+        false,
+        false,
+      );
+      const date = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
+      const assets = await prisma.eagleAsset.findMany({
+        where: { ownerId: f.ownerId, libraryMode: mode, id: { in: oracle.map((p) => p.assetId) } },
+        orderBy: [{ [date]: 'desc' }, { id: 'desc' }],
+      });
+      const expected = assets.map((a) => ({
+        ...oracle.find((p) => p.assetId === a.id),
+        libraryAddedAt: a[date].toISOString(),
+      }));
+      const actual = [];
+      let after;
+      do {
+        const page = await reader.rankPage(
+          f.ownerId,
+          '海边',
+          context,
+          after,
+          1,
+          false,
+          false,
+          undefined,
+          sort,
+        );
+        if (!page.length) break;
+        actual.push(...page);
+        after = page[0];
+      } while (actual.length <= expected.length);
+      assert.deepEqual(
+        actual,
+        expected,
+        `${mode} ${sort} date pagination must equal exhaustive matching`,
+      );
+      const allowed = expected.slice(0, 1).map((p) => p.assetId);
+      assert.deepEqual(
+        await reader.rankPage(
+          f.ownerId,
+          '海边',
+          context,
+          undefined,
+          100,
+          false,
+          false,
+          allowed,
+          sort,
+        ),
+        expected.slice(0, 1),
+      );
+    }
+  }
   const rules = {
     version: 2,
     conditions: [
@@ -2801,4 +2867,14 @@ test('legacy transfer retirement preserves restored sources and changed or missi
       variant,
     );
   }
+});
+
+test('public chronological search has a covering owner-mode-visibility index', async () => {
+  const indexes =
+    await prisma.$queryRaw`SELECT indexdef FROM pg_indexes WHERE tablename='EagleAsset' AND indexname='EagleAsset_owner_mode_privacy_chronological_idx'`;
+  assert.equal(indexes.length, 1);
+  assert.match(
+    indexes[0].indexdef,
+    /\("ownerId", "libraryMode", "isPrivate", "deletedAt", "chronologicalAt", id\)/,
+  );
 });

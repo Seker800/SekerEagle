@@ -119,14 +119,31 @@ export class EagleImageSearchService {
           AND embedding."assetRevision"=asset."mediaRevision" AND embedding.embedding IS NOT NULL
       `
           : Prisma.sql`SELECT NULL::double precision AS similarity`;
-      const rows = await this.prisma.$queryRaw<
-        Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
-      >(Prisma.sql`
+      const page: ImageSearchPosition[] = [];
+      const windowSize = Math.max(64, Math.min(1000, limit * 4));
+      let position = after;
+      for (;;) {
+        const rows = await this.prisma.$queryRaw<
+          Array<{
+            assetId: string;
+            tier: number;
+            similarity: number;
+            libraryAddedAt: Date;
+            matches: boolean;
+          }>
+        >(Prisma.sql`
+        WITH ordered AS MATERIALIZED (
+          SELECT asset.id,${date} AS "orderDate" FROM "EagleAsset" asset
+          WHERE ${visible}
+          ${position ? Prisma.sql`AND (${date},asset.id)<(${new Date(position.libraryAddedAt)},${position.assetId})` : Prisma.empty}
+          ORDER BY ${date} DESC,asset.id DESC LIMIT ${windowSize}
+        )
         SELECT asset.id AS "assetId",
           GREATEST(CASE WHEN ${nameMatch} THEN 3 ELSE 0 END,COALESCE(manual.tier,0),CASE WHEN semantic.similarity>=${threshold} THEN 1 ELSE 0 END)::integer AS tier,
           GREATEST(CASE WHEN ${nameMatch} OR manual.tier IS NOT NULL THEN 1::double precision ELSE 0::double precision END,COALESCE(semantic.similarity,0)) AS similarity,
-          ${date} AS "libraryAddedAt"
-        FROM "EagleAsset" asset
+          ordered."orderDate" AS "libraryAddedAt",
+          (${nameMatch} OR manual.tier IS NOT NULL OR COALESCE(semantic.similarity>=${threshold},false)) AS matches
+        FROM ordered JOIN "EagleAsset" asset ON asset.id=ordered.id
         LEFT JOIN LATERAL (
           SELECT max(CASE WHEN tag."normalizedName"=${normalized} THEN 5 ELSE 4 END)::integer AS tier
           FROM "EagleAssetManualTag" link JOIN "EagleManualTag" tag
@@ -135,13 +152,24 @@ export class EagleImageSearchService {
             AND strpos(tag."normalizedName",${normalized})>0
         ) manual ON true
         LEFT JOIN LATERAL (${semanticProbe}) semantic ON true
-        WHERE ${visible}
-          AND (${nameMatch} OR manual.tier IS NOT NULL OR semantic.similarity>=${threshold})
-          ${after ? Prisma.sql`AND (${date},asset.id)<(${new Date(after.libraryAddedAt)},${after.assetId})` : Prisma.empty}
-        ORDER BY ${date} DESC,asset.id DESC LIMIT ${limit}
+        ORDER BY ordered."orderDate" DESC,asset.id DESC
       `);
-      return rows.map((row) => ({ ...row, libraryAddedAt: row.libraryAddedAt.toISOString() }));
+        for (const row of rows) {
+          if (!row.matches) continue;
+          page.push({
+            assetId: row.assetId,
+            tier: row.tier,
+            similarity: row.similarity,
+            libraryAddedAt: row.libraryAddedAt.toISOString(),
+          });
+          if (page.length >= limit) return page;
+        }
+        if (rows.length < windowSize) return page;
+        const last = rows.at(-1)!;
+        position = { ...last, libraryAddedAt: last.libraryAddedAt.toISOString() };
+      }
     }
+
     const semantic =
       context.status === 'READY'
         ? Prisma.sql`
