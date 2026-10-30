@@ -32,6 +32,11 @@ test('queue command validation rejects owner, mode, private escalation, unknown 
   const duplicate = randomUUID();
   await assert.rejects(validate({ ...input(), assetIds: [duplicate, duplicate] }));
 });
+test('a queue command accepts a large unique selection instead of imposing a 1000 item user limit', async () => {
+  const assetIds = Array.from({ length: 5001 }, () => randomUUID());
+  const result = await validate({ ...input(), assetIds });
+  assert.equal(result.assetIds.length, 5001);
+});
 test('both inherited controllers require authenticated browser principals and origin validation on every mutation', () => {
   for (const controller of [EagleController, PhotosController]) {
     const guards = Reflect.getMetadata(GUARDS_METADATA, controller) as unknown[];
