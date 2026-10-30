@@ -209,3 +209,103 @@ test('date search crosses nonmatching windows without truncating sparse results 
   );
   assert.equal(calls, 2);
 });
+
+test('incompatible vector spaces never invoke inference or masquerade as semantic search', async () => {
+  for (const incompatible of [
+    null,
+    { ...space, isCurrent: false },
+    { ...space, model: 'other' },
+    { ...space, dimensions: 512 },
+    { ...space, normalized: false },
+    { ...space, instructionVersion: 'other' },
+    { ...space, preprocessingVersion: 'other' },
+  ]) {
+    const service = new EagleImageSearchService(
+      { eagleEmbeddingSpace: { findUnique: async () => incompatible } } as never,
+      { embedText: async () => assert.fail('incompatible space invoked inference') } as never,
+    );
+    assert.equal((await service.prepare('owner', '猫')).status, 'UNAVAILABLE');
+  }
+});
+
+test('offline inference is not cached and a healthy retry can return real semantics', async () => {
+  let calls = 0;
+  const service = new EagleImageSearchService(
+    { eagleEmbeddingSpace: { findUnique: async () => space } } as never,
+    {
+      embedText: async () => {
+        if (++calls === 1) throw Error('offline');
+        return { embedding: [1, 0], revision: space.revision };
+      },
+    } as never,
+  );
+  assert.equal((await service.prepare('owner', '猫')).status, 'UNAVAILABLE');
+  assert.equal((await service.prepare('owner', '猫')).status, 'READY');
+  assert.equal(calls, 2);
+});
+
+test('empty eligibility stays empty and explicit private trash reads retain their scope and bounded results', async () => {
+  let calls = 0;
+  let sql = '';
+  const service = new EagleImageSearchService(
+    {
+      $queryRaw: async (q: { sql: string }) => {
+        calls++;
+        sql = q.sql;
+        return [
+          {
+            assetId: 'hit',
+            tier: 1,
+            similarity: 0.8,
+            libraryAddedAt: new Date('2026-01-01'),
+            matches: true,
+          },
+        ];
+      },
+    } as never,
+    {} as never,
+    'PHOTO',
+  );
+  const context = { status: 'READY' as const, spaceId: space.id, vector: '[1,0]' };
+  assert.deepEqual(
+    await service.rankPage('owner', '猫', context, undefined, 60, false, false, [], 'ADDED_AT'),
+    [],
+  );
+  assert.deepEqual(await service.rankPage('owner', '猫', context, undefined, 0, false, false), []);
+  assert.equal(calls, 0);
+  assert.equal(
+    (await service.rankPage('owner', '猫', context, undefined, 60, true, true, ['hit'], 'ADDED_AT'))
+      .length,
+    1,
+  );
+  assert.match(sql, /"ownerId"=/);
+  assert.match(sql, /"libraryMode"=/);
+  assert.match(sql, /"deletedAt" IS NOT NULL/);
+  assert.match(sql, /"purgeAfter" IS NULL/);
+  assert.doesNotMatch(sql, /asset\."isPrivate"=false/);
+  assert.match(sql, /asset\.id = ANY/);
+});
+
+test('relevance search evaluates each eligible vector distance once instead of repeating it for filtering and ranking', async () => {
+  let sql = '';
+  const service = new EagleImageSearchService(
+    {
+      $queryRaw: async (q: { sql: string }) => {
+        sql = q.sql;
+        return [];
+      },
+    } as never,
+    {} as never,
+  );
+  await service.rankPage(
+    'owner',
+    '猫',
+    { status: 'READY', spaceId: space.id, vector: '[1,0]' },
+    undefined,
+    60,
+    false,
+    false,
+  );
+  assert.equal((sql.match(/embedding\.embedding <=>/g) || []).length, 1);
+  assert.match(sql, /MATERIALIZED/);
+});
