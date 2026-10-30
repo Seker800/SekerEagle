@@ -79,7 +79,7 @@ class NativeReviewTest {
                                                 val prefix =
                                                     if (path.startsWith("/api/eagle/")) "material"
                                                     else "asset"
-                                                """{"id":"$prefix$i","displayName":"item$i","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
+                                                """{"id":"$prefix$i","displayName":"item$i","mimeType":"image/jpeg","lifecycleStatus":"READY","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
                                             }
                                         """{"items":[$items],"nextCursor":${if (start + 60 < 180) "\"${start+60}\"" else "null"}}"""
                                     }

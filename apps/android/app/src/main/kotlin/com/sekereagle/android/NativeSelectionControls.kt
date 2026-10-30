@@ -24,6 +24,7 @@ fun NativeSelectionControls(
     offset: Offset,
 ) {
     var confirm by remember { mutableStateOf(false) }
+    var confirmSend by remember { mutableStateOf(false) }
     Box(modifier) {
         GlassSurface(
             Modifier.align(Alignment.TopCenter)
@@ -59,6 +60,20 @@ fun NativeSelectionControls(
                 ) {
                     Text("刷新并退出选择")
                 }
+            }
+            if (!state.trash) {
+                GlassSurface(Modifier.fillMaxWidth(), backdrop, offset) {
+                    TextButton(
+                        { confirmSend = true },
+                        Modifier.fillMaxWidth(),
+                        enabled = !state.busy && state.selected.isNotEmpty(),
+                    ) {
+                        Icon(Icons.Outlined.Send, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (state.mode == GalleryMode.PHOTO) "发送到素材" else "发送到照片")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
             }
             GlassSurface(Modifier.fillMaxWidth(), backdrop, offset) {
                 if (state.busy)
@@ -123,6 +138,14 @@ fun NativeSelectionControls(
             }
         }
     }
+    if (confirmSend)
+        AlertDialog(
+            onDismissRequest = { confirmSend = false },
+            title = { Text(if (state.mode == GalleryMode.PHOTO) "发送到素材？" else "发送到照片？") },
+            text = { Text(if (state.mode == GalleryMode.PHOTO) "发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。" else "发送后将在照片模式生成独立副本，成功后从素材模式移除源项，不进入回收站。") },
+            confirmButton = { TextButton({ confirmSend = false; model.sendSelection() }) { Text("确认发送") } },
+            dismissButton = { TextButton({ confirmSend = false }) { Text("取消") } },
+        )
     if (confirm)
         AlertDialog(
             onDismissRequest = { confirm = false },

@@ -42,6 +42,8 @@ data class NativeAsset(
     val city: String? = null,
     val cacheVersion: String? = null,
     val favorite: Boolean = false,
+    val mimeType: String = "",
+    val lifecycleStatus: String = "",
 )
 
 data class NativeDay(val date: String, val before: String, val count: Long, val offset: Long) {
@@ -372,6 +374,8 @@ class NativeGalleryRepository(
             }
         }
 
+    internal val assetOperations = NativeAssetOperations(session)
+
     internal fun imageVersion(path: String?): String? = path?.let { imageVersions.get(it) }
 
     suspend fun image(
@@ -557,6 +561,8 @@ class NativeGalleryRepository(
             json.optJSONArray("manualTags")?.let { tags ->
                 (0 until tags.length()).any { tags.getJSONObject(it).optString("name") == "收藏" }
             } ?: false,
+            json.optString("mimeType"),
+            json.optString("lifecycleStatus"),
         )
     }
 }

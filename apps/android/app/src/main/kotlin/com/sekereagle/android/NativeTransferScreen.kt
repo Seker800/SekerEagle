@@ -62,6 +62,20 @@ fun NativeTransferScreen(
                 delay(1000)
             }
         }
+    var operationError by remember(identity.scope) { mutableStateOf<String?>(null) }
+    val operations by produceState(emptyList<NativeAssetOperation>(), identity.scope) {
+        while (true) {
+            try {
+                value = model.readAssetOperations()
+                operationError = null
+            } catch (reason: kotlinx.coroutines.CancellationException) {
+                throw reason
+            } catch (reason: Exception) {
+                operationError = "后台操作进度暂时无法读取：${reason.message.orEmpty()}"
+            }
+            delay(if (value.any { it.pending }) 1500 else 30000)
+        }
+    }
     var notificationsAllowed by remember {
         mutableStateOf(
             androidx.core.app.NotificationManagerCompat.from(context).areNotificationsEnabled()
@@ -111,6 +125,19 @@ fun NativeTransferScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            if (operationError != null)
+                item { Text(operationError.orEmpty(), color = MaterialTheme.colorScheme.error) }
+            items(operations.size, key = { "operation:${operations[it].mode}:${operations[it].id}" }) { index ->
+                val operation = operations[index]
+                GlassSurface(Modifier.fillMaxWidth(), radius = 22) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(operation.title, style = MaterialTheme.typography.titleMedium)
+                        Text(operation.progress)
+                        if (operation.pending) LinearProgressIndicator(Modifier.fillMaxWidth())
+                        if (operation.failed > 0) Text("失败项的源文件仍保留，请返回图库核对后重新选择发送。", color = NativeMuted)
+                    }
+                }
+            }
             if (queue.error != null)
                 item { Text(queue.error.orEmpty(), color = MaterialTheme.colorScheme.error) }
             if (!notificationsAllowed)
