@@ -52,6 +52,7 @@ class OperationAccessError extends Error {
 export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy {
   private timer?: NodeJS.Timeout;
   private readonly running = new Set<OperationLane>();
+  private readonly pendingWake = new Set<OperationLane>();
   private stopping = false;
   private readonly logger = new Logger(EagleAssetOperationService.name);
   constructor(
@@ -76,8 +77,11 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   // Local admissions do not wait for the cross-process recovery poll. Wake only
   // after the admitting transaction commits; durable claims remain authoritative.
   private wake() {
-    if (this.timer && !this.stopping)
+    if (this.timer && !this.stopping) {
+      this.pendingWake.add('SEND');
+      this.pendingWake.add('METADATA');
       void this.tick().catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED'));
+    }
   }
 
   private libraryModeWhere(ownerId: string, includePrivate: boolean) {
@@ -508,6 +512,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
   }
   private async tickLane(lane: OperationLane) {
     if (this.running.has(lane) || this.stopping) return;
+    this.pendingWake.delete(lane);
     this.running.add(lane);
     let heartbeat: NodeJS.Timeout | undefined;
     let processed = false;
@@ -532,7 +537,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     } finally {
       if (heartbeat) clearInterval(heartbeat);
       this.running.delete(lane);
-      if (processed && !this.stopping && this.timer) {
+      if ((processed || this.pendingWake.has(lane)) && !this.stopping && this.timer) {
         const next = setTimeout(
           () =>
             void this.tickLane(lane).catch(() => this.logger.warn('ASSET_OPERATION_POLL_FAILED')),

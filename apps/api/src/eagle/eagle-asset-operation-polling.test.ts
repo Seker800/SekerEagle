@@ -17,7 +17,7 @@ test('a local admission during an empty in-flight claim is followed up without t
   const operation = {
     id: 'operation',
     ownerId: 'owner',
-    kind: 'TRASH',
+    kind: 'SEND',
     libraryMode: 'MATERIAL',
     isPrivate: false,
     inputIds: ['asset'],
@@ -50,7 +50,7 @@ test('a local admission during an empty in-flight claim is followed up without t
     await started;
     await service.enqueue({ sub: 'owner', canViewPrivate: false } as never, {
       operationId: 'operation',
-      kind: 'TRASH',
+      kind: 'SEND',
       assetIds: ['asset'],
     });
     release();

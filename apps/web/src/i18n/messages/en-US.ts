@@ -1,4 +1,5 @@
 export const enUS = {
+  '界面加载失败，请重新加载。': 'The view could not load. Please reload the page.',
   '正在准备首批地图位置，无需等待照片分析完成。':
     'Preparing the first map locations without waiting for photo analysis.',
   '已显示可用位置，地图细节正在后台补齐。':

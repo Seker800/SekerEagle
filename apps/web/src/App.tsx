@@ -1,6 +1,7 @@
+import { AsyncContent } from './components/AsyncContent';
 import { useQueryClient } from '@tanstack/react-query';
 import { t } from './i18n';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { IconArrowRight } from '@tabler/icons-react';
 import sekerEagleLogo from './assets/seker-eagle-logo.svg';
 import { DesktopConnectionButton } from './components/desktop/DesktopConnectionButton';
@@ -277,7 +278,7 @@ export function App() {
     >
       <div className="standalone-eagle-shell">
         {connectionButton}
-        <Suspense
+        <AsyncContent
           fallback={
             <main className="auth-shell" role="status">
               {t('正在加载素材…')}
@@ -301,7 +302,7 @@ export function App() {
             privacyRulesRevision={privacyRulesRevision}
             onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             accountView={
-              <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+              <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
                 <AccountHome
                   user={user}
                   onPasswordChanged={() => logout(t('密码已修改，请使用新密码重新登录。'))}
@@ -312,20 +313,20 @@ export function App() {
                   }}
                   privacyExtras={
                     libraryMode === 'PHOTO' ? (
-                      <Suspense fallback={<div role="status">{t('正在加载素材…')}</div>}>
+                      <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
                         <PhotoPrivatePeopleSettings
                           includePrivate={privacyVisibility?.enabled === true}
                           onRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
                         />
-                      </Suspense>
+                      </AsyncContent>
                     ) : undefined
                   }
                   onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
                 />
-              </Suspense>
+              </AsyncContent>
             }
           />
-        </Suspense>
+        </AsyncContent>
       </div>
     </LibraryWorkspaceProvider>
   );

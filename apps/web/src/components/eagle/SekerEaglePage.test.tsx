@@ -2232,12 +2232,18 @@ describe('SekerEaglePage', () => {
     const pendingNavigation = screen.getByRole('navigation', { name: '待处理功能' });
     expect(within(pendingNavigation).getByRole('button', { name: '待分类 6' })).toBeInTheDocument();
     fireEvent.click(within(pendingNavigation).getByRole('button', { name: '推荐审核 32' }));
-    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'REVIEW');
+    expect(await screen.findByTestId('eagle-vector-workspace')).toHaveAttribute(
+      'data-view',
+      'REVIEW',
+    );
 
     fireEvent.click(screen.getByRole('button', { name: '设置' }));
     const settingsNavigation = screen.getByRole('navigation', { name: '设置功能' });
     fireEvent.click(within(settingsNavigation).getByRole('button', { name: '人工标签推荐' }));
-    expect(screen.getByTestId('eagle-vector-workspace')).toHaveAttribute('data-view', 'TAGS');
+    expect(await screen.findByTestId('eagle-vector-workspace')).toHaveAttribute(
+      'data-view',
+      'TAGS',
+    );
 
     expect(
       within(settingsNavigation).queryByRole('button', { name: 'AI 内容识别' }),
