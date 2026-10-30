@@ -4,9 +4,10 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { PhotoCollections } from './PhotoCollections';
 import type { PhotoPerson } from '../../lib/photo-management-api';
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), merge: vi.fn(), privacy: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), review: vi.fn(), merge: vi.fn(), privacy: vi.fn() }));
 vi.mock('../../lib/photo-management-api', () => ({
   listPhotoPeople: mocks.list,
+  reviewPhotoPeople: mocks.review,
   mergePhotoPeople: mocks.merge,
   scanPhotoPeople: vi.fn(),
   renamePhotoPerson: vi.fn(),
@@ -83,13 +84,18 @@ beforeEach(() => {
     people: [person('a'), person('b', '小明'), person('c')],
     nextCursor: null,
   });
+  mocks.review.mockImplementation(async () => {
+    const { people } = await mocks.list();
+    return { pairs: people.flatMap((first: PhotoPerson, i: number) =>
+      people.slice(i + 1).map((second: PhotoPerson) => ({ first, second, similarity: 0.4 }))) };
+  });
   mocks.merge.mockResolvedValue({ id: 'b' });
 });
 it('用大预览呈现人脸，直接比较两个不同人物，不需要选择合并目标', async () => {
   show();
   const review = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
   const photos = within(review).getAllByRole('img');
-  expect(photos.map((img) => img.getAttribute('src'))).toEqual(['/a/large', '/b/large']);
+  expect(photos.map((img) => img.getAttribute('src'))).toEqual(['/a/large', '/a/large', '/b/large', '/b/large']);
   fireEvent.click(screen.getByRole('button', { name: '未命名人物 1' }));
   expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: '未命名人物 1' }).querySelector('img')).toHaveAttribute(
@@ -112,7 +118,7 @@ it('换一批更新比较对象且不执行合并', async () => {
     within(review)
       .getAllByRole('img')
       .map((img) => img.getAttribute('src')),
-  ).toEqual(['/a/large', '/c/large']);
+  ).toEqual(['/a/large', '/a/large', '/c/large', '/c/large']);
   expect(mocks.merge).not.toHaveBeenCalled();
 });
 it('提交时禁止换批和重复确认，失败保留原照片供重试', async () => {
@@ -132,7 +138,7 @@ it('提交时禁止换批和重复确认，失败保留原照片供重试', asyn
   expect(await screen.findByRole('alert')).toHaveTextContent('合并失败');
   expect(confirm).toBeEnabled();
   expect(
-    within(screen.getByRole('region', { name: '这两张照片是同一个人吗？' })).getAllByRole('img')[1],
+    within(screen.getByRole('region', { name: '这两张照片是同一个人吗？' })).getAllByRole('img')[3],
   ).toHaveAttribute('src', '/b/large');
   expect(mocks.privacy).not.toHaveBeenCalled();
 });
@@ -168,32 +174,41 @@ it('换批遍历不同组合，比较结束后可以重新开始', async () => {
     within(review)
       .getAllByRole('img')
       .map((img) => img.getAttribute('src')),
-  ).toEqual(['/b/large', '/c/large']);
+  ).toEqual(['/b/large', '/b/large', '/c/large', '/c/large']);
   fireEvent.click(next);
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: '重新比较' }));
   expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled();
   expect(mocks.merge).not.toHaveBeenCalled();
 });
-it('合并后必须换一批才显示下一对，快速再点不会误合并其他人', async () => {
+it('合并成功自动展示下一对，连点不会误合并其他人', async () => {
   show();
-  fireEvent.click(await screen.findByRole('button', { name: '是，同一个人' }));
+  const confirm = await screen.findByRole('button', { name: '是，同一个人' });
+  fireEvent.click(confirm);
+  fireEvent.click(confirm);
   await waitFor(() => expect(mocks.privacy).toHaveBeenCalledTimes(1));
-  await waitFor(() =>
-    expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument(),
-  );
+  await waitFor(() => expect(screen.getByRole('button', { name: '是，同一个人' })).toBeEnabled());
+  const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
+  expect(within(review).getAllByRole('img').map(img => img.getAttribute('src')))
+    .toEqual(['/b/large', '/b/large', '/c/large', '/c/large']);
+  fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }), { detail: 2 });
   expect(mocks.merge).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: '换一批' }));
-  await waitFor(() => {
-    const review = screen.getByRole('region', { name: '这两张照片是同一个人吗？' });
-    expect(
-      within(review)
-        .getAllByRole('img')
-        .map((img) => img.getAttribute('src')),
-    ).toEqual(['/b/large', '/c/large']);
-  });
   fireEvent.click(screen.getByRole('button', { name: '是，同一个人' }));
   await waitFor(() => expect(mocks.merge).toHaveBeenLastCalledWith('c', 'b'));
+});
+it('使用服务端排序的疑似组合，不从人物列表随意配对', async () => {
+  mocks.review.mockResolvedValue({ pairs: [{ first: {...person('c'), photoCount: 100}, second: {...person('b'), photoCount: 80}, similarity: 0.42 }] });
+  show();
+  const review = await screen.findByRole('region', { name: '这两张照片是同一个人吗？' });
+  expect(within(review).getAllByRole('img').map(img => img.getAttribute('src')))
+    .toEqual(['/c/large', '/c/large', '/b/large', '/b/large']);
+  expect(within(review).getByText('100 张照片')).toBeInTheDocument();
+});
+it('没有疑似组合时不把无关人物凑成问题', async () => {
+  mocks.review.mockResolvedValue({ pairs: [] });
+  show();
+  await screen.findByRole('button', { name: '未命名人物 1' });
+  expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
 it('两个人均已命名时，确认前明确告知保留哪个名字', async () => {
   mocks.list.mockResolvedValue({
