@@ -34,18 +34,17 @@ describe('original file export', () => {
     return saving;
   });
 
-  it('starts every selected browser download in library order', async () => {
+  it('hands a browser batch to the visible queue without triggering multiple downloads', async () => {
+    const queueBrowserDownloads = vi.fn();
     const triggerBrowserDownload = vi.fn();
-
-    await downloadOriginalFiles([first, second], {
+    const result = await downloadOriginalFiles([first, second], {
       desktopBridge: null,
+      queueBrowserDownloads,
       triggerBrowserDownload,
     });
-
-    expect(triggerBrowserDownload.mock.calls).toEqual([
-      ['/api/eagle/assets/asset-1/original', 'first image.png'],
-      ['/api/eagle/assets/asset-2/original', 'second.jpg'],
-    ]);
+    expect(queueBrowserDownloads).toHaveBeenCalledWith([first, second]);
+    expect(triggerBrowserDownload).not.toHaveBeenCalled();
+    expect(result.downloaded).toBe(0);
   });
 
   it('passes the active locale to desktop batch downloads', async () => {

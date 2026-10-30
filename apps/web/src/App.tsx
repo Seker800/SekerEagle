@@ -57,6 +57,7 @@ export function App() {
     DEFAULT_PRIVACY_VISIBILITY,
   );
   const [privacyRulesRevision, setPrivacyRulesRevision] = useState(0);
+  const privacyVisibilityEpoch = useRef(0);
   const sessionOwnerId = user?.id;
   useEffect(() => {
     if (!sessionOwnerId) return;
@@ -145,13 +146,15 @@ export function App() {
       return;
     }
     let active = true;
+    const epoch = privacyVisibilityEpoch.current;
     void createPrivacyVisibilityApi(libraryMode)
       .getPrivacyVisibility()
       .then((value) => {
-        if (active) setPrivacyVisibility(value);
+        if (active && epoch === privacyVisibilityEpoch.current) setPrivacyVisibility(value);
       })
       .catch(() => {
-        if (active) setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
+        if (active && epoch === privacyVisibilityEpoch.current)
+          setPrivacyVisibility(DEFAULT_PRIVACY_VISIBILITY);
       });
     return () => {
       active = false;
@@ -318,6 +321,12 @@ export function App() {
             canManageProcessing={user.role === 'ADMIN'}
             privacyVisibility={privacyVisibility}
             privacyRulesRevision={privacyRulesRevision}
+            onPrivacyVisibilityChange={(value) => {
+              if (modeRef.current === libraryMode) {
+                privacyVisibilityEpoch.current++;
+                setPrivacyVisibility(value);
+              }
+            }}
             onPrivacyRulesChange={() => setPrivacyRulesRevision((revision) => revision + 1)}
             accountView={
               <AsyncContent fallback={<div role="status">{t('正在加载素材…')}</div>}>
@@ -327,7 +336,10 @@ export function App() {
                   onLogout={() => void logout()}
                   privacyVisibility={privacyVisibility}
                   onPrivacyVisibilityChange={(value) => {
-                    if (modeRef.current === libraryMode) setPrivacyVisibility(value);
+                    if (modeRef.current === libraryMode) {
+                      privacyVisibilityEpoch.current++;
+                      setPrivacyVisibility(value);
+                    }
                   }}
                   privacyExtras={
                     libraryMode === 'PHOTO' ? (

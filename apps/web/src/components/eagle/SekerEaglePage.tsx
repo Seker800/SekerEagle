@@ -1,3 +1,4 @@
+import { LibraryPrivacyToggle } from './LibraryPrivacyToggle';
 import { EagleUploadQueue } from './EagleUploadQueue';
 import { AsyncContent } from '../AsyncContent';
 import { useAssetOperationProgress } from './useAssetOperations';
@@ -140,7 +141,11 @@ import { applyEagleSelection, type EagleSelectionGesture } from './eagle-selecti
 import { getAssetDragIds, getDesktopAssetDragBridge } from './eagle-asset-drag';
 import { DesktopAssetDragSession, type DesktopAssetDragStatus } from './eagle-asset-drag-session';
 import type { NormalizedEagleAssetPage } from './eagle-asset-entity-store';
-import { getEagleWorkspaceCache } from './eagle-workspace-cache';
+import {
+  getEagleWorkspaceCache,
+  type EagleLibraryView,
+  type EaglePhotoView,
+} from './eagle-workspace-cache';
 import { createEagleQueryKeys } from './eagle-query-keys';
 import { useEagleUploadController } from './useEagleUploadController';
 import { useEagleReferenceData } from './useEagleReferenceData';
@@ -180,6 +185,7 @@ interface SekerEaglePageProps {
   accountSummary?: { email: string; onLogout: () => void };
   privacyVisibility?: PrivacyVisibilityState;
   privacyRulesRevision?: number;
+  onPrivacyVisibilityChange?: (value: PrivacyVisibilityState) => void;
   onPrivacyRulesChange?: () => void;
 }
 type EagleAssetContextMenu = {
@@ -190,17 +196,6 @@ type EagleTagPickerState = {
   mode: 'add' | 'remove';
   assetIds: string[];
 };
-type EagleLibraryView =
-  | 'ACTIVE'
-  | 'PRIVATE'
-  | 'TRASH'
-  | 'MANUAL_TAGS'
-  | 'AI_TAGS'
-  | 'VECTOR_REVIEW'
-  | 'VECTOR_TAGS'
-  | 'VECTOR_UNCLASSIFIED'
-  | 'PROCESSING'
-  | 'ACCOUNT';
 type EagleWorkspaceSection = 'TAGS' | 'PENDING' | 'SETTINGS' | 'TASKS';
 
 function getWorkspaceSection(view: EagleLibraryView): EagleWorkspaceSection | null {
@@ -300,6 +295,7 @@ export function SekerEaglePage({
   accountSummary,
   privacyVisibility,
   privacyRulesRevision = 0,
+  onPrivacyVisibilityChange,
   onPrivacyRulesChange,
 }: SekerEaglePageProps) {
   const { libraryMode } = useLibraryWorkspace();
@@ -342,13 +338,16 @@ export function SekerEaglePage({
     `${privacyVisibility?.enabled === true}:${privacyVisibility?.expiresAt ?? ''}:${privacyRulesRevision}`,
   );
   const metadataFormRef = useRef<HTMLFormElement>(null);
-  const [photoView, setPhotoView] = useState<
-    'timeline' | 'map' | 'people' | 'agent' | 'statistics'
-  >('timeline');
+  const [photoView, setPhotoView] = useState<EaglePhotoView>(() =>
+    !privateVisible ? (workspaceCache.browse?.photoView ?? 'timeline') : 'timeline',
+  );
   const [search, setSearch] = useState(() =>
     privateVisible ? '' : (workspaceCache.browse?.search ?? ''),
   );
-  const [libraryView, setLibraryView] = useState<EagleLibraryView>('ACTIVE');
+  const [libraryView, setLibraryView] = useState<EagleLibraryView>(() => {
+    const saved = !privateVisible ? workspaceCache.browse?.libraryView : undefined;
+    return saved && saved !== 'PRIVATE' ? saved : 'ACTIVE';
+  });
   const [aiTagReferenceRequested, setAiTagReferenceRequested] = useState(false);
   const [smartFolderOrder, setSmartFolderOrder] = useState<'DATE' | 'RELEVANCE'>(() =>
     privateVisible ? 'DATE' : (workspaceCache.browse?.smartFolderOrder ?? 'DATE'),
@@ -363,12 +362,18 @@ export function SekerEaglePage({
     scope: string;
     items: EagleAssetListItem[];
   } | null>(null);
-  const [isBatchSelection, setIsBatchSelection] = useState(false);
+  const [isBatchSelection, setIsBatchSelection] = useState(
+    () => !privateVisible && (workspaceCache.browse?.isBatchSelection ?? false),
+  );
   const compact = useCompactLayout();
   const [mobileMore, setMobileMore] = useState(false);
   const [mobileSearch, setMobileSearch] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>([]);
+  const [selectionMode, setSelectionMode] = useState(
+    () => !privateVisible && (workspaceCache.browse?.selectionMode ?? false),
+  );
+  const [selectedAssetIds, setSelectedAssetIds] = useState<string[]>(() =>
+    !privateVisible ? [...(workspaceCache.browse?.selectedAssetIds ?? [])] : [],
+  );
   const [assetContextMenu, setAssetContextMenu] = useState<EagleAssetContextMenu | null>(null);
   const [tagPicker, setTagPicker] = useState<EagleTagPickerState | null>(null);
   const deferredSearch = useDebouncedValue(search.normalize('NFKC').trim(), 250);
@@ -381,13 +386,16 @@ export function SekerEaglePage({
   const filterInputsPending =
     hashKey([quickFilters]) !== hashKey([deferredQuickFilters]) ||
     search.normalize('NFKC').trim() !== deferredSearch;
-  const [filtersExpanded, setFiltersExpanded] = useState(false);
+  const [filtersExpanded, setFiltersExpanded] = useState(
+    () => !privateVisible && (workspaceCache.browse?.filtersExpanded ?? false),
+  );
   const filterPanelId = useId();
-  useEffect(() => {
-    setFiltersExpanded(false);
-  }, [libraryView, photoView]);
-  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
-  const [isInspectorVisible, setIsInspectorVisible] = useState(false);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(() =>
+    !privateVisible ? (workspaceCache.browse?.selectedAssetId ?? null) : null,
+  );
+  const [isInspectorVisible, setIsInspectorVisible] = useState(
+    () => !privateVisible && (workspaceCache.browse?.isInspectorVisible ?? false),
+  );
   const [isDragging, setIsDragging] = useState(false);
   const [originalFileError, setOriginalFileError] = useState<string | null>(null);
   const [assetDragStatus, setAssetDragStatus] = useState<DesktopAssetDragStatus>(null);
@@ -522,8 +530,21 @@ export function SekerEaglePage({
   const assetViewportRef = assetViewport.elementRef;
   const { scrollTop, viewportHeight } = assetViewport;
   useEffect(() => {
-    if (!privateVisible && libraryView === 'ACTIVE') {
-      workspaceCache.browse = { search, quickFilters, activeSmartFolderId, smartFolderOrder };
+    if (!privateVisible && libraryView !== 'PRIVATE') {
+      workspaceCache.browse = {
+        search,
+        quickFilters,
+        activeSmartFolderId,
+        smartFolderOrder,
+        libraryView,
+        photoView,
+        filtersExpanded,
+        selectedAssetIds,
+        selectedAssetId,
+        isInspectorVisible,
+        isBatchSelection,
+        selectionMode,
+      };
     }
   }, [
     workspaceCache,
@@ -533,6 +554,13 @@ export function SekerEaglePage({
     quickFilters,
     activeSmartFolderId,
     smartFolderOrder,
+    photoView,
+    filtersExpanded,
+    selectedAssetIds,
+    selectedAssetId,
+    isInspectorVisible,
+    isBatchSelection,
+    selectionMode,
   ]);
   const assetStore = workspaceCache.store;
   useEffect(() => workspaceCache.retain(privateVisible), [workspaceCache, privateVisible]);
@@ -570,13 +598,17 @@ export function SekerEaglePage({
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
   const listIdentity = hashKey(listKey);
+  const selectionScope = hashKey([listIdentity, quickFilters, search]);
+  const previousSelectionScope = useRef(selectionScope);
   useEffect(() => {
+    if (previousSelectionScope.current === selectionScope) return;
+    previousSelectionScope.current = selectionScope;
     setSelectedAssetId(null);
     setSelectedAssetIds([]);
     setAssetContextMenu(null);
     setIsBatchSelection(false);
     selectionAnchorIdRef.current = null;
-  }, [listIdentity, quickFilters, search]);
+  }, [selectionScope]);
   const secondaryReady =
     !isAssetView ||
     !showsAssetControls ||
@@ -606,7 +638,7 @@ export function SekerEaglePage({
   const pendingWorkCount = unavailableSuggestionCount + (vectorSummary?.suggestions.pending ?? 0);
   const photoFieldOptions = usePhotoFilterOptions(
     privateVisible,
-    filtersExpanded || isSmartFolderDialogOpen,
+    (isAssetView && showsAssetControls && filtersExpanded) || isSmartFolderDialogOpen,
   );
   const resetAssetPrivacyState = useCallback(() => {
     workspaceCache.clearNavigation();
@@ -2021,6 +2053,13 @@ export function SekerEaglePage({
                     {!compact && toolbarTools}
                   </>
                 )}
+                {onPrivacyVisibilityChange && privacyVisibility && (
+                  <LibraryPrivacyToggle
+                    value={privacyVisibility}
+                    onChange={onPrivacyVisibilityChange}
+                    onOpen={() => changeLibraryView('PRIVATE')}
+                  />
+                )}
               </div>
 
               {!compact && quickFilterPanel}
@@ -2212,6 +2251,18 @@ export function SekerEaglePage({
                                   ? t('将照片拖入此处。')
                                   : t('将图片、RAW 或相机视频拖入此处。')}
                         </p>
+                        {(search || activeFilterCount || activeSmartFolderId) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSearch('');
+                              setQuickFilters(createEmptyEagleQuickFilterState());
+                              setActiveSmartFolderId(null);
+                            }}
+                          >
+                            {t('清除搜索与筛选')}
+                          </button>
+                        )}
                       </div>
                     )}
                     <div

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { IconChevronDown, IconRefresh, IconX } from '@tabler/icons-react';
 import { t } from '../../i18n';
@@ -46,6 +46,23 @@ export function PhotoStatistics({
   });
   const options = result;
   const data = result.data;
+  useEffect(() => {
+    if (panel !== 'date') return;
+    if (dates.start && dates.end && dates.start > dates.end) {
+      setRangeError(true);
+      return;
+    }
+    setRangeError(false);
+    const timer = window.setTimeout(() => {
+      setPreset(dates.start || dates.end ? 'custom' : 'all');
+      setInput((current) =>
+        current.start === (dates.start || undefined) && current.end === (dates.end || undefined)
+          ? current
+          : { ...current, start: dates.start || undefined, end: dates.end || undefined },
+      );
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [dates, panel]);
   function openPanel(next: Exclude<Panel, null>) {
     setPanel((value) => (value === next ? null : next));
     setSearch('');

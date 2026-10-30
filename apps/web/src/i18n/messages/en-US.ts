@@ -1,4 +1,6 @@
 export const enUS = {
+  清除搜索与筛选: 'Clear search and filters',
+  隐藏隐私内容: 'Hide private content',
   '正在继续…': 'Resuming…',
   '正在暂停…': 'Pausing…',
   '导入完成 {{value1}}/{{value2}}': 'Import complete {{value1}}/{{value2}}',

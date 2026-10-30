@@ -4,6 +4,19 @@ import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
 import { EagleAssetEntityStore } from './eagle-asset-entity-store';
 import { createEagleQueryKeys } from './eagle-query-keys';
 
+export type EagleLibraryView =
+  | 'ACTIVE'
+  | 'PRIVATE'
+  | 'TRASH'
+  | 'MANUAL_TAGS'
+  | 'AI_TAGS'
+  | 'VECTOR_REVIEW'
+  | 'VECTOR_TAGS'
+  | 'VECTOR_UNCLASSIFIED'
+  | 'PROCESSING'
+  | 'ACCOUNT';
+export type EaglePhotoView = 'timeline' | 'map' | 'people' | 'agent' | 'statistics';
+
 // Normalized page IDs and their entities must have the same lifetime. Keep only
 // workspaces that still have a list in React Query; its existing GC bounds idle use.
 const caches = new WeakMap<QueryClient, Map<string, EagleWorkspaceCache>>();
@@ -33,6 +46,14 @@ class EagleWorkspaceCache {
     quickFilters: EagleQuickFilterState;
     activeSmartFolderId: string | null;
     smartFolderOrder: 'DATE' | 'RELEVANCE';
+    libraryView: EagleLibraryView;
+    photoView: EaglePhotoView;
+    filtersExpanded: boolean;
+    selectedAssetIds: string[];
+    selectedAssetId: string | null;
+    isInspectorVisible: boolean;
+    isBatchSelection: boolean;
+    selectionMode: boolean;
   } | null = null;
   readonly scrollPositions = new Map<string, number>();
   clearNavigation() {
