@@ -370,10 +370,15 @@ try {
     assert.equal(response.status, 200);
     await response.body?.cancel();
   };
-  worker = spawn(process.execPath, ['apps/worker/dist/main.js'], {
-    env,
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  // Allow the same isolated acceptance to verify a prepared native release before cutover.
+  worker = spawn(
+    process.execPath,
+    [process.env.SEKEREAGLE_TEST_WORKER_ENTRY || 'apps/worker/dist/main.js'],
+    {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
   worker.stdout.on('data', (b) => {
     events += b.toString();
   });
