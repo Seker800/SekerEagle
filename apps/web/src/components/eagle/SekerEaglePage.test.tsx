@@ -521,6 +521,43 @@ describe('SekerEaglePage', () => {
     }
   });
 
+  it('restores this mode selection, inspector and expanded filters after switching away', async () => {
+    const view = renderPage('mode-ui-state');
+    const card = await screen.findByRole('button', { name: /Owl Reference/ });
+    fireEvent.click(card);
+    fireEvent.click(screen.getByRole('button', { name: '显示素材详情' }));
+    fireEvent.click(screen.getByRole('button', { name: '展开筛选' }));
+    view.rerender(<></>);
+    testWorkspaceMode.value = 'PHOTO';
+    view.rerender(view.renderForOwner('mode-ui-state'));
+    expect(screen.queryByRole('toolbar', { name: '快捷筛选' })).not.toBeInTheDocument();
+    view.rerender(<></>);
+    testWorkspaceMode.value = 'MATERIAL';
+    view.rerender(view.renderForOwner('mode-ui-state'));
+    expect(screen.getByRole('toolbar', { name: '快捷筛选' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(await screen.findByRole('complementary', { name: '素材详情' })).toBeInTheDocument();
+  });
+
+  it('offers an immediate escape from an empty filtered result', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: /Owl Reference/ });
+    listEagleAssetsMock.mockImplementation(async (_token, input: { search?: string }) => ({
+      items: input.search ? [] : [asset],
+      nextCursor: null,
+    }));
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索素材' }), {
+      target: { value: '不存在' },
+    });
+    await screen.findByText('没有匹配的素材');
+    fireEvent.click(screen.getByRole('button', { name: '清除搜索与筛选' }));
+    expect(screen.getByRole('searchbox', { name: '搜索素材' })).toHaveValue('');
+    expect(await screen.findByRole('button', { name: /Owl Reference/ })).toBeInTheDocument();
+  });
+
   it('keeps old cards visible but unavailable while an uncached search is pending', async () => {
     renderPage();
     await screen.findByRole('button', { name: /Owl Reference/ });

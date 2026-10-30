@@ -56,6 +56,18 @@ describe('photo statistics', () => {
     expect(screen.getByText('2024-02', { selector: 'time' })).toBeInTheDocument();
     expect(within(screen.getByRole('status')).getByText('0')).toBeInTheDocument();
   });
+  it('applies valid custom dates automatically without requiring the apply button', async () => {
+    get.mockResolvedValue(data);
+    const view = mount();
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
+    fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
+    fireEvent.change(screen.getByLabelText('开始日期'), { target: { value: '2025-01-01' } });
+    fireEvent.change(screen.getByLabelText('结束日期'), { target: { value: '2025-12-31' } });
+    await waitFor(() =>
+      expect(get.mock.calls.at(-1)?.[0]).toMatchObject({ start: '2025-01-01', end: '2025-12-31' }),
+    );
+    view.unmount();
+  });
   it('combines camera and lens filters and switches the time series dimension', async () => {
     get.mockResolvedValue(data);
     mount();
