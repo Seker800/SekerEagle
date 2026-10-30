@@ -39,14 +39,16 @@ export async function prepareAssetPurge(
     });
     return;
   }
-  const objectKeys = [
-    ...new Set([asset.originalObjectKey, ...asset.renditions.map((r) => r.storageKey)]),
-  ];
-  const prefixes = asset.imagePyramids.map((p) => `${p.storagePrefix}/`);
-  for (const key of [...objectKeys, ...prefixes]) assertDeletionKey(asset.ownerId, key);
-  await tx.eagleObjectDeletion.create({
-    data: { ownerId: asset.ownerId, libraryMode: asset.libraryMode, objectKeys, prefixes },
-  });
+  if (!asset.storageTransferredOut) {
+    const objectKeys = [
+      ...new Set([asset.originalObjectKey, ...asset.renditions.map((r) => r.storageKey)]),
+    ];
+    const prefixes = asset.imagePyramids.map((p) => `${p.storagePrefix}/`);
+    for (const key of [...objectKeys, ...prefixes]) assertDeletionKey(asset.ownerId, key);
+    await tx.eagleObjectDeletion.create({
+      data: { ownerId: asset.ownerId, libraryMode: asset.libraryMode, objectKeys, prefixes },
+    });
+  }
   await tx.uploadSession.updateMany({
     where: { uploaderId: asset.ownerId, libraryMode: asset.libraryMode, eagleAssetId: asset.id },
     data: { eagleAssetId: null },

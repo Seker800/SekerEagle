@@ -32,6 +32,7 @@ import { lockOwnerPrivacyProjection } from './eagle-privacy.service';
 import type { SendEagleAssetsDto } from './eagle.dto';
 
 interface TransferItem {
+  storageAction?: 'HANDOFF';
   sourceId: string;
   targetId: string;
   revision: number;
@@ -167,26 +168,31 @@ export class EagleLibraryTransferService {
       const items: TransferItem[] = components.map((row) => {
         assertOwnedObjectKey(ownerId, row.originalObjectKey);
         const targetId = randomUUID();
+        const pyramid = planTransferPyramid(
+          ownerId,
+          targetId,
+          row.mediaRevision,
+          row.imagePyramids ?? [],
+        );
+        const renditions = planTransferRenditions(
+          ownerId,
+          targetId,
+          row.mediaRevision,
+          row.renditions ?? [],
+        );
         return {
+          storageAction: 'HANDOFF',
           sourceId: row.id,
           targetId,
           revision: row.mediaRevision,
           rowVersion: row.rowVersion,
           sourceKey: row.originalObjectKey,
-          targetKey: `users/${ownerId}/assets/${targetId}/original.${row.format.replace(/[^a-z0-9]/gi, '') || 'bin'}`,
+          targetKey: row.originalObjectKey,
           size: String(row.byteSize),
-          pyramid: planTransferPyramid(
-            ownerId,
-            targetId,
-            row.mediaRevision,
-            row.imagePyramids ?? [],
-          ),
-          renditions: planTransferRenditions(
-            ownerId,
-            targetId,
-            row.mediaRevision,
-            row.renditions ?? [],
-          ),
+          pyramid: pyramid
+            ? { ...pyramid, targetPrefix: `${pyramidStoragePrefix(pyramid.storagePrefix)}/` }
+            : undefined,
+          renditions: renditions.map((r) => ({ ...r, targetKey: r.sourceKey })),
         };
       });
       try {
@@ -215,6 +221,13 @@ export class EagleLibraryTransferService {
     const items = operation.plan as unknown as TransferItem[];
     if (!Array.isArray(items) || !items.length || items.length > 200)
       throw new ConflictException('发送计划无效。');
+    const handoff = items.every((item) => item.storageAction === 'HANDOFF');
+    if (
+      items.some((item) => item.storageAction !== undefined && item.storageAction !== 'HANDOFF') ||
+      (!handoff && items.some((item) => item.storageAction === 'HANDOFF'))
+    )
+      throw new ConflictException('发送存储计划无效。');
+
     if (
       guard &&
       JSON.stringify(items.map((item) => item.sourceId).sort()) !==
@@ -257,13 +270,21 @@ export class EagleLibraryTransferService {
         assertOwnedObjectKey(ownerId, object.sourceKey);
         assertOwnedObjectKey(ownerId, object.targetKey);
       }
+      if (
+        handoff &&
+        (objects.some((object) => object.sourceKey !== object.targetKey) ||
+          (item.pyramid &&
+            pyramidStoragePrefix(item.pyramid.storagePrefix) !==
+              pyramidStoragePrefix(item.pyramid.targetPrefix)))
+      )
+        throw new ConflictException('发送存储所有权计划无效。');
       await runTransferWork(objects, async (object) => {
-        await this.storage.copyObject(object.sourceKey, object.targetKey);
+        if (!handoff) await this.storage.copyObject(object.sourceKey, object.targetKey);
         const copied = await this.storage.headObject(object.targetKey);
         if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
           throw new ConflictException('文件复制校验失败，请重试。');
       });
-      if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
+      if (item.pyramid && !handoff) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
     }
     return this.prisma.$transaction(
       async (tx) => {
@@ -462,7 +483,8 @@ export class EagleLibraryTransferService {
         }
         // Publishing the independent target and retiring the source are atomic.
         // Keep the non-restorable source identity for approval history and privacy checks.
-        // Only source objects enter the existing durable deletion outbox.
+        // Only objects still owned by the retired source enter the deletion outbox.
+        // A handoff transfers exclusive storage lifetime to the independent target.
         const retiredAt = new Date();
         const retired = await tx.eagleAsset.updateMany({
           where: this.libraryModeWhere(ownerId, sourceIds, includePrivate),
@@ -470,11 +492,27 @@ export class EagleLibraryTransferService {
             deletedAt: retiredAt,
             purgeAfter: retiredAt,
             transferredAt: retiredAt,
+            storageTransferredOut: handoff,
             rowVersion: { increment: 1 },
           },
         });
         if (retired.count !== items.length)
           throw new ConflictException('图片已变化或不再可访问，请刷新后重试。');
+        const retainedKeys = new Set(
+          handoff
+            ? items.flatMap((item) => [
+                item.sourceKey,
+                ...(item.renditions ?? []).map((r) => r.sourceKey),
+              ])
+            : [],
+        );
+        const retainedPrefixes = new Set(
+          handoff
+            ? items.flatMap((item) =>
+                item.pyramid ? [`${pyramidStoragePrefix(item.pyramid.storagePrefix)}/`] : [],
+              )
+            : [],
+        );
         const objectKeys = [
           ...new Set(
             sources.flatMap((source) => [
@@ -482,14 +520,17 @@ export class EagleLibraryTransferService {
               ...source.renditions.map((r) => r.storageKey),
             ]),
           ),
-        ];
-        const prefixes = sources.flatMap((source) =>
-          source.imagePyramids.map((p) => `${pyramidStoragePrefix(p.storagePrefix)}/`),
-        );
+        ].filter((key) => !retainedKeys.has(key));
+        const prefixes = sources
+          .flatMap((source) =>
+            source.imagePyramids.map((p) => `${pyramidStoragePrefix(p.storagePrefix)}/`),
+          )
+          .filter((prefix) => !retainedPrefixes.has(prefix));
         for (const key of [...objectKeys, ...prefixes]) assertOwnedObjectKey(ownerId, key);
-        await tx.eagleObjectDeletion.create({
-          data: { ownerId, libraryMode: this.sourceMode, objectKeys, prefixes },
-        });
+        if (objectKeys.length || prefixes.length)
+          await tx.eagleObjectDeletion.create({
+            data: { ownerId, libraryMode: this.sourceMode, objectKeys, prefixes },
+          });
         const result: LibraryTransferResult = {
           targetMode,
           movedCount: ids.length,

@@ -404,6 +404,7 @@ model EagleAsset {
   livePhotoRole                  String?
   deletedAt                      DateTime?
   transferredAt                  DateTime?
+  storageTransferredOut          Boolean @default(false)
   purgeAfter                     DateTime?
   createdAt                      DateTime                       @default(now())
   updatedAt                      DateTime                       @updatedAt
