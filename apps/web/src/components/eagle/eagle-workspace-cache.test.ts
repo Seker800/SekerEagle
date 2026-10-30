@@ -208,3 +208,33 @@ it('keeps an independently cached detail after the final list leaves and collect
   expect(getEagleWorkspaceCache(client, 'owner', 'MATERIAL')).not.toBe(cache);
   expect(cache.store.size).toBe(0);
 });
+
+it('aborts a real in-flight query on privacy reset before its late response can normalize', async () => {
+  const { client, cache, keys } = fixture();
+  let resolvePage!: (page: ReturnType<typeof makeEaglePage>) => void;
+  let signal!: AbortSignal;
+  const response = new Promise<ReturnType<typeof makeEaglePage>>((resolve) => {
+    resolvePage = resolve;
+  });
+  const key = keys.assetList('PRIVATE', {});
+  const request = client
+    .fetchInfiniteQuery({
+      queryKey: key,
+      initialPageParam: undefined,
+      queryFn: async (context) => {
+        signal = context.signal;
+        const page = await response;
+        signal.throwIfAborted();
+        return cache.store.normalizePage(page);
+      },
+    })
+    .catch(() => undefined);
+  cache.store.clear();
+  await client.resetQueries({ queryKey: keys.root });
+  expect(signal.aborted).toBe(true);
+  resolvePage(makeEaglePage(['private-late']));
+  await request;
+  await Promise.resolve();
+  expect(cache.store.size).toBe(0);
+  expect(client.getQueryData(key)).toBeUndefined();
+});

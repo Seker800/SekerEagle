@@ -5,8 +5,14 @@ import * as desktopCache from '../../lib/desktop-cache';
 import * as eagleApi from '../../lib/eagle-api';
 import * as api from '../../lib/eagle-vector-api';
 import { EagleVectorWorkspace } from './EagleVectorWorkspace';
+import { QueryClient } from '@tanstack/react-query';
+import { createEagleQueryKeys } from './eagle-query-keys';
+import { refreshEagleAssetRelations } from './eagle-write-refresh';
 
-vi.mock('../../lib/desktop-cache', () => ({ invalidateDesktopAssets: vi.fn() }));
+vi.mock('../../lib/desktop-cache', async (original) => ({
+  ...(await original<typeof desktopCache>()),
+  invalidateDesktopAssets: vi.fn(),
+}));
 
 vi.mock('../../lib/eagle-api', () => {
   const api = {
@@ -306,44 +312,62 @@ describe('EagleVectorWorkspace', () => {
     expect(screen.queryByRole('button', { name: /选择 red-car\.jpg/ })).not.toBeInTheDocument();
   });
 
-  it('confirms vector suggestions into manual tags without repeating implementation details', async () => {
-    const onAssetPrivacyChanged = vi.fn();
-    const onAssetRelationsChanged = vi.fn().mockResolvedValue(undefined);
-    vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
-      items: [
-        {
-          id: 'suggestion-1',
-          status: 'ACCEPTED',
-          assetId: 'asset-1',
-          privacyChanged: false,
-        },
-      ],
-    });
-    render(
-      <EagleVectorWorkspace
-        onAssetPrivacyChanged={onAssetPrivacyChanged}
-        onAssetRelationsChanged={onAssetRelationsChanged}
-      />,
-    );
-    expect(
-      await screen.findByText('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
-    ).not.toBeInTheDocument();
-    expect(await screen.findByText('建议：汽车')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: '确认' }));
-    await waitFor(() =>
-      expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),
-    );
-    expect(onAssetPrivacyChanged).not.toHaveBeenCalled();
-    expect(onAssetRelationsChanged).toHaveBeenCalledWith(['asset-1']);
-    await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
-    fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
-    await waitFor(() =>
-      expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'REJECT'),
-    );
-  });
+  it.each([false, true])(
+    'confirms suggestions and refreshes real relations with privacyChanged=%s',
+    async (privacyChanged) => {
+      const onAssetPrivacyChanged = vi.fn();
+      const client = new QueryClient();
+      const keys = createEagleQueryKeys('owner', 'MATERIAL');
+      const watched = [
+        keys.assets,
+        keys.assetDetails,
+        keys.manualTags,
+        keys.manualTagGroups,
+        keys.smartFolders,
+        [...keys.root, 'vector-summary'],
+      ];
+      watched.forEach((key) => client.setQueryData(key, []));
+      const onAssetRelationsChanged = vi.fn((ids: readonly string[]) =>
+        refreshEagleAssetRelations(client, keys, ids),
+      );
+      vi.mocked(api.reviewEagleVectorSuggestions).mockResolvedValue({
+        items: [
+          {
+            id: 'suggestion-1',
+            status: 'ACCEPTED',
+            assetId: 'asset-1',
+            privacyChanged,
+          },
+        ],
+      });
+      render(
+        <EagleVectorWorkspace
+          onAssetPrivacyChanged={onAssetPrivacyChanged}
+          onAssetRelationsChanged={onAssetRelationsChanged}
+        />,
+      );
+      expect(
+        await screen.findByText('确认可靠建议，拒绝不正确的结果，或为素材指定其他人工标签。'),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText('这里审核的是已有人工标签的向量推荐，不会写入 AI 自动标签。'),
+      ).not.toBeInTheDocument();
+      expect(await screen.findByText('建议：汽车')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: '确认' }));
+      await waitFor(() =>
+        expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'ACCEPT'),
+      );
+      expect(onAssetPrivacyChanged).toHaveBeenCalledTimes(privacyChanged ? 1 : 0);
+      expect(onAssetRelationsChanged).toHaveBeenCalledWith(['asset-1']);
+      watched.forEach((key) => expect(client.getQueryState(key)?.isInvalidated).toBe(true));
+      client.clear();
+      await waitFor(() => expect(screen.getByRole('button', { name: '拒绝' })).toBeEnabled());
+      fireEvent.click(screen.getByRole('button', { name: '拒绝' }));
+      await waitFor(() =>
+        expect(api.reviewEagleVectorSuggestions).toHaveBeenCalledWith(['suggestion-1'], 'REJECT'),
+      );
+    },
+  );
 
   it('presents review tags and suggestions as a similarity-first batch workflow', async () => {
     vi.mocked(api.listEagleVectorTags).mockResolvedValue([
