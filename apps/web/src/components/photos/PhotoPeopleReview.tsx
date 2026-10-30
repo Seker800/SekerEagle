@@ -63,9 +63,12 @@ export function PhotoPeopleReview({
     }
   }
   return (
-    <section className="photo-people-review" aria-label={t('这两张照片是同一个人吗？')}>
-      <h3>{t('这两张照片是同一个人吗？')}</h3>
-      <p>{t('按相似程度推荐，需要你确认；不会自动合并。')}</p>
+    <section
+      className="photo-people-review"
+      aria-label={pair ? t('这两张照片是同一个人吗？') : t('相似人物确认')}
+    >
+      <h3>{pair ? t('这两张照片是同一个人吗？') : t('相似人物确认')}</h3>
+      <p>{t('仅推荐有清晰人脸和充分相似依据的组合；证据不足时不提问，不会自动合并。')}</p>
       {(error || query.error) && <p role="alert">{error ?? query.error?.message}</p>}
       {result && <p role="status">{result}</p>}
       {query.isPending ? (

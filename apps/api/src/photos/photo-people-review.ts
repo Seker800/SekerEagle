@@ -1,9 +1,21 @@
 import { Prisma } from '@prisma/client';
+import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
 import { normalizeEmbedding } from '@sekereagle/vector-core';
 import type { PrismaService } from '../prisma/prisma.service';
 import { previewSelect, serializePreview } from './photo-preview';
+import {
+  PERSON_REVIEW_RETRIEVAL_SIMILARITY,
+  qualifyPersonReviewPairs,
+  readPersonReviewEvidence,
+} from './photo-person-review-evidence';
 
-type Candidate = { id: string; prototype: number[]; modelVersion: string; count: bigint };
+type Candidate = {
+  id: string;
+  name?: string | null;
+  prototype: number[];
+  modelVersion: string;
+  count: bigint;
+};
 type Pair = {
   firstId: string;
   secondId: string;
@@ -39,6 +51,7 @@ export function rankPhotoPeopleReviewCandidates(
         second = normalized[j]!;
       if (
         first.modelVersion !== second.modelVersion ||
+        (Boolean(first.name?.trim()) && Boolean(second.name?.trim())) ||
         excluded.has(JSON.stringify([first.id, second.id].sort()))
       )
         continue;
@@ -46,7 +59,7 @@ export function rankPhotoPeopleReviewCandidates(
         (sum, value, index) => sum + value * second.prototype[index]!,
         0,
       );
-      if (similarity >= 0.25)
+      if (similarity >= PERSON_REVIEW_RETRIEVAL_SIMILARITY)
         pairs.push({
           firstId: first.id,
           secondId: second.id,
@@ -62,17 +75,20 @@ export function rankPhotoPeopleReviewCandidates(
         totalB = b.firstCount + b.secondCount;
       const minimumA = a.firstCount < a.secondCount ? a.firstCount : a.secondCount;
       const minimumB = b.firstCount < b.secondCount ? b.firstCount : b.secondCount;
-      return totalA !== totalB
-        ? totalA > totalB
-          ? -1
-          : 1
-        : minimumA !== minimumB
-          ? minimumA > minimumB
+      return (
+        b.similarity - a.similarity ||
+        (totalA !== totalB
+          ? totalA > totalB
             ? -1
             : 1
-          : b.similarity - a.similarity ||
-            a.firstId.localeCompare(b.firstId) ||
-            a.secondId.localeCompare(b.secondId);
+          : minimumA !== minimumB
+            ? minimumA > minimumB
+              ? -1
+              : 1
+            : b.similarity - a.similarity ||
+              a.firstId.localeCompare(b.firstId) ||
+              a.secondId.localeCompare(b.secondId))
+      );
     })
     .slice(0, 100);
 }
@@ -86,11 +102,12 @@ export function readPhotoPeopleReview(
     async (tx) => {
       // Indexed base-table joins remain usable even before a newly imported owner's statistics refresh.
       const candidates = await tx.$queryRaw<Candidate[]>(Prisma.sql`
-      SELECT p.id, p.prototype, p."modelVersion", count(DISTINCT f."assetId") AS count
+      SELECT p.id, p.name, p.prototype, p."modelVersion", count(DISTINCT f."assetId") AS count
       FROM "EaglePhotoPerson" p JOIN "EaglePhotoFace" f
         ON f."personId" = p.id AND f."ownerId" = p."ownerId" AND f."libraryMode" = p."libraryMode" AND f."isCurrent" = true
       JOIN "EagleAsset" a ON a.id = f."assetId" AND a."ownerId" = f."ownerId" AND a."libraryMode" = f."libraryMode"
       WHERE p."ownerId" = ${ownerId} AND p."libraryMode" = 'PHOTO'
+        AND p."modelVersion" = ${PHOTO_FACE_MODEL_VERSION} AND f."modelVersion" = p."modelVersion"
         AND f."assetRevision" = a."mediaRevision" AND a."deletedAt" IS NULL
         ${includePrivate ? Prisma.empty : Prisma.sql`AND a."isPrivate" = false AND p."marksAssetsPrivate" = false`}
         AND cardinality(p.prototype) = 128
@@ -124,21 +141,17 @@ export function readPhotoPeopleReview(
         },
         select: { firstId: true, secondId: true },
       });
-      const pairs = rankPhotoPeopleReviewCandidates(candidates, [...blocked, ...separations]);
+      const retrieved = rankPhotoPeopleReviewCandidates(candidates, [...blocked, ...separations]);
+      const evidence = await readPersonReviewEvidence(
+        tx,
+        ownerId,
+        includePrivate,
+        retrieved.flatMap((p) => [p.firstId, p.secondId]),
+      );
+      const pairs = qualifyPersonReviewPairs(retrieved, evidence);
       const ids = [...new Set(pairs.flatMap((pair) => [pair.firstId, pair.secondId]))];
       if (!ids.length) return { pairs: [] };
-      const representatives = await tx.$queryRaw<Array<{ faceId: string }>>(Prisma.sql`
-      SELECT DISTINCT ON (f."personId") f.id AS "faceId"
-      FROM "EaglePhotoFace" f JOIN "EagleAsset" a
-        ON a.id = f."assetId" AND a."ownerId" = f."ownerId" AND a."libraryMode" = f."libraryMode"
-      JOIN "EagleAssetRendition" r ON r."assetId" = a.id AND r."ownerId" = a."ownerId" AND r."libraryMode" = a."libraryMode"
-        AND r."revision" = a."mediaRevision" AND r.status = 'READY'
-        AND r.kind IN ('PREVIEW', 'THUMBNAIL') AND r."mimeType" LIKE 'image/%' AND r.variant <> 'edit'
-      WHERE f."ownerId" = ${ownerId} AND f."libraryMode" = 'PHOTO' AND f."isCurrent" = true
-        AND f."personId" IN (${Prisma.join(ids)}) AND f."assetRevision" = a."mediaRevision" AND a."deletedAt" IS NULL
-        ${includePrivate ? Prisma.empty : Prisma.sql`AND a."isPrivate" = false`}
-      ORDER BY f."personId", (COALESCE(r.width, 1)::double precision * COALESCE(r.height, 1) * f.box[3] * f.box[4]) DESC, f.confidence DESC, f.id
-    `);
+      const faceIds = pairs.flatMap((p) => [p.firstFaceId, p.secondFaceId]);
       const people = await tx.eaglePhotoPerson.findMany({
         where: {
           ownerId,
@@ -153,7 +166,7 @@ export function readPhotoPeopleReview(
           marksAssetsPrivate: true,
           faces: {
             where: {
-              id: { in: representatives.map((face) => face.faceId) },
+              id: { in: faceIds },
               isCurrent: true,
               asset: {
                 ownerId,
@@ -198,11 +211,13 @@ export function readPhotoPeopleReview(
         pairs: pairs.flatMap((pair) => {
           const first = byId.get(pair.firstId),
             second = byId.get(pair.secondId);
-          return first && second
+          const firstFace = first?.faces.find((f) => f.id === pair.firstFaceId),
+            secondFace = second?.faces.find((f) => f.id === pair.secondFaceId);
+          return first && second && firstFace && secondFace
             ? [
                 {
-                  first: { ...first, photoCount: Number(pair.firstCount) },
-                  second: { ...second, photoCount: Number(pair.secondCount) },
+                  first: { ...first, faces: [firstFace], photoCount: Number(pair.firstCount) },
+                  second: { ...second, faces: [secondFace], photoCount: Number(pair.secondCount) },
                   similarity: pair.similarity,
                 },
               ]

@@ -9,6 +9,7 @@ import {
   requireVisiblePerson,
 } from './photo-person-scope';
 import { encodeReviewCursor, personReviewCandidatesSql, reviewCursor } from './photo-person-review';
+import { qualifyPersonReviewPairs, readPersonReviewEvidence } from './photo-person-review-evidence';
 @Injectable()
 export class PhotoPersonReviewService {
   constructor(
@@ -25,6 +26,7 @@ export class PhotoPersonReviewService {
           FROM "EaglePhotoFace" f JOIN "EagleAsset" a
             ON a."ownerId"=f."ownerId" AND a."libraryMode"=f."libraryMode" AND a.id=f."assetId"
           WHERE f."ownerId"=${ownerId} AND f."libraryMode"='PHOTO' AND f."isCurrent"
+            AND f."assetRevision"=a."mediaRevision"
             AND a."deletedAt" IS NULL AND (${includePrivate} OR NOT a."isPrivate")
         )
         SELECT count(*) FILTER (WHERE p.name IS NOT NULL) AS named,
@@ -50,36 +52,54 @@ export class PhotoPersonReviewService {
             anchorId: string;
             candidateId: string | null;
             score: number | null;
-            anchorFaceIds: string[];
-            candidateFaceIds: string[];
             lastAnchor: string;
             hasMore: boolean;
           }>
         >(personReviewCandidatesSql(ownerId, includePrivate, cursor));
-        const ids = [
-          ...new Set(rows.flatMap((r) => (r.candidateId ? [r.anchorId, r.candidateId] : []))),
-        ];
+        const retrieved = rows.flatMap((row) =>
+          row.candidateId && row.score !== null && Number.isFinite(row.score)
+            ? [{ firstId: row.anchorId, secondId: row.candidateId }]
+            : [],
+        );
+        const evidence = await readPersonReviewEvidence(
+          tx,
+          ownerId,
+          includePrivate,
+          retrieved.flatMap((p) => [p.firstId, p.secondId]),
+        );
+        const qualified = qualifyPersonReviewPairs(retrieved, evidence);
+        const ids = [...new Set(qualified.flatMap((p) => [p.firstId, p.secondId]))];
         const people = ids.length
           ? await tx.eaglePhotoPerson.findMany({
               where: { ...visiblePhotoPeople(ownerId, includePrivate), id: { in: ids } },
               select: personPreviewSelect(
                 ownerId,
                 includePrivate,
-                3,
-                rows.flatMap((r) => [...r.anchorFaceIds, ...r.candidateFaceIds]),
+                1,
+                qualified.flatMap((p) => [p.firstFaceId, p.secondFaceId]),
               ),
             })
           : [];
         const map = new Map(people.map((p) => [p.id, serializePersonPreview(p)]));
         const seen = new Set<string>();
-        const items = rows.flatMap((r) => {
-          if (!r.candidateId || r.score === null || !Number.isFinite(r.score)) return [];
-          const key = [r.anchorId, r.candidateId].sort().join(':');
+        const items = qualified.flatMap((r) => {
+          const key = [r.firstId, r.secondId].sort().join(':');
           if (seen.has(key)) return [];
           seen.add(key);
-          const first = map.get(r.anchorId),
-            second = map.get(r.candidateId);
-          return first && second ? [{ key, first, second, similarity: r.score }] : [];
+          const first = map.get(r.firstId),
+            second = map.get(r.secondId);
+          const firstFace = first?.faces.find((f) => f.id === r.firstFaceId),
+            secondFace = second?.faces.find((f) => f.id === r.secondFaceId);
+          return first && second && firstFace && secondFace
+            ? [
+                {
+                  key,
+                  first: { ...first, faces: [firstFace] },
+                  second: { ...second, faces: [secondFace] },
+                  similarity: r.similarity,
+                },
+              ]
+            : [];
         });
         return {
           items,

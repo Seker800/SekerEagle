@@ -1,5 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { PHOTO_FACE_MODEL_VERSION } from '@sekereagle/library-core';
+import { PERSON_REVIEW_RETRIEVAL_SIMILARITY } from './photo-person-review-evidence';
 /** Bounded anchors; candidate scoring stays server-side and searches the visible library. */
 export const PERSON_REVIEW_ANCHORS = 16;
 export function reviewCursor(after: string | undefined, ownerId: string, includePrivate: boolean) {
@@ -34,7 +36,10 @@ WITH visible_faces AS MATERIALIZED (
 ), eligible AS MATERIALIZED (
  SELECT p.id,p.name,p."rowVersion",p.prototype,p."modelVersion"
  FROM "EaglePhotoPerson" p WHERE p."ownerId"=${ownerId} AND p."libraryMode"='PHOTO'
+ AND p."modelVersion"=${PHOTO_FACE_MODEL_VERSION}
  AND (${includePrivate} OR NOT p."marksAssetsPrivate") AND array_length(p.prototype,1)=128
+ AND NOT EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE v IS NULL OR v NOT BETWEEN -1.001 AND 1.001)
+ AND EXISTS (SELECT 1 FROM unnest(p.prototype) v WHERE abs(v)>0.000001)
  AND EXISTS (SELECT 1 FROM visible_faces f WHERE f."personId"=p.id AND f."modelVersion"=p."modelVersion")
 ), anchors AS (SELECT * FROM eligible WHERE name IS NULL AND id>${after} ORDER BY id LIMIT ${PERSON_REVIEW_ANCHORS + 1}),
 work AS MATERIALIZED (SELECT * FROM anchors ORDER BY id LIMIT ${PERSON_REVIEW_ANCHORS}),
@@ -44,15 +49,13 @@ cooccurring AS MATERIALIZED (
  JOIN visible_faces f2 ON f2."assetId"=f1."assetId" AND f2."assetRevision"=f1."assetRevision"
 )
 SELECT a.id AS "anchorId", b.id AS "candidateId",b.score,
- ARRAY(SELECT f.id FROM visible_faces f WHERE f."personId"=a.id AND f."modelVersion"=a."modelVersion" ORDER BY f.confidence DESC,f.id LIMIT 3) AS "anchorFaceIds",
- ARRAY(SELECT f.id FROM visible_faces f WHERE f."personId"=b.id AND f."modelVersion"=a."modelVersion" ORDER BY f.confidence DESC,f.id LIMIT 3) AS "candidateFaceIds",
  (SELECT max(id) FROM work) AS "lastAnchor",(SELECT count(*)>${PERSON_REVIEW_ANCHORS} FROM anchors) AS "hasMore"
 FROM work a LEFT JOIN LATERAL (
  SELECT e.id,1-(a.prototype::vector <=> e.prototype::vector) AS score FROM eligible e
  WHERE e.id<>a.id AND e."modelVersion"=a."modelVersion"
  AND NOT EXISTS(SELECT 1 FROM "EaglePhotoPersonSeparation" d WHERE d."ownerId"=${ownerId} AND d."libraryMode"='PHOTO' AND d."firstId"=LEAST(a.id,e.id) AND d."secondId"=GREATEST(a.id,e.id))
  AND NOT EXISTS(SELECT 1 FROM cooccurring c WHERE c.anchor=a.id AND c.candidate=e.id)
- AND (1-(a.prototype::vector <=> e.prototype::vector))>=0.3
+ AND (1-(a.prototype::vector <=> e.prototype::vector))>=${PERSON_REVIEW_RETRIEVAL_SIMILARITY}
  ORDER BY a.prototype::vector <=> e.prototype::vector,e.id LIMIT 2
 ) b ON true ORDER BY b.score DESC NULLS LAST,a.id,b.id`;
 }

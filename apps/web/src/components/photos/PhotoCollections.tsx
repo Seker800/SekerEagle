@@ -124,7 +124,7 @@ export function PhotoCollections({
               [
                 ['NAMED', t('已命名人物')],
                 ['REVIEW', t('待确认')],
-                ['UNNAMED', t('待整理头像')],
+                ['UNNAMED', t('待整理分组')],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -148,7 +148,7 @@ export function PhotoCollections({
           </div>
           {view === 'NAMED' && summary.data && summary.data.unnamed > 0 && (
             <p className="photo-person-hint">
-              {t('有 {{value1}} 个头像待整理，可先确认相似人物。', {
+              {t('有 {{value1}} 个自动分组待整理，同一个人可能出现在多个分组中；这不是实际人数。', {
                 value1: summary.data.unnamed,
               })}
               <button type="button" onClick={() => setView('REVIEW')}>
@@ -182,7 +182,7 @@ export function PhotoCollections({
                     >
                       {src && face && <PhotoFaceImage face={face} url={thumbnail} />}
                       <strong>
-                        {person.name ?? t('未命名人物 {{value1}}', { value1: index + 1 })}
+                        {person.name ?? t('未命名分组 {{value1}}', { value1: index + 1 })}
                       </strong>
                     </button>
                   );
@@ -229,8 +229,8 @@ export function PhotoCollections({
             people.data.people.length === 0 && (
               <p>
                 {view === 'NAMED'
-                  ? t('还没有已命名人物。可从待整理头像中命名，或先确认相似人物。')
-                  : t('暂无待整理头像。')}
+                  ? t('还没有已命名人物。可从待整理分组中命名，或先确认相似人物。')
+                  : t('暂无待整理分组。')}
               </p>
             )}
         </>

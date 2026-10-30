@@ -98,7 +98,9 @@ it('defaults to named people and makes the review entry explicit, not a wall of 
     'aria-selected',
     'true',
   );
-  expect(screen.getByText('有 3000 个头像待整理，可先确认相似人物。')).toBeVisible();
+  expect(
+    screen.getByText('有 3000 个自动分组待整理，同一个人可能出现在多个分组中；这不是实际人数。'),
+  ).toBeVisible();
   expect(mocks.suggest).not.toHaveBeenCalled();
   expect(mocks.list.mock.calls[0]?.[2]).toBe('NAMED');
 });
@@ -151,6 +153,10 @@ it('never falls back to arbitrary pairs when the server has no similarity candid
   show();
   fireEvent.click(await screen.findByRole('button', { name: '开始确认人物' }));
   expect(await screen.findByText('暂时没有需要确认的相似人物。')).toBeVisible();
+  expect(
+    screen.queryByRole('heading', { name: '这两张照片是同一个人吗？' }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: '相似人物确认' })).toBeVisible();
   expect(screen.queryByRole('button', { name: '是，同一个人' })).not.toBeInTheDocument();
 });
 it('can traverse the full library instead of stopping at the directory page', async () => {

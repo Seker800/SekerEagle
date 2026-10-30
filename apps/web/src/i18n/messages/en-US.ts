@@ -1,4 +1,5 @@
 export const enUS = {
+  相似人物确认: 'Similar people review',
   '已完成 {{value1}} 项，待重试 {{value2}} 项': 'Completed {{value1}}, awaiting retry {{value2}}',
   重试未完成项: 'Retry unfinished items',
   下载队列: 'Download queue',
@@ -29,16 +30,16 @@ export const enUS = {
   暂时跳过: 'Skip for now',
   不是同一个人: 'Different people',
   '正在查找相似人物…': 'Finding similar people…',
-  '按相似程度推荐，需要你确认；不会自动合并。':
-    'Suggested by similarity. Your confirmation is required; people are never merged automatically.',
+  '仅推荐有清晰人脸和充分相似依据的组合；证据不足时不提问，不会自动合并。':
+    'Only clear faces with strong matching evidence are suggested. Insufficient evidence means no question; people are never merged automatically.',
   '已记住：不是同一个人。': 'Remembered: different people.',
-  '暂无待整理头像。': 'No unorganized faces.',
-  '还没有已命名人物。可从待整理头像中命名，或先确认相似人物。':
+  '暂无待整理分组。': 'No unorganized groups.',
+  '还没有已命名人物。可从待整理分组中命名，或先确认相似人物。':
     'No named people yet. Name a person or review similar people.',
   开始确认人物: 'Review similar people',
-  '有 {{value1}} 个头像待整理，可先确认相似人物。':
-    '{{value1}} faces need organizing. Start with similar people.',
-  待整理头像: 'Unorganized faces',
+  '有 {{value1}} 个自动分组待整理，同一个人可能出现在多个分组中；这不是实际人数。':
+    '{{value1}} automatic groups to organize. One person may appear in several groups; this is not a person count.',
+  待整理分组: 'Unorganized groups',
   已命名人物: 'Named people',
   人物整理: 'Organize people',
   '正在准备首批地图位置，无需等待照片分析完成。':
@@ -659,7 +660,7 @@ export const enUS = {
   '人物识别服务尚未配置，暂时无法分析照片。':
     'People recognition is not configured. Photo analysis is currently unavailable.',
   '正在加载人物…': 'Loading people…',
-  '未命名人物 {{value1}}': 'Unnamed person {{value1}}',
+  '未命名分组 {{value1}}': 'Unnamed group {{value1}}',
   '暂无人物。可点击“分析人物”扫描图库中的照片。':
     'No people yet. Select “Analyze people” to scan photos in your library.',
   '清晰度只作参考，所有原片都会保留。': 'Sharpness is a reference. All originals are retained.',
