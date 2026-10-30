@@ -120,24 +120,29 @@ export class SessionTokenService {
     if (
       payload.kind !== 'browser' ||
       !Number.isInteger(payload.authVersion) ||
+      typeof payload.sub !== 'string' ||
+      !payload.sub ||
+      typeof payload.sessionFamilyId !== 'string' ||
       !payload.sessionFamilyId
     ) {
       throw new UnauthorizedException('访问令牌类型无效。');
     }
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user || user.disabledAt || user.authVersion !== payload.authVersion) {
-      throw new UnauthorizedException('登录状态已失效。');
-    }
-    const active = await this.prisma.refreshToken.findFirst({
+    const user = await this.prisma.user.findFirst({
       where: {
-        userId: user.id,
-        familyId: payload.sessionFamilyId,
-        revokedAt: null,
-        expiresAt: { gt: new Date() },
+        id: payload.sub,
+        disabledAt: null,
+        authVersion: payload.authVersion,
+        refreshTokens: {
+          some: {
+            familyId: payload.sessionFamilyId,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        },
       },
-      select: { id: true },
+      select: { id: true, email: true, role: true, authVersion: true },
     });
-    if (!active) throw new UnauthorizedException('登录会话已退出。');
+    if (!user) throw new UnauthorizedException('登录状态已失效。');
     return {
       sub: user.id,
       email: user.email,

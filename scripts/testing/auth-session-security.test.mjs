@@ -24,6 +24,64 @@ const jwt = new JwtService({
 });
 const config = { getOrThrow: () => 3600 };
 
+test('one SQL per access verification preserves immediate account, family, expiry and role checks', async () => {
+  const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+  let queries = 0;
+  measured.$on('query', () => queries++);
+  const sessions = new SessionTokenService(measured, jwt, config);
+  const users = [];
+  async function verify(token, accepted) {
+    queries = 0;
+    if (accepted) await sessions.verifyAccessToken(token);
+    else await assert.rejects(sessions.verifyAccessToken(token));
+    assert.equal(queries, 1);
+  }
+  try {
+    for (let index = 0; index < 2; index++)
+      users.push(
+        await prisma.user.create({
+          data: { email: `${randomUUID()}@example.invalid`, passwordHash: 'synthetic-only' },
+        }),
+      );
+    const [user, other] = users;
+    const session = await sessions.createSession(user);
+    await verify(session.accessToken, true);
+    const foreign = await sessions.createSession(other);
+    const payload = jwt.decode(foreign.accessToken);
+    const forgedFamily = await jwt.signAsync({
+      sub: user.id,
+      kind: 'browser',
+      authVersion: user.authVersion,
+      sessionFamilyId: payload.sessionFamilyId,
+    });
+    await verify(forgedFamily, false);
+    await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
+    assert.equal((await sessions.verifyAccessToken(session.accessToken)).role, 'ADMIN');
+    await prisma.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
+    await verify(session.accessToken, false);
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { disabledAt: null, authVersion: { increment: 1 } },
+    });
+    await verify(session.accessToken, false);
+    await prisma.user.update({ where: { id: user.id }, data: { authVersion: user.authVersion } });
+    await prisma.refreshToken.updateMany({
+      where: { userId: user.id },
+      data: { expiresAt: new Date(0) },
+    });
+    await verify(session.accessToken, false);
+    await prisma.refreshToken.updateMany({
+      where: { userId: user.id },
+      data: { expiresAt: new Date(Date.now() + 60000), revokedAt: new Date() },
+    });
+    await verify(session.accessToken, false);
+    await verify(foreign.accessToken, true);
+  } finally {
+    await measured.$disconnect();
+    await prisma.user.deleteMany({ where: { id: { in: users.map((user) => user.id) } } });
+  }
+});
+
 test('real database rejects login/refresh credentials created from a stale pre-change account snapshot', async () => {
   const passwords = new PasswordService(prisma);
   const user = await passwords.createUser(
