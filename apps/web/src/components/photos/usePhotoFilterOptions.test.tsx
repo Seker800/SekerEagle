@@ -36,3 +36,17 @@ it('loads paged identity options without fetching person cards or faces', async 
   await waitFor(() => expect(view.result.current.fieldOptions.PERSON).toHaveLength(2));
   expect(mocks.options.mock.calls[1]?.[0]).toBe('next');
 });
+
+it('refreshes identity options when person mutations invalidate the shared people prefix', async () => {
+  mocks.options.mockReset();
+  mocks.options.mockResolvedValue({people: [{id: 'p1', name: '旧名字'}], nextCursor: null});
+  const client = new QueryClient({defaultOptions: {queries: {retry: false}}});
+  const wrapper = ({children}: {children: ReactNode}) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  const view = renderHook(() => usePhotoFilterOptions(false, true), {wrapper});
+  await waitFor(() => expect(view.result.current.fieldOptions.PERSON[0]?.label).toBe('旧名字'));
+  mocks.options.mockResolvedValue({people: [{id: 'p1', name: '新名字'}], nextCursor: null});
+  await act(async () => {await client.invalidateQueries({queryKey: ['eagle', 'owner', 'PHOTO', 'people']});});
+  await waitFor(() => expect(view.result.current.fieldOptions.PERSON[0]?.label).toBe('新名字'));
+  view.unmount();
+  client.clear();
+});

@@ -56,6 +56,17 @@ describe('photo statistics', () => {
     expect(screen.getByText('2024-02', { selector: 'time' })).toBeInTheDocument();
     expect(within(screen.getByRole('status')).getByText('0')).toBeInTheDocument();
   });
+  it('preserves the active preset when inspecting unchanged dates', async () => {
+    get.mockResolvedValue(data);
+    const view = mount();
+    await screen.findByRole('img', { name: '拍摄量曲线图' });
+    fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+    fireEvent.blur(screen.getByLabelText('开始日期'));
+    expect(screen.getByRole('button', {name: '最近3年'})).toHaveAttribute('aria-pressed', 'true');
+    expect(get).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
   it('applies valid custom dates automatically without requiring the apply button', async () => {
     get.mockResolvedValue(data);
     const view = mount();
