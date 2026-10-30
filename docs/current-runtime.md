@@ -1,6 +1,10 @@
 # 现用运行状态与交接
 
-> **2026-10-31 安卓多选发送候选更新**：当前安卓交付包为 **0.9.13／30**（同调试签名），支持从智能文件夹／普通图库多选发送到另一模式，接入已有后台队列并在传输列表显示进度。34项Android16设备、80项JVM、安卓完整检查／核心覆盖和隔离数据库升级／发送／完整恢复验证通过；未操作用户真实照片，固定图库预览已恢复。安装包、SHA与范围见 [安卓客户端](android-client.md)。本轮没有更换下方现用API／网页／worker，也未改数据库、处理策略或模型；0.9.12搜索验收仍作为历史记录保留。
+> **2026-10-31 安卓0.9.13生产分发已发布**：用户明确授权commit、push和生产部署。功能源码 `eb24258212772dc29cb934903d750d0caca10e3c` 已在main；生产web更新为 `sekereagle/web:android-0.9.13-eb2425821277`，healthy／零重启。仅增加新版APK、SHA文件与版本清单，原46个网页文件及7个nginx配置文件哈希保持。外网 [下载安装包](https://yuntai.design:8181/downloads/android/SekerEagle-0.9.13.apk) 完整70,896,780字节，SHA与同签名候选一致，Range206、版本清单和匿名认证401均验证通过；用户手机需覆盖安装。该包仍为原 `com.sekereagle.android.debug` 调试签名，不冒充商店发行版。
+>
+> 原完整Compose链仅追加 `maintenance/android-0.9.13-eb242582-20261031/images.json`。API保持 `android-search-e332c5f47e2a` healthy，API／数据库／对象存储／网关／协调器／中继容器ID保持；NAS worker继续停止，唯一Mac业务worker仍running／PID17421，未重启。没有数据库写入／迁移、恢复、真实资源发送或模型／调度调整。镜像回滚文件、精确清单及验收见 [本次发布记录](android-production-release-2026-10-31.md)。
+
+> **2026-10-31 安卓多选发送候选验收（后续生产分发见上）**：当前安卓交付包为 **0.9.13／30**（同调试签名），支持从智能文件夹／普通图库多选发送到另一模式，接入已有后台队列并在传输列表显示进度。34项Android16设备、80项JVM、安卓完整检查／核心覆盖和隔离数据库升级／发送／完整恢复验证通过；未操作用户真实照片，固定图库预览已恢复。安装包、SHA与范围见 [安卓客户端](android-client.md)。本轮没有更换下方现用API／网页／worker，也未改数据库、处理策略或模型；0.9.12搜索验收仍作为历史记录保留。
 
 > **2026-10-31 安卓2B搜索修复已上线**：API为 `sekereagle/api:android-search-e332c5f47e2a`，源码固定 `e332c5f47e2a7d6c49c9a6fe95a92fcc671a7af7`；网页继续原 `people-quality-a3bcda8eea99`，唯一Mac业务worker继续f166dc01 release／现场PID17421，NAS worker保持停止。日期搜索改为有界窗口直接核验并补齐私密／拍摄日期索引，精确筛选与分页不截断；迁移累计63项。原完整Compose链末尾为 `maintenance/android-search-20261030/refined/images.json`，API healthy；网页、数据库、对象存储、网关、协调器和中继容器身份／用户策略保持，模型与名额未改。
 >
