@@ -33,6 +33,9 @@ class NativeSearchTest {
         @Volatile var assetStatus = 200
         @Volatile var assetDelay = 0L
         @Volatile var tagDelay = 0L
+        @Volatile var semanticStatus = "READY"
+        @Volatile var slowSearchStarted = false
+        val disconnectedSearches = java.util.concurrent.atomic.AtomicInteger()
         private val workers = CopyOnWriteArrayList<Thread>()
         private val tags =
             (0 until tagCount).joinToString(",", "[", "]") {
@@ -59,7 +62,16 @@ class NativeSearchTest {
                                             paths.add(path)
                                             while (!reader.readLine().isNullOrEmpty()) {}
                                             if (path.contains("manual-tags")) Thread.sleep(tagDelay)
-                                            if (path.contains("/assets?")) Thread.sleep(assetDelay)
+                                            if (path.contains("/assets?")) {
+                                                val delay = assetDelay
+                                                if (delay > 0 && path.contains("search=")) {
+                                                    workers += Thread {
+                                                        runCatching { if (client.getInputStream().read() == -1) disconnectedSearches.incrementAndGet() }
+                                                    }.also { it.start() }
+                                                    slowSearchStarted = true
+                                                }
+                                                Thread.sleep(delay)
+                                            }
                                             val status =
                                                 when {
                                                     path.endsWith("smart-folders") -> folderStatus
@@ -100,7 +112,7 @@ class NativeSearchTest {
                                                                         else "asset$i"
                                                                     """{"id":"$id","displayName":"photo$i","mediaRevision":1,"rowVersion":1,"renditions":[]}"""
                                                                 }
-                                                        """{"items":[$rows],"nextCursor":${if (assetCount > start + 60) "\"60\"" else "null"}}"""
+                                                        """{"imageSearch":{"status":"$semanticStatus"},"items":[$rows],"nextCursor":${if (assetCount > start + 60) "\"60\"" else "null"}}"""
                                                     }
                                                     else -> "{}"
                                                 }
@@ -644,6 +656,41 @@ class NativeSearchTest {
             await { !model.state.value.loading }
             assertEquals("photo-child", model.state.value.filters.smartFolderId)
             assertEquals("photo-child", model.state.value.options.folders.last().id)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun replacingSlowSearchDisconnectsTheObsoleteRequest() {
+        Server().use { server ->
+            val model = model(server)
+            server.assetDelay = 5000
+            main { model.search("old") }
+            await { server.slowSearchStarted }
+            server.assetDelay = 0
+            main { model.search("new") }
+            compose.waitUntil(1500) { server.disconnectedSearches.get() > 0 }
+            await { !model.state.value.loading }
+            assertEquals("new", model.state.value.query)
+            assertNull(model.state.value.error)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun unavailableVectorSearchIsExplainedWithoutDiscardingNameMatches() {
+        Server().use { server ->
+            val model = model(server)
+            compose.setContent { NativeGalleryApp(model) {} }
+            server.semanticStatus = "UNAVAILABLE"
+            main { model.search("flower") }
+            await { !model.state.value.loading }
+            compose.onNodeWithText("向量搜索暂不可用，当前仅匹配名称和人工标签").assertIsDisplayed()
+            assertEquals(1, model.state.value.items.size)
+            server.semanticStatus = "READY"
+            main { model.search("mountain") }
+            await { !model.state.value.loading }
+            compose.onNodeWithText("向量搜索暂不可用，当前仅匹配名称和人工标签").assertDoesNotExist()
             main { model.logout() }
         }
     }
