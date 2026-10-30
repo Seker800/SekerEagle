@@ -113,3 +113,81 @@ it('keeps independent file progress, all failures and a dismissible success summ
     '网络断开',
   );
 });
+
+it('revoking the browser session aborts active uploads and never starts the third queued file', async () => {
+  const { fetchWithBrowserSession } = await import('../../lib/api-client');
+  const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+  vi.stubGlobal('fetch', fetchMock);
+  material.mockReset();
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  material.mockImplementation(() => gate);
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const view = renderHook(
+    () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']),
+    { wrapper },
+  );
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = view.result.current.importFiles(
+      ['a', 'b', 'c'].map((name) => new File(['data'], name)),
+    );
+  });
+  expect(material).toHaveBeenCalledTimes(2);
+  view.unmount();
+  await fetchWithBrowserSession('/api/auth/logout');
+  await fetchWithBrowserSession('/api/auth/login');
+  await act(async () => {
+    release();
+    await pending;
+  });
+  expect(material).toHaveBeenCalledTimes(2);
+  expect(material.mock.calls[0]![3].signal.aborted).toBe(true);
+  vi.unstubAllGlobals();
+});
+
+it('remounting a mode subscribes to its original upload queue and keeps the original two slots', async () => {
+  material.mockReset();
+  let release!: () => void;
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  material.mockImplementation(() => gate);
+  const client = new QueryClient();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <LibraryWorkspaceProvider ownerId="owner" libraryMode="MATERIAL">
+        {children}
+      </LibraryWorkspaceProvider>
+    </QueryClientProvider>
+  );
+  const hook = () => useEagleUploadController('', ['eagle', 'owner', 'MATERIAL', 'assets']);
+  const first = renderHook(hook, { wrapper });
+  let pending!: Promise<void>;
+  await act(async () => {
+    pending = first.result.current.importFiles([new File(['a'], 'a'), new File(['b'], 'b')]);
+  });
+  first.unmount();
+  const second = renderHook(hook, { wrapper });
+  expect(second.result.current.uploads).toHaveLength(2);
+  let next!: Promise<void>;
+  await act(async () => {
+    next = second.result.current.importFiles([new File(['c'], 'c')]);
+  });
+  expect(material).toHaveBeenCalledTimes(2);
+  await act(async () => {
+    release();
+    await pending;
+    await next;
+  });
+  expect(second.result.current.uploads.every((item) => item.state === 'completed')).toBe(true);
+});
