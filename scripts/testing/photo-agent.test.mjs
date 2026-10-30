@@ -107,6 +107,28 @@ test('photo tasks freeze only visible owned PHOTO resources and paginate without
   await assert.rejects(f.service.detail(f.ownerId, task.id, false), /不存在/);
   assert.equal((await f.service.tasks(f.ownerId, { limit: 20 }, false)).items.length, 0);
 });
+test('fifty photo tasks use three list queries and still disappear when a frozen photo becomes private', async (t) => {
+  const f = await fixture();
+  const tasks = [];
+  for (let index = 0; index < 50; index++) tasks.push(await f.task());
+  await f.proposal(tasks[0]);
+  const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
+  let queries = 0;
+  measured.$on('query', () => queries++);
+  try {
+    const service = new PhotoAgentService(measured, {});
+    const result = await service.tasks(f.ownerId, { limit: 50 }, false);
+    assert.equal(result.items.length, 50);
+    assert.equal(result.items.find((row) => row.id === tasks[0].id).pendingCount, 1);
+    assert.equal(queries, 3);
+    t.diagnostic('50-task list: 3 SQL queries; original path: 101 queries.');
+    await prisma.eagleAsset.update({ where: { id: f.b.id }, data: { isPrivate: true } });
+    const hidden = await service.tasks(f.ownerId, { limit: 50 }, false);
+    assert.equal(hidden.items.length, 0);
+  } finally {
+    await measured.$disconnect();
+  }
+});
 test('city proposal, confirmation, shared asset projection, city filtering and undo preserve original GPS', async () => {
   const f = await fixture(),
     t = await f.task();

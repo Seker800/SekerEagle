@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { Buffer } from 'node:buffer';
+import console from 'node:console';
+import { setTimeout } from 'node:timers';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
