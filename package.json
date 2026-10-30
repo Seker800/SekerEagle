@@ -50,7 +50,7 @@
     "performance:library:100k": "node ./scripts/performance/verify-library-100k.mjs --verify",
     "performance:media-memory": "node ./scripts/performance/verify-media-memory.mjs --verify",
     "performance:desktop-cache:100k": "node --experimental-strip-types ./scripts/performance/desktop-cache-index.mts --verify 100000",
-    "performance:verify": "npm run performance:library:100k && npm run performance:media-memory && npm run performance:desktop-cache:100k",
+    "performance:verify": "npm run performance:library:100k && npm run performance:media-memory && npm run performance:desktop-cache:100k && npm run performance:web:delivery",
     "mlx:test": "./scripts/mlx-embedding-host.sh test",
     "oss:check": "node ./scripts/check-oss-readiness.mjs",
     "ci:check": "npm run architecture:check && npm run lint && npm run typecheck && npm run test && npm run build && npm run format:check && npm run oss:check",
@@ -81,7 +81,8 @@
     "android:lab:verify": "node scripts/testing/android-lab-seed.mjs verify",
     "android:lab:preview": "python3 scripts/testing/android-lab-preview.py",
     "pretypecheck": "npm run build --workspace @sekereagle/library-core && npm run build --workspace @sekereagle/photo-render-core",
-    "test:server-edits": "npm run db:generate && npm run build && PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_SERVER_EDITS=1 node scripts/testing/photo-workbench.mjs"
+    "test:server-edits": "npm run db:generate && npm run build && PHOTO_WORKBENCH_BASIC=1 PHOTO_WORKBENCH_SERVER_EDITS=1 node scripts/testing/photo-workbench.mjs",
+    "performance:web:delivery": "npm run build --workspace @sekereagle/web && node ./scripts/performance/verify-web-delivery.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

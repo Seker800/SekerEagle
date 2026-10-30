@@ -1,7 +1,6 @@
 import { AsyncViewBoundary } from '../AsyncViewBoundary';
 import { useAssetOperationProgress } from './useAssetOperations';
 import { EagleFavoriteButton } from './EagleFavoriteButton';
-import { PhotoStatistics } from '../photos/PhotoStatistics';
 import { IconChartBar } from '@tabler/icons-react';
 import { EagleSmartFolderStatus } from './EagleSmartFolderStatus';
 import { useEaglePrependAnchor } from './useEaglePrependAnchor';
@@ -17,7 +16,6 @@ import { EagleMobileMore, isAndroidClient } from './EagleMobileMore';
 import { useCompactLayout } from '../../hooks/useCompactLayout';
 import { EagleResponsiveTools } from './EagleResponsiveTools';
 import { EagleResponsiveDetails } from './EagleResponsiveDetails';
-import { PhotoAgentReview } from '../photos/PhotoAgentReview';
 import { EagleStackBadge } from './EagleStackBadge';
 import { eagleViewerMetadata } from './EagleViewerShell';
 import { EagleAssetActionMenu } from './EagleAssetActionMenu';
@@ -120,8 +118,7 @@ import {
 } from './eagle-media-sources';
 import { EagleBatchTagPicker } from './EagleBatchTagPicker';
 import { EagleColorPalette } from './EagleColorPalette';
-import { EagleTaskCenter } from './EagleTaskCenter';
-import { EagleVectorWorkspace, type EagleVectorWorkspaceView } from './EagleVectorWorkspace';
+import type { EagleVectorWorkspaceView } from './EagleVectorWorkspace';
 import { EagleSmartFolderDialog } from './EagleSmartFolderDialog';
 import { EagleSmartFolderTree } from './EagleSmartFolderTree';
 import {
@@ -147,6 +144,18 @@ import {
 } from '../media/masonry-layout';
 import { MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
 import styles from './SekerEaglePage.module.css';
+const PhotoStatistics = lazy(() =>
+  import('../photos/PhotoStatistics').then((module) => ({ default: module.PhotoStatistics })),
+);
+const PhotoAgentReview = lazy(() =>
+  import('../photos/PhotoAgentReview').then((module) => ({ default: module.PhotoAgentReview })),
+);
+const EagleTaskCenter = lazy(() =>
+  import('./EagleTaskCenter').then((module) => ({ default: module.EagleTaskCenter })),
+);
+const EagleVectorWorkspace = lazy(() =>
+  import('./EagleVectorWorkspace').then((module) => ({ default: module.EagleVectorWorkspace })),
+);
 const PhotoMap = lazy(() =>
   import('../photos/PhotoMap').then((module) => ({ default: module.PhotoMap })),
 );
@@ -1761,28 +1770,32 @@ export function SekerEaglePage({
           {libraryView === 'ACCOUNT' ? (
             accountView
           ) : libraryView === 'PROCESSING' ? (
-            <EagleTaskCenter
-              key={`${storeScope}:${privateVisible}`}
-              includePrivate={privateVisible}
-              canManageProcessing={canManageProcessing}
-              onReview={() => {
-                changeLibraryView('ACTIVE');
-                setPhotoView('agent');
-              }}
-            />
+            <AsyncViewBoundary>
+              <EagleTaskCenter
+                key={`${storeScope}:${privateVisible}`}
+                includePrivate={privateVisible}
+                canManageProcessing={canManageProcessing}
+                onReview={() => {
+                  changeLibraryView('ACTIVE');
+                  setPhotoView('agent');
+                }}
+              />
+            </AsyncViewBoundary>
           ) : getVectorWorkspaceView(libraryView) ? (
-            <EagleVectorWorkspace
-              view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
-              manualTags={manualTags}
-              onCreateManualTag={(name) => createBatchTagMutation.mutateAsync(name)}
-              onChangeManualTags={async ({ assetIds, addTagIds, removeTagIds }) => {
-                await batchTagMutation.mutateAsync({ assetIds, addTagIds, removeTagIds });
-              }}
-              onTrashAssets={async (assetIds) => {
-                await trashMutation.mutateAsync(assetIds);
-              }}
-              onAssetPrivacyChanged={resetAssetPrivacyState}
-            />
+            <AsyncViewBoundary>
+              <EagleVectorWorkspace
+                view={getVectorWorkspaceView(libraryView) ?? 'REVIEW'}
+                manualTags={manualTags}
+                onCreateManualTag={(name) => createBatchTagMutation.mutateAsync(name)}
+                onChangeManualTags={async ({ assetIds, addTagIds, removeTagIds }) => {
+                  await batchTagMutation.mutateAsync({ assetIds, addTagIds, removeTagIds });
+                }}
+                onTrashAssets={async (assetIds) => {
+                  await trashMutation.mutateAsync(assetIds);
+                }}
+                onAssetPrivacyChanged={resetAssetPrivacyState}
+              />
+            </AsyncViewBoundary>
           ) : libraryView === 'MANUAL_TAGS' || libraryView === 'AI_TAGS' ? (
             <EagleTagPage
               kind={libraryView === 'MANUAL_TAGS' ? 'MANUAL' : 'AI'}
@@ -1970,17 +1983,21 @@ export function SekerEaglePage({
                 </div>
               )}
               {libraryMode === 'PHOTO' && photoView === 'statistics' && (
-                <PhotoStatistics
-                  key={`${ownerId}:${privateVisible}`}
-                  ownerId={ownerId}
-                  includePrivate={privateVisible}
-                />
+                <AsyncViewBoundary>
+                  <PhotoStatistics
+                    key={`${ownerId}:${privateVisible}`}
+                    ownerId={ownerId}
+                    includePrivate={privateVisible}
+                  />
+                </AsyncViewBoundary>
               )}
               {libraryMode === 'PHOTO' && photoView === 'agent' && (
-                <PhotoAgentReview
-                  key={`${ownerId}:${privateVisible}`}
-                  includePrivate={privateVisible}
-                />
+                <AsyncViewBoundary>
+                  <PhotoAgentReview
+                    key={`${ownerId}:${privateVisible}`}
+                    includePrivate={privateVisible}
+                  />
+                </AsyncViewBoundary>
               )}
               {libraryMode === 'PHOTO' && photoView === 'people' && (
                 <PhotoCollections

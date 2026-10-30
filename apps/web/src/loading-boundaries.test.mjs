@@ -26,7 +26,7 @@ test('production login and gallery exclude optional map, EXIF and batch-render p
   const login = staticModules(entry).join('\n');
   assert.doesNotMatch(
     login,
-    /SekerEaglePage\.tsx|PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
+    /SekerEaglePage\.tsx|PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|PhotoStatistics\.tsx|PhotoAgentReview\.tsx|EagleTaskCenter\.tsx|EagleVectorWorkspace\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
   );
   const gallery = chunks.find((chunk) =>
     Object.keys(chunk.modules).some((id) => id.endsWith('/SekerEaglePage.tsx')),
@@ -34,6 +34,6 @@ test('production login and gallery exclude optional map, EXIF and batch-render p
   assert.ok(gallery);
   assert.doesNotMatch(
     staticModules(gallery).join('\n'),
-    /PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
+    /PhotoMap\.tsx|EagleBatchPhotoEdit\.tsx|PhotoStatistics\.tsx|PhotoAgentReview\.tsx|EagleTaskCenter\.tsx|EagleVectorWorkspace\.tsx|node_modules\/(?:leaflet|exifr|fast-png)\//u,
   );
 });
