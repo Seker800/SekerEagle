@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
@@ -134,4 +135,32 @@ test('cards return one clear browsable representative from the original bounded 
   const card = result.people[0] as unknown as { faces: Array<{ id: string }> };
   assert.equal(card.faces.length, 1);
   assert.equal(card.faces[0]?.id, 'face-1');
+});
+
+test('people reads reject caller-supplied identity, permission and invalid projections', async () => {
+  const { ValidationPipe } = await import('@nestjs/common');
+  const { PeopleQueryDto, PeopleCursorDto, PhotoManagementController } =
+    await import('./photo-management.controller');
+  const { GUARDS_METADATA } = await import('@nestjs/common/constants');
+  const { AccessAuthGuard } = await import('../auth/access-auth.guard');
+  const { BrowserPrincipalGuard } = await import('../auth/browser-principal.guard');
+  const guards = Reflect.getMetadata(GUARDS_METADATA, PhotoManagementController) as unknown[];
+  assert.ok(guards.includes(AccessAuthGuard) && guards.includes(BrowserPrincipalGuard));
+  const pipe = new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true });
+  for (const input of [
+    { ownerId: 'other' },
+    { includePrivate: true },
+    { view: 'embedding' },
+    { after: 'x'.repeat(1025) },
+  ]) {
+    await assert.rejects(pipe.transform(input, { type: 'query', metatype: PeopleQueryDto }));
+  }
+  await assert.rejects(
+    pipe.transform({ view: 'cards' }, { type: 'query', metatype: PeopleCursorDto }),
+  );
+  for (const view of ['full', 'cards', 'options'])
+    assert.equal(
+      (await pipe.transform({ view }, { type: 'query', metatype: PeopleQueryDto })).view,
+      view,
+    );
 });

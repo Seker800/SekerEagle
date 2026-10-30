@@ -1,3 +1,4 @@
+import { addSelfHostedBasemap } from './self-hosted-basemap';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
@@ -566,4 +567,14 @@ it('slows polling from five to thirty seconds after the generation completes', a
     view?.client.clear();
     vi.useRealTimers();
   }
+});
+
+it('does not download the fallback land dataset when a self-hosted overview is available', async () => {
+  vi.mocked(addSelfHostedBasemap).mockResolvedValueOnce({} as never);
+  mount();
+  await waitFor(() => expect(addSelfHostedBasemap).toHaveBeenCalled());
+  await waitFor(() => expect(fetch).toHaveBeenCalled());
+  const paths = vi.mocked(fetch).mock.calls.map(([url]) => String(url));
+  expect(paths.some((url) => url.includes('cities'))).toBe(true);
+  expect(paths.some((url) => url.includes('land'))).toBe(false);
 });

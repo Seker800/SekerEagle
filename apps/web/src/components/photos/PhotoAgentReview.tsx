@@ -55,7 +55,7 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     queryFn: ({ pageParam, signal }) => listPhotoAgentTasks(pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next ?? undefined,
-    refetchInterval: 10000,
+    refetchInterval: taskId ? 10000 : 60000,
   });
   const detail = useQuery({
     queryKey: [...key, 'task', taskId],
@@ -73,7 +73,12 @@ export function PhotoAgentReview({ includePrivate }: { includePrivate: boolean }
     await client.invalidateQueries({ queryKey: ['eagle', ownerId], refetchType: 'none' });
     await Promise.all([
       client.invalidateQueries({ queryKey: [...key, 'tasks'] }),
-      ...(taskId ? [client.invalidateQueries({ queryKey: [...key, 'task', taskId] })] : []),
+      ...(taskId
+        ? [
+            client.invalidateQueries({ queryKey: [...key, 'task', taskId] }),
+            client.invalidateQueries({ queryKey: [...key, 'history', taskId] }),
+          ]
+        : []),
     ]);
   }
   return (
@@ -592,12 +597,14 @@ function RequestHistory({
   includePrivate: boolean;
 }) {
   const { ownerId } = useLibraryWorkspace();
+  const [historyOpen, setHistoryOpen] = useState(false);
   const history = useInfiniteQuery({
     queryKey: ['eagle', ownerId, 'PHOTO', 'agent', includePrivate, 'history', task.id],
     queryFn: ({ pageParam, signal }) => getPhotoAgentHistory(task.id, pageParam, signal),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.next ?? undefined,
-    refetchInterval: 10000,
+    enabled: historyOpen,
+    refetchInterval: historyOpen ? 10000 : false,
   });
   const labels = {
     MANUAL_STARTED: t('开始人工处理'),
@@ -614,7 +621,10 @@ function RequestHistory({
     UNDO_FAILED: t('撤销失败'),
   };
   return (
-    <details className={styles.history}>
+    <details
+      className={styles.history}
+      onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
+    >
       <summary>{t('操作记录')}</summary>
       <p>{t('记录提交、人工决定、执行与撤销；撤销不会删除原记录。')}</p>
       {history.isPending && <p role="status">{t('正在加载操作记录…')}</p>}

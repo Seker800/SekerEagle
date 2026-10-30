@@ -377,6 +377,10 @@ export function SekerEaglePage({
       (!privateVisible && workspaceCache.browse?.quickFilters) ||
       createEmptyEagleQuickFilterState(),
   );
+  const deferredQuickFilters = useDebouncedValue(quickFilters, 150);
+  const filterInputsPending =
+    hashKey([quickFilters]) !== hashKey([deferredQuickFilters]) ||
+    search.normalize('NFKC').trim() !== deferredSearch;
   const [filtersExpanded, setFiltersExpanded] = useState(false);
   const filterPanelId = useId();
   useEffect(() => {
@@ -424,7 +428,11 @@ export function SekerEaglePage({
     libraryView === 'ACTIVE' || libraryView === 'PRIVATE' || libraryView === 'TRASH';
   const showsAssetControls = libraryMode !== 'PHOTO' || photoView === 'timeline';
   const activeFilterCount = countActiveEagleQuickFilters(quickFilters);
-  const filterQuery = useMemo(() => buildEagleQuickFilterQuery(quickFilters), [quickFilters]);
+  const appliedFilterCount = countActiveEagleQuickFilters(deferredQuickFilters);
+  const filterQuery = useMemo(
+    () => buildEagleQuickFilterQuery(deferredQuickFilters),
+    [deferredQuickFilters],
+  );
   const isPhotoTimeline =
     libraryMode === 'PHOTO' && photoView === 'timeline' && libraryView !== 'TRASH';
   const hasTimelineNavigation =
@@ -502,7 +510,7 @@ export function SekerEaglePage({
     cursor: browserCursor || undefined,
     limit: EAGLE_PAGE_SIZE,
     search: deferredSearch || undefined,
-    rules: activeFilterCount ? filterQuery : undefined,
+    rules: appliedFilterCount ? filterQuery : undefined,
     smartFolderId: activeSmartFolderId ?? undefined,
     smartFolderOrder:
       activeSmartFolderId && smartFolderOrder === 'RELEVANCE' ? 'RELEVANCE' : undefined,
@@ -557,7 +565,7 @@ export function SekerEaglePage({
     initialPageParam: browserCursor,
     getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
     getPreviousPageParam: (firstPage) => firstPage.previousCursor ?? undefined,
-    enabled: isAssetView && showsAssetControls,
+    enabled: isAssetView && showsAssetControls && !filterInputsPending,
     staleTime: ASSET_LIST_STALE_TIME_MS,
     gcTime: ASSET_LIST_GC_TIME_MS,
   });
@@ -568,7 +576,7 @@ export function SekerEaglePage({
     setAssetContextMenu(null);
     setIsBatchSelection(false);
     selectionAnchorIdRef.current = null;
-  }, [listIdentity]);
+  }, [listIdentity, quickFilters, search]);
   const secondaryReady =
     !isAssetView ||
     !showsAssetControls ||
@@ -2132,13 +2140,16 @@ export function SekerEaglePage({
                   className={`${styles.assetViewport} ${isPhotoTimeline ? styles.horizontalViewport : ''}`}
                   role="region"
                   aria-label={libraryMode === 'PHOTO' ? t('照片时间线') : t('素材瀑布流')}
-                  aria-busy={assetsQuery.isFetching && !assetsQuery.isFetchingNextPage}
+                  aria-busy={
+                    filterInputsPending ||
+                    (assetsQuery.isFetching && !assetsQuery.isFetchingNextPage)
+                  }
                   data-bidirectional={Boolean(browserCursor)}
                   onClick={clearAssetSelection}
                   onScroll={(event) => assetViewport.handleScroll(event.currentTarget.scrollTop)}
                 >
-                  {assetsQuery.isFetching &&
-                    !assetsQuery.isFetchingNextPage &&
+                  {(filterInputsPending ||
+                    (assetsQuery.isFetching && !assetsQuery.isFetchingNextPage)) &&
                     !assetsQuery.isLoading && (
                       <div className={styles.queryProgress} role="status">
                         {t('正在更新结果…')}
@@ -2230,7 +2241,7 @@ export function SekerEaglePage({
                         return (
                           <button
                             key={asset.id}
-                            disabled={assetsQuery.isPlaceholderData}
+                            disabled={filterInputsPending || assetsQuery.isPlaceholderData}
                             data-asset-id={asset.id}
                             type="button"
                             className={`${styles.assetCard} ${isSelected ? styles.assetCardSelected : ''}`}
@@ -2992,7 +3003,9 @@ export function SekerEaglePage({
           fieldOptionsAction={peopleOptionsAction}
           accessToken={accessToken}
           initialQuery={
-            editingSmartFolder ? toEagleFilterQuery(editingSmartFolder.queryJson) : filterQuery
+            editingSmartFolder
+              ? toEagleFilterQuery(editingSmartFolder.queryJson)
+              : buildEagleQuickFilterQuery(quickFilters)
           }
           initialName={editingSmartFolder?.name}
           mode={editingSmartFolder ? 'edit' : 'create'}
