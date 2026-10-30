@@ -61,9 +61,11 @@ describe('photo statistics', () => {
     const view = mount();
     await screen.findByRole('img', { name: '拍摄量曲线图' });
     fireEvent.click(screen.getByRole('button', { name: '自定义日期' }));
-    await act(async () => { await new Promise(resolve => setTimeout(resolve, 400)); });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400));
+    });
     fireEvent.blur(screen.getByLabelText('开始日期'));
-    expect(screen.getByRole('button', {name: '最近3年'})).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '最近3年' })).toHaveAttribute('aria-pressed', 'true');
     expect(get).toHaveBeenCalledTimes(1);
     view.unmount();
   });

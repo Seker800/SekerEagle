@@ -52,6 +52,8 @@ export function PhotoStatistics({
       return false;
     }
     setRangeError(false);
+    if (input.start === (dates.start || undefined) && input.end === (dates.end || undefined))
+      return true;
     setPreset(dates.start || dates.end ? 'custom' : 'all');
     setInput((current) =>
       current.start === (dates.start || undefined) && current.end === (dates.end || undefined)
@@ -59,7 +61,7 @@ export function PhotoStatistics({
         : { ...current, start: dates.start || undefined, end: dates.end || undefined },
     );
     return true;
-  }, [dates]);
+  }, [dates, input.start, input.end]);
   useEffect(() => {
     if (panel !== 'date') return;
     const timer = window.setTimeout(applyDates, 350);

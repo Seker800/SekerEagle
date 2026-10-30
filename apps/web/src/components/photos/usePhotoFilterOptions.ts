@@ -11,7 +11,7 @@ export function usePhotoFilterOptions(includePrivate: boolean, enabled = true) {
     staleTime: 30000,
   });
   const people = useInfiniteQuery({
-    queryKey: ['eagle', ownerId, 'PHOTO', 'people-options', includePrivate],
+    queryKey: ['eagle', ownerId, 'PHOTO', 'people', 'options', includePrivate],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam, signal }) => listPhotoPeopleOptions(pageParam, signal),
     getNextPageParam: (page) => page.nextCursor ?? undefined,
