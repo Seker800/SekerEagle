@@ -133,8 +133,8 @@ test('explicit search date order uses date and ID for both ORDER BY and continua
       sort,
     );
     const field = sort === 'CAPTURED_AT' ? 'chronologicalAt' : 'libraryAddedAt';
-    assert.ok(sql.includes(`ORDER BY asset."${field}" DESC,ranked."assetId" DESC`));
-    assert.ok(sql.includes(`WHERE (asset."${field}", ranked."assetId") <`));
+    assert.ok(sql.includes(`ORDER BY asset."${field}" DESC,asset.id DESC`));
+    assert.ok(sql.includes(`AND (asset."${field}",asset.id)<`));
     assert.ok(sql.includes(`asset."${field}" AS "libraryAddedAt"`));
     assert.ok(sql.includes('asset."ownerId"='));
     assert.ok(sql.includes('asset."libraryMode"='));
@@ -144,8 +144,27 @@ test('explicit search date order uses date and ID for both ORDER BY and continua
 
 test('date-ordered mobile searches do not sort and aggregate every matching vector before LIMIT', async () => {
   let sql = '';
-  const service = new EagleImageSearchService({$queryRaw: async (q: {sql: string}) => {sql=q.sql;return [];}} as never, {} as never, 'PHOTO');
-  await service.rankPage('owner', '山峰', {status:'READY',spaceId:space.id,vector:'[1,0]'}, undefined, 60, false, false, undefined, 'CAPTURED_AT');
+  const service = new EagleImageSearchService(
+    {
+      $queryRaw: async (q: { sql: string }) => {
+        sql = q.sql;
+        return [];
+      },
+    } as never,
+    {} as never,
+    'PHOTO',
+  );
+  await service.rankPage(
+    'owner',
+    '山峰',
+    { status: 'READY', spaceId: space.id, vector: '[1,0]' },
+    undefined,
+    60,
+    false,
+    false,
+    undefined,
+    'CAPTURED_AT',
+  );
   assert.doesNotMatch(sql, /UNION ALL|GROUP BY "assetId"/);
   assert.match(sql, /LATERAL/);
   assert.match(sql, /asset\."ownerId"=/);

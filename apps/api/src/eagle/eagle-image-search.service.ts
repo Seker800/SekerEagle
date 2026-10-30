@@ -100,6 +100,48 @@ export class EagleImageSearchService {
     const configured = Number(process.env.EAGLE_IMAGE_SEARCH_MINIMUM_SIMILARITY ?? '0.25');
     const threshold =
       Number.isFinite(configured) && configured >= 0 && configured <= 1 ? configured : 0.25;
+    if (sort) {
+      // Traverse the existing chronological index and stop when the page is full.
+      // Per-asset probes preserve exact matching; there is no global top-K cutoff.
+      const date =
+        sort === 'CAPTURED_AT'
+          ? Prisma.sql`asset."chronologicalAt"`
+          : Prisma.sql`asset."libraryAddedAt"`;
+      const nameMatch = Prisma.sql`(strpos(asset."normalizedDisplayName",${normalized})>0 OR strpos(lower(asset."originalName"),${normalized})>0)`;
+      const semanticProbe =
+        context.status === 'READY'
+          ? Prisma.sql`
+        SELECT max(1-(embedding.embedding <=> ${context.vector}::vector))::double precision AS similarity
+        FROM "EagleAssetEmbedding" embedding
+        WHERE embedding."ownerId"=asset."ownerId" AND embedding."libraryMode"=asset."libraryMode"
+          AND embedding."assetId"=asset.id AND embedding."spaceId"=${context.spaceId}
+          AND embedding.status='READY' AND embedding."isCurrent"=true
+          AND embedding."assetRevision"=asset."mediaRevision" AND embedding.embedding IS NOT NULL
+      `
+          : Prisma.sql`SELECT NULL::double precision AS similarity`;
+      const rows = await this.prisma.$queryRaw<
+        Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
+      >(Prisma.sql`
+        SELECT asset.id AS "assetId",
+          GREATEST(CASE WHEN ${nameMatch} THEN 3 ELSE 0 END,COALESCE(manual.tier,0),CASE WHEN semantic.similarity>=${threshold} THEN 1 ELSE 0 END)::integer AS tier,
+          GREATEST(CASE WHEN ${nameMatch} OR manual.tier IS NOT NULL THEN 1::double precision ELSE 0::double precision END,COALESCE(semantic.similarity,0)) AS similarity,
+          ${date} AS "libraryAddedAt"
+        FROM "EagleAsset" asset
+        LEFT JOIN LATERAL (
+          SELECT max(CASE WHEN tag."normalizedName"=${normalized} THEN 5 ELSE 4 END)::integer AS tier
+          FROM "EagleAssetManualTag" link JOIN "EagleManualTag" tag
+            ON tag.id=link."tagId" AND tag."ownerId"=link."ownerId" AND tag."libraryMode"=link."libraryMode"
+          WHERE link."ownerId"=asset."ownerId" AND link."libraryMode"=asset."libraryMode" AND link."assetId"=asset.id
+            AND strpos(tag."normalizedName",${normalized})>0
+        ) manual ON true
+        LEFT JOIN LATERAL (${semanticProbe}) semantic ON true
+        WHERE ${visible}
+          AND (${nameMatch} OR manual.tier IS NOT NULL OR semantic.similarity>=${threshold})
+          ${after ? Prisma.sql`AND (${date},asset.id)<(${new Date(after.libraryAddedAt)},${after.assetId})` : Prisma.empty}
+        ORDER BY ${date} DESC,asset.id DESC LIMIT ${limit}
+      `);
+      return rows.map((row) => ({ ...row, libraryAddedAt: row.libraryAddedAt.toISOString() }));
+    }
     const semantic =
       context.status === 'READY'
         ? Prisma.sql`
@@ -113,20 +155,11 @@ export class EagleImageSearchService {
         AND 1-(embedding.embedding <=> ${context.vector}::vector)>=${threshold}
     `
         : Prisma.empty;
-    // Columns are selected from fixed literals, never interpolated from user input.
-    const dateColumn =
-      sort === 'CAPTURED_AT'
-        ? Prisma.sql`asset."chronologicalAt"`
-        : Prisma.sql`asset."libraryAddedAt"`;
-    const order = sort
-      ? Prisma.sql`${dateColumn} DESC,ranked."assetId" DESC`
-      : Prisma.sql`ranked.tier DESC,ranked.similarity DESC,asset."libraryAddedAt" DESC,ranked."assetId" DESC`;
-    const continuation =
-      sort && after
-        ? Prisma.sql`WHERE (${dateColumn}, ranked."assetId") < (${new Date(after.libraryAddedAt)}, ${after.assetId})`
-        : after
-          ? Prisma.sql`WHERE (ranked.tier, ranked.similarity, asset."libraryAddedAt", ranked."assetId") < (${after.tier}, ${after.similarity}, ${new Date(after.libraryAddedAt)}, ${after.assetId})`
-          : Prisma.empty;
+    const dateColumn = Prisma.sql`asset."libraryAddedAt"`;
+    const order = Prisma.sql`ranked.tier DESC,ranked.similarity DESC,asset."libraryAddedAt" DESC,ranked."assetId" DESC`;
+    const continuation = after
+      ? Prisma.sql`WHERE (ranked.tier, ranked.similarity, asset."libraryAddedAt", ranked."assetId") < (${after.tier}, ${after.similarity}, ${new Date(after.libraryAddedAt)}, ${after.assetId})`
+      : Prisma.empty;
     const rows = await this.prisma.$queryRaw<
       Array<{ assetId: string; tier: number; similarity: number; libraryAddedAt: Date }>
     >(Prisma.sql`
