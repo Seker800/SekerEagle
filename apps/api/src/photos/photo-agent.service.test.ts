@@ -13,6 +13,59 @@ import {
 } from './photo-agent.dto';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 
+test('task list batches visibility and suggestions while preserving per-task counts, covers and cursor', async () => {
+  const tasks = Array.from({ length: 51 }, (_, number) => ({
+    id: `task-${number}`,
+    number,
+    kind: number === 0 ? 'CITY' : 'DELETE',
+    scope: [{ id: 'visible' }, { id: number === 1 ? 'hidden' : 'shared' }],
+  }));
+  const calls: unknown[] = [];
+  const db = {
+    eaglePhotoAgentTask: { findMany: async () => tasks },
+    eagleAsset: {
+      count: async () => {
+        assert.fail('task visibility must not issue a query per task');
+      },
+      findMany: async (query: unknown) => {
+        calls.push(query);
+        return [{ id: 'visible' }, { id: 'shared' }];
+      },
+    },
+    eaglePhotoAgentSuggestion: {
+      findMany: async (query: unknown) => {
+        calls.push(query);
+        return [
+          { taskId: 'task-0', assetId: 'visible', status: 'ACCEPTED' },
+          { taskId: 'task-0', assetId: 'shared', status: 'PENDING' },
+          { taskId: 'task-2', assetId: 'shared', status: 'ACCEPTED' },
+          { taskId: 'task-2', assetId: 'visible', status: 'FAILED' },
+        ];
+      },
+    },
+  };
+  const service = new PhotoAgentService(db as never, {} as never);
+  const result = await service.tasks('owner', { limit: 50 }, false);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], {
+    where: {
+      ownerId: 'owner',
+      libraryMode: 'PHOTO',
+      isPrivate: false,
+      id: { in: ['visible', 'shared', 'hidden'] },
+      OR: [{ purgeAfter: null }, { transferredAt: { not: null } }],
+    },
+    select: { id: true },
+  });
+  assert.ok(result.items.every((row) => !['task-1', 'task-50'].includes(row.id)));
+  assert.deepEqual(result.items[0]?.coverIds, ['visible', 'shared']);
+  assert.equal(result.items[0]?.acceptedCount, 1);
+  assert.equal(result.items[0]?.pendingCount, 1);
+  assert.deepEqual(result.items[1]?.coverIds, ['visible']);
+  assert.equal(result.items[1]?.retryCount, 1);
+  assert.equal(result.next, 'task-49');
+});
+
 test('task creation rejects partial visibility and never persists out-of-scope resources', async () => {
   let writes = 0;
   const tx = {
