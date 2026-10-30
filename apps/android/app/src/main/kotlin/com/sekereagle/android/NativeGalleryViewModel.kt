@@ -1064,15 +1064,25 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
             }
     }
 
-    internal suspend fun readAssetOperations(): List<NativeAssetOperation> =
-        repository?.assetOperations?.list() ?: emptyList()
+    internal suspend fun readAssetOperations(): List<NativeAssetOperation> {
+        val connection = repository ?: return emptyList()
+        try {
+            return connection.assetOperations.list()
+        } catch (reason: NativeSession.Failure) {
+            if (repository === connection && reason.status == 401) expire()
+            throw reason
+        }
+    }
 
     fun sendSelection() {
         val snapshot = state.value
         val repo = repository ?: return
         if (snapshot.busy || snapshot.trash || snapshot.selected.isEmpty()) return
         val assets = snapshot.items.filter { it.id in snapshot.selected }
-        if (assets.size != snapshot.selected.size || assets.any { !it.mimeType.startsWith("image/") || it.lifecycleStatus != "READY" }) {
+        if (
+            assets.size != snapshot.selected.size ||
+                assets.any { !it.mimeType.startsWith("image/") || it.lifecycleStatus != "READY" }
+        ) {
             mutable.value = snapshot.copy(message = "请选择已处理完成的图片；配对实况视频会自动随照片发送。")
             return
         }
@@ -1080,23 +1090,37 @@ class NativeGalleryViewModel(application: Application) : AndroidViewModel(applic
         val operationId = sendRequests.getOrPut(key) { java.util.UUID.randomUUID().toString() }
         cancelOperation()
         val request = ++generation
-        mutable.value = snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
-        mutation = viewModelScope.launch {
-            try {
-                repo.assetOperations.send(snapshot.mode, snapshot.selected, operationId)
-                if (generation != request) return@launch
-                sendRequests.remove(key)
-                invalidateInactiveLibrary()
-                mutable.value = state.value.copy(busy = false, selecting = false, selected = emptySet(), transfersOpen = true, message = "已加入后台发送队列，可在传输列表查看结果。")
-            } catch (reason: CancellationException) {
-                throw reason
-            } catch (reason: Exception) {
-                if (generation == request) {
-                    if (reason is NativeSession.Failure && reason.status == 401) expire()
-                    else mutable.value = state.value.copy(busy = false, message = "发送未确认，请重试或到传输列表核对：${reason.message.orEmpty()}")
+        mutable.value =
+            snapshot.copy(busy = true, loading = false, refreshing = false, message = null)
+        mutation =
+            viewModelScope.launch {
+                try {
+                    repo.assetOperations.send(snapshot.mode, snapshot.selected, operationId)
+                    if (generation != request) return@launch
+                    sendRequests.remove(key)
+                    invalidateInactiveLibrary()
+                    mutable.value =
+                        state.value.copy(
+                            busy = false,
+                            selecting = false,
+                            selected = emptySet(),
+                            transfersOpen = true,
+                            message = "已加入后台发送队列，可在传输列表查看结果。",
+                        )
+                } catch (reason: CancellationException) {
+                    throw reason
+                } catch (reason: Exception) {
+                    if (generation == request) {
+                        if (reason is NativeSession.Failure && reason.status == 401) expire()
+                        else
+                            mutable.value =
+                                state.value.copy(
+                                    busy = false,
+                                    message = "发送未确认，请重试或到传输列表核对：${reason.message.orEmpty()}",
+                                )
+                    }
                 }
             }
-        }
     }
 
     fun changeSelection(action: String, tags: Set<String> = emptySet(), rating: Int? = null) {

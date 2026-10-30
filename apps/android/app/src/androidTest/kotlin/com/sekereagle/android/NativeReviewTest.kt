@@ -31,6 +31,11 @@ class NativeReviewTest {
         val socket = ServerSocket(0, 16, InetAddress.getByName("127.0.0.1"))
         val origin = "http://127.0.0.1:${socket.localPort}"
         val paths = CopyOnWriteArrayList<String>()
+        val writes = CopyOnWriteArrayList<Pair<String, JSONObject>>()
+        @Volatile var rejectSend = false
+        @Volatile var sendFinished = false
+        @Volatile var enqueued = false
+        @Volatile var lifecycle = "READY"
         @Volatile var version = 1
         @Volatile var listDelay = 0L
         @Volatile var revoked = false
@@ -50,10 +55,24 @@ class NativeReviewTest {
                                 if (line.startsWith("Content-Length:", true))
                                     length = line.substringAfter(':').trim().toInt()
                             }
-                            repeat(length) { reader.read() }
+                            val requestBody = CharArray(length)
+                            var offset = 0
+                            while (offset < length) {
+                                val read = reader.read(requestBody, offset, length - offset)
+                                if (read < 0) error("Incomplete request")
+                                offset += read
+                            }
+                            if (first[0] == "POST" && path.endsWith("/operations")) {
+                                writes.add(path to JSONObject(String(requestBody)))
+                                if (!rejectSend) enqueued = true
+                            }
                             if (path.contains("/assets?")) Thread.sleep(listDelay)
                             val status =
                                 if (
+                                    rejectSend && path.endsWith("/operations") && first[0] == "POST"
+                                )
+                                    503
+                                else if (
                                     path == "/api/auth/login" ||
                                         (revoked && path.startsWith("/api/auth/"))
                                 )
@@ -63,6 +82,14 @@ class NativeReviewTest {
                                 when {
                                     path == "/api/auth/me" ->
                                         """{"user":{"id":"owner","email":"test@example.invalid"},"desktopCache":{"deploymentId":"review"}}"""
+                                    path.contains("/operations") -> {
+                                        val row =
+                                            """{"id":"send-operation","libraryMode":"PHOTO","kind":"SEND","total":2,"completed":${if (sendFinished) 2 else 0},"failed":0,"cancelled":0,"queued":${if (sendFinished) 0 else 2},"running":0}"""
+                                        if (first[0] == "POST") row
+                                        else if (enqueued && path.startsWith("/api/photos/"))
+                                            "[$row]"
+                                        else "[]"
+                                    }
                                     path.contains("/timeline") ->
                                         """{"days":[{"date":"2026-10-20","before":"2026-10-21T00:00:00Z","count":180,"offset":0}],"total":180}"""
                                     path.contains("/assets?") -> {
@@ -73,14 +100,15 @@ class NativeReviewTest {
                                                 ?.get(1)
                                                 ?.toInt() ?: 0
                                         val items =
-                                            (start until minOf(start + 60, 180)).joinToString(
-                                                ","
-                                            ) { i ->
-                                                val prefix =
-                                                    if (path.startsWith("/api/eagle/")) "material"
-                                                    else "asset"
-                                                """{"id":"$prefix$i","displayName":"item$i","mimeType":"image/jpeg","lifecycleStatus":"READY","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
-                                            }
+                                            (start until minOf(start + 60, 180))
+                                                .filterNot { sendFinished && enqueued && it < 2 }
+                                                .joinToString(",") { i ->
+                                                    val prefix =
+                                                        if (path.startsWith("/api/eagle/"))
+                                                            "material"
+                                                        else "asset"
+                                                    """{"id":"$prefix$i","displayName":"item$i","mimeType":"image/jpeg","lifecycleStatus":"$lifecycle","mediaRevision":1,"rowVersion":$version,"chronologicalAt":"2026-10-20T12:00:00Z","libraryAddedAt":"2026-10-21T12:00:00Z","renditions":[]}"""
+                                                }
                                         """{"items":[$items],"nextCursor":${if (start + 60 < 180) "\"${start+60}\"" else "null"}}"""
                                     }
                                     else -> "{}"
@@ -130,8 +158,108 @@ class NativeReviewTest {
             }
             compose.setContent { NativeGalleryApp(model) {} }
             compose.onNodeWithText("发送到素材").assertExists().performClick()
-            compose.onNodeWithText("发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。")
-                .assertExists()
+            compose.onNodeWithText("发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。").assertExists()
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun sendsSmartFolderSelectionAndOnlyRefreshesSourcesAfterPublishedResults() {
+        Server().use { server ->
+            val model = model(server)
+            main { model.applyFilters(NativeFilters(smartFolderId = "folder")) }
+            await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+            main {
+                model.startSelection("asset0")
+                model.toggleSelection("asset1")
+            }
+            compose.setContent { NativeGalleryApp(model) {} }
+            compose.onNodeWithText("发送到素材").performClick()
+            compose.onNodeWithText("确认发送").performClick()
+            await { !model.state.value.busy && model.state.value.transfersOpen }
+            compose.onNodeWithText("已完成 0/2 · 正在处理").assertExists()
+            assertTrue(model.state.value.items.any { it.id == "asset0" })
+            assertEquals(
+                setOf("asset0", "asset1"),
+                (0 until server.writes.single().second.getJSONArray("assetIds").length())
+                    .map { server.writes.single().second.getJSONArray("assetIds").getString(it) }
+                    .toSet(),
+            )
+            assertEquals("/api/photos/operations", server.writes.single().first)
+            assertEquals("SEND", server.writes.single().second.getString("kind"))
+            assertFalse(server.writes.single().second.has("ownerId"))
+            server.sendFinished = true
+            compose.waitUntil(10000) {
+                compose.onAllNodesWithText("已完成 2/2").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithContentDescription("返回图库").performClick()
+            await {
+                !model.state.value.refreshing &&
+                    model.state.value.items.none { it.id == "asset0" || it.id == "asset1" }
+            }
+            assertEquals("folder", model.state.value.filters.smartFolderId)
+            assertFalse(model.state.value.trash)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun uncertainSendRetainsSelectionAndReusesIdempotencyKeyOnRetry() {
+        Server().use { server ->
+            val model = model(server)
+            server.rejectSend = true
+            main {
+                model.startSelection("asset0")
+                model.toggleSelection("asset1")
+                model.sendSelection()
+            }
+            await { !model.state.value.busy && model.state.value.message != null }
+            assertEquals(setOf("asset0", "asset1"), model.state.value.selected)
+            assertTrue(model.state.value.items.any { it.id == "asset0" })
+            val firstId = server.writes.single().second.getString("operationId")
+            server.rejectSend = false
+            main { model.sendSelection() }
+            await { !model.state.value.busy && model.state.value.transfersOpen }
+            assertEquals(2, server.writes.size)
+            assertEquals(firstId, server.writes.last().second.getString("operationId"))
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun rejectsUnreadySourcesWithoutEnqueuing() {
+        Server().use { server ->
+            server.lifecycle = "PROCESSING"
+            val model = model(server)
+            main {
+                model.startSelection("asset0")
+                model.sendSelection()
+            }
+            assertTrue(model.state.value.message.orEmpty().contains("已处理完成"))
+            assertTrue(server.writes.isEmpty())
+            assertTrue(model.state.value.selecting)
+            main { model.logout() }
+        }
+    }
+
+    @Test
+    fun materialsUseTheirOwnSendQueue() {
+        Server().use { server ->
+            val model = model(server)
+            main { model.switchMode(GalleryMode.MATERIAL) }
+            await {
+                !model.state.value.loading && model.state.value.items.any { it.id == "material0" }
+            }
+            main {
+                model.startSelection("material0")
+                model.sendSelection()
+            }
+            await { !model.state.value.busy && model.state.value.transfersOpen }
+            assertEquals("/api/eagle/operations", server.writes.single().first)
+            assertEquals(
+                "material0",
+                server.writes.single().second.getJSONArray("assetIds").getString(0),
+            )
             main { model.logout() }
         }
     }
@@ -438,9 +566,7 @@ class NativeReviewTest {
             main { model.refresh() }
             await { !model.state.value.loading }
             assertEquals(180, model.state.value.items.size)
-            main {
-                model.openTrash()
-            }
+            main { model.openTrash() }
             await { !model.state.value.loading }
             main {
                 assertFalse(model.prepareUploadSelection())

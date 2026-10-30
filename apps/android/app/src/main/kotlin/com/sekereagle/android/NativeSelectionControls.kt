@@ -142,8 +142,20 @@ fun NativeSelectionControls(
         AlertDialog(
             onDismissRequest = { confirmSend = false },
             title = { Text(if (state.mode == GalleryMode.PHOTO) "发送到素材？" else "发送到照片？") },
-            text = { Text(if (state.mode == GalleryMode.PHOTO) "发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。" else "发送后将在照片模式生成独立副本，成功后从素材模式移除源项，不进入回收站。") },
-            confirmButton = { TextButton({ confirmSend = false; model.sendSelection() }) { Text("确认发送") } },
+            text = {
+                Text(
+                    if (state.mode == GalleryMode.PHOTO) "发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。"
+                    else "发送后将在照片模式生成独立副本，成功后从素材模式移除源项，不进入回收站。"
+                )
+            },
+            confirmButton = {
+                TextButton({
+                    confirmSend = false
+                    model.sendSelection()
+                }) {
+                    Text("确认发送")
+                }
+            },
             dismissButton = { TextButton({ confirmSend = false }) { Text("取消") } },
         )
     if (confirm)
