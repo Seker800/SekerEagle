@@ -2581,6 +2581,30 @@ describe('SekerEaglePage', () => {
     expect(screen.queryByText('2026年4月')).not.toBeInTheDocument();
   });
 
+  it('sends multiple selected photos from a semantic smart folder through the operation queue', async () => {
+    testWorkspaceMode.value = 'PHOTO';
+    const second = { ...asset, id: 'asset-2', displayName: 'Second Photo' };
+    listEagleAssetsMock.mockResolvedValue({ items: [asset, second], nextCursor: null });
+    listEagleSmartFoldersMock.mockResolvedValue([{
+      id: 'scene-folder', name: '画面结果', color: null, parentId: null,
+      queryVersion: 2,
+      queryJson: { version: 2, conditions: [], semantic: { text: '截图', breadth: 'BROAD' } },
+      position: 0, rowVersion: 1,
+      semanticState: { id: 'snapshot', status: 'READY', isActive: true, hasResults: true, updatedAt: '2026-10-29T00:00:00Z' },
+    }]);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: '画面结果' }));
+    await waitFor(() => expect(listEagleAssetsMock.mock.calls.at(-1)?.[1]).toMatchObject({ smartFolderId: 'scene-folder' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Owl Reference/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Second Photo/ }), { ctrlKey: true });
+    fireEvent.click(within(screen.getByRole('toolbar', { name: '图片选择' })).getByRole('button', { name: '操作' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: '发送到素材' }));
+    await waitFor(() => expect(enqueueAssetOperationMock).toHaveBeenCalledWith({ kind: 'SEND', assetIds: [asset.id, second.id], operationId: expect.any(String) }));
+    expect(screen.getByRole('button', { name: /Owl Reference/ })).toBeVisible();
+    expect(screen.getByRole('button', { name: /Second Photo/ })).toBeVisible();
+    expect(sendEagleAssetsMock).not.toHaveBeenCalled();
+  });
+
   it('keeps saved smart-folder conditions separate from temporary filter controls', async () => {
     listEagleSmartFoldersMock.mockResolvedValueOnce([
       {

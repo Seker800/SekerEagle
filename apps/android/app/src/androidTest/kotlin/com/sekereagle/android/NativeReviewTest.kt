@@ -119,6 +119,24 @@ class NativeReviewTest {
     }
 
     @Test
+    fun smartFolderSelectionOffersSendToMaterials() {
+        Server().use { server ->
+            val model = model(server)
+            main { model.applyFilters(NativeFilters(smartFolderId = "folder")) }
+            await { !model.state.value.loading && model.state.value.items.isNotEmpty() }
+            main {
+                model.startSelection("asset0")
+                model.toggleSelection("asset1")
+            }
+            compose.setContent { NativeGalleryApp(model) {} }
+            compose.onNodeWithText("发送到素材").assertExists().performClick()
+            compose.onNodeWithText("发送后将在素材模式生成独立副本，成功后从照片模式移除源项，不进入回收站。")
+                .assertExists()
+            main { model.logout() }
+        }
+    }
+
+    @Test
     fun switchingLibrariesRetainsLoadedWindowWithoutReloading() {
         Server().use { server ->
             val model = model(server)
