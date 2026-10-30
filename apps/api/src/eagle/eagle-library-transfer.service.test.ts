@@ -109,7 +109,7 @@ test('an edit between approval validation and plan creation cannot silently repl
   assert.equal(writes, 0);
 });
 
-test('sending current browse outputs copies independent derivatives and publishes a ready target', async () => {
+for (const handoff of [false, true]) test(`sending current browse outputs ${handoff ? 'hands off exclusive object ownership without copies' : 'resumes a legacy copy plan'} and publishes a ready target`, async () => {
   const ownerId = '00000000-0000-4000-8000-000000000001';
   const sourceId = '00000000-0000-4000-8000-000000000002';
   const targetId = '00000000-0000-4000-8000-000000000003';
@@ -203,6 +203,12 @@ test('sending current browse outputs copies independent derivatives and publishe
       },
     ],
   };
+  if (handoff) {
+    const item = operation.plan[0]!;
+    Object.assign(item, { storageAction: 'HANDOFF', targetKey: source.originalObjectKey });
+    for (const r of item.renditions) r.targetKey = r.sourceKey;
+    item.pyramid.targetPrefix = item.pyramid.storagePrefix.replace(/\/+$/, '') + '/';
+  }
   const copies: string[][] = [];
   const created: Record<string, unknown>[] = [];
   const jobs: Array<{
@@ -267,7 +273,8 @@ test('sending current browse outputs copies independent derivatives and publishe
     'PHOTO',
   );
   await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
-  assert.equal(copies.length, 5);
+  assert.equal(copies.length, handoff ? 0 : 5);
+  if (handoff) assert.equal(retired?.storageTransferredOut, true);
   assert.equal(
     publishedPyramid.storagePrefix,
     pyramid.targetPrefix.replace(/\/+$/, ''),
@@ -278,13 +285,13 @@ test('sending current browse outputs copies independent derivatives and publishe
   assert.ok(retired?.transferredAt instanceof Date);
   assert.deepEqual(
     deletion?.objectKeys.sort(),
-    [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
+    handoff ? [] : [source.originalObjectKey, ...renditions.map((r) => r.storageKey)].sort(),
   );
   assert.deepEqual(
     deletion?.prefixes?.sort(),
     [
       `users/${ownerId}/assets/${sourceId}/old-pyramid/`,
-      `users/${ownerId}/assets/${sourceId}/ready-pyramid/`,
+      ...(handoff ? [] : [`users/${ownerId}/assets/${sourceId}/ready-pyramid/`]),
     ].sort(),
   );
   assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));

@@ -2,9 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { prepareAssetPurge } from './asset-purge';
 
-test('purge detaches every restrictive pointer and queues object deletion before removing the DB asset', async () => {
+for (const handedOff of [false, true]) test(`purge detaches restrictive pointers and ${handedOff ? 'preserves handed-off objects' : 'deletes owned objects'}`, async () => {
   const events: string[] = [];
   const asset = {
+    storageTransferredOut: handedOff,
     id: 'asset',
     ownerId: 'owner',
     libraryMode: 'PHOTO',
@@ -44,7 +45,7 @@ test('purge detaches every restrictive pointer and queues object deletion before
       leaseVersion: 1,
     } as never,
   );
-  assert.deepEqual(events, ['outbox', 'upload', 'state', 'state', 'capture', 'asset']);
+  assert.deepEqual(events, [...(handedOff ? [] : ['outbox']), 'upload', 'state', 'state', 'capture', 'asset']);
 });
 
 test('an expired purge lease cannot delete a DB row or queue object removal', async () => {
