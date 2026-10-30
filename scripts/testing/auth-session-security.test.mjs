@@ -26,24 +26,37 @@ const config = { getOrThrow: () => 3600 };
 
 test('one SQL per access verification preserves immediate account, family, expiry and role checks', async () => {
   const measured = new PrismaClient({ log: [{ emit: 'event', level: 'query' }] });
-  let queries = 0;
-  const statements = [];
+  let nextAccountRead;
   measured.$on('query', ({ query }) => {
-    // Prisma may deliver the preceding createSession COMMIT event after its
-    // promise resolves. Count the account/session reads under measurement.
-    if (/^SELECT\b/u.test(query)) {
-      queries++;
-      statements.push(query);
-    }
+    // Query events are asynchronous; a completed Prisma promise is not an
+    // event-delivery fence. Account locks/COMMITs from session creation are excluded.
+    if (/^SELECT\b/u.test(query) && query.includes('"User"."email"')) nextAccountRead?.(query);
   });
   const sessions = new SessionTokenService(measured, jwt, config);
   const users = [];
   async function verify(token, accepted) {
-    queries = 0;
-    statements.length = 0;
-    if (accepted) await sessions.verifyAccessToken(token);
-    else await assert.rejects(sessions.verifyAccessToken(token));
-    assert.equal(queries, 1, JSON.stringify(statements));
+    const read = new Promise((resolve) => {
+      nextAccountRead = resolve;
+    });
+    const cancellation = new globalThis.AbortController();
+    try {
+      let principal;
+      if (accepted) principal = await sessions.verifyAccessToken(token);
+      else await assert.rejects(sessions.verifyAccessToken(token));
+      const query = await Promise.race([
+        read,
+        delay(2000, undefined, { signal: cancellation.signal }).then(() => {
+          throw new Error('Missing account query event');
+        }),
+      ]);
+      // The real account statement itself must contain the active-family check;
+      // a separate token SELECT cannot satisfy this assertion.
+      assert.match(query, /EXISTS\(SELECT.*"RefreshToken"/u);
+      return principal;
+    } finally {
+      nextAccountRead = undefined;
+      cancellation.abort();
+    }
   }
   try {
     for (let index = 0; index < 2; index++)
@@ -65,7 +78,7 @@ test('one SQL per access verification preserves immediate account, family, expir
     });
     await verify(forgedFamily, false);
     await prisma.user.update({ where: { id: user.id }, data: { role: 'ADMIN' } });
-    assert.equal((await sessions.verifyAccessToken(session.accessToken)).role, 'ADMIN');
+    assert.equal((await verify(session.accessToken, true)).role, 'ADMIN');
     await prisma.user.update({ where: { id: user.id }, data: { disabledAt: new Date() } });
     await verify(session.accessToken, false);
     await prisma.user.update({
