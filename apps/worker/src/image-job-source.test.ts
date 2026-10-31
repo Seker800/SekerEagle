@@ -140,3 +140,13 @@ test('analysis never loads the large RAW edit copy, even when it precedes the br
     );
   }
 });
+
+test('details-only work reuses the preview only when the original hash is already known', () => {
+  for (const sha256 of [null, 'verified-original-hash']) {
+    const sourceAsset = { ...asset, sha256, renditions: [{ kind: 'PREVIEW', variant: 'default',
+      revision: 3, status: 'READY', storageKey: 'users/owner/preview.webp', mimeType: 'image/webp' }] };
+    const selected = selectImageJobSource(sourceAsset, 'GENERATE_RENDITIONS', 'photo-source-details-v1');
+    assert.equal(selected.storageKey, sha256 ? 'users/owner/preview.webp' : asset.originalObjectKey);
+    assert.equal(selected.verifiesOriginalHash, !sha256);
+  }
+});
