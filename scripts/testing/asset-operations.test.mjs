@@ -1623,8 +1623,15 @@ for (const mode of ['PHOTO', 'MATERIAL'])
     const [actual] =
       await prisma.$queryRaw`SELECT embedding::text AS value FROM "EagleAssetEmbedding" WHERE id=${copied.id}`;
     assert.equal(actual.value, vector);
-    const regeneration = await prisma.eagleAssetProcessingJob.update({ where: { id: job.id }, data: { status: 'PROCESSING', leaseVersion: { increment: 1 } } });
-    assert.equal(await publishStoredEmbedding(prisma, regeneration, identity, suggest), false, 'explicit regeneration must not silently reuse an already indexed vector');
+    const regeneration = await prisma.eagleAssetProcessingJob.update({
+      where: { id: job.id },
+      data: { status: 'PROCESSING', leaseVersion: { increment: 1 } },
+    });
+    assert.equal(
+      await publishStoredEmbedding(prisma, regeneration, identity, suggest),
+      false,
+      'explicit regeneration must not silently reuse an already indexed vector',
+    );
 
     assert.equal(f.copies(), 0);
   });

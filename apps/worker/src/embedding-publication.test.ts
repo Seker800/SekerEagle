@@ -151,6 +151,8 @@ test('stored-vector activation preserves compatibility, scope and lease without 
   ])
     assert.ok(lookup.includes(field), field);
   assert.ok(sql[0]!.includes('"deletedAt" IS NULL'));
+  assert.ok(lookup.includes('NOT e."isCurrent"'));
+  assert.ok(lookup.includes("e.status IN ('PENDING','RUNNING','FAILED')"));
 });
 
 for (const scenario of [
@@ -169,13 +171,13 @@ for (const scenario of [
           ? scenario === 'stale-asset'
             ? []
             : [{ id: job.assetId }]
-          : scenario === 'no-cache'
+          : scenario === 'no-cache' || scenario === 'ready'
             ? []
             : [
                 {
                   id: 'stored',
-                  status: scenario === 'ready' ? 'READY' : 'FAILED',
-                  isCurrent: scenario === 'ready',
+                  status: 'FAILED',
+                  isCurrent: false,
                 },
               ],
       eagleAssetProcessingJob: {
@@ -209,7 +211,7 @@ for (const scenario of [
         matched++;
       });
     if (scenario === 'missing-record') await assert.rejects(activate, /EMBEDDING_RECORD_NOT_OWNED/);
-    else assert.equal(await activate(), scenario !== 'no-cache');
-    assert.equal(completions, scenario === 'no-cache' ? 0 : 1);
+    else assert.equal(await activate(), scenario !== 'no-cache' && scenario !== 'ready');
+    assert.equal(completions, scenario === 'no-cache' || scenario === 'ready' ? 0 : 1);
     assert.equal(matched, 0);
   });

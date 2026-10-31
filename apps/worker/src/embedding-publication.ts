@@ -99,13 +99,12 @@ export async function publishStoredEmbedding(
         });
         return true;
       }
-      const records = await tx.$queryRaw<
-        Array<{ id: string; status: string; isCurrent: boolean }>
-      >(Prisma.sql`
-      SELECT e.id,e.status,e."isCurrent" FROM "EagleAssetEmbedding" e
+      const records = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT e.id FROM "EagleAssetEmbedding" e
       JOIN "EagleEmbeddingSpace" s ON s.id=e."spaceId"
       WHERE e."ownerId"=${job.ownerId} AND e."libraryMode"=${job.libraryMode}::"LibraryMode"
         AND e."assetId"=${job.assetId} AND e."assetRevision"=${job.assetRevision}
+        AND NOT e."isCurrent" AND e.status IN ('PENDING','RUNNING','FAILED')
         AND e.embedding IS NOT NULL AND e."l2Norm" BETWEEN 0.99 AND 1.01
         AND s.id=${identity.id} AND s."isCurrent" AND s.model=${identity.model}
         AND s.revision=${identity.revision} AND s.dimensions=${identity.dimensions}
@@ -117,7 +116,6 @@ export async function publishStoredEmbedding(
       if (!record) return false;
       const completed = await tx.eagleAssetProcessingJob.updateMany(mediaCompletion(job));
       if (completed.count !== 1) return true;
-      if (record.status === 'READY' && record.isCurrent) return true;
       await tx.eagleAssetEmbedding.updateMany({
         where: {
           ownerId: job.ownerId,
