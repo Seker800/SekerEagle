@@ -13,6 +13,7 @@ export interface DuplicateResults {
   outdatedGroups?: number;
   algorithmVersion?: string;
   originalCheckCompleted?: boolean;
+  originalCheckAttempted?: boolean;
   revision: string;
   exactRevision: string;
   exactItems: number;

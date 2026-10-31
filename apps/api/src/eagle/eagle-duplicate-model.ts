@@ -14,7 +14,7 @@ export type CleanupSnapshot = {
 export type ScanSnapshot =
   | { kind: 'scan'; rows: Snapshot[] }
   | { kind: 'verify'; rows: Snapshot[] }
-  | { kind: 'build' }
+  | { kind: 'build'; version?: string }
   | { kind: 'publish'; version?: string };
 export type Item = EagleAssetOperationItem & { operation: EagleAssetOperation };
 export function signature(

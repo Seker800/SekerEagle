@@ -196,6 +196,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     if (
       (data?.outdatedGroups ||
         (data?.originalCheckCompleted === false && data.coverage.total > 0)) &&
+      data?.originalCheckAttempted !== true &&
       attemptedUpgrade.current !== upgradeKey &&
       !scanning &&
       !scan.isPending
@@ -206,6 +207,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   }, [
     data?.outdatedGroups,
     data?.originalCheckCompleted,
+    data?.originalCheckAttempted,
     data?.coverage.total,
     upgradeKey,
     scanning,
@@ -429,7 +431,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           </div>
           <div className={styles.content}>
             {!!data?.outdatedGroups && (
-              <p role="status">{t('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。')}</p>
+              <p role="status">
+                {data.originalCheckAttempted && !scanning && !scan.isPending
+                  ? t('旧版近似结果已停用；可点击“检查新内容”重新核验原图。')
+                  : t('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。')}
+              </p>
             )}
             {data && (
               <div className={styles.coverage}>
@@ -731,7 +737,14 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               !active.some((op) => op.kind === 'DUPLICATE_CLEANUP') &&
               !pendingGlobal.length && (
                 <div className={styles.empty}>
-                  {!scanning && !scan.isPending && !data.outdatedGroups && <IconCheck size={35} />}
+                  {!scanning &&
+                    !scan.isPending &&
+                    !data.outdatedGroups &&
+                    !(
+                      data.originalCheckAttempted &&
+                      !data.originalCheckCompleted &&
+                      kind !== 'EXACT'
+                    ) && <IconCheck size={35} />}
                   <h3>
                     {scanning || scan.isPending
                       ? t('正在检查查重结果…')
@@ -741,22 +754,32 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                           ? t('没有已忽略的结果')
                           : kind === 'EXACT'
                             ? t('没有完全重复的文件')
-                            : data.coverage.indexed < data.coverage.total
-                              ? t('视觉检查尚未完成')
-                              : kind === 'SIMILAR'
-                                ? t('未发现已核验的画面相同副本')
-                                : t('未发现符合当前规则的重复项')}
+                            : data.originalCheckAttempted && !data.originalCheckCompleted
+                              ? t('原图核验尚未完成')
+                              : data.coverage.indexed < data.coverage.total
+                                ? t('视觉检查尚未完成')
+                                : kind === 'SIMILAR'
+                                  ? t('未发现已核验的画面相同副本')
+                                  : t('未发现符合当前规则的重复项')}
                   </h3>
                   <p>
                     {scanning || scan.isPending
                       ? t('后台检查完成后会自动显示结果，可以继续浏览。')
                       : data.outdatedGroups
-                        ? t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
-                        : kind === 'EXACT' && !showIgnored
-                          ? t('文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。')
-                          : data.coverage.indexed < data.coverage.total
-                            ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
-                            : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
+                        ? data.originalCheckAttempted
+                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                          : t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
+                        : data.originalCheckAttempted &&
+                            !data.originalCheckCompleted &&
+                            kind !== 'EXACT'
+                          ? t('检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。')
+                          : kind === 'EXACT' && !showIgnored
+                            ? t(
+                                '文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。',
+                              )
+                            : data.coverage.indexed < data.coverage.total
+                              ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
+                              : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
                   </p>
                   {!showIgnored && kind === 'EXACT' && data.similarGroups > 0 && (
                     <button

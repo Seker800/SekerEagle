@@ -21,6 +21,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, type LibraryMode } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
+import { DUPLICATE_GROUPING_VERSION } from '@sekereagle/library-core';
 import { PrismaService } from '../prisma/prisma.service';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import type { AuthPrincipal } from '../auth/auth.types';
@@ -92,6 +93,7 @@ export class EagleDuplicateService {
           outdatedGroups: state.outdatedGroups,
           algorithmVersion: state.algorithmVersion,
           originalCheckCompleted: state.originalCheckCompleted,
+          originalCheckAttempted: state.originalCheckAttempted,
           totalGroups: visible.length,
           exactGroups: state.groups.filter(
             (g) => g.kind === 'EXACT' && !state.ignored.has(g.signature),
@@ -316,7 +318,11 @@ export class EagleDuplicateService {
             weight: part.length,
           });
         }
-        items.push({ assetIds: [], snapshots: { kind: 'build' }, weight: 1 });
+        items.push({
+          assetIds: [],
+          snapshots: { kind: 'build', version: DUPLICATE_GROUPING_VERSION },
+          weight: 1,
+        });
         return this.admit(tx, principal, id, 'DUPLICATE_SCAN', [], principal.canViewPrivate, items);
       },
       { timeout: 45_000 },

@@ -1,4 +1,9 @@
 export const enUS = {
+  '旧版近似结果已停用；可点击“检查新内容”重新核验原图。':
+    'Old similarity results are disabled. Select Check new content to verify originals again.',
+  原图核验尚未完成: 'Original verification is incomplete',
+  '检查尚未完成，点击“检查新内容”继续。已停止的检查不会自动重启。':
+    'The check is incomplete. Select Check new content to continue. Stopped checks will not restart automatically.',
   '原图像素已核验完全相同。可用上方批量工具每组保留一份；这里也可手动选择额外保留项。':
     'Original pixels were verified identical. Use bulk cleanup above to keep one per group, or manually retain additional copies here.',
 

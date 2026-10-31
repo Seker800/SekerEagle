@@ -745,3 +745,24 @@ test('legacy cleanup request identities remain replayable after the pixel-proof 
     assetIds: [],
   });
 });
+
+test('a cancelled scan persists its attempted version without claiming complete coverage', async () => {
+  const f = await fixture('PHOTO'),
+    row = await f.add();
+  await f.preview(
+    row,
+    await sharp({ create: { width: 96, height: 64, channels: 3, background: '#345678' } })
+      .png()
+      .toBuffer(),
+  );
+  assert.equal((await f.duplicate.list(f.ownerId, false, {})).originalCheckAttempted, false);
+  const scan = await f.duplicate.scan(f.principal, randomUUID());
+  await f.executor.cancel(f.principal, scan.operationId);
+  const stopped = await f.duplicate.list(f.ownerId, false, {});
+  assert.equal(stopped.originalCheckAttempted, true);
+  assert.equal(stopped.originalCheckCompleted, false);
+  const resumed = await f.duplicate.scan(f.principal, randomUUID());
+  assert.notEqual(resumed.operationId, scan.operationId);
+  assert.equal((await f.drain(resumed.operationId)).failed, 0);
+  assert.equal((await f.duplicate.list(f.ownerId, false, {})).originalCheckCompleted, true);
+});

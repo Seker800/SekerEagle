@@ -61,8 +61,12 @@ export async function readDuplicateReview(
         originalsVerified: number;
         unsupportedOriginals: number;
         originalCheckCompleted: boolean;
+        originalCheckAttempted: boolean;
       }>
     >`SELECT count(*)::int AS total,
+        EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
+          WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
+          AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION} AND i.snapshots->>'kind' IN ('build','publish')) AS "originalCheckAttempted",
         EXISTS(SELECT 1 FROM "EagleAssetOperation" o JOIN "EagleAssetOperationItem" i ON i."operationId"=o.id AND i."ownerId"=o."ownerId" AND i."libraryMode"=o."libraryMode"
           WHERE o."ownerId"=${ownerId} AND o."libraryMode"=${libraryMode}::"LibraryMode" AND o.kind='DUPLICATE_SCAN' AND o."isPrivate"=${includePrivate}
           AND i.status='COMPLETED' AND i.snapshots->>'kind'='publish' AND i.snapshots->>'version'=${DUPLICATE_GROUPING_VERSION}
@@ -140,6 +144,7 @@ export async function readDuplicateReview(
     outdatedGroups: counts[0]?.outdatedGroups ?? 0,
     algorithmVersion: DUPLICATE_GROUPING_VERSION,
     originalCheckCompleted: counts[0]?.originalCheckCompleted ?? false,
+    originalCheckAttempted: counts[0]?.originalCheckAttempted ?? false,
     coverage: counts[0] ?? { total: 0, indexed: 0, waiting: 0 },
   };
 }
