@@ -144,8 +144,9 @@ export class PhotoManagementController {
     return this.review.decide(p.sub, p.canViewPrivate, dto);
   }
   @Get('people/review-priority')
-  priorityPeople(@CurrentPrincipal() p: AuthPrincipal) {
-    return this.photos.reviewPeople(p.sub, p.canViewPrivate);
+  async priorityPeople(@CurrentPrincipal() p: AuthPrincipal) {
+    const result = await this.review.suggestions(p.sub, p.canViewPrivate);
+    return { pairs: result.items };
   }
   @Post('people/scan') @UseGuards(BrowserOriginGuard) scanPeople(
     @CurrentPrincipal() p: AuthPrincipal,

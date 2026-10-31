@@ -12,6 +12,7 @@ import {
   inheritedPrivacyTag,
 } from '../../packages/library-persistence/dist/index.js';
 import { PhotoManagementService } from '../../apps/api/dist/photos/photo-management.service.js';
+import { PhotoPersonReviewService } from '../../apps/api/dist/photos/photo-person-review.service.js';
 import { EaglePrivacyService } from '../../apps/api/dist/eagle/eagle-privacy.service.js';
 import { EagleService } from '../../apps/api/dist/eagle/eagle.service.js';
 import { persistPhotoFaces, FACE_MODEL_VERSION } from '../../apps/worker/dist/photo-faces.js';
@@ -976,7 +977,7 @@ test('无人脸结果跳过向量读取仍保留人工人物纠错及其私密�
   );
 });
 
-test('人物确认按相似证据排序并分散提问，排除同框、旧版本及不可见数据', async () => {
+test('人物确认按证据与照片数量排序，排除同框、旧版本及不可见数据', async () => {
   const f = await fixture();
   const addPerson = (prototype = embedding, more = {}) =>
     prisma.eaglePhotoPerson.create({
@@ -1048,17 +1049,18 @@ test('人物确认按相似证据排序并分散提问，排除同框、旧版�
     where: { id: stale.id },
     data: { mediaRevision: { increment: 1 } },
   });
-  const result = await f.service.reviewPeople(f.ownerId, false);
-  assert.equal(result.pairs.length, 1);
-  const top = result.pairs[0];
+  const reviews = new PhotoPersonReviewService(prisma, f.service);
+  const result = await reviews.suggestions(f.ownerId, false);
+  assert.ok(result.items.length >= 1);
+  const top = result.items[0];
   assert.deepEqual(new Set([top.first.id, top.second.id]), new Set([first.id, second.id]));
   assert.deepEqual([top.first.photoCount, top.second.photoCount].sort(), [3, 5]);
   assert.equal(JSON.stringify(result).includes('prototype'), false);
   assert.equal(JSON.stringify(result).includes('embedding'), false);
   assert.equal(JSON.stringify(result).includes(stale.id), false);
-  assert.equal((await f.service.reviewPeople(randomUUID(), false)).pairs.length, 0);
+  assert.equal((await reviews.suggestions(randomUUID(), false)).items.length, 0);
   assert.ok(
-    (await f.service.reviewPeople(f.ownerId, true)).pairs.some((pair) =>
+    (await reviews.suggestions(f.ownerId, true)).items.some((pair) =>
       [pair.first.id, pair.second.id].includes(hidden.id),
     ),
   );
@@ -1072,7 +1074,7 @@ test('人物确认按相似证据排序并分散提问，排除同框、旧版�
     },
   });
   assert.ok(
-    !(await f.service.reviewPeople(f.ownerId, false)).pairs.some(
+    !(await reviews.suggestions(f.ownerId, false)).items.some(
       (pair) =>
         [pair.first.id, pair.second.id].includes(first.id) &&
         [pair.first.id, pair.second.id].includes(second.id),
@@ -1081,10 +1083,10 @@ test('人物确认按相似证据排序并分散提问，排除同框、旧版�
   );
   await prisma.eaglePhotoPersonSeparation.deleteMany({ where: { ownerId: f.ownerId } });
   await sample(second, {}, shared);
-  const after = await f.service.reviewPeople(f.ownerId, false);
-  assert.ok(after.pairs.every((pair) => new Set([pair.first.id, pair.second.id]).size === 2));
+  const after = await reviews.suggestions(f.ownerId, false);
+  assert.ok(after.items.every((pair) => new Set([pair.first.id, pair.second.id]).size === 2));
   assert.ok(
-    !after.pairs.some(
+    !after.items.some(
       (pair) =>
         [pair.first.id, pair.second.id].includes(first.id) &&
         [pair.first.id, pair.second.id].includes(second.id),
@@ -1092,7 +1094,7 @@ test('人物确认按相似证据排序并分散提问，排除同框、旧版�
   );
 });
 
-test('人物确认在一万张照片五百个人物下保持候选上限与全库排序', async () => {
+test('人物确认在一万张照片五百个人物下保持分批读取', async () => {
   const ownerId = randomUUID(),
     embedding = [1, ...Array(127).fill(0)];
   await prisma.user.create({
@@ -1159,12 +1161,14 @@ test('人物确认在一万张照片五百个人物下保持候选上限与全�
   }
   await prisma.$executeRawUnsafe('ANALYZE');
   const start = performance.now();
-  const result = await new PhotoManagementService(prisma).reviewPeople(ownerId, false);
+  const result = await new PhotoPersonReviewService(
+    prisma,
+    new PhotoManagementService(prisma),
+  ).suggestions(ownerId, false);
   const elapsedMs = performance.now() - start;
-  assert.equal(result.pairs.length, 100);
-  assert.ok([result.pairs[0].first.id, result.pairs[0].second.id].includes(people[499].id));
-  assert.equal(new Set(result.pairs.flatMap((p) => [p.first.id, p.second.id])).size, 200);
-  assert.ok(result.pairs.every((p) => p.first.photoCount + p.second.photoCount >= 40));
+  assert.ok(result.items.length > 0 && result.items.length <= 32);
+  assert.ok([result.items[0].first.id, result.items[0].second.id].includes(people[499].id));
+  assert.ok(result.items.every((p) => p.first.photoCount + p.second.photoCount >= 40));
   const service = new PhotoManagementService(prisma);
   const full = await service.people(ownerId, false);
   const cards = await service.people(ownerId, false, undefined, 'cards');
@@ -1192,7 +1196,7 @@ test('人物确认在一万张照片五百个人物下保持候选上限与全�
       syntheticOnly: true,
       photos: 10001,
       people: 500,
-      pairs: result.pairs.length,
+      pairs: result.items.length,
       elapsedMs,
       productionTiming: false,
     }),

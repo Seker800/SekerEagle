@@ -15,7 +15,6 @@ import {
   queuePhotoFaceScan,
 } from '@sekereagle/library-persistence';
 import { facePreviewSelect, previewSelect, serializePreview } from './photo-preview';
-import { readPhotoPeopleReview } from './photo-people-review';
 import { suggestPhotoGroups } from './photo-grouping';
 import { visiblePhotoAssets, requireVisiblePerson } from './photo-person-scope';
 import { carryPersonSeparations } from './photo-person-review';
@@ -214,9 +213,6 @@ export class PhotoManagementService {
         asset: serializePreview(face.asset),
       })),
     };
-  }
-  reviewPeople(ownerId: string, includePrivate: boolean) {
-    return readPhotoPeopleReview(this.prisma, ownerId, includePrivate);
   }
   async scanFaces(ownerId: string, includePrivate: boolean) {
     if (!process.env.PHOTO_FACE_PYTHON || !process.env.PHOTO_FACE_MODEL_DIR)

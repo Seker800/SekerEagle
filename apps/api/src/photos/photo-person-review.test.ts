@@ -1,6 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PhotoManagementService } from './photo-management.service';
+import { encodeReviewCursor, reviewCursor, personReviewCandidatesSql } from './photo-person-review';
+
+test('review cursor preserves the whole traversal and is bound to identity and privacy', () => {
+  const state = { id: 'anchor-1', round: 3, photos: 8, confidence: 0.9, found: true };
+  const cursor = encodeReviewCursor(state, 'owner', false);
+  assert.deepEqual(reviewCursor(cursor, 'owner', false), state);
+  assert.throws(() => reviewCursor(cursor, 'other', false));
+  assert.throws(() => reviewCursor(cursor, 'owner', true));
+  const sql = personReviewCandidatesSql('owner', false, state).text;
+  assert.doesNotMatch(sql, /score\s*>=/);
+  assert.match(sql, /OFFSET/);
+});
 
 test('person merge refuses a stale review before moving any faces', async () => {
   let writes = 0;
@@ -79,6 +91,7 @@ test('review endpoints derive owner/private visibility from browser principal an
     {
       suggestions: (...args: unknown[]) => {
         calls.push(args);
+        return Promise.resolve({ items: [] });
       },
       decide: (...args: unknown[]) => {
         calls.push(args);
@@ -94,8 +107,13 @@ test('review endpoints derive owner/private visibility from browser principal an
   });
   controller.reviewPeople({ sub: 'trusted-owner', canViewPrivate: false } as never, {});
   controller.decidePeople({ sub: 'trusted-owner', canViewPrivate: false } as never, input);
+  assert.deepEqual(
+    await controller.priorityPeople({ sub: 'trusted-owner', canViewPrivate: false } as never),
+    { pairs: [] },
+  );
   assert.deepEqual(calls[0], ['trusted-owner', false, undefined]);
   assert.equal(calls[1]?.[0], 'trusted-owner');
+  assert.deepEqual(calls[2], ['trusted-owner', false]);
   assert.equal((await validate(input)).length, 0);
   assert(
     (

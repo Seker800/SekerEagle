@@ -8,7 +8,6 @@ import { PHOTO_FACE_MODEL_VERSION } from '../../packages/library-core/dist/index
 import { assertSafeRuntimeTarget } from '../../packages/config/dist/index.js';
 import { PhotoManagementService } from '../../apps/api/dist/photos/photo-management.service.js';
 import { PhotoPersonReviewService } from '../../apps/api/dist/photos/photo-person-review.service.js';
-import { readPhotoPeopleReview } from '../../apps/api/dist/photos/photo-people-review.js';
 assertSafeRuntimeTarget({
   databaseUrl: process.env.DATABASE_URL,
   s3Endpoint: process.env.S3_ENDPOINT,
@@ -105,15 +104,15 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     // More than one anchor page, with a real pair beyond the old first directory page.
     for (let i = 0; i < 20; i++)
       await add([0, 0, ...Array.from({ length: 126 }, (_, j) => (j === i ? 1 : 0))]);
-    const lowResolution = await add(vector(1, 0), { box: [0.1, 0.1, 0.02, 0.02] }),
-      lowConfidence = await add(vector(1, 0), { confidence: 0.94 }),
-      wrongModel = await add(vector(1, 0), { model: 'incompatible-model' });
+    await add(vector(1, 0), { box: [0.1, 0.1, 0.02, 0.02] });
+    await add(vector(1, 0), { confidence: 0.94 });
+    const wrongModel = await add(vector(1, 0), { model: 'incompatible-model' });
     const basis = (axis, component = 1, second = 0) =>
       Array.from({ length: 128 }, (_, i) => (i === axis ? component : i === axis + 1 ? second : 0));
-    const weakA = await add(basis(100)),
-      weakB = await add(basis(100, 0.55, Math.sqrt(1 - 0.55 ** 2)));
-    const namedA = await add(basis(102), { name: 'Named A' }),
-      namedB = await add(basis(102), { name: 'Named B' });
+    await add(basis(100));
+    await add(basis(100, 0.55, Math.sqrt(1 - 0.55 ** 2)));
+    await add(basis(102), { name: 'Named A' });
+    await add(basis(102), { name: 'Named B' });
     const currentFace = await db.eaglePhotoFace.findFirstOrThrow({ where: { personId: a.id } });
     const oldFace = await db.eaglePhotoFace.create({
       data: {
@@ -137,33 +136,12 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
       'stale high-confidence faces must never illustrate a review',
     );
     assert(first.nextCursor);
-    assert(
-      first.items.some(
-        (p) => [p.first.id, p.second.id].includes(a.id) && [p.first.id, p.second.id].includes(b.id),
-      ),
-    );
     for (const pair of first.items)
       for (const person of [pair.first, pair.second])
         assert(![hidden.id, foreign.id, stale.id, missing.id].includes(person.id));
-    const priority = await readPhotoPeopleReview(db, owner, false);
-    assert(
-      priority.pairs.some(
-        (p) => [p.first.id, p.second.id].includes(a.id) && [p.first.id, p.second.id].includes(b.id),
-      ),
-    );
-    // Both read routes use the same evidence rules, with no weaker fallback.
-    const excluded = [
-      hidden,
-      foreign,
-      stale,
-      missing,
-      lowResolution,
-      lowConfidence,
-      wrongModel,
-      weakA,
-      weakB,
-    ];
-    for (const pair of [...first.items, ...priority.pairs]) {
+    // Scores and face size affect rank, while invalid or inaccessible data remains excluded.
+    const excluded = [hidden, foreign, stale, missing, wrongModel];
+    for (const pair of first.items) {
       for (const person of [pair.first, pair.second]) {
         assert(
           !excluded.some((p) => p.id === person.id),
@@ -176,14 +154,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
         );
         assert(!person.faces.some((f) => f.id === oldFace.id));
       }
-      assert(
-        !(
-          [pair.first.id, pair.second.id].includes(namedA.id) &&
-          [pair.first.id, pair.second.id].includes(namedB.id)
-        ),
-      );
     }
-    assert(!JSON.stringify(priority).includes('embedding'));
     assert(!JSON.stringify(first).includes('prototype'));
     assert(!JSON.stringify(first).includes('embedding'));
     await assert.rejects(reviews.suggestions(other, false, first.nextCursor), /游标无效/);

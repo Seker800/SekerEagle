@@ -242,6 +242,10 @@ try {
     env,
     stdio: 'inherit',
   });
+  run(process.execPath, ['--test', 'scripts/testing/photo-person-ranked.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   // Queue claim tests run after other fixtures to avoid competing for their leases.
   run(process.execPath, ['--test', 'scripts/testing/task-center.test.mjs'], {
     env,
