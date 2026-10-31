@@ -328,7 +328,14 @@ test('真实 HTTP 私密规则拒绝匿名、PAT、跨用户、跨模式和过�
     const optionsResponse = await fetch(peopleUrl + '?view=options', { headers: auth });
     assert.equal(optionsResponse.status, 200);
     const option = (await optionsResponse.json()).people[0];
-    assert.deepEqual(Object.keys(option).sort(), ['id', 'name']);
+    assert.deepEqual(Object.keys(option).sort(), [
+      'id',
+      'marksAssetsPrivate',
+      'name',
+      'rowVersion',
+    ]);
+    assert.equal(option.rowVersion, f.person.rowVersion);
+    assert.equal(option.marksAssetsPrivate, f.person.marksAssetsPrivate);
     assert.equal((await fetch(faceUrl, { headers: auth })).status, 200);
     const foreignPerson = await fixture();
     assert.equal(
@@ -1240,7 +1247,14 @@ test('人物卡片、姓名选项和脸分页维持撤权边界且不暴露 EXIF
   assert.equal('embedding' in card.faces[0], false);
   assert.equal('originalObjectKey' in card.faces[0].asset, false);
   const options = await f.service.people(f.ownerId, false, undefined, 'options');
-  assert.deepEqual(options.people, [{ id: f.person.id, name: f.person.name }]);
+  assert.deepEqual(options.people, [
+    {
+      id: f.person.id,
+      name: f.person.name,
+      rowVersion: f.person.rowVersion,
+      marksAssetsPrivate: f.person.marksAssetsPrivate,
+    },
+  ]);
   const first = await f.service.personFaces(f.ownerId, f.person.id, false);
   assert.equal(first.faces.length, 20);
   const second = await f.service.personFaces(f.ownerId, f.person.id, false, first.nextCursor);
