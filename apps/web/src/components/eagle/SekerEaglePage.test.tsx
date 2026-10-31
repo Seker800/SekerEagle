@@ -2742,6 +2742,50 @@ describe('SekerEaglePage', () => {
     );
   });
 
+  it.each(['MATERIAL', 'PHOTO'] as const)(
+    'returns from a smart folder to the complete cached %s library',
+    async (mode) => {
+      testWorkspaceMode.value = mode;
+      const outsideFolder = { ...asset, id: 'outside-folder', displayName: 'Outside Folder' };
+      listEagleAssetsMock.mockImplementation(async (_token, filters) => ({
+        items: filters.smartFolderId ? [asset] : [asset, outsideFolder],
+        nextCursor: null,
+      }));
+      listEagleSmartFoldersMock.mockResolvedValue([
+        {
+          id: 'folder-1',
+          name: '常用集合',
+          color: null,
+          parentId: null,
+          queryVersion: 1,
+          queryJson: { version: 1, filters: {} },
+          position: 0,
+          rowVersion: 1,
+        },
+      ]);
+      renderPage();
+      expect(await screen.findByRole('button', { name: /Outside Folder/ })).toBeVisible();
+      fireEvent.click(await screen.findByRole('button', { name: '常用集合' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /Outside Folder/ })).not.toBeInTheDocument(),
+      );
+      expect(listEagleAssetsMock.mock.lastCall?.[1]).toEqual(
+        expect.objectContaining({ smartFolderId: 'folder-1' }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '全部', exact: true }));
+      expect(await screen.findByRole('heading', { name: '全部', exact: true })).toBeVisible();
+      expect(await screen.findByRole('button', { name: /Outside Folder/ })).toBeVisible();
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+
+      fireEvent.click(screen.getByRole('button', { name: '常用集合' }));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /Outside Folder/ })).not.toBeInTheDocument(),
+      );
+      expect(listEagleAssetsMock).toHaveBeenCalledTimes(2);
+    },
+  );
+
   it('reuses recently visited folder listings instead of refetching on every switch', async () => {
     listEagleSmartFoldersMock.mockResolvedValue([
       {
