@@ -135,7 +135,7 @@ export async function readPersonReviewEvidence(
         AND f."personId" IN (${Prisma.join(ids)}) AND f."assetRevision"=a."mediaRevision" AND a."deletedAt" IS NULL
         AND f."modelVersion"=p."modelVersion" AND f."modelVersion"=${PHOTO_FACE_MODEL_VERSION}
         AND (${includePrivate} OR (NOT a."isPrivate" AND NOT p."marksAssetsPrivate"))
-        AND f.confidence BETWEEN 0.95 AND 1 AND cardinality(f.box)=4
+        AND f.confidence BETWEEN 0.9 AND 1 AND cardinality(f.box)=4
         AND f.box[1]>=0 AND f.box[2]>=0 AND f.box[3]>0 AND f.box[4]>0
         AND f.box[1]+f.box[3]<=1.001 AND f.box[2]+f.box[4]<=1.001
         AND r.width * f.box[3]>=48 AND r.height * f.box[4]>=48

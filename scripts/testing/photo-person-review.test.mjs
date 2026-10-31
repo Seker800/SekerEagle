@@ -96,6 +96,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     const a = await add(vector(1, 0), { id: '00000000-0000-4000-8000-000000000001' }),
       b = await add(vector(0.8, 0.6), {
         id: '00000000-0000-4000-8000-000000000002',
+        confidence: 0.92,
       }),
       c = await add(vector(0, 1), { name: 'Named' });
     const hidden = await add(vector(1, 0), { isPrivate: true }),
@@ -106,7 +107,7 @@ test('similarity reviews are global, private-scoped, persistent, versioned and s
     for (let i = 0; i < 20; i++)
       await add([0, 0, ...Array.from({ length: 126 }, (_, j) => (j === i ? 1 : 0))]);
     const lowResolution = await add(vector(1, 0), { box: [0.1, 0.1, 0.02, 0.02] }),
-      lowConfidence = await add(vector(1, 0), { confidence: 0.94 }),
+      lowConfidence = await add(vector(1, 0), { confidence: 0.89 }),
       wrongModel = await add(vector(1, 0), { model: 'incompatible-model' });
     const basis = (axis, component = 1, second = 0) =>
       Array.from({ length: 128 }, (_, i) => (i === axis ? component : i === axis + 1 ? second : 0));
