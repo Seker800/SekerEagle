@@ -5,6 +5,7 @@ interface Relation {
   from: string;
   to: string;
   scoped: boolean;
+  many: boolean;
 }
 interface Model {
   table: string;
@@ -17,6 +18,11 @@ const relation = (model: string, from = 'id', to = 'assetId', scoped = true): Re
   from,
   to,
   scoped,
+  many: true,
+});
+const one = (model: string, from = 'id', to = 'assetId', scoped = true): Relation => ({
+  ...relation(model, from, to, scoped),
+  many: false,
 });
 const model = (
   table: string,
@@ -37,15 +43,15 @@ const models: Readonly<Record<string, Model>> = {
     'EagleAsset',
     'id ownerId libraryMode deletedAt purgeAfter isPrivate format rating width height byteSize durationMs aspectRatio libraryAddedAt chronologicalAt updatedAt normalizedDisplayName originalName mimeType mediaRevision',
     {
-      annotation: relation('annotation'),
-      photoMetadata: relation('metadata'),
-      photoLocation: relation('location'),
+      annotation: one('annotation'),
+      photoMetadata: one('metadata'),
+      photoLocation: one('location'),
       photoFaces: relation('face'),
       manualTagLinks: relation('manualLink'),
       aiTagLinks: relation('aiLink'),
       colorAnalyses: relation('analysis'),
       embeddings: relation('embedding'),
-      owner: relation('owner', 'ownerId', 'id', false),
+      owner: one('owner', 'ownerId', 'id', false),
     },
   ),
   annotation: model('EagleAssetAnnotation', 'ownerId libraryMode assetId description sourceUrl'),
@@ -56,7 +62,7 @@ const models: Readonly<Record<string, Model>> = {
   location: model('EaglePhotoLocation', 'ownerId libraryMode assetId name'),
   face: model('EaglePhotoFace', 'ownerId libraryMode assetId personId isCurrent'),
   manualLink: model('EagleAssetManualTag', 'ownerId libraryMode assetId tagId', {
-    tag: relation('tag', 'tagId', 'id'),
+    tag: one('tag', 'tagId', 'id'),
   }),
   tag: model('EagleManualTag', 'id ownerId libraryMode normalizedName'),
   aiLink: model(
@@ -79,7 +85,7 @@ const models: Readonly<Record<string, Model>> = {
     { status: 'EagleEmbeddingStatus' },
   ),
   match: model('EagleSmartFolderSemanticMatch', 'ownerId libraryMode embeddingId snapshotId', {
-    snapshot: relation('snapshot', 'snapshotId', 'id'),
+    snapshot: one('snapshot', 'snapshotId', 'id'),
   }),
   snapshot: model('EagleSmartFolderSemanticSnapshot', 'id ownerId libraryMode folderId isActive'),
   owner: model('User', 'id', { eagleSmartFolders: relation('folder', 'id', 'ownerId', false) }),
@@ -174,7 +180,7 @@ function scalar(
 /** Keep eligibility inside PostgreSQL instead of materializing an entire library's IDs in Node. */
 export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Prisma.Sql {
   let sequence = 0;
-  const visit = (name: string, alias: string, input: unknown): Prisma.Sql => {
+  const visit = (name: string, alias: string, input: unknown, preserveNull = false): Prisma.Sql => {
     const definition = models[name]!;
     const column = (key: string) => Prisma.raw(`${alias}."${key}"`);
     const parts: Prisma.Sql[] = [];
@@ -182,7 +188,7 @@ export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Pris
       if (value === undefined) continue;
       if (key === 'AND' || key === 'OR' || key === 'NOT') {
         const entries = (Array.isArray(value) ? value : [value]).map((value) =>
-          visit(name, alias, value),
+          visit(name, alias, value, preserveNull || key === 'NOT'),
         );
         parts.push(
           key === 'NOT'
@@ -199,12 +205,17 @@ export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Pris
         if (!link) throw new Error('Unsupported search predicate field');
         const target = models[link.model]!;
         const next = `search_scope_${++sequence}`;
-        const exists = (
-          condition: unknown,
-        ) => Prisma.sql`EXISTS (SELECT 1 FROM ${Prisma.raw(`"${target.table}"`)} ${Prisma.raw(next)}
-          WHERE ${Prisma.raw(`${next}."${link.to}"`)}=${column(link.from)}
-          ${link.scoped ? Prisma.sql`AND ${Prisma.raw(`${next}."ownerId"`)}=${column('ownerId')} AND ${Prisma.raw(`${next}."libraryMode"`)}=${column('libraryMode')}` : Prisma.empty}
-          AND ${visit(link.model, next, condition)})`;
+        const table = Prisma.raw(`"${target.table}" ${next}`);
+        const join = Prisma.sql`${Prisma.raw(`${next}."${link.to}"`)}=${column(link.from)}
+          ${link.scoped ? Prisma.sql`AND ${Prisma.raw(`${next}."ownerId"`)}=${column('ownerId')} AND ${Prisma.raw(`${next}."libraryMode"`)}=${column('libraryMode')}` : Prisma.empty}`;
+        const exists = (condition: unknown) =>
+          Prisma.sql`EXISTS (SELECT 1 FROM ${table} WHERE ${join} AND ${visit(link.model, next, condition)})`;
+        // A to-one row with a NULL scalar is UNKNOWN under NOT, whereas a missing
+        // relation is FALSE. EXISTS alone collapses both and broadens negative filters.
+        const matches = (condition: unknown, negative = preserveNull): Prisma.Sql =>
+          !link.many && negative
+            ? Prisma.sql`(SELECT CASE WHEN count(*)=0 THEN FALSE ELSE bool_and(${visit(link.model, next, condition, true)}) END FROM ${table} WHERE ${join})`
+            : exists(condition);
         if (value === null) {
           parts.push(Prisma.sql`NOT (${exists({})})`);
           continue;
@@ -215,16 +226,19 @@ export function compileSearchPredicate(where: Prisma.EagleAssetWhereInput): Pris
         );
         if (operators.length && operators.length !== Object.keys(filter).length)
           throw new Error('Unsupported search relation operator');
-        if (!operators.length) parts.push(exists(filter));
+        if (!operators.length) parts.push(matches(filter));
         else
           for (const operator of operators) {
             const operand = filter[operator];
             if (operand === undefined) continue;
             if (operator === 'some' || operator === 'is')
-              parts.push(operand === null ? Prisma.sql`NOT (${exists({})})` : exists(operand));
+              parts.push(operand === null ? Prisma.sql`NOT (${exists({})})` : matches(operand));
             else if (operator === 'every')
               parts.push(Prisma.sql`NOT (${exists({ NOT: operand })})`);
-            else parts.push(operand === null ? exists({}) : Prisma.sql`NOT (${exists(operand)})`);
+            else
+              parts.push(
+                operand === null ? exists({}) : Prisma.sql`NOT (${matches(operand, true)})`,
+              );
           }
       }
     }
