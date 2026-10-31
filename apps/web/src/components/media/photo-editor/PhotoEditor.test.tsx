@@ -498,7 +498,7 @@ describe('photo editor interactions', () => {
   it('keeps failed saves retryable and retains unsaved changes', async () => {
     const save = vi
       .fn()
-      .mockRejectedValueOnce(new Error('offline'))
+      .mockRejectedValueOnce(new Error('上传分片失败（403）'))
       .mockResolvedValue({ id: 'saved', name: 'Photo-edited.png' });
     vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((callback) =>
       callback(new Blob(['png'], { type: 'image/png' })),
@@ -507,7 +507,7 @@ describe('photo editor interactions', () => {
     const button = screen.getByRole('button', { name: '保存到相册' });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('照片保存失败'));
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('上传分片失败（403）'));
     expect(button).toBeEnabled();
     fireEvent.click(button);
     await waitFor(() => expect(save).toHaveBeenCalledTimes(2));

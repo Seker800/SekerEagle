@@ -84,6 +84,25 @@ test('NAS uses matching signed upload host and no Mac runtime mounts', async () 
   assert.doesNotMatch(gateway, /localhost:8180/u);
 });
 
+test('NAS upload gateway preserves the configured public signing identity across browser aliases', async () => {
+  const { createNasGateway } = await import('./deploy-nas.mjs');
+  const source = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
+  for (const signedUploadEndpoint of ['https://photos.example:8181', 'http://127.0.0.1:8181']) {
+    const gateway = createNasGateway(source, { signedUploadEndpoint });
+    const upload = gateway.match(/location \^~ \/sekereagle-assets\/ \{([\s\S]*?)\n {2}\}/u)[1];
+    assert.ok(upload.includes(`proxy_set_header Host ${new URL(signedUploadEndpoint).host};`));
+    assert.doesNotMatch(upload, /proxy_set_header Host \$(?:host|http_host)/u);
+  }
+  for (const signedUploadEndpoint of [
+    'ftp://photos.example',
+    'https://user:password@photos.example',
+    'https://photos.example/path',
+    'https://photos.example/?token=value',
+    'https://photos.example/#fragment',
+  ])
+    assert.throws(() => createNasGateway(source, { signedUploadEndpoint }), /upload endpoint/u);
+});
+
 test('NAS package only accepts immutable source revisions and bounded memory', async () => {
   for (const revision of ['', 'latest', '../../evil', 'a;touch x', '123']) {
     await assert.rejects(render({ revision }), /revision/u);
