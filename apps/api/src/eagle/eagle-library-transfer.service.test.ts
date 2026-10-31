@@ -228,7 +228,14 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
       let publishedPyramid: Record<string, unknown> = {};
       let deletion: { objectKeys: string[]; prefixes: string[] } | undefined;
       const tx = {
-        $queryRaw: async () => [],
+        $queryRaw: async (query: unknown) =>
+          sourceMode === 'MATERIAL' &&
+          query &&
+          typeof query === 'object' &&
+          'sql' in query &&
+          String(query.sql).includes('AS "assetId"')
+            ? [{ assetId: sourceId, detailsReady: true }]
+            : [],
         eagleLibraryTransfer: {
           findUnique: async () => operation,
           findUniqueOrThrow: async () => operation,
@@ -310,6 +317,11 @@ for (const sourceMode of ['PHOTO', 'MATERIAL'] as const)
       assert.ok(!deletion?.objectKeys.some((key) => key.includes(targetId)));
       assert.equal(created[0]!.libraryMode, targetMode);
       assert.equal(created[0]!.lifecycleStatus, 'READY');
+      if (targetMode === 'PHOTO')
+        assert(
+          jobs.some((job) => job.processorVersion === 'photo-source-details-v1'),
+          'editing details do not imply missing photography metadata is complete',
+        );
       assert.equal(published.length, 3);
       assert.ok(
         !jobs.some(
