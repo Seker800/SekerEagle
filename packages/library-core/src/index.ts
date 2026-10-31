@@ -45,3 +45,4 @@ export * from './media-task-lifecycle';
 export * from './photo-face-contract';
 
 export * from './browse-media';
+export * from './duplicates';
