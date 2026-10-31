@@ -77,9 +77,14 @@ test('both modes share a single decoder slot, and a failed job releases it', asy
   assert.equal(results[2]!.status, 'fulfilled');
 });
 test('an animated PNG declaration cannot be mistaken for an identical still image', async () => {
-  const png = await sharp({ create: { width: 3, height: 2, channels: 3, background: 'red' } }).png().toBuffer();
-  const control = Buffer.alloc(20); control.writeUInt32BE(8, 0); control.write('acTL', 4);
-  control.writeUInt32BE(2, 8); control.writeUInt32BE(crc32(control.subarray(4, 16)), 16);
+  const png = await sharp({ create: { width: 3, height: 2, channels: 3, background: 'red' } })
+    .png()
+    .toBuffer();
+  const control = Buffer.alloc(20);
+  control.writeUInt32BE(8, 0);
+  control.write('acTL', 4);
+  control.writeUInt32BE(2, 8);
+  control.writeUInt32BE(crc32(control.subarray(4, 16)), 16);
   const animated = Buffer.concat([png.subarray(0, 33), control, png.subarray(33)]);
   assert.equal((await verify(animated)).status, 'UNSUPPORTED');
 });

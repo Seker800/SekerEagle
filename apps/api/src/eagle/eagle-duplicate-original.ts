@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, open, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Transform, Writable, type Readable } from 'node:stream';
@@ -32,6 +32,28 @@ function budget(value: number | undefined, env: string, fallback: number) {
   if (!Number.isSafeInteger(result) || result < 1)
     throw new Error('INVALID_DUPLICATE_ORIGINAL_BUDGET');
   return result;
+}
+/** libvips exposes only the first APNG frame. Inspect chunk headers, without reading IDAT payloads. */
+async function hasPngAnimation(path: string, signal?: AbortSignal) {
+  const file = await open(path, 'r');
+  try {
+    const size = (await file.stat()).size,
+      header = Buffer.alloc(8);
+    let offset = 8;
+    while (offset + 12 <= size) {
+      signal?.throwIfAborted();
+      const { bytesRead } = await file.read(header, 0, 8, offset);
+      const length = header.readUInt32BE(0),
+        kind = header.toString('ascii', 4, 8);
+      if (bytesRead !== 8 || offset + length + 12 > size) throw new Error('INVALID_DUPLICATE_PNG');
+      if (['acTL', 'fcTL', 'fdAT'].includes(kind)) return true;
+      if (kind === 'IEND') return false;
+      offset += length + 12;
+    }
+    throw new Error('INVALID_DUPLICATE_PNG');
+  } finally {
+    await file.close();
+  }
 }
 /** Independent executor only. Stream the source and hash decoder output without collecting chunks. */
 export async function verifyDuplicateOriginal(
@@ -67,7 +89,14 @@ export async function verifyDuplicateOriginal(
     if (
       !['jpeg', 'png'].includes(metadata.format ?? '') ||
       metadata.depth !== 'uchar' ||
+      (metadata.bitsPerSample ?? 8) > 8 ||
       (metadata.pages ?? 1) !== 1
+    )
+      return { hash: null, status: 'UNSUPPORTED' };
+    if (
+      (metadata.format === 'png' && (await hasPngAnimation(path, options.signal))) ||
+      metadata.xmp?.includes('MotionPhoto') ||
+      metadata.xmp?.includes('MicroVideo')
     )
       return { hash: null, status: 'UNSUPPORTED' };
     if (!metadata.width || !metadata.height || metadata.width * metadata.height > maxPixels)
