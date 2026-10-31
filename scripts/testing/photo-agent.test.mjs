@@ -15,6 +15,38 @@ assertSafeRuntimeTarget({
 assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient();
 after(() => prisma.$disconnect());
+// Persist the pre-handoff journal shape to exercise in-flight historical copy plans.
+const legacyTransferDb = prisma.$extends({
+  query: {
+    eagleLibraryTransfer: {
+      upsert({ args, query }) {
+        if (Array.isArray(args.create.plan))
+          args.create.plan = args.create.plan.map((item) => {
+            const { storageAction: _action, ...legacy } = item;
+            const root = `users/${args.create.ownerId}/assets/${item.targetId}`;
+            return {
+              ...legacy,
+              targetKey: `${root}/original.jpg`,
+              renditions: (item.renditions ?? []).map((r) => ({
+                ...r,
+                targetKey: `${root}/transfer/${r.id}`,
+              })),
+              ...(item.pyramid
+                ? {
+                    pyramid: {
+                      ...item.pyramid,
+                      targetPrefix: `${root}/pyramids/1/transfer-${item.pyramid.id}/`,
+                    },
+                  }
+                : {}),
+            };
+          });
+        return query(args);
+      },
+    },
+  },
+});
+
 const city = {
   id: 'cn-zj-hangzhou',
   name: '杭州市',
@@ -746,7 +778,7 @@ test('send approval reuses the shared transfer, survives interruption and cannot
   let copies = 0,
     fail = true;
   const transfer = new EagleLibraryTransferService(
-    prisma,
+    legacyTransferDb,
     {
       copyObject: async () => {
         copies++;
@@ -1205,7 +1237,7 @@ test('manual send failure retries the same independent copy without approving th
   let offline = true,
     copies = 0;
   const transfer = new EagleLibraryTransferService(
-    prisma,
+    legacyTransferDb,
     {
       copyObject: async () => {
         copies++;

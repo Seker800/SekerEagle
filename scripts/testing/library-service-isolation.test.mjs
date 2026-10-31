@@ -22,6 +22,38 @@ assert.equal(new URL(process.env.DATABASE_URL).pathname, '/sekereagle_test');
 const prisma = new PrismaClient();
 after(() => prisma.$disconnect());
 
+// Persist the pre-handoff journal shape to exercise in-flight historical copy plans.
+const legacyTransferDb = prisma.$extends({
+  query: {
+    eagleLibraryTransfer: {
+      upsert({ args, query }) {
+        if (Array.isArray(args.create.plan))
+          args.create.plan = args.create.plan.map((item) => {
+            const { storageAction: _action, ...legacy } = item;
+            const root = `users/${args.create.ownerId}/assets/${item.targetId}`;
+            return {
+              ...legacy,
+              targetKey: `${root}/original.jpg`,
+              renditions: (item.renditions ?? []).map((r) => ({
+                ...r,
+                targetKey: `${root}/transfer/${r.id}`,
+              })),
+              ...(item.pyramid
+                ? {
+                    pyramid: {
+                      ...item.pyramid,
+                      targetPrefix: `${root}/pyramids/1/transfer-${item.pyramid.id}/`,
+                    },
+                  }
+                : {}),
+            };
+          });
+        return query(args);
+      },
+    },
+  },
+});
+
 async function fixtures() {
   const ownerId = randomUUID();
   await prisma.user.create({
@@ -1426,7 +1458,7 @@ test('failed sends leave all sources active and retry the durable plan without d
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
-  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  const sender = new EagleLibraryTransferService(legacyTransferDb, storage, 'MATERIAL');
   const input = { operationId: randomUUID(), assetIds: [f.material.id, second.id] };
   await assert.rejects(() => sender.send(f.ownerId, input, false), /temporary/);
   assert.equal(
@@ -1562,7 +1594,7 @@ test('concurrent source edits or conflicting sends never publish duplicate targe
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
-  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  const sender = new EagleLibraryTransferService(legacyTransferDb, storage, 'MATERIAL');
   await assert.rejects(() => sender.send(f.ownerId, input, false), /变化/);
   assert.equal(
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt,
@@ -2302,7 +2334,7 @@ test('expiry racing an object copy fences publication and keeps the original vis
   const f = await fixtures();
   const operationId = randomUUID();
   const sender = new EagleLibraryTransferService(
-    prisma,
+    legacyTransferDb,
     {
       copyObject: async () => {
         await prisma.eagleLibraryTransfer.update({
@@ -2788,7 +2820,7 @@ test('legacy transfer retirement preserves restored sources and changed or missi
   ]) {
     const f = await fixtures();
     const sender = new EagleLibraryTransferService(
-      prisma,
+      legacyTransferDb,
       { copyObject: async () => {}, headObject: async () => ({ ContentLength: 1 }) },
       'PHOTO',
     );
