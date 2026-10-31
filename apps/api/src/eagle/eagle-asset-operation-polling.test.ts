@@ -24,7 +24,7 @@ test('idle operation lanes avoid claim transactions when unlocked probes are emp
     undefined as never,
     undefined as never,
   );
-  service.onModuleInit();
+  service.startExecutor();
   try {
     for (let step = 0; step < 20; step++) {
       context.mock.timers.tick(500);
@@ -77,7 +77,7 @@ test('accepted and retried commands wake the local processor only after commit',
     assert.ok(committed);
     wakeups++;
   };
-  service.onModuleInit();
+  service.startExecutor();
   try {
     const principal = { sub: 'owner', canViewPrivate: false } as never;
     await service.enqueue(principal, {

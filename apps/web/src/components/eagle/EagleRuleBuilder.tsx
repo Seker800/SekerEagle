@@ -8,8 +8,6 @@ import { t } from '../../i18n';
 import { useMemo, useState } from 'react';
 import { IconMinus, IconPlus, IconSearch, IconX } from '@tabler/icons-react';
 import {
-  EAGLE_FILTER_MAX_CONDITIONS,
-  EAGLE_FILTER_MAX_RULES_PER_CONDITION,
   createEagleFilterCondition,
   createEagleFilterRule,
   type EagleFilterCondition,
@@ -45,7 +43,6 @@ export function EagleRuleBuilder({
       ),
     });
   const insertCondition = (index: number) => {
-    if (value.conditions.length >= EAGLE_FILTER_MAX_CONDITIONS) return;
     const conditions = [...value.conditions];
     conditions.splice(index + 1, 0, createEagleFilterCondition());
     onChange({ ...value, conditions });
@@ -137,7 +134,6 @@ export function EagleRuleBuilder({
                 aria-label={t('在条件组 {{value1}} 后添加条件组', {
                   value1: conditionIndex + 1,
                 })}
-                disabled={value.conditions.length >= EAGLE_FILTER_MAX_CONDITIONS}
                 onClick={() => insertCondition(conditionIndex)}
               >
                 <IconPlus size={17} />
@@ -168,7 +164,6 @@ export function EagleRuleBuilder({
                   })
                 }
                 onAdd={() => {
-                  if (condition.rules.length >= EAGLE_FILTER_MAX_RULES_PER_CONDITION) return;
                   const rules = [...condition.rules];
                   rules.splice(ruleIndex + 1, 0, createEagleFilterRule());
                   replaceCondition(condition.id, { ...condition, rules });
@@ -286,7 +281,6 @@ function RuleRow({
           aria-label={t('在规则 {{value1}} 后添加规则', {
             value1: ruleIndex + 1,
           })}
-          disabled={condition.rules.length >= EAGLE_FILTER_MAX_RULES_PER_CONDITION}
           onClick={onAdd}
         >
           <IconPlus size={17} />

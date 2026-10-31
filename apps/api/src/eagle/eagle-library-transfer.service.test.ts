@@ -270,13 +270,17 @@ for (const handoff of [false, true])
         copyObject: async (a: string, b: string) => {
           copies.push([a, b]);
         },
-        headObject: async () => { heads++; return { ContentLength: 1 }; },
+        headObject: async () => {
+          heads++;
+          return { ContentLength: 1 };
+        },
       } as never,
       'PHOTO',
     );
     await service.send(ownerId, { operationId: 'op', assetIds: [sourceId] }, false);
     assert.equal(copies.length, handoff ? 0 : 5);
-    if (handoff) assert.equal(heads, 0, 'ownership handoff must perform no redundant storage reads');
+    if (handoff)
+      assert.equal(heads, 0, 'ownership handoff must perform no redundant storage reads');
     if (handoff) assert.equal(retired?.storageTransferredOut, true);
     assert.equal(
       publishedPyramid.storagePrefix,

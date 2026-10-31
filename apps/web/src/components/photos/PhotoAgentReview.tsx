@@ -309,22 +309,16 @@ function RequestDetail({
     setError('');
     setResult(null);
     try {
-      const accumulated: PhotoRequestReviewResult = { results: [], succeeded: 0, failed: 0 };
-      for (let offset = 0; offset < ids.length; offset += 5) {
-        const outcome = await reviewPhotoRequest(task.id, ids.slice(offset, offset + 5), action);
-        accumulated.results.push(...outcome.results);
-        accumulated.succeeded += outcome.succeeded;
-        accumulated.failed += outcome.failed;
-        setResult({ ...accumulated, results: [...accumulated.results] });
-        setSelected(
-          (current) =>
-            new Set(
-              [...current].filter(
-                (id) => !outcome.results.some((item) => item.id === id && item.status !== 'ERROR'),
-              ),
+      const outcome = await reviewPhotoRequest(task.id, ids, action);
+      setResult(outcome);
+      setSelected(
+        (current) =>
+          new Set(
+            [...current].filter(
+              (id) => !outcome.results.some((item) => item.id === id && item.status !== 'ERROR'),
             ),
-        );
-      }
+          ),
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t('操作失败'));
     } finally {

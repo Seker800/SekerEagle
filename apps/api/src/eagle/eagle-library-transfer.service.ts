@@ -278,13 +278,17 @@ export class EagleLibraryTransferService {
               pyramidStoragePrefix(item.pyramid.targetPrefix)))
       )
         throw new ConflictException('发送存储所有权计划无效。');
-      await runTransferWork(objects, async (object) => {
-        if (!handoff) await this.storage.copyObject(object.sourceKey, object.targetKey);
-        const copied = await this.storage.headObject(object.targetKey);
-        if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
-          throw new ConflictException('文件复制校验失败，请重试。');
-      });
-      if (item.pyramid && !handoff) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
+      // READY media is immutable. Ownership changes no bytes, so rereading or
+      // recopying those bytes cannot make the handoff safer.
+      if (!handoff) {
+        await runTransferWork(objects, async (object) => {
+          await this.storage.copyObject(object.sourceKey, object.targetKey);
+          const copied = await this.storage.headObject(object.targetKey);
+          if (BigInt(copied.ContentLength ?? -1) !== BigInt(object.size))
+            throw new ConflictException('文件复制校验失败，请重试。');
+        });
+        if (item.pyramid) await copyTransferPyramid(this.storage, ownerId, item.pyramid);
+      }
     }
     return this.prisma.$transaction(
       async (tx) => {

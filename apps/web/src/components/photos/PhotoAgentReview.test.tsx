@@ -353,12 +353,31 @@ it('polls the unopened approval inbox once per minute rather than every ten seco
 
 it('approves a selected request in one submission rather than five-item round trips', async () => {
   const task = fixture();
-  task.assets = Array.from({ length: 8 }, (_, i) => ({ ...task.assets[0]!, id: `photo-${i}`, displayName: `Photo ${i}` }));
-  task.suggestions = task.assets.map((asset, i) => ({ ...task.suggestions[0]!, id: `suggestion-${i}`, assetId: asset.id, number: i+1 }));
+  task.assets = Array.from({ length: 8 }, (_, i) => ({
+    ...task.assets[0]!,
+    id: `photo-${i}`,
+    displayName: `Photo ${i}`,
+  }));
+  task.suggestions = task.assets.map((asset, i) => ({
+    ...task.suggestions[0]!,
+    id: `suggestion-${i}`,
+    assetId: asset.id,
+    number: i + 1,
+  }));
   mocks.detail.mockResolvedValue(task);
-  mocks.review.mockImplementation(async (_task: string, ids: string[]) => ({ results: ids.map(id => ({ id, status: 'ACCEPTED' })), succeeded: ids.length, failed: 0 }));
+  mocks.review.mockImplementation(async (_task: string, ids: string[]) => ({
+    results: ids.map((id) => ({ id, status: 'ACCEPTED' })),
+    succeeded: ids.length,
+    failed: 0,
+  }));
   await open();
   fireEvent.click(screen.getByRole('button', { name: '同意选中申请' }));
-  await waitFor(() => expect(mocks.review).toHaveBeenCalledWith('task', task.suggestions.map(item => item.id), 'ACCEPT'));
+  await waitFor(() =>
+    expect(mocks.review).toHaveBeenCalledWith(
+      'task',
+      task.suggestions.map((item) => item.id),
+      'ACCEPT',
+    ),
+  );
   expect(mocks.review).toHaveBeenCalledTimes(1);
 });

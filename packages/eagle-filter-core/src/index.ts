@@ -1,7 +1,5 @@
 export const EAGLE_FILTER_QUERY_VERSION = 2 as const;
 // The previous format allowed thirty ordinary groups plus one top-level scene.
-export const EAGLE_FILTER_MAX_CONDITIONS = 31;
-export const EAGLE_FILTER_MAX_RULES_PER_CONDITION = 30;
 
 export type EagleFilterField =
   | 'SEMANTIC'
@@ -393,12 +391,6 @@ export function parseEagleFilterQuery(value: unknown): EagleFilterQuery {
   if (!isRecord(value) || value.version !== EAGLE_FILTER_QUERY_VERSION)
     throw new Error('筛选规则版本无效。');
   if (!Array.isArray(value.conditions)) throw new Error('筛选条件组无效。');
-  // A legacy top-level scene consumes the same one-group budget as its editable form.
-  if (
-    value.conditions.length + (value.semantic === undefined ? 0 : 1) >
-    EAGLE_FILTER_MAX_CONDITIONS
-  )
-    throw new Error('筛选条件组无效。');
   const query: EagleFilterQuery = {
     version: EAGLE_FILTER_QUERY_VERSION,
     ...(value.semantic === undefined ? {} : { semantic: parseEagleSemanticIntent(value.semantic) }),
@@ -419,11 +411,7 @@ function parseCondition(value: unknown, conditionIndex: number): EagleFilterCond
   if (value.match !== 'ALL' && value.match !== 'ANY') throw new Error('条件组匹配方式无效。');
   if (value.result !== 'MATCH' && value.result !== 'NOT_MATCH')
     throw new Error('条件组结果方式无效。');
-  if (
-    !Array.isArray(value.rules) ||
-    value.rules.length === 0 ||
-    value.rules.length > EAGLE_FILTER_MAX_RULES_PER_CONDITION
-  )
+  if (!Array.isArray(value.rules) || value.rules.length === 0)
     throw new Error('条件组内规则数量无效。');
   return {
     id: readId(value.id, `condition-${conditionIndex + 1}`),

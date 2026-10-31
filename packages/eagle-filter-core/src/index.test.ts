@@ -156,13 +156,12 @@ test('editing a legacy scene retains all thirty existing condition groups', () =
   });
   const edited = editableEagleFilterQuery(legacy);
   assert.equal(parseEagleFilterQuery(edited).conditions.length, 31);
-  assert.throws(
-    () =>
-      parseEagleFilterQuery({
-        ...edited,
-        conditions: [...edited.conditions, edited.conditions[0]],
-      }),
-    /条件组/,
+  assert.equal(
+    parseEagleFilterQuery({
+      ...edited,
+      conditions: [...edited.conditions, { ...edited.conditions[0], id: 'additional' }],
+    }).conditions.length,
+    32,
   );
 });
 
@@ -182,15 +181,26 @@ test('changing a migrated scene to an ordinary field preserves a valid 31-group 
     { id: 'changed', field: 'NAME', operator: 'CONTAINS', value: '海边' },
   ];
   assert.equal(parseEagleFilterQuery(edited).conditions.length, 31);
-  assert.throws(
-    () => parseEagleFilterQuery({ ...edited, semantic: { text: '海边', breadth: 'BALANCED' } }),
-    /条件组/,
+  assert.equal(
+    parseEagleFilterQuery({ ...edited, semantic: { text: '海边', breadth: 'BALANCED' } }).conditions
+      .length,
+    31,
   );
 });
 
 test('ordinary filter groups and rules have no arbitrary 31/30 item cap', () => {
-  const conditions = Array.from({ length: 40 }, (_, i) => ({ id: `group-${i}`, match: 'ALL', result: 'MATCH',
-    rules: Array.from({ length: 35 }, (_, j) => ({ id: `rule-${i}-${j}`, field: 'NAME', operator: 'CONTAINS', value: 'photo' })) }));
+  const conditions = Array.from({ length: 40 }, (_, i) => ({
+    id: `group-${i}`,
+    match: 'ALL',
+    result: 'MATCH',
+    rules: Array.from({ length: 35 }, (_, j) => ({
+      id: `rule-${i}-${j}`,
+      field: 'NAME',
+      operator: 'CONTAINS',
+      value: 'photo',
+    })),
+  }));
   const result = parseEagleFilterQuery({ version: 2, conditions });
-  assert.equal(result.conditions.length, 40); assert.equal(result.conditions[0]?.rules.length, 35);
+  assert.equal(result.conditions.length, 40);
+  assert.equal(result.conditions[0]?.rules.length, 35);
 });
