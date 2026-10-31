@@ -140,6 +140,29 @@ async function fixture(mode = 'PHOTO', copy) {
     copies: () => copies,
   };
 }
+async function transferTestSpace() {
+  const current = await prisma.eagleEmbeddingSpace.findFirst({ where: { isCurrent: true } });
+  if (current) {
+    assert.equal(current.model, EAGLE_EMBEDDING_MODEL);
+    assert.equal(current.dimensions, 1024);
+    assert.equal(current.normalized, true);
+    assert.equal(current.instructionVersion, 'image-retrieval-v1');
+    assert.equal(current.preprocessingVersion, 'preview-webp-v1');
+    return current;
+  }
+  return prisma.eagleEmbeddingSpace.create({
+    data: {
+      id: 'send-publication-test-space',
+      model: EAGLE_EMBEDDING_MODEL,
+      revision: 'synthetic-v1',
+      dimensions: 1024,
+      instructionVersion: 'image-retrieval-v1',
+      preprocessingVersion: 'preview-webp-v1',
+      normalized: true,
+      isCurrent: true,
+    },
+  });
+}
 for (const mode of ['PHOTO', 'MATERIAL']) {
   test(`${mode} local admission executes after commit without waiting for the five-second recovery poll`, async () => {
     const f = await fixture(mode);
@@ -1527,20 +1550,7 @@ for (const mode of ['PHOTO', 'MATERIAL'])
   test(`${mode} SEND preserves a vector off-index until its scoped worker lease atomically activates it`, async () => {
     const f = await fixture(mode);
     const source = await f.add();
-    const identity = {
-      id: 'send-publication-test-space',
-      model: EAGLE_EMBEDDING_MODEL,
-      revision: 'synthetic-v1',
-      dimensions: 1024,
-      instructionVersion: 'image-retrieval-v1',
-      preprocessingVersion: 'preview-webp-v1',
-      normalized: true,
-    };
-    await prisma.eagleEmbeddingSpace.upsert({
-      where: { id: identity.id },
-      create: { ...identity, isCurrent: true },
-      update: {},
-    });
+    const identity = await transferTestSpace();
     const vector = `[1,${Array.from({ length: 1023 }, () => 0).join(',')}]`;
     await prisma.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES (${randomUUID()},${f.ownerId},${mode}::"LibraryMode",${source.id},1,${identity.id},'READY',true,${vector}::vector,1,now())`;
     const receipt = await f.enqueue('SEND', [source]);
@@ -1613,26 +1623,16 @@ for (const mode of ['PHOTO', 'MATERIAL'])
     const [actual] =
       await prisma.$queryRaw`SELECT embedding::text AS value FROM "EagleAssetEmbedding" WHERE id=${copied.id}`;
     assert.equal(actual.value, vector);
+    const regeneration = await prisma.eagleAssetProcessingJob.update({ where: { id: job.id }, data: { status: 'PROCESSING', leaseVersion: { increment: 1 } } });
+    assert.equal(await publishStoredEmbedding(prisma, regeneration, identity, suggest), false, 'explicit regeneration must not silently reuse an already indexed vector');
+
     assert.equal(f.copies(), 0);
   });
 
 test('sending back before background indexing preserves the stored vector instead of recomputing it', async () => {
   const f = await fixture();
   const source = await f.add();
-  const identity = {
-    id: 'send-publication-test-space',
-    model: EAGLE_EMBEDDING_MODEL,
-    revision: 'synthetic-v1',
-    dimensions: 1024,
-    instructionVersion: 'image-retrieval-v1',
-    preprocessingVersion: 'preview-webp-v1',
-    normalized: true,
-  };
-  const space = await prisma.eagleEmbeddingSpace.upsert({
-    where: { id: identity.id },
-    create: { ...identity, isCurrent: true },
-    update: {},
-  });
+  const space = await transferTestSpace();
   const vector = `[1,${Array.from({ length: 1023 }, () => 0).join(',')}]`;
   await prisma.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES (${randomUUID()},${f.ownerId},'PHOTO',${source.id},1,${space.id},'READY',true,${vector}::vector,1,now())`;
   await f.enqueue('SEND', [source]);
