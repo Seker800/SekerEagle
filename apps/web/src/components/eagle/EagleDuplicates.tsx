@@ -50,6 +50,8 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     removeCount: number;
   } | null>(null);
   const [notice, setNotice] = useState('');
+  const [selected, setSelected] = useState<Map<string, DuplicateGroupSummary>>(new Map());
+  const selectionRevision = useRef<string | undefined>(undefined);
   const cache = getEagleWorkspaceCache(client, ownerId, libraryMode);
   const changes = cache.operations;
   useSyncExternalStore(changes.subscribe, changes.getSnapshot, changes.getSnapshot);
@@ -193,9 +195,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     mutationFn: async (input: DuplicateCleanupInput) => {
       const signatures =
         changes.entries.find((row) => row.id === input.operationId)?.groupSignatures ??
-        (input.allExact
+        (input.allVerified ? groups.map(group => group.signature) : input.signatures ?? (input.allExact
           ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
-          : (input.groups?.map((group) => group.signature) ?? []));
+          : (input.groups?.map((group) => group.signature) ?? [])));
       const ids = new Set<string>();
       for (const choice of input.groups ?? []) {
         if (choice.removeIds) choice.removeIds.forEach((id) => ids.add(id));
@@ -214,7 +216,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
         input.operationId,
         'DUPLICATE_CLEANUP',
         [...ids],
-        input.allExact ? data?.exactItems : undefined,
+        input.allVerified ? data?.verifiedItems : input.allExact ? data?.exactItems : undefined,
       );
       changes.setGroups(input.operationId, signatures);
       changes.setDuplicateInput(input.operationId, input);
@@ -246,11 +248,12 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     },
     onSuccess: (result, input) => {
       setConfirm(null);
+      setSelected(new Map());
       const signatures =
         changes.entries.find((row) => row.id === input.operationId)?.groupSignatures ??
-        (input.allExact
+        (input.allVerified ? groups.map(group => group.signature) : input.signatures ?? (input.allExact
           ? groups.filter((group) => group.kind === 'EXACT').map((group) => group.signature)
-          : (input.groups?.map((group) => group.signature) ?? []));
+          : (input.groups?.map((group) => group.signature) ?? [])));
       if (result.operationId) {
         changes.setGroups(result.operationId, signatures);
         if (result.assetIds) changes.expand(result.operationId, result.assetIds);
@@ -285,11 +288,19 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const confirmAll = () => {
     if (!data) return;
     setConfirm({
-      input: { operationId: crypto.randomUUID(), allExact: true, revision: data.exactRevision },
-      count: data.exactGroups,
-      removeCount: data.exactItems,
+      input: data.verifiedGroups === undefined
+        ? { operationId: crypto.randomUUID(), allExact: true, revision: data.exactRevision }
+        : { operationId: crypto.randomUUID(), allVerified: true, revision: data.revision },
+      count: data.verifiedGroups ?? data.exactGroups,
+      removeCount: data.verifiedItems ?? data.exactItems,
     });
   };
+  useEffect(() => {
+    if (selectionRevision.current !== data?.revision) {
+      selectionRevision.current = data?.revision;
+      setSelected(new Map());
+    }
+  }, [data?.revision]);
   return (
     <dialog
       ref={dialog}
@@ -318,7 +329,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       </header>
       {confirm ? (
         <section className={styles.confirm} role="alertdialog" aria-label={t('确认清理')}>
-          <h3>{t('清理 {{count}} 组完全重复项', { count: confirm.count })}</h3>
+          <h3>{t('清理 {{count}} 组重复副本', { count: confirm.count })}</h3>
           <p>
             {t('保留 {{keep}} 项，清理 {{remove}} 项', {
               keep: confirm.count,
@@ -354,7 +365,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               {[
                 ['ALL', t('全部')],
                 ['EXACT', t('完全重复')],
-                ['SIMILAR', t('近似清理')],
+                ['SIMILAR', t('原图画面相同')],
               ].map(([value, label]) => (
                 <button
                   key={value}
@@ -389,7 +400,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           </div>
           <div className={styles.content}>
             {!!data?.outdatedGroups && (
-              <p role="status">{t('旧版近似结果已停用，正在按同格式、同尺寸规则更新。')}</p>
+              <p role="status">{t('旧版近似结果已停用，正在核验原图；连拍不作为重复副本清理。')}</p>
             )}
             {data && (
               <div className={styles.coverage}>
@@ -402,14 +413,17 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   {data.coverage.waiting > 0
                     ? ` · ${t('{{count}} 张等待预览', { count: data.coverage.waiting })}`
                     : ''}
+                  {` · ${t('已核验 {{value1}} 张候选原图', { value1: (data.coverage.originalsVerified ?? 0).toLocaleString() })}`}
                 </span>
                 <details className={styles.help}>
                   <summary>{t('查重依据与空间说明')}</summary>
                   <p>
                     {t(
-                      '完全重复依据文件内容；画面近似依据像素特征，需要人工确认。未完成视觉检查不代表没有重复。',
+                      '文件完全相同依据原文件哈希；原图画面相同依据完整分辨率的定向像素哈希。缩略图只找候选，连拍和重新压缩的近似照片不进入清理结果。',
                     )}
                   </p>
+                  <p>{t('原图核验目前支持单帧八位 JPEG 和 PNG；RAW、实况、编辑副本及其他格式仅检查文件完全相同，不将相似预览当作证据。')}</p>
+                  {!!data.coverage.unsupportedOriginals && <p>{t('{{value1}} 张候选原图未通过格式或资源预算核验，不会进入画面相同清理。', { value1: data.coverage.unsupportedOriginals })}</p>}
                   <p>{t('现在不会释放磁盘空间，清空回收站后才会释放实际占用。')}</p>
                 </details>
               </div>
@@ -510,7 +524,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   />
                   {t('查看已忽略')} ({data.ignoredGroups})
                 </label>
-                {!showIgnored && data.exactGroups > 0 && (
+                {!showIgnored && (data.verifiedGroups ?? data.exactGroups) > 0 && (
                   <button
                     type="button"
                     disabled={
@@ -520,13 +534,35 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                     }
                     onClick={confirmAll}
                   >
-                    {t('清理全部完全重复项')}
+                    {t('每组保留一份，清理全部重复副本')}
                   </button>
                 )}
               </div>
             )}
+            {!showIgnored && groups.length > 0 && (
+              <div className={styles.bulkActions}>
+                <button type="button" onClick={() => setSelected(current => {
+                  const next = new Map(current);
+                  const all = groups.every(group => next.has(group.signature));
+                  for (const group of groups) if (all) next.delete(group.signature); else if (!submitted[group.signature]) next.set(group.signature, group);
+                  return next;
+                })}>{t('选择或取消本页')}</button>
+                <span>{t('已选 {{value1}} 组，每组保留一份', { value1: selected.size })}</span>
+                <button type="button" disabled={!selected.size} onClick={() => setSelected(new Map())}>{t('清空选择')}</button>
+                <button type="button" disabled={!selected.size || cleanup.isPending} onClick={() => setConfirm({
+                  input: { operationId: crypto.randomUUID(), revision: data!.revision, signatures: [...selected.keys()] },
+                  count: selected.size, removeCount: [...selected.values()].reduce((n, group) => n + group.count - 1, 0),
+                })}>{t('清理所选重复组')}</button>
+              </div>
+            )}
             {groups.map((group, index) => (
               <article key={group.signature} className={styles.group}>
+                {!showIgnored && <label className={styles.groupSelection}>
+                  <input type="checkbox" aria-label={t('选择重复组 {{value1}}', { value1: index + 1 })}
+                    checked={selected.has(group.signature)} disabled={!!submitted[group.signature]}
+                    onChange={event => setSelected(current => { const next = new Map(current); if (event.target.checked) next.set(group.signature, group); else next.delete(group.signature); return next; })} />
+                  {t('每组保留推荐的一份')}
+                </label>}
                 <button
                   className={styles.groupHeader}
                   type="button"
@@ -552,7 +588,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                   <div>
                     <div className={styles.groupSummary}>
                       <strong>
-                        {group.kind === 'EXACT' ? t('文件完全相同') : t('画面近似，待确认')} ·{' '}
+                        {group.kind === 'EXACT' ? t('文件完全相同') : t('原图像素完全相同')} ·{' '}
                         {group.count} {t('项')}
                       </strong>
                       <small>
@@ -621,7 +657,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                           : data.coverage.indexed < data.coverage.total
                             ? t('视觉检查尚未完成')
                             : kind === 'SIMILAR'
-                              ? t('未发现符合当前规则的近似项')
+                              ? t('未发现已核验的画面相同副本')
                               : t('未发现符合当前规则的重复项')}
                 </h3>
                 <p>
@@ -630,7 +666,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                     : data.outdatedGroups
                       ? t('旧规则结果已停用，请等待更新完成；失败时可重新检查。')
                       : kind === 'EXACT' && !showIgnored
-                        ? t('完全重复要求同格式、相同字节和哈希；近似照片在“近似清理”中查看。')
+                        ? t('文件字节不同的备份副本请查看“原图画面相同”；需先完成候选原图核验。')
                         : data.coverage.indexed < data.coverage.total
                           ? t('还有图片未完成视觉检查，可以点击“检查新内容”。')
                           : t('当前分类没有待处理结果，可切换分类或检查新内容。')}
@@ -643,7 +679,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
                       setExpanded(null);
                     }}
                   >
-                    {t('查看近似清理 {{value1}} 组', {
+                    {t('查看原图画面相同 {{value1}} 组', {
                       value1: data.similarGroups.toLocaleString(),
                     })}
                   </button>

@@ -15,7 +15,9 @@ export interface DuplicateResults {
   revision: string;
   exactRevision: string;
   exactItems: number;
-  coverage: { total: number; indexed: number; waiting: number };
+  verifiedItems?: number;
+  verifiedGroups?: number;
+  coverage: { total: number; indexed: number; waiting: number; originalsVerified?: number; unsupportedOriginals?: number };
   totalGroups: number;
   exactGroups: number;
   similarGroups: number;
@@ -42,6 +44,8 @@ export interface DuplicateCleanupInput {
   operationId: string;
   revision?: string;
   allExact?: boolean;
+  allVerified?: boolean;
+  signatures?: string[];
   groups?: Array<{ signature: string; keepIds?: string[]; removeIds?: string[] }>;
 }
 export function createDuplicatesApi(mode: LibraryMode) {

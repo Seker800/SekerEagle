@@ -13,6 +13,24 @@
   box-shadow: 0 28px 100px #0008;
   overflow: hidden;
 }
+.bulkActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px;
+  background: var(--ui-panel, #1b1d21);
+  border-bottom: 1px solid var(--ui-line);
+}
+.groupSelection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 0;
+}
 .dialog[open] {
   display: flex;
   flex-direction: column;
