@@ -111,20 +111,21 @@ describe('duplicate cleanup review', () => {
     expect(mocks.members).not.toHaveBeenCalled();
   });
   it('retains selected groups across pages and submits their signatures without loading members', async () => {
+    mocks.members.mockResolvedValue({ signature: 'd'.repeat(64), kind: 'SIMILAR', recommendedId: 'one', total: 4, nextCursor: null, items: [] });
     mocks.list.mockImplementation(async ({ cursor }: { cursor?: string }) => ({
       revision: 'b'.repeat(64),
       exactRevision: 'b'.repeat(64),
       exactItems: 0,
-      verifiedGroups: 2,
-      verifiedItems: 6,
-      coverage: { total: 8, indexed: 8, waiting: 0 },
-      totalGroups: 2,
+      verifiedGroups: 3,
+      verifiedItems: 9,
+      coverage: { total: 12, indexed: 12, waiting: 0 },
+      totalGroups: 3,
       exactGroups: 0,
-      similarGroups: 2,
+      similarGroups: 3,
       ignoredGroups: 0,
       removableBytes: 1024,
       nextCursor: cursor ? null : '1',
-      groups: [{ ...group, kind: 'SIMILAR', count: 4, signature: (cursor ? 'c' : 'a').repeat(64) }],
+      groups: (cursor ? ['c', 'd'] : ['a']).map(key => ({ ...group, kind: 'SIMILAR', count: 4, signature: key.repeat(64) })),
     }));
     render();
     fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 1' }));
@@ -141,6 +142,7 @@ describe('duplicate cleanup review', () => {
         }),
       ),
     );
+    await screen.findByText('清理已加入后台任务，可在任务中心查看进度。完成后可从回收站恢复。');
     expect(mocks.members).not.toHaveBeenCalled();
   });
   beforeEach(() => {
