@@ -86,6 +86,7 @@ export class DuplicateActionDto {
 }
 export class DuplicateScanDto {
   @ApiProperty() @IsUUID('4') operationId!: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsBoolean() onlyIfUnattempted?: boolean;
 }
 export class DuplicateIgnoreDto {
   @ApiProperty() @Matches(/^[a-f0-9]{64}$/) signature!: string;

@@ -113,6 +113,44 @@ describe('duplicate cleanup review', () => {
     fireEvent.click(screen.getByRole('button', { name: '检查新内容' }));
     await waitFor(() => expect(mocks.scan).toHaveBeenCalledTimes(1));
   });
+  it('honors a cancelled operation before the result metadata has caught up', async () => {
+    mocks.operations.push(
+      Object.assign(
+        {
+          id: 'cancelled-check',
+          libraryMode: 'MATERIAL',
+          kind: 'DUPLICATE_SCAN',
+          running: false,
+          queued: false,
+          completed: 0,
+          total: 1,
+          failed: 0,
+        },
+        { cancelled: 1 },
+      ),
+    );
+    mocks.list.mockResolvedValue({
+      revision: 'b'.repeat(64),
+      exactRevision: 'b'.repeat(64),
+      originalCheckCompleted: false,
+      originalCheckAttempted: false,
+      outdatedGroups: 0,
+      exactItems: 0,
+      verifiedGroups: 0,
+      verifiedItems: 0,
+      coverage: { total: 80, indexed: 0, waiting: 0 },
+      totalGroups: 0,
+      exactGroups: 0,
+      similarGroups: 0,
+      ignoredGroups: 0,
+      removableBytes: 0,
+      nextCursor: null,
+      groups: [],
+    });
+    render();
+    await screen.findByRole('heading', { name: '视觉检查尚未完成' });
+    expect(mocks.scan).not.toHaveBeenCalled();
+  });
   it('cleans thousands of verified copies in one request without opening member comparisons', async () => {
     mocks.list.mockResolvedValue({
       revision: 'b'.repeat(64),

@@ -280,7 +280,7 @@ export class EagleDuplicateService {
       };
     return { operationId: id };
   }
-  async scan(principal: AuthPrincipal, id: string) {
+  async scan(principal: AuthPrincipal, id: string, onlyIfUnattempted = false) {
     return this.prisma.$transaction(
       async (tx) => {
         await lockOwnerPrivacyProjection(tx, principal.sub, this.libraryMode);
@@ -296,6 +296,19 @@ export class EagleDuplicateService {
           },
         });
         if (active) return { operationId: active.id };
+        if (
+          onlyIfUnattempted &&
+          (await tx.eagleAssetOperationItem.findFirst({
+            where: {
+              ownerId: principal.sub,
+              libraryMode: this.libraryMode,
+              operation: { kind: 'DUPLICATE_SCAN', isPrivate: principal.canViewPrivate },
+              snapshots: { path: ['version'], equals: DUPLICATE_GROUPING_VERSION },
+            },
+            select: { id: true },
+          }))
+        )
+          return { operationId: null, alreadyAttempted: true };
         const missing = await readMissingDuplicateFingerprints(
           tx,
           principal.sub,

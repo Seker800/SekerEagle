@@ -761,6 +761,8 @@ test('a cancelled scan persists its attempted version without claiming complete 
   const stopped = await f.duplicate.list(f.ownerId, false, {});
   assert.equal(stopped.originalCheckAttempted, true);
   assert.equal(stopped.originalCheckCompleted, false);
+  const declined = await f.duplicate.scan(f.principal, randomUUID(), true);
+  assert.deepEqual(declined, { operationId: null, alreadyAttempted: true });
   const resumed = await f.duplicate.scan(f.principal, randomUUID());
   assert.notEqual(resumed.operationId, scan.operationId);
   assert.equal((await f.drain(resumed.operationId)).failed, 0);

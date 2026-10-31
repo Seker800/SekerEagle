@@ -1,4 +1,6 @@
 export const enUS = {
+  '已保留当前检查状态；点击“检查新内容”可手动重新检查。':
+    'The current check state was preserved. Select Check new content to check again manually.',
   '旧版近似结果已停用；可点击“检查新内容”重新核验原图。':
     'Old similarity results are disabled. Select Check new content to verify originals again.',
   原图核验尚未完成: 'Original verification is incomplete',

@@ -143,6 +143,9 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       );
   const active = operations.filter((op) => op.running || op.queued),
     scanning = active.some((op) => op.kind === 'DUPLICATE_SCAN');
+  const stoppedScan = operations.some(
+    (op) => op.kind === 'DUPLICATE_SCAN' && op.cancelled > 0 && !op.running && !op.queued,
+  );
   const terminalScan = operations
     .filter(
       (op) =>
@@ -167,10 +170,10 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   const invalidate = () =>
     client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
   const scan = useMutation({
-    mutationFn: () => {
+    mutationFn: (onlyIfUnattempted: boolean) => {
       scanId.current ??= crypto.randomUUID();
       cache.beginOperation(scanId.current, 'DUPLICATE_SCAN', []);
-      return api.scan(scanId.current);
+      return api.scan(scanId.current, onlyIfUnattempted);
     },
     onSuccess: (result) => {
       if (result.operationId && scanId.current && result.operationId !== scanId.current) {
@@ -181,9 +184,11 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
         changes.finish(scanId.current, 'DUPLICATE_SCAN', []);
       scanId.current = null;
       setNotice(
-        result.operationId
-          ? t('检查已加入后台任务，关闭此窗口后仍会继续。')
-          : t('现有可用图片都已检查，新图片处理完成后可再次检查。'),
+        result.alreadyAttempted
+          ? t('已保留当前检查状态；点击“检查新内容”可手动重新检查。')
+          : result.operationId
+            ? t('检查已加入后台任务，关闭此窗口后仍会继续。')
+            : t('现有可用图片都已检查，新图片处理完成后可再次检查。'),
       );
       void invalidate();
       // A check also renews the visible projection, even when there is no new work.
@@ -197,12 +202,13 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
       (data?.outdatedGroups ||
         (data?.originalCheckCompleted === false && data.coverage.total > 0)) &&
       data?.originalCheckAttempted !== true &&
+      !stoppedScan &&
       attemptedUpgrade.current !== upgradeKey &&
       !scanning &&
       !scan.isPending
     ) {
       attemptedUpgrade.current = upgradeKey;
-      scan.mutate();
+      scan.mutate(true);
     }
   }, [
     data?.outdatedGroups,
@@ -211,6 +217,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     data?.coverage.total,
     upgradeKey,
     scanning,
+    stoppedScan,
     scan.isPending,
     scan.mutate,
   ]);
@@ -423,7 +430,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
               <button
                 type="button"
                 disabled={scan.isPending || scanning}
-                onClick={() => scan.mutate()}
+                onClick={() => scan.mutate(false)}
               >
                 {scanning ? t('后台检查中…') : t('检查新内容')}
               </button>
@@ -542,7 +549,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
             {scan.error && (
               <div role="alert">
                 <p>{scan.error.message}</p>
-                <button type="button" disabled={scan.isPending} onClick={() => scan.mutate()}>
+                <button type="button" disabled={scan.isPending} onClick={() => scan.mutate(false)}>
                   {t('重试')}
                 </button>
               </div>

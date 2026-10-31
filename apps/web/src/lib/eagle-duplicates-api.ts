@@ -68,10 +68,13 @@ export function createDuplicatesApi(mode: LibraryMode) {
         `${base}/${encodeURIComponent(signature)}/members?${new URLSearchParams(cursor ? { cursor } : {})}`,
         { signal },
       ),
-    scan: (operationId: string) =>
-      request<{ operationId: string | null }>(`${base}/scan`, {
+    scan: (operationId: string, onlyIfUnattempted = false) =>
+      request<{ operationId: string | null; alreadyAttempted?: boolean }>(`${base}/scan`, {
         method: 'POST',
-        body: JSON.stringify({ operationId }),
+        body: JSON.stringify({
+          operationId,
+          ...(onlyIfUnattempted ? { onlyIfUnattempted: true } : {}),
+        }),
       }),
     cleanup: (input: DuplicateCleanupInput) =>
       request<{ operationId: string | null; assetIds?: string[] }>(`${base}/cleanup`, {

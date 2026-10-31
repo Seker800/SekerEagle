@@ -3836,6 +3836,7 @@ export interface components {
     };
     DuplicateScanDto: {
       operationId: string;
+      onlyIfUnattempted?: boolean;
     };
     DuplicateSelectionDto: {
       signature: string;
@@ -3846,6 +3847,8 @@ export interface components {
       operationId: string;
       revision?: string;
       allExact?: boolean;
+      allVerified?: boolean;
+      signatures?: string[];
       groups?: components['schemas']['DuplicateSelectionDto'][];
     };
     DuplicateIgnoreDto: {

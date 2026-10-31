@@ -8575,6 +8575,9 @@
         "properties": {
           "operationId": {
             "type": "string"
+          },
+          "onlyIfUnattempted": {
+            "type": "boolean"
           }
         },
         "required": ["operationId"]
@@ -8611,6 +8614,15 @@
           },
           "allExact": {
             "type": "boolean"
+          },
+          "allVerified": {
+            "type": "boolean"
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "groups": {
             "type": "array",

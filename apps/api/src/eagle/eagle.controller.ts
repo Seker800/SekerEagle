@@ -111,7 +111,7 @@ export class EagleController {
   @Post('duplicates/scan')
   @UseGuards(BrowserOriginGuard)
   scanDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateScanDto) {
-    return this.duplicates!.scan(principal, input.operationId);
+    return this.duplicates!.scan(principal, input.operationId, input.onlyIfUnattempted);
   }
   @Post('duplicates/cleanup')
   @UseGuards(BrowserOriginGuard)
