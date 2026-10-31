@@ -9,6 +9,7 @@ import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { EagleController } from './eagle.controller';
+import { SendEagleAssetsDto } from './eagle.dto';
 import { EnqueueAssetOperationDto } from './eagle-asset-operations.dto';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { PhotosController } from '../photos/photo-library.module';
@@ -327,4 +328,21 @@ test('a repeated selected ID is canonicalized without duplicating work or reject
   });
   assert.equal(result.total, 1);
   assert.equal(result.queued, 1);
+});
+
+
+test('the legacy send route also accepts a large selection and only enqueues independent background work', async () => {
+  const request = { operationId: randomUUID(), assetIds: Array.from({ length: 5001 }, () => randomUUID()) };
+  await pipe.transform(request, { type: 'body', metatype: SendEagleAssetsDto });
+  const principal = { sub: 'owner', canViewPrivate: false } as AuthPrincipal;
+  let admitted = false;
+  const controller = new EagleController(undefined as never, undefined as never, undefined as never, undefined as never,
+    { send: () => { throw new Error('HTTP must not execute transfers'); } } as never,
+    { enqueue: (actor: AuthPrincipal, input: unknown) => {
+      assert.equal(actor, principal);
+      assert.deepEqual(input, { ...request, kind: 'SEND' });
+      admitted = true; return { queued: request.assetIds.length };
+    } } as never);
+  assert.deepEqual(controller.sendAssets(principal, request), { queued: 5001 });
+  assert.equal(admitted, true);
 });
