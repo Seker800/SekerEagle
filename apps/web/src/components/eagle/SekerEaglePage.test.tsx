@@ -2786,6 +2786,55 @@ describe('SekerEaglePage', () => {
     },
   );
 
+  it.each(
+    (['MATERIAL', 'PHOTO'] as const).flatMap((mode) =>
+      ['标签', '任务中心', '待处理', '设置', '回收站'].map((destination) => ({
+        mode,
+        destination,
+      })),
+    ),
+  )(
+    'exits smart-folder scope when $mode sidebar opens $destination',
+    async ({ mode, destination }) => {
+      testWorkspaceMode.value = mode;
+      listEagleSmartFoldersMock.mockResolvedValue([
+        {
+          id: 'folder-sidebar',
+          name: '侧栏集合',
+          color: null,
+          parentId: null,
+          queryVersion: 1,
+          queryJson: { version: 1, filters: {} },
+          position: 0,
+          rowVersion: 1,
+        },
+      ]);
+      renderPage();
+      const sidebar = screen.getByRole('navigation', {
+        name: mode === 'PHOTO' ? '照片库导航' : '素材库导航',
+      });
+      fireEvent.click(await within(sidebar).findByRole('button', { name: '侧栏集合' }));
+      expect(within(sidebar).getByRole('treeitem', { name: '侧栏集合' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      const button = within(sidebar).getByRole('button', { name: new RegExp(`^${destination}`) });
+      fireEvent.click(button);
+      expect(within(sidebar).getByRole('treeitem', { name: '侧栏集合' })).toHaveAttribute(
+        'aria-selected',
+        'false',
+      );
+      expect(button).toHaveAttribute('aria-current', 'page');
+      expect(sidebar.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+      fireEvent.click(within(sidebar).getByRole('button', { name: /^全部/ }));
+      expect(await screen.findByRole('heading', { name: '全部' })).toBeVisible();
+      expect(within(sidebar).getByRole('button', { name: /^全部/ })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+    },
+  );
+
   it('reuses recently visited folder listings instead of refetching on every switch', async () => {
     listEagleSmartFoldersMock.mockResolvedValue([
       {
