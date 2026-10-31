@@ -187,3 +187,10 @@ test('changing a migrated scene to an ordinary field preserves a valid 31-group 
     /条件组/,
   );
 });
+
+test('ordinary filter groups and rules have no arbitrary 31/30 item cap', () => {
+  const conditions = Array.from({ length: 40 }, (_, i) => ({ id: `group-${i}`, match: 'ALL', result: 'MATCH',
+    rules: Array.from({ length: 35 }, (_, j) => ({ id: `rule-${i}-${j}`, field: 'NAME', operator: 'CONTAINS', value: 'photo' })) }));
+  const result = parseEagleFilterQuery({ version: 2, conditions });
+  assert.equal(result.conditions.length, 40); assert.equal(result.conditions[0]?.rules.length, 35);
+});
