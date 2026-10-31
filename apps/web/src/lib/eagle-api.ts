@@ -1,5 +1,5 @@
 import { getBrowserSessionSignal } from './api-client';
-import type { PhotoEditRecipe } from '@sekereagle/library-core';
+import type { AssetOperationSummary, PhotoEditRecipe } from '@sekereagle/library-core';
 import type { components } from '@sekereagle/contracts';
 import { normalizeCameraMimeType } from '@sekereagle/library-core';
 import { libraryApiPath, type LibraryMode } from './library-api-scope';
@@ -378,7 +378,7 @@ export function createEagleApi(libraryMode: LibraryMode = 'MATERIAL') {
     _token: string,
     input: { assetIds: string[]; operationId: string },
   ) {
-    return api<EagleLibraryTransferResult>('/eagle/assets/batch/send', {
+    return api<AssetOperationSummary>('/eagle/assets/batch/send', {
       method: 'POST',
       body: JSON.stringify(input),
     });

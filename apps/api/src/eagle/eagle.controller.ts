@@ -7,10 +7,10 @@ import { SaveEagleEditRecipeDto } from './eagle-edit-recipe';
 import { EagleMediaCapabilitiesDto } from './eagle-media-capability.dto';
 import { EagleAssetUpdateResponseDto } from './eagle-asset-update.dto';
 import { Optional } from '@nestjs/common';
-import { EagleLibraryTransferService } from './eagle-library-transfer.service';
 import { SendEagleAssetsDto } from './eagle.dto';
 import {
   Body,
+  HttpCode,
   Controller,
   Delete,
   Get,
@@ -76,7 +76,6 @@ export class EagleController {
     private readonly eagle: EagleService,
     private readonly media: EagleMediaService,
     private readonly privacy: EaglePrivacyService,
-    @Optional() private readonly transfers?: EagleLibraryTransferService,
     @Optional() private readonly operations?: EagleAssetOperationService,
   ) {}
 
@@ -120,10 +119,11 @@ export class EagleController {
   }
 
   @Post('assets/batch/send')
+  @HttpCode(202)
   @UseGuards(BrowserOriginGuard)
   sendAssets(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: SendEagleAssetsDto) {
-    if (!this.transfers) throw new Error('Library transfer service is unavailable');
-    return this.transfers.send(principal.sub, input, principal.canViewPrivate === true);
+    if (!this.operations) throw new Error('Asset operation service is unavailable');
+    return this.operations.enqueue(principal, { ...input, kind: 'SEND' });
   }
 
   @Get('media-capabilities')

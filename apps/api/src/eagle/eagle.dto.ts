@@ -269,7 +269,12 @@ export class EagleAssetIdsDto {
   assetIds!: string[];
 }
 
-export class SendEagleAssetsDto extends EagleAssetIdsDto {
+export class SendEagleAssetsDto {
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @ArrayMinSize(1)
+  @IsUUID('4', { each: true })
+  assetIds!: string[];
   @ApiProperty({ format: 'uuid' })
   @IsUUID('4')
   operationId!: string;

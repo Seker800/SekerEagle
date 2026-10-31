@@ -9,8 +9,15 @@ test('large operation selection bodies work in both modes without widening ordin
   const app = express();
   installOperationRequestBodyParser(app as never);
   app.use(express.json());
-  app.post(['/api/eagle/operations', '/api/photos/operations', '/ordinary'], (req, res) =>
-    res.json({ count: req.body.assetIds.length }),
+  app.post(
+    [
+      '/api/eagle/operations',
+      '/api/photos/operations',
+      '/api/eagle/assets/batch/send',
+      '/api/photos/assets/batch/send',
+      '/ordinary',
+    ],
+    (req, res) => res.json({ count: req.body.assetIds.length }),
   );
   const server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -22,7 +29,12 @@ test('large operation selection bodies work in both modes without widening ordin
       kind: 'SEND',
       assetIds: Array.from({ length: 5001 }, () => randomUUID()),
     });
-    for (const path of ['/api/eagle/operations', '/api/photos/operations']) {
+    for (const path of [
+      '/api/eagle/operations',
+      '/api/photos/operations',
+      '/api/eagle/assets/batch/send',
+      '/api/photos/assets/batch/send',
+    ]) {
       const result = await fetch(`http://127.0.0.1:${address.port}${path}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
