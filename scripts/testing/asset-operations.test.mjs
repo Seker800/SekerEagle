@@ -1615,3 +1615,27 @@ for (const mode of ['PHOTO', 'MATERIAL'])
     assert.equal(actual.value, vector);
     assert.equal(f.copies(), 0);
   });
+
+
+test('sending back before background indexing preserves the stored vector instead of recomputing it', async () => {
+  const f = await fixture();
+  const source = await f.add();
+  const identity = { id: 'send-publication-test-space', model: EAGLE_EMBEDDING_MODEL, revision: 'synthetic-v1', dimensions: 1024, instructionVersion: 'image-retrieval-v1', preprocessingVersion: 'preview-webp-v1', normalized: true };
+  const space = await prisma.eagleEmbeddingSpace.upsert({ where: { id: identity.id }, create: { ...identity, isCurrent: true }, update: {} });
+  const vector = `[1,${Array.from({ length: 1023 }, () => 0).join(',')}]`;
+  await prisma.$executeRaw`INSERT INTO "EagleAssetEmbedding" (id,"ownerId","libraryMode","assetId","assetRevision","spaceId",status,"isCurrent",embedding,"l2Norm","updatedAt") VALUES (${randomUUID()},${f.ownerId},'PHOTO',${source.id},1,${space.id},'READY',true,${vector}::vector,1,now())`;
+  await f.enqueue('SEND', [source]);
+  await f.service.tick();
+  const material = await prisma.eagleAsset.findFirstOrThrow({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL', deletedAt: null } });
+  // Simulate rendition completion independently of vector indexing.
+  await prisma.eagleAsset.update({ where: { id: material.id }, data: { lifecycleStatus: 'READY' } });
+  const back = new EagleAssetOperationService(prisma, new EagleLibraryTransferService(prisma, {}, 'MATERIAL'), new EagleService(prisma, undefined, 'MATERIAL'), 'MATERIAL');
+  const receipt = await back.enqueue(f.principal, { operationId: randomUUID(), kind: 'SEND', assetIds: [material.id] });
+  await back.tick();
+  assert.equal((await back.list(f.ownerId, true)).find(row => row.id === receipt.id).completed, 1);
+  const photo = await prisma.eagleAsset.findFirstOrThrow({ where: { ownerId: f.ownerId, libraryMode: 'PHOTO', deletedAt: null } });
+  const [stored] = await prisma.$queryRaw`SELECT status,embedding::text AS value FROM "EagleAssetEmbedding" WHERE "ownerId"=${f.ownerId} AND "assetId"=${photo.id}`;
+  assert.ok(stored, 'a compatible vector pending indexing is still reusable intrinsic data');
+  assert.equal(stored.status, 'PENDING');
+  assert.equal(stored.value, vector);
+});
