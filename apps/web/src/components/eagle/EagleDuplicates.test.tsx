@@ -151,15 +151,63 @@ describe('duplicate cleanup review', () => {
     await waitFor(() => expect(mocks.cleanup).toHaveBeenCalledTimes(2));
     expect(mocks.cleanup.mock.calls[0]).toEqual(mocks.cleanup.mock.calls[1]);
   });
- it('visual matches keep unseen members and require explicit removal',async()=>{
-  const similar={...group,kind:'SIMILAR' as const,count:3};
-  mocks.list.mockResolvedValue({revision:'b'.repeat(64),exactRevision:'c'.repeat(64),exactItems:0,coverage:{total:3,indexed:3,waiting:0},totalGroups:1,exactGroups:0,similarGroups:1,ignoredGroups:0,removableBytes:2000,nextCursor:null,groups:[similar]});
-  mocks.members.mockResolvedValue({signature:group.signature,recommendedId:'one',kind:'SIMILAR',total:3,nextCursor:'2',items:['one','two'].map(id=>({id,displayName:id,format:'jpeg',width:1200,height:800,byteSize:1000,libraryAddedAt:'2020-01-01',rating:null,manualTags:[],annotation:null,renditions:[],mediaRevision:1}))});
-  render();fireEvent.click(await screen.findByRole('button',{name:/^画面近似，待确认/}));
-  expect(await screen.findByRole('checkbox',{name:'保留 one'})).toBeChecked();expect(screen.getByRole('checkbox',{name:'保留 two'})).toBeChecked();
-  expect(screen.getByRole('button',{name:'保留 3 项，清理 0 项'})).toBeDisabled();
-  fireEvent.click(screen.getByRole('checkbox',{name:'保留 two'}));fireEvent.click(screen.getByRole('button',{name:'保留 2 项，清理 1 项'}));
-  fireEvent.click(screen.getByRole('button',{name:'确认移入回收站'}));await waitFor(()=>expect(mocks.cleanup).toHaveBeenCalledWith(expect.objectContaining({groups:[{signature:group.signature,removeIds:['two']}]})));
+  it('visual matches keep unseen members and require explicit removal', async () => {
+    const similar = { ...group, kind: 'SIMILAR' as const, count: 3 };
+    mocks.list.mockResolvedValue({
+      revision: 'b'.repeat(64),
+      exactRevision: 'c'.repeat(64),
+      exactItems: 0,
+      coverage: { total: 3, indexed: 3, waiting: 0 },
+      totalGroups: 1,
+      exactGroups: 0,
+      similarGroups: 1,
+      ignoredGroups: 0,
+      removableBytes: 2000,
+      nextCursor: null,
+      groups: [similar],
+    });
+    mocks.members.mockResolvedValue({
+      signature: group.signature,
+      recommendedId: 'one',
+      kind: 'SIMILAR',
+      total: 3,
+      nextCursor: '2',
+      items: ['one', 'two'].map((id) => ({
+        id,
+        displayName: id,
+        format: 'jpeg',
+        width: 1200,
+        height: 800,
+        byteSize: 1000,
+        libraryAddedAt: '2020-01-01',
+        rating: null,
+        manualTags: [],
+        annotation: null,
+        renditions: [],
+        mediaRevision: 1,
+      })),
+    });
+    render();
+    fireEvent.click(await screen.findByRole('button', { name: /^画面近似，待确认/ }));
+    expect(await screen.findByRole('checkbox', { name: '保留 one' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '保留 two' })).toBeChecked();
+    expect(screen.getByRole('button', { name: '保留 3 项，清理 0 项' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('checkbox', { name: '保留 two' }));
+    fireEvent.click(screen.getByRole('button', { name: '保留 2 项，清理 1 项' }));
+    fireEvent.click(screen.getByRole('button', { name: '确认移入回收站' }));
+    await waitFor(() =>
+      expect(mocks.cleanup).toHaveBeenCalledWith(
+        expect.objectContaining({ groups: [{ signature: group.signature, removeIds: ['two'] }] }),
+      ),
+    );
+  });
+ it('permission revision changes hide old cached names immediately',async()=>{
+  const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});
+  mocks.list.mockResolvedValue({revision:'b'.repeat(64),exactRevision:'c'.repeat(64),exactItems:1,coverage:{total:2,indexed:2,waiting:0},totalGroups:1,exactGroups:1,similarGroups:0,ignoredGroups:0,removableBytes:1000,nextCursor:null,groups:[{...group,previews:[{id:'old',displayName:'old-public-name'}]}]});
+  const show=(scopeRevision:string)=><QueryClientProvider client={client}><EagleDuplicates includePrivate={false} scopeRevision={scopeRevision} onClose={()=>{}}/></QueryClientProvider>;
+  const view=renderInWorkspace(show('before'));await screen.findByText('old-public-name');
+  mocks.list.mockImplementation(()=>new Promise(()=>{}));view.rerender(show('after'));
+  expect(screen.queryByText('old-public-name')).not.toBeInTheDocument();
  });
 
 });
