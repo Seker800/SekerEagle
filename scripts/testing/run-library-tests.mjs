@@ -202,6 +202,10 @@ try {
       stdio: 'inherit',
     },
   );
+  run(process.execPath, ['--test', 'scripts/testing/asset-operation-executor.test.mjs'], {
+    env,
+    stdio: 'inherit',
+  });
   // Keep the synthetic scale fixture out of concurrent privacy transactions.
   run(process.execPath, ['--test', 'scripts/testing/vector-review-performance.test.mjs'], {
     env,
