@@ -67,6 +67,7 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
       `;
       for (const plan of plans) {
         const items = plan.plan as Array<{
+          storageAction?: 'HANDOFF';
           targetKey: string;
           targetId: string;
           renditions?: Array<{ targetKey: string }>;
@@ -76,6 +77,9 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
           throw new Error('Invalid transfer cleanup plan');
         const prefixes: string[] = [];
         const objectKeys = items.flatMap((item) => {
+          // Handoff owns no temporary copies: abandoned plans leave all source bytes intact.
+          if (item.storageAction === 'HANDOFF') return [];
+          if (item.storageAction !== undefined) throw new Error('Invalid transfer storage action');
           if (item.pyramid) {
             const prefix = item.pyramid.targetPrefix;
             assertOwnedObjectKey(plan.ownerId, prefix);
@@ -99,9 +103,10 @@ export class EagleMaintenanceService implements OnModuleInit, OnModuleDestroy {
           where: { id: plan.id, ownerId: plan.ownerId, sourceMode: plan.sourceMode },
           data: { status: 'ABANDONED', updatedAt: now },
         });
-        await tx.eagleObjectDeletion.create({
-          data: { ownerId: plan.ownerId, libraryMode: plan.targetMode, objectKeys, prefixes },
-        });
+        if (objectKeys.length || prefixes.length)
+          await tx.eagleObjectDeletion.create({
+            data: { ownerId: plan.ownerId, libraryMode: plan.targetMode, objectKeys, prefixes },
+          });
       }
       // Keep tombstones and revisit them daily: a delayed object copy may finish after deletion.
       return plans.length;
