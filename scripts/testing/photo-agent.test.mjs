@@ -782,8 +782,7 @@ test('send approval reuses the shared transfer, survives interruption and cannot
     legacyTransferDb,
     {
       copyObject: async () => {
-        copies++;
-        if (fail) throw new Error('synthetic copy interruption');
+        assert.fail('handoff must not copy immutable bytes');
       },
       headObject: async () => ({ ContentLength: 1 }),
     },
@@ -1241,8 +1240,7 @@ test('manual send failure retries the same independent copy without approving th
     legacyTransferDb,
     {
       copyObject: async () => {
-        copies++;
-        if (offline) throw new Error('copy offline');
+        assert.fail('handoff must not copy immutable bytes');
       },
       headObject: async () => ({ ContentLength: 1 }),
     },

@@ -1,4 +1,94 @@
 export const enUS = {
+  '每组按推荐保留一项，其余移入回收站，可以恢复。':
+    'Keep the recommended item in each group and move the others to Trash, where they can be restored.',
+  已提交清理: 'Cleanup queued',
+  '清理项移入回收站，可恢复': 'Removed items go to Trash and can be restored',
+  查重依据与空间说明: 'Detection and storage details',
+  '完全重复项合并标签和最高评分；说明、来源及编辑关系保留在回收站原项中。':
+    'Exact duplicates merge tags and the highest rating. Notes, sources and edit relationships stay on the original items in Trash.',
+
+  '检查当前图库全部可访问内容，不含回收站': 'All accessible items in this library, excluding Trash',
+  '近似图片默认全部保留。取消勾选才会清理；未加载的图片继续保留。请放大比较细节。':
+    'Visual matches are all kept by default. Uncheck only the images you want to remove; unloaded images remain kept. Enlarge images to compare details.',
+  '保留 {{value1}}': 'Keep {{value1}}',
+  保留此项: 'Keep this item',
+  照片库: 'Photo library',
+  素材库: 'Asset library',
+  收起: 'Collapse',
+  说明: 'Description',
+  '{{count}} 张等待预览': '{{count}} waiting for previews',
+  '{{count}} 组待检查': '{{count}} groups to review',
+  '{{count}} 项未完成，可在任务中心查看原因并重试。':
+    '{{count}} items could not finish. Open the task center to inspect and retry them.',
+  '保留 {{keep}} 项，清理 {{remove}} 项': 'Keep {{keep}}, remove {{remove}}',
+  '保留一项后可清理 {{size}} 文件': '{{size}} in files to remove when keeping one',
+  关闭查重清理: 'Close duplicate review',
+  刷新结果: 'Refresh results',
+  加载更多组: 'Load more groups',
+  加载更多组内图片: 'Load more images in this group',
+  只检查当前可见内容: 'Only your currently visible items are included',
+  '后台处理状态已更新，刷新即可查看最新结果。':
+    'Background work has updated. Refresh to see the latest results.',
+  '后台检查中…': 'Checking in background…',
+  完全重复: 'Exact duplicates',
+  '完全重复依据文件内容；画面近似依据像素特征，需要人工确认。未完成视觉检查不代表没有重复。':
+    'Exact duplicates have identical file contents. Visual matches use pixel features and need your review. Unchecked images may still contain duplicates.',
+  '完全重复项的独有标签和最高评分会合并到保留项。说明、来源和编辑关系仍保存在原项目中，请先检查需要保留的信息。':
+    'Unique tags and the highest rating from exact duplicates are copied to the retained item. Descriptions, sources and edit relationships remain on the original items. Review any information you need before continuing.',
+  '实况照片，清理包含关联动态组件': 'Live Photo: removal includes its motion component',
+  当前没有待处理的查重结果: 'No duplicate groups awaiting review',
+  忽略这组: 'Ignore this group',
+  '推荐优先保留有评分的项目，其次为尺寸、文件大小和较早入库时间。可自行更改保留项。':
+    'Recommendations prioritize ratings, then dimensions, file size and earlier import date. You can change which items to keep.',
+  推荐保留: 'Recommended',
+  放大比较: 'Compare enlarged',
+  文件完全相同: 'Identical file contents',
+  '新图片入库后，可以再次检查。': 'Check again after importing new images.',
+  查看已忽略: 'Show ignored groups',
+  '查重比较 · {{value1}} × {{value2}}': 'Duplicate comparison · {{value1}} × {{value2}}',
+  查重清理: 'Duplicate review',
+  查重类型: 'Duplicate category',
+  '检查已加入后台任务，关闭此窗口后仍会继续。':
+    'Checking is queued in the background and continues after you close this window.',
+  检查新内容: 'Check new items',
+  检查重复图片: 'Check for duplicate images',
+  检查图片: 'Checking images',
+  '正在提交…': 'Submitting…',
+  '正在读取查重结果…': 'Loading duplicate results…',
+  '正在读取组内图片…': 'Loading images in this group…',
+  '每组保留已选择的内容，其余项目移入回收站，可以恢复。':
+    'Selected items in each group will be kept. Other items move to Trash and can be restored.',
+  '每组至少保留一项。': 'Keep at least one item in each group.',
+  比较并选择: 'Compare and choose',
+  没有已忽略的结果: 'No ignored groups',
+  '没有需要清理的项目。': 'No items to remove.',
+  '清理 {{count}} 组完全重复项': 'Remove duplicates from {{count}} exact groups',
+  '清理 {{count}} 项': 'Remove {{count}} items',
+  清理全部完全重复项: 'Clean up all exact duplicates',
+  '清理已加入后台任务，可在任务中心查看进度。完成后可从回收站恢复。':
+    'Cleanup is queued. Follow its progress in the task center. Removed items can be restored from Trash.',
+  清理重复项: 'Remove duplicate items',
+  '现在不会释放磁盘空间，清空回收站后才会释放实际占用。':
+    'Disk space is released only after Trash is emptied, not by this operation.',
+  '现有可用图片都已检查，新图片处理完成后可再次检查。':
+    'All currently available images are indexed. Check again after new images finish processing.',
+  画面近似: 'Visual matches',
+  '画面近似不能证明文件重复。请确认已比较清晰度、构图、表情以及原片与成片。':
+    'Visual similarity does not prove duplication. Compare sharpness, composition, expressions, and original versus edited versions.',
+  '画面近似，待确认': 'Visual match, needs review',
+  确认清理: 'Confirm cleanup',
+  确认移入回收站: 'Confirm move to Trash',
+  '编辑成片，请保留需要的版本': 'Edited copy: keep any versions you need',
+  '视觉检查 {{done}} / {{total}} 张': 'Visual index: {{done}} / {{total}} images',
+  返回检查: 'Back to review',
+  '还有图片未完成视觉检查，可以点击“检查新内容”。':
+    'Some images have not been visually indexed. Select Check new items to continue.',
+  '这些图片可能是压缩副本，也可能是连拍或编辑版本。可保留多张；点“放大比较”检查细节。':
+    'These may be compressed copies, burst shots or edited versions. Keep as many as you need; enlarge images to inspect details.',
+  重新检查这组: 'Review this group again',
+  保留: 'Keep',
+  入库: 'Imported',
+  拍摄: 'Captured',
   '后台内容已更新，当前浏览位置保持不变。':
     'Background changes are ready. Your browsing position is preserved.',
   加载更新: 'Load updates',

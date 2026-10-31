@@ -175,6 +175,9 @@ it('trash progress marks its own workspace stale once without starting a foregro
     ['eagle', 'owner', 'PHOTO', 'operations'],
   ])
     expect(predicate({ queryKey: key } as never)).toBe(false);
+  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('none');
+  for (const name of ['manual-tags', 'statistics'])
+    expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', name] } as never)).toBe(true);
   client.setQueryData(
     ['eagle', 'owner', 'PHOTO', 'operations', false],
     [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' })],

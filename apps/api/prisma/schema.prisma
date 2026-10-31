@@ -219,6 +219,8 @@ model EagleAssetOperationItem {
 
 model User {
   assetOperations EagleAssetOperation[]
+  duplicateGroups EagleDuplicateGroup[]
+  duplicateDismissals EagleDuplicateDismissal[]
   photoAgentPreferences EaglePhotoAgentPreference[]
   photoMapStates EaglePhotoMapState[]
   libraryTransfers EagleLibraryTransfer[]
@@ -429,6 +431,7 @@ model EagleAsset {
   vectorSuggestions              EagleVectorTagSuggestion[]
   tagMemberDistances             EagleTagMemberDistance[]
   browserCaptures                EagleBrowserCapture[]
+  duplicateFingerprint EagleDuplicateFingerprint?
   transferFacts                  EagleAssetTransferFacts?
   photoMetadata                  EaglePhotoMetadata?
   photoLocation                  EaglePhotoLocation?
@@ -1736,4 +1739,40 @@ model EaglePhotoPersonSeparation {
   second EaglePhotoPerson @relation("PersonSeparationSecond",fields:[ownerId,libraryMode,secondId],references:[ownerId,libraryMode,id],onDelete:Cascade)
   @@id([ownerId,libraryMode,firstId,secondId])
   @@index([ownerId,libraryMode,secondId])
+}
+
+model EagleDuplicateFingerprint {
+  assetId String @id
+  ownerId String
+  libraryMode LibraryMode
+  mediaRevision Int
+  processorVersion String
+  hash String
+  colors Json
+  contrast Float
+  updatedAt DateTime @updatedAt
+  asset EagleAsset @relation(fields: [ownerId, libraryMode, assetId], references: [ownerId, libraryMode, id], onDelete: Cascade)
+  @@unique([ownerId, libraryMode, assetId])
+  @@index([ownerId, libraryMode])
+}
+model EagleDuplicateDismissal {
+  ownerId String
+  libraryMode LibraryMode
+  signature String
+  createdAt DateTime @default(now())
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  @@id([ownerId, libraryMode, signature])
+}
+
+model EagleDuplicateGroup {
+ ownerId String
+ libraryMode LibraryMode
+ signature String
+ assetIds String[]
+ rowVersions Int[]
+ mediaRevisions Int[]
+ isPrivate Boolean
+ removableBytes BigInt
+ owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+ @@id([ownerId, libraryMode, signature])
 }

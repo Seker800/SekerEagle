@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { ThumbnailLoadService } from '../media/loading/thumbnailLoadService';
@@ -341,4 +341,53 @@ it('viewer placeholders acquire only a cached current-version blob and release i
   expect(release).toHaveBeenCalledOnce();
   view.unmount();
   vi.restoreAllMocks();
+});
+
+it('renders the same asset in multiple review groups without replacing or cancelling another view', async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, 'fetch')
+    .mockResolvedValue(
+      new Response(new Blob(['image']), { headers: { 'content-type': 'image/webp' } }),
+    );
+  const revoke = vi.fn();
+  vi.stubGlobal('URL', { createObjectURL: () => 'blob:shared-review', revokeObjectURL: vi.fn() });
+  const service = new ThumbnailLoadService();
+  const scheduler = new MediaLoadScheduler({ maxConcurrent: 2 });
+  const show = (includeFirst: boolean) => (
+    <>
+      {includeFirst && (
+        <EagleAssetThumbnail
+          key="exact-group"
+          asset={imageAsset}
+          scheduler={scheduler}
+          loadService={service}
+          order={0}
+          displayWidth={240}
+        />
+      )}
+      <EagleAssetThumbnail
+        key="similar-group"
+        asset={imageAsset}
+        scheduler={scheduler}
+        loadService={service}
+        order={1}
+        displayWidth={240}
+      />
+    </>
+  );
+  const view = render(show(true));
+  try {
+    await waitFor(() => expect(view.container.querySelectorAll('img')).toHaveLength(2));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    view.container.querySelectorAll('img').forEach((img) => fireEvent.load(img));
+    view.rerender(show(false));
+    expect(view.container.querySelector('img')).toHaveAttribute('src', 'blob:shared-review');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(revoke).not.toHaveBeenCalled();
+  } finally {
+    view.unmount();
+    service.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
 });

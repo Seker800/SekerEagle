@@ -1,3 +1,4 @@
+import { OPERATION_SEND_CONCURRENCY } from '../../apps/api/dist/eagle/eagle-operation-settings.js';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import console from 'node:console';
@@ -100,6 +101,7 @@ async function fixture(mode = 'PHOTO', copy) {
       new EagleService(prisma, undefined, mode),
       mode,
     );
+  };
   const add = async (changes = {}) => {
     const id = randomUUID();
     return prisma.eagleAsset.create({
@@ -291,6 +293,7 @@ test('a live lease excludes other executors and stopping cancels only the waitin
     4,
   );
 });
+
 test('a crash after transfer publication replays the result without making another resource', async () => {
   const f = await fixture(),
     receipt = await f.enqueue('SEND', [await f.add()]);

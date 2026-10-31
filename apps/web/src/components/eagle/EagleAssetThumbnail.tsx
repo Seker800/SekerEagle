@@ -2,7 +2,7 @@ import { isCameraVideoMime } from '@sekereagle/library-core';
 import { getEagleVideoContentUrl } from './eagle-media-sources';
 import { getEagleRenditionContentUrl } from '../../lib/eagle-api';
 import { t } from '../../i18n';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { IconPhoto, IconPlayerPlayFilled } from '@tabler/icons-react';
 import { type EagleAssetListItem } from '../../lib/eagle-api';
 import { type MediaLoadScheduler } from '../media/loading/mediaLoadScheduler';
@@ -116,7 +116,10 @@ export function EagleAssetThumbnail({
   const transientRetriesRef = useRef(0);
   const maxAttempts = urls.length * ATTEMPTS_PER_RENDITION;
   const source = urls.length > 0 ? urls[Math.floor(attempt / ATTEMPTS_PER_RENDITION)] : undefined;
-  const taskId = `eagle-thumbnail:${asset.id}`;
+  // Each view owns its scheduler lifetime. The shared load service separately
+  // deduplicates bytes by asset/media/source, including across duplicate groups.
+  const instanceId = useId();
+  const taskId = `eagle-thumbnail:${asset.id}:${instanceId}`;
   const clearRetryTimer = () => {
     if (retryTimerRef.current === null) return;
     window.clearTimeout(retryTimerRef.current);

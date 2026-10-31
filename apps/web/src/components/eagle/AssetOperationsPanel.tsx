@@ -46,15 +46,19 @@ export function AssetOperationsPanel({
   );
   const history = operations.filter((operation) => !active.includes(operation));
   const titles = (operation: AssetOperationSummary) =>
-    operation.kind === 'SEND'
-      ? operation.libraryMode === 'PHOTO'
-        ? t('发送到素材')
-        : t('发送到照片')
-      : operation.kind === 'TRASH'
-        ? t('移入回收站')
-        : operation.kind === 'RESTORE'
-          ? t('恢复')
-          : t('清空回收站');
+    operation.kind === 'DUPLICATE_SCAN'
+      ? t('检查重复图片')
+      : operation.kind === 'DUPLICATE_CLEANUP'
+        ? t('清理重复项')
+        : operation.kind === 'SEND'
+          ? operation.libraryMode === 'PHOTO'
+            ? t('发送到素材')
+            : t('发送到照片')
+          : operation.kind === 'TRASH'
+            ? t('移入回收站')
+            : operation.kind === 'RESTORE'
+              ? t('恢复')
+              : t('清空回收站');
   const state = (operation: AssetOperationSummary) =>
     operation.running
       ? operation.kind === 'SEND'

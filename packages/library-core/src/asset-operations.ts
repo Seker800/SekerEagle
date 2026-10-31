@@ -1,4 +1,11 @@
-export const ASSET_OPERATION_KINDS = ['SEND', 'TRASH', 'RESTORE', 'EMPTY_TRASH'] as const;
+export const ASSET_OPERATION_KINDS = [
+  'SEND',
+  'TRASH',
+  'RESTORE',
+  'EMPTY_TRASH',
+  'DUPLICATE_SCAN',
+  'DUPLICATE_CLEANUP',
+] as const;
 export type AssetOperationKind = (typeof ASSET_OPERATION_KINDS)[number];
 export interface AssetOperationSummary {
   id: string;

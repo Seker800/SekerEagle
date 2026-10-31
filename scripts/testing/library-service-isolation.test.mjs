@@ -1,3 +1,4 @@
+import { seedLegacyTransfer } from './legacy-transfer-fixture.mjs';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 import {
   readEagleEditRecipe,
@@ -1455,7 +1456,7 @@ test('failed sends leave all sources active and retry the durable plan without d
   let calls = 0;
   const storage = {
     copyObject: async () => {
-      if (++calls === 2 && failed) throw new Error('temporary storage failure');
+      assert.fail('handoff must not copy immutable bytes');
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
@@ -2348,6 +2349,10 @@ test('expiry racing an object copy fences publication and keeps the original vis
     },
     'MATERIAL',
   );
+  await seedLegacyTransfer(prisma, f.ownerId, 'MATERIAL', {
+    operationId,
+    assetIds: [f.material.id],
+  });
   await assert.rejects(
     () => sender.send(f.ownerId, { operationId, assetIds: [f.material.id] }, false),
     /过期/,
@@ -2844,6 +2849,7 @@ test('legacy transfer retirement preserves restored sources and changed or missi
       },
     });
     const operationId = randomUUID();
+    await seedLegacyTransfer(prisma, f.ownerId, 'PHOTO', { operationId, assetIds: [f.photo.id] });
     const result = await sender.send(f.ownerId, { operationId, assetIds: [f.photo.id] }, false);
     const targetId = result.assets[0].assetId;
     await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: f.ownerId } });

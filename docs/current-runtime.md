@@ -1,5 +1,20 @@
 # 现用运行状态与交接
 
+## 2026-10-31 本地 Docker 闲置验收环境清理
+
+用户授权清理已无用途的本地 Eagle 容器，释放空间和内存。清理前逐个核对容器身份、loopback 端口、tmpfs 和连接：移除 11 个无已建立应用连接、无持久卷挂载的临时工作台容器，批次为 `cefc2f01`、`429167e3`、`63f38554`、`2239cb31`、`934116fe`、`7a6acf8a`。这些容器的数据原本位于临时内存盘，停止后不再保留；本机私有来源样本缓存未清理。
+
+保留固定测试图库两个容器及原持久卷、账号和用户修改；`5eac24ad-db` 仍由运行中的工作台 API／worker 使用，对应原 4188 入口，也予以保留。清理后本地 Eagle 容器由 14 个减至 3 个，移除容器在清理前的 Docker 内存采样合计约 1.22 GiB；保留容器 ID 未变、均 running；49813 固定图库及 4188 工作台首页均返回 HTTP 200，固定图库状态为 running／initialized。其他项目服务、群晖生产、Mac 业务 worker、模型和调度未调整。
+
+另移除 22 个已被正式发布替代的 Eagle 候选／测试镜像标签，保留现用及近期正式回滚镜像；按精确 ID 清理已数天未使用且未被镜像共享的 Eagle 构建缓存，Docker 报告回收 **12.45 GB**。镜像与缓存共享层存在重叠，不将镜像账面减少量与缓存回收量相加。未执行全局 prune，未清理其他项目镜像、缓存或任何数据卷。清理前后及精确清单见本机私有 `.omx/artifacts/docker-cleanup-20261031/`；本节是清理验收快照，后续实时状态仍须现场核对。
+
+
+### 同日追加：旧工作台退役与失败容器清理
+
+用户继续要求核对剩余程序的必要性。此前保留的 4188 临时验收工作台现已退役：向原 supervisor 正常发送 SIGTERM，确认其 API／worker 一并退出、数据库连接清空后，停止并移除 `5eac24ad-db`。后续本机交互验收统一使用原固定 49813 图库，不再使用 4188；原私有样本缓存保留。此记录覆盖上段“保留 4188”的阶段状态。
+
+另核实 `sweet_hawking`、`hardcore_villani`、`adoring_panini` 为同一 NapCat 镜像创建、两天前以状态 1 退出的三个临时容器，已仅移除容器，挂载的配置卷保留。SekerChat 的初始化容器、数据库与对象存储未修改；现用 NapCat／AstrBot／QQ 桥接及通知三服务未修改。清理后 Eagle 仅余固定图库两容器，固定图库 running／initialized、首页 HTTP 200。
+
 > **2026-10-31 安卓0.9.13生产分发已发布**：用户明确授权commit、push和生产部署。功能源码 `eb24258212772dc29cb934903d750d0caca10e3c` 已在main；生产web更新为 `sekereagle/web:android-0.9.13-eb2425821277`，healthy／零重启。仅增加新版APK、SHA文件与版本清单，原46个网页文件及7个nginx配置文件哈希保持。外网 [下载安装包](https://yuntai.design:8181/downloads/android/SekerEagle-0.9.13.apk) 完整70,896,780字节，SHA与同签名候选一致，Range206、版本清单和匿名认证401均验证通过；用户手机需覆盖安装。该包仍为原 `com.sekereagle.android.debug` 调试签名，不冒充商店发行版。
 >
 > 原完整Compose链仅追加 `maintenance/android-0.9.13-eb242582-20261031/images.json`。API保持 `android-search-e332c5f47e2a` healthy，API／数据库／对象存储／网关／协调器／中继容器ID保持；NAS worker继续停止，唯一Mac业务worker仍running／PID17421，未重启。没有数据库写入／迁移、恢复、真实资源发送或模型／调度调整。镜像回滚文件、精确清单及验收见 [本次发布记录](android-production-release-2026-10-31.md)。
