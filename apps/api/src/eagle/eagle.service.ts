@@ -99,7 +99,7 @@ const publicPhotoLocationSelect = {
   source: true,
 } satisfies Prisma.EaglePhotoLocationSelect;
 
-const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
+export const assetListInclude = Prisma.validator<Prisma.EagleAssetInclude>()({
   photoMetadata: { select: publicPhotoMetadataSelect },
   photoLocation: { select: publicPhotoLocationSelect },
   renditions: {
@@ -2009,7 +2009,7 @@ function serializeAsset(asset: AssetRecord) {
   };
 }
 
-function serializeAssetList(asset: AssetListRecord) {
+export function serializeAssetList(asset: AssetListRecord) {
   const { manualTagLinks, ...record } = asset;
   const safe = {
     id: record.id,
