@@ -1,5 +1,10 @@
 import { EagleDuplicateService } from './eagle-duplicates.service';
-import { DuplicateActionDto, DuplicateIgnoreDto, DuplicateListDto, DuplicateScanDto } from './eagle-duplicates.dto';
+import {
+  DuplicateActionDto,
+  DuplicateIgnoreDto,
+  DuplicateListDto,
+  DuplicateScanDto,
+} from './eagle-duplicates.dto';
 import { EagleAssetOperationService } from './eagle-asset-operations.service';
 import { EnqueueAssetOperationDto, ListAssetOperationsDto } from './eagle-asset-operations.dto';
 import { CreateEditRenderDto } from './eagle-edit-render';
@@ -88,19 +93,37 @@ export class EagleController {
     return this.duplicates!.list(principal.sub, principal.canViewPrivate, input);
   }
   @Get('duplicates/:signature/members')
-  duplicateMembers(@CurrentPrincipal() principal: AuthPrincipal, @Param('signature') signature: string, @Query() input: DuplicateListDto) {
-    return this.duplicates!.members(principal.sub, principal.canViewPrivate, signature, Number(input.cursor ?? 0));
+  duplicateMembers(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Param('signature') signature: string,
+    @Query() input: DuplicateListDto,
+  ) {
+    return this.duplicates!.members(
+      principal.sub,
+      principal.canViewPrivate,
+      signature,
+      Number(input.cursor ?? 0),
+    );
   }
-  @Post('duplicates/scan') @UseGuards(BrowserOriginGuard)
+  @Post('duplicates/scan')
+  @UseGuards(BrowserOriginGuard)
   scanDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateScanDto) {
     return this.duplicates!.scan(principal, input.operationId);
   }
-  @Post('duplicates/cleanup') @UseGuards(BrowserOriginGuard)
-  cleanupDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateActionDto) {
+  @Post('duplicates/cleanup')
+  @UseGuards(BrowserOriginGuard)
+  cleanupDuplicates(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: DuplicateActionDto,
+  ) {
     return this.duplicates!.cleanup(principal, input);
   }
-  @Post('duplicates/ignore') @UseGuards(BrowserOriginGuard)
-  ignoreDuplicates(@CurrentPrincipal() principal: AuthPrincipal, @Body() input: DuplicateIgnoreDto) {
+  @Post('duplicates/ignore')
+  @UseGuards(BrowserOriginGuard)
+  ignoreDuplicates(
+    @CurrentPrincipal() principal: AuthPrincipal,
+    @Body() input: DuplicateIgnoreDto,
+  ) {
     return this.duplicates!.ignore(principal.sub, principal.canViewPrivate, input);
   }
 

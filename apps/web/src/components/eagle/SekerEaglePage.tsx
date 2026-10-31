@@ -1610,7 +1610,14 @@ export function SekerEaglePage({
           {' ' + t('设置')}
         </button>
       </div>
-      <button type="button" data-navigation-destination onClick={() => { closeNavigation(); setDuplicatesOpen(true); }}>
+      <button
+        type="button"
+        data-navigation-destination
+        onClick={() => {
+          closeNavigation();
+          setDuplicatesOpen(true);
+        }}
+      >
         <IconPhoto size={17} /> {t('查重清理')}
       </button>
       <button
@@ -3151,7 +3158,14 @@ export function SekerEaglePage({
           }
         />
       )}
-      {duplicatesOpen && <EagleDuplicates key={`${storeScope}:${privateVisible}:${privacyRulesRevision}`} includePrivate={privateVisible} onClose={() => setDuplicatesOpen(false)} />}
+      {duplicatesOpen && (
+        <EagleDuplicates
+          key={editingScope}
+          scopeRevision={editingScope}
+          includePrivate={privateVisible}
+          onClose={() => setDuplicatesOpen(false)}
+        />
+      )}
     </main>
   );
 }

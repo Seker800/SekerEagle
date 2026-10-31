@@ -1,3 +1,5 @@
+import { seedLegacyTransfer } from './legacy-transfer-fixture.mjs';
+import { withTransferPublicationFault } from './transfer-publication-fault.mjs';
 import { DEFAULT_PHOTO_EDITS } from '../../packages/library-core/dist/index.js';
 import {
   readEagleEditRecipe,
@@ -1422,11 +1424,17 @@ test('failed sends leave all sources active and retry the durable plan without d
   let calls = 0;
   const storage = {
     copyObject: async () => {
-      if (++calls === 2 && failed) throw new Error('temporary storage failure');
+      assert.fail('handoff must not copy immutable bytes');
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
-  const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  const sender = new EagleLibraryTransferService(
+    withTransferPublicationFault(prisma, () => {
+      if (++calls === 2 && failed) throw new Error('temporary publication failure');
+    }),
+    storage,
+    'MATERIAL',
+  );
   const input = { operationId: randomUUID(), assetIds: [f.material.id, second.id] };
   await assert.rejects(() => sender.send(f.ownerId, input, false), /temporary/);
   assert.equal(
@@ -1563,6 +1571,7 @@ test('concurrent source edits or conflicting sends never publish duplicate targe
     headObject: async () => ({ ContentLength: 1 }),
   };
   const sender = new EagleLibraryTransferService(prisma, storage, 'MATERIAL');
+  await seedLegacyTransfer(prisma, f.ownerId, 'MATERIAL', input);
   await assert.rejects(() => sender.send(f.ownerId, input, false), /变化/);
   assert.equal(
     (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: f.material.id } })).deletedAt,
@@ -2315,6 +2324,10 @@ test('expiry racing an object copy fences publication and keeps the original vis
     },
     'MATERIAL',
   );
+  await seedLegacyTransfer(prisma, f.ownerId, 'MATERIAL', {
+    operationId,
+    assetIds: [f.material.id],
+  });
   await assert.rejects(
     () => sender.send(f.ownerId, { operationId, assetIds: [f.material.id] }, false),
     /过期/,
@@ -2811,6 +2824,7 @@ test('legacy transfer retirement preserves restored sources and changed or missi
       },
     });
     const operationId = randomUUID();
+    await seedLegacyTransfer(prisma, f.ownerId, 'PHOTO', { operationId, assetIds: [f.photo.id] });
     const result = await sender.send(f.ownerId, { operationId, assetIds: [f.photo.id] }, false);
     const targetId = result.assets[0].assetId;
     await prisma.eagleObjectDeletion.deleteMany({ where: { ownerId: f.ownerId } });

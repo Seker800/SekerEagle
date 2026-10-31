@@ -1,3 +1,4 @@
+import { withTransferPublicationFault } from './transfer-publication-fault.mjs';
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -746,11 +747,13 @@ test('send approval reuses the shared transfer, survives interruption and cannot
   let copies = 0,
     fail = true;
   const transfer = new EagleLibraryTransferService(
-    prisma,
+    withTransferPublicationFault(prisma, () => {
+      copies++;
+      if (fail) throw new Error('synthetic publication interruption');
+    }),
     {
       copyObject: async () => {
-        copies++;
-        if (fail) throw new Error('synthetic copy interruption');
+        assert.fail('handoff must not copy immutable bytes');
       },
       headObject: async () => ({ ContentLength: 1 }),
     },
@@ -1205,11 +1208,13 @@ test('manual send failure retries the same independent copy without approving th
   let offline = true,
     copies = 0;
   const transfer = new EagleLibraryTransferService(
-    prisma,
+    withTransferPublicationFault(prisma, () => {
+      copies++;
+      if (offline) throw new Error('publication offline');
+    }),
     {
       copyObject: async () => {
-        copies++;
-        if (offline) throw new Error('copy offline');
+        assert.fail('handoff must not copy immutable bytes');
       },
       headObject: async () => ({ ContentLength: 1 }),
     },

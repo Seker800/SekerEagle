@@ -1,3 +1,5 @@
+import { OPERATION_SEND_CONCURRENCY } from '../../apps/api/dist/eagle/eagle-operation-settings.js';
+import { seedLegacyTransfer } from './legacy-transfer-fixture.mjs';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import console from 'node:console';
@@ -62,13 +64,24 @@ async function fixture(mode = 'PHOTO', copy) {
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
-  const createService = (db = prisma) =>
-    new EagleAssetOperationService(
+  const createService = (db = prisma) => {
+    const transfers = new EagleLibraryTransferService(prisma, storage, mode);
+    if (copy) {
+      // Copy fault tests resume historical durable plans; new commands use handoff.
+      const send = transfers.send.bind(transfers);
+      transfers.send = async (owner, input, ...args) => {
+        if (!(await prisma.eagleLibraryTransfer.findUnique({ where: { id: input.operationId } })))
+          await seedLegacyTransfer(prisma, owner, mode, input, args[2]?.componentIds);
+        return send(owner, input, ...args);
+      };
+    }
+    return new EagleAssetOperationService(
       db,
-      new EagleLibraryTransferService(prisma, storage, mode),
+      transfers,
       new EagleService(prisma, undefined, mode),
       mode,
     );
+  };
   const add = async (changes = {}) => {
     const id = randomUUID();
     return prisma.eagleAsset.create({
@@ -158,7 +171,7 @@ for (const mode of ['PHOTO', 'MATERIAL']) {
     );
   });
 }
-test('scope, privacy and command identity fail closed and no partial selection is queued', async () => {
+test('scope, privacy and command identity fail closed and sends never queue partial selections', async () => {
   const f = await fixture(),
     other = await fixture(),
     row = await f.add(),
@@ -166,7 +179,7 @@ test('scope, privacy and command identity fail closed and no partial selection i
     material = await f.add({ libraryMode: 'MATERIAL' }),
     hidden = await f.add({ isPrivate: true });
   for (const resource of [foreign, material, hidden])
-    await assert.rejects(f.enqueue('TRASH', [row, resource]), /不存在/);
+    await assert.rejects(f.enqueue('SEND', [row, resource]), /不存在/);
   assert.equal(await prisma.eagleAssetOperation.count({ where: { ownerId: f.ownerId } }), 0);
   const receipt = await f.enqueue('SEND', [row]);
   await assert.rejects(other.service.retry(other.principal, receipt.id), /不存在/);
@@ -227,25 +240,35 @@ test('a live lease excludes other executors and stopping cancels only the waitin
     entered.resolve();
     await finish.promise;
   });
-  const receipt = await f.enqueue('SEND', [await f.add(), await f.add()]);
-  const processing = f.service.tick();
+  const rows = [];
+  for (let i = 0; i < OPERATION_SEND_CONCURRENCY + 1; i++) rows.push(await f.add());
+  const receipt = await f.enqueue('SEND', rows),
+    processing = f.service.tick();
   await entered.promise;
-  await f.createService().tick();
-  assert.equal(f.copies(), 1);
-  const stopped = await f.service.cancel(f.principal, receipt.id);
-  assert.equal(stopped.running, 1);
-  assert.equal(stopped.cancelled, 1);
-  finish.resolve();
-  await processing;
+  try {
+    for (let i = 0; f.copies() < OPERATION_SEND_CONCURRENCY; i++) {
+      assert.ok(i < 200, 'claimed sends must reach the copy boundary');
+      await delay(5);
+    }
+    await f.createService().tick();
+    assert.equal(f.copies(), OPERATION_SEND_CONCURRENCY);
+    const stopped = await f.service.cancel(f.principal, receipt.id);
+    assert.equal(stopped.running, OPERATION_SEND_CONCURRENCY);
+    assert.equal(stopped.cancelled, 1);
+  } finally {
+    finish.resolve();
+    await processing;
+  }
   const result = await f.state(receipt.id);
-  assert.equal(result.completed, 1);
+  assert.equal(result.completed, OPERATION_SEND_CONCURRENCY);
   assert.equal(result.cancelled, 1);
   assert.equal(result.state, 'STOPPED');
   assert.equal(
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
-    1,
+    OPERATION_SEND_CONCURRENCY,
   );
 });
+
 test('a crash after transfer publication replays the result without making another resource', async () => {
   const f = await fixture(),
     receipt = await f.enqueue('SEND', [await f.add()]);

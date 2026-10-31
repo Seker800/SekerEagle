@@ -211,7 +211,18 @@ try {
       resolve();
     });
   });
-  const origin = `http://${process.env.PHOTO_WORKBENCH_TASK_CENTER === '1' ? '[::1]' : process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES ? '127.0.0.1' : 'localhost'}:${gateway.address().port}`;
+  const workbenchHost =
+    process.env.PHOTO_WORKBENCH_HOST ??
+    (process.env.PHOTO_WORKBENCH_TASK_CENTER === '1'
+      ? '[::1]'
+      : process.env.PHOTO_WORKBENCH_STATISTICS_SAMPLES
+        ? '127.0.0.1'
+        : 'localhost');
+  assert.ok(
+    ['localhost', '127.0.0.1', '[::1]'].includes(workbenchHost),
+    'workbench is loopback only',
+  );
+  const origin = `http://${workbenchHost}:${gateway.address().port}`;
   const canonicalOrigin = `http://localhost:${gateway.address().port}`;
   const env = {
     ...process.env,
@@ -315,6 +326,8 @@ try {
   });
   await s3.send(new CreateBucketCommand({ Bucket: env.S3_BUCKET }));
 
+  if (process.env.PHOTO_WORKBENCH_DUPLICATES === '1')
+    child('apps/api/dist/asset-operation-executor.js', env, 'duplicate-executor');
   child('apps/api/dist/main.js', env, 'api');
   await waitFor(
     async () =>
@@ -1432,6 +1445,22 @@ try {
           assetIds: [a.assetId, b.assetId],
         }),
       ),
+    );
+  }
+  if (process.env.PHOTO_WORKBENCH_DUPLICATES === '1') {
+    const { verifyDuplicatesHttp } = await import('./duplicates-http.mjs');
+    console.log(
+      JSON.stringify({
+        duplicatesHttp: await verifyDuplicatesHttp({
+          db,
+          origin,
+          accessToken,
+          ownerId: owner.id,
+          assetId: a.assetId,
+          s3,
+          bucket: storageBucket,
+        }),
+      }),
     );
   }
   if (basic) {

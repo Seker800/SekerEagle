@@ -47,7 +47,12 @@ const SEND_CONCURRENCY = OPERATION_SEND_CONCURRENCY;
 // Leave a bounded write budget after that wait, inside the 120-second lease.
 const METADATA_TRANSACTION_TIMEOUT_MS = 45_000;
 type OperationLane = 'SEND' | 'METADATA' | 'SCAN';
-const laneKind = (lane: OperationLane) => lane === 'SEND' ? 'SEND' : lane === 'SCAN' ? 'DUPLICATE_SCAN' : {notIn: ['SEND', 'DUPLICATE_SCAN']};
+const laneKind = (lane: OperationLane) =>
+  lane === 'SEND'
+    ? 'SEND'
+    : lane === 'SCAN'
+      ? 'DUPLICATE_SCAN'
+      : { notIn: ['SEND', 'DUPLICATE_SCAN'] };
 type ClaimedItem = EagleAssetOperationItem & { operation: EagleAssetOperation };
 class OperationAccessError extends Error {
   constructor(readonly code: string) {
@@ -178,7 +183,8 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     return operation;
   }
   async enqueue(principal: AuthPrincipal, input: EnqueueAssetOperationDto) {
-    if (input.kind === 'DUPLICATE_SCAN' || input.kind === 'DUPLICATE_CLEANUP') throw new BadRequestException('请从查重入口提交操作。');
+    if (input.kind === 'DUPLICATE_SCAN' || input.kind === 'DUPLICATE_CLEANUP')
+      throw new BadRequestException('请从查重入口提交操作。');
     const ids = [...new Set(input.assetIds)].sort();
     if (
       ids.length !== input.assetIds.length ||
@@ -426,6 +432,17 @@ export class EagleAssetOperationService implements OnModuleDestroy {
         },
         data: { status: 'PENDING', errorCode: null, leaseUntil: null },
       });
+      if (operation.kind === 'DUPLICATE_SCAN')
+        await tx.eagleAssetOperationItem.updateMany({
+          where: {
+            operationId: operation.id,
+            ownerId: principal.sub,
+            libraryMode: this.libraryMode,
+            status: 'COMPLETED',
+            snapshots: { path: ['kind'], equals: 'build' },
+          },
+          data: { status: 'PENDING', errorCode: null, leaseUntil: null },
+        });
       return this.summary(await this.owned(tx, id, principal.sub, principal.canViewPrivate));
     });
     this.wake();
@@ -488,19 +505,20 @@ export class EagleAssetOperationService implements OnModuleDestroy {
       if (!first) return [];
       // Only one command is batched: owner, authorization, kind and frozen selection
       // stay together. Persisted per-resource receipts and retry identities are unchanged.
-      const candidates =
-        ['EMPTY_TRASH', 'DUPLICATE_SCAN', 'DUPLICATE_CLEANUP'].includes(first.operation.kind)
-          ? [first]
-          : await tx.eagleAssetOperationItem.findMany({
-              where: {
-                libraryMode: this.libraryMode,
-                ...available,
-                operationId: first.operationId,
-                ownerId: first.ownerId,
-              },
-              orderBy: { ordinal: 'asc' },
-              take: lane === 'SEND' ? SEND_CONCURRENCY : METADATA_BATCH_SIZE,
-            });
+      const candidates = ['EMPTY_TRASH', 'DUPLICATE_SCAN', 'DUPLICATE_CLEANUP'].includes(
+        first.operation.kind,
+      )
+        ? [first]
+        : await tx.eagleAssetOperationItem.findMany({
+            where: {
+              libraryMode: this.libraryMode,
+              ...available,
+              operationId: first.operationId,
+              ownerId: first.ownerId,
+            },
+            orderBy: { ordinal: 'asc' },
+            take: lane === 'SEND' ? SEND_CONCURRENCY : METADATA_BATCH_SIZE,
+          });
       if (!candidates.length) return [];
       const claimed = await tx.eagleAssetOperationItem.updateMany({
         where: {
@@ -594,7 +612,11 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     };
   }
   async tick() {
-    const results = await Promise.allSettled([this.tickLane('SEND'), this.tickLane('METADATA'), this.tickLane('SCAN')]);
+    const results = await Promise.allSettled([
+      this.tickLane('SEND'),
+      this.tickLane('METADATA'),
+      this.tickLane('SCAN'),
+    ]);
     const failed = results.find((result) => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
   }
@@ -650,7 +672,10 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     try {
       if (operation.kind === 'DUPLICATE_SCAN' || operation.kind === 'DUPLICATE_CLEANUP') {
         if (!this.duplicates) throw new Error('Duplicate executor is unavailable');
-        for (const entry of items) await this.duplicates.execute(entry, tx => this.assertActor(tx, operation, [entry]));
+        if (operation.kind === 'DUPLICATE_SCAN')
+          await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
+        for (const entry of items)
+          await this.duplicates.execute(entry, (tx) => this.assertActor(tx, operation, [entry]));
         return;
       }
       // Publication is authoritative even if a crash delayed the queue receipt.

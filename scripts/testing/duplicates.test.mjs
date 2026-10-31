@@ -133,13 +133,24 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     let page = await f.duplicate.list(f.ownerId, false, {});
     assert.equal(page.exactGroups, 1);
     assert.equal(page.groups[0].recommendedId, b.id);
-    const signature = page.groups[0].signature;
+    let signature = page.groups[0].signature;
     await f.duplicate.ignore(f.ownerId, false, { signature, ignored: true });
     assert.equal((await f.duplicate.list(f.ownerId, false, {})).totalGroups, 0);
     assert.equal(
       (await f.duplicate.list(f.ownerId, false, { showIgnored: 'true' })).totalGroups,
       1,
     );
+    await db.eagleAsset.update({
+      where: { id: a.id },
+      data: { displayName: 'renamed ignored duplicate', rowVersion: { increment: 1 } },
+    });
+    const ignoredAfterRename = await f.duplicate.list(f.ownerId, false, { showIgnored: 'true' });
+    assert.equal(
+      ignoredAfterRename.totalGroups,
+      1,
+      'metadata edits retain the content-bound ignore decision',
+    );
+    signature = ignoredAfterRename.groups[0].signature;
     await f.duplicate.ignore(f.ownerId, false, { signature, ignored: false });
     page = await f.duplicate.list(f.ownerId, false, {});
     const input = { operationId: randomUUID(), revision: page.exactRevision, allExact: true };
@@ -242,9 +253,17 @@ for (const mode of ['MATERIAL', 'PHOTO']) {
     const next = await f.duplicate.scan(f.principal, randomUUID());
     await f.drain(next.operationId);
     assert.equal(f.reads(), 2, 'repeat checks reuse versioned fingerprints');
-    await db.eagleAsset.update({where:{id:a.id},data:{displayName:'renamed after review',rowVersion:{increment:1}}});
-    const renamed=await f.duplicate.list(f.ownerId,false,{});assert.equal(renamed.similarGroups,1,'metadata edits must not discard pixel evidence');
-    assert.notEqual(renamed.groups[0].signature,page.groups[0].signature,'review still freezes current metadata versions');
+    await db.eagleAsset.update({
+      where: { id: a.id },
+      data: { displayName: 'renamed after review', rowVersion: { increment: 1 } },
+    });
+    const renamed = await f.duplicate.list(f.ownerId, false, {});
+    assert.equal(renamed.similarGroups, 1, 'metadata edits must not discard pixel evidence');
+    assert.notEqual(
+      renamed.groups[0].signature,
+      page.groups[0].signature,
+      'review still freezes current metadata versions',
+    );
     await db.eagleAsset.update({
       where: { id: a.id },
       data: { mediaRevision: { increment: 1 }, rowVersion: { increment: 1 } },

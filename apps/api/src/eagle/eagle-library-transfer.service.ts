@@ -405,6 +405,29 @@ export class EagleLibraryTransferService {
                   : 'PROCESSING',
             },
           });
+          const facts = await copyTransferFacts(tx, ownerId, targetMode, item.targetId, source);
+          if (handoff) {
+            // Derived rows have unique storage identities. Recreate their independent
+            // target records atomically after removing the retired source references.
+            if (copiedRenditions.length)
+              await tx.eagleAssetRendition.deleteMany({
+                where: {
+                  ownerId,
+                  libraryMode: this.sourceMode,
+                  assetId: source.id,
+                  id: { in: copiedRenditions.map((r) => r.id) },
+                },
+              });
+            if (item.pyramid)
+              await tx.eagleImagePyramid.deleteMany({
+                where: {
+                  ownerId,
+                  libraryMode: this.sourceMode,
+                  assetId: source.id,
+                  id: item.pyramid.id,
+                },
+              });
+          }
           if (copiedRenditions.length)
             await tx.eagleAssetRendition.createMany({
               data: copiedRenditions.map((r) => ({
@@ -445,7 +468,6 @@ export class EagleLibraryTransferService {
               },
             });
           }
-          const facts = await copyTransferFacts(tx, ownerId, targetMode, item.targetId, source);
           if (browsingReady && targetMode === 'PHOTO' && facts.photoMetadataReady)
             await tx.eagleAsset.update({
               where: { id: item.targetId, ownerId, libraryMode: targetMode },

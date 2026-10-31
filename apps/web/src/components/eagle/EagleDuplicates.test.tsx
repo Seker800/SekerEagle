@@ -201,13 +201,32 @@ describe('duplicate cleanup review', () => {
       ),
     );
   });
- it('permission revision changes hide old cached names immediately',async()=>{
-  const client=new QueryClient({defaultOptions:{queries:{retry:false},mutations:{retry:false}}});
-  mocks.list.mockResolvedValue({revision:'b'.repeat(64),exactRevision:'c'.repeat(64),exactItems:1,coverage:{total:2,indexed:2,waiting:0},totalGroups:1,exactGroups:1,similarGroups:0,ignoredGroups:0,removableBytes:1000,nextCursor:null,groups:[{...group,previews:[{id:'old',displayName:'old-public-name'}]}]});
-  const show=(scopeRevision:string)=><QueryClientProvider client={client}><EagleDuplicates includePrivate={false} scopeRevision={scopeRevision} onClose={()=>{}}/></QueryClientProvider>;
-  const view=renderInWorkspace(show('before'));await screen.findByText('old-public-name');
-  mocks.list.mockImplementation(()=>new Promise(()=>{}));view.rerender(show('after'));
-  expect(screen.queryByText('old-public-name')).not.toBeInTheDocument();
- });
-
+  it('permission revision changes hide old cached names immediately', async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    mocks.list.mockResolvedValue({
+      revision: 'b'.repeat(64),
+      exactRevision: 'c'.repeat(64),
+      exactItems: 1,
+      coverage: { total: 2, indexed: 2, waiting: 0 },
+      totalGroups: 1,
+      exactGroups: 1,
+      similarGroups: 0,
+      ignoredGroups: 0,
+      removableBytes: 1000,
+      nextCursor: null,
+      groups: [{ ...group, previews: [{ id: 'old', displayName: 'old-public-name' }] }],
+    });
+    const show = (scopeRevision: string) => (
+      <QueryClientProvider client={client}>
+        <EagleDuplicates includePrivate={false} scopeRevision={scopeRevision} onClose={() => {}} />
+      </QueryClientProvider>
+    );
+    const view = renderInWorkspace(show('before'));
+    await screen.findByText('old-public-name');
+    mocks.list.mockImplementation(() => new Promise(() => {}));
+    view.rerender(show('after'));
+    expect(screen.queryByText('old-public-name')).not.toBeInTheDocument();
+  });
 });

@@ -146,7 +146,7 @@ it('refreshes both libraries only after publication and never invalidates the po
   }
 });
 
-it('trash progress refreshes only its own lists and counts, with a final refresh for published results', async () => {
+it('trash publication marks only its own workspace stale without refetching or repeating invalidation', async () => {
   mocks.list.mockImplementation(async (mode) => (mode === 'PHOTO' ? [job({ kind: 'TRASH' })] : []));
   const client = show('ALL', false, true);
   await waitFor(() =>
@@ -169,14 +169,16 @@ it('trash progress refreshes only its own lists and counts, with a final refresh
   ).toBe(true);
   for (const key of [
     ['eagle', 'owner', 'MATERIAL', 'assets', 'ALL', {}],
-    ['eagle', 'owner', 'PHOTO', 'manual-tags'],
-    ['eagle', 'owner', 'PHOTO', 'statistics'],
     ['eagle', 'owner', 'PHOTO', 'operations'],
   ])
     expect(predicate({ queryKey: key } as never)).toBe(false);
+  expect(invalidate.mock.calls[0]![0]!.refetchType).toBe('none');
+  for (const name of ['manual-tags', 'statistics'])
+    expect(predicate({ queryKey: ['eagle', 'owner', 'PHOTO', name] } as never)).toBe(true);
   client.setQueryData(
     ['eagle', 'owner', 'PHOTO', 'operations', false],
     [job({ kind: 'TRASH', completed: 3, queued: 0, running: 0, failed: 7, state: 'STOPPED' })],
   );
-  await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(invalidate).toHaveBeenCalledTimes(1);
 });
