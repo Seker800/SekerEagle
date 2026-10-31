@@ -11,7 +11,17 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-export class DuplicateListDto {
+export class DuplicateFilterDto {
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) sameName?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) sameCapturedAt?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) sameDimensions?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) sameFormat?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) sameBytes?: string;
+  @ApiProperty({ required: false, enum: ['true', 'false'] }) @IsOptional() @IsIn(['true', 'false']) protectEdits?: string;
+  @ApiProperty({ required: false, description: 'Every original must be smaller than this positive integer number of bytes.' })
+  @IsOptional() @Matches(/^[1-9]\d*$/) maxBytes?: string;
+}
+export class DuplicateListDto extends DuplicateFilterDto {
   @ApiProperty({ required: false }) @IsOptional() @Matches(/^\d+$/) cursor?: string;
   @ApiProperty({ required: false }) @IsOptional() @Matches(/^[a-f0-9]{64}$/) revision?: string;
   @ApiProperty({ required: false, enum: ['ALL', 'EXACT', 'SIMILAR'] })
@@ -49,6 +59,8 @@ export class DuplicateSelectionDto {
   private readonly groupSelection?: never;
 }
 export class DuplicateActionDto {
+  @ApiProperty({ required: false, type: DuplicateListDto }) @IsOptional() @ValidateNested() @Type(() => DuplicateListDto) filters?: DuplicateListDto;
+  @ApiProperty({ required: false, type: [DuplicateSelectionDto] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => DuplicateSelectionDto) keepOverrides?: DuplicateSelectionDto[];
   @ApiProperty() @IsUUID('4') operationId!: string;
   @ApiProperty({ required: false }) @IsOptional() @Matches(/^[a-f0-9]{64}$/) revision?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsBoolean() allExact?: boolean;
@@ -89,6 +101,13 @@ export class DuplicateScanDto {
   @ApiProperty({ required: false }) @IsOptional() @IsBoolean() onlyIfUnattempted?: boolean;
 }
 export class DuplicateIgnoreDto {
-  @ApiProperty() @Matches(/^[a-f0-9]{64}$/) signature!: string;
+  @ApiProperty({ required: false }) @IsOptional() @Matches(/^[a-f0-9]{64}$/) signature?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsBoolean() allFiltered?: boolean;
+  @ApiProperty({ required: false }) @IsOptional() @Matches(/^[a-f0-9]{64}$/) revision?: string;
+  @ApiProperty({ required: false, type: DuplicateListDto }) @IsOptional() @ValidateNested() @Type(() => DuplicateListDto) filters?: DuplicateListDto;
+  @ValidateBy({ name: 'ignoreScope', validator: { validate: (_v, args) => {
+    const obj = args!.object as DuplicateIgnoreDto;
+    return (Number(!!obj.signature) + Number(obj.allFiltered === true)) === 1 && (!obj.allFiltered || !!obj.revision);
+  } } }) private readonly ignoreScope?: never;
   @ApiProperty() @IsBoolean() ignored!: boolean;
 }
