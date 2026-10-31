@@ -7,7 +7,6 @@ import { processImageWork } from './image-work';
 import {
   mediaWaitData,
   mediaFailure,
-  mediaCompletion,
   mediaExecutionGuard,
   MediaLeaseRecoveryExhaustedError,
 } from '@sekereagle/library-core';

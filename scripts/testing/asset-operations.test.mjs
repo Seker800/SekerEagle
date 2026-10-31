@@ -1318,6 +1318,6 @@ test('large admission does not hold the owner privacy mutex or block unrelated w
     release.resolve();
     await holder;
     await admission;
-    if (failure) throw failure;
   }
+  if (failure) throw failure;
 });
