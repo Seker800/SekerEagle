@@ -67,13 +67,15 @@ async function remoteValidationCode(
   response: Response,
 ): Promise<PermanentMediaValidationCode | undefined> {
   const maximum = Number(process.env.REMOTE_MEDIA_ERROR_MAX_BYTES ?? '4096');
-  if (!Number.isSafeInteger(maximum) || maximum < 1)
+  if (!Number.isSafeInteger(maximum) || maximum < 1) {
+    await response.body?.cancel();
     throw new Error('INVALID_REMOTE_MEDIA_ERROR_MAX_BYTES');
+  }
   try {
     if (!response.body) return undefined;
-    const value = JSON.parse(
-      (await body(response.body, maximum)).toString(),
-    ) as { error?: unknown };
+    const value = JSON.parse((await body(response.body, maximum)).toString()) as {
+      error?: unknown;
+    };
     return validationCodes.find((code) => code === value.error);
   } catch {
     return undefined;

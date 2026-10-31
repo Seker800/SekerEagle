@@ -22,18 +22,35 @@ test('remote rejection keeps its HTTP cause instead of blaming a healthy source 
   });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
-  t.after(() => { server.closeAllConnections(); server.close(); });
+  t.after(() => {
+    server.closeAllConnections();
+    server.close();
+  });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('address');
   const client = new RemoteMediaClient(`http://127.0.0.1:${address.port}`, 'synthetic-token');
-  const request = () => client.image(Readable.from([Buffer.from('test')]), {
-    assetMimeType: 'image/jpeg', sourceMimeType: 'image/jpeg', kind: 'GENERATE_RENDITIONS', mode: 'PHOTO', detailsOnly: false, verifiesOriginalHash: true,
-  });
+  const request = () =>
+    client.image(Readable.from([Buffer.from('test')]), {
+      assetMimeType: 'image/jpeg',
+      sourceMimeType: 'image/jpeg',
+      kind: 'GENERATE_RENDITIONS',
+      mode: 'PHOTO',
+      detailsOnly: false,
+      verifiesOriginalHash: true,
+    });
   await assert.rejects(request(), /REMOTE_MEDIA_HTTP_401/);
-  status=500;
+  status = 500;
   await assert.rejects(request(), /REMOTE_MEDIA_HTTP_500/);
-  status=422;
+  status = 422;
   await assert.rejects(request(), /IMAGE_PIXEL_LIMIT_EXCEEDED/);
+  const previous = process.env.REMOTE_MEDIA_ERROR_MAX_BYTES;
+  process.env.REMOTE_MEDIA_ERROR_MAX_BYTES = '0';
+  try {
+    await assert.rejects(request(), /INVALID_REMOTE_MEDIA_ERROR_MAX_BYTES/);
+  } finally {
+    if (previous === undefined) delete process.env.REMOTE_MEDIA_ERROR_MAX_BYTES;
+    else process.env.REMOTE_MEDIA_ERROR_MAX_BYTES = previous;
+  }
 });
 test('real HTTP pyramid work streams all validated tiles and rejects command-bearing recipes', async (t) => {
   const server = createRemoteMediaServer('test-media-token', 1, false, undefined, [

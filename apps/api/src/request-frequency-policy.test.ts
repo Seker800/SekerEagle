@@ -36,5 +36,8 @@ test('removed rate-limit configuration cannot remain part of deployment defaults
     dependencies: Record<string, string>;
   };
   assert.equal(manifest.dependencies['@nestjs/throttler'], undefined);
-  assert.doesNotMatch(readFileSync(join(root, 'deploy/gateway/nginx.conf'), 'utf8'), /\blimit_req(?:_zone)?\b/);
+  assert.doesNotMatch(
+    readFileSync(join(root, 'deploy/gateway/nginx.conf'), 'utf8'),
+    /\blimit_req(?:_zone)?\b/,
+  );
 });

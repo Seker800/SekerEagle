@@ -260,10 +260,19 @@ try {
     stdio: 'inherit',
   });
   // Queue claim tests run after other fixtures to avoid competing for their leases.
-  run(process.execPath, ['--test', 'scripts/testing/task-center.test.mjs'], {
-    env,
-    stdio: 'inherit',
-  });
+  run(
+    process.execPath,
+    [
+      '--experimental-test-coverage',
+      '--test-coverage-include=packages/library-persistence/dist/task-policy-snapshot.js',
+      '--test-coverage-lines=80',
+      '--test-coverage-branches=80',
+      '--test-coverage-functions=80',
+      '--test',
+      'scripts/testing/task-center.test.mjs',
+    ],
+    { env, stdio: 'inherit' },
+  );
   run(process.execPath, ['--test', 'scripts/testing/media-scheduler-performance.test.mjs'], {
     env,
     stdio: 'inherit',

@@ -157,13 +157,30 @@ test('legacy trash backfill is transactional and keeps successful history and ph
 });
 
 test('bulk trash retires media jobs once per statement instead of once per selected photo', async () => {
-  const f=await fixture();
-  const ids=[];
-  for(let n=0;n<40;n++) { const a=await f.asset(); ids.push(a.id); await f.job(a); }
-  const result=await prisma.$queryRaw(Prisma.sql`EXPLAIN (ANALYZE,FORMAT JSON) UPDATE "EagleAsset" SET "deletedAt"=now() WHERE "ownerId"=${f.owner} AND "libraryMode"='PHOTO' AND id=ANY(${ids}::text[])`);
-  const trigger=result[0]['QUERY PLAN'][0].Triggers.find(row=>row['Trigger Name']==='eagle_trash_media_jobs');
-  assert.equal(trigger.Calls,1,'the queue transition must be amortized across the deletion batch');
-  assert.equal(await prisma.eagleAssetProcessingJob.count({where:{ownerId:f.owner,status:'COMPLETED',lastError:'ASSET_TRASHED'}}),40);
+  const f = await fixture();
+  const ids = [];
+  for (let n = 0; n < 40; n++) {
+    const a = await f.asset();
+    ids.push(a.id);
+    await f.job(a);
+  }
+  const result = await prisma.$queryRaw(
+    Prisma.sql`EXPLAIN (ANALYZE,FORMAT JSON) UPDATE "EagleAsset" SET "deletedAt"=now() WHERE "ownerId"=${f.owner} AND "libraryMode"='PHOTO' AND id=ANY(${ids}::text[])`,
+  );
+  const trigger = result[0]['QUERY PLAN'][0].Triggers.find(
+    (row) => row['Trigger Name'] === 'eagle_trash_media_jobs',
+  );
+  assert.equal(
+    trigger.Calls,
+    1,
+    'the queue transition must be amortized across the deletion batch',
+  );
+  assert.equal(
+    await prisma.eagleAssetProcessingJob.count({
+      where: { ownerId: f.owner, status: 'COMPLETED', lastError: 'ASSET_TRASHED' },
+    }),
+    40,
+  );
 });
 
 test('accepted and rejected approvals both appear in scoped completion history', async () => {
