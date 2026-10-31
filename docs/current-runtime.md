@@ -1,5 +1,9 @@
 # 现用运行状态与交接
 
+> **2026-11-01 编辑照片保存修复已上线（覆盖下方web／网关快照）**：web为`sekereagle/web:photo-save-c7643383a7d9`，固定源码c7643383a7d9dc52758c2767070a012ac99de22e。生产API使用公开地址签名、网关却转发为loopback Host，实际上传403 SignatureDoesNotMatch；现已与实际S3_PUBLIC_ENDPOINT的host对齐，保留签名与权限校验，仅nginx校验／reload。共享编辑器显示上传阶段具体错误，保留同一文件及会话重试。真实Chrome照片保存2804毫秒，真实Electron素材保存1389毫秒，无页面异常；存储读回验证独立PNG、像素变化及原件哈希／版本保持。
+>
+> API仍87b73b650960、独立operations仍9de9bb766fb0，无API镜像／迁移／计算策略变更；原完整Compose链仅追加`maintenance/photo-save-20261101/web-final/images.json`。完整检查、11项部署配置和43项编辑器回归通过；模拟一次PUT失败后明确显示403原因，重试成功且仅一个上传会话／一次原图读取。合成主体、成片、对象和未完成multipart均清理，66张所属表及用户行零；三个应用healthy零重启，74项迁移和原Mac心跳／用户策略保持。回退网页时仍须保留与当前API签名地址一致的网关Host；备份、验收及限制见[编辑保存修复](photo-editor-save-2026-11-01.md)。
+
 > **2026-11-01 严格重复副本与批量清理最终核验已上线（覆盖下方应用快照）**：API／web为`sekereagle/{api,web}:duplicate-originals-87b73b650960`，固定源码87b73b6509601fbe9a0153afc62c9676aca73081；独立operations为`sekereagle/api:duplicate-originals-9de9bb766fb0`，固定源码9de9bb766fb0e7ce1468936818a5c6924142f440，均已推送main。旧近似分组停用，备份副本增加原图SHA核验和完整定向像素摘要证据；连拍不能只凭缩略图相近入选，支持跨页多选及全部每组保留一份；取消后不因重开或旧页面自动请求重启，显式检查可重试。像素核验仅支持单帧八位JPEG／PNG，其余格式仍用整文件哈希；动画、动态、编辑副本及实况保持保守。真实照片没有执行清理。
 >
 > 三个应用healthy、零重启，74项迁移；独立执行器为768MiB且全模式一个原图解码名额，原件每四项一批，仍在独立进程运行。原执行器正常排空退出0；Mac原业务worker仍d0ad3b6d941b／PID81038与新鲜心跳，NAS媒体worker停止。其余容器身份、用户暂停／时段、模型及APK保持；网关只扩展查重批量正文／deadline路径并原地reload。完整Compose链追加`maintenance/duplicate-originals-20261101/images.json`、`web-final/images.json`、`cancel-final/images.json`和`ops-final/images.json`；新备份867490422字节经SHA与完整解析。
