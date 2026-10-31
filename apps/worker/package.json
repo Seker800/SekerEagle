@@ -27,7 +27,7 @@
     "sharp": "^0.35.5"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^26.6.5",
     "@types/pg": "^8.23.1",
     "esbuild": "0.25.12",
     "ts-node": "^10.9.2",
