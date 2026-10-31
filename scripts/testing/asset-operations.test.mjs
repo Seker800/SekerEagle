@@ -101,7 +101,6 @@ async function fixture(mode = 'PHOTO', copy) {
       new EagleService(prisma, undefined, mode),
       mode,
     );
-  };
   const add = async (changes = {}) => {
     const id = randomUUID();
     return prisma.eagleAsset.create({
