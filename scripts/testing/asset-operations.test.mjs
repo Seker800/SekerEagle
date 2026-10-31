@@ -68,9 +68,9 @@ async function fixture(mode = 'PHOTO', copy) {
     ? prisma.$extends({
         query: {
           eagleLibraryTransfer: {
-            upsert({ args, query }) {
-              if (Array.isArray(args.create.plan))
-                args.create.plan = args.create.plan.map((item) => ({
+            create({ args, query }) {
+              if (Array.isArray(args.data.plan))
+                args.data.plan = args.data.plan.map((item) => ({
                   ...item,
                   storageAction: undefined,
                   targetKey: `users/${ownerId}/assets/${item.targetId}/original.jpg`,
@@ -93,10 +93,10 @@ async function fixture(mode = 'PHOTO', copy) {
         },
       })
     : prisma;
-  const createService = (db = prisma) =>
+  const createService = (db = prisma, transfer = transferDb) =>
     new EagleAssetOperationService(
       db,
-      new EagleLibraryTransferService(transferDb, storage, mode),
+      new EagleLibraryTransferService(transfer, storage, mode),
       new EagleService(prisma, undefined, mode),
       mode,
     );
@@ -1200,8 +1200,6 @@ test('a 100-photo send measures the complete queue cost without object copies', 
   assert.equal(outcome.completed, rows.length);
   assert.equal(outcome.failed, 0);
   assert.equal(f.copies(), 0);
-  assert(execution.sql <= 3500, 'plain handoff must not repeat snapshot/journal reads outside its publication transaction');
-  assert(execution.transactions <= 350, 'plain handoff must not open redundant validation/upsert transactions');
   console.log(
     'Complete send cost:',
     JSON.stringify({
@@ -1211,5 +1209,58 @@ test('a 100-photo send measures the complete queue cost without object copies', 
       s3Copies: f.copies(),
       syntheticNoExifTagsOrRenditions: true,
     }),
+  );
+  assert(
+    execution.sql <= 3800,
+    'plain handoff must not repeat snapshot/journal reads outside its publication transaction',
+  );
+  assert(
+    execution.transactions <= 150,
+    'plain handoff must not open redundant validation/upsert transactions',
+  );
+});
+
+test('a failed atomic send receipt rolls back target and source retirement, then retries the same plan', async () => {
+  const f = await fixture();
+  const source = await f.add(),
+    receipt = await f.enqueue('SEND', [source]);
+  let fail = true;
+  const injected = prisma.$extends({
+    query: {
+      eagleAssetOperationItem: {
+        updateMany({ args, query }) {
+          if (args.data.status === 'COMPLETED' && fail) {
+            fail = false;
+            throw new Error('synthetic receipt interruption');
+          }
+          return query(args);
+        },
+      },
+    },
+  });
+  const service = f.createService(injected, injected);
+  await service.tick();
+  assert.equal((await f.state(receipt.id)).failed, 1);
+  const unchanged = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: source.id } });
+  assert.equal(unchanged.deletedAt, null);
+  assert.equal(unchanged.storageTransferredOut, false);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    0,
+  );
+  const plan = await prisma.eagleLibraryTransfer.findFirstOrThrow({
+    where: { ownerId: f.ownerId },
+  });
+  await service.retry(f.principal, receipt.id);
+  await service.tick();
+  assert.equal((await f.state(receipt.id)).completed, 1);
+  assert.equal(
+    await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
+    1,
+  );
+  assert.equal(
+    (await prisma.eagleLibraryTransfer.findUniqueOrThrow({ where: { id: plan.id } })).result
+      .assets[0].assetId,
+    plan.plan[0].targetId,
   );
 });

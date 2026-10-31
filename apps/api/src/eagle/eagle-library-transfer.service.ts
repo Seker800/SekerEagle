@@ -100,6 +100,8 @@ export class EagleLibraryTransferService {
     expected?: ReadonlyMap<string, { mediaRevision: number; rowVersion: number }>,
     guard?: {
       beforePublish: (tx: Prisma.TransactionClient) => Promise<void>;
+      beforeCopy?: () => Promise<void>;
+      afterPublish?: (tx: Prisma.TransactionClient) => Promise<void>;
       componentIds: readonly string[];
     },
   ): Promise<LibraryTransferResult> {
@@ -154,15 +156,34 @@ export class EagleLibraryTransferService {
       const componentIds = [
         ...new Set([...ids, ...[...motions.values()].map((row) => row.assetId)]),
       ];
-      const components = await this.prisma.eagleAsset.findMany({
-        where: this.libraryModeWhere(ownerId, componentIds, includePrivate),
-        include: {
-          renditions: {
-            where: { status: 'READY', kind: { in: ['THUMBNAIL', 'PREVIEW', 'POSTER'] } },
+      // A plan is provisional: publish rechecks its version and every output under locks.
+      // Independent scoped reads avoid a redundant implicit relation-read transaction.
+      const [componentAssets, renditions, imagePyramids] = await Promise.all([
+        this.prisma.eagleAsset.findMany({
+          where: this.libraryModeWhere(ownerId, componentIds, includePrivate),
+        }),
+        this.prisma.eagleAssetRendition.findMany({
+          where: {
+            ownerId,
+            libraryMode: this.sourceMode,
+            assetId: { in: componentIds },
+            status: 'READY',
+            kind: { in: ['THUMBNAIL', 'PREVIEW', 'POSTER'] },
           },
-          imagePyramids: true,
-        },
-      });
+        }),
+        this.prisma.eagleImagePyramid.findMany({
+          where: {
+            ownerId,
+            libraryMode: this.sourceMode,
+            assetId: { in: componentIds },
+          },
+        }),
+      ]);
+      const components = componentAssets.map((row) => ({
+        ...row,
+        renditions: renditions.filter((r) => r.assetId === row.id),
+        imagePyramids: imagePyramids.filter((p) => p.assetId === row.id),
+      }));
       if (components.length !== componentIds.length)
         throw new NotFoundException('实况照片组件不存在。');
       checkExpected(components);
@@ -197,10 +218,8 @@ export class EagleLibraryTransferService {
         };
       });
       try {
-        operation = await this.prisma.eagleLibraryTransfer.upsert({
-          where: { id: input.operationId, ownerId, sourceMode: this.sourceMode },
-          update: {},
-          create: {
+        operation = await this.prisma.eagleLibraryTransfer.create({
+          data: {
             id: input.operationId,
             ownerId,
             sourceMode: this.sourceMode,
@@ -210,9 +229,13 @@ export class EagleLibraryTransferService {
           },
         });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')
-          throw new NotFoundException('发送操作不存在。');
-        throw error;
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002')
+          throw error;
+        // Only concurrent creation needs another read; never return another owner's journal.
+        operation = await this.prisma.eagleLibraryTransfer.findUnique({
+          where: { id: input.operationId, ownerId, sourceMode: this.sourceMode },
+        });
+        if (!operation) throw new NotFoundException('发送操作不存在。');
       }
 
       this.checkOperation(operation, ownerId, ids);
@@ -235,33 +258,32 @@ export class EagleLibraryTransferService {
         JSON.stringify([...guard.componentIds].sort())
     )
       throw new ConflictException('实况照片组件已变化。');
-    const currentSources = await this.prisma.eagleAsset.findMany({
-      where: this.libraryModeWhere(
-        ownerId,
-        items.map((item) => item.sourceId),
-        includePrivate,
-      ),
-    });
-    if (
-      currentSources.length !== items.length ||
-      items.some((item) => {
-        const source = currentSources.find((row) => row.id === item.sourceId);
-        return (
-          !source ||
-          source.mediaRevision !== item.revision ||
-          source.rowVersion !== item.rowVersion ||
-          source.originalObjectKey !== item.sourceKey
-        );
-      })
-    )
-      throw new ConflictException('图片已变化或不再可访问，请刷新后重新发送。');
-    checkExpected(currentSources);
+    if (!handoff) {
+      await guard?.beforeCopy?.();
+      const currentSources = await this.prisma.eagleAsset.findMany({
+        where: this.libraryModeWhere(
+          ownerId,
+          items.map((item) => item.sourceId),
+          includePrivate,
+        ),
+      });
+      if (
+        currentSources.length !== items.length ||
+        items.some((item) => {
+          const source = currentSources.find((row) => row.id === item.sourceId);
+          return (
+            !source ||
+            source.mediaRevision !== item.revision ||
+            source.rowVersion !== item.rowVersion ||
+            source.originalObjectKey !== item.sourceKey
+          );
+        })
+      )
+        throw new ConflictException('图片已变化或不再可访问，请刷新后重新发送。');
+      checkExpected(currentSources);
+    }
     // The durable plan owns these keys before copying; retrying never creates additional copies.
     for (const item of items) {
-      const active = await this.prisma.eagleLibraryTransfer.findUniqueOrThrow({
-        where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
-      });
-      this.checkOperation(active, ownerId, ids);
       const objects = [
         { sourceKey: item.sourceKey, targetKey: item.targetKey, size: item.size },
         ...(item.renditions ?? []),
@@ -282,6 +304,10 @@ export class EagleLibraryTransferService {
       // READY media is immutable. Ownership changes no bytes, so rereading or
       // recopying those bytes cannot make the handoff safer.
       if (!handoff) {
+        const active = await this.prisma.eagleLibraryTransfer.findUniqueOrThrow({
+          where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
+        });
+        this.checkOperation(active, ownerId, ids);
         await runTransferWork(objects, async (object) => {
           await this.storage.copyObject(object.sourceKey, object.targetKey);
           const copied = await this.storage.headObject(object.targetKey);
@@ -588,6 +614,7 @@ export class EagleLibraryTransferService {
           where: { id: operation.id, ownerId, sourceMode: this.sourceMode },
           data: { status: 'COMPLETED', result: result as unknown as Prisma.InputJsonValue },
         });
+        await guard?.afterPublish?.(tx);
         return result;
       },
       { timeout: 30000 },

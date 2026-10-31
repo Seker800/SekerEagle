@@ -646,36 +646,39 @@ export class EagleAssetOperationService implements OnModuleDestroy {
     const { operation } = item;
     const libraryModeIdentity = { libraryMode: this.libraryMode, ...this.leaseWhere(items) };
     try {
-      // Publication is authoritative even if a crash delayed the queue receipt.
-      // Recording an already committed result performs no resource write and
-      // must not misreport success as failure after a later credential change.
-      const previous =
-        operation.kind === 'SEND'
-          ? await this.prisma.eagleLibraryTransfer.findUnique({
-              where: { id: item.id, ownerId: operation.ownerId, sourceMode: this.libraryMode },
-            })
-          : null;
-      if (previous?.status === 'COMPLETED') {
-        await this.prisma.eagleAssetOperationItem.updateMany({
-          where: { ...libraryModeIdentity },
-          data: { status: 'COMPLETED', leaseUntil: null },
-        });
-        return;
-      }
-      if (operation.kind === 'SEND' || operation.kind === 'EMPTY_TRASH')
+      // The transfer journal alone owns idempotency; its completed result can be
+      // replayed after credential changes without attempting any new resource write.
+      if (operation.kind === 'EMPTY_TRASH')
         await this.prisma.$transaction((tx) => this.assertActor(tx, operation, items));
       const snapshots = items.flatMap((entry) => entry.snapshots as unknown as Snapshot[]);
       const assetIds = items.flatMap((entry) => entry.assetIds);
       const beforeWrite = (tx: Prisma.TransactionClient) => this.assertActor(tx, operation, items);
       if (operation.kind === 'SEND') {
-        await this.prisma.$transaction((tx) => this.checkSnapshots(tx, operation, snapshots));
+        let receiptPublished = false;
+        // Transfer checks this same frozen selection before planning and under publish locks.
         await this.transfers.send(
           operation.ownerId,
           { assetIds: assetIds, operationId: item.id },
           operation.isPrivate,
           new Map(snapshots.map((row) => [row.id, row])),
-          { beforePublish: beforeWrite, componentIds: snapshots.map((row) => row.id) },
+          {
+            beforePublish: beforeWrite,
+            beforeCopy: () =>
+              this.prisma.$transaction((tx) => this.assertActor(tx, operation, items)),
+            afterPublish: async (tx) => {
+              this.assertPrivateGrant(operation);
+              const updated = await tx.eagleAssetOperationItem.updateMany({
+                where: { ...libraryModeIdentity },
+                data: { status: 'COMPLETED', leaseUntil: null },
+              });
+              if (updated.count !== items.length) throw new OperationAccessError('LEASE_LOST');
+              receiptPublished = true;
+            },
+            componentIds: snapshots.map((row) => row.id),
+          },
         );
+        // Fresh publication includes its receipt. Only old committed replays need a receipt write.
+        if (receiptPublished) return;
       } else if (operation.kind === 'EMPTY_TRASH') {
         await this.eagle.emptyTrash(
           operation.ownerId,

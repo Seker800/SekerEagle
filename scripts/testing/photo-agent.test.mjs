@@ -19,11 +19,12 @@ after(() => prisma.$disconnect());
 const legacyTransferDb = prisma.$extends({
   query: {
     eagleLibraryTransfer: {
-      upsert({ args, query }) {
-        if (Array.isArray(args.create.plan))
-          args.create.plan = args.create.plan.map((item) => {
-            const { storageAction: _action, ...legacy } = item;
-            const root = `users/${args.create.ownerId}/assets/${item.targetId}`;
+      create({ args, query }) {
+        if (Array.isArray(args.data.plan))
+          args.data.plan = args.data.plan.map((item) => {
+            const legacy = { ...item };
+            delete legacy.storageAction;
+            const root = `users/${args.data.ownerId}/assets/${item.targetId}`;
             return {
               ...legacy,
               targetKey: `${root}/original.jpg`,

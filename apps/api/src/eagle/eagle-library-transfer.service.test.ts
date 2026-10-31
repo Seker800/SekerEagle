@@ -43,7 +43,7 @@ test('approval snapshot mismatch fails before a transfer plan or any object copy
   const db = {
     eagleLibraryTransfer: {
       findUnique: async () => null,
-      upsert: async () => {
+      create: async () => {
         writes++;
       },
     },
@@ -72,10 +72,12 @@ test('an edit between approval validation and plan creation cannot silently repl
   const db = {
     eagleLibraryTransfer: {
       findUnique: async () => null,
-      upsert: async () => {
+      create: async () => {
         writes++;
       },
     },
+    eagleAssetRendition: { findMany: async () => [] },
+    eagleImagePyramid: { findMany: async () => [] },
     eagleAsset: {
       findMany: async () => [
         {

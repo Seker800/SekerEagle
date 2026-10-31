@@ -26,12 +26,12 @@ after(() => prisma.$disconnect());
 const legacyTransferDb = prisma.$extends({
   query: {
     eagleLibraryTransfer: {
-      upsert({ args, query }) {
-        if (Array.isArray(args.create.plan))
-          args.create.plan = args.create.plan.map((item) => {
+      create({ args, query }) {
+        if (Array.isArray(args.data.plan))
+          args.data.plan = args.data.plan.map((item) => {
             const legacy = { ...item };
             delete legacy.storageAction;
-            const root = `users/${args.create.ownerId}/assets/${item.targetId}`;
+            const root = `users/${args.data.ownerId}/assets/${item.targetId}`;
             return {
               ...legacy,
               targetKey: `${root}/original.jpg`,
@@ -3033,6 +3033,11 @@ test('handoff keeps exactly one storage owner through source purge and final tar
   });
   assert.deepEqual(new Set(receipt.objectKeys), new Set([target.originalObjectKey, preview]));
   assert.deepEqual(receipt.prefixes, [`${prefix}/`]);
+  // Other concurrent integration fixtures also enqueue cleanup; make this receipt due first.
+  await prisma.eagleObjectDeletion.update({
+    where: { id: receipt.id },
+    data: { availableAt: new Date(0) },
+  });
   await drainObjectDeletion(prisma, {
     deleteObjects: async (keys) => {
       for (const key of keys) bytes.delete(key);
