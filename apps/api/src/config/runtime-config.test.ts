@@ -23,11 +23,6 @@ void test('accepts the local isolated runtime', () => {
   assert.equal(result.CANONICAL_ORIGIN, 'http://localhost:8180');
   assert.deepEqual(result.BROWSER_TRUSTED_ORIGINS, ['http://localhost:8180']);
   assert.equal(result.ALLOW_INSECURE_PUBLIC_HTTP_ORIGINS, false);
-  assert.equal(result.EAGLE_MEDIA_THROTTLE_V2_ENABLED, true);
-  assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, 256);
-  assert.equal(result.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE, 6_000);
-  assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND, 1_024);
-  assert.equal(result.EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE, 24_000);
   assert.equal(result.S3_CONNECTION_TIMEOUT_MS, 3_000);
   assert.equal(result.S3_REQUEST_TIMEOUT_MS, 12_000);
   assert.equal(result.S3_SOCKET_TIMEOUT_MS, 10_000);
@@ -45,27 +40,19 @@ void test('rejects unsafe object-storage timeout and connection-pool settings', 
   }
 });
 
-void test('validates bounded media throttle configuration and its rollback flag', () => {
+void test('legacy quota environment values stay opaque and do not affect real resource budgets', () => {
   const configured = validateEnvironment({
     ...safeEnv,
-    EAGLE_MEDIA_THROTTLE_V2_ENABLED: 'false',
-    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: '128',
-    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE: '5000',
-    EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND: '512',
-    EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: '20000',
+    EAGLE_MEDIA_THROTTLE_V2_ENABLED: 'true',
+    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: '1',
+    EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: '1',
   });
-  assert.equal(configured.EAGLE_MEDIA_THROTTLE_V2_ENABLED, false);
-  assert.equal(configured.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, 128);
-
-  for (const [key, value] of [
-    ['EAGLE_MEDIA_THROTTLE_V2_ENABLED', 'maybe'],
-    ['EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND', '31'],
-    ['EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE', '999'],
-    ['EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND', '10001'],
-    ['EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE', '1000001'],
-  ] as const) {
-    assert.throws(() => validateEnvironment({ ...safeEnv, [key]: value }), new RegExp(key));
-  }
+  assert.equal(configured.EAGLE_MEDIA_THROTTLE_V2_ENABLED, 'true');
+  assert.equal(configured.EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND, '1');
+  assert.equal(configured.S3_MAX_SOCKETS, 64);
+  assert.doesNotThrow(() =>
+    validateEnvironment({ ...safeEnv, EAGLE_MEDIA_THROTTLE_V2_ENABLED: 'obsolete' }),
+  );
 });
 
 void test('accepts exact trusted LAN origins while preserving the canonical origin', () => {

@@ -76,7 +76,6 @@ import { EagleService } from './eagle.service';
 import { EaglePrivacyService } from './eagle-privacy.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
-import { EagleDerivedMediaReadThrottle } from './eagle-media-throttle';
 
 @ApiTags('eagle')
 @ApiCookieAuth()
@@ -382,7 +381,6 @@ export class EagleController {
     schema: { type: 'string' },
   })
   @Get('assets/:assetId/renditions/:renditionId')
-  @EagleDerivedMediaReadThrottle()
   async getRendition(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -435,7 +433,6 @@ export class EagleController {
     schema: { type: 'string' },
   })
   @Get('assets/:assetId/renditions/:renditionId/content')
-  @EagleDerivedMediaReadThrottle()
   getRenditionContent(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,
@@ -456,7 +453,6 @@ export class EagleController {
   }
 
   @Get('assets/:assetId/pyramids/:pyramidId/tiles/:level/:x/:y')
-  @EagleDerivedMediaReadThrottle()
   async getPyramidTile(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Param('assetId', new ParseUUIDPipe({ version: '4' })) assetId: string,

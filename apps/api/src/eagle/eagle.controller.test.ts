@@ -3,7 +3,6 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 import test from 'node:test';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserPrincipalGuard } from '../auth/browser-principal.guard';
 import { BrowserOriginGuard } from '../auth/browser-origin.guard';
@@ -12,7 +11,6 @@ import {
   createMediaAbortSignal,
   EagleController,
 } from './eagle.controller';
-import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 
 function controllerMethod(name: keyof EagleController): object {
   const method = Object.getOwnPropertyDescriptor(EagleController.prototype, name)?.value as unknown;
@@ -20,30 +18,18 @@ function controllerMethod(name: keyof EagleController): object {
   return method as object;
 }
 
-test('authenticated media reads use a dedicated owner-aware guard without changing API limits', () => {
-  const mediaHandlers = [
-    controllerMethod('getRendition'),
-    controllerMethod('getRenditionContent'),
-    controllerMethod('getPyramidTile'),
-  ];
-
-  for (const handler of mediaHandlers) {
-    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}short`, handler), true);
-    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}default`, handler), true);
-    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, handler), [EagleMediaThrottleGuard]);
-  }
-
-  assert.equal(
-    Reflect.getMetadata(`${THROTTLER_SKIP}short`, controllerMethod('listAssets')),
-    undefined,
-  );
-  assert.equal(
-    Reflect.getMetadata(`${THROTTLER_SKIP}short`, controllerMethod('getOriginal')),
-    undefined,
-  );
+test('library, original and derived-media reads have no extra request-count guards', () => {
+  for (const name of [
+    'listAssets',
+    'getOriginal',
+    'getRendition',
+    'getRenditionContent',
+    'getPyramidTile',
+  ] as const)
+    assert.equal(Reflect.getMetadata(GUARDS_METADATA, controllerMethod(name)), undefined);
 });
 
-test('media throttle overrides do not weaken Eagle authentication guards', () => {
+test('library authentication remains required independently of request frequency', () => {
   const guards = Reflect.getMetadata(GUARDS_METADATA, EagleController) as unknown[];
   assert.deepEqual(guards, [AccessAuthGuard, BrowserPrincipalGuard]);
 });

@@ -16,7 +16,6 @@ import { EagleImportService } from './eagle-import.service';
 import { EagleMediaService } from './eagle-media.service';
 import { EagleMaintenanceService } from './eagle-maintenance.service';
 import { EagleMediaCapabilityService } from './eagle-media-capability.service';
-import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 import { EagleProcessingController } from './eagle-processing.controller';
 import { EagleProcessingService } from './eagle-processing.service';
 import { EagleTaskCenterController } from './eagle-task-center.controller';
@@ -48,7 +47,6 @@ export const EAGLE_LIBRARY_PROVIDERS: Provider[] = [
   EagleMediaService,
   EagleMaintenanceService,
   EagleMediaCapabilityService,
-  EagleMediaThrottleGuard,
   EagleUploadService,
   EagleUploadRecoveryService,
   EagleUploadInspectionService,

@@ -203,35 +203,6 @@ export function validateEnvironment(env: Record<string, unknown>): Record<string
     S3_ACCESS_KEY_ID: required(env, 'S3_ACCESS_KEY_ID'),
     S3_SECRET_ACCESS_KEY: required(env, 'S3_SECRET_ACCESS_KEY'),
     ...objectStorageRuntimeOptions(env),
-    EAGLE_MEDIA_THROTTLE_V2_ENABLED: optionalBoolean(env, 'EAGLE_MEDIA_THROTTLE_V2_ENABLED', true),
-    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND: boundedInteger(
-      env,
-      'EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_SECOND',
-      256,
-      32,
-      2_000,
-    ),
-    EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE: boundedInteger(
-      env,
-      'EAGLE_MEDIA_OWNER_RATE_LIMIT_PER_MINUTE',
-      6_000,
-      1_000,
-      120_000,
-    ),
-    EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND: boundedInteger(
-      env,
-      'EAGLE_MEDIA_IP_RATE_LIMIT_PER_SECOND',
-      1_024,
-      128,
-      10_000,
-    ),
-    EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE: boundedInteger(
-      env,
-      'EAGLE_MEDIA_IP_RATE_LIMIT_PER_MINUTE',
-      24_000,
-      4_000,
-      1_000_000,
-    ),
   };
 }
 

@@ -2,8 +2,6 @@ import { BackupController } from './backup/backup.controller';
 import { securityResponse } from './security-response';
 import { Module, type MiddlewareConsumer, type NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
-import { ThrottlerGuard, ThrottlerModule, minutes, seconds } from '@nestjs/throttler';
 import { AuthModule } from './auth/auth.module';
 import { validateEnvironment } from './config/runtime-config';
 import { PhotoLibraryModule } from './photos/photo-library.module';
@@ -15,10 +13,6 @@ import { StorageModule } from './storage/storage.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }),
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: seconds(1), limit: 10 },
-      { name: 'default', ttl: minutes(1), limit: 120 },
-    ]),
     PrismaModule,
     StorageModule,
     AuthModule,
@@ -27,7 +21,6 @@ import { StorageModule } from './storage/storage.module';
     HealthModule,
   ],
   controllers: [BackupController],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

@@ -1,4 +1,3 @@
-import { EagleMediaThrottleGuard } from './eagle-media-throttle.guard';
 import {
   BadRequestException,
   Body,
@@ -12,7 +11,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags, ApiCreatedResponse } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOrPatOriginGuard } from '../auth/browser-or-pat-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
@@ -32,7 +30,6 @@ import { EagleUploadService } from './eagle-upload.service';
 @ApiCookieAuth()
 @ApiBearerAuth()
 @Controller('eagle/uploads')
-@SkipThrottle({ short: true, default: true })
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 @RequirePatScopes('asset:write')
 export class EagleUploadController {
@@ -49,7 +46,7 @@ export class EagleUploadController {
 
   @Post('check-content')
   @ApiCreatedResponse({ type: CheckUploadContentResultDto })
-  @UseGuards(BrowserOrPatOriginGuard, EagleMediaThrottleGuard)
+  @UseGuards(BrowserOrPatOriginGuard)
   checkContent(
     @CurrentPrincipal() principal: AuthPrincipal,
     @Body() input: CheckUploadContentDto,

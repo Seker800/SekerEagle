@@ -14,7 +14,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AccessAuthGuard } from './access-auth.guard';
 import { AdminGuard } from './admin.guard';
@@ -52,7 +51,6 @@ export class AuthController {
 
   @Post('auth/login')
   @UseGuards(BrowserOriginGuard)
-  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   async login(@Body() dto: LoginDto, @Res({ passthrough: true }) response: Response) {
     const user = await this.passwords.login(dto.email, dto.password);
     const session = await this.tokens.createSession(user);

@@ -177,6 +177,25 @@ try {
     '/api/photos/photography/people/review',
   ])
     assert.equal((await fetch(`${origin}${path}`)).status, 401);
+  if (process.argv.includes('--request-frequency-check')) {
+    const pgPort = run(['port', pg, '5432']).split(':').at(-1);
+    const fixture = spawnSync(process.execPath, ['scripts/testing/request-frequency.test.mjs'], {
+      encoding: 'utf8',
+      timeout: 90000,
+      env: {
+        ...process.env,
+        ...env,
+        DATABASE_URL: `postgresql://sekereagle_test:${password}@127.0.0.1:${pgPort}/sekereagle_test`,
+        S3_ENDPOINT: 'http://127.0.0.1:9000',
+        REQUEST_FREQUENCY_TEST_ORIGIN: origin,
+      },
+    });
+    let output = `${fixture.stdout ?? ''}${fixture.stderr ?? ''}`;
+    for (const value of [password, accessKey, secretKey, tokenKey])
+      output = output.replaceAll(value, '[test value]');
+    process.stdout.write(output);
+    assert.equal(fixture.status, 0, 'Request-frequency HTTP regression failed');
+  }
   const operations = `${prefix}-operations`;
   containers.push(operations);
   const executorEnv = Object.entries(env)

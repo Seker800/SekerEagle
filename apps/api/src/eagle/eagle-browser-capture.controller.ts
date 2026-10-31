@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCookieAuth, ApiTags } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
 import { AccessAuthGuard } from '../auth/access-auth.guard';
 import { BrowserOrPatOriginGuard } from '../auth/browser-or-pat-origin.guard';
 import { CurrentPrincipal } from '../auth/current-principal.decorator';
@@ -25,7 +24,6 @@ import { CompleteEagleUploadDto } from './eagle-upload.dto';
 @ApiCookieAuth()
 @ApiBearerAuth()
 @Controller('eagle/browser-captures')
-@SkipThrottle({ default: true })
 @UseGuards(AccessAuthGuard, PatScopeGuard)
 @RequirePatScopes('capture:write')
 export class EagleBrowserCaptureController {

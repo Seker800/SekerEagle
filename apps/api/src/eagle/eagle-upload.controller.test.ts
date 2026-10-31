@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { THROTTLER_SKIP } from '@nestjs/throttler/dist/throttler.constants';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { AccessAuthGuard } from '../auth/access-auth.guard';
+import { PatScopeGuard } from '../auth/pat-scope.guard';
 import { EagleImportController } from './eagle-import.controller';
 import { EagleUploadController } from './eagle-upload.controller';
 
-test('bulk import controllers bypass generic request throttles without weakening auth guards', () => {
+test('bulk import controllers retain authentication and token scopes without request quotas', () => {
   for (const controller of [EagleImportController, EagleUploadController]) {
-    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}short`, controller), true);
-    assert.equal(Reflect.getMetadata(`${THROTTLER_SKIP}default`, controller), true);
+    assert.deepEqual(Reflect.getMetadata(GUARDS_METADATA, controller), [
+      AccessAuthGuard,
+      PatScopeGuard,
+    ]);
   }
 });
 
