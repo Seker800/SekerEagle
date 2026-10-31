@@ -296,7 +296,8 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
   });
   const advance = (signatures: string[]) => {
     setExpanded((current) => {
-      if (current && !signatures.includes(current)) return current;
+      if (!current) return null;
+      if (!signatures.includes(current)) return current;
       const index = groups.findIndex((group) => group.signature === current);
       const remaining = [...groups.slice(index + 1), ...groups.slice(0, index + 1)];
       return (

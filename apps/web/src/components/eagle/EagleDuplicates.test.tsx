@@ -111,7 +111,14 @@ describe('duplicate cleanup review', () => {
     expect(mocks.members).not.toHaveBeenCalled();
   });
   it('retains selected groups across pages and submits their signatures without loading members', async () => {
-    mocks.members.mockResolvedValue({ signature: 'd'.repeat(64), kind: 'SIMILAR', recommendedId: 'one', total: 4, nextCursor: null, items: [] });
+    mocks.members.mockResolvedValue({
+      signature: 'd'.repeat(64),
+      kind: 'SIMILAR',
+      recommendedId: 'one',
+      total: 4,
+      nextCursor: null,
+      items: [],
+    });
     mocks.list.mockImplementation(async ({ cursor }: { cursor?: string }) => ({
       revision: 'b'.repeat(64),
       exactRevision: 'b'.repeat(64),
@@ -125,7 +132,12 @@ describe('duplicate cleanup review', () => {
       ignoredGroups: 0,
       removableBytes: 1024,
       nextCursor: cursor ? null : '1',
-      groups: (cursor ? ['c', 'd'] : ['a']).map(key => ({ ...group, kind: 'SIMILAR', count: 4, signature: key.repeat(64) })),
+      groups: (cursor ? ['c', 'd'] : ['a']).map((key) => ({
+        ...group,
+        kind: 'SIMILAR',
+        count: 4,
+        signature: key.repeat(64),
+      })),
     }));
     render();
     fireEvent.click(await screen.findByRole('checkbox', { name: '选择重复组 1' }));
