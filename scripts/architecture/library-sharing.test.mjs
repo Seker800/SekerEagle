@@ -150,11 +150,7 @@ test('rejects missing core imports, a copied photo controller, and a removed pro
   );
   rejectsMutation(
     photoModule,
-    (s) =>
-      s.replace(
-        '...EAGLE_LIBRARY_PROVIDERS.filter((provider) => provider !== EagleMaintenanceService),',
-        '',
-      ),
+    (s) => s.replace("...libraryProviders('PHOTO'),", ''),
     'shared-providers',
   );
 });
@@ -294,9 +290,18 @@ test('rejects lazy mapping of a different component from the same module', () =>
 
 for (const [file, source] of [
   ['packages/library-core/src/new-rule.ts', "import { readFile } from 'node:fs/promises';"],
-  ['apps/web/src/lib/new-transport.ts', "const server = import('@sekereagle/photo-render-core/server');"],
-  ['packages/library-persistence/src/new-adapter.ts', "import { EagleService } from '../../../apps/api/src/eagle/eagle.service';"],
-  ['apps/worker/src/new-job.ts', "import { EagleService } from '../../api/src/eagle/eagle.service';"],
+  [
+    'apps/web/src/lib/new-transport.ts',
+    "const server = import('@sekereagle/photo-render-core/server');",
+  ],
+  [
+    'packages/library-persistence/src/new-adapter.ts',
+    "import { EagleService } from '../../../apps/api/src/eagle/eagle.service';",
+  ],
+  [
+    'apps/worker/src/new-job.ts',
+    "import { EagleService } from '../../api/src/eagle/eagle.service';",
+  ],
 ]) {
   test(`rejects runtime dependency leaks in ${file}`, () => {
     const sources = new Map(baseline);
@@ -307,7 +312,10 @@ for (const [file, source] of [
 
 test('rejects an Injectable without a capability owner even when both modes could register it', () => {
   const sources = new Map(baseline);
-  sources.set('apps/api/src/eagle/new-unowned.service.ts', '@Injectable() export class UnownedService {}');
+  sources.set(
+    'apps/api/src/eagle/new-unowned.service.ts',
+    '@Injectable() export class UnownedService {}',
+  );
   assert.ok(checkLibrarySharing(sources).some((error) => error.rule === 'capability-ownership'));
 });
 
@@ -321,6 +329,22 @@ test('rejects optional mode injection rather than permitting silent MATERIAL fal
 
 test('rejects duplicate provider and table ownership in the shared capability registry', () => {
   const file = 'apps/api/src/eagle/library-capabilities.ts';
-  rejectsMutation(file, (s) => s.replace(/providers: \[\s*EagleImageSearchService/u, 'providers: [EagleService, EagleImageSearchService'), 'capability-ownership');
-  rejectsMutation(file, (s) => s.replace("tables: ['EagleLibraryTransfer']", "tables: ['EagleLibraryTransfer', 'EagleAsset']"), 'capability-ownership');
+  rejectsMutation(
+    file,
+    (s) =>
+      s.replace(
+        /providers: \[\s*EagleImageSearchService/u,
+        'providers: [EagleService, EagleImageSearchService',
+      ),
+    'capability-ownership',
+  );
+  rejectsMutation(
+    file,
+    (s) =>
+      s.replace(
+        "tables: ['EagleLibraryTransfer']",
+        "tables: ['EagleLibraryTransfer', 'EagleAsset']",
+      ),
+    'capability-ownership',
+  );
 });

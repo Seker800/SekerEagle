@@ -38,7 +38,11 @@ test('every shared provider has exactly one capability owner and explicit mode e
       tables: readonly string[];
     }>;
   };
-  assert.ok(Array.isArray(capabilities), 'shared assembly must declare capability ownership');
+  assert.equal(
+    Array.isArray(capabilities),
+    true,
+    'shared assembly must declare capability ownership',
+  );
   const providers = capabilities.flatMap((entry) => entry.providers);
   assert.equal(new Set(capabilities.map((entry) => entry.id)).size, capabilities.length);
   assert.equal(new Set(providers).size, providers.length, 'no provider may have two owners');

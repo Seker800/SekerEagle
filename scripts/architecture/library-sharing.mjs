@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { checkRuntimeBoundaries } from './library-runtime-boundaries.mjs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import ts from 'typescript';
 import { join, relative } from 'node:path';
 
@@ -7,21 +8,24 @@ export function readLibrarySources(root) {
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
-      if (entry.isDirectory()) visit(path);
-      else if (/\.(ts|tsx|css)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
+      if (entry.isDirectory() && !['dist', 'node_modules'].includes(entry.name)) visit(path);
+      else if (/\.(ts|tsx|css|mjs|cjs)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
         sources.set(relative(root, path).replaceAll('\\', '/'), readFileSync(path, 'utf8'));
       }
     }
   }
-  for (const directory of [
+  const directories = [
     'apps/web/src',
-    'apps/api/src/eagle',
-    'apps/api/src/photos',
-    'packages/library-core/src',
-    'packages/photo-render-core/src',
-  ]) {
-    visit(join(root, directory));
-  }
+    'apps/api/src',
+    'apps/worker/src',
+    ...readdirSync(join(root, 'packages')).map((name) => `packages/${name}/src`),
+  ];
+  for (const directory of directories)
+    if (existsSync(join(root, directory))) visit(join(root, directory));
+  sources.set(
+    'apps/api/prisma/schema.prisma',
+    readFileSync(join(root, 'apps/api/prisma/schema.prisma'), 'utf8'),
+  );
   return sources;
 }
 
@@ -450,7 +454,7 @@ export function checkLibrarySharing(sources) {
         if (ts.isSpreadElement(provider)) {
           if (
             provider.expression.getText(photoTree).replace(/\s/g, '') ===
-            'EAGLE_LIBRARY_PROVIDERS.filter((provider)=>provider!==EagleMaintenanceService)'
+            "libraryProviders('PHOTO')"
           )
             spreads++;
           else
@@ -499,5 +503,5 @@ export function checkLibrarySharing(sources) {
         'Photo module must consume the common provider registry exactly once.',
       );
   }
-  return errors;
+  return [...errors, ...checkRuntimeBoundaries(sources, trees)];
 }

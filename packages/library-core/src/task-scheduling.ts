@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from './media-job-contract';
 import type { ComputeRuntime } from './compute-runtime';
 export interface BackgroundSchedule {
   mode: string;
@@ -142,7 +143,7 @@ export const MEDIA_FAMILY_RULES: ReadonlyArray<{
   prefix?: string;
   kind?: string;
 }> = [
-  { version: 'photo-source-details-v1', family: 'DETAILS' },
+  { version: PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION, family: 'DETAILS' },
   { prefix: 'video-playback-', family: 'VIDEO' },
   { prefix: 'camera-video-playback-', family: 'VIDEO' },
   { kind: 'GENERATE_EMBEDDING', family: 'EMBEDDING' },

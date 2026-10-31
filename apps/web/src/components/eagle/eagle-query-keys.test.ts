@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createEagleQueryKeys } from './eagle-query-keys';
+import {
+  createEagleQueryKeys,
+  isEagleAssetListKey,
+  isEagleOperationKey,
+  isEagleQuery,
+} from './eagle-query-keys';
 
 describe('createEagleQueryKeys', () => {
   it('isolates every Eagle cache namespace by owner', () => {
@@ -22,16 +27,30 @@ describe('createEagleQueryKeys', () => {
 });
 
 it('shares count and operation namespaces without conflating list pages or privacy scopes', () => {
-  const keys = createEagleQueryKeys('owner', 'PHOTO') as ReturnType<typeof createEagleQueryKeys> & {
-    libraryCounts: readonly unknown[];
-    libraryCount: (visible: boolean, revision: number) => readonly unknown[];
-    operations: readonly unknown[];
-    operationList: (visible: boolean) => readonly unknown[];
-  };
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
   expect(keys.libraryCounts).toEqual(['eagle', 'owner', 'PHOTO', 'assets', 'library-count']);
   expect(keys.libraryCount(false, 2)).toEqual([...keys.libraryCounts, false, 2]);
   expect(keys.libraryCount(false, 2)).not.toEqual(keys.libraryCount(true, 2));
   expect(keys.libraryCount(false, 2)).not.toEqual(keys.libraryCount(false, 3));
   expect(keys.operationList(false)).toEqual([...keys.operations, false]);
   expect(keys.operationList(false)).not.toEqual(keys.operationList(true));
+});
+
+it('recognizes only scoped asset pages, excluding counts, receipts and transient fetches', () => {
+  const keys = createEagleQueryKeys('owner', 'PHOTO');
+  for (const view of ['ACTIVE', 'PRIVATE', 'TRASH'])
+    expect(isEagleAssetListKey(keys.assetList(view, {}), 'owner', 'PHOTO')).toBe(true);
+  for (const key of [
+    keys.libraryCount(false, 0),
+    keys.operationList(false),
+    [...keys.assetList('ACTIVE', {}), 'operation-first-page'],
+    ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', null],
+    ['eagle', 'owner', 'PHOTO', 'assets', 'ACTIVE', []],
+  ])
+    expect(isEagleAssetListKey(key, 'owner', 'PHOTO')).toBe(false);
+  expect(isEagleAssetListKey(keys.assetList('ACTIVE', {}), 'other', 'PHOTO')).toBe(false);
+  expect(isEagleAssetListKey(keys.assetList('ACTIVE', {}), 'owner', 'MATERIAL')).toBe(false);
+  expect(isEagleOperationKey(keys.operationList(true), 'owner', 'PHOTO')).toBe(true);
+  expect(isEagleOperationKey(keys.assets, 'owner', 'PHOTO')).toBe(false);
+  expect(isEagleQuery(keys.assets, 'owner', 'PHOTO')).toBe(true);
 });

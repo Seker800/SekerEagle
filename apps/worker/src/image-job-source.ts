@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { isCameraRawMime } from '@sekereagle/library-core';
 import type { EagleMediaJobKind } from './processing-policy';
 
@@ -25,7 +26,7 @@ export function selectImageJobSource(
     kind === 'GENERATE_EMBEDDING' ||
     kind === 'ANALYZE_PHOTO_FACES' ||
     (kind === 'GENERATE_RENDITIONS' &&
-      processorVersion === 'photo-source-details-v1' &&
+      processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION &&
       !isCameraRawMime(asset.mimeType) &&
       Boolean(asset.sha256))
   ) {

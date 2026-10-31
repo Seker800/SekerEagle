@@ -638,19 +638,18 @@ export function SekerEaglePage({
     setIsBatchSelection(false);
     selectionAnchorIdRef.current = null;
   }, [selectionScope]);
-  const secondaryReady = true;
   const { manualTagsQuery, manualTagGroupsQuery, aiTagsQuery, smartFoldersQuery } =
     useEagleReferenceData(accessToken, queryKeys, {
-      enabled: secondaryReady,
+      enabled: true,
       aiTagsEnabled:
         libraryView === 'AI_TAGS' || aiTagReferenceRequested || isSmartFolderDialogOpen,
     });
-  useAssetOperationProgress(privateVisible, secondaryReady);
+  useAssetOperationProgress(privateVisible, true);
   const vectorSummaryQuery = useQuery({
     queryKey: [...queryKeys.root, 'vector-summary'],
     queryFn: fetchEagleVectorSummary,
     staleTime: 60_000,
-    enabled: secondaryReady,
+    enabled: true,
     refetchInterval:
       workspaceSection === 'PENDING' ? 10_000 : workspaceSection === 'SETTINGS' ? 30_000 : false,
   });
@@ -770,7 +769,7 @@ export function SekerEaglePage({
     queryKeys,
     privateVisible,
     privacyRulesRevision,
-    secondaryReady,
+    true,
   );
   const photoStacks = useMemo(() => {
     const stacks = new Map<string, EaglePhotoStack>();

@@ -191,6 +191,7 @@ try {
       'packages/library-persistence/dist/privacy.test.js',
       'apps/api/dist/eagle/eagle-library-transfer.service.test.js',
       'apps/api/dist/eagle/eagle-transfer-pyramid.test.js',
+      'scripts/testing/background-schedule-parity.test.mjs',
       'scripts/testing/library-isolation.test.mjs',
       'scripts/testing/library-service-isolation.test.mjs',
       'scripts/testing/photo-agent.test.mjs',

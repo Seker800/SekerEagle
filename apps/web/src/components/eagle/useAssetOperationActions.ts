@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { ApiError } from '../../lib/api-error';
 import { createDuplicatesApi } from '../../lib/eagle-duplicates-api';
 import { useRef } from 'react';
@@ -53,7 +54,7 @@ export function useAssetOperationActions() {
       } else if (action === 'retry') changes.resume(operation.id);
       changes.observe(result);
       void client.invalidateQueries({
-        queryKey: ['eagle', ownerId, operation.libraryMode, 'operations'],
+        queryKey: createEagleQueryKeys(ownerId, operation.libraryMode).operations,
       });
     },
   });

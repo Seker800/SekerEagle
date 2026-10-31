@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { DUPLICATE_GROUPING_VERSION } from '@sekereagle/library-core';
 import { useAssetOperationActions } from './useAssetOperationActions';
 import { ApiError } from '../../lib/api-error';
@@ -168,7 +169,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
     }
   }, [terminalScan, client, ownerId, libraryMode]);
   const invalidate = () =>
-    client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
+    client.invalidateQueries({ queryKey: createEagleQueryKeys(ownerId, libraryMode).operations });
   const scan = useMutation({
     mutationFn: (onlyIfUnattempted: boolean) => {
       scanId.current ??= crypto.randomUUID();
@@ -266,7 +267,7 @@ export function EagleDuplicates({ includePrivate, scopeRevision = '', onClose }:
           changes.reject(input.operationId, error.message);
           setExpanded(input.groups?.[0]?.signature ?? null);
           await client.invalidateQueries({
-            queryKey: ['eagle', ownerId, libraryMode, 'assets', 'library-count'],
+            queryKey: createEagleQueryKeys(ownerId, libraryMode).libraryCounts,
           });
           changes.confirmCounts();
         } else {

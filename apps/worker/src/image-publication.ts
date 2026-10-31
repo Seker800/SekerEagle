@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import type { EagleAsset, EagleAssetProcessingJob, Prisma, PrismaClient } from '@prisma/client';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from '@sekereagle/library-persistence';
 import { persistPhotoAnalysis } from './photo-analysis-persistence';
@@ -97,7 +98,7 @@ export async function publishImage(
               assetId: asset.id,
               assetRevision: job.assetRevision,
               kind: 'GENERATE_RENDITIONS',
-              processorVersion: 'photo-source-details-v1',
+              processorVersion: PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION,
               lane: 'BACKGROUND',
               dependsOnJobId: job.id,
             },

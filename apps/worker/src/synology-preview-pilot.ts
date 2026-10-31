@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { PrismaClient, type Prisma } from '@prisma/client';
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { assertSafeRuntimeTarget } from '@sekereagle/config';
@@ -160,7 +161,7 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
                   assetId: asset.id,
                   assetRevision: item.mediaRevision,
                   kind: 'GENERATE_RENDITIONS',
-                  processorVersion: 'photo-source-details-v1',
+                  processorVersion: PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION,
                   lane: 'MAINTENANCE',
                   dependsOnJobId: job.id,
                 },

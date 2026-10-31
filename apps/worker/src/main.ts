@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { mediaMemoryMiB, WORKER_INFLIGHT_MEMORY_MIB } from './media-resource-budget';
 import { computePolicySignature } from './compute-runtime';
 import { RemoteMediaClient, RemoteMediaUnavailableError } from './remote-media';
@@ -443,7 +444,7 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
         'IMAGE_CONTENT_MISMATCH',
         'IMAGE_TOO_LARGE_TO_PROCESS',
       );
-    const sourceDetailsOnly = job.processorVersion === 'photo-source-details-v1';
+    const sourceDetailsOnly = job.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION;
     const sourceDetails = selectImageJobSource(asset, job.kind, job.processorVersion);
     if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash && !asset.sha256)
       throw new Error('ORIGINAL_HASH_REQUIRED');
@@ -1448,14 +1449,17 @@ async function nextQueueWakeAt(now = new Date()): Promise<Date | null> {
       continue;
     if (
       !runBackgroundProcessing &&
-      (candidate.lane === 'BACKGROUND' || candidate.processorVersion === 'photo-source-details-v1')
+      (candidate.lane === 'BACKGROUND' ||
+        candidate.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION)
     )
       continue;
     const wakeAt = nextEligibleWakeAt(
       {
         ...candidate,
         lane:
-          candidate.processorVersion === 'photo-source-details-v1' ? 'BACKGROUND' : candidate.lane,
+          candidate.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION
+            ? 'BACKGROUND'
+            : candidate.lane,
       },
       settingsByOwner.get(JSON.stringify([candidate.ownerId, candidate.libraryMode])) ??
         defaultWakeSettings(),

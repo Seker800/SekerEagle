@@ -56,7 +56,7 @@ class EagleWorkspaceCache {
     if (existing?.pending) return;
     const countQuery = this.client
       .getQueryCache()
-      .findAll({ queryKey: [...this.#keys.assets, 'library-count'] })[0];
+      .findAll({ queryKey: this.#keys.libraryCounts })[0];
     const count = (countQuery?.state.data as { count?: number } | undefined)?.count;
     const known = [...new Set(assetIds)].filter(
       (assetId) => this.store.get(assetId) && this.operations.visible(assetId, kind === 'RESTORE'),

@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import {
   Prisma,
   type PrismaClient,
@@ -75,8 +76,8 @@ export function selectScheduledMediaCandidates(
       job.kind<>'GENERATE_AI_TAGS' AND
       ${
         input.where.lane === 'BACKGROUND'
-          ? Prisma.sql`(job.lane='BACKGROUND' OR job."processorVersion"='photo-source-details-v1')`
-          : Prisma.sql`(job.lane=${input.where.lane}::"EagleProcessingLane" AND job."processorVersion"<>'photo-source-details-v1')`
+          ? Prisma.sql`(job.lane='BACKGROUND' OR job."processorVersion"=${PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION})`
+          : Prisma.sql`(job.lane=${input.where.lane}::"EagleProcessingLane" AND job."processorVersion"<>${PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION})`
       }
       AND (job.status='PENDING' OR (job.status='PROCESSING' AND job."lockedAt"<${mediaStaleBeforeSql()}))
       AND job."assetRevision"=a."mediaRevision" AND (a."deletedAt" IS NULL OR job.kind='PURGE_ASSET')

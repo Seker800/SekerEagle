@@ -1,3 +1,9 @@
+import {
+  createEagleQueryKeys,
+  isEagleQuery,
+  isEagleOperationKey,
+  isEagleAssetListKey,
+} from './eagle-query-keys';
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 import type {
   AssetOperationReceipt,
@@ -56,7 +62,7 @@ export class AssetOperationRefresher {
           if (
             this.client
               .getQueryCache()
-              .findAll({ queryKey: ['eagle', this.ownerId, mode, 'assets', 'library-count'] })
+              .findAll({ queryKey: createEagleQueryKeys(this.ownerId, mode).libraryCounts })
               .some((query) => query.isActive())
           )
             cache.operations.confirmCounts();
@@ -74,13 +80,10 @@ export class AssetOperationRefresher {
     await this.client.invalidateQueries(
       {
         predicate: (query) =>
-          query.queryKey[0] === 'eagle' &&
-          query.queryKey[1] === this.ownerId &&
-          query.queryKey[2] === mode &&
-          query.queryKey[3] !== 'operations' &&
+          isEagleQuery(query.queryKey, this.ownerId, mode) &&
+          !isEagleOperationKey(query.queryKey, this.ownerId, mode) &&
           !(
-            query.queryKey[3] === 'assets' &&
-            query.queryKey.length === 6 &&
+            isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
             query.state.data &&
             typeof query.state.data === 'object' &&
             'pages' in query.state.data
@@ -115,7 +118,7 @@ export class AssetOperationRefresher {
         changes.finish(summary.id, summary.kind, [], summary, [], readRevision);
         done.set(summary.id, `${epoch}:${intentVersion}:${signature}`);
         await this.client.invalidateQueries(
-          { queryKey: ['eagle', this.ownerId, mode, 'duplicates'] },
+          { queryKey: createEagleQueryKeys(this.ownerId, mode).duplicates },
           { cancelRefetch: false },
         );
         return;
@@ -173,11 +176,7 @@ export class AssetOperationRefresher {
     const queries = this.client.getQueryCache().findAll({
       predicate: (query) =>
         query.isActive() &&
-        query.queryKey[0] === 'eagle' &&
-        query.queryKey[1] === this.ownerId &&
-        query.queryKey[2] === mode &&
-        query.queryKey[3] === 'assets' &&
-        query.queryKey.length === 6 &&
+        isEagleAssetListKey(query.queryKey, this.ownerId, mode) &&
         query.queryKey[4] !== 'TRASH',
     });
     for (const query of queries) {

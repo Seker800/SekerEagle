@@ -26,7 +26,7 @@ import { ObjectStorageService } from '../storage/object-storage.service';
 import type { AuthPrincipal } from '../auth/auth.types';
 import { LIBRARY_MODE } from './library-mode';
 import { lockOwnerPrivacyProjection, syncAssetPrivacy } from './eagle-privacy.service';
-import { assetListInclude, serializeAssetList } from './eagle.service';
+import { assetListInclude, serializeAssetList } from './eagle-asset-projection';
 import { resolveEagleTrashTargets, setEagleTrash } from './eagle-trash';
 import type {
   DuplicateActionDto,

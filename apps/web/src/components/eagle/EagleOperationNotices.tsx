@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { useAssetOperationActions } from './useAssetOperationActions';
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -153,7 +154,7 @@ export function EagleOperationNotices({ onShowProgress }: { onShowProgress?: () 
                   .then((result) => {
                     if (result) changes.observe(result);
                     void client.invalidateQueries({
-                      queryKey: ['eagle', ownerId, libraryMode, 'operations'],
+                      queryKey: createEagleQueryKeys(ownerId, libraryMode).operations,
                     });
                   })
                   .catch((reason) =>

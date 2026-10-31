@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import type { EagleAssetProcessingJob } from '@prisma/client';
 import { imageWorkMemoryMiB } from './image-work-budget';
 import type { MediaResource } from './media-resource-pool';
@@ -23,7 +24,7 @@ export function mediaMemoryMiB(
     return imageWorkMemoryMiB({
       kind: job.kind,
       mode: job.libraryMode ?? 'MATERIAL',
-      detailsOnly: job.processorVersion === 'photo-source-details-v1',
+      detailsOnly: job.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION,
     });
   if (job.kind === 'EXTRACT_COLOR_PALETTE') return 96;
   if (job.kind === 'PURGE_ASSET') return 32;

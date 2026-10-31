@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { mediaBlocksAssetReadySql } from '@sekereagle/library-persistence';
 import { mediaRequeueData, mediaTaskBlocksAssetReady } from '@sekereagle/library-core';
 import type { LibraryMode } from '@prisma/client';
@@ -308,7 +309,7 @@ export class EagleProcessingService {
         const repairsBefore = repairIds.length;
         for (const job of existingByAssetRevision.get(key) ?? []) {
           const ready =
-            job.processorVersion === 'photo-source-details-v1'
+            job.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION
               ? fact?.detailsReady
               : outputs[job.kind];
           if (job.status === 'COMPLETED' && ready === false) repairIds.push(job.id);

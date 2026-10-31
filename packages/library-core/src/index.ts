@@ -46,3 +46,5 @@ export * from './photo-face-contract';
 
 export * from './browse-media';
 export * from './duplicates';
+
+export * from './media-job-contract';

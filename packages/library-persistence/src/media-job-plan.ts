@@ -1,3 +1,4 @@
+import { PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION } from '@sekereagle/library-core';
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 
@@ -77,14 +78,14 @@ export function buildMissingImageProcessingJobs(
   if (
     input.needsDetails &&
     !input.detailsReady &&
-    !existingJobs.some((job) => job.processorVersion === 'photo-source-details-v1')
+    !existingJobs.some((job) => job.processorVersion === PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION)
   ) {
     jobs.push({
       id: randomUUID(),
       ...common,
       kind: 'GENERATE_RENDITIONS',
       lane: 'BACKGROUND',
-      processorVersion: 'photo-source-details-v1',
+      processorVersion: PHOTO_SOURCE_DETAILS_PROCESSOR_VERSION,
       dependsOnJobId: renditionJobId,
     });
   }

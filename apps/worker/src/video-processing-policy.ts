@@ -1,4 +1,4 @@
-export const VIDEO_PLAYBACK_PROCESSOR_VERSION = 'camera-video-playback-v1';
+export { VIDEO_PLAYBACK_PROCESSOR_VERSION } from '@sekereagle/library-core';
 export function videoProcessingStage(
   kind: string,
   transcoding: boolean,

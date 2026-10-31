@@ -19,7 +19,7 @@ export function useEagleLibraryCount(
   const changes = getEagleWorkspaceCache(client, ownerId, libraryMode).operations;
   useSyncExternalStore(changes.subscribe, changes.getSnapshot, changes.getSnapshot);
   const query = useQuery({
-    queryKey: [...queryKeys.assets, 'library-count', privateVisible, privacyRevision],
+    queryKey: queryKeys.libraryCount(privateVisible, privacyRevision),
     queryFn: () =>
       api.countEagleAssets(accessToken, { version: EAGLE_FILTER_QUERY_VERSION, conditions: [] }),
     staleTime: 60_000,

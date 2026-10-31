@@ -1,3 +1,4 @@
+import { createEagleQueryKeys } from './eagle-query-keys';
 import { getEagleWorkspaceCache } from './eagle-workspace-cache';
 import { ApiError } from '../../lib/api-error';
 import { useEffect, useMemo, useRef } from 'react';
@@ -24,7 +25,9 @@ export function useEnqueueAssetOperation() {
       const operation = await api.enqueue({ operationId, kind, assetIds });
       pendingIds.current.delete(key);
       changes.observe(operation);
-      void client.invalidateQueries({ queryKey: ['eagle', ownerId, libraryMode, 'operations'] });
+      void client.invalidateQueries({
+        queryKey: createEagleQueryKeys(ownerId, libraryMode).operations,
+      });
       return operation;
     } catch (error) {
       if (
@@ -35,7 +38,7 @@ export function useEnqueueAssetOperation() {
       ) {
         changes.reject(operationId, error.message);
         await client.invalidateQueries({
-          queryKey: ['eagle', ownerId, libraryMode, 'assets', 'library-count'],
+          queryKey: createEagleQueryKeys(ownerId, libraryMode).libraryCounts,
         });
         changes.confirmCounts();
       } else changes.uncertain(operationId, error instanceof Error ? error.message : String(error));
@@ -61,7 +64,7 @@ export function useAssetOperationList(includePrivate: boolean, enabled = true) {
     queries: (['MATERIAL', 'PHOTO'] as const).map((mode) => {
       const visible = includePrivate && mode === libraryMode;
       return {
-        queryKey: ['eagle', ownerId, mode, 'operations', visible],
+        queryKey: createEagleQueryKeys(ownerId, mode).operationList(visible),
         queryFn: ({ signal }: { signal: AbortSignal }) => apis[mode].list(visible, signal),
         enabled,
         staleTime: 1000,
