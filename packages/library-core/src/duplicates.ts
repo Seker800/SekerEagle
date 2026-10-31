@@ -1,4 +1,5 @@
-export const DUPLICATE_GROUPING_VERSION = 'same-format-size-v2';
+export const DUPLICATE_GROUPING_VERSION = 'original-pixels-v3';
+export const DUPLICATE_PIXEL_VERSION = 'oriented-srgb-rgba8-v1';
 export function canonicalDuplicateFormat(format: string) {
   const v = format.trim().toLowerCase();
   return (
@@ -15,6 +16,8 @@ export interface DuplicateCandidate {
   id: string;
   format: string;
   isEdited?: boolean;
+  isLivePhoto?: boolean;
+  pixelHash?: string | null;
   sha256: string | null;
   mediaRevision: number;
   rowVersion: number;
@@ -25,6 +28,26 @@ export interface DuplicateCandidate {
   rating: number | null;
   libraryAddedAt: string;
   fingerprint: DuplicateFingerprint | null;
+}
+/** Only full-resolution, current-version proofs qualify. Preview similarity is discovery only. */
+export function findVerifiedPixelGroups(input: readonly DuplicateCandidate[]): DuplicateGroup[] {
+  const buckets = new Map<string, DuplicateCandidate[]>();
+  for (const row of input) {
+    if (!row.pixelHash || !/^[a-f0-9]{64}$/.test(row.pixelHash) || row.isEdited || row.isLivePhoto)
+      continue;
+    const format = canonicalDuplicateFormat(row.format);
+    if (format !== 'jpeg' && format !== 'png') continue;
+    const key = `${row.isPrivate}:${format}:${row.pixelHash}`;
+    const members = buckets.get(key) ?? [];
+    members.push(row);
+    buckets.set(key, members);
+  }
+  return [...buckets.values()].filter(members => members.length > 1).map(members => {
+    members.sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0) || b.byteSize - a.byteSize ||
+      a.libraryAddedAt.localeCompare(b.libraryAddedAt) || a.id.localeCompare(b.id));
+    return { kind: 'SIMILAR' as const, assetIds: members.map(row => row.id), recommendedId: members[0]!.id,
+      removableBytes: members.slice(1).reduce((n, row) => n + row.byteSize, 0) };
+  }).sort((a, b) => b.removableBytes - a.removableBytes || a.recommendedId.localeCompare(b.recommendedId));
 }
 export interface DuplicateGroup {
   kind: 'EXACT' | 'SIMILAR';
