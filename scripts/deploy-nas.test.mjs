@@ -168,7 +168,8 @@ test('large operation admission has its own adjustable gateway deadline', async 
   const source = await readFile(new URL('../deploy/gateway/nginx.conf', import.meta.url), 'utf8');
   const route = source.match(/location ~ (\S*operations\S*) \{([\s\S]*?)\n {2}\}/u);
   assert.ok(route, 'operation admission must not inherit the 15 second deadline');
-  const pattern = new RegExp(route[1]);
+  const pattern = new RegExp(route[1].replace(/^"|"$/gu, ''));
+  assert.match(route[1], /^".*"$/u, 'nginx regex quantifier braces require a quoted expression');
   for (const mode of ['eagle', 'photos']) {
     assert.ok(pattern.test(`/api/${mode}/operations`));
     assert.ok(pattern.test(`/api/${mode}/assets/batch/send`));

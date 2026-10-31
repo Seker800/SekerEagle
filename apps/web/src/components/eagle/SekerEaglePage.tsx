@@ -325,11 +325,6 @@ export function SekerEaglePage({
     () => getEagleWorkspaceCache(queryClient, ownerId, libraryMode),
     [queryClient, ownerId, libraryMode],
   );
-  const backgroundChanges = useSyncExternalStore(
-    workspaceCache.subscribeBackgroundChanges,
-    workspaceCache.hasBackgroundChanges,
-    workspaceCache.hasBackgroundChanges,
-  );
   const thumbnailLoadService = workspaceCache.thumbnails;
   const pageSentinelRef = useRef<HTMLDivElement>(null);
   const dragDepthRef = useRef(0);
@@ -2157,24 +2152,6 @@ export function SekerEaglePage({
                     {t('图片内容搜索暂不可用，当前仅匹配名称和人工标签。')}
                   </div>
                 )}
-              {backgroundChanges && (
-                <div className={styles.statusBar} role="status">
-                  {t('后台内容已更新，当前浏览位置保持不变。')}
-                  <button
-                    type="button"
-                    disabled={assetsQuery.isFetching}
-                    onClick={() => {
-                      const revision = workspaceCache.backgroundRevision;
-                      void assetsQuery
-                        .refetch({ cancelRefetch: false, throwOnError: true })
-                        .then(() => workspaceCache.acknowledgeBackgroundChanges(revision))
-                        .catch(() => undefined);
-                    }}
-                  >
-                    {t('加载更新')}
-                  </button>
-                </div>
-              )}
               {transferStatus && (
                 <div className={styles.statusBar} role="status">
                   {transferStatus}

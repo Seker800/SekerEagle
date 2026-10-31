@@ -57,11 +57,13 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
   const previous = useRef<Array<AssetOperationSummary[] | undefined>>([material, photo]);
   const refresher = useRef<AssetOperationRefresher | null>(null);
   const publishedOperations = useRef(new Set<string>());
+  const refreshedAt = useRef(new Map<LibraryMode, number>());
   useEffect(() => {
     const queue = new AssetOperationRefresher(client, ownerId);
     refresher.current = queue;
     previous.current = [undefined, undefined];
     publishedOperations.current.clear();
+    refreshedAt.current.clear();
     return () => {
       queue.dispose();
       if (refresher.current === queue) refresher.current = null;
@@ -94,7 +96,14 @@ export function useAssetOperationProgress(includePrivate: boolean, enabled: bool
         if (final) publishedOperations.current.delete(row.id);
       }
     });
-    for (const [mode, final] of affected) refresher.current?.schedule(mode, final);
+    for (const [mode, final] of affected) {
+      const now = Date.now();
+      // Intermediate results must not repeatedly read a deeply paged list.
+      // Completion always bypasses this cadence, including partial failure.
+      if (!final && now - (refreshedAt.current.get(mode) ?? -Infinity) < 10_000) continue;
+      refreshedAt.current.set(mode, now);
+      refresher.current?.schedule(mode, final);
+    }
     previous.current = snapshots;
   }, [material, photo]);
 }
