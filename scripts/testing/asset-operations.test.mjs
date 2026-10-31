@@ -62,10 +62,39 @@ async function fixture(mode = 'PHOTO', copy) {
     },
     headObject: async () => ({ ContentLength: 1 }),
   };
+  const transferDb = copy
+    ? prisma.$extends({
+        query: {
+          eagleLibraryTransfer: {
+            upsert({ args, query }) {
+              if (Array.isArray(args.create.plan))
+                args.create.plan = args.create.plan.map((item) => ({
+                  ...item,
+                  storageAction: undefined,
+                  targetKey: `users/${ownerId}/assets/${item.targetId}/original.jpg`,
+                  renditions: (item.renditions ?? []).map((r) => ({
+                    ...r,
+                    targetKey: `users/${ownerId}/assets/${item.targetId}/transfer/${r.id}`,
+                  })),
+                  ...(item.pyramid
+                    ? {
+                        pyramid: {
+                          ...item.pyramid,
+                          targetPrefix: `users/${ownerId}/assets/${item.targetId}/pyramids/1/transfer-${item.pyramid.id}/`,
+                        },
+                      }
+                    : {}),
+                }));
+              return query(args);
+            },
+          },
+        },
+      })
+    : prisma;
   const createService = (db = prisma) =>
     new EagleAssetOperationService(
       db,
-      new EagleLibraryTransferService(prisma, storage, mode),
+      new EagleLibraryTransferService(transferDb, storage, mode),
       new EagleService(prisma, undefined, mode),
       mode,
     );
@@ -158,16 +187,27 @@ for (const mode of ['PHOTO', 'MATERIAL']) {
     );
   });
 }
-test('scope, privacy and command identity fail closed and no partial selection is queued', async () => {
+test('scope, privacy and command identity fail closed per resource while valid deletion items continue', async () => {
   const f = await fixture(),
     other = await fixture(),
     row = await f.add(),
     foreign = await other.add(),
     material = await f.add({ libraryMode: 'MATERIAL' }),
     hidden = await f.add({ isPrivate: true });
-  for (const resource of [foreign, material, hidden])
-    await assert.rejects(f.enqueue('TRASH', [row, resource]), /不存在/);
-  assert.equal(await prisma.eagleAssetOperation.count({ where: { ownerId: f.ownerId } }), 0);
+  for (const resource of [foreign, material, hidden]) {
+    await assert.rejects(f.enqueue('TRASH', [resource]), /不存在/);
+    const owned = await f.add();
+    const partial = await f.enqueue('TRASH', [owned, resource]);
+    assert.equal(partial.queued, 1);
+    assert.equal(partial.failed, 1);
+    assert.deepEqual(partial.errors, [{ code: 'NOT_FOUND', count: 1 }]);
+    await f.service.tick();
+    assert.equal((await f.state(partial.id)).completed, 1);
+    assert.equal(
+      (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: resource.id } })).deletedAt,
+      null,
+    );
+  }
   const receipt = await f.enqueue('SEND', [row]);
   await assert.rejects(other.service.retry(other.principal, receipt.id), /不存在/);
   await assert.rejects(other.service.cancel(other.principal, receipt.id), /不存在/);
@@ -227,23 +267,26 @@ test('a live lease excludes other executors and stopping cancels only the waitin
     entered.resolve();
     await finish.promise;
   });
-  const receipt = await f.enqueue('SEND', [await f.add(), await f.add()]);
+  const receipt = await f.enqueue(
+    'SEND',
+    await Promise.all(Array.from({ length: 6 }, () => f.add())),
+  );
   const processing = f.service.tick();
   await entered.promise;
   await f.createService().tick();
-  assert.equal(f.copies(), 1);
+  assert.equal(f.copies(), 4);
   const stopped = await f.service.cancel(f.principal, receipt.id);
-  assert.equal(stopped.running, 1);
-  assert.equal(stopped.cancelled, 1);
+  assert.equal(stopped.running, 4);
+  assert.equal(stopped.cancelled, 2);
   finish.resolve();
   await processing;
   const result = await f.state(receipt.id);
-  assert.equal(result.completed, 1);
-  assert.equal(result.cancelled, 1);
+  assert.equal(result.completed, 4);
+  assert.equal(result.cancelled, 2);
   assert.equal(result.state, 'STOPPED');
   assert.equal(
     await prisma.eagleAsset.count({ where: { ownerId: f.ownerId, libraryMode: 'MATERIAL' } }),
-    1,
+    4,
   );
 });
 test('a crash after transfer publication replays the result without making another resource', async () => {
@@ -1062,4 +1105,70 @@ test('a mismatched live pair fails individually while an unaffected pair is tras
       const actual = await prisma.eagleAsset.findUniqueOrThrow({ where: { id: row.id } });
       assert.equal(actual.deletedAt !== null, i === 1);
     }
+});
+
+test('a source disappearing after admission is an idempotent trash no-op and does not block valid peers', async () => {
+  const f = await fixture();
+  const gone = await f.add(),
+    keep = await f.add();
+  const receipt = await f.enqueue('TRASH', [gone, keep]);
+  await prisma.eagleAsset.delete({ where: { id: gone.id } });
+  await f.service.tick();
+  const result = await f.state(receipt.id);
+  assert.equal(result.completed, 2);
+  assert.equal(result.skipped, 1);
+  assert.equal(result.failed, 0);
+  assert.notEqual(
+    (await prisma.eagleAsset.findUniqueOrThrow({ where: { id: keep.id } })).deletedAt,
+    null,
+  );
+});
+
+test('a 60000-item selection is one durable operation with bounded SQL batches and no storage I/O', async () => {
+  const f = await fixture();
+  const ids = Array.from({ length: 60000 }, () => randomUUID());
+  for (let offset = 0; offset < ids.length; offset += 512)
+    await prisma.eagleAsset.createMany({
+      data: ids.slice(offset, offset + 512).map((id) => ({
+        id,
+        ownerId: f.ownerId,
+        libraryMode: f.mode,
+        originalName: 'scale.jpg',
+        displayName: 'Scale',
+        normalizedDisplayName: 'scale',
+        mimeType: 'image/jpeg',
+        format: 'jpeg',
+        byteSize: 1,
+        originalObjectKey: `users/${f.ownerId}/assets/${id}/original.jpg`,
+        lifecycleStatus: 'READY',
+        mediaRevision: 1,
+      })),
+    });
+  try {
+    const before = queryCount,
+      start = performance.now();
+    const receipt = await f.service.enqueue(f.principal, {
+      operationId: randomUUID(),
+      kind: 'SEND',
+      assetIds: ids,
+    });
+    const admission = {
+      count: ids.length,
+      durationMs: Math.round(performance.now() - start),
+      sql: queryCount - before,
+      storageCopies: f.copies(),
+    };
+    console.log('Large selection admission:', JSON.stringify(admission));
+    assert.equal(receipt.total, 60000);
+    assert.equal(receipt.queued, 60000);
+    assert.equal(receipt.failed, 0);
+    assert.equal(f.copies(), 0);
+    assert(
+      admission.sql < 1000,
+      'admission queries must scale by internal chunks, not one query per resource',
+    );
+  } finally {
+    await prisma.eagleAssetOperation.deleteMany({ where: { ownerId: f.ownerId } });
+    await prisma.eagleAsset.deleteMany({ where: { ownerId: f.ownerId } });
+  }
 });
