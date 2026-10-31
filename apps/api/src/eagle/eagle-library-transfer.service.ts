@@ -487,10 +487,7 @@ export class EagleLibraryTransferService {
               livePhotoRole: source.livePhotoRole,
               isPrivate: source.isPrivate,
               mediaRevision: 1,
-              lifecycleStatus:
-                (browsingReady && targetMode === 'MATERIAL') || motionReady
-                  ? 'READY'
-                  : 'PROCESSING',
+              lifecycleStatus: browsingReady || motionReady ? 'READY' : 'PROCESSING',
             },
           });
           if (copiedRenditions.length)
@@ -541,11 +538,6 @@ export class EagleLibraryTransferService {
             source,
             Boolean(processingFacts.get(source.id)?.detailsReady),
           );
-          if (browsingReady && targetMode === 'PHOTO' && facts.photoMetadataReady)
-            await tx.eagleAsset.update({
-              where: { id: item.targetId, ownerId, libraryMode: targetMode },
-              data: { lifecycleStatus: 'READY' },
-            });
           if (source.isPrivate && !facts.hasPrivateTag) {
             const tagId = await this.targetPrivacyTag(tx, ownerId, targetMode);
             await tx.eagleAssetManualTag.create({
@@ -570,8 +562,7 @@ export class EagleLibraryTransferService {
                 assetRevision: 1,
                 width: source.width,
                 height: source.height,
-                renditionsReady:
-                  browsingReady && (targetMode === 'MATERIAL' || facts.photoMetadataReady),
+                renditionsReady: browsingReady,
                 needsDetails: targetMode === 'PHOTO' || isCameraRawMime(source.mimeType),
                 detailsReady: facts.detailsReady,
                 embeddingReady: facts.embeddingReady,

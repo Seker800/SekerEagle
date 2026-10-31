@@ -5,6 +5,7 @@ interface ImageSourceAsset {
   originalObjectKey: string;
   mimeType: string;
   mediaRevision: number;
+  sha256?: string | null;
   renditions: Array<{
     kind: string;
     variant?: string;
@@ -25,7 +26,8 @@ export function selectImageJobSource(
     kind === 'ANALYZE_PHOTO_FACES' ||
     (kind === 'GENERATE_RENDITIONS' &&
       processorVersion === 'photo-source-details-v1' &&
-      !isCameraRawMime(asset.mimeType))
+      !isCameraRawMime(asset.mimeType) &&
+      Boolean(asset.sha256))
   ) {
     const preview = asset.renditions.find(
       (rendition) =>
