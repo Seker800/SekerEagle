@@ -358,3 +358,40 @@ test('the legacy send route also accepts a large selection and only enqueues ind
   assert.deepEqual(controller.sendAssets(principal, request), { queued: 5001 });
   assert.equal(admitted, true);
 });
+
+test('operation result receipts reject foreign, wrong-mode and locked private operations before reading items', async () => {
+  const queries: unknown[] = [];
+  const prisma = {
+    eagleAssetOperation: {
+      findFirst: async (query: unknown) => {
+        queries.push(query);
+        return null;
+      },
+    },
+    eagleAssetOperationItem: {
+      findMany: () => {
+        throw Error('Must not read inaccessible receipts');
+      },
+    },
+  };
+  for (const mode of ['MATERIAL', 'PHOTO'] as const) {
+    const service = new EagleAssetOperationService(
+      prisma as never,
+      undefined as never,
+      undefined as never,
+      mode,
+    );
+    await assert.rejects(
+      () =>
+        service.results({ sub: 'owner', canViewPrivate: false } as AuthPrincipal, 'operation', {}),
+      /操作不存在/,
+    );
+  }
+  assert.deepEqual(
+    queries,
+    ['MATERIAL', 'PHOTO'].map((libraryMode) => ({
+      where: { id: 'operation', ownerId: 'owner', libraryMode, isPrivate: false },
+      select: { id: true, kind: true, libraryMode: true, inputIds: true, updatedAt: true },
+    })),
+  );
+});
