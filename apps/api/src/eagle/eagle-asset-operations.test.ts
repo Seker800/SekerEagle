@@ -221,31 +221,74 @@ test('a positive probe still enters the locked claim and cannot overlap an activ
 });
 
 test('batch trash skips owned retired entries and isolates unavailable entries without blocking valid resources', async () => {
-  const active = randomUUID(), retired = randomUUID(), unavailable = randomUUID();
+  const active = randomUUID(),
+    retired = randomUUID(),
+    unavailable = randomUUID();
   const resources = [
     { id: active, deletedAt: null },
     { id: retired, deletedAt: new Date(), purgeAfter: null },
-  ].map(row => ({ ...row, ownerId: 'owner', libraryMode: 'PHOTO', rowVersion: 1, mediaRevision: 1,
-    livePhotoIdentifier: null, livePhotoRole: null, isPrivate: false, mimeType: 'image/jpeg', lifecycleStatus: 'READY' }));
+  ].map((row) => ({
+    ...row,
+    ownerId: 'owner',
+    libraryMode: 'PHOTO',
+    rowVersion: 1,
+    mediaRevision: 1,
+    livePhotoIdentifier: null,
+    livePhotoRole: null,
+    isPrivate: false,
+    mimeType: 'image/jpeg',
+    lifecycleStatus: 'READY',
+  }));
   const written: Array<{ status?: string; weight: number; errorCode?: string }> = [];
   const tx = {
-    $queryRaw: async () => [], $executeRaw: async () => 0,
+    $queryRaw: async () => [],
+    $executeRaw: async () => 0,
     eagleAssetOperation: {
       findUnique: async () => null,
       count: async () => 0,
       create: async ({ data }: { data: Record<string, unknown> }) => data,
     },
-    eagleAssetOperationItem: { createMany: async ({ data }: { data: typeof written }) => { written.push(...data); return { count: data.length }; } },
-    eagleAsset: { findMany: async ({ where }: { where: { ownerId: string; libraryMode: string; id: { in: string[] }; deletedAt?: unknown } }) => {
-      assert.equal(where.ownerId, 'owner'); assert.equal(where.libraryMode, 'PHOTO');
-      return resources.filter(row => where.id.in.includes(row.id) && (where.deletedAt === undefined || (where.deletedAt === null && row.deletedAt === null)));
-    } },
+    eagleAssetOperationItem: {
+      createMany: async ({ data }: { data: typeof written }) => {
+        written.push(...data);
+        return { count: data.length };
+      },
+    },
+    eagleAsset: {
+      findMany: async ({
+        where,
+      }: {
+        where: { ownerId: string; libraryMode: string; id: { in: string[] }; deletedAt?: unknown };
+      }) => {
+        assert.equal(where.ownerId, 'owner');
+        assert.equal(where.libraryMode, 'PHOTO');
+        return resources.filter(
+          (row) =>
+            where.id.in.includes(row.id) &&
+            (where.deletedAt === undefined || (where.deletedAt === null && row.deletedAt === null)),
+        );
+      },
+    },
   };
-  const service = new EagleAssetOperationService({ $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx) } as never, {} as never, {} as never, 'PHOTO');
-  const result = await service.enqueue({ sub: 'owner', canViewPrivate: false } as never,
-    { operationId: randomUUID(), kind: 'TRASH', assetIds: [active, retired, unavailable] });
-  assert.equal(result.total, 3); assert.equal(result.queued, 1);
-  assert.equal(result.completed, 1); assert.equal(result.failed, 1);
-  assert.deepEqual(written.map(row => row.status ?? 'PENDING').sort(), ['FAILED', 'PENDING', 'SKIPPED']);
-  assert.equal(written.find(row => row.status === 'FAILED')?.errorCode, 'NOT_FOUND');
+  const service = new EagleAssetOperationService(
+    { $transaction: async (work: (tx: unknown) => Promise<unknown>) => work(tx) } as never,
+    {} as never,
+    {} as never,
+    'PHOTO',
+  );
+  const result = await service.enqueue({ sub: 'owner', canViewPrivate: false } as never, {
+    operationId: randomUUID(),
+    kind: 'TRASH',
+    assetIds: [active, retired, unavailable],
+  });
+  assert.equal(result.total, 3);
+  assert.equal(result.queued, 1);
+  assert.equal(result.completed, 1);
+  assert.equal(result.failed, 1);
+  assert.deepEqual(written.map((row) => row.status ?? 'PENDING').sort(), [
+    'FAILED',
+    'PENDING',
+    'SKIPPED',
+  ]);
+  assert.equal(written.find((row) => row.status === 'FAILED')?.errorCode, 'NOT_FOUND');
 });

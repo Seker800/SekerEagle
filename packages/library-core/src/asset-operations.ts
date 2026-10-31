@@ -6,6 +6,8 @@ export interface AssetOperationSummary {
   libraryMode: LibraryModeForOperation;
   total: number;
   completed: number;
+  /** Idempotent no-ops, included in completed for older clients. */
+  skipped?: number;
   failed: number;
   queued: number;
   running: number;

@@ -91,7 +91,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
     const counts = {
       queued: count('PENDING'),
       running: count('RUNNING'),
-      completed: count('COMPLETED'),
+      completed: count('COMPLETED') + count('SKIPPED'),
       failed: count('FAILED'),
       cancelled: count('CANCELLED'),
     };
@@ -105,6 +105,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
       libraryMode: operation.libraryMode,
       total: operation.items.reduce((n, item) => n + item.weight, 0),
       ...counts,
+      ...(count('SKIPPED') ? { skipped: count('SKIPPED') } : {}),
       state: assetOperationState(counts),
       errors: [...errors].map(([code, count]) => ({ code, count })),
     };
@@ -198,11 +199,42 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             string,
             Awaited<ReturnType<typeof resolveEagleTrashTargets>>[number]
           >();
-          for (let offset = 0; offset < ids.length; offset += ADMISSION_BATCH_SIZE) {
+          const unavailable: string[] = [],
+            alreadyRemoved: string[] = [];
+          let skippedPrivate = false;
+          const activeIds: string[] = [];
+          if (input.kind === 'TRASH') {
+            for (let offset = 0; offset < ids.length; offset += ADMISSION_BATCH_SIZE) {
+              const part = ids.slice(offset, offset + ADMISSION_BATCH_SIZE);
+              const owned = await tx.eagleAsset.findMany({
+                where: {
+                  ownerId: principal.sub,
+                  libraryMode: this.libraryMode,
+                  id: { in: part },
+                  ...(principal.canViewPrivate ? {} : { isPrivate: false }),
+                },
+                select: { id: true, deletedAt: true, isPrivate: true },
+              });
+              const byId = new Map(owned.map((row) => [row.id, row]));
+              for (const id of part) {
+                const row = byId.get(id);
+                if (!row) unavailable.push(id);
+                else if (row.deletedAt) {
+                  alreadyRemoved.push(id);
+                  skippedPrivate ||= row.isPrivate;
+                } else activeIds.push(id);
+              }
+            }
+            // No inaccessible resource is ever resolved or touched. An entirely
+            // unavailable selection retains the same owner/private 404 contract.
+            if (!activeIds.length && !alreadyRemoved.length)
+              throw new NotFoundException('一个或多个素材不存在。');
+          } else activeIds.push(...ids);
+          for (let offset = 0; offset < activeIds.length; offset += ADMISSION_BATCH_SIZE) {
             const part = await resolveEagleTrashTargets(
               tx,
               { ownerId: principal.sub, libraryMode: this.libraryMode },
-              ids.slice(offset, offset + ADMISSION_BATCH_SIZE),
+              activeIds.slice(offset, offset + ADMISSION_BATCH_SIZE),
               input.kind === 'RESTORE',
               principal.canViewPrivate,
             );
@@ -244,6 +276,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           )
             throw new ConflictException('请等待图片处理完成后发送。');
           const isPrivate =
+            skippedPrivate ||
             rows.some((row) => row.isPrivate) ||
             (input.kind === 'EMPTY_TRASH' &&
               principal.canViewPrivate &&
@@ -288,6 +321,27 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
                     return { assetIds, snapshots, weight: assetIds.length };
                   })
                   .filter((item) => item.weight > 0);
+          const outcomes = [
+            ...items.map((item) => ({
+              ...item,
+              status: 'PENDING',
+              errorCode: null as string | null,
+            })),
+            ...alreadyRemoved.map((id) => ({
+              assetIds: [id],
+              snapshots: [],
+              weight: 1,
+              status: 'SKIPPED',
+              errorCode: null as string | null,
+            })),
+            ...unavailable.map((id) => ({
+              assetIds: [id],
+              snapshots: [],
+              weight: 1,
+              status: 'FAILED',
+              errorCode: 'NOT_FOUND',
+            })),
+          ];
           const operation = await tx.eagleAssetOperation.create({
             data: {
               id: input.operationId,
@@ -300,7 +354,7 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
               privateUntil,
             },
           });
-          const pendingItems = items.map((item, ordinal) => ({
+          const pendingItems = outcomes.map((item, ordinal) => ({
             id: randomUUID(),
             operationId: operation.id,
             ownerId: principal.sub,
@@ -309,6 +363,8 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
             assetIds: item.assetIds,
             weight: item.weight,
             snapshots: item.snapshots,
+            status: item.status,
+            errorCode: item.errorCode,
           }));
           for (let offset = 0; offset < pendingItems.length; offset += ADMISSION_BATCH_SIZE) {
             await tx.eagleAssetOperationItem.createMany({
@@ -317,10 +373,10 @@ export class EagleAssetOperationService implements OnModuleInit, OnModuleDestroy
           }
           return this.summary({
             ...operation,
-            items: items.map((item) => ({
-              status: 'PENDING',
+            items: outcomes.map((item) => ({
+              status: item.status,
               weight: item.weight,
-              errorCode: null,
+              errorCode: item.errorCode,
             })),
           });
         },
