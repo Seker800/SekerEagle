@@ -13,6 +13,7 @@ import {
 } from './photo-maintenance-scope';
 import { claimNextMediaJob } from './job-claim';
 import { publishImage } from './image-publication';
+import { MediaOutputAttempt } from './media-output-attempt';
 import { analyzePhotoPixels, normalizePhotoExif } from './photo-analysis';
 import { inspectLivePhotoImage } from './live-photo';
 
@@ -147,6 +148,8 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
           },
         );
         if (!job) throw new Error('NO_ELIGIBLE_RENDITION_LEASE');
+        const outputAttempt = new MediaOutputAttempt(prisma, asset, 'renditions');
+        let published = false;
         try {
           if (policy.deferRawEditing || motionPending)
             await prisma.eagleAssetProcessingJob.createMany({
@@ -166,7 +169,10 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
             });
           const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
           for (const image of cached.renditions) {
-            const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${item.mediaRevision}/${image.kind.toLowerCase()}-${image.variant}.jpg`;
+            const storageKey = outputAttempt.key(
+              `${image.kind.toLowerCase()}-${image.variant}.jpg`,
+            );
+            await outputAttempt.prepare();
             await storage.send(
               new PutObjectCommand({
                 Bucket: process.env.S3_BUCKET,
@@ -191,7 +197,8 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
             });
           }
           await verifyCachedImageSource(root, item.source);
-          const published = await publishImage(prisma, {
+          published = await publishImage(prisma, {
+            outputAttempt,
             asset,
             job,
             renditions,
@@ -219,6 +226,8 @@ async function run(manifest: Manifest, root: string, apply: boolean) {
             },
           });
           throw error;
+        } finally {
+          await outputAttempt.finish(published);
         }
       } catch (error) {
         report.push({

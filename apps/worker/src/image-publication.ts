@@ -4,7 +4,7 @@ import { persistPhotoAnalysis } from './photo-analysis-persistence';
 import { groupAnalyzedPhoto } from './photo-grouping';
 import { FACE_MODEL_VERSION } from './photo-faces';
 import { beginMediaPublication } from './media-publication';
-import type { MediaOutputAttempt } from './media-output-attempt';
+import { retireReplacedRenditions, type MediaOutputAttempt } from './media-output-attempt';
 
 type Asset = Pick<
   EagleAsset,
@@ -74,6 +74,7 @@ export async function publishImage(
         }))
       )
         return false;
+      if (input.outputAttempt) await retireReplacedRenditions(tx, asset, renditions);
       for (const rendition of renditions)
         await tx.eagleAssetRendition.upsert({
           where: {

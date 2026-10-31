@@ -50,7 +50,7 @@ function fixture(lease = 1, current = true) {
       updateMany: record('lease', { count: lease }),
       createMany: record('faces'),
     },
-    eagleAssetRendition: { upsert: record('rendition') },
+    eagleAssetRendition: { findMany: async () => [], upsert: record('rendition') },
   };
   const client = {
     $transaction: async (

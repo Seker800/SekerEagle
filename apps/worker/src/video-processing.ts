@@ -1,6 +1,7 @@
 import { renderVideoWork } from './video-work';
 import type { RemoteMediaClient } from './remote-media';
-import { mediaCompletion } from '@sekereagle/library-core';
+import { beginMediaPublication } from './media-publication';
+import { MediaOutputAttempt, retireReplacedRenditions } from './media-output-attempt';
 import { videoProcessingStage, VIDEO_PLAYBACK_PROCESSOR_VERSION } from './video-processing-policy';
 import type { Prisma, PrismaClient, EagleAssetProcessingJob, LibraryMode } from '@prisma/client';
 import { type S3Client, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -50,6 +51,18 @@ export async function processVideo(
     lockPrivacy,
     syncPrivacy,
   } = dependencies;
+  if (
+    job.ownerId !== asset.ownerId ||
+    job.libraryMode !== asset.libraryMode ||
+    job.assetId !== asset.id
+  )
+    throw new Error('VIDEO_PUBLICATION_SCOPE');
+  const outputAttempt = new MediaOutputAttempt(
+    prisma,
+    { ...asset, mediaRevision: job.assetRevision },
+    'renditions',
+  );
+  let published = false;
   const stage = videoProcessingStage(job.kind, transcodingEnabled);
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-media-video-'));
   const posterPath = join(directory, 'poster.jpg');
@@ -68,8 +81,9 @@ export async function processVideo(
     assertExpectedHash(asset.uploadSessions[0]?.eagleState?.expectedContentSha256, sha256);
     const poster = stage === 'PLAYBACK' ? null : await readFile(posterPath);
     const posterMetadata = poster ? await sharp(poster).metadata() : null;
-    const playbackKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/preview.mp4`;
+    const playbackKey = outputAttempt.key('preview.mp4');
     const playbackSize = playbackMetadata ? (await stat(previewPath)).size : 0;
+    if (playbackMetadata || poster) await outputAttempt.prepare();
     if (playbackMetadata)
       await storage.send(
         new PutObjectCommand({
@@ -80,7 +94,7 @@ export async function processVideo(
           ContentType: 'video/mp4',
         }),
       );
-    const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/thumbnail.jpg`;
+    const storageKey = outputAttempt.key('thumbnail.jpg');
     if (poster)
       await storage.send(
         new PutObjectCommand({
@@ -90,76 +104,64 @@ export async function processVideo(
           ContentType: 'image/jpeg',
         }),
       );
-    await prisma.$transaction(async (transaction) => {
-      await lockPrivacy(transaction, asset.ownerId, asset.libraryMode);
-      const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        ...mediaCompletion(job),
+    const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
+    if (playbackMetadata)
+      renditions.push({
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        revision: job.assetRevision,
+        kind: 'PREVIEW',
+        variant: 'default',
+        storageKey: playbackKey,
+        mimeType: 'video/mp4',
+        byteSize: BigInt(playbackSize),
+        width: playbackMetadata.width,
+        height: playbackMetadata.height,
+        status: 'READY',
       });
-      if (completed.count !== 1) return;
-      if (playbackMetadata) {
-        const playbackData = {
-          storageKey: playbackKey,
-          mimeType: 'video/mp4',
-          byteSize: BigInt(playbackSize),
-          width: playbackMetadata.width,
-          height: playbackMetadata.height,
-          status: 'READY' as const,
-        };
+    if (poster && posterMetadata)
+      renditions.push({
+        ownerId: asset.ownerId,
+        libraryMode: asset.libraryMode,
+        assetId: asset.id,
+        revision: job.assetRevision,
+        kind: 'THUMBNAIL',
+        variant: 'poster',
+        storageKey,
+        mimeType: 'image/jpeg',
+        byteSize: BigInt(poster.byteLength),
+        width: posterMetadata.width,
+        height: posterMetadata.height,
+        status: 'READY',
+      });
+    published = await prisma.$transaction(async (transaction) => {
+      if (!(await beginMediaPublication(transaction, job, { lockPrivacy }))) return false;
+      await retireReplacedRenditions(
+        transaction,
+        { ...asset, mediaRevision: job.assetRevision },
+        renditions,
+      );
+      for (const rendition of renditions)
         await transaction.eagleAssetRendition.upsert({
           where: {
             assetId_kind_revision_variant: {
               assetId: asset.id,
-              kind: 'PREVIEW',
+              kind: rendition.kind,
               revision: job.assetRevision,
-              variant: 'default',
+              variant: rendition.variant ?? 'default',
             },
           },
-          create: {
-            ...playbackData,
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            assetId: asset.id,
-            kind: 'PREVIEW',
-            variant: 'default',
-            revision: job.assetRevision,
-          },
-          update: playbackData,
-        });
-      }
-      if (poster && posterMetadata) {
-        await transaction.eagleAssetRendition.upsert({
-          where: {
-            assetId_kind_revision_variant: {
-              assetId: asset.id,
-              kind: 'THUMBNAIL',
-              revision: job.assetRevision,
-              variant: 'poster',
-            },
-          },
-          create: {
-            ownerId: asset.ownerId,
-            libraryMode: asset.libraryMode,
-            assetId: asset.id,
-            kind: 'THUMBNAIL',
-            variant: 'poster',
-            revision: job.assetRevision,
-            storageKey,
-            mimeType: 'image/jpeg',
-            byteSize: BigInt(poster.byteLength),
-            width: posterMetadata.width,
-            height: posterMetadata.height,
-            status: 'READY',
-          },
+          create: rendition,
           update: {
-            storageKey,
-            mimeType: 'image/jpeg',
-            byteSize: BigInt(poster.byteLength),
-            width: posterMetadata.width,
-            height: posterMetadata.height,
+            storageKey: rendition.storageKey,
+            mimeType: rendition.mimeType,
+            byteSize: rendition.byteSize,
+            width: rendition.width,
+            height: rendition.height,
             status: 'READY',
           },
         });
-      }
       if (stage === 'POSTER') {
         await transaction.eagleAssetProcessingJob.createMany({
           data: [
@@ -207,8 +209,14 @@ export async function processVideo(
           },
         });
       await syncPrivacy(transaction, asset.ownerId, [asset.id], asset.libraryMode);
+      await outputAttempt.publish(transaction);
+      return true;
     });
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await outputAttempt.finish(published);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }

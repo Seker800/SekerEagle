@@ -18,6 +18,8 @@ import { canAdvancePhotoMap, runPhotoMapBuildStep } from './photo-map-build';
 import { reconcileSmartFolderSpaces, runSmartFolderBuildStep } from './smart-folder-build';
 import { SmartFolderBuildRunner } from './smart-folder-runner';
 import { publishImage } from './image-publication';
+import { MediaOutputAttempt } from './media-output-attempt';
+import { publishPyramid } from './pyramid-publication';
 import { publishEmbedding } from './embedding-publication';
 import { buildMediaWakeQuery } from './job-wakeup-query';
 import { processVideo } from './video-processing';
@@ -555,103 +557,112 @@ async function processJob(job: EagleAssetProcessingJob, remoteRequired = false):
       });
       return;
     }
-    const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
-    for (const { spec, output: rendered } of processed.rendered ?? []) {
-      const storageKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/${spec.kind.toLowerCase()}-${spec.variant}.webp`;
-      await storage.send(
-        new PutObjectCommand({
-          Bucket: s3Bucket,
-          Key: storageKey,
-          Body: rendered.data,
-          ContentType: 'image/webp',
-        }),
-      );
-      renditions.push({
-        ownerId: asset.ownerId,
-        libraryMode: asset.libraryMode,
-        assetId: asset.id,
-        kind: spec.kind,
-        variant: spec.variant,
-        revision: job.assetRevision,
-        storageKey,
-        mimeType: 'image/webp',
-        byteSize: BigInt(rendered.data.byteLength),
-        width: rendered.info.width,
-        height: rendered.info.height,
-        status: 'READY' as const,
-      });
-    }
-    let livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
-    if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash) {
-      if (asset.mimeType === 'image/jpeg') {
-        livePhoto = await inspectJpegLivePhoto(Number(asset.byteSize), (start, length) =>
-          readOwnedImageRange(
-            (input) => storage.send(new GetObjectCommand(input)),
-            {
-              bucket: s3Bucket,
-              ownerId: asset.ownerId,
-              key: asset.originalObjectKey,
-              byteSize: Number(asset.byteSize),
-            },
-            start,
-            length,
-          ),
+    const outputAttempt = new MediaOutputAttempt(prisma, asset, 'renditions');
+    let published = false;
+    try {
+      const renditions: Prisma.EagleAssetRenditionUncheckedCreateInput[] = [];
+      for (const { spec, output: rendered } of processed.rendered ?? []) {
+        const storageKey = outputAttempt.key(`${spec.kind.toLowerCase()}-${spec.variant}.webp`);
+        await outputAttempt.prepare();
+        await storage.send(
+          new PutObjectCommand({
+            Bucket: s3Bucket,
+            Key: storageKey,
+            Body: rendered.data,
+            ContentType: 'image/webp',
+          }),
         );
-      } else if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') {
-        const original = await storage.send(
-          new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
-        );
-        if (!original.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
-        livePhoto = await inspectLivePhotoStream(
-          original.Body as AsyncIterable<Uint8Array>,
-          asset.sha256!,
-        );
+        renditions.push({
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetId: asset.id,
+          kind: spec.kind,
+          variant: spec.variant,
+          revision: job.assetRevision,
+          storageKey,
+          mimeType: 'image/webp',
+          byteSize: BigInt(rendered.data.byteLength),
+          width: rendered.info.width,
+          height: rendered.info.height,
+          status: 'READY' as const,
+        });
       }
-    }
-    if (livePhoto?.motion) {
-      const motionKey = `users/${asset.ownerId}/assets/${asset.id}/renditions/${job.assetRevision}/motion.mp4`;
-      await storage.send(
-        new PutObjectCommand({
-          Bucket: s3Bucket,
-          Key: motionKey,
-          Body: livePhoto.motion.data,
-          ContentType: 'video/mp4',
-        }),
-      );
-      renditions.push({
-        ownerId: asset.ownerId,
-        libraryMode: asset.libraryMode,
-        assetId: asset.id,
-        kind: 'PREVIEW',
-        variant: 'motion',
-        revision: job.assetRevision,
-        storageKey: motionKey,
-        mimeType: 'video/mp4',
-        byteSize: BigInt(livePhoto.motion.data.length),
-        width: livePhoto.motion.width,
-        height: livePhoto.motion.height,
-        status: 'READY',
+      let livePhoto = 'livePhoto' in processed ? processed.livePhoto : null;
+      if (sourceDetailsOnly && !sourceDetails.verifiesOriginalHash) {
+        if (asset.mimeType === 'image/jpeg') {
+          livePhoto = await inspectJpegLivePhoto(Number(asset.byteSize), (start, length) =>
+            readOwnedImageRange(
+              (input) => storage.send(new GetObjectCommand(input)),
+              {
+                bucket: s3Bucket,
+                ownerId: asset.ownerId,
+                key: asset.originalObjectKey,
+                byteSize: Number(asset.byteSize),
+              },
+              start,
+              length,
+            ),
+          );
+        } else if (asset.mimeType === 'image/heic' || asset.mimeType === 'image/heif') {
+          const original = await storage.send(
+            new GetObjectCommand({ Bucket: s3Bucket, Key: asset.originalObjectKey }),
+          );
+          if (!original.Body) throw new Error('ORIGINAL_OBJECT_MISSING');
+          livePhoto = await inspectLivePhotoStream(
+            original.Body as AsyncIterable<Uint8Array>,
+            asset.sha256!,
+          );
+        }
+      }
+      if (livePhoto?.motion) {
+        const motionKey = outputAttempt.key('motion.mp4');
+        await outputAttempt.prepare();
+        await storage.send(
+          new PutObjectCommand({
+            Bucket: s3Bucket,
+            Key: motionKey,
+            Body: livePhoto.motion.data,
+            ContentType: 'video/mp4',
+          }),
+        );
+        renditions.push({
+          ownerId: asset.ownerId,
+          libraryMode: asset.libraryMode,
+          assetId: asset.id,
+          kind: 'PREVIEW',
+          variant: 'motion',
+          revision: job.assetRevision,
+          storageKey: motionKey,
+          mimeType: 'video/mp4',
+          byteSize: BigInt(livePhoto.motion.data.length),
+          width: livePhoto.motion.width,
+          height: livePhoto.motion.height,
+          status: 'READY',
+        });
+      }
+      published = await publishImage(prisma, {
+        outputAttempt,
+        asset,
+        job,
+        renditions,
+        sha256: sourceDetails.verifiesOriginalHash ? sha256 : asset.sha256!,
+        dimensions: sourceDetailsOnly
+          ? {}
+          : catalogImageDimensions(
+              processed.metadata,
+              'originalDimensions' in processed ? processed.originalDimensions : undefined,
+            ),
+        photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
+        livePhoto: livePhoto ?? null,
+        scheduleFaces:
+          facesConfigured ||
+          remoteMediaKinds(embeddingClient.computeRuntime).includes('ANALYZE_PHOTO_FACES'),
+        deferDetails,
+        preserveBrowseState: sourceDetailsOnly,
       });
+    } finally {
+      await outputAttempt.finish(published);
     }
-    await publishImage(prisma, {
-      asset,
-      job,
-      renditions,
-      sha256: sourceDetails.verifiesOriginalHash ? sha256 : asset.sha256!,
-      dimensions: sourceDetailsOnly
-        ? {}
-        : catalogImageDimensions(
-            processed.metadata,
-            'originalDimensions' in processed ? processed.originalDimensions : undefined,
-          ),
-      photoAnalysis: 'photoAnalysis' in processed ? (processed.photoAnalysis ?? null) : null,
-      livePhoto: livePhoto ?? null,
-      scheduleFaces:
-        facesConfigured ||
-        remoteMediaKinds(embeddingClient.computeRuntime).includes('ANALYZE_PHOTO_FACES'),
-      deferDetails,
-      preserveBrowseState: sourceDetailsOnly,
-    });
     return;
   }
 
@@ -1121,8 +1132,13 @@ async function generateImagePyramid(
   remoteRequired = false,
 ): Promise<void> {
   const directory = await mkdtemp(join(tmpdir(), 'sekereagle-pyramid-'));
-  const storagePrefix = `users/${asset.ownerId}/assets/${asset.id}/pyramids/${job.assetRevision}/${job.processorVersion}`;
-  assertOwnedKey(asset.ownerId, `${storagePrefix}/0/0_0.webp`);
+  const outputAttempt = new MediaOutputAttempt(
+    prisma,
+    { ...asset, mediaRevision: job.assetRevision },
+    'pyramids',
+  );
+  const storagePrefix = outputAttempt.prefix.replace(/\/+$/, '');
+  let published = false;
   try {
     const output = remoteRequired
       ? await remoteMediaClient.pyramid(sourceBody, asset.mimeType, directory)
@@ -1132,6 +1148,7 @@ async function generateImagePyramid(
 
     const tilePaths = output.files.map((name) => join(tileDirectory, name));
     let byteSize = 0n;
+    await outputAttempt.prepare();
     for (const filePath of tilePaths) {
       const relativePath = filePath.slice(tileDirectory.length + 1);
       const tile = parseDeepZoomTilePath(relativePath);
@@ -1147,45 +1164,20 @@ async function generateImagePyramid(
       );
     }
 
-    await prisma.$transaction(async (transaction) => {
-      const completed = await transaction.eagleAssetProcessingJob.updateMany({
-        ...mediaCompletion(job),
-      });
-      if (completed.count !== 1) return;
-      await transaction.eagleImagePyramid.upsert({
-        where: {
-          assetId_revision_processorVersion: {
-            assetId: asset.id,
-            revision: job.assetRevision,
-            processorVersion: job.processorVersion,
-          },
-        },
-        create: {
-          ownerId: asset.ownerId,
-          libraryMode: asset.libraryMode,
-          assetId: asset.id,
-          revision: job.assetRevision,
-          processorVersion: job.processorVersion,
-          storagePrefix,
-          status: 'READY',
-          tileCount: tilePaths.length,
-          byteSize,
-          completedAt: new Date(),
-          ...result,
-        },
-        update: {
-          status: 'READY',
-          storagePrefix,
-          tileCount: tilePaths.length,
-          byteSize,
-          completedAt: new Date(),
-          lastError: null,
-          ...result,
-        },
-      });
+    published = await publishPyramid(prisma, {
+      job,
+      descriptor: result,
+      storagePrefix,
+      tileCount: tilePaths.length,
+      byteSize,
+      outputAttempt,
     });
   } finally {
-    await rm(directory, { recursive: true, force: true });
+    try {
+      await outputAttempt.finish(published);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   }
 }
 

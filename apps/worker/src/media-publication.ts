@@ -1,4 +1,4 @@
-import type { EagleAssetProcessingJob, Prisma } from '@prisma/client';
+import type { EagleAssetProcessingJob, Prisma, LibraryMode } from '@prisma/client';
 import { mediaCompletion } from '@sekereagle/library-core';
 import { lockOwnerPrivacyProjection } from '@sekereagle/library-persistence';
 
@@ -12,7 +12,11 @@ export async function beginMediaPublication(
   tx: Prisma.TransactionClient,
   job: MediaPublicationJob,
   options: {
-    lockPrivacy?: typeof lockOwnerPrivacyProjection;
+    lockPrivacy?: (
+      tx: Prisma.TransactionClient,
+      ownerId: string,
+      mode: LibraryMode,
+    ) => Promise<void>;
     photoGroups?: boolean;
     sha256?: string | null;
   } = {},

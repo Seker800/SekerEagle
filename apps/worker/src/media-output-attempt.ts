@@ -79,3 +79,36 @@ export class MediaOutputAttempt {
     });
   }
 }
+
+/** Retire replaced outputs once per publication, never one lookup per file. */
+export async function retireReplacedRenditions(
+  tx: Prisma.TransactionClient,
+  asset: Asset,
+  next: Prisma.EagleAssetRenditionUncheckedCreateInput[],
+) {
+  if (!next.length) return;
+  const key = (kind: string, variant?: string) => `${kind}:${variant ?? 'default'}`;
+  const current = await tx.eagleAssetRendition.findMany({
+    where: {
+      ownerId: asset.ownerId,
+      libraryMode: asset.libraryMode,
+      assetId: asset.id,
+      revision: asset.mediaRevision,
+      OR: next.map((r) => ({ kind: r.kind, variant: r.variant ?? 'default' })),
+    },
+    select: { kind: true, variant: true, storageKey: true },
+  });
+  const replacements = new Map(next.map((r) => [key(r.kind, r.variant), r.storageKey]));
+  const objectKeys = [
+    ...new Set(
+      current
+        .filter((r) => r.storageKey !== replacements.get(key(r.kind, r.variant)))
+        .map((r) => r.storageKey),
+    ),
+  ];
+  if (!objectKeys.length) return;
+  for (const path of objectKeys) assertDeletionKey(asset.ownerId, path);
+  await tx.eagleObjectDeletion.create({
+    data: { ownerId: asset.ownerId, libraryMode: asset.libraryMode, objectKeys, prefixes: [] },
+  });
+}

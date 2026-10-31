@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MediaOutputAttempt } from './media-output-attempt';
+import { MediaOutputAttempt, retireReplacedRenditions } from './media-output-attempt';
 
 function fixture() {
   const records = new Map<
@@ -87,4 +87,58 @@ test('failed output publication accelerates only its own still-pending cleanup',
     2,
     'an ambiguous committed publication must never recreate a deletion intent',
   );
+});
+
+test('replacement retirement reads one scoped batch and never deletes an unchanged output', async () => {
+  let reads = 0;
+  const retired: unknown[] = [];
+  const asset = { id: 'asset', ownerId: 'owner', libraryMode: 'PHOTO' as const, mediaRevision: 1 };
+  const tx = {
+    eagleAssetRendition: {
+      findMany: async ({ where }: { where: Record<string, unknown> }) => {
+        reads++;
+        assert.equal(where.ownerId, 'owner');
+        assert.equal(where.libraryMode, 'PHOTO');
+        assert.equal(where.assetId, 'asset');
+        return [
+          { kind: 'PREVIEW', variant: 'default', storageKey: 'users/owner/old.webp' },
+          { kind: 'THUMBNAIL', variant: '512', storageKey: 'users/owner/current.webp' },
+        ];
+      },
+    },
+    eagleObjectDeletion: {
+      create: async ({ data }: { data: unknown }) => {
+        retired.push(data);
+      },
+    },
+  };
+  await retireReplacedRenditions(tx as never, asset, [
+    { kind: 'PREVIEW', storageKey: 'users/owner/new.webp' },
+    { kind: 'THUMBNAIL', variant: '512', storageKey: 'users/owner/current.webp' },
+  ] as never);
+  assert.equal(reads, 1);
+  assert.deepEqual(retired, [
+    { ownerId: 'owner', libraryMode: 'PHOTO', objectKeys: ['users/owner/old.webp'], prefixes: [] },
+  ]);
+});
+
+test('metadata-only attempts and a failed intent creation do not schedule object deletion', async () => {
+  const f = fixture(),
+    attempt = f.make();
+  await attempt.publish(f.db as never);
+  await attempt.finish(false);
+  assert.equal(f.count(), 0);
+  const broken = new MediaOutputAttempt(
+    {
+      eagleObjectDeletion: {
+        create: async () => {
+          throw new Error('database unavailable');
+        },
+      },
+    } as never,
+    { id: 'asset', ownerId: 'owner', libraryMode: 'PHOTO', mediaRevision: 1 },
+    'renditions',
+  );
+  await assert.rejects(broken.prepare(), /database unavailable/);
+  await broken.finish(false);
 });
